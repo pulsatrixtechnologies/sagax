@@ -2422,8 +2422,15 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const { capabilities } = useDesktopCapabilities();
   const sidebarRef = useRef<HTMLElement>(null);
+  // set by Collapse sidebar: the keyboard's place moves to Expand sidebar on the rail it opens
+  const expandFocus = useRef(false);
   const width = useSidebarWidth({ sidebarRef });
   const { density, viewport, autoRail, sidebarWidth, quietRows, setSidebarCollapsed } = width;
+  useEffect(() => {
+    if (density !== "icons" || !expandFocus.current) return;
+    expandFocus.current = false;
+    sidebarRef.current?.querySelector<HTMLElement>("[data-sidebar-compact-toggle]")?.focus();
+  }, [density]);
   const multi = useSidebarMultiSelect({ state, density });
   const unread = useSidebarUnreadPills({ listRef: listFade.ref, state, selecting: multi.selecting });
   const actions = useSidebarBotActions({ state, dispatch, showThreads, open, onClose, remoteClient });
@@ -2462,54 +2469,51 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   // Search and New ride in the title bar when there is one and no brand row.
   const titleBarHead = (macInset || browser) && !showLogo;
   const { accountPlaces, archivedBots } = roster;
-  // Search and New: in the head's row at full width, in the rail's foot
-  // (#4093, the reference's rail keeps its controls at the bottom).
-  const railButtons = (
-    <>
-      <button
-        type="button"
-        data-sidebar-search
-        onClick={openCommandPalette}
-        aria-label={t("sidebar.searchAria")}
-        aria-keyshortcuts={isMacPlatform() ? "Meta+K" : "Control+K"}
-        title={searchTitle}
-        className={SIDEBAR_HEAD_BUTTON}
-      >
-        <Search {...CIRCLE_ICON} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onCompose?.()}
-        aria-expanded={composeOpen}
-        aria-label={t("sidebar.new")}
-        title={t("sidebar.new")}
-        data-sidebar-new
-        className={SIDEBAR_HEAD_BUTTON}
-      >
-        <Plus {...CIRCLE_ICON} aria-hidden="true" />
-      </button>
-    </>
+  // The reference's top button row is collapse, search, New (its collapse
+  // button leads, #4484). The rail draws search and New in its foot (#4093,
+  // the reference's rail keeps its controls at the bottom) beside its own
+  // Expand sidebar button, so it takes the last two only.
+  const collapseButton = viewport !== "phone" && (
+    <button
+      type="button"
+      data-sidebar-collapse
+      aria-expanded="true"
+      onClick={() => { expandFocus.current = true; setSidebarCollapsed(true); }}
+      aria-label={t("sidebar.collapse")}
+      title={t("sidebar.collapse")}
+      className={SIDEBAR_HEAD_BUTTON}
+    >
+      <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
+    </button>
   );
-  // The head also leads with the reference's collapse button; the rail keeps
-  // its own expand button in the foot, so its controls are Search and New only.
-  const headButtons = (
-    <>
-      {viewport !== "phone" && (
-        <button
-          type="button"
-          data-sidebar-collapse
-          aria-expanded="true"
-          onClick={() => setSidebarCollapsed(true)}
-          aria-label={t("sidebar.collapse")}
-          title={t("sidebar.collapse")}
-          className={SIDEBAR_HEAD_BUTTON}
-        >
-          <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
-        </button>
-      )}
-      {railButtons}
-    </>
+  const searchButton = (
+    <button
+      type="button"
+      data-sidebar-search
+      onClick={openCommandPalette}
+      aria-label={t("sidebar.searchAria")}
+      aria-keyshortcuts={isMacPlatform() ? "Meta+K" : "Control+K"}
+      title={searchTitle}
+      className={SIDEBAR_HEAD_BUTTON}
+    >
+      <Search {...CIRCLE_ICON} aria-hidden="true" />
+    </button>
   );
+  const newButton = (
+    <button
+      type="button"
+      onClick={() => onCompose?.()}
+      aria-expanded={composeOpen}
+      aria-label={t("sidebar.new")}
+      title={t("sidebar.new")}
+      data-sidebar-new
+      className={SIDEBAR_HEAD_BUTTON}
+    >
+      <Plus {...CIRCLE_ICON} aria-hidden="true" />
+    </button>
+  );
+  const headButtons = <>{collapseButton}{searchButton}{newButton}</>;
+  const railButtons = <>{searchButton}{newButton}</>;
 
   return (
     <SidebarMascotProvider rootRef={sidebarRef}>

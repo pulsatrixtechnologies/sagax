@@ -2666,7 +2666,6 @@
   "composer.hint.auto": "Jev 會決定由誰回應",
   "composer.queued.editAria": "編輯佇列中的第 {index} 則訊息，共 {count} 則",
   "composer.queued.editTitle": "編輯——將這則訊息移回輸入區",
-  "attach.showInFolder": "在資料夾中顯示",
   "attach.folderEmpty": "這個資料夾沒有可在此開啟的檔案",
   "attach.folderFilesAria": "{name} 中的檔案",
   "attach.folderTruncated": "僅列出前幾個檔案",

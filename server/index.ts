@@ -8745,7 +8745,7 @@ setSharedHost(IDENTITY.kind === "perspicax");
 const ORG_ENGINE_NOT_ALLOWED = "Your organization does not allow this model provider.";
 /** 2026-10-30 (lot 2): a model turned off, by the organization or by the person. */
 const MODEL_TURNED_OFF_BY_ORG = "Your organization turned this model off. Pick another model or Auto.";
-const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Models. Turn it back on there, or pick another model.";
+const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Providers > Models. Turn it back on there, or pick another model.";
 /** Organization server: Perspicax owns each signed-in person's name and email. */
 const PROFILE_MANAGEMENT = profileManagement(IDENTITY);
 // Every stream frame and request rechecks email sessions against this list,
@@ -23685,7 +23685,7 @@ const meetingService: MeetingService = createMeetingService({
     try { assertWithinBudget(cfg, DATA_DIR); } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
     if (!key.ok) {
       return { error: key.cause === "no_credentials"
-        ? "Meeting notes need speech to text: add an xAI key in Settings > Models."
+        ? "Meeting notes need speech to text: add an xAI key in Settings > Providers > Models."
         : `Speech to text is not available for you right now (${key.cause}).` };
     }
     const target = { botId, botName: bot.name, threadId };
@@ -24170,7 +24170,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       store.appendMessage(threadId, {
         role: "bot",
         kind: "access",
-        text: `${owner.bot.name} asks you to sign in to ${name} again to use ${account.label} connectors. Open Settings > Models to sign in.`,
+        text: `${owner.bot.name} asks you to sign in to ${name} again to use ${account.label} connectors. Open Settings > Providers > Models to sign in.`,
         ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
         access: { reason: "sign_in", engine: name, instanceId: engine.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
       });
@@ -24203,7 +24203,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       store.appendMessage(threadId, {
         role: "bot",
         kind: "access",
-        text: `${owner.bot.name} asks you to sign in to ${name}. Open Settings > Models to sign in.`,
+        text: `${owner.bot.name} asks you to sign in to ${name}. Open Settings > Providers > Models to sign in.`,
         ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
         access: { reason: "sign_in", engine: name, instanceId: claude.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
       });

@@ -5049,6 +5049,12 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   outline: none;
   border-color: transparent;
 }
+/* High contrast keeps a clearly visible keyboard focus: the pill itself, not
+   the text, draws it in the primary ink (a rounded ring, no layout shift). */
+:root[data-contrast="high"] [data-tour="composer"]:focus-within {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 1.5px var(--color-ink);
+}
 /* Text size: the whole interface scales, so fixed pixel sizes follow. The
    desktop app zooms the window itself (data-zoom-native); this is the
    browser's fallback. */

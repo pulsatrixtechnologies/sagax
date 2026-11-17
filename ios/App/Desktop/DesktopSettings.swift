@@ -242,7 +242,7 @@ extension DesktopSettingsSection {
         case .general: "Your identity in Sagax."
         case .appearance: "Theme, conversations and mascots."
         case .notifications: "On this computer: what alerts you and who sees you."
-        case .security: "Your keys and what your bots may do without asking you."
+        case .security: "What your bots may do without asking you, your privacy and your keys."
         case .vault: "What your bots can use for you. Encrypted on this computer with the system keychain, or with the server's key."
         case .providers: "Where models and services come from."
         case .engines: "Which model each bot uses."

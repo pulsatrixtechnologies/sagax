@@ -745,7 +745,7 @@ add({
   classes: always("rule-change"),
 });
 add({
-  key: "rules.ownerDelete", family: "rules", target: "rule", value: "boolean", label: "Delete an owner rule (true)", where: "Settings > Security > Your approval rules",
+  key: "rules.ownerDelete", family: "rules", target: "rule", value: "boolean", label: "Delete an owner rule (true)", where: "Settings > Permissions > Your approval rules",
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/approval-rules/${enc(ids.target!)}` } : "value is true.",
   classes: always("delete", "rule-change"),
 });
@@ -757,16 +757,16 @@ add({
 
 // ── account (the person) ───────────────────────────────────────────────
 add({
-  key: "account.label", family: "account", target: "self", value: "string", label: "How people see your name", where: "Settings > Account",
+  key: "account.label", family: "account", target: "self", value: "string", label: "How people see your name", where: "Settings > General",
   read: (ids) => ({ path: "/api/people/labels", field: `labels.${ids.target!}` }),
   write: (ids, v) => ({ method: "PUT", path: `/api/people/${enc(ids.target!)}/label`, body: { label: v } }),
 });
 add({
-  key: "account.avatar", family: "account", target: "none", value: "string?", label: "Your photo (a data URL, null removes)", where: "Settings > Account",
+  key: "account.avatar", family: "account", target: "none", value: "string?", label: "Your photo (a data URL, null removes)", where: "Settings > General",
   write: (_ids, v) => v === null ? { method: "DELETE", path: "/api/me/avatar" } : { method: "PUT", path: "/api/me/avatar", body: { avatarUrl: v } },
 });
 add({
-  key: "account.aboutMe", family: "account", target: "none", value: "text", label: "About me", where: "Settings > Account > About me",
+  key: "account.aboutMe", family: "account", target: "none", value: "text", label: "About me", where: "Settings > General > About me",
   // #3424: the person's own on an organization server (the operator's is the
   // server's profile), read by their own bots only
   read: () => ({ path: "/api/me/about-me", field: "aboutMe" }),
@@ -816,12 +816,12 @@ add({
   classes: (value, ctx) => carriesSecret(value) ? ["secret"] : serverWide(value, { ...ctx, organization: false }),
 });
 add({
-  key: "account.timeZone", family: "account", target: "none", value: "string", label: "Your time zone (an IANA zone such as America/Toronto; turns automatic detection off)", where: "Settings > Account > Time zone",
+  key: "account.timeZone", family: "account", target: "none", value: "string", label: "Your time zone (an IANA zone such as America/Toronto; turns automatic detection off)", where: "Settings > General > Appearance > Time zone",
   read: () => ({ path: "/api/settings/bot", field: "settings.timeZone" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/settings/bot", body: { timeZone: v, timeZoneAuto: false } }),
 });
 add({
-  key: "account.timeZoneAuto", family: "account", target: "none", value: "boolean", label: "Detect your time zone automatically (the app then follows this computer's zone)", where: "Settings > Account > Time zone",
+  key: "account.timeZoneAuto", family: "account", target: "none", value: "boolean", label: "Detect your time zone automatically (the app then follows this computer's zone)", where: "Settings > General > Appearance > Time zone",
   read: () => ({ path: "/api/settings/bot", field: "settings.timeZoneAuto" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/settings/bot", body: { timeZoneAuto: v } }),
 });
@@ -837,54 +837,54 @@ function pref(key: string, family: SettingFamily, storage: string, value: Settin
     write: (_ids, v) => ({ ui: "setPreference", input: { key: storage, value: typeof v === "string" ? v : JSON.stringify(v) } }),
   });
 }
-pref("appearance.skin", "appearance", "omb-skin", "string", "Skin", "Settings > Appearance > Skin");
-pref("appearance.mode", "appearance", "omb-skin-mode", "enum:light|dark|auto", "Light, dark or auto", "Settings > Appearance > Skin");
-pref("appearance.font", "appearance", "omb-font", "string", "Font", "Settings > Appearance");
+pref("appearance.skin", "appearance", "omb-skin", "string", "Skin", "Settings > General > Appearance > Skin");
+pref("appearance.mode", "appearance", "omb-skin-mode", "enum:light|dark|auto", "Light, dark or auto", "Settings > General > Appearance > Skin");
+pref("appearance.font", "appearance", "omb-font", "string", "Font", "Settings > General > Appearance");
 pref("appearance.language", "appearance", "omb-language", "string", "Language (fr, en; empty follows the system)", "Settings > General > Appearance");
-pref("appearance.interfaceMode", "appearance", "sagax.interfaceMode.v1", "enum:simple|advanced", "Simple or Advanced", "Settings > Appearance");
-pref("appearance.showThreads", "appearance", "omb-show-threads", "boolean", "Show threads", "Settings > Appearance");
-pref("appearance.showSuggestions", "appearance", "sagax.showSuggestions.v1", "boolean", "Show the Suggestions card in the bot panel", "Settings > Appearance");
-pref("appearance.showAllHistory", "appearance", "sagax.showAllHistory.v1", "boolean", "Show the All history row in the bot panel", "Settings > Appearance");
-pref("appearance.showPermissions", "appearance", "sagax.showPermissions.v1", "boolean", "Show the Permissions section in the bot panel", "Settings > Appearance");
-pref("appearance.threadsLocation", "appearance", "omb-threads-location", "string", "Threads location", "Settings > Appearance");
-pref("appearance.backgroundEffect", "appearance", "sagax-background-effect", "string", "Background effect", "Settings > Appearance > Background");
-pref("appearance.glyphRipple", "appearance", "sagax-glyph-ripple", "boolean", "Glyph ripple", "Settings > Appearance > Background");
-pref("appearance.retro98", "appearance", "omb.retro98.on", "boolean", "Hibou 98", "Settings > Appearance");
-pref("appearance.reduceMotion", "appearance", "sagax.a11y.motion.v1", "enum:system|reduce", "Reduce motion (follow the system, or always)", "Settings > Appearance > Accessibility");
-pref("appearance.highContrast", "appearance", "sagax.a11y.contrast.v1", "enum:system|high", "Contrast (standard, or high)", "Settings > Appearance > Accessibility");
-pref("appearance.hdMascots", "appearance", "sagax.hdMascots.v1", "enum:on|off", "HD mascots (painted art for the characters that have it, or the classic look)", "Settings > Appearance > Mascots");
-pref("appearance.textSize", "appearance", "sagax.a11y.textSize.v1", "enum:default|large|xlarge", "Text size (default, large, extra large)", "Settings > Appearance > Accessibility");
-pref("appearance.hardwareAcceleration", "appearance", "sagax.hardwareAcceleration.v1", "boolean", "Use hardware acceleration (desktop app; needs a restart)", "Settings > Appearance > Desktop");
-pref("appearance.spellcheck", "appearance", "sagax.spellcheck.v1", "boolean", "Check spelling while typing (desktop app)", "Settings > Appearance > Desktop");
-pref("appearance.botHotkeys", "appearance", "sagax.botHotkeys.v1", "boolean", "Global shortcuts that open a bot (macOS)", "Settings > Appearance > Desktop");
-pref("appearance.botHotkeyChord", "appearance", "sagax.botHotkeyModifier.v1", "enum:cmd-shift|cmd-alt|ctrl-alt", "Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number)", "Settings > Appearance > Desktop");
-pref("appearance.sendKey", "appearance", "omb-send-key", "enum:enter|mod-enter", "Send key", "Settings > Appearance");
-pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This run card", "Settings > Appearance");
-pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > Appearance");
-pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > Appearance > Sidebar");
-pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > Appearance");
-pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > Appearance");
-pref("appearance.freshTopicAfter", "appearance", "sagax.freshTopicAfter.v1", "string", "Fresh topic after", "Settings > Appearance");
-pref("appearance.floatingBots", "appearance", "omb.floatingBots.prefs.v1", "object", "Desktop mascot", "Settings > Appearance > Floating bots");
+pref("appearance.interfaceMode", "appearance", "sagax.interfaceMode.v1", "enum:simple|advanced", "Simple or Advanced", "Settings > General > Appearance");
+pref("appearance.showThreads", "appearance", "omb-show-threads", "boolean", "Show threads", "Settings > General > Appearance");
+pref("appearance.showSuggestions", "appearance", "sagax.showSuggestions.v1", "boolean", "Show the Suggestions card in the bot panel", "Settings > General > Appearance");
+pref("appearance.showAllHistory", "appearance", "sagax.showAllHistory.v1", "boolean", "Show the All history row in the bot panel", "Settings > General > Appearance");
+pref("appearance.showPermissions", "appearance", "sagax.showPermissions.v1", "boolean", "Show the Permissions section in the bot panel", "Settings > General > Appearance");
+pref("appearance.threadsLocation", "appearance", "omb-threads-location", "string", "Threads location", "Settings > General > Appearance");
+pref("appearance.backgroundEffect", "appearance", "sagax-background-effect", "string", "Background effect", "Settings > General > Appearance > More appearance > Background");
+pref("appearance.glyphRipple", "appearance", "sagax-glyph-ripple", "boolean", "Glyph ripple", "Settings > General > Appearance > More appearance > Background");
+pref("appearance.retro98", "appearance", "omb.retro98.on", "boolean", "Hibou 98", "Settings > General > Appearance");
+pref("appearance.reduceMotion", "appearance", "sagax.a11y.motion.v1", "enum:system|reduce", "Reduce motion (follow the system, or always)", "Settings > General > Appearance > More appearance > Accessibility");
+pref("appearance.highContrast", "appearance", "sagax.a11y.contrast.v1", "enum:system|high", "Contrast (standard, or high)", "Settings > General > Appearance > More appearance > Accessibility");
+pref("appearance.hdMascots", "appearance", "sagax.hdMascots.v1", "enum:on|off", "HD mascots (painted art for the characters that have it, or the classic look)", "Settings > General > Appearance > More appearance > Mascots");
+pref("appearance.textSize", "appearance", "sagax.a11y.textSize.v1", "enum:default|large|xlarge", "Text size (default, large, extra large)", "Settings > General > Appearance > More appearance > Accessibility");
+pref("appearance.hardwareAcceleration", "appearance", "sagax.hardwareAcceleration.v1", "boolean", "Use hardware acceleration (desktop app; needs a restart)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.spellcheck", "appearance", "sagax.spellcheck.v1", "boolean", "Check spelling while typing (desktop app)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.botHotkeys", "appearance", "sagax.botHotkeys.v1", "boolean", "Global shortcuts that open a bot (macOS)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.botHotkeyChord", "appearance", "sagax.botHotkeyModifier.v1", "enum:cmd-shift|cmd-alt|ctrl-alt", "Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.sendKey", "appearance", "omb-send-key", "enum:enter|mod-enter", "Send key", "Settings > General > Appearance");
+pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This run card", "Settings > General > Appearance");
+pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
+pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > General > Appearance");
+pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > General > Appearance");
+pref("appearance.freshTopicAfter", "appearance", "sagax.freshTopicAfter.v1", "string", "Fresh topic after", "Settings > General > Appearance");
+pref("appearance.floatingBots", "appearance", "omb.floatingBots.prefs.v1", "object", "Desktop mascot", "Settings > General > Appearance > More appearance > Floating bots");
 // #1545: the open bot's colour as the accent, and what the person hid from the sidebar
-pref("appearance.botAccent", "appearance", "sagax.botAccent.v1", "enum:1|0", "The open bot's colour as the accent (1 on, 0 off)", "Settings > Appearance");
-pref("appearance.sidebarHidden", "appearance", "sagax.sidebarHidden.v1", "object", "Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}})", "Settings > Appearance > Hidden from the sidebar");
-pref("appearance.busySend", "appearance", "sagax.busySend.v1", "string", "Sending to a busy bot", "Settings > Appearance");
-pref("appearance.botReplyBubbles", "appearance", "sagax.botReplyBubbles.v1", "enum:on|off", "Show bot replies in bubbles (on by default; off leaves reply text on the conversation background; the phone follows)", "Settings > Appearance > Conversation");
-pref("appearance.botBubbleAccent", "appearance", "sagax.botBubble.v1", "enum:1|0", "Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice)", "Settings > Appearance > Conversation");
-pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > Appearance > Conversation");
-pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > Appearance > Conversation");
-pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > Notifications");
-pref("notifications.soundChoice", "notifications", "sagax.notificationSound.v1", "enum:system|tick|double-tick|chime-a|chime-b|blip", "Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip)", "Settings > Notifications");
-pref("notifications.persistent", "notifications", "omb-notification-persistent", "boolean", "Persistent notifications", "Settings > Notifications");
-pref("notifications.dockBadge", "notifications", "omb-dock-badge", "boolean", "Dock badge", "Settings > Notifications");
-pref("notifications.approvalChime", "notifications", "omb-approval-chime", "boolean", "Approval chime", "Settings > Notifications");
-pref("notifications.nudgeSound", "notifications", "omb-nudge-sound", "boolean", "Nudge sound", "Settings > Notifications > Nudges");
-pref("notifications.nudgeShake", "notifications", "omb-nudge-shake", "boolean", "Nudge shake", "Settings > Notifications > Nudges");
-pref("notifications.readReceipts", "notifications", "sagax.readReceipts.v1", "boolean", "Read receipts", "Settings > Notifications > Privacy");
-pref("notifications.presence", "notifications", "sagax.presenceVisible.v1", "boolean", "Show when online", "Settings > Notifications > Privacy");
-pref("notifications.analyticsOptOut", "notifications", "omb-analytics-opt-out", "boolean", "Analytics opt-out", "Settings > Privacy");
-pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (voice, speed, language)", "Settings > Voice > Voice mode");
+pref("appearance.botAccent", "appearance", "sagax.botAccent.v1", "enum:1|0", "The open bot's colour as the accent (1 on, 0 off)", "Settings > General > Appearance");
+pref("appearance.sidebarHidden", "appearance", "sagax.sidebarHidden.v1", "object", "Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}})", "Settings > General > Appearance > More appearance > Hidden from the sidebar");
+pref("appearance.busySend", "appearance", "sagax.busySend.v1", "string", "Sending to a busy bot", "Settings > General > Appearance");
+pref("appearance.botReplyBubbles", "appearance", "sagax.botReplyBubbles.v1", "enum:on|off", "Show bot replies in bubbles (on by default; off leaves reply text on the conversation background; the phone follows)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.botBubbleAccent", "appearance", "sagax.botBubble.v1", "enum:1|0", "Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > General > Appearance > More appearance > Conversation");
+pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > General > Notifications");
+pref("notifications.soundChoice", "notifications", "sagax.notificationSound.v1", "enum:system|tick|double-tick|chime-a|chime-b|blip", "Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip)", "Settings > General > Notifications");
+pref("notifications.persistent", "notifications", "omb-notification-persistent", "boolean", "Persistent notifications", "Settings > General > Notifications");
+pref("notifications.dockBadge", "notifications", "omb-dock-badge", "boolean", "Dock badge", "Settings > General > Notifications");
+pref("notifications.approvalChime", "notifications", "omb-approval-chime", "boolean", "Approval chime", "Settings > General > Notifications");
+pref("notifications.nudgeSound", "notifications", "omb-nudge-sound", "boolean", "Nudge sound", "Settings > General > Notifications > Nudges");
+pref("notifications.nudgeShake", "notifications", "omb-nudge-shake", "boolean", "Nudge shake", "Settings > General > Notifications > Nudges");
+pref("notifications.readReceipts", "notifications", "sagax.readReceipts.v1", "boolean", "Read receipts", "Settings > General > Notifications > Privacy");
+pref("notifications.presence", "notifications", "sagax.presenceVisible.v1", "boolean", "Show when online", "Settings > General > Notifications > Privacy");
+pref("notifications.analyticsOptOut", "notifications", "omb-analytics-opt-out", "boolean", "Analytics opt-out", "Settings > Permissions > Privacy");
+pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (voice, speed, language)", "Settings > Providers > Voice > Voice mode");
 // where bots run for the person (their own computer, routines, network): a
 // widening of where work goes, the person's Allow
 // #1545: read back as {place, routines, network}, the default filled in
@@ -934,15 +934,15 @@ config("server.newBotDefaults", "server", "newBotDefaults", "object", "New bot d
   // a default that sets a level, grants or tools for every new bot widens
   (v, ctx) => /"(approvalMode|alwaysAllow|routines|toolScope|mcpServers|fullAccess)"/.test(JSON.stringify(v ?? null)) ? ["rule-change"] : serverWide(v, ctx));
 config("server.threads", "server", "threads", "object", "Conversation cleanup", "Settings > General > Advanced > Threads");
-config("server.showToolCalls", "server", "features.showToolCalls", "boolean", "Show tool calls", "Settings > Appearance");
-config("server.feature", "server", "features", "object", "Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles})", "Settings > Developer > Experimental");
+config("server.showToolCalls", "server", "features.showToolCalls", "boolean", "Show tool calls", "Settings > General > Appearance");
+config("server.feature", "server", "features", "object", "Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles})", "Settings > Updates > Advanced > Experimental");
 config("server.routinesInConversation", "server", "features.routinesInConversation", "boolean", "Routines in conversation", "Settings > Organization > Bots");
 config("server.roomTurnTimeout", "server", "rooms.turnTimeoutMinutes", "number", "Room turn limit", "Settings > Organization > Rooms");
 config("server.mcpCallTimeout", "server", "mcp.callTimeoutMinutes", "number", "MCP call time limit", "Settings > Organization");
 config("server.localVm", "computer", "localVm", "object", "Local VM ({mode, maxInstances, idleTimeoutMinutes})", "Settings > Computer");
-config("models.fishModel", "models", "tts.fishModel", "string", "Fish Audio model", "Settings > Voice");
-config("models.imageGen", "models", "imageGen", "object", "Image generation", "Settings > Models > Images", secretWhenKeyed);
-config("models.decider", "models", "decider", "object", "Decision model", "Settings > Models > Decision model", secretWhenKeyed);
+config("models.fishModel", "models", "tts.fishModel", "string", "Fish Audio model", "Settings > Providers > Voice");
+config("models.imageGen", "models", "imageGen", "object", "Image generation", "Settings > Providers > Models > Images", secretWhenKeyed);
+config("models.decider", "models", "decider", "object", "Decision model", "Settings > Providers > Models > Decision model", secretWhenKeyed);
 add({
   key: "models.providerKey", family: "credentials", target: "none", value: "object", label: "A provider key ({<provider>: {key}}; get says which are saved, never a key)", where: "Settings > Providers",
   read: () => ({ path: "/api/config", shape: savedKeys }),
@@ -965,24 +965,24 @@ add({
   classes: (_v, ctx) => ctx.organization ? ["secret", "org"] : ["secret"],
 });
 add({
-  key: "models.liveCalls", family: "models", target: "none", value: "object", label: "Live call settings", where: "Settings > Voice > Live calls",
+  key: "models.liveCalls", family: "models", target: "none", value: "object", label: "Live call settings", where: "Settings > Providers > Voice > Live calls",
   read: () => ({ path: "/api/live/settings" }),
   write: (_ids, v) => ({ method: "PATCH", path: "/api/live/settings", body: v }), classes: secretWhenKeyed,
 });
 
-// ── engines (Settings > Models; #1545) ──────────────────────────────────
-// The engines of this server and their accounts, as Settings > Models lists
+// ── engines (Settings > Providers > Models; #1545) ──────────────────────────────────
+// The engines of this server and their accounts, as Settings > Providers > Models lists
 // them: GET /api/instances answers each person what they may see (an admin
 // or a person who manages engines, every detail; a member, their copy).
 add({
   key: "models.engines", family: "models", target: "none", value: "object",
-  label: "Engines and their accounts (read only: instanceId, name, driver, signedIn, account)", where: "Settings > Models > Engines",
+  label: "Engines and their accounts (read only: instanceId, name, driver, signedIn, account)", where: "Settings > Providers > Models > Engines",
   read: () => ({ path: "/api/instances", field: "instances", shape: (rows) => Array.isArray(rows) ? rows.map((row) => engineRow((row ?? {}) as EngineRow)) : rows }),
   write: () => "models.engines is read only: add an account with models.claudeAccount or models.chatgptAccount, change one with models.engine.",
 });
 add({
   key: "models.engine", family: "models", target: "engine", value: "object",
-  label: "An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools})", where: "Settings > Models > Engines > engine",
+  label: "An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools})", where: "Settings > Providers > Models > Engines > engine",
   read: () => ({ path: "/api/instances", list: "instances", match: "instanceId", shape: (row) => engineRow((row ?? {}) as EngineRow) }),
   write: (ids, v) => ({ method: "PATCH", path: `/api/instances/${enc(ids.target!)}`, body: v }),
   // a new name only: the person's own; the program, folder or tools: others' work too
@@ -998,7 +998,7 @@ add({
 });
 add({
   key: "models.claudeAccount", family: "models", target: "none", value: "object",
-  label: "Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card", where: "Settings > Models > Claude > Add account",
+  label: "Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card", where: "Settings > Providers > Models > Claude > Add account",
   write: (_ids, v) => {
     const { name, configDir } = (v ?? {}) as { name?: unknown; configDir?: unknown };
     if (typeof name !== "string" || !name.trim()) return "value is {name, configDir?}.";
@@ -1008,7 +1008,7 @@ add({
 });
 add({
   key: "models.chatgptAccount", family: "models", target: "none", value: "object",
-  label: "Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card", where: "Settings > Models > Codex > Add account",
+  label: "Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card", where: "Settings > Providers > Models > Codex > Add account",
   write: (_ids, v) => {
     const { name } = (v ?? {}) as { name?: unknown };
     if (typeof name !== "string" || !name.trim()) return "value is {name}.";
@@ -1018,24 +1018,24 @@ add({
 });
 add({
   key: "models.engineSignIn", family: "models", target: "engine", value: "boolean",
-  label: "Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in", where: "Settings > Models > engine > Sign in",
+  label: "Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in", where: "Settings > Providers > Models > engine > Sign in",
   write: (ids, v) => v === true ? { card: "engineSignIn", input: { instanceId: ids.target! } } : "value is true.",
 });
 add({
   key: "models.engineSignOut", family: "models", target: "engine", value: "boolean",
-  label: "Sign an engine or account out (value true)", where: "Settings > Models > engine > Sign out",
+  label: "Sign an engine or account out (value true)", where: "Settings > Providers > Models > engine > Sign out",
   write: (ids, v) => v === true ? { method: "POST", path: `/api/instances/${enc(ids.target!)}/auth/sign-out`, body: {} } : "value is true.",
   classes: (v, ctx) => [...engineReach(v, ctx), "delete"],
 });
 add({
   key: "models.engineRemove", family: "models", target: "engine", value: "boolean",
-  label: "Remove an added account (value true)", where: "Settings > Models > account > Remove",
+  label: "Remove an added account (value true)", where: "Settings > Providers > Models > account > Remove",
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/instances/${enc(ids.target!)}` } : "value is true.",
   classes: (v, ctx) => [...engineReach(v, ctx), "delete"],
 });
 add({
   key: "models.engineKeySaved", family: "models", target: "engine", value: "object",
-  label: "An engine's access key (get says whether one is saved, never the key; set {key} saves one, key a reference: {$secret: generate|copy})", where: "Settings > Models > engine > Access key",
+  label: "An engine's access key (get says whether one is saved, never the key; set {key} saves one, key a reference: {$secret: generate|copy})", where: "Settings > Providers > Models > engine > Access key",
   read: (ids) => ({ path: `/api/instances/${enc(ids.target!)}/api-key`, field: "configured" }),
   write: (ids, v) => {
     const key = (v as { key?: unknown } | null)?.key;
@@ -1051,12 +1051,12 @@ function engineAction(key: string, action: string, label: string, where: string)
     classes: engineOwn,
   });
 }
-engineAction("models.engineInstall", "install", "Install an engine", "Settings > Models > engine > Install");
-engineAction("models.engineRefresh", "refresh-models", "Check an engine again (its models)", "Settings > Models > Check again");
-engineAction("models.claudeUpdate", "claude-update", "Update Claude Code", "Settings > Models > Claude > Advanced > Update");
+engineAction("models.engineInstall", "install", "Install an engine", "Settings > Providers > Models > engine > Install");
+engineAction("models.engineRefresh", "refresh-models", "Check an engine again (its models)", "Settings > Providers > Models > Check again");
+engineAction("models.claudeUpdate", "claude-update", "Update Claude Code", "Settings > Providers > Models > Claude > Advanced > Update");
 add({
   key: "models.antigravityAccount", family: "models", target: "none", value: "object",
-  label: "Add an Antigravity account ({name, source: the Antigravity engine's instanceId}); then models.engineSignIn", where: "Settings > Models > Antigravity > Add account",
+  label: "Add an Antigravity account ({name, source: the Antigravity engine's instanceId}); then models.engineSignIn", where: "Settings > Providers > Models > Antigravity > Add account",
   write: (_ids, v) => {
     const { name, source } = (v ?? {}) as { name?: unknown; source?: unknown };
     if (typeof name !== "string" || !name.trim() || typeof source !== "string" || !source) return "value is {name, source}.";
@@ -1064,16 +1064,16 @@ add({
   },
   classes: engineOwn,
 });
-// an organization member's own subscriptions (Settings > Models, organization server)
+// an organization member's own subscriptions (Settings > Providers > Models, organization server)
 add({
   key: "models.myEngines", family: "models", target: "none", value: "object",
-  label: "The person's own engine access (organization server: subscription signed in, own key, organization key; read only)", where: "Settings > Models > My engines",
+  label: "The person's own engine access (organization server: subscription signed in, own key, organization key; read only)", where: "Settings > Providers > Models > My engines",
   read: () => ({ path: "/api/me/engines", field: "engines" }),
   write: () => "models.myEngines is read only: models.engineSignIn posts a sign-in card, models.mySignOut signs the person's own subscription out.",
 });
 add({
   key: "models.mySignOut", family: "models", target: "engine", value: "boolean",
-  label: "Sign the person's own subscription out of an engine (organization server; value true)", where: "Settings > Models > My engines > Disconnect",
+  label: "Sign the person's own subscription out of an engine (organization server; value true)", where: "Settings > Providers > Models > My engines > Disconnect",
   write: (ids, v) => v === true ? { method: "POST", path: `/api/me/engines/${enc(ids.target!)}/login/sign-out`, body: {} } : "value is true.",
   classes: always("delete"),
 });
@@ -1097,13 +1097,13 @@ org("org.pendingApprovalExpireDays", "pendingApprovalExpireDays", "number", "Wai
 org("org.pluginMarketplaces", "pluginMarketplaces", "any", "Plugin marketplaces", "Capabilities > Sources > Organization sources and access");
 // published pages (lot R8): the admins' switch for public links, a card at every level
 add({
-  key: "org.pagesLinkSharing", family: "organization", target: "none", value: "boolean", label: "Public links for published pages", where: "Settings > Pages > Organization pages",
+  key: "org.pagesLinkSharing", family: "organization", target: "none", value: "boolean", label: "Public links for published pages", where: "Settings > General > Pages > Organization pages",
   read: () => ({ path: "/api/admin/pages/policy", field: "linkSharing" }),
   write: (_ids, v) => typeof v === "boolean" ? { method: "PUT", path: "/api/admin/pages/policy", body: { linkSharing: v } } : "value is true or false.",
   classes: always("org"),
 });
 add({
-  key: "org.pagesReaderComments", family: "organization", target: "none", value: "boolean", label: "Reader comments on published pages", where: "Settings > Pages > Organization pages",
+  key: "org.pagesReaderComments", family: "organization", target: "none", value: "boolean", label: "Reader comments on published pages", where: "Settings > General > Pages > Organization pages",
   read: () => ({ path: "/api/admin/pages/policy", field: "readerComments" }),
   write: (_ids, v) => typeof v === "boolean" ? { method: "PUT", path: "/api/admin/pages/policy", body: { readerComments: v } } : "value is true or false.",
   classes: always("org"),
@@ -1177,7 +1177,7 @@ add({
   write: (_ids, v) => v === true ? { method: "DELETE", path: "/api/me/github" } : "value is true.", classes: always("delete", "secret"),
 });
 add({
-  key: "connections.cloudAgentKey", family: "credentials", target: "none", value: "object", label: "Cloud coding agent key ({provider: cursor|claude|codex, token}, token null removes; get says which are saved)", where: "Settings > Models > Cloud coding agents",
+  key: "connections.cloudAgentKey", family: "credentials", target: "none", value: "object", label: "Cloud coding agent key ({provider: cursor|claude|codex, token}, token null removes; get says which are saved)", where: "Settings > Providers > Models > Cloud coding agents",
   read: () => ({ path: "/api/me/cloud-agent-providers", field: "providers" }),
   write: (_ids, v) => {
     const k = v as { provider?: unknown; token?: unknown } | null;
@@ -1268,11 +1268,11 @@ function deviceSetting(key: keyof typeof DEVICE_ONLY_SETTINGS, value: SettingVal
     write: (_ids, v) => ({ device: key, value: asText(v) }),
   });
 }
-deviceSetting("device.openAtLogin", "enum:on|off", "Open Sagax when the person signs in to this computer (desktop app)", "Settings > Account > Open at login");
+deviceSetting("device.openAtLogin", "enum:on|off", "Open Sagax when the person signs in to this computer (desktop app)", "Settings > General > Open at login");
 deviceSetting("device.updateChannel", "enum:stable|nightly", "Update channel of the desktop app (stable, or nightly: versions still in testing)", "Settings > Updates > Channel");
 deviceSetting("device.updateWhenAway", "boolean", "Install a downloaded update while the person is away and no bot works (desktop app)", "Settings > Updates");
-deviceSetting("device.appIcon", "string", "App icon of the desktop app (an icon's id: sagax for the default, sagax-owl, owl:<skin>, primary...; get gives the one shown)", "Settings > Appearance > App icon");
-deviceSetting("device.microphone", "string", "Microphone used for voice on this device (get lists them; set an id, a name, or default)", "Settings > Voice > Microphone");
+deviceSetting("device.appIcon", "string", "App icon of the desktop app (an icon's id: sagax for the default, sagax-owl, owl:<skin>, primary...; get gives the one shown)", "Settings > General > Appearance > More appearance > App icon");
+deviceSetting("device.microphone", "string", "Microphone used for voice on this device (get lists them; set an id, a name, or default)", "Settings > Providers > Voice > Microphone");
 deviceSetting("device.keepAwake", "boolean", "Keep this computer awake for scheduled routines (desktop app)", "Settings > Routines > Keep awake");
 deviceSetting("device.remoteAccess", "boolean", "Phone access to this computer (the desktop app's companion: on or off; get lists the paired devices)", "Settings > Phone > This computer");
 deviceSetting("device.pairing", "boolean", "Open or close pairing for a new phone (the code stays on the person's screen; get says whether it is open)", "Settings > Phone > Pair a phone");
@@ -1286,16 +1286,16 @@ function deviceAction(key: keyof typeof DEVICE_ONLY_SETTINGS, value: SettingValu
   add({ key, family: "device", target: "none", label, where, value, classes, write: (_ids, v) => ({ device: key, value: asText(v) }) });
 }
 deviceAction("device.vaultExport", "enum:chrome-csv|bitwarden-csv|bitwarden-json", "Export the vault to a file saved on the person's device (chrome-csv, bitwarden-csv, bitwarden-json; the values never reach the bot; their security key or a fresh sign-in is asked on their screen)", "Settings > Vault > Export", always("secret"));
-deviceAction("device.securityKeyAdd", "string", "Add a security key (its name): the ceremony opens on the person's screen, they touch the key", "Settings > Security > Add a key", always("secret"));
-deviceAction("device.securityKeyRemove", "string", "Remove a security key (its id, from security.keys): confirmed with a key on the person's screen", "Settings > Security > key > Remove", always("secret", "delete"));
-deviceAction("device.securityKeyClasses", "array", "Which approvals ask for a security key (the full list; removing one is confirmed with the key on the person's screen)", "Settings > Security > Ask for my key", always("secret"));
-deviceSetting("device.haptics", "boolean", "Haptic feedback (iPhone app)", "iPhone: Settings > Appearance > Haptics");
-deviceSetting("device.nudgeHaptic", "boolean", "Vibrate on a nudge (iPhone app)", "iPhone: Settings > Notifications > Nudges");
+deviceAction("device.securityKeyAdd", "string", "Add a security key (its name): the ceremony opens on the person's screen, they touch the key", "Settings > Permissions > Add a key", always("secret"));
+deviceAction("device.securityKeyRemove", "string", "Remove a security key (its id, from security.keys): confirmed with a key on the person's screen", "Settings > Permissions > key > Remove", always("secret", "delete"));
+deviceAction("device.securityKeyClasses", "array", "Which approvals ask for a security key (the full list; removing one is confirmed with the key on the person's screen)", "Settings > Permissions > Ask for my key", always("secret"));
+deviceSetting("device.haptics", "boolean", "Haptic feedback (iPhone app)", "iPhone: Settings > General > Appearance > More appearance > Haptics");
+deviceSetting("device.nudgeHaptic", "boolean", "Vibrate on a nudge (iPhone app)", "iPhone: Settings > General > Notifications > Nudges");
 
 // ── #1545 (2026-10-28): security keys, wallets, purchases, 1Password,
 // webhook secrets: managed for the person, never a value to the bot ─────
 add({
-  key: "security.keys", family: "credentials", target: "none", value: "object", label: "The person's security keys and which approvals ask for one (read only: names, ids, classes; security.keyName, device.securityKey* change them)", where: "Settings > Security",
+  key: "security.keys", family: "credentials", target: "none", value: "object", label: "The person's security keys and which approvals ask for one (read only: names, ids, classes; security.keyName, device.securityKey* change them)", where: "Settings > Permissions",
   read: () => ({ path: "/api/security-keys", shape: (v) => {
     const r = (v ?? {}) as { keys?: Array<Record<string, unknown>>; classes?: unknown };
     return { keys: (r.keys ?? []).map((key) => ({ id: key.id, name: key.name, ...(key.createdAt ? { createdAt: key.createdAt } : {}), ...(key.lastUsedAt ? { lastUsedAt: key.lastUsedAt } : {}) })), classes: r.classes };
@@ -1303,13 +1303,13 @@ add({
   write: () => "security.keys is read only: security.keyName renames a key, security.keyClasses adds protections, device.securityKeyAdd / device.securityKeyRemove / device.securityKeyClasses run on the person's screen.",
 });
 add({
-  key: "security.keyClasses", family: "credentials", target: "none", value: "array", label: "Which approvals ask for a security key (the full list; adding runs here, removing one needs the key: device.securityKeyClasses)", where: "Settings > Security > Ask for my key",
+  key: "security.keyClasses", family: "credentials", target: "none", value: "array", label: "Which approvals ask for a security key (the full list; adding runs here, removing one needs the key: device.securityKeyClasses)", where: "Settings > Permissions > Ask for my key",
   read: () => ({ path: "/api/security-keys", field: "classes" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/security-keys/classes", body: { classes: v } }),
   classes: always("secret"),
 });
 add({
-  key: "security.keyName", family: "credentials", target: "none", value: "object", label: "Rename a security key ({id, name})", where: "Settings > Security > key",
+  key: "security.keyName", family: "credentials", target: "none", value: "object", label: "Rename a security key ({id, name})", where: "Settings > Permissions > key",
   read: () => ({ path: "/api/security-keys", field: "keys" }),
   write: (_ids, v) => {
     const r = v as { id?: unknown; name?: unknown } | null;
@@ -1412,12 +1412,12 @@ add({
   },
   classes: (v) => Object.values((v ?? {}) as Record<string, { key?: unknown }>)[0]?.key === null ? ["delete"] : ["secret"],
 });
-config("models.ttsServer", "models", "tts.baseUrl", "string", "Custom voice server address (the voice engine's own server)", "Settings > Voice > Advanced", secretWhenKeyed);
-config("models.ttsModel", "models", "tts.model", "string", "Custom voice server model", "Settings > Voice > Advanced");
-config("server.vpsAlias", "server", "vps.sshAlias", "string", "VPS computer SSH alias", "Settings > Models > Integrations > VPS");
+config("models.ttsServer", "models", "tts.baseUrl", "string", "Custom voice server address (the voice engine's own server)", "Settings > Providers > Voice > Advanced", secretWhenKeyed);
+config("models.ttsModel", "models", "tts.model", "string", "Custom voice server model", "Settings > Providers > Voice > Advanced");
+config("server.vpsAlias", "server", "vps.sshAlias", "string", "VPS computer SSH alias", "Settings > Providers > Models > Integrations > VPS");
 // tests the screen offers: one real call, nothing saved
 add({
-  key: "models.deciderTest", family: "models", target: "none", value: "boolean", label: "Test the decision model (value true)", where: "Settings > Models > Decision model > Test",
+  key: "models.deciderTest", family: "models", target: "none", value: "boolean", label: "Test the decision model (value true)", where: "Settings > Providers > Models > Decision model > Test",
   write: (_ids, v) => v === true ? { method: "POST", path: "/api/decider/test", body: {} } : "value is true.",
 });
 add({
@@ -1425,15 +1425,15 @@ add({
   write: (_ids, v) => v === true ? { method: "POST", path: "/api/me/web-search/test", body: {} } : "value is true.",
 });
 // account
-config("account.profile", "account", "profile", "object", "Your name, email and photo on this computer ({name, email, avatarUrl})", "Settings > Account");
+config("account.profile", "account", "profile", "object", "Your name, email and photo on this computer ({name, email, avatarUrl})", "Settings > General");
 add({
-  key: "account.learned", family: "account", target: "none", value: "string", label: "What upkeep learned about you (get lists them; set with a fact's id removes it)", where: "Settings > Account > About me",
+  key: "account.learned", family: "account", target: "none", value: "string", label: "What upkeep learned about you (get lists them; set with a fact's id removes it)", where: "Settings > General > About me",
   read: () => ({ path: "/api/profile/learned", field: "learned" }),
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/profile/learned/${enc(v)}/remove`, body: {} } : "value is the id of a learned fact.",
   classes: always("delete"),
 });
 add({
-  key: "account.usageMeter", family: "account", target: "none", value: "boolean", label: "Anonymous usage counts to this server", where: "Settings > Account > Advanced > Usage meter",
+  key: "account.usageMeter", family: "account", target: "none", value: "boolean", label: "Anonymous usage counts to this server", where: "Settings > General > Advanced > Usage meter",
   read: () => ({ path: "/api/me/usage-meter", field: "enabled" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/me/usage-meter", body: { enabled: v === true } }),
 });
@@ -1444,14 +1444,14 @@ add({
 });
 // security: the person's own tool access
 add({
-  key: "security.myToolGrants", family: "rules", target: "none", value: "string", label: "Your tool access (get lists it; set with a grant's id revokes it)", where: "Settings > Security > My tool access",
+  key: "security.myToolGrants", family: "rules", target: "none", value: "string", label: "Your tool access (get lists it; set with a grant's id revokes it)", where: "Settings > Permissions > My tool access",
   read: () => ({ path: "/api/me/tool-grants", field: "grants" }),
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/me/tool-grants/${enc(v)}/revoke`, body: {} } : "value is a grant's id.",
   classes: always("delete"),
 });
 // privacy: blocked people
 add({
-  key: "notifications.blocks", family: "notifications", target: "none", value: "object", label: "People you blocked ({block: {id, name}} or {unblock: id}; get lists them)", where: "Settings > Notifications > Privacy > Blocked people",
+  key: "notifications.blocks", family: "notifications", target: "none", value: "object", label: "People you blocked ({block: {id, name}} or {unblock: id}; get lists them)", where: "Settings > General > Notifications > Privacy > Blocked people",
   read: () => ({ path: "/api/me/blocks" }),
   write: (_ids, v) => {
     const r = (v ?? {}) as { block?: { id?: unknown; name?: unknown }; unblock?: unknown };
@@ -1477,13 +1477,13 @@ add({
 });
 // experimental: an organization member's own switches
 add({
-  key: "account.experimental", family: "account", target: "none", value: "object", label: "Your own experiments and tool calls shown ({features: {<key>: true|false|null}})", where: "Settings > Developer > Experimental; Settings > Appearance > Show tool calls",
+  key: "account.experimental", family: "account", target: "none", value: "object", label: "Your own experiments and tool calls shown ({features: {<key>: true|false|null}})", where: "Settings > Updates > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls",
   read: () => ({ path: "/api/me/experimental" }),
   write: (_ids, v) => ({ method: "PATCH", path: "/api/me/experimental", body: v }),
 });
 // organization
 add({
-  key: "org.phoneCalls", family: "organization", target: "none", value: "object", label: "Phone calls ({enabled, addDoNotCall, removeDoNotCall})", where: "Settings > Voice > Phone calls",
+  key: "org.phoneCalls", family: "organization", target: "none", value: "object", label: "Phone calls ({enabled, addDoNotCall, removeDoNotCall})", where: "Settings > Providers > Voice > Phone calls",
   read: () => ({ path: "/api/org/phone-calls", field: "settings" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/org/phone-calls", body: v }),
   classes: always("org"),
@@ -1580,7 +1580,7 @@ add({
   classes: (v, ctx) => [...serverWide(v, ctx), "delete"],
 });
 add({
-  key: "models.antigravityLeftovers", family: "models", target: "engine", value: "boolean", label: "Free up space: delete Antigravity's leftover files (get lists them; value true deletes)", where: "Settings > Models > Antigravity > Free up space",
+  key: "models.antigravityLeftovers", family: "models", target: "engine", value: "boolean", label: "Free up space: delete Antigravity's leftover files (get lists them; value true deletes)", where: "Settings > Providers > Models > Antigravity > Free up space",
   read: (ids) => ({ path: `/api/instances/${enc(ids.target!)}/leftover-files` }),
   write: (ids, v) => v === true ? { method: "POST", path: `/api/instances/${enc(ids.target!)}/leftover-files/remove`, body: {} } : "value is true.",
   // files no engine uses any more: the person's own clean-up
@@ -1588,13 +1588,13 @@ add({
 });
 // people and the organization (admin)
 add({
-  key: "org.toolGrants", family: "organization", target: "none", value: "string", label: "People's tool access (get lists it; set with a grant's id revokes it)", where: "Settings > Account > Advanced > People's tool access",
+  key: "org.toolGrants", family: "organization", target: "none", value: "string", label: "People's tool access (get lists it; set with a grant's id revokes it)", where: "Settings > General > Advanced > People's tool access",
   read: () => ({ path: "/api/tool-grants", query: { kind: "user" }, field: "grants" }),
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/tool-grants/${enc(v)}/revoke`, body: {} } : "value is a grant's id.",
   classes: always("others", "delete"),
 });
 add({
-  key: "org.reports", family: "organization", target: "none", value: "string", label: "Reports (get lists them; set with a report's id resolves it)", where: "Settings > Notifications > Privacy > Reports",
+  key: "org.reports", family: "organization", target: "none", value: "string", label: "Reports (get lists them; set with a report's id resolves it)", where: "Settings > General > Notifications > Privacy > Reports",
   read: () => ({ path: "/api/moderation/reports" }),
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/moderation/reports/${enc(v)}/resolve`, body: {} } : "value is a report's id.",
   classes: always("others"),
@@ -1616,7 +1616,7 @@ add({
   classes: always("others"),
 });
 add({
-  key: "org.pageRevoke", family: "organization", target: "none", value: "string", label: "Take down a published page of the organization (its id)", where: "Settings > Pages > Organization pages",
+  key: "org.pageRevoke", family: "organization", target: "none", value: "string", label: "Take down a published page of the organization (its id)", where: "Settings > General > Pages > Organization pages",
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/admin/pages/${enc(v)}/revoke`, body: {} } : "value is a page's id.",
   classes: always("others", "delete"),
 });

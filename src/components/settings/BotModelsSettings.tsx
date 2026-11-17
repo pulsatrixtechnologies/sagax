@@ -336,6 +336,7 @@ export function NewBotDefaultsRow() {
     <DescribedRow
       label={newBotDefaultsSummary(state.config) || t("botModels.defaults.perspicax")}
       description={t("providers.chosenInPerspicax")}
+      help={t("botModels.defaults.help")}
       rowId="models.newBotDefaults"
     />
   ) : (

@@ -352,7 +352,7 @@ export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Pro
 }
 
 const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
-  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Voice.",
+  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers > Voice.",
   server_engine_not_allowed: "Your organization has not given you its xAI voice. Add your own xAI key, or ask an admin.",
   payer_disabled: "Your access is turned off in your organization.",
   perspicax_unreachable: "Perspicax could not be reached to read your xAI key. Try again in a moment.",
@@ -597,7 +597,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   };
   if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
   if (blocked) return refuse("spend_cap", blocked);
-  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Voice.");
+  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Providers > Voice.");
   const callId = randomUUID();
   const link = deps.realtime.session(target, auth, callId);
   const tried: VoiceKeyRefusal[] = [];
@@ -647,7 +647,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   // every key refused for itself: say which to fix, never fall back to text to speech
   const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
-    keyRefused ? "The realtime voice key was refused. Fix it in Settings > Voice." : "The realtime voice is not reachable. Try the call again.",
+    keyRefused ? "The realtime voice key was refused. Fix it in Settings > Providers > Voice." : "The realtime voice is not reachable. Try the call again.",
     { tried });
 }
 

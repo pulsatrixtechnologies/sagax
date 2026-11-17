@@ -245,6 +245,15 @@ describe("instances routes", () => {
     expect(cfg.instances?.claude).toBeDefined();
   });
 
+  it("never takes the organization's account away while the only one left is a member's own (#4426)", async () => {
+    const { call, cfg } = harness();
+    cfg.instances!["claude-extra"]!.ownerPrincipalId = "member@example.com";
+    expect((await call("DELETE", "/api/instances/claude")).sent?.status).toBe(400);
+    expect(cfg.instances?.claude).toBeDefined();
+    // the member's own account is theirs to remove
+    expect((await call("DELETE", "/api/instances/claude-extra")).sent?.status).toBe(200);
+  });
+
   it("removes an added account of any provider, not Claude's only (#4415)", async () => {
     const { call, cfg } = harness();
     const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";

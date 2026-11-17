@@ -27,4 +27,12 @@ describe("composer focus ring after a send", () => {
     expect(rule).toContain(':root[data-contrast="high"]');
     expect(rule).toMatch(/outline:\s*none/);
   });
+
+  it("keeps a visible focus on the pill in high contrast, drawn in the primary ink", () => {
+    const start = css.indexOf(':root[data-contrast="high"] [data-tour="composer"]:focus-within');
+    expect(start).toBeGreaterThan(composer);
+    const rule = css.slice(start, css.indexOf("}", start));
+    expect(rule).toContain("border-color: var(--color-ink)");
+    expect(rule).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--color-ink\)/);
+  });
 });

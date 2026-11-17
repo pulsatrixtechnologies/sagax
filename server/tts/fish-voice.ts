@@ -15,7 +15,7 @@ export function createFishVoice(options: { api?: string; fetch?: typeof fetch; m
   }
   async function request(text: string, voice: string | undefined, key: string, opts: SynthesizeOptions, format: "mp3" | "pcm", signal?: AbortSignal): Promise<Response> {
     const id = voice || (await listVoices(key))[0]?.id;
-    if (!id) throw new Error("Fish Audio could not find that voice. Pick a voice in Settings > Voice.");
+    if (!id) throw new Error("Fish Audio could not find that voice. Pick a voice in Settings > Providers > Voice.");
     let response: Response;
     try {
       response = await doFetch(`${api()}/v1/tts`, {

@@ -42,13 +42,11 @@ describe("sidebar head buttons", () => {
 
   it("are what the head's search and New buttons wear, at every density", () => {
     expect(sidebar).toMatch(/const SIDEBAR_HEAD_BUTTON = cn\(\s*SIDEBAR_CIRCLE_BUTTON,/);
-    // one pair, drawn in the head at full width and in the rail's foot (#4093)
-    const buttons = sidebar.slice(sidebar.indexOf("const railButtons = ("), sidebar.indexOf("</>", sidebar.indexOf("const railButtons = (")));
-    expect(buttons.match(/className=\{SIDEBAR_HEAD_BUTTON\}/g)).toHaveLength(2);
-    // the head leads with the reference's collapse button, in the same circle (#4484)
-    const lead = sidebar.slice(sidebar.indexOf("const headButtons = ("), sidebar.indexOf("{railButtons}"));
-    expect(lead.match(/className=\{SIDEBAR_HEAD_BUTTON\}/g)).toHaveLength(1);
-    expect(lead).toContain("data-sidebar-collapse");
+    // collapse, search and New, drawn in the head at full width; the rail's foot takes search and New (#4093)
+    const buttons = sidebar.slice(sidebar.indexOf("const collapseButton ="), sidebar.indexOf("const headButtons ="));
+    expect(buttons.match(/className=\{SIDEBAR_HEAD_BUTTON\}/g)).toHaveLength(3);
+    expect(buttons).toContain("data-sidebar-collapse");
+    expect(sidebar).toContain("const railButtons = <>{searchButton}{newButton}</>");
     expect(buttons).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);
     const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("{/* Bot list."));
     expect(head.match(/\{headButtons\}/g)).toHaveLength(1);

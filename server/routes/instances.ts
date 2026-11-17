@@ -165,7 +165,10 @@ export async function removeAddedAccount(
   // Antigravity), the first one too, while the provider keeps another.
   // A key engine of the same tool is a key, not an account.
   const entry = instances[instanceId];
-  const accounts = Object.keys(instances).filter((id) => instances[id]?.driver === entry.driver && instances[id]?.access !== "api");
+  // Another person's own added account (ownerPrincipalId, an organization
+  // server) is not the provider's account for everyone: leaving only it would
+  // take the provider away from the rest of the organization.
+  const accounts = Object.keys(instances).filter((id) => instances[id]?.driver === entry.driver && instances[id]?.access !== "api" && !instances[id]?.ownerPrincipalId);
   if (entry.access === "api" || !(addedAccount(instanceId, entry.driver) || removableAccount(instanceId, accounts))) {
     return { ok: false, status: 400, body: { error: ONLY_ACCOUNT_ERROR } };
   }

@@ -297,66 +297,66 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Change a custom rule ({when?, behavior?, enabled?, riskScope?}) | Bot editor > Permissions > Custom rules | `sagax_settings` get, set `rules.customUpdate` | élargit les droits |
 | Delete a custom rule (true) | Bot editor > Permissions > Custom rules | `sagax_settings` set `rules.customDelete` | suppression + élargit les droits |
 | Change an owner rule ({behavior, botId?}) | Bot editor > Permissions > Owner permissions | `sagax_settings` get, set `rules.owner` | élargit les droits |
-| Delete an owner rule (true) | Settings > Security > Your approval rules | `sagax_settings` set `rules.ownerDelete` | suppression + élargit les droits |
+| Delete an owner rule (true) | Settings > Permissions > Your approval rules | `sagax_settings` set `rules.ownerDelete` | suppression + élargit les droits |
 | Allow an exact command ({command, cwd, providerInstanceId}) | Bot editor > Access > Saved commands | `sagax_settings` set `rules.commandAllow` | élargit les droits |
-| Your tool access (get lists it; set with a grant's id revokes it) | Settings > Security > My tool access | `sagax_settings` get, set `security.myToolGrants` | suppression |
+| Your tool access (get lists it; set with a grant's id revokes it) | Settings > Permissions > My tool access | `sagax_settings` get, set `security.myToolGrants` | suppression |
 
 ### Compte
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| How people see your name | Settings > Account | `sagax_settings` get, set `account.label` | simple |
-| Your photo (a data URL, null removes) | Settings > Account | `sagax_settings` set `account.avatar` | simple |
-| About me | Settings > Account > About me | `sagax_settings` get, set `account.aboutMe` | simple |
+| How people see your name | Settings > General | `sagax_settings` get, set `account.label` | simple |
+| Your photo (a data URL, null removes) | Settings > General | `sagax_settings` set `account.avatar` | simple |
+| About me | Settings > General > About me | `sagax_settings` get, set `account.aboutMe` | simple |
 | Your own model and notifications for a shared bot | Shared bot > Model / Notifications | `sagax_settings` get, set `account.botOverride` | simple |
-| Your time zone (an IANA zone such as America/Toronto; turns automatic detection off) | Settings > Account > Time zone | `sagax_settings` get, set `account.timeZone` | simple |
-| Detect your time zone automatically (the app then follows this computer's zone) | Settings > Account > Time zone | `sagax_settings` get, set `account.timeZoneAuto` | simple |
-| Your name, email and photo on this computer ({name, email, avatarUrl}) | Settings > Account | `sagax_settings` get, set `account.profile` | simple; organisation : organisation |
-| What upkeep learned about you (get lists them; set with a fact's id removes it) | Settings > Account > About me | `sagax_settings` get, set `account.learned` | suppression |
-| Anonymous usage counts to this server | Settings > Account > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
+| Your time zone (an IANA zone such as America/Toronto; turns automatic detection off) | Settings > General > Appearance > Time zone | `sagax_settings` get, set `account.timeZone` | simple |
+| Detect your time zone automatically (the app then follows this computer's zone) | Settings > General > Appearance > Time zone | `sagax_settings` get, set `account.timeZoneAuto` | simple |
+| Your name, email and photo on this computer ({name, email, avatarUrl}) | Settings > General | `sagax_settings` get, set `account.profile` | simple; organisation : organisation |
+| What upkeep learned about you (get lists them; set with a fact's id removes it) | Settings > General > About me | `sagax_settings` get, set `account.learned` | suppression |
+| Anonymous usage counts to this server | Settings > General > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
 | Your monthly spend limit in USD (null removes; personal server) | Settings > Usage > Monthly limit | `sagax_settings` get, set `account.spendCap` | simple |
-| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Developer > Experimental; Settings > Appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
+| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Updates > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
 
 ### Apparence
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| Skin | Settings > Appearance > Skin | `sagax_settings` get, set `appearance.skin` | simple |
-| Light, dark or auto | Settings > Appearance > Skin | `sagax_settings` get, set `appearance.mode` | simple |
-| Font | Settings > Appearance | `sagax_settings` get, set `appearance.font` | simple |
+| Skin | Settings > General > Appearance > Skin | `sagax_settings` get, set `appearance.skin` | simple |
+| Light, dark or auto | Settings > General > Appearance > Skin | `sagax_settings` get, set `appearance.mode` | simple |
+| Font | Settings > General > Appearance | `sagax_settings` get, set `appearance.font` | simple |
 | Language (fr, en; empty follows the system) | Settings > General > Appearance | `sagax_settings` get, set `appearance.language` | simple |
-| Simple or Advanced | Settings > Appearance | `sagax_settings` get, set `appearance.interfaceMode` | simple |
-| Show threads | Settings > Appearance | `sagax_settings` get, set `appearance.showThreads` | simple |
-| Show the Suggestions card in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showSuggestions` | simple |
-| Show the All history row in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showAllHistory` | simple |
-| Show the Permissions section in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showPermissions` | simple |
-| Threads location | Settings > Appearance | `sagax_settings` get, set `appearance.threadsLocation` | simple |
-| Background effect | Settings > Appearance > Background | `sagax_settings` get, set `appearance.backgroundEffect` | simple |
-| Glyph ripple | Settings > Appearance > Background | `sagax_settings` get, set `appearance.glyphRipple` | simple |
-| Hibou 98 | Settings > Appearance | `sagax_settings` get, set `appearance.retro98` | simple |
-| Reduce motion (follow the system, or always) | Settings > Appearance > Accessibility | `sagax_settings` get, set `appearance.reduceMotion` | simple |
-| Contrast (standard, or high) | Settings > Appearance > Accessibility | `sagax_settings` get, set `appearance.highContrast` | simple |
-| HD mascots (painted art for the characters that have it, or the classic look) | Settings > Appearance > Mascots | `sagax_settings` get, set `appearance.hdMascots` | simple |
-| Text size (default, large, extra large) | Settings > Appearance > Accessibility | `sagax_settings` get, set `appearance.textSize` | simple |
-| Use hardware acceleration (desktop app; needs a restart) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.hardwareAcceleration` | simple |
-| Check spelling while typing (desktop app) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.spellcheck` | simple |
-| Global shortcuts that open a bot (macOS) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
-| Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeyChord` | simple |
-| Send key | Settings > Appearance | `sagax_settings` get, set `appearance.sendKey` | simple |
-| This run card | Settings > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
-| Sidebar logo | Settings > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
-| Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > Appearance > Sidebar | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
-| Routines badge | Settings > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
-| Sidebar density | Settings > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |
-| Fresh topic after | Settings > Appearance | `sagax_settings` get, set `appearance.freshTopicAfter` | simple |
-| Desktop mascot | Settings > Appearance > Floating bots | `sagax_settings` get, set `appearance.floatingBots` | simple |
-| The open bot's colour as the accent (1 on, 0 off) | Settings > Appearance | `sagax_settings` get, set `appearance.botAccent` | simple |
-| Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}}) | Settings > Appearance > Hidden from the sidebar | `sagax_settings` get, set `appearance.sidebarHidden` | simple |
-| Sending to a busy bot | Settings > Appearance | `sagax_settings` get, set `appearance.busySend` | simple |
-| Show bot replies in bubbles (on by default; off leaves reply text on the conversation background; the phone follows) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.botReplyBubbles` | simple |
-| Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.botBubbleAccent` | simple |
-| Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
-| Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
+| Simple or Advanced | Settings > General > Appearance | `sagax_settings` get, set `appearance.interfaceMode` | simple |
+| Show threads | Settings > General > Appearance | `sagax_settings` get, set `appearance.showThreads` | simple |
+| Show the Suggestions card in the bot panel | Settings > General > Appearance | `sagax_settings` get, set `appearance.showSuggestions` | simple |
+| Show the All history row in the bot panel | Settings > General > Appearance | `sagax_settings` get, set `appearance.showAllHistory` | simple |
+| Show the Permissions section in the bot panel | Settings > General > Appearance | `sagax_settings` get, set `appearance.showPermissions` | simple |
+| Threads location | Settings > General > Appearance | `sagax_settings` get, set `appearance.threadsLocation` | simple |
+| Background effect | Settings > General > Appearance > More appearance > Background | `sagax_settings` get, set `appearance.backgroundEffect` | simple |
+| Glyph ripple | Settings > General > Appearance > More appearance > Background | `sagax_settings` get, set `appearance.glyphRipple` | simple |
+| Hibou 98 | Settings > General > Appearance | `sagax_settings` get, set `appearance.retro98` | simple |
+| Reduce motion (follow the system, or always) | Settings > General > Appearance > More appearance > Accessibility | `sagax_settings` get, set `appearance.reduceMotion` | simple |
+| Contrast (standard, or high) | Settings > General > Appearance > More appearance > Accessibility | `sagax_settings` get, set `appearance.highContrast` | simple |
+| HD mascots (painted art for the characters that have it, or the classic look) | Settings > General > Appearance > More appearance > Mascots | `sagax_settings` get, set `appearance.hdMascots` | simple |
+| Text size (default, large, extra large) | Settings > General > Appearance > More appearance > Accessibility | `sagax_settings` get, set `appearance.textSize` | simple |
+| Use hardware acceleration (desktop app; needs a restart) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.hardwareAcceleration` | simple |
+| Check spelling while typing (desktop app) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.spellcheck` | simple |
+| Global shortcuts that open a bot (macOS) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
+| Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeyChord` | simple |
+| Send key | Settings > General > Appearance | `sagax_settings` get, set `appearance.sendKey` | simple |
+| This run card | Settings > General > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
+| Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
+| Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
+| Routines badge | Settings > General > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
+| Sidebar density | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |
+| Fresh topic after | Settings > General > Appearance | `sagax_settings` get, set `appearance.freshTopicAfter` | simple |
+| Desktop mascot | Settings > General > Appearance > More appearance > Floating bots | `sagax_settings` get, set `appearance.floatingBots` | simple |
+| The open bot's colour as the accent (1 on, 0 off) | Settings > General > Appearance | `sagax_settings` get, set `appearance.botAccent` | simple |
+| Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}}) | Settings > General > Appearance > More appearance > Hidden from the sidebar | `sagax_settings` get, set `appearance.sidebarHidden` | simple |
+| Sending to a busy bot | Settings > General > Appearance | `sagax_settings` get, set `appearance.busySend` | simple |
+| Show bot replies in bubbles (on by default; off leaves reply text on the conversation background; the phone follows) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.botReplyBubbles` | simple |
+| Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.botBubbleAccent` | simple |
+| Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
+| Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 
 ### Notifications et confidentialité
 
@@ -365,48 +365,48 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Reach me: how this bot reaches you outside the app when a card waits on you ({ channels: push/sms/teams/telegram/whatsapp, smsNumber?: your own E.164 number, hours: { always: true } or { always: false, timeZone, ranges: [{ days: 0-6, start: HH:MM, end: HH:MM }] } }) | Bot panel > Overview > Reach me | `sagax_settings` get, set `notifications.reachMe` | simple |
 | Reach me by Telegram: connect your own bot ({ token } from BotFather; the answer gives the t.me link to press Start), or { disconnect: true } | Bot panel > Overview > Reach me > Telegram | `sagax_settings` set `notifications.reachMeTelegram` | simple |
 | Reach me by WhatsApp: connect your own WhatsApp Business number ({ accessToken, phoneNumberId, appSecret?, templateName?, templateLanguage?, businessAccountId? } from your Meta app; the template is checked with Meta), change { templateName?, templateLanguage?, appSecret?, businessAccountId? } or check the template again with { update: true }, prove your number with { link: {} } (a wa.me code), { link: { number } } (the code by your template) then { link: { code } }, or { disconnect: true } | Bot panel > Overview > Reach me > WhatsApp | `sagax_settings` set `notifications.reachMeWhatsApp` | simple |
-| Notification sounds | Settings > Notifications | `sagax_settings` get, set `notifications.sounds` | simple |
-| Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip) | Settings > Notifications | `sagax_settings` get, set `notifications.soundChoice` | simple |
-| Persistent notifications | Settings > Notifications | `sagax_settings` get, set `notifications.persistent` | simple |
-| Dock badge | Settings > Notifications | `sagax_settings` get, set `notifications.dockBadge` | simple |
-| Approval chime | Settings > Notifications | `sagax_settings` get, set `notifications.approvalChime` | simple |
-| Nudge sound | Settings > Notifications > Nudges | `sagax_settings` get, set `notifications.nudgeSound` | simple |
-| Nudge shake | Settings > Notifications > Nudges | `sagax_settings` get, set `notifications.nudgeShake` | simple |
-| Read receipts | Settings > Notifications > Privacy | `sagax_settings` get, set `notifications.readReceipts` | simple |
-| Show when online | Settings > Notifications > Privacy | `sagax_settings` get, set `notifications.presence` | simple |
-| Analytics opt-out | Settings > Privacy | `sagax_settings` get, set `notifications.analyticsOptOut` | simple |
-| People you blocked ({block: {id, name}} or {unblock: id}; get lists them) | Settings > Notifications > Privacy > Blocked people | `sagax_settings` get, set `notifications.blocks` | simple |
+| Notification sounds | Settings > General > Notifications | `sagax_settings` get, set `notifications.sounds` | simple |
+| Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip) | Settings > General > Notifications | `sagax_settings` get, set `notifications.soundChoice` | simple |
+| Persistent notifications | Settings > General > Notifications | `sagax_settings` get, set `notifications.persistent` | simple |
+| Dock badge | Settings > General > Notifications | `sagax_settings` get, set `notifications.dockBadge` | simple |
+| Approval chime | Settings > General > Notifications | `sagax_settings` get, set `notifications.approvalChime` | simple |
+| Nudge sound | Settings > General > Notifications > Nudges | `sagax_settings` get, set `notifications.nudgeSound` | simple |
+| Nudge shake | Settings > General > Notifications > Nudges | `sagax_settings` get, set `notifications.nudgeShake` | simple |
+| Read receipts | Settings > General > Notifications > Privacy | `sagax_settings` get, set `notifications.readReceipts` | simple |
+| Show when online | Settings > General > Notifications > Privacy | `sagax_settings` get, set `notifications.presence` | simple |
+| Analytics opt-out | Settings > Permissions > Privacy | `sagax_settings` get, set `notifications.analyticsOptOut` | simple |
+| People you blocked ({block: {id, name}} or {unblock: id}; get lists them) | Settings > General > Notifications > Privacy > Blocked people | `sagax_settings` get, set `notifications.blocks` | simple |
 | What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get answers your choices, when you were first asked and the last asks first, then the domains you can choose (available: domain slug, label, eligible, each watch with its summary, cadence and what it lacks), a page at a time: get with value {offset: nextOffset} reads on; use a slug from available; absent = off) | No screen yet: ask any of your bots | `sagax_settings` get, set `notifications.proactiveChoices` | simple |
 
 ### Modèles et voix
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| Voice mode (voice, speed, language) | Settings > Voice > Voice mode | `sagax_settings` get, set `models.voiceMode` | simple |
-| Fish Audio model | Settings > Voice | `sagax_settings` get, set `models.fishModel` | simple; organisation : organisation |
-| Image generation | Settings > Models > Images | `sagax_settings` get, set `models.imageGen` | simple; organisation : organisation |
-| Decision model | Settings > Models > Decision model | `sagax_settings` get, set `models.decider` | simple; organisation : organisation |
-| Live call settings | Settings > Voice > Live calls | `sagax_settings` get, set `models.liveCalls` | simple; organisation : organisation |
-| Engines and their accounts (read only: instanceId, name, driver, signedIn, account) | Settings > Models > Engines | `sagax_settings` get, set `models.engines` | simple |
-| An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools}) | Settings > Models > Engines > engine | `sagax_settings` get, set `models.engine` | simple; organisation : autrui |
+| Voice mode (voice, speed, language) | Settings > Providers > Voice > Voice mode | `sagax_settings` get, set `models.voiceMode` | simple |
+| Fish Audio model | Settings > Providers > Voice | `sagax_settings` get, set `models.fishModel` | simple; organisation : organisation |
+| Image generation | Settings > Providers > Models > Images | `sagax_settings` get, set `models.imageGen` | simple; organisation : organisation |
+| Decision model | Settings > Providers > Models > Decision model | `sagax_settings` get, set `models.decider` | simple; organisation : organisation |
+| Live call settings | Settings > Providers > Voice > Live calls | `sagax_settings` get, set `models.liveCalls` | simple; organisation : organisation |
+| Engines and their accounts (read only: instanceId, name, driver, signedIn, account) | Settings > Providers > Models > Engines | `sagax_settings` get, set `models.engines` | simple |
+| An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools}) | Settings > Providers > Models > Engines > engine | `sagax_settings` get, set `models.engine` | simple; organisation : autrui |
 | Runs with, per provider ({<provider id>: <engine kind> or null}; provider ids from GET /api/me/providers/catalog) | Settings > Providers > provider > Runs with | `sagax_settings` get, set `models.harnessDefault` | simple |
-| Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card | Settings > Models > Claude > Add account | `sagax_settings` set `models.claudeAccount` | simple |
-| Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card | Settings > Models > Codex > Add account | `sagax_settings` set `models.chatgptAccount` | simple |
-| Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in | Settings > Models > engine > Sign in | `sagax_settings` set `models.engineSignIn` | simple |
-| Sign an engine or account out (value true) | Settings > Models > engine > Sign out | `sagax_settings` set `models.engineSignOut` | simple + suppression; organisation : autrui + suppression |
-| Remove an added account (value true) | Settings > Models > account > Remove | `sagax_settings` set `models.engineRemove` | simple + suppression; organisation : autrui + suppression |
-| An engine's access key (get says whether one is saved, never the key; set {key} saves one, key a reference: {$secret: generate/copy}) | Settings > Models > engine > Access key | `sagax_settings` get, set `models.engineKeySaved` | secret; organisation : secret + organisation |
-| Install an engine (value true) | Settings > Models > engine > Install | `sagax_settings` set `models.engineInstall` | simple |
-| Check an engine again (its models) (value true) | Settings > Models > Check again | `sagax_settings` set `models.engineRefresh` | simple |
-| Update Claude Code (value true) | Settings > Models > Claude > Advanced > Update | `sagax_settings` set `models.claudeUpdate` | simple |
-| Add an Antigravity account ({name, source: the Antigravity engine's instanceId}); then models.engineSignIn | Settings > Models > Antigravity > Add account | `sagax_settings` set `models.antigravityAccount` | simple |
-| The person's own engine access (organization server: subscription signed in, own key, organization key; read only) | Settings > Models > My engines | `sagax_settings` get, set `models.myEngines` | simple |
-| Sign the person's own subscription out of an engine (organization server; value true) | Settings > Models > My engines > Disconnect | `sagax_settings` set `models.mySignOut` | suppression |
+| Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card | Settings > Providers > Models > Claude > Add account | `sagax_settings` set `models.claudeAccount` | simple |
+| Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card | Settings > Providers > Models > Codex > Add account | `sagax_settings` set `models.chatgptAccount` | simple |
+| Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in | Settings > Providers > Models > engine > Sign in | `sagax_settings` set `models.engineSignIn` | simple |
+| Sign an engine or account out (value true) | Settings > Providers > Models > engine > Sign out | `sagax_settings` set `models.engineSignOut` | simple + suppression; organisation : autrui + suppression |
+| Remove an added account (value true) | Settings > Providers > Models > account > Remove | `sagax_settings` set `models.engineRemove` | simple + suppression; organisation : autrui + suppression |
+| An engine's access key (get says whether one is saved, never the key; set {key} saves one, key a reference: {$secret: generate/copy}) | Settings > Providers > Models > engine > Access key | `sagax_settings` get, set `models.engineKeySaved` | secret; organisation : secret + organisation |
+| Install an engine (value true) | Settings > Providers > Models > engine > Install | `sagax_settings` set `models.engineInstall` | simple |
+| Check an engine again (its models) (value true) | Settings > Providers > Models > Check again | `sagax_settings` set `models.engineRefresh` | simple |
+| Update Claude Code (value true) | Settings > Providers > Models > Claude > Advanced > Update | `sagax_settings` set `models.claudeUpdate` | simple |
+| Add an Antigravity account ({name, source: the Antigravity engine's instanceId}); then models.engineSignIn | Settings > Providers > Models > Antigravity > Add account | `sagax_settings` set `models.antigravityAccount` | simple |
+| The person's own engine access (organization server: subscription signed in, own key, organization key; read only) | Settings > Providers > Models > My engines | `sagax_settings` get, set `models.myEngines` | simple |
+| Sign the person's own subscription out of an engine (organization server; value true) | Settings > Providers > Models > My engines > Disconnect | `sagax_settings` set `models.mySignOut` | suppression |
 | A personal OpenAI or Anthropic server ({instanceId, name, url, protocol, models}; {instanceId, remove:true} removes) | Settings > Providers > Add a provider | `sagax_settings` get, set `models.myProviderServer` | simple |
-| Custom voice server address (the voice engine's own server) | Settings > Voice > Advanced | `sagax_settings` get, set `models.ttsServer` | simple; organisation : organisation |
-| Custom voice server model | Settings > Voice > Advanced | `sagax_settings` get, set `models.ttsModel` | simple; organisation : organisation |
-| Test the decision model (value true) | Settings > Models > Decision model > Test | `sagax_settings` set `models.deciderTest` | simple |
-| Free up space: delete Antigravity's leftover files (get lists them; value true deletes) | Settings > Models > Antigravity > Free up space | `sagax_settings` get, set `models.antigravityLeftovers` | simple + suppression |
+| Custom voice server address (the voice engine's own server) | Settings > Providers > Voice > Advanced | `sagax_settings` get, set `models.ttsServer` | simple; organisation : organisation |
+| Custom voice server model | Settings > Providers > Voice > Advanced | `sagax_settings` get, set `models.ttsModel` | simple; organisation : organisation |
+| Test the decision model (value true) | Settings > Providers > Models > Decision model > Test | `sagax_settings` set `models.deciderTest` | simple |
+| Free up space: delete Antigravity's leftover files (get lists them; value true deletes) | Settings > Providers > Models > Antigravity > Free up space | `sagax_settings` get, set `models.antigravityLeftovers` | simple + suppression |
 
 ### Connexions
 
@@ -429,13 +429,13 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
 | A provider key ({<provider>: {key}}; get says which are saved, never a key) | Settings > Providers | `sagax_settings` get, set `models.providerKey` | secret; organisation : secret + organisation |
-| Cloud coding agent key ({provider: cursor/claude/codex, token}, token null removes; get says which are saved) | Settings > Models > Cloud coding agents | `sagax_settings` get, set `connections.cloudAgentKey` | secret |
+| Cloud coding agent key ({provider: cursor/claude/codex, token}, token null removes; get says which are saved) | Settings > Providers > Models > Cloud coding agents | `sagax_settings` get, set `connections.cloudAgentKey` | secret |
 | A vault item ({name, username, password, apiKey, notes, domains}); no target creates one | Settings > Vault | `sagax_settings` get, set `credentials.item` | secret |
 | Let a bot use an item ({botId, allow: true/false}) | Settings > Vault > item | `sagax_settings` get, set `credentials.botAccess` | secret |
 | Delete a vault item (true) | Settings > Vault | `sagax_settings` set `credentials.delete` | suppression + secret |
-| The person's security keys and which approvals ask for one (read only: names, ids, classes; security.keyName, device.securityKey* change them) | Settings > Security | `sagax_settings` get, set `security.keys` | simple |
-| Which approvals ask for a security key (the full list; adding runs here, removing one needs the key: device.securityKeyClasses) | Settings > Security > Ask for my key | `sagax_settings` get, set `security.keyClasses` | secret |
-| Rename a security key ({id, name}) | Settings > Security > key | `sagax_settings` get, set `security.keyName` | simple |
+| The person's security keys and which approvals ask for one (read only: names, ids, classes; security.keyName, device.securityKey* change them) | Settings > Permissions | `sagax_settings` get, set `security.keys` | simple |
+| Which approvals ask for a security key (the full list; adding runs here, removing one needs the key: device.securityKeyClasses) | Settings > Permissions > Ask for my key | `sagax_settings` get, set `security.keyClasses` | secret |
+| Rename a security key ({id, name}) | Settings > Permissions > key | `sagax_settings` get, set `security.keyName` | simple |
 | One-time card wallets the person uses ({wallet: shop_pay/link, chosen}) | Settings > Vault > One-time card | `sagax_settings` get, set `credentials.wallets` | secret |
 | Purchases waiting for the person (read only; sagax_approvals answers them) | Settings > Vault > Purchases | `sagax_settings` get, set `credentials.purchases` | simple |
 | Add an item of the person's 1Password to the vault as a reference ({vaultId, itemId, name?, domains?}; get lists names, vaults and sites, never a value) | Settings > Vault > 1Password | `sagax_settings` get, set `credentials.onePassword` | secret |
@@ -448,12 +448,12 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 |---|---|---|---|
 | New bot defaults | Settings > General > System > New bots | `sagax_settings` get, set `server.newBotDefaults` | simple; organisation : organisation |
 | Conversation cleanup | Settings > General > Advanced > Threads | `sagax_settings` get, set `server.threads` | simple; organisation : organisation |
-| Show tool calls | Settings > Appearance | `sagax_settings` get, set `server.showToolCalls` | simple; organisation : organisation |
-| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Developer > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
+| Show tool calls | Settings > General > Appearance | `sagax_settings` get, set `server.showToolCalls` | simple; organisation : organisation |
+| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Updates > Advanced > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
 | Routines in conversation | Settings > Organization > Bots | `sagax_settings` get, set `server.routinesInConversation` | simple; organisation : organisation |
 | Room turn limit | Settings > Organization > Rooms | `sagax_settings` get, set `server.roomTurnTimeout` | simple; organisation : organisation |
 | MCP call time limit | Settings > Organization | `sagax_settings` get, set `server.mcpCallTimeout` | simple; organisation : organisation |
-| VPS computer SSH alias | Settings > Models > Integrations > VPS | `sagax_settings` get, set `server.vpsAlias` | simple; organisation : organisation |
+| VPS computer SSH alias | Settings > Providers > Models > Integrations > VPS | `sagax_settings` get, set `server.vpsAlias` | simple; organisation : organisation |
 | Custom domain (null removes) | Settings > Organization > Servers > Custom domain | `sagax_settings` get, set `server.customDomain` | simple + suppression; organisation : organisation + suppression |
 | Scheduled computer update ({enabled, days, hour, windowHours, timeZone}) | Settings > Computer > Computer care | `sagax_settings` get, set `server.maintenance` | simple; organisation : organisation |
 | Disk saver ({categories: [ids from get], confirmUserFiles?}; get lists what it frees) | Settings > Computer > Computer care > Disk saver | `sagax_settings` get, set `server.diskSaver` | simple + suppression; organisation : organisation + suppression |
@@ -472,15 +472,15 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | People from before: days | Settings > Organization > People | `sagax_settings` get, set `org.interimAttachDays` | organisation |
 | Waiting cards expire after (days) | Settings > Organization > Approvals | `sagax_settings` get, set `org.pendingApprovalExpireDays` | organisation |
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
-| Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
-| Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |
-| Phone calls ({enabled, addDoNotCall, removeDoNotCall}) | Settings > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
+| Public links for published pages | Settings > General > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
+| Reader comments on published pages | Settings > General > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |
+| Phone calls ({enabled, addDoNotCall, removeDoNotCall}) | Settings > Providers > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
 | Organization bot secrets ({op: add, kind, label, value, injection, botIds} / {op: replace, id, value} / {op: assign, id, botIds} / {op: remove, id}; value a {$secret} reference; get lists names and ids, never a value) | Settings > Organization > Bots > Team secrets | `sagax_settings` get, set `org.botSecrets` | secret + organisation |
-| People's tool access (get lists it; set with a grant's id revokes it) | Settings > Account > Advanced > People's tool access | `sagax_settings` get, set `org.toolGrants` | autrui + suppression |
-| Reports (get lists them; set with a report's id resolves it) | Settings > Notifications > Privacy > Reports | `sagax_settings` get, set `org.reports` | autrui |
+| People's tool access (get lists it; set with a grant's id revokes it) | Settings > General > Advanced > People's tool access | `sagax_settings` get, set `org.toolGrants` | autrui + suppression |
+| Reports (get lists them; set with a report's id resolves it) | Settings > General > Notifications > Privacy > Reports | `sagax_settings` get, set `org.reports` | autrui |
 | Attach a person from before to a member ({interimPrincipalId, principalId}) | Settings > Organization > People from before | `sagax_settings` set `org.interimAttach` | autrui + organisation |
 | Invitations ({invite: email} or {revoke: token}; get lists them) | Settings > Organization > Servers > Invitations | `sagax_settings` get, set `org.invites` | autrui |
-| Take down a published page of the organization (its id) | Settings > Pages > Organization pages | `sagax_settings` set `org.pageRevoke` | autrui + suppression |
+| Take down a published page of the organization (its id) | Settings > General > Pages > Organization pages | `sagax_settings` set `org.pageRevoke` | autrui + suppression |
 
 ### Ordinateur
 
@@ -504,11 +504,11 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| Open Sagax when the person signs in to this computer (desktop app) | Settings > Account > Open at login | `sagax_settings` get, set `device.openAtLogin` | simple |
+| Open Sagax when the person signs in to this computer (desktop app) | Settings > General > Open at login | `sagax_settings` get, set `device.openAtLogin` | simple |
 | Update channel of the desktop app (stable, or nightly: versions still in testing) | Settings > Updates > Channel | `sagax_settings` get, set `device.updateChannel` | simple |
 | Install a downloaded update while the person is away and no bot works (desktop app) | Settings > Updates | `sagax_settings` get, set `device.updateWhenAway` | simple |
-| App icon of the desktop app (an icon's id: sagax for the default, sagax-owl, owl:<skin>, primary...; get gives the one shown) | Settings > Appearance > App icon | `sagax_settings` get, set `device.appIcon` | simple |
-| Microphone used for voice on this device (get lists them; set an id, a name, or default) | Settings > Voice > Microphone | `sagax_settings` get, set `device.microphone` | simple |
+| App icon of the desktop app (an icon's id: sagax for the default, sagax-owl, owl:<skin>, primary...; get gives the one shown) | Settings > General > Appearance > More appearance > App icon | `sagax_settings` get, set `device.appIcon` | simple |
+| Microphone used for voice on this device (get lists them; set an id, a name, or default) | Settings > Providers > Voice > Microphone | `sagax_settings` get, set `device.microphone` | simple |
 | Keep this computer awake for scheduled routines (desktop app) | Settings > Routines > Keep awake | `sagax_settings` get, set `device.keepAwake` | simple |
 | Phone access to this computer (the desktop app's companion: on or off; get lists the paired devices) | Settings > Phone > This computer | `sagax_settings` get, set `device.remoteAccess` | simple |
 | Open or close pairing for a new phone (the code stays on the person's screen; get says whether it is open) | Settings > Phone > Pair a phone | `sagax_settings` get, set `device.pairing` | simple |
@@ -516,11 +516,11 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Share this computer with a saved organization server ({server, terminal?, computer?, folders?: [{path, write}]}, or {server, revoke: true}; get lists each server's sharing). A new folder is chosen by the person; the desktop app confirms the change on its own screen | Settings > Servers > server > Computer access | `sagax_settings` get, set `device.computerSharing` | simple |
 | Server mode of the desktop app (get: the server it is locked to; leave signs out of it and returns to the launch screen) | Settings > General > Server > Change | `sagax_settings` get, set `device.serverMode` | simple |
 | Export the vault to a file saved on the person's device (chrome-csv, bitwarden-csv, bitwarden-json; the values never reach the bot; their security key or a fresh sign-in is asked on their screen) | Settings > Vault > Export | `sagax_settings` set `device.vaultExport` | secret |
-| Add a security key (its name): the ceremony opens on the person's screen, they touch the key | Settings > Security > Add a key | `sagax_settings` set `device.securityKeyAdd` | secret |
-| Remove a security key (its id, from security.keys): confirmed with a key on the person's screen | Settings > Security > key > Remove | `sagax_settings` set `device.securityKeyRemove` | secret + suppression |
-| Which approvals ask for a security key (the full list; removing one is confirmed with the key on the person's screen) | Settings > Security > Ask for my key | `sagax_settings` set `device.securityKeyClasses` | secret |
-| Haptic feedback (iPhone app) | iPhone: Settings > Appearance > Haptics | `sagax_settings` get, set `device.haptics` | simple |
-| Vibrate on a nudge (iPhone app) | iPhone: Settings > Notifications > Nudges | `sagax_settings` get, set `device.nudgeHaptic` | simple |
+| Add a security key (its name): the ceremony opens on the person's screen, they touch the key | Settings > Permissions > Add a key | `sagax_settings` set `device.securityKeyAdd` | secret |
+| Remove a security key (its id, from security.keys): confirmed with a key on the person's screen | Settings > Permissions > key > Remove | `sagax_settings` set `device.securityKeyRemove` | secret + suppression |
+| Which approvals ask for a security key (the full list; removing one is confirmed with the key on the person's screen) | Settings > Permissions > Ask for my key | `sagax_settings` set `device.securityKeyClasses` | secret |
+| Haptic feedback (iPhone app) | iPhone: Settings > General > Appearance > More appearance > Haptics | `sagax_settings` get, set `device.haptics` | simple |
+| Vibrate on a nudge (iPhone app) | iPhone: Settings > General > Notifications > Nudges | `sagax_settings` get, set `device.nudgeHaptic` | simple |
 
 ## Hors de sagax_settings
 

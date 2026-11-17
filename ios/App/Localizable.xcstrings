@@ -20517,6 +20517,16 @@
         }
       }
     },
+    "Collapse sidebar": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réduire la barre latérale"
+          }
+        }
+      }
+    },
     "Collapse sidebar to avatars": {
       "localizations": {
         "en": {
@@ -26262,7 +26272,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Défauts des nouveaux bots"
+            "value": "Réglages par défaut des nouveaux bots"
           }
         }
       }
@@ -31711,6 +31721,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expandir a barra lateral"
+          }
+        }
+      }
+    },
+    "Expand sidebar": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrandir la barre latérale"
           }
         }
       }
@@ -90701,16 +90721,6 @@
         }
       }
     },
-    "Turn the compact sidebar on or off": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Activer ou désactiver la barre latérale compacte"
-          }
-        }
-      }
-    },
     "Turned off by your organization.": {
       "localizations": {
         "en": {
@@ -95401,6 +95411,16 @@
         }
       }
     },
+    "What your bots may do without asking you, your privacy and your keys.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que tes bots peuvent faire sans te demander, ta confidentialité et tes clés."
+          }
+        }
+      }
+    },
     "What your bots used and what it costs.": {
       "localizations": {
         "fr": {
@@ -99014,16 +99034,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tes clés"
-          }
-        }
-      }
-    },
-    "Your keys and what your bots may do without asking you.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tes clés et ce que tes bots peuvent faire sans te demander."
           }
         }
       }

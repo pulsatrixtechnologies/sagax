@@ -2003,7 +2003,6 @@
   "teamImport.library": "プリセットボットとスキル · チームなし",
   "teamImport.libraryAdds": "「新しいボット」にプリセットボットを追加します。",
   "teamImport.addPresets": "プリセットを追加",
-  "attach.showInFolder": "フォルダー内で表示",
   "attach.folderEmpty": "このフォルダーにはここで開けるファイルがありません",
   "attach.folderFilesAria": "{name} 内のファイル",
   "attach.folderTruncated": "最初のファイルのみ表示しています",

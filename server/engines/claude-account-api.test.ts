@@ -29,6 +29,12 @@ async function api(method: string, path: string, body?: unknown, headers: Record
   return { status: response.status, body: await response.json() as any };
 }
 
+// The fake CLI replies with the last 12 characters of the account's folder: the
+// server strips whole UUIDs from bot text, so the full folder name never arrives.
+function replyOf(dir: string) {
+  return `account:${basename(dir).slice(-12)}`;
+}
+
 function saved() {
   return JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8"));
 }
@@ -75,7 +81,7 @@ if (process.argv[2] !== "--version") {
   mkdirSync(dir, { recursive: true });
   process.env.FAKE_CLAUDE_MODE = existsSync(join(dir, "hang")) ? "hang" : "happy";
   process.env.FAKE_CLAUDE_DUMP = join(dir, "spawn.json");
-  process.env.FAKE_CLAUDE_REPLIES = JSON.stringify(["account:" + basename(dir)]);
+  process.env.FAKE_CLAUDE_REPLIES = JSON.stringify(["account:" + basename(dir).slice(-12)]);
 }
 await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts")).href)});
 `, { mode: 0o755 });
@@ -202,7 +208,7 @@ describe("Claude account HTTP API", () => {
     expect((await api("DELETE", `/api/instances/${first.id}`)).status).toBe(409);
     expect((await api("POST", `/api/bots/${firstBot.id}/messages`, { text: "record fixture history" })).status).toBe(202);
     await idle(firstBot.id);
-    expect((await bot(firstBot.id)).messages.some((message: any) => message.text === `account:${basename(first.dir)}`)).toBe(true);
+    expect((await bot(firstBot.id)).messages.some((message: any) => message.text === replyOf(first.dir))).toBe(true);
     expect((await api("PATCH", `/api/bots/${firstBot.id}/model`, { instanceId: second.id, model: MODEL })).status).toBe(200);
     expect((await api("POST", `/api/bots/${firstBot.id}/tasks`, { title: "New empty task" })).status).toBe(201);
     expect((await bot(firstBot.id)).modelSelection.instanceId).toBe(second.id);
@@ -235,9 +241,9 @@ describe("Claude account HTTP API", () => {
       await idle(runningBot.id);
       unlinkSync(join(active.dir, "hang"));
       expect((await api("POST", `/api/bots/${runningBot.id}/messages`, { text: "reply after interruption" })).status).toBe(202);
-      await stream.until(frame => frame.kind === "message" && frame.threadId === runningBot.threadId && frame.message?.text === `account:${basename(active.dir)}`);
+      await stream.until(frame => frame.kind === "message" && frame.threadId === runningBot.threadId && frame.message?.text === replyOf(active.dir));
       await idle(runningBot.id);
-      expect((await bot(runningBot.id)).messages.some((message: any) => message.text === `account:${basename(active.dir)}`)).toBe(true);
+      expect((await bot(runningBot.id)).messages.some((message: any) => message.text === replyOf(active.dir))).toBe(true);
     } finally {
       stream.close();
       await api("POST", `/api/bots/${runningBot.id}/interrupt`, {});

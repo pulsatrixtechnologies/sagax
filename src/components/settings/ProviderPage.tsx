@@ -26,7 +26,7 @@ import type { LocaleKey } from "@/locales";
 import { copyText } from "@/lib/copy-text";
 import { readableError } from "@/lib/plain-error";
 import { useOfferedInstances } from "@/lib/offered-instances";
-import { perspicaxKeysUrl, reloadMyEngines, type MyEngine } from "@/lib/perspicax-org";
+import { perspicaxKeysUrl, reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
 import {
   connectionAction,
   connectionLabel,
@@ -524,13 +524,17 @@ function AccountLine({ row, group, list, index, total, open, show }: {
   // a member removes their own account from their list; who manages the
   // server's accounts removes it from the server (the same people as Add).
   // An engine's second sign-in (Grok) goes with Sign out, never alone.
+  // who removes from the server (not from their own list) on an organization server
+  const orgServer = usePerspicaxOrg() !== null && !list.member;
   const account = accountLead(row, list);
   const lead = account?.instanceId;
   const driver = account?.driver ?? "";
   const others = accountRows(group).filter((other) => other !== row && !other.slot)
     .map((other) => accountLead(other, list))
     .filter((other) => other?.driver === driver)
-    .map((other) => other!.instanceId);
+    .map((other) => other!.instanceId)
+    // an account a person added on an organization server is theirs, not the provider's account for everyone (the server leaves it out of its count too)
+    .filter((id) => !(orgServer && addedAccount(id, driver)));
   const removable = Boolean(lead) && !row.slot && (addedAccount(lead!, driver) || removableAccount(lead!, others)) && (list.organization || !list.member);
   const run = (work: () => Promise<unknown>) => {
     setBusy(true);

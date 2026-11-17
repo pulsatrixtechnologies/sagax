@@ -383,7 +383,7 @@ export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path
   // the admin activity log and its export
   { methods: ["GET"], path: /^\/api\/admin-activity(?:\.csv)?$/, permission: "people.activityLog" },
   // plugin marketplaces (server/routes/marketplaces.ts)
-  { methods: ["GET", "POST", "DELETE"], path: /^\/api\/marketplaces(?:\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/(?:refresh|plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/update)?))?)?$/, permission: "apps.marketplaces" },
+  { methods: ["GET", "POST", "DELETE"], path: /^\/api\/marketplaces(?:\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/(?:refresh|plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/update|\/files)?))?)?$/, permission: "apps.marketplaces" },
   // the shared skills library (person editor: review Accept/Revert, files)
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/skills-library(?:\/[a-z0-9-]+)?$/, permission: "skills.library" },
   { methods: ["POST"], path: /^\/api\/skills-library\/[a-z0-9-]+\/review$/, permission: "skills.library" },

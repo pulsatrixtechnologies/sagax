@@ -716,6 +716,10 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // #4504: the person's own updates (server/routes/capability-updates.ts):
   // the session's person only, no admin
   { methods: ["GET", "POST"], path: /^\/api\/me\/capability-updates$/, feature: "orgDirectory" },
+  // what the organization offers or requires, as the person sees it: their own switch, and the files of what is on for them (read only)
+  { methods: ["GET"], path: /^\/api\/me\/org-capabilities$/, feature: "orgDirectory" },
+  { methods: ["PUT"], path: /^\/api\/me\/org-capabilities\/[^/]{1,200}$/, feature: "orgDirectory" },
+  { methods: ["GET"], path: /^\/api\/me\/org-capabilities\/[^/]{1,200}\/files$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/review$/, feature: "orgDirectory" },
   { methods: ["GET"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/files$/, feature: "orgDirectory" },
   // Slice 5: the Perspicax MCP profiles a bot mounts. server/bots/bot-perspicax.ts

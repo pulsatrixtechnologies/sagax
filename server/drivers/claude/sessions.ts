@@ -209,7 +209,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
    * launched with --permission-mode and does not re-read it, so the new
    * level goes to the running process as set_permission_mode: its next
    * tool call is decided at that level (Ask: every call reaches Sagax's
-   * broker, mcp__ogb__approve). Approve for me's fixed list of tools that
+   * permission prompt). Approve for me's fixed list of tools that
    * never need a person (claudeAutoAllowedTools) stays allowed: none of
    * them changes anything. Resolves false when the CLI did not confirm, and
    * the harness then stops the turn. */

@@ -256,9 +256,12 @@ if ((autoAllowlist || fullAllowlist) && !turn.guestConfined) {
 // Keep ask_user available even in Full access. #1982: Full keeps the
 // broker too (no bypassPermissions), so MCP asks reach request.opened.
 // Broker is created in spawnClaudeSession for a new process only.
+// #4525: stdio can_use_tool carries a consent disclosure. The MCP approve
+// tool is only tool_name and input, so Claude refuses to forward
+// ArtifactData's disclosure on that wire. ask_user stays on ogb.
 const socketPath = permissionSocketPath(threadId, botId);
 if (permissionMode !== "bypassPermissions") {
-  args.push("--permission-prompt-tool", "mcp__ogb__approve");
+  args.push("--permission-prompt-tool", "stdio");
 }
 const permissionEnv: Record<string, string> = {
   ...NODE_ENV_FLAG,

@@ -87,7 +87,7 @@ if (turn.access?.via === "subscription" && turn.access.claudeConfigDir) {
 // person said yes in the chat, and the bot concluded it could not.
 // Auto is now Auto-accept edits plus a fixed list of tools that never
 // need a person (claudeAutoAllowedTools); every other call reaches
-// Sagax's broker (mcp__ogb__approve) and becomes a real card.
+// Sagax through --permission-prompt-tool stdio and becomes a real card.
 // #1982: Full also keeps the broker (Codex #1977 pattern). Host tools
 // are pre-allowed; custom MCP stays off the allowlist so every write
 // reaches request.opened and Sagax Full-approves unless a rule holds.

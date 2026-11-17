@@ -52,7 +52,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const filtersMenuRef = useRef<HTMLDetailsElement>(null);
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const [section, setSection] = useState<"calendar" | "logs" | "webhooks">(state.routinesFocus?.section === "logs" || state.routinesFocus?.section === "webhooks" ? state.routinesFocus.section : "calendar");
-  const [scheduleView, setScheduleView] = useState<"calendar" | "list">(state.routinesFocus?.view ?? "calendar");
+  const [scheduleView, setScheduleView] = useState<"calendar" | "list">(state.routinesFocus?.view ?? "list");
   // Mine, My teams or Everyone and the filters (src/lib/use-routine-scope.ts).
   const scoped = useRoutineScope({ config: state.config, routines: state.routines ?? [], runs: state.routineRuns ?? [], ignoreStatus: section === "calendar" && scheduleView === "calendar" });
   const [viewDays, setViewDays] = useState<1 | 3 | 7>(7);
@@ -82,7 +82,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   useEffect(() => {
     const focus = state.routinesFocus;
     setSection(focus?.section === "logs" || focus?.section === "webhooks" ? focus.section : "calendar");
-    setScheduleView(focus?.view ?? "calendar");
+    setScheduleView(focus?.view ?? "list");
     setBotFilterState(focus?.botId ?? scoped.prefs.botId ?? "all");
     setRoutineFilter(focus?.routineId);
     setStatusFilter(focus?.runStatus ?? "all");
@@ -214,7 +214,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     if (routine.nextRunAt != null) setAnchor(startOfDay(routine.nextRunAt));
     openRoutine(routine);
   };
-  const openLogs = (routine: Routine) => { setRoutineFilter(routine.id); setSection("logs"); };
   // 2026-11-05 (#2098): a run opens in the chat, at its message.
   const openRun = (run: RoutineRun) => {
     openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId, botId: run.botId });
@@ -362,12 +361,13 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   // content-page.tsx, shared with the Achievements page (2026-10-28).
   const scopeShown = section !== "webhooks" && scoped.available;
   const calendarGrid = section === "calendar" && scheduleView === "calendar";
+  const overviewShown = section === "calendar" && scheduleView === "list";
   const hideStatus = calendarGrid;
   const scopeFilters = scopeShown
     ? (scoped.scope !== "mine" ? 1 : 0)
       + (scoped.scope !== "mine" && scoped.prefs.teamId ? 1 : 0)
       + (scoped.prefs.ownerId ? 1 : 0)
-      + (advanced && !hideStatus && scoped.prefs.status ? 1 : 0)
+      + ((advanced || overviewShown) && !hideStatus && scoped.prefs.status ? 1 : 0)
     : 0;
   const activeFilters = scopeFilters + (botFilter !== "all" ? 1 : 0);
   const clearFilters = () => {
@@ -376,7 +376,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     setRoutineFilter(undefined);
   };
   const closeNavMenu = () => navMenuRef.current?.removeAttribute("open");
-  const sectionName = section === "logs" ? t("routines.logs") : section === "webhooks" ? t("routines.webhooks") : null;
   // The calendar's handlers keep their identity, so the memoized grid, its
   // cards and the side panel skip a render that changes none of their data.
   // 2026-11-05 (#2098): a run on the grid opens in the chat, at its message;
@@ -411,10 +410,10 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     filteredRoutines, upcoming, inFlightRuns, filteredRuns, routineOwnerOf, clearLogs,
     rowMenu, setRowMenu, renamingId, setRenamingId, viewerId, groupBy, setGroupBy,
     createInGroup, closeRowMenu, duplicateRoutine, renameRoutine, openRoutine, showUpcoming,
-    openLogs, openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
+    openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
     handleWebhookCreateHandled, openCreate, upsertCall, moveEvent, dropOnReset, resizeEvent,
-    scopeShown, calendarGrid, hideStatus, scopeFilters, activeFilters, clearFilters, closeNavMenu,
-    sectionName, openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
+    overviewShown, scopeShown, calendarGrid, hideStatus, scopeFilters, activeFilters, clearFilters, closeNavMenu,
+    openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
     openSidebarRoutine, collapseSidebar, pendingSlot,
   };
 }

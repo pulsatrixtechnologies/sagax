@@ -7,8 +7,6 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
-  FileText,
-  List,
   Loader2,
   Pause,
   Plus,
@@ -19,7 +17,6 @@ import {
 import { DetailPanel } from "@/components/DetailPanel";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
 import { RightRailStrip } from "@/components/RightRail";
-import { RoutineList } from "@/components/routines/RoutineList";
 import { RoutineGroupedList } from "@/components/routines/RoutineGroupedList";
 import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems } from "@/components/routines/RoutineRowMenu";
 import {
@@ -33,14 +30,13 @@ import {
   PAGE_SCROLL,
   PageFilters,
   PageHeader,
-  PageHeading,
   PageMenu,
   PageMenuItem,
-  PageMenuSeparator,
-  PageSegment,
+  PageTabs,
   PageTopStrip,
 } from "@/components/content-page";
 import { RoutineLogs } from "@/components/routines/RoutineLogs";
+import { RoutinesOverview } from "@/components/routines/RoutinesOverview";
 import { RoutineScopeBar } from "@/components/routines/RoutineScopeBar";
 import { RoutineAwayBanner } from "@/components/routines/RoutineAwayBanner";
 import { TriggersPanel } from "@/components/TriggersPanel";
@@ -90,18 +86,18 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
     filteredRoutines, upcoming, inFlightRuns, filteredRuns, routineOwnerOf, clearLogs,
     rowMenu, setRowMenu, renamingId, setRenamingId, viewerId, groupBy, setGroupBy,
     createInGroup, closeRowMenu, duplicateRoutine, renameRoutine, openRoutine,
-    openLogs, openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
+    openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
     handleWebhookCreateHandled, openCreate, upsertCall,
     scopeShown, calendarGrid, hideStatus, activeFilters, clearFilters, closeNavMenu,
-    sectionName, openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
-    openSidebarRoutine, collapseSidebar, pendingSlot,
+    openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
+    openSidebarRoutine, collapseSidebar, pendingSlot, overviewShown,
   } = m;
 
   const filtersMenu = section !== "webhooks" && (
-    <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters}>
+    <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters} labelled={overviewShown}>
         {scopeShown && <div>
           <span className={PAGE_FIELD_LABEL}>{t("routines.scope.label")}</span>
-          <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
+          <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced || overviewShown} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
         </div>}
         <div className="block">
           <span className={PAGE_FIELD_LABEL}>{t("routineCalendar.filterBot")}</span>
@@ -112,16 +108,16 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
             options={[{ value: "all", label: t("usage.allBots") }, ...botChoices.map((bot) => ({ value: bot.id, label: bot.name }))]}
           />
         </div>
-        {section === "calendar" && scheduleView === "list" && <div className="block" data-routine-group-by="">
+        {overviewShown && <div className="block" data-routine-group-by="">
           <span className={PAGE_FIELD_LABEL}>{t("routines.group.label")}</span>
           <PillSelect
             ariaLabel={t("routines.group.label")}
             value={groupBy}
             onChange={(next) => setGroupBy(next as RoutineGroupBy)}
             options={[
+              { value: "none", label: t("routines.group.none") },
               { value: "bot", label: t("routines.group.bot") },
               { value: "folder", label: t("routines.group.folder") },
-              { value: "none", label: t("routines.group.none") },
             ]}
           />
         </div>}
@@ -141,19 +137,10 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         {activeFilters > 0 && <button type="button" data-routine-filter-reset onClick={clearFilters} className={PAGE_FILTER_RESET}>{t("routines.scope.reset")}</button>}
     </PageFilters>
   );
-  const automationActions = (
-    <>
-          <PageMenu name="automations" menuRef={navMenuRef} label={t("routineCalendar.automationMenu")} title={paused.length > 0 ? `${t("routineCalendar.automationMenu")} (${t("routineCalendar.pausedMenu")} ${paused.length})` : t("routineCalendar.automationMenu")} badge={paused.length}>
-              <PageMenuItem icon={CalendarDays} current={section === "calendar"} onClick={() => { closeNavMenu(); setSection("calendar"); }}>{routinesOnly ? t("routineCalendar.scheduledRoutines") : t("routines.drawer.schedule")}</PageMenuItem>
-              <PageMenuItem icon={FileText} current={section === "logs"} trailing={unseenFailures > 0 ? <span className="ml-auto rounded-full bg-danger/10 px-1.5 text-[11px] text-danger">{unseenFailures}</span> : undefined} onClick={() => { closeNavMenu(); setSection("logs"); setRoutineFilter(undefined); }}>{t("routines.logs")}</PageMenuItem>
-              {!routinesOnly && <PageMenuItem icon={Webhook} current={section === "webhooks"} trailing={state.webhooks.length > 0 ? <span className={PAGE_MENU_COUNT}>{state.webhooks.length}</span> : undefined} onClick={() => { closeNavMenu(); setSection("webhooks"); }}>{t("routines.webhooks")}</PageMenuItem>}
-              <PageMenuSeparator />
-              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setQuick(null); setEditor(null); setSelected(null); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
-              <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
-          </PageMenu>
+  const newMenu = (compact: boolean) => (
           <details ref={newMenuRef} className="group relative">
             <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={PAGE_ACTION_BUTTON}>
-              <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("sidebar.new")}</span>
+              <Plus size={15} aria-hidden="true" /><span className={compact ? undefined : "@max-[30rem]/page-header:sr-only"}>{compact ? t("routinesOverview.new") : t("sidebar.new")}</span>
             </summary>
             <div role="group" aria-label={t("routineCalendar.newAutomation")} className={cn(PAGE_POPOVER, "w-[280px] min-w-[200px] gap-0.5 p-1.5")}>
               <button type="button" aria-label={t("routineCalendar.createTaskAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "routine" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
@@ -170,8 +157,27 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               </button>}
             </div>
           </details>
+  );
+  const automationActions = (
+    <>
+          <PageMenu name="automations" menuRef={navMenuRef} label={t("routineCalendar.automationMenu")} title={paused.length > 0 ? `${t("routineCalendar.automationMenu")} (${t("routineCalendar.pausedMenu")} ${paused.length})` : t("routineCalendar.automationMenu")} badge={paused.length}>
+              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setQuick(null); setEditor(null); setSelected(null); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
+              <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
+          </PageMenu>
+
+          {!overviewShown && newMenu(false)}
     </>
   );
+  // The tabs under the title: the Overview (list view), the Calendar, the Run
+  // log and the Webhooks (2026-11-17); they replace the List and Calendar
+  // switch and the ☰ menu's section entries.
+  const tab = section === "logs" ? "logs" : section === "webhooks" ? "webhooks" : scheduleView === "calendar" ? "calendar" : "overview";
+  const selectTab = (next: "overview" | "calendar" | "logs" | "webhooks") => {
+    if (next === "logs") { setRoutineFilter(undefined); setSection("logs"); return; }
+    if (next === "webhooks") { setSection("webhooks"); return; }
+    setSection("calendar");
+    setScheduleView(next === "calendar" ? "calendar" : "list");
+  };
   return (
     <main className={cn("flex h-full min-w-0 flex-col bg-app", fill ? "flex-1" : embedded ? "w-[min(820px,48vw)] min-w-[420px] shrink-0 border-l border-hairline/40" : "flex-1 animate-workspace-in")}>
       {fill && <PageTopStrip />}
@@ -179,8 +185,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         name="automations"
         icon={CalendarDays}
         title={t("sidebar.nav.automations")}
-        section={sectionName}
-        onRoot={() => setSection("calendar")}
         count={scopedRoutines.length === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count: scopedRoutines.length })}
         subtitle={t("routineCalendar.subtitle")}
         titleProps={{ "data-tour": "automations-page" }}
@@ -190,11 +194,13 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
         primaryStyle={noDragStyle ?? windowNoDragStyle}
         actionsStyle={{ ...(noDragStyle ?? windowNoDragStyle), ...controlsShiftStyle }}
-        primary={(section === "calendar" || filtersMenu) && <>
-            {section === "calendar" && <PageSegment label={t("routines.view.label")} value={scheduleView} onChange={setScheduleView} options={[
-              { value: "list", label: t("routines.view.list"), icon: List },
-              { value: "calendar", label: t("connectApps.capabilities.calendar"), icon: CalendarDays },
-            ]} />}
+        primary={<>
+            <PageTabs label={t("routines.view.label")} value={tab} onChange={selectTab} data-routines-tabs="" options={[
+              { value: "overview", label: t("routinesOverview.tab.overview") },
+              { value: "calendar", label: t("connectApps.capabilities.calendar") },
+              { value: "logs", label: t("routines.logs"), badge: unseenFailures },
+              ...(routinesOnly ? [] : [{ value: "webhooks" as const, label: t("routines.webhooks"), badge: undefined }]),
+            ]} />
             {section === "calendar" && scheduleView === "calendar" && <>
               <div className="flex shrink-0 items-center">
                 <button type="button" onClick={() => setAnchor((current) => addDays(current, -viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.previous")} title={t("routines.previous")}><ChevronLeft size={16} /></button>
@@ -203,11 +209,10 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               </div>
               <div data-automations-range className="min-w-0 truncate text-[14px] font-medium text-ink">{calendarRangeLabel(rangeStart, viewDays)}</div>
             </>}
-            {filtersMenu && <div className="ml-auto">{filtersMenu}</div>}
+            {filtersMenu && !overviewShown && <div className="ml-auto">{filtersMenu}</div>}
           </>}
         actions={<>
             {section !== "webhooks" && running > 0 && <span role="status" data-automations-running title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className={cn(PAGE_INDICATOR, "text-accent")}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{running}</span>}
-            {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
             {automationActions}
           </>}
         below={<>
@@ -233,15 +238,17 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
       ) : scheduleView === "list" ? (
         <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
-          <PageHeading title={t("routines.title")} subtitle={t("routineCalendar.allSchedules")} />
           <LimitWarnings botFilter={botFilter} />
-          {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
-            onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-            renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
-            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
+          <RoutinesOverview routines={filteredRoutines} runs={botFilter === "all" ? scopedRuns : scopedRuns.filter((run) => run.botId === botFilter)} bots={state.bots} viewerPrincipalId={viewerId}
+            loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error}
+            filtersMenu={filtersMenu} newMenu={newMenu(true)}
+            onOpen={openRoutine} onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
+            renamingId={renamingId} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)}
+            onFailedRuns={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })}
+            grouped={groupBy === "none" ? undefined : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
               onCreate={createInGroup} onDuplicate={duplicateRoutine}
               onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-              renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}
+              renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />} />
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
               routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state: { config: state.config, routineRuns: state.routineRuns }, dispatch, close: closeRowMenu,

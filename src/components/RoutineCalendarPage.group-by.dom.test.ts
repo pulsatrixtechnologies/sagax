@@ -89,7 +89,15 @@ afterEach(() => {
 });
 
 describe("Automations list grouped", () => {
+  it("draws the routines table by default, with no group", async () => {
+    await mount();
+    expect(container.querySelector("[data-routines-table] [role=table]")).not.toBeNull();
+    expect(container.querySelector("[data-routine-groups]")).toBeNull();
+    expect(rowIds()).toHaveLength(4);
+  });
+
   it("groups by bot in the sidebar's order, each with its count and its folders inside", async () => {
+    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
     await mount();
     const sections = [...container.querySelectorAll("[data-routine-group-bot]")].map((section) => section.getAttribute("data-routine-group-bot"));
     // Scout is pinned, so it comes first, as in the sidebar.
@@ -111,6 +119,7 @@ describe("Automations list grouped", () => {
   });
 
   it("remembers a folded bot section for the person", async () => {
+    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
     await mount();
     const toggle = botSection("atlas").querySelector<HTMLButtonElement>("[data-routine-group-header] button[aria-expanded]")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -147,6 +156,7 @@ describe("Automations list grouped", () => {
     fixture.api.mockImplementation(async (path: unknown) => String(path).includes("/api/routines/folders")
       ? { folders: ["Clients"], routines: [{ ...routines[0], folder: "Clients" }] }
       : { calls: [] });
+    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
     await mount();
     const row = botSection("atlas").querySelector('[data-routine-id="a1"]')!;
     const target = botSection("atlas").querySelector('[data-routine-folder-section="Clients"]')!;
@@ -177,20 +187,23 @@ describe("Automations header", () => {
     const create = header.querySelector("[data-page-actions] summary, [data-page-actions] button:last-child");
     expect(create?.className).toContain("border-hairline/50");
     expect(create?.className).not.toContain("bg-accent");
-    // the List / Calendar switch sits in the toolbar row under the title
-    expect(header.querySelector("[data-page-toolbar]")?.textContent).toContain("List");
+    // the tabs sit in the toolbar row under the title (2026-11-17)
+    expect(header.querySelector("[data-page-toolbar]")?.textContent).toContain("Overview");
   });
 
-  it("the parent crumb of a section brings back the Automations page", async () => {
+  it("the tabs under the title switch between the Overview, the Calendar, the Run logs and the Webhooks", async () => {
     await mount();
+    const tab = (name: string) => container.querySelector<HTMLButtonElement>(`[data-page-tab="${name}"]`)!;
     expect(container.querySelector("[data-automations-crumb]")).toBeNull();
-    const logs = [...container.querySelectorAll<HTMLButtonElement>("[data-automations-menu] button")].find((button) => button.textContent?.startsWith("Run logs"))!;
-    await act(async () => { logs.click(); });
-    expect(container.querySelector("[data-automations-section]")?.textContent).toBe("Run logs");
-    const crumb = container.querySelector<HTMLButtonElement>("[data-automations-crumb]")!;
-    expect(crumb.textContent).toBe("Automations");
-    await act(async () => { crumb.click(); });
-    expect(container.querySelector("[data-automations-section]")).toBeNull();
-    expect(container.querySelector("[data-automations-crumb]")).toBeNull();
+    expect(tab("overview").getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector("[data-routines-overview]")).not.toBeNull();
+    await act(async () => { tab("logs").click(); });
+    expect(tab("logs").getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector("[data-routines-overview]")).toBeNull();
+    expect(container.querySelector('section[aria-label="Run logs"]')).not.toBeNull();
+    await act(async () => { tab("calendar").click(); });
+    expect(container.querySelector("[data-automations-range]")).not.toBeNull();
+    await act(async () => { tab("overview").click(); });
+    expect(container.querySelector("[data-routines-overview]")).not.toBeNull();
   });
 });

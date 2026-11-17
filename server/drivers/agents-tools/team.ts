@@ -271,9 +271,9 @@ export const DEF_PROPOSE_RULE = {
       type: "object",
       additionalProperties: false,
       properties: {
-        action: { type: "string", enum: ["add", "change", "remove"], description: "add, change or remove." },
+        action: { type: "string", enum: ["add", "change", "remove"] },
         when: { type: "string", minLength: 1, maxLength: 500, description: "add: when-text (3+ words). change: prefer changes.when." },
-        behavior: { type: "string", enum: ["allow", "ask", "deny"], description: "add: allow, ask or deny. change: prefer changes.behavior." },
+        behavior: { type: "string", enum: ["allow", "ask", "deny"], description: "change: prefer changes.behavior." },
         rule_id: { type: "string", minLength: 1, description: "change/remove: id from sagax_settings list (family rules)." },
         scope_bot_id: { type: ["string", "null"], description: "Omit = this bot; null = every bot of the person; or a bot id they own." },
         risk_scope: {

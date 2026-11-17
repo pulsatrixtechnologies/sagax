@@ -31,7 +31,7 @@ const ROUTINE_TOOL_FIELDS = {
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
-    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner. archived true lists only the archived ones instead.",
+    description: "List the Sagax agents (bots) you may reach, with status, owner ({principal_id, name} or null) and model when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner. archived true lists only the archived ones instead.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       archived: { type: "boolean" },
     } },
@@ -47,7 +47,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "get_agent",
-    description: "Read one agent's full profile for an audit: title, owner, model (instance_id, model, effort, auto), instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
+    description: "Read one agent's full profile for an audit: owner, model, instructions, voice settings, expiry and a link to its sheet.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {
@@ -81,13 +81,13 @@ export const AGENT_API_TOOLS = [
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle agent or moves this to the front of its queue, never interrupting a running turn; past 10 per sender per hour it is normal (the default)." },
       files: { type: "array", maxItems: 8, items: { type: "string" }, description: "Workspace-relative paths, 25 MiB each; copied to the agent's workspace." },
       thread_id: { type: "string", description: "Continue one of your conversations with this agent (a turn answer's thread_id)." },
-      idempotency_key: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9_.:-]+$", description: "Your key for this send, held 7 days: a resend with it starts no second turn and returns the first handle and thread_id (replayed true); with another prompt, thread or files: 409 idempotency_key_reused." },
+      idempotency_key: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9_.:-]+$", description: "Your key for this send, held 7 days (then a send with it is a new send): a resend with it starts no second turn and returns the first handle and thread_id (replayed true); with another prompt, thread or files: 409 idempotency_key_reused." },
       bridge_thread_id: { type: "string", maxLength: 128, description: "Opaque Grok bridge thread id: the prompt is then a bridge message (fenced, never a GO) in the person's unified chat with this agent." },
     }, required: ["agent_id", "prompt"] },
   },
   {
     name: "await_turn",
-    description: "Wait up to timeout_ms for an agent's turn: with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. still_working (not an error) carries thread_id, progress.summary, progress.steps, wait_cursor and recommended_wait_ms: pass wait_cursor as cursor next time; prefer short polls. status failed carries a plain error. interrupted true: finished false means it is still being answered (resumed after a server restart, or sent again by the server after resets_at for reason usage_limit or credits), so keep waiting; finished true is the resumed answer when resumed is true, else it was not answered and nothing sends it again (error says why): send the request again. An expired handle on a conversation you can read still answers (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle. Without a handle: read_latest_page (agent_id, thread_id) or sagax_thread. Never re-send the prompt.",
+    description: "Wait up to timeout_ms for an agent's turn: with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. still_working (not an error) carries thread_id, progress.summary, progress.steps, wait_cursor and recommended_wait_ms: pass wait_cursor as cursor next time; prefer short polls. status failed carries a plain error. interrupted true: finished false means it is still being answered (resumed after a server restart, or sent again by the server after resets_at, a timestamp, for reason usage_limit or credits), so keep waiting; finished true is the resumed answer when resumed is true, else it was not answered and nothing sends it again (error says why): send the request again. An expired handle on a conversation you can read still answers (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle. Without a handle: read_latest_page (agent_id, thread_id) or sagax_thread. Never re-send the prompt.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
       handle: { type: "string" },

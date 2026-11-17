@@ -228,9 +228,13 @@ export const CATALOG_TESTS = [
   "server/drivers/agents-merged.test.ts",
 ];
 
-/** The roots of the tool list: the catalog and its profiles, and the groups
- * and budget module. */
-export const CATALOG_ROOTS = ["server/drivers/agents-catalog.ts", "server/drivers/agents-catalog-budget.ts"];
+/** The roots of the tool list: the catalog and its profiles, the groups and
+ * budget module, and the agents proxy that serves the list (tools/list). */
+export const CATALOG_ROOTS = ["server/drivers/agents-catalog.ts", "server/drivers/agents-catalog-budget.ts", "server/drivers/agents-proxy.ts"];
+
+/** The checked-in goldens of the list: a lot that edits one by hand runs the
+ * tests that pin it. */
+export const CATALOG_GOLDENS = /^server\/drivers\/agents-catalog-goldens\//;
 
 const TYPE_ONLY_IMPORT = /\b(?:import|export)\s+type\s+[^;]*?\bfrom\s*["'][^"']+["']/g;
 const IMPORT_FROM = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g;
@@ -264,7 +268,7 @@ export function catalogFeeders(root) {
  * the part the guard-tests line does not already run on every lot. */
 export function catalogPlan(files, root) {
   const feeders = catalogFeeders(root);
-  const touched = files.some((file) => feeders.has(file) || CATALOG_TESTS.includes(file));
+  const touched = files.some((file) => feeders.has(file) || CATALOG_TESTS.includes(file) || CATALOG_GOLDENS.test(file));
   const tests = touched ? CATALOG_TESTS.filter((file) => existsSync(join(root, file))) : [];
   const run = tests.filter((file) => !GUARD_TESTS.includes(file));
   const skip = run.length ? "" : tests.length ? "the guard tests run the catalog tests of this lot" : "no file of the tool list touched";

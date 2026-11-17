@@ -209,36 +209,42 @@ describe("agents catalog budget strategy (#1703)", () => {
     };
     const widest = () => availableTools(catalogProfileFromEnv(EVERYTHING));
 
-    it("describes every field of propose_routine_action's changes in propose_routine, listed in the same turn", () => {
-      for (const env of [EVERYTHING, { SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "0" }, { ...EVERYTHING, SAGAX_ROOM_TURN: "1", SAGAX_GROUP_TURN: "1" }]) {
-        const tools = availableTools(catalogProfileFromEnv(env));
-        const changes = tool(tools, "propose_routine_action").inputSchema.properties!.changes!;
-        const fields = tool(tools, "propose_routine").inputSchema.properties!;
-        expect(changes.description).toContain("propose_routine");
-        for (const [key, schema] of Object.entries(changes.properties!)) {
-          expect(fields[key]?.description, key).toBeTruthy();
-          expect(schema.type, key).toEqual(fields[key]!.type);
-          expect(schema.enum, key).toEqual(fields[key]!.enum);
-        }
-        // the schedule's own fields too
-        for (const key of Object.keys(changes.properties!.schedule!.properties!)) {
-          expect(fields.schedule!.properties![key]!.description, `schedule.${key}`).toBeTruthy();
-        }
-      }
-    });
+    // A Claude turn loads a deferred tool's schema alone (ToolSearch, or a
+    // pinned tool in compact mode): each of these must teach its own rules.
+    const ROUTINE_RULES: Array<[string, RegExp]> = [
+      ["cron: five fields", /5 fields \(min hour dom month dow\)/],
+      ["cron: an IANA time zone", /IANA/],
+      ["once: RFC3339 with an offset", /once: future RFC3339 with offset/],
+      ["weekly and daily: local HH:MM", /weekly\/daily: local HH:MM/],
+      ["every_day clears weekdays", /"every_day":\{"type":"boolean","description":"update: true clears/],
+      ["all_day clears the window", /"all_day":\{"type":"boolean","description":"update: true clears/],
+      ["never_ends clears ends_at", /"never_ends":\{"type":"boolean","description":"update: true clears ends_at/],
+      ["clear_timeout clears timeout_minutes", /"clear_timeout":\{"type":"boolean","description":"update: true clears timeout_minutes/],
+      ["folder null removes", /"folder":\{[^}]*"description":"(?:[^"\\]|\\.)*null removes/],
+      ["model null resets", /"model":\{[^}]*"description":"(?:[^"\\]|\\.)*null resets/],
+      ["goal null removes", /"goal":\{[^}]*"description":"(?:[^"\\]|\\.)*null removes/],
+      ["watch null clears", /"watch":\{"type":\["object","null"\],"description":"(?:[^"\\]|\\.)*null clears/],
+      ["watch shape", /kind:\\"watch\\", source: files\|command\|tool/],
+      ["act_as empty string is own access", /\\"\\" = own access/],
+    ];
+    const ARTIFACT_RULES: Array<[string, RegExp]> = [
+      ["no network, strict CSP", /no network \(strict CSP\)/],
+      ["window.sagax.data", /window\.sagax\.data/],
+      ["window.sagax.onData", /window\.sagax\.onData/],
+      ["tool source shape", /\{kind:\\"tool\\",tool,args\}/],
+      ["command source shape", /\{kind:\\"command\\",command\}/],
+      ["null removes the source", /null removes it/],
+    ];
 
-    it("describes every field update_artifact shares with save_artifact in save_artifact", () => {
+    it("teaches every routine and artifact rule in each tool loaded alone", () => {
       const tools = widest();
-      const update = tool(tools, "update_artifact");
-      const save = tool(tools, "save_artifact").inputSchema.properties!;
-      expect(update.description).toContain("save_artifact");
-      for (const [key, schema] of Object.entries(update.inputSchema.properties!)) {
-        if (!(key in save)) continue;
-        expect(schema.description, key).toBeUndefined();
-        expect(save[key]!.type, key).toEqual(schema.type);
+      for (const [name, rules] of [
+        ["propose_routine", ROUTINE_RULES], ["propose_routine_action", ROUTINE_RULES],
+        ["save_artifact", ARTIFACT_RULES], ["update_artifact", ARTIFACT_RULES],
+      ] as const) {
+        const alone = JSON.stringify(tool(tools, name));
+        for (const [rule, pattern] of rules) expect(alone, `${name}: ${rule}`).toMatch(pattern);
       }
-      expect(save.html!.description).toContain("window.sagax.onData");
-      expect(save.source!.description).toContain("null removes it");
     });
 
     it("lists in phone_tool only the fields of the offered phone tools", () => {

@@ -16,7 +16,6 @@ import {
   routineFields,
   confirmationResult,
 } from "./shared.ts";
-import { withoutFieldDescriptions } from "../catalog-schema.ts";
 
 export const DEF_LIST_ROUTINES = {
     name: "list_routines",
@@ -61,7 +60,7 @@ export const DEF_EVENT_SUBSCRIPTIONS = {
 export const DEF_PROPOSE_ROUTINE = {
     name: "propose_routine",
     description:
-      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first; one-time schedules need an RFC3339 offset." + SELF_CHANGE_OUTCOME,
+      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -138,7 +137,7 @@ export function withProductTrigger(def: typeof DEF_PROPOSE_ROUTINE): typeof DEF_
 export const DEF_PROPOSE_ROUTINE_ACTION = {
     name: "propose_routine_action",
     description:
-      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update." + SELF_CHANGE_OUTCOME,
+      "Prepare a user-requested change to one of this bot's routines. Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -152,14 +151,13 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
         action: {
           type: "string",
           enum: ["update", "pause", "resume", "run_now", "delete", "rotate_webhook_key"],
-          description: "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook, email or GitHub trigger.",
+          description: "changes only with update. rotate_webhook_key replaces a webhook, email or GitHub trigger's key.",
         },
         changes: {
           type: "object",
           additionalProperties: false,
-          // #4518: propose_routine, always listed beside it, describes each field
-          properties: withoutFieldDescriptions(ROUTINE_FIELDS_SCHEMA),
-          description: "update only: the fields to change, each meaning what propose_routine says.",
+          properties: ROUTINE_FIELDS_SCHEMA,
+          description: "update only: the fields to change.",
         },
         quote: PERSON_QUOTE,
       },

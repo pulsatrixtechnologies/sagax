@@ -2,7 +2,7 @@
   "tools": [
     {
       "name": "ask_choice",
-      "description": "Ask the person to choose with clickable options when you need a decision their request did not cover and your engine offers no question tool. Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool (routine runs and MCP-started turns included), never a plain-text confirmation request; then end your turn. Never for a write the request or an exact quoted GO covers (use its approval gate), may-I permission on in-scope work, or teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions); a list to pick from is a checklist (items, actions); question is then one line of context. Several questions in one text, a list in prose or answers only in the text are refused with an example. Separate items: one card each, a key to replace or retire it; only wait false cards can follow one another in one turn.",
+      "description": "Ask the person to choose with clickable options when you need a decision their request did not cover and your engine offers no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool (routine runs and MCP-started turns included), never a plain-text confirmation request; then end your turn. Never for a write the request or an exact quoted GO covers (use its approval gate), may-I permission on in-scope work, or teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions); a list to pick from is a checklist (items, actions); question is then one line of context. Several questions in one text, a list in prose or answers only in the text are refused with an example. Separate items: one card each (no maximum), a key to replace or retire it; only wait false cards can follow one another in one turn.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -142,7 +142,13 @@
           },
           "retire": {
             "type": "boolean",
-            "description": "With key: close that pending card now; a later answer starts nothing."
+            "description": "With key: close that pending card now (other fields ignored but reason); a later answer starts nothing."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "With retire: the short line the closed card shows (\"Already approved on Nov 16\")."
           },
           "to": {
             "type": "string",
@@ -168,13 +174,12 @@
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "description": "Saved result id copied from the truncation notice."
+            "type": "string"
           },
           "offset": {
             "type": "integer",
             "minimum": 0,
-            "description": "Character offset copied from the previous result's notice. Defaults to 0."
+            "description": "Default 0."
           }
         },
         "required": [
@@ -492,7 +497,7 @@
     },
     {
       "name": "list_threads",
-      "description": "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; when you mention one to the person, name the work by its subject, never as a thread to open. A teammate's other threads are never listed, only the ones you opened. This is a read: it starts nothing and changes nothing.",
+      "description": "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; when you mention one to the person, name the work by its subject, never as a thread to open. A teammate's other threads are never listed, only the ones you opened.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -582,14 +587,12 @@
         "additionalProperties": false,
         "properties": {
           "command": {
-            "type": "string",
-            "description": "The shell command to run, for example: python3 make_report.py && ls -l report.pdf"
+            "type": "string"
           },
           "timeout_seconds": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 300,
-            "description": "How long it may run before it is stopped. Default 60."
+            "maximum": 300
           }
         },
         "required": [
@@ -628,12 +631,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120,
-            "description": "What meme to look for, for example \"this is fine\" or \"high five\"."
+            "description": "e.g. \"this is fine\"."
           },
           "caption": {
             "type": "string",
-            "maxLength": 200,
-            "description": "Optional short caption for a still meme template."
+            "maxLength": 200
           }
         },
         "required": [
@@ -770,7 +772,7 @@
           },
           "html": {
             "type": "string",
-            "description": "Self-contained HTML with inline CSS and JS; no network (strict CSP). Read window.sagax.data; window.sagax.onData(fn) gets each refresh's JSON."
+            "description": "Self-contained, inline CSS and JS, no network (strict CSP); reads window.sagax.data, window.sagax.onData(fn) per refresh."
           },
           "source": {
             "type": "object",
@@ -795,7 +797,7 @@
             "required": [
               "kind"
             ],
-            "description": "Re-run by Sagax on the interval, with no turn of yours: {kind:\"tool\",tool,args} (a read tool: workspace_read of a JSON file you keep, a connector query) or {kind:\"command\",command} (read-only, prints JSON). A call that would need approval is marked blocked. null removes it."
+            "description": "Re-run each interval, no turn of yours: {kind:\"tool\",tool,args} (a read tool) or {kind:\"command\",command} (read-only, prints JSON); one needing approval is blocked; null removes it."
           },
           "interval_seconds": {
             "type": "integer",
@@ -875,7 +877,7 @@
     },
     {
       "name": "choose_page_target",
-      "description": "When asked to create a page or an artifact with no surface named, call this first. It returns the target to publish with (sagax_page → propose_page, sagax_artifact → save_artifact, claude_artifact → claude_artifact, or another registered target), or shows a choice card when several are available and this bot has no remembered default (one target, or a working default, skips the card). After the person picks (the next message is the target id), call that target's tool. Do not invent a surface: no propose_page, save_artifact or claude_artifact for a new page until this tool or the person names the target. intent narrows the list: page, artifact, or any.",
+      "description": "When asked to create a page or an artifact with no surface named, call this first. It returns the target to publish with (sagax_page → propose_page, sagax_artifact → save_artifact, claude_artifact → claude_artifact, or another registered target), or shows a choice card when several are available and this bot has no remembered default (one target, or a working default, skips the card). After the person picks (the next message is the target id), call that target's tool. Do not invent a surface: no propose_page, save_artifact or claude_artifact for a new page until this tool or the person names the target.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -934,7 +936,7 @@
     },
     {
       "name": "propose_page",
-      "description": "Propose a web page shared by link (report, site, app); the person reviews and publishes. A live widget in Sagax: save_artifact. kind html: one complete document, inline CSS and JS; markdown: text; presentation: Markdown slides split by --- lines; kind design: mockups, app screens, a prototype, HTML whose <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> are screens on a canvas, styled with design system tokens (var(--accent), var(--bg), var(--fg); guide designs). Has Sagax's theme: no hard-coded colors or fonts. Sandboxed, no network: inline everything (data: URIs). Never publishes itself. Revise: pass its page_id. content or path, not both. The answer gives bytes and sha256; read back with page_comments action source. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
+      "description": "Propose a web page shared by link (report, site, app); the person reviews and publishes. A live widget in Sagax: save_artifact. kind html: one complete document, inline CSS and JS; markdown: text; presentation: Markdown slides split by --- lines; kind design: mockups, app screens, a prototype, HTML whose <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> are screens on a canvas, styled with design system tokens (var(--accent), var(--bg), var(--fg); guide designs). Has Sagax's theme: no hard-coded colors or fonts. Sandboxed, no network: inline everything (data: URIs). content or path, not both. The answer gives bytes and sha256; read back with page_comments action source. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1070,7 +1072,7 @@
     },
     {
       "name": "sagax_settings",
-      "description": "Read or change any Sagax setting for the person you speak with, with their rights (every family, and what lives only in their open app). list (optional family) gives the keys, get reads, set changes. Their own things (bots, routines, vault, keys) change at once at Approve for me or Full; another person or the organization waits for an Allow. You never see a secret: set one by reference, {$secret: generate} or {$secret: copy, from, field}. A Primary Bot the person asks now (levels, rules) passes quote, their words: it runs at once. Try before saying you cannot.",
+      "description": "Read or change any Sagax setting for the person you speak with, with their rights: bots, conversations, routines, groups, teams, rules, account, appearance, notifications, models, connections, vault, server, organization, and what lives only in their open app. list (optional family) gives the keys, get reads, set changes. Their own things (bots, routines, vault, keys) change at once at Approve for me or Full; another person or the organization waits for an Allow. You never see a secret: set one by reference, {$secret: generate} or {$secret: copy, from, field}. A Primary Bot the person asks now (levels, rules) passes quote, their words: it runs at once. Try before saying you cannot.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1432,7 +1434,7 @@
     },
     {
       "name": "team_setup",
-      "description": "The team setup: propose and list. Set tool to the one to run, with its own arguments beside it.\n- propose_team_setup: Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use catalog engine/model IDs from list_team_setup. Combine all fields per bot. New teams must be named in newTeams and have a specialist in this plan; access is granted only to those teams. Models change bot defaults: threads following the bot move at their next turn. If review is pending, the decision resumes you once: do not ask again, poll, or repeat. Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone. Needs: reason, operations.\n- list_team_setup: Primary Bot only: list every bot of the person (whatever its team), their teams, and exact engine/model choices for team setup. Call before proposing configuration; never invent model IDs. A new default model: threads following the bot (main, routines) move at their next turn.",
+      "description": "The team setup: propose and list. Set tool to the one to run, with its own arguments beside it.\n- propose_team_setup: Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use catalog engine/model IDs from list_team_setup. Combine all fields per bot. New teams must be named in newTeams and have a specialist in this plan; access is granted only to those teams. Models change bot defaults: threads following the bot move at their next turn. If review is pending, the decision resumes you once: do not ask again, poll, or repeat. Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone. Needs: reason, operations.\n- list_team_setup: Primary Bot only: list every bot of the person (whatever its team), their teams, and exact engine/model choices for team setup. Call before proposing configuration; never invent model IDs. A new default model: threads following the bot (main, routines) move at their next turn.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1555,7 +1557,7 @@
     },
     {
       "name": "propose_bot_deletion",
-      "description": "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block it. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once. Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
+      "description": "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block it. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once. Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1583,7 +1585,7 @@
     },
     {
       "name": "import_plugin_team",
-      "description": "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Connect Apps; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit. Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
+      "description": "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Connect Apps; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit. Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2218,7 +2220,7 @@
               "conversations",
               "memory"
             ],
-            "description": "Omit for both."
+            "description": "memory: only your memory files; conversations: only earlier conversations; omit for both."
           },
           "thread_id": {
             "type": "string",
@@ -2390,7 +2392,7 @@
     },
     {
       "name": "routines",
-      "description": "Routines: propose and change. Use list_routines and run_routine by name to list or run. Set tool to the one to run, with its own arguments beside it.\n- propose_routine: Prepare a new routine after the user explicitly asks to schedule recurring or future work. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first; one-time schedules need an RFC3339 offset. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result. Needs: name, instructions.\n- propose_routine_action: Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result. Needs: routine_id, action.",
+      "description": "Routines: propose and change. Use list_routines and run_routine by name to list or run. Set tool to the one to run, with its own arguments beside it.\n- propose_routine: Prepare a new routine after the user explicitly asks to schedule recurring or future work. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result. Needs: name, instructions.\n- propose_routine_action: Prepare a user-requested change to one of this bot's routines. Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result. Needs: routine_id, action.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2407,13 +2409,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 80,
-            "description": "Short name shown in Routines."
+            "description": "Shown in Routines."
           },
           "instructions": {
             "type": "string",
             "minLength": 1,
             "maxLength": 20000,
-            "description": "Full instructions for each run."
+            "description": "For each run."
           },
           "schedule": {
             "type": "object",
@@ -2428,26 +2430,25 @@
                   "interval",
                   "cron",
                   "limit_reset"
-                ],
-                "description": "Schedule kind."
+                ]
               },
               "expression": {
                 "type": "string",
                 "maxLength": 256,
-                "description": "Cron only: five fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2. No seconds/year/@macros."
+                "description": "cron: 5 fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2; no seconds, year or @macros."
               },
               "timeZone": {
                 "type": "string",
                 "maxLength": 128,
-                "description": "Cron only: IANA timezone, no numeric offset."
+                "description": "cron: IANA name, not an offset."
               },
               "at": {
                 "type": "string",
-                "description": "once only: future RFC3339 with explicit offset."
+                "description": "once: future RFC3339 with offset."
               },
               "engine": {
                 "type": "string",
-                "description": "limit_reset only: engine id. Omit for your own."
+                "description": "limit_reset: engine id; omit for yours."
               },
               "repeat": {
                 "type": "string",
@@ -2455,7 +2456,7 @@
                   "once",
                   "every_reset"
                 ],
-                "description": "limit_reset only: once (default) or every_reset."
+                "description": "limit_reset; default once."
               },
               "time": {
                 "type": "string",
@@ -2475,25 +2476,25 @@
                     "sunday"
                   ]
                 },
-                "description": "weekly: required days. interval: optional filter. Local timezone."
+                "description": "weekly: required. interval: optional filter."
               },
               "every_minutes": {
                 "type": "integer",
                 "minimum": 5,
                 "maximum": 1440,
-                "description": "interval only: minutes between runs (5-1440)."
+                "description": "interval: minutes between runs."
               },
               "starts_at": {
                 "type": "string",
-                "description": "interval: optional RFC3339 cadence anchor."
+                "description": "interval: RFC3339 cadence anchor."
               },
               "window_start": {
                 "type": "string",
-                "description": "interval: local HH:MM window start, with window_end."
+                "description": "interval: local HH:MM, with window_end."
               },
               "window_end": {
                 "type": "string",
-                "description": "interval: local HH:MM window end, same day."
+                "description": "interval: local HH:MM, same day."
               },
               "ends_at": {
                 "type": "string",
@@ -2501,11 +2502,11 @@
               },
               "every_day": {
                 "type": "boolean",
-                "description": "update: true clears the weekday filter."
+                "description": "update: true clears weekdays."
               },
               "all_day": {
                 "type": "boolean",
-                "description": "update: true clears the time window."
+                "description": "update: true clears the window."
               },
               "never_ends": {
                 "type": "boolean",
@@ -2517,23 +2518,23 @@
                   "exact",
                   "flexible"
                 ],
-                "description": "exact (default) or flexible (early/late windows)."
+                "description": "flexible: early/late windows; default exact."
               },
               "window_early_minutes": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "flexible: minutes early (default 15)."
+                "description": "flexible: default 15."
               },
               "window_late_minutes": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "flexible: minutes late (default 15; 0 = on time)."
+                "description": "flexible: default 15; 0 = on time."
               }
             },
             "required": [
               "type"
             ],
-            "description": "cron (expression+timeZone), once (at), weekly (time+weekdays), daily (time), interval (every_minutes; optional weekdays/window/ends_at), or limit_reset (when an AI usage limit resets)."
+            "description": "cron (expression, timeZone), once (at), weekly (time, weekdays), daily (time), interval (every_minutes), limit_reset (an AI usage limit resets)."
           },
           "run_on": {
             "type": "string",
@@ -2541,25 +2542,25 @@
               "maus",
               "box"
             ],
-            "description": "maus (default): bot model+computer (incl. VPS). box: bot cloud computer."
+            "description": "maus (default): bot model+computer (incl. VPS); box: bot cloud computer."
           },
           "timeout_minutes": {
             "type": "integer",
             "minimum": 5,
             "maximum": 240,
-            "description": "Optional active-work limit (5-240 min). Omit for none."
+            "description": "Active-work limit; omit for none."
           },
           "clear_timeout": {
             "type": "boolean",
-            "description": "Update only: true clears timeout_minutes."
+            "description": "update: true clears timeout_minutes."
           },
           "continuity": {
             "type": "boolean",
-            "description": "true: feed the last run report into the next run. false starts fresh."
+            "description": "true feeds the last run report into the next run."
           },
           "run_on_startup": {
             "type": "boolean",
-            "description": "true: also run each time Sagax starts (repeating schedules). false stops it."
+            "description": "true: also run each time Sagax starts."
           },
           "overlap": {
             "type": "string",
@@ -2567,7 +2568,7 @@
               "skip",
               "queue"
             ],
-            "description": "skip (default) or queue one while a run is working."
+            "description": "While a run works: skip (default) or queue one."
           },
           "watch": {
             "type": [
@@ -2582,7 +2583,7 @@
               "null"
             ],
             "maxLength": 60,
-            "description": "Routines list folder. null removes. Not in the name."
+            "description": "Routines folder; null removes."
           },
           "model": {
             "type": [
@@ -2590,7 +2591,7 @@
               "null"
             ],
             "maxLength": 200,
-            "description": "Model id for runs on this bot's engine; chat unchanged. null resets."
+            "description": "Runs' model id on this bot's engine; null resets."
           },
           "subagent_model": {
             "type": [
@@ -2598,7 +2599,7 @@
               "null"
             ],
             "maxLength": 200,
-            "description": "Claude sub-agent model (Agent tool, Flow workers); main model unchanged. null clears (falls back to model, then the fast model)."
+            "description": "Claude sub-agent model; null falls back to model, then the fast model."
           },
           "act_as": {
             "type": [
@@ -2610,7 +2611,7 @@
           },
           "requires_computer": {
             "type": "boolean",
-            "description": "true: wait for the bot's computer online before a run; false drops that need."
+            "description": "true: a run waits for the bot's computer online."
           },
           "effort": {
             "type": [
@@ -2627,7 +2628,7 @@
               "ultracode",
               null
             ],
-            "description": "Routine-run effort on this bot's engine (chat unchanged). null resets."
+            "description": "Runs' effort; null resets."
           },
           "goal": {
             "type": [
@@ -2635,11 +2636,11 @@
               "object",
               "null"
             ],
-            "description": "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Stops once reached. null removes."
+            "description": "Objective in words or {text, deadline (RFC 3339)}; stops once reached; null removes."
           },
           "delete_when_finished": {
             "type": "boolean",
-            "description": "Auto-delete when the schedule ends and the last run settles. false keeps it."
+            "description": "Delete when the schedule ends and the last run settles."
           },
           "trigger": {
             "type": "object",
@@ -2765,7 +2766,7 @@
               "delete",
               "rotate_webhook_key"
             ],
-            "description": "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook, email or GitHub trigger."
+            "description": "changes only with update. rotate_webhook_key replaces a webhook, email or GitHub trigger's key."
           },
           "changes": {
             "type": "object",
@@ -2774,16 +2775,19 @@
               "name": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 80
+                "maxLength": 80,
+                "description": "Shown in Routines."
               },
               "instructions": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 20000
+                "maxLength": 20000,
+                "description": "For each run."
               },
               "schedule": {
                 "type": "object",
                 "additionalProperties": false,
+                "description": "cron (expression, timeZone), once (at), weekly (time, weekdays), daily (time), interval (every_minutes), limit_reset (an AI usage limit resets).",
                 "properties": {
                   "type": {
                     "type": "string",
@@ -2798,27 +2802,33 @@
                   },
                   "expression": {
                     "type": "string",
-                    "maxLength": 256
+                    "maxLength": 256,
+                    "description": "cron: 5 fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2; no seconds, year or @macros."
                   },
                   "timeZone": {
                     "type": "string",
-                    "maxLength": 128
+                    "maxLength": 128,
+                    "description": "cron: IANA name, not an offset."
                   },
                   "at": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "once: future RFC3339 with offset."
                   },
                   "engine": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "limit_reset: engine id; omit for yours."
                   },
                   "repeat": {
                     "type": "string",
                     "enum": [
                       "once",
                       "every_reset"
-                    ]
+                    ],
+                    "description": "limit_reset; default once."
                   },
                   "time": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "weekly/daily: local HH:MM."
                   },
                   "weekdays": {
                     "type": "array",
@@ -2833,48 +2843,60 @@
                         "saturday",
                         "sunday"
                       ]
-                    }
+                    },
+                    "description": "weekly: required. interval: optional filter."
                   },
                   "every_minutes": {
                     "type": "integer",
                     "minimum": 5,
-                    "maximum": 1440
+                    "maximum": 1440,
+                    "description": "interval: minutes between runs."
                   },
                   "starts_at": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "interval: RFC3339 cadence anchor."
                   },
                   "window_start": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "interval: local HH:MM, with window_end."
                   },
                   "window_end": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "interval: local HH:MM, same day."
                   },
                   "ends_at": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "interval: inclusive RFC3339 cutoff."
                   },
                   "every_day": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "update: true clears weekdays."
                   },
                   "all_day": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "update: true clears the window."
                   },
                   "never_ends": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "update: true clears ends_at."
                   },
                   "timing": {
                     "type": "string",
                     "enum": [
                       "exact",
                       "flexible"
-                    ]
+                    ],
+                    "description": "flexible: early/late windows; default exact."
                   },
                   "window_early_minutes": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "description": "flexible: default 15."
                   },
                   "window_late_minutes": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "description": "flexible: default 15; 0 = on time."
                   }
                 },
                 "required": [
@@ -2886,65 +2908,77 @@
                 "enum": [
                   "maus",
                   "box"
-                ]
+                ],
+                "description": "maus (default): bot model+computer (incl. VPS); box: bot cloud computer."
               },
               "timeout_minutes": {
                 "type": "integer",
                 "minimum": 5,
-                "maximum": 240
+                "maximum": 240,
+                "description": "Active-work limit; omit for none."
               },
               "clear_timeout": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "update: true clears timeout_minutes."
               },
               "continuity": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "true feeds the last run report into the next run."
               },
               "run_on_startup": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "true: also run each time Sagax starts."
               },
               "overlap": {
                 "type": "string",
                 "enum": [
                   "skip",
                   "queue"
-                ]
+                ],
+                "description": "While a run works: skip (default) or queue one."
               },
               "watch": {
                 "type": [
                   "object",
                   "null"
-                ]
+                ],
+                "description": "Wake only on change/match. {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. Repeating schedule; null clears."
               },
               "folder": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "maxLength": 60
+                "maxLength": 60,
+                "description": "Routines folder; null removes."
               },
               "model": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "maxLength": 200
+                "maxLength": 200,
+                "description": "Runs' model id on this bot's engine; null resets."
               },
               "subagent_model": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "maxLength": 200
+                "maxLength": 200,
+                "description": "Claude sub-agent model; null falls back to model, then the fast model."
               },
               "act_as": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "maxLength": 120
+                "maxLength": 120,
+                "description": "Perspicax role slug for runs; \"\" = own access; null resets."
               },
               "requires_computer": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "true: a run waits for the bot's computer online."
               },
               "effort": {
                 "type": [
@@ -2960,20 +2994,23 @@
                   "max",
                   "ultracode",
                   null
-                ]
+                ],
+                "description": "Runs' effort; null resets."
               },
               "goal": {
                 "type": [
                   "string",
                   "object",
                   "null"
-                ]
+                ],
+                "description": "Objective in words or {text, deadline (RFC 3339)}; stops once reached; null removes."
               },
               "delete_when_finished": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Delete when the schedule ends and the last run settles."
               }
             },
-            "description": "update only: the fields to change, each meaning what propose_routine says."
+            "description": "update only: the fields to change."
           }
         },
         "required": [
@@ -3144,7 +3181,7 @@
     },
     {
       "name": "propose_rule",
-      "description": "Propose add, change or remove of one personal Auto-review rule (allow / ask / deny) after the person confirms an action or asks in chat. Writes custom-approval-rules; org Ask/Deny still win. List/edit with sagax_settings (family rules). Confirm card unless a Primary Bot quote names the rule. Allow never auto-applies from Full alone. Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
+      "description": "Propose add, change or remove of one personal Auto-review rule (allow / ask / deny) after the person confirms an action or asks in chat. Writes custom-approval-rules; org Ask/Deny still win. List/edit with sagax_settings (family rules). Confirm card unless a Primary Bot quote names the rule. Allow never auto-applies from Full alone. Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -3155,8 +3192,7 @@
               "add",
               "change",
               "remove"
-            ],
-            "description": "add, change or remove."
+            ]
           },
           "when": {
             "type": "string",
@@ -3171,7 +3207,7 @@
               "ask",
               "deny"
             ],
-            "description": "add: allow, ask or deny. change: prefer changes.behavior."
+            "description": "change: prefer changes.behavior."
           },
           "rule_id": {
             "type": "string",
@@ -3676,7 +3712,7 @@
           "prompt": {
             "type": "string",
             "maxLength": 4000,
-            "description": "What the image should show, or the change to make to the attached image, in the person's words."
+            "description": "What to show or change, in the person's words."
           },
           "image": {
             "type": "string",
@@ -3684,8 +3720,7 @@
             "description": "Optional exact attachment path or /api/attachments URL of one image in the current person's message. Default: the latest image they attached."
           },
           "use_attached_image": {
-            "type": "boolean",
-            "description": "Default true: edit the image attached to the person's message when there is one."
+            "type": "boolean"
           },
           "aspect_ratio": {
             "type": "string",
@@ -3708,7 +3743,7 @@
     },
     {
       "name": "make_video",
-      "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without a new paid generation. The finished MP4 is attached in this chat. Never claim completion from pending status or show a temporary provider URL. Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job.",
+      "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without a new paid generation. The finished MP4 is attached in this chat. Never claim completion from pending status or show a temporary provider URL. A new generate request_key starts a separately billable job.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

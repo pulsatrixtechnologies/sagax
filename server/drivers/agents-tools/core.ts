@@ -27,8 +27,8 @@ export const DEF_TOOL_RESULT_READ = {
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {
-        id: { type: "string", description: "Saved result id copied from the truncation notice." },
-        offset: { type: "integer", minimum: 0, description: "Character offset copied from the previous result's notice. Defaults to 0." },
+        id: { type: "string" },
+        offset: { type: "integer", minimum: 0, description: "Default 0." },
       },
       required: ["id"],
     },
@@ -279,8 +279,8 @@ export const DEF_SEND_MEME = {
       type: "object",
       additionalProperties: false,
       properties: {
-        query: { type: "string", minLength: 1, maxLength: 120, description: "What meme to look for, for example \"this is fine\" or \"high five\"." },
-        caption: { type: "string", maxLength: 200, description: "Optional short caption for a still meme template." },
+        query: { type: "string", minLength: 1, maxLength: 120, description: "e.g. \"this is fine\"." },
+        caption: { type: "string", maxLength: 200 },
       },
       required: ["query"],
     },
@@ -365,7 +365,7 @@ export const DEF_SESSION_SEARCH = {
         scope: {
           type: "string",
           enum: ["all", "conversations", "memory"],
-          description: "Omit for both.",
+          description: "memory: only your memory files; conversations: only earlier conversations; omit for both.",
         },
       },
     },
@@ -380,7 +380,7 @@ export const DEF_ROUTE_MESSAGE = {
       additionalProperties: false,
       properties: {
         handle: { type: "string", description: "The route handle from the note in front of the message." },
-        mode: { type: "string", enum: ["parallel", "after"], description: "parallel: an independent request, run now as its own task. after: it depends on your current work or touches the same files or records." },
+        mode: { type: "string", enum: ["parallel", "after"] },
         title: { type: "string", description: "Optional: a short name for the parallel task." },
         resources: { type: "array", items: { type: "string" }, maxItems: 12, description: "Optional: the files or records the task writes, such as src/app.ts or ticket:123456." },
       },

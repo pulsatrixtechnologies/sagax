@@ -63,32 +63,44 @@ export const GROK_DRIVER_KIND = "grokAgent";
  * this names that id form for the engine the turn runs on.
  *
  * #3019: on a server linked to Perspicax, the agents server lists the
- * gateway tools (PERSPICAX_TOOLS: api_search, api_describe, api_result_query,
- * identity, flow...), and the account mount withholds its copy of them (#2189,
- * agents-tool-priority.ts). Naming `mcp__perspicax__api_search` there sent the
- * bot to a tool that does not exist, then to a guessed `search_tools`, before
- * `mcp__agents__api_search`. `gatewayServer` names the server that really
- * lists them; the profile's own tools (`cw_psa_query`, `identity_switch`)
- * stay on the account mount. */
-export const GATEWAY_FINDER_TOOLS = ["api_search", "api_describe", "api_list", "api_result_query", "api_lookup", "identity", "flow"] as const;
+ * gateway finding tools (PERSPICAX_TOOLS: api_search, api_describe,
+ * api_result_query, identity), and the account mount withholds its copy of
+ * them (#2189, agents-tool-priority.ts). Naming `mcp__perspicax__api_search`
+ * there sent the bot to a tool that does not exist, then to a guessed
+ * `search_tools`, before `mcp__agents__api_search`. `gatewayServer` names
+ * the server that really lists them; the profile's own tools
+ * (`cw_psa_query`, `identity_switch`) stay on the account mount.
+ *
+ * #4432: `flow`, `flow_action` and `flow_run` stay on that account mount.
+ * They are not agents tools. A copy on agents withheld the names the
+ * routine already calls, and Grok answered "Tool not found" for the
+ * display "Flow". */
+export const GATEWAY_FINDER_TOOLS = ["api_search", "api_describe", "api_list", "api_result_query", "api_lookup", "identity"] as const;
+/** Flow tools the account connection lists. Not copied onto agents (#4432). */
+export const ACCOUNT_FLOW_TOOLS = ["flow", "flow_action", "flow_run"] as const;
 export function perspicaxToolIdsPrompt(server: string, driverKind: string | undefined, gatewayServer?: string): string {
   const gateway = gatewayServer && gatewayServer !== server ? gatewayServer : server;
   const finders = GATEWAY_FINDER_TOOLS.map((tool) => `\`${tool}\``).join(", ");
-  const never = `never a display title such as "Api search", never a name from a routine's text without its prefix, never a server prefix your tool list does not show`;
+  const never = `never a display title such as "Api search" or "Flow", never a name from a routine's text without its prefix, never a server prefix your tool list does not show`;
+  const flowClause = (id: (tool: string) => string) => gateway !== server
+    ? ` Flow (\`flow\`, \`flow_action\`, \`flow_run\`) stays on \`${server}\`, not on \`${gateway}\`: ${ACCOUNT_FLOW_TOOLS.map(id).join(", ")}.`
+    : "";
   if (driverKind === CLAUDE_DRIVER_KIND) {
     const id = (on: string, tool: string) => `\`mcp__${on}__${tool}\``;
     const split = gateway !== server
-      ? ` The finding tools (${finders}) are on the \`${gateway}\` server: ${id(gateway, "api_search")}, ${id(gateway, "api_describe")}, ${id(gateway, "api_result_query")}; \`${server}\` does not list them. The account's own tools are on \`${server}\`: ${id(server, "cw_psa_query")}, ${id(server, "identity_switch")}, each product's \`<product>_query\`, \`_write\` and \`_action\`.`
+      ? ` The finding tools (${finders}) are on the \`${gateway}\` server: ${id(gateway, "api_search")}, ${id(gateway, "api_describe")}, ${id(gateway, "api_result_query")}; \`${server}\` does not list them. The account's own tools are on \`${server}\`: ${id(server, "cw_psa_query")}, ${id(server, "identity_switch")}, each product's \`<product>_query\`, \`_write\` and \`_action\`.${flowClause((tool) => id(server, tool))}`
       : ` For example ${id(server, "api_search")}, ${id(server, "api_result_query")}.`;
     return `\n- Tool ids: tools are named \`mcp__<server>__<tool>\`.${split} Call them by that exact id, ${never}. A tool your list shows as deferred is loaded with ToolSearch (select:<id>) before its first call.`;
   }
   if (driverKind === GROK_DRIVER_KIND) {
     const split = gateway !== server
-      ? ` The finding tools (${finders}) are \`${gateway}__<tool>\` (\`${gateway}__api_search\`, \`${gateway}__api_result_query\`); the account's own tools are \`${server}__<tool>\` (\`${server}__cw_psa_query\`, \`${server}__identity_switch\`).`
+      ? ` The finding tools (${finders}) are \`${gateway}__<tool>\` (\`${gateway}__api_search\`, \`${gateway}__api_result_query\`); the account's own tools are \`${server}__<tool>\` (\`${server}__cw_psa_query\`, \`${server}__identity_switch\`).${flowClause((tool) => `\`${server}__${tool}\``)}`
       : ` For example \`${server}__api_search\`, \`${server}__api_result_query\`.`;
     return `\n- Tool ids: reach this server's tools with use_tool and tool_name \`<server>__<tool>\`, the exact id.${split} ${never.charAt(0).toUpperCase()}${never.slice(1)}. search_tool is a native tool: call it directly, never through use_tool. A server's own \`search_tools\` is a different tool, reached with use_tool as \`${server}__search_tools\` and only when that server lists it.`;
   }
-  const split = gateway !== server ? ` (the finding tools ${finders} on the \`${gateway}\` server, the account's own tools such as \`cw_psa_query\` on \`${server}\`)` : ` (the \`${server}\` server's \`api_search\`, with the prefix your tool list gives it)`;
+  const split = gateway !== server
+    ? ` (the finding tools ${finders} on the \`${gateway}\` server, the account's own tools such as \`cw_psa_query\` on \`${server}\`).${flowClause((tool) => `\`${tool}\``)}`
+    : ` (the \`${server}\` server's \`api_search\`, with the prefix your tool list gives it)`;
   return `\n- Tool ids: call each tool by the exact id your tool list shows for it${split}, ${never}.`;
 }
 

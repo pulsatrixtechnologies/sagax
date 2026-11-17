@@ -241,7 +241,7 @@ mode still decide. Perspicax's own Sagax tools (`sagax_bots`, `sagax_send`,
 (`PATCH /api/org/member/routines/{id}`); a bot still uses
 `propose_routine_action`, which follows Ask or Auto. The Perspicax gateway tools
 (`PERSPICAX_TOOLS`: the memory tools, the `api_*` meta-tools, `identity`,
-`flow`, `flow_action`, the `remote_support_*` tools, `review_write`) are listed only on an organization
+the `remote_support_*` tools, `review_write`) are listed only on an organization
 server linked to Perspicax (`SAGAX_PERSPICAX_TOOLS`) and forwarded by
 `/api/internal/perspicax/tool` to the account connection mounted in the turn, after the
 misuse and safety review. Reading the Perspicax catalog to vet resource names

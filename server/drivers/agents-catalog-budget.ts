@@ -198,12 +198,12 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   },
   {
     id: "perspicax",
-    title: "Perspicax gateway, memory, flow and remote support",
+    title: "Perspicax gateway, memory and remote support",
     tools: [
       "memory_recall", "memory_search", "memory_write", "memory_propose", "memory_forget",
       "memory_feedback", "api_list", "api_search", "api_describe", "api_result_query",
       "api_lookup", "api_plan", "api_upload", "api_reload", "identity",
-      "flow", "flow_action", "remote_support_open", "remote_support_status",
+      "remote_support_open", "remote_support_status",
       "remote_support_close", "remote_support_hosts", "remote_support_host_code",
       "remote_support_host_revoke", "review_write", "request_product_key",
       "claim", "claim_list", "claim_release", "claim_renew",

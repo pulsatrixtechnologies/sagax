@@ -42,8 +42,10 @@ export const PERSPICAX_TOOLS = [
   pxTool("api_upload", "Reserve a slot to send a file for a write that takes one: declare filename, bytes and sha256, send the bytes with the returned PUT, then pass file: { upload: <id> } in the write.", { filename: { type: "string" }, content_type: { type: "string" }, bytes: { type: "integer", minimum: 1 }, sha256: { type: "string" } }, ["filename", "bytes", "sha256"]),
   pxTool("api_reload", "Admin: re-read the served APIs and swap them."),
   pxTool("identity", "Find records by a name or an identifier across the served APIs.", { query: { type: "string", minLength: 2 }, apis: { type: "array", items: { type: "string" } }, limit: { type: "integer", minimum: 1, maximum: 100 } }, ["query"]),
-  pxTool("flow", "Pulsatrix Flow, read only: command catalog lists the actions of the active pack; command describe with args.name gives one action's params and bounds.", { command: { type: "string", enum: ["catalog", "describe"] }, args: { type: "object", properties: { name: { type: "string" } }, additionalProperties: false } }, ["command"]),
-  pxTool("flow_action", "Run one Pulsatrix Flow action (see flow catalog). A write batch answers needs_confirmation with a preview first: ask the user, then call again with confirm: true. _dry_run previews every write; resume continues a run paused at choice_needed.", { name: { type: "string" }, params: { type: "object" }, _dry_run: { type: "boolean" }, confirm: { type: "boolean" }, resume: { type: "object", properties: { run_id: { type: "string" }, choice: {} }, required: ["run_id"], additionalProperties: false } }),
+  // `flow` and `flow_action` stay on the account connection only (#4432).
+  // A copy here is a second tool: #2189 would withhold the real names from
+  // that connection, and Grok answers "Tool not found" before the call
+  // arrives. `flow_run` and the compute tools were never copied.
   // Remote support (Perspicax 1.8.43, Tailcat). The bot does not supply a
   // nodekey: server/remote-support/remote-support-local.ts creates a key for this session
   // only on this computer and forwards only the public half.

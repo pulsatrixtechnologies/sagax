@@ -827,8 +827,6 @@ describe("agents-proxy MCP surface", () => {
       "api_upload",
       "api_reload",
       "identity",
-      "flow",
-      "flow_action",
       "remote_support_open",
       "remote_support_hosts",
       "remote_support_host_code",
@@ -1898,7 +1896,7 @@ describe("agents-proxy MCP surface", () => {
   });
 
   it("forwards the Perspicax gateway tools through the harness route", async () => {
-    for (const tool of ["memory_recall", "memory_write", "api_search", "api_result_query", "identity", "flow", "flow_action", "review_write"]) {
+    for (const tool of ["memory_recall", "memory_write", "api_search", "api_result_query", "identity", "review_write"]) {
       lastPerspicaxToolBody = null;
       const res = await callTool(tool, { query: "vpn" });
       expect(res.result.isError, tool).toBeFalsy();

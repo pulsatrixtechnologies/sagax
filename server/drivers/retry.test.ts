@@ -166,6 +166,8 @@ describe("mayResendTurn", () => {
 
   it("spends the one free pre-init resume, and never resends a refused sign-in", () => {
     expect(mayResendTurn({ ...failed, endedBeforeTurn: true, transient: false, attempt: 1 })).toBe(false);
+    // a warm process that exited cleanly before taking the turn still resumes once
+    expect(mayResendTurn({ ...failed, endedBeforeTurn: true, exitCode: 0, transient: false, attempt: 0 })).toBe(true);
     expect(mayResendTurn({ ...failed, endedBeforeTurn: true, auth: true })).toBe(false);
     expect(mayResendTurn({ ...failed, endedBeforeTurn: true, answered: true, transient: false, auth: true })).toBe(false);
   });

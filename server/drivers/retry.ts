@@ -157,7 +157,8 @@ export function classifyError(err: FailureInput): ErrorClassification {
 export function mayResendTurn(turn: { endedBeforeTurn: boolean; exitCode: number | null; transient: boolean; streamed: boolean;
   answered: boolean; attempt: number; auth?: boolean }): boolean {
   if (turn.auth) return false;
-  if (turn.endedBeforeTurn && turn.attempt < 1 && turn.exitCode !== 0) return true;
+  // a warm process that ended cleanly between turns (exit 0) resumes too
+  if (turn.endedBeforeTurn && turn.attempt < 1) return true;
   return turn.exitCode !== 0 && turn.transient && !turn.streamed && !turn.answered && turn.attempt < RETRY_MAX_ATTEMPTS - 1;
 }
 

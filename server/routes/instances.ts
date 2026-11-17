@@ -25,7 +25,7 @@ import {
 } from "../engines/claude-accounts.ts";
 import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../engines/claude-update.ts";
 import { accountInUseRefusal, accountUserNames } from "../engines/account-users.ts";
-import { ONLY_ACCOUNT_ERROR, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
+import { ONLY_ACCOUNT_ERROR, addedAccount, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 import {
   engineLaunches,
   persistableInstanceConfigs,
@@ -166,7 +166,7 @@ export async function removeAddedAccount(
   // A key engine of the same tool is a key, not an account.
   const entry = instances[instanceId];
   const accounts = Object.keys(instances).filter((id) => instances[id]?.driver === entry.driver && instances[id]?.access !== "api");
-  if (entry.access === "api" || !removableAccount(instanceId, accounts)) {
+  if (entry.access === "api" || !(addedAccount(instanceId, entry.driver) || removableAccount(instanceId, accounts))) {
     return { ok: false, status: 400, body: { error: ONLY_ACCOUNT_ERROR } };
   }
   const refused = options.inUse?.();

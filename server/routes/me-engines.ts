@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { PASS, type RouteHandler } from "./table.ts";
 import { cleanAccountName } from "../engines/account-names.ts";
 import { accountInUseRefusal } from "../engines/account-users.ts";
-import { ONLY_ACCOUNT_ERROR, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
+import { ONLY_ACCOUNT_ERROR, addedAccount, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 
 /** The person's sign-in folder of an engine, or null when it keeps none
  * (#4415: engines reading the same folder are one account). */
@@ -142,9 +142,9 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     // A key engine of the same tool is a key, not an account.
     const same = listed.filter((candidate: any) => driverOf(candidate) === driver && !deps.keyOnlyInstance?.(candidate.instanceId));
     const account = folder ? same.filter((candidate: any) => signInFolder(deps, principalId, driver, candidate.instanceId) === folder) : [entry];
-    const others = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any) => candidate.instanceId);
+    const others = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any): string => candidate.instanceId);
     // a key engine is removed with its key, never as an account
-    if (deps.keyOnlyInstance?.(instanceId) || !removableAccount(instanceId, others)) return json(res, 400, { error: ONLY_ACCOUNT_ERROR });
+    if (deps.keyOnlyInstance?.(instanceId) || !(addedAccount(instanceId, driver) || removableAccount(instanceId, others))) return json(res, 400, { error: ONLY_ACCOUNT_ERROR });
     const users = [...new Set(account.flatMap((candidate: any) => deps.accountUsers?.(principalId, candidate.instanceId) ?? []))];
     if (users.length) return json(res, 409, accountInUseRefusal(users, false));
     // #4435: the person's own account goes for good (its entry, its sign-in

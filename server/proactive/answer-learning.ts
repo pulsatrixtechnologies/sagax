@@ -17,6 +17,7 @@
 import { createHash } from "node:crypto";
 
 import type { SignalLedger } from "./signal-ledger.ts";
+import { answerWithoutNote } from "../../shared/options-card.ts";
 
 /** The ledger kind of an answer entry. */
 export const CARD_ANSWER_KIND = "card-answer";
@@ -258,7 +259,7 @@ export function learnedOptions(
 /** The words a settled card was answered with, or null when it was not
  * answered by the person (skipped, put away, closed, answered for them). */
 export function answeredCardText(card: {
-  answered?: string; answeredText?: string; skipped?: boolean; dismissed?: boolean; expired?: boolean; autoApplied?: boolean;
+  answered?: string; answeredText?: string; answerNote?: string; skipped?: boolean; dismissed?: boolean; expired?: boolean; autoApplied?: boolean;
   answeredBy?: { kind?: string } | null;
 }, visible: (answer: string) => string = (answer) => answer): string | null {
   if (!card.answered || card.skipped || card.dismissed || card.expired || card.autoApplied) return null;
@@ -266,7 +267,8 @@ export function answeredCardText(card: {
   if (card.answeredBy?.kind === "worker") return null;
   // a question card's words come with answeredText; "answer" alone is the
   // verdict before them
-  const raw = card.answeredText ?? (card.answered === "answer" ? "" : card.answered);
+  // #4438: never the line a server card's choice adds after the words
+  const raw = card.answeredText !== undefined ? answerWithoutNote(card.answeredText, card.answerNote) : (card.answered === "answer" ? "" : card.answered);
   const text = visible(raw).trim();
   return text || null;
 }

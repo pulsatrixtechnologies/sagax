@@ -6,8 +6,6 @@ approval.action.alwaysAllowSession
 approval.action.alwaysDeny
 approval.action.alwaysDenyRuleHint
 approval.always.scopeLine
-approval.details.hide
-approval.details.show
 approval.pending
 approval.pill.cancelled
 approval.rule.destructive

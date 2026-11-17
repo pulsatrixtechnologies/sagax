@@ -49,6 +49,9 @@ final class RoutineFoldersTests: XCTestCase {
         XCTAssertEqual(admin.errorDescription, "Available after the server update.")
         let member = APIError.status(code: 403, message: "forbidden: this session lacks the admin scope")
         XCTAssertTrue(member.isRouteMissing)
+        // #4471: the same refusal in plain words from a current server
+        let plain = APIError.status(code: 403, message: "Only an administrator can do this: the fleet is every workspace of this installation.")
+        XCTAssertTrue(plain.isRouteMissing)
         // Any other refusal keeps its own words.
         let gone = APIError.status(code: 404, message: "no such routine")
         XCTAssertFalse(gone.isRouteMissing)

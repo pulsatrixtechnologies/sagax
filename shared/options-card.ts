@@ -10,7 +10,7 @@ export const WATCHER_OPTIONS_CARD_BOT_ID = "f08dd8e3-f942-4eb4-8783-df32b26b88a4
 export const ASK_CHOICE_TOOL = "ask_choice";
 // #4205: the question is the item's whole context; the card folds a long one
 // behind "show full question", so it is as long as a question card takes.
-export const ASK_CHOICE_LIMITS = { question: MAX_QUESTION_TEXT, title: 120, key: 120, to: 200 } as const;
+export const ASK_CHOICE_LIMITS = { question: MAX_QUESTION_TEXT, title: 120, key: 120, to: 200, reason: 200 } as const;
 
 /** #4475: whether an options card is the first-run quiz (or a legacy
  * passive card of its kind), the one card a later message of the person
@@ -53,7 +53,8 @@ export interface OptionsCardInput {
  * carries it). `wait` false: the card holds no turn and no routine run.
  * #4233: absent, it holds except in a repeating routine's run; true holds.
  * `decision`: a business decision of the person's, never answered for them
- * (a key counts as one). `retire`: with key, close that pending card.
+ * (a key counts as one). `retire`: with key, close that pending card;
+ * #4438: its `reason` is the one line the closed card shows (why it closed).
  * #4219 `to`: in a room, the one person the card is addressed to (their
  * person id or display name); the same key with another `to` re-addresses
  * the pending card. */
@@ -73,7 +74,7 @@ export interface AskChoiceInput extends OptionsCardInput {
 
 export type ParsedAskChoiceInput =
   | { ok: true; value: AskChoiceInput }
-  | { ok: true; retire: { key: string } }
+  | { ok: true; retire: { key: string; reason?: string } }
   | { ok: false; error: string };
 
 /** #2909: the longest `detail` of an ask_choice option. */
@@ -133,7 +134,12 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
   }
   if (value.retire === true) {
     if (!key) return { ok: false, error: "retire needs the key of the card to close." };
-    return { ok: true, retire: { key } };
+    // #4438: why the card closes itself ("Already approved on Nov 16"),
+    // shown on the closed card instead of "Expired, no answer"
+    if (value.reason === undefined) return { ok: true, retire: { key } };
+    const reason = boundedText(value.reason, "reason", ASK_CHOICE_LIMITS.reason);
+    if (typeof reason !== "string") return { ok: false, error: reason.error };
+    return { ok: true, retire: { key, reason: reason.replace(/\s+/g, " ") } };
   }
   // #4219: the room member the card is addressed to
   let to: string | undefined;
@@ -310,4 +316,19 @@ export function askChoiceRefusal(input: unknown): string | null {
     ? cardRuleBreak({ context: value.subtitle, questions: value.questions })
     : cardRuleBreak({ questions: [{ question: value.subtitle, options: value.options.map((label) => ({ label })) }] });
   return broken ? cardRefusalText(broken, "ask_choice") : null;
+}
+
+/** #4438: a server card's choice done at once says what happened in one
+ * line (`answerNote`). An app released before that field draws only the
+ * answer's words (`answeredText`), so for a device that did not say it reads
+ * the note (no `opens` in its answer, or a call) the line also follows the
+ * answer there, after a blank line. A reader of the note takes it off again
+ * (answerWithoutNote), so the line is never said twice. */
+export function answerWithNote(answer: string, note: string | undefined): string {
+  return note ? `${answer}\n\n${note}` : answer;
+}
+
+/** The answer's own words, without the note answerWithNote put after it. */
+export function answerWithoutNote(text: string, note: string | undefined): string {
+  return note && text.endsWith(`\n\n${note}`) ? text.slice(0, text.length - note.length - 2) : text;
 }

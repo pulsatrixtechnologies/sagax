@@ -45,7 +45,7 @@ describe("Live credential config authorization", () => {
         for (const path of ["/api/config", "/api/config?secretStorage=external"]) {
           for (const key of ["fixture-live-client", ""]) {
             const refused = await api(method, path, { openai: { key } }, client);
-            expect(refused).toMatchObject({ status: 403, body: { error: expect.stringContaining("lacks the admin scope") } });
+            expect(refused).toMatchObject({ status: 403, body: { error: expect.stringContaining("Only an administrator can do this") } });
             expect(readFileSync(join(fixture.info.dataDir, "config.json"), "utf8")).toBe(before);
           }
         }

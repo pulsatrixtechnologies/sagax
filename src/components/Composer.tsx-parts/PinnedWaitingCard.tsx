@@ -31,7 +31,7 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PinnedItem } from "@/lib/pending-question";
-import { pinnedItemsFrom, servedItemPlace, servedWordsCard } from "@/lib/pinned-waiting";
+import { pinnedItemsFrom, servedItemPlace, servedWordsCard, stillListed } from "@/lib/pinned-waiting";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, type Bot, type Message, type useStore } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
@@ -51,7 +51,12 @@ const FOLDED_TEXT_MAX = 72;
  * screen, `fresh` its transcript in the store and `approvals` its live
  * approvals, which add who asked (src/lib/pinned-waiting.ts). */
 export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId = "", fresh: readonly Message[] = [], approvals: readonly Pending[] = []) {
-  const items = pinnedItemsFrom(served, threadId, fresh, approvals);
+  // #4438: an item answered here leaves at once, before the server's list
+  // is read again, even when its card lives where the store has not loaded
+  // it; the list dropping it forgets it, a failed answer brings it back
+  const [answeredHere, setAnsweredHere] = useState<ReadonlySet<string>>(() => new Set());
+  const answered = stillListed(answeredHere, served);
+  const items = pinnedItemsFrom(served, threadId, fresh, approvals, answered);
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
   const [place, setPlace] = useState<{ key: string; at: number } | undefined>(undefined);
@@ -70,6 +75,13 @@ export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId 
     },
     collapsed,
     setCollapsed,
+    answered: (key: string) => setAnsweredHere((before) => new Set([...stillListed(before, served), key])),
+    answerFailed: (key: string) => setAnsweredHere((before) => {
+      if (!before.has(key)) return before;
+      const next = new Set(before);
+      next.delete(key);
+      return next;
+    }),
   };
 }
 
@@ -255,6 +267,8 @@ export function PinnedWaitingCard({
             bot={questionBot(current.message, bot, name)}
             message={current.message}
             embedded
+            onAnswered={() => pinned.answered(current.key)}
+            onAnswerFailed={() => pinned.answerFailed(current.key)}
           />
         </div>
       ) : (

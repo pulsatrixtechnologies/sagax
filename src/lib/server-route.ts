@@ -1,7 +1,9 @@
 // A section the app shows before its server has the route behind it: a newer
 // app against an older server. That server answers a route it does not know
 // with "no route: METHOD /path" (404). A member's session on that server is
-// refused with "lacks the admin scope" (403), because the route was not yet
+// refused by the gate as admin-only (403: code "admin_route" since #4471,
+// "lacks the admin scope" before; never a handler's own refusal), because
+// the route was not yet
 // on its member list. Neither is a failure the person can fix: the section
 // says it arrives with the server update, never a red error.
 //
@@ -23,7 +25,7 @@ export function routeMissingOnServer(error: unknown): boolean {
   if (!isServerError(error)) return false;
   const said = typeof error.body?.error === "string" ? error.body.error : error.message;
   if (error.status === 404) return isNoRouteText(said) || isNoRouteText(error.message);
-  if (error.status === 403) return /lacks the admin scope/.test(said) || /lacks the admin scope/.test(error.message);
+  if (error.status === 403) return error.body?.code === "admin_route" || /lacks the admin scope/.test(said) || /lacks the admin scope/.test(error.message);
   return false;
 }
 

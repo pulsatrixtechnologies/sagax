@@ -22,11 +22,14 @@ export interface CardResponse {
   behavior: "allow" | "deny" | "answer";
   message?: string;
   dismiss?: boolean;
+  /** #4438: this device opens the place a server card's answer names (the
+   * routine fix card's Open the routine). */
+  opens?: boolean;
 }
 
 /** The response for pressing one of a card's options. */
 export function answerResponse(card: CardKind, answer: string): CardResponse {
-  if (!card.tool) return { behavior: "answer", message: answer };
+  if (!card.tool) return { behavior: "answer", message: answer, opens: true };
   // A permission card's own options are Allow / Deny / Always allow; the
   // grant behind "always" is written separately, so anything that is not a
   // refusal lets this one action through.
@@ -43,4 +46,15 @@ export function dismissResponse(card: CardKind): CardResponse {
     message: QUESTION_DISMISS_MESSAGE,
     dismiss: true,
   };
+}
+
+/** #4438: the place a server card's answer opens on the device (the routine
+ * fix card's Open the routine: its page), read from the respond route's
+ * answer; null when it names none. */
+export function cardAnswerOpen(response: unknown): { routineId: string; botId?: string } | null {
+  const open = response && typeof response === "object" ? (response as { open?: unknown }).open : undefined;
+  if (!open || typeof open !== "object") return null;
+  const { type, routineId, botId } = open as { type?: unknown; routineId?: unknown; botId?: unknown };
+  if (type !== "open_routine" || typeof routineId !== "string" || !routineId) return null;
+  return { routineId, ...(typeof botId === "string" && botId ? { botId } : {}) };
 }

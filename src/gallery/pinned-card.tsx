@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered|fixes-before|fixes-after|timesheet|timesheet-closed|fix-closed|fix-answered&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { ComposerPendingStrip } from "../components/Composer.tsx-parts/ComposerPendingStrip";
 import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaitingCard";
 import type { ServedWaitingItem } from "../../shared/waiting-items";
+import { answerWithNote } from "../../shared/options-card";
 import type { Pending } from "../components/PendingApproval";
 import { QuestionCard } from "../components/QuestionCard";
 import { ApprovalCard } from "../components/ApprovalCard";
@@ -155,9 +156,53 @@ const orgMessage = {
 } as unknown as Message;
 const orgApproval: Pending = { message: orgMessage, requestId: "admin:src1", tool: "Bash", detail: ORG_COMMAND, threadId: "thread-member", askedBy: nimbus.name };
 
+// #4438: five routine fix cards of one bot (the owner's capture: "1 of 5").
+// Before: the first one's raw tool error in its text. After: its plain
+// sentence, the raw words under Details. An answer takes it off at once.
+const RAW_HANDLE = "Api result query failed 3 times and never succeeded after: handle res_5f0c2a91d4e7b836 is unknown, expired, or not yours (handle_unknown)";
+const fixChoicesRoutine = fr ? ["Lancer une vérification", "Mettre la routine en pause", "Ouvrir la routine"] : ["Run a check", "Pause the routine", "Open the routine"];
+const routineNames = fr ? ["Tri du courriel", "Feuilles de temps", "Rapport du matin", "Suivi des billets", "Sauvegardes"] : ["Mail triage", "Time sheets", "Morning report", "Ticket follow-up", "Backups"];
+const routineFix = (n: number, plain: boolean): Message => {
+  const name = routineNames[n - 1]!;
+  const lead = fr ? `La routine ${name} a eu des problèmes à sa dernière passe.` : `${name} ended with problems on its last run.`;
+  const said = n === 1
+    ? (plain ? (fr ? "La routine n'a pas pu lire un résultat enregistré : il n'était plus disponible." : "The routine could not read a saved result: it was no longer available.") : RAW_HANDLE)
+    : (fr ? "Flow a échoué 2 fois et n'a jamais réussi ensuite : outil introuvable." : "Flow failed 2 times and never succeeded after: Tool not found: Flow");
+  const base = ask(`fx${n}`, 60 + n, `${lead}\n\n${said}`, fixChoicesRoutine);
+  return { ...base, card: { ...base.card!, askKey: `routine-problem:r${n}`, noHold: true, ...(plain && n === 1 ? { technicalDetails: RAW_HANDLE } : {}) } } as Message;
+};
+const fixesBefore = [1, 2, 3, 4, 5].map((n) => routineFix(n, false));
+const fixesAfter = [1, 2, 3, 4, 5].map((n) => routineFix(n, true));
+// #4438: a bot's keyed card about a business object: it says since when its
+// facts were read (a time sheet asked about this morning)
+const timesheet = (() => {
+  const base = ask("ts", 70, fr ? "La feuille de temps de la semaine 46 est encore en attente d'approbation. Je l'approuve ?" : "The time sheet of week 46 is still waiting for approval. Do I approve it?", fr ? ["Approuver", "Laisser"] : ["Approve", "Leave it"]);
+  return { ...base, card: { ...base.card!, askKey: "timesheet-46", noHold: true, factsAt: new Date(2026, 10, 16, 9, 14).getTime() } } as Message;
+})();
+
+// #4438: a card closed because its matter is settled says why: the time
+// sheet approved elsewhere (the bot's retire reason), a fix card whose
+// routine worked since
+const timesheetClosed = { ...timesheet, id: "tsc", card: { ...timesheet.card!, expired: true, options: [], answerNote: fr ? "Déjà approuvée le 16 nov." : "Already approved on Nov 16" } } as Message;
+// #4438: a fix card answered from an app that reads no note: the server
+// says what happened after the answer's words too; this app says it once
+const fixAnswered = (() => {
+  const base = fixesAfter[2]!;
+  const pick = fixChoicesRoutine[1]!;
+  const note = t("routine.problemCard.pausedNow");
+  return { ...base, id: "fxa", card: { ...base.card!, answered: "answer", answeredText: answerWithNote(pick, note), answerNote: note } } as Message;
+})();
+const fixClosed = { ...fixesAfter[1]!, id: "fxc", card: { ...fixesAfter[1]!.card!, expired: true, options: [], answerNote: t("routine.problemCard.alreadyFixed") } } as Message;
+
 const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message; org?: boolean }> = {
   "approval-only": { approvals: [approval], questions: [] },
   "org-approval": { approvals: [orgApproval], questions: [], org: true },
+  "timesheet-closed": { approvals: [], questions: [], inline: timesheetClosed },
+  "fix-closed": { approvals: [], questions: [], inline: fixClosed },
+  "fix-answered": { approvals: [], questions: [], inline: fixAnswered },
+  "fixes-before": { approvals: [], questions: fixesBefore, inline: fixesBefore[0] },
+  "fixes-after": { approvals: [], questions: fixesAfter, inline: fixesAfter[0] },
+  timesheet: { approvals: [], questions: [timesheet], inline: timesheet },
   "room-keyed": { approvals: [], questions: [roomOpen], room: true, inline: roomOpen },
   "room-keyed-other": { approvals: [], questions: [], room: true, inline: roomOpen },
   "room-answered": { approvals: [], questions: [], room: true, inline: roomAnswered },
@@ -183,7 +228,8 @@ function Gallery() {
   // the server's items (#3543), as GET /api/approvals?waiting=1 serves them
   const items: ServedWaitingItem[] = [...chosen.approvals.map((pending) => pending.message), ...chosen.questions].map((message) => ({
     id: message.card?.requestId ?? message.id, kind: (message.card?.questionRequest ? "question" : "approval") as ServedWaitingItem["kind"],
-    botId: message.from?.botId ?? "bot-orla", botName: message.from?.name ?? "", threadId: "thread-main", messageId: message.id, at: message.at, ageMs: 0,
+    // #4438: the fix cards sit in an earlier topic the store has not loaded
+    botId: message.from?.botId ?? "bot-orla", botName: message.from?.name ?? "", threadId: which.startsWith("fixes") ? "thread-earlier" : "thread-main", messageId: message.id, at: message.at, ageMs: 0,
     title: "", text: "", options: [], answerWith: "text" as const, freeText: true, skippable: true as const, message,
   })).sort((a, b) => a.at - b.at);
   const pinned = usePinnedWaiting(items, "thread-main", [], chosen.approvals);

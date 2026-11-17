@@ -202,7 +202,8 @@ export function createAgentCard(args: {
   askKeys?: {
     find(key: string, accepts: (message: Message) => boolean): { threadId: string; message: Message } | null;
     remember(key: string, threadId: string, messageId: string): void;
-    retire(threadId: string, message: Message): void;
+    /** #4438: `reason`, why it closed, the one line the closed card shows. */
+    retire(threadId: string, message: Message, reason?: string): void;
   };
   /** #4250 (S7): a keyed card of a routine's run: the person's answers on
    * its kind put their usual answer first, and after three identical
@@ -295,14 +296,14 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const own = (message: Message) => !message.from || message.from.botId === args.bot.id;
   const findKeyed = (key: string) => args.askKeys?.find(key, own)
     ?? pendingKeyedCard(args.threadId, args.store.messagesFor(args.threadId), key, own);
-  const closeCard = (threadId: string, message: Message) => {
-    if (args.askKeys) args.askKeys.retire(threadId, message);
-    else args.store.patchMessage(threadId, message.id, { card: closedAskCard(message.card!) });
+  const closeCard = (threadId: string, message: Message, reason?: string) => {
+    if (args.askKeys) args.askKeys.retire(threadId, message, reason);
+    else args.store.patchMessage(threadId, message.id, { card: closedAskCard(message.card!, reason) });
   };
   if ("retire" in parsed) {
     const found = findKeyed(parsed.retire.key);
     if (!found) return { ok: true, messageId: "", retired: 0 };
-    closeCard(found.threadId, found.message);
+    closeCard(found.threadId, found.message, parsed.retire.reason);
     return { ok: true, messageId: "", retired: 1 };
   }
   const value = parsed.value;

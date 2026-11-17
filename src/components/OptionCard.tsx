@@ -222,7 +222,7 @@ export function OptionCard({
       {settled && !closed && (reading.rest || (!reading.picked.length && !given)) && (
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
       )}
-      {closed && <SheetNote closed>{card.skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : t("question.status.closed")}</SheetNote>}
+      {closed && <SheetNote closed>{card.skipped ? t("waitingCard.skipped") : card.answerNote || (card.expired ? t("waitingCard.expired") : t("question.status.closed"))}</SheetNote>}
       {card.proactiveProposal && (!groupId || (bot && viewerOwnsBot(state.config, bot))) && (
         <SuggestionFeedback
           className="mt-2"

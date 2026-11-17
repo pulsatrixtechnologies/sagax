@@ -10,7 +10,7 @@ import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { requiredScope } from "../auth/request-auth.ts";
+import { clientRouteOwnerBot, requiredScope } from "../auth/request-auth.ts";
 import { Store } from "../store.ts";
 import { createThreadModelRoutes } from "./thread-models.ts";
 import { dispatchRoutes } from "./table.ts";
@@ -69,8 +69,11 @@ function fixture() {
 }
 
 describe("Switch them too", () => {
-  it("is admin-scoped, like the bot's model", () => {
-    expect(requiredScope("POST", "/api/bots/bot-1/threads/follow-model")).toBe("admin");
+  // #4471: the bot's owner's, like the bot's model: client scope, and the
+  // gate lets through only the person who owns the bot (or may edit it)
+  it("is the bot owner's, like the bot's model", () => {
+    expect(requiredScope("POST", "/api/bots/bot-1/threads/follow-model")).toBe("client");
+    expect(clientRouteOwnerBot("POST", "/api/bots/bot-1/threads/follow-model")).toBe("bot-1");
   });
 
   it("clears exactly the threads on a model of their own, and leaves a running one until it settles", async () => {

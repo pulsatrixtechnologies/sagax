@@ -17,8 +17,9 @@ export interface RetireQuestionsDeps {
 
 /** Retire every open persistent question card of a thread (#4205: or only
  * the card of row `messageId`, or only the cards drawn at or after `since`,
- * a routine run's own). Returns the retired request ids. */
-export function retireOpenQuestions(deps: RetireQuestionsDeps, threadId: string, only: { messageId?: string; since?: number } = {}): string[] {
+ * a routine run's own; #4438: `reason`, the line the closed card shows).
+ * Returns the retired request ids. */
+export function retireOpenQuestions(deps: RetireQuestionsDeps, threadId: string, only: { messageId?: string; since?: number; reason?: string } = {}): string[] {
   const retired: string[] = [];
   for (const message of deps.messagesFor(threadId)) {
     if (only.messageId !== undefined && message.id !== only.messageId) continue;
@@ -27,7 +28,8 @@ export function retireOpenQuestions(deps: RetireQuestionsDeps, threadId: string,
     if (!card?.requestId || card.answered || card.dismissed || card.expired) continue;
     if (!deps.isPersistentQuestionCard(card)) continue;
     if (deps.isApprovalCardMessage?.(message)) continue;
-    deps.patch(threadId, message.id, { ...card, expired: true, options: [] });
+    // #4438: a card closed because its matter is settled says why
+    deps.patch(threadId, message.id, { ...card, expired: true, options: [], ...(only.reason?.trim() ? { answerNote: only.reason.trim() } : {}) });
     deps.forget?.(threadId, card.requestId);
     retired.push(card.requestId);
   }

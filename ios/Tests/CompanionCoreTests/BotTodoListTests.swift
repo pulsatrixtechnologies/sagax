@@ -95,6 +95,7 @@ final class BotTodoListTests: XCTestCase {
     func testFailureOutcomes() {
         XCTAssertEqual(BotTodoList.outcome(of: APIError.status(code: 404, message: "no route: GET /api/bots/b/task-list")), .needsUpdate)
         XCTAssertEqual(BotTodoList.outcome(of: APIError.status(code: 403, message: "session lacks the admin scope")), .needsUpdate)
+        XCTAssertEqual(BotTodoList.outcome(of: APIError.status(code: 403, message: "Only an administrator can do this: it reaches everyone.")), .needsUpdate)
         XCTAssertEqual(BotTodoList.outcome(of: APIError.status(code: 404, message: "no such bot")), .loaded([]))
         XCTAssertEqual(BotTodoList.outcome(of: APIError.status(code: 500, message: nil)), .failed)
         XCTAssertEqual(BotTodoList.outcome(of: APIError.transport("offline")), .failed)

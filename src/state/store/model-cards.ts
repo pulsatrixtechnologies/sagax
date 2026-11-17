@@ -13,6 +13,15 @@ export interface OptionCardData {
   approvalDestination?: import("../../../shared/wire").OptionCardData["approvalDestination"];
   /** #4219: a room card addressed to one person of the room. */
   askTo?: import("../../../shared/wire").OptionCardData["askTo"];
+  /** #4205: the asking bot's own key for its card (shared/fix-card-keys.ts
+   * names the server's own). */
+  askKey?: string;
+  /** #4438: when the card's words were last read from what they describe. */
+  factsAt?: number;
+  /** #4438: a server card's raw words (a tool's own error), under Details. */
+  technicalDetails?: string;
+  /** #4438: what the server did at once with the answer, in one line. */
+  answerNote?: string;
   title: string;
   subtitle: string;
   options: string[];

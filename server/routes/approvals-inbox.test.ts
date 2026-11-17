@@ -30,6 +30,12 @@ let testedDrafts: unknown[] = [];
 let settledCalls: Array<{ messageId: string; how: string; answer?: string }> = [];
 let gateNow = Date.UTC(2026, 10, 13, 3, 0);
 let gate: PersonSignalGate;
+/** #4438: a card whose matter was settled outside (its facts changed) */
+let settledOutside: string | null = null;
+/** #4438: each re-check, and whether the person opened the list */
+let rechecks: boolean[] = [];
+/** #4438: the bot each re-check is scoped to (none: every bot) */
+let recheckBots: Array<string | undefined> = [];
 
 beforeEach(async () => {
   pending = [entry("r1"), entry("r2"), entry("q1", { kind: "question", bulk: "question" }), entry("k1", { needsKey: true, bulk: "needs-key" })];
@@ -39,6 +45,9 @@ beforeEach(async () => {
   journalDaysAsked = [];
   testedDrafts = [];
   settledCalls = [];
+  settledOutside = null;
+  rechecks = [];
+  recheckBots = [];
   gateNow = Date.UTC(2026, 10, 13, 3, 0);
   gate = new PersonSignalGate(() => ({ budget: 0, quiet: null, timeZone: "UTC" }), () => gateNow);
   const deps: ApprovalsInboxDeps = {
@@ -47,6 +56,8 @@ beforeEach(async () => {
     settle: (_auth, _viewer, item, how) => { settledCalls.push({ messageId: item.messageId, how, ...(item.answer ? { answer: item.answer } : {}) }); return item.messageId !== "gone"; },
     viewer: () => (person ? { principalId: person } : null),
     pending: () => pending,
+    // the server's own cards read their facts again: one settled outside closes itself
+    recheck: (_viewer, opened, botId) => { rechecks.push(opened); recheckBots.push(botId); if (settledOutside) pending = pending.filter((row) => row.requestId !== settledOutside); },
     history: () => {
       historyCalls++;
       return [{ at: "2026-10-19T12:00:00.000Z", decision: "allow", who: "Ada", botName: "Nova", threadId: "t1" }];
@@ -100,6 +111,28 @@ describe("GET /api/approvals", () => {
     const withHistory = await get("/api/approvals?history=1");
     expect(withHistory.body.history).toHaveLength(1);
     expect(historyCalls).toBe(1);
+  });
+
+  it("a card whose matter was settled outside is gone from the list the moment it is read (#4438)", async () => {
+    expect((await get("/api/approvals?waiting=1")).body.pending.map((row: InboxApproval) => row.requestId)).toContain("q1");
+    settledOutside = "q1";
+    const after = await get("/api/approvals?waiting=1");
+    expect(after.body.pending.map((row: InboxApproval) => row.requestId)).not.toContain("q1");
+    expect(after.body.waiting.map((item: { id: string }) => item.id)).not.toContain("q1");
+  });
+
+  it("only the screen's first read says the person opened it; its polls never do (#4438)", async () => {
+    await get("/api/approvals?waiting=1&opened=1");
+    await get("/api/approvals?waiting=1");
+    await get("/api/approvals?waiting=1");
+    expect(rechecks).toEqual([true, false, false]);
+  });
+
+  it("one bot's chat re-checks only that bot's cards; Today re-checks every bot (#4438)", async () => {
+    await get("/api/approvals?waiting=1&botId=bot_a&opened=1");
+    await get("/api/approvals?waiting=1&opened=1");
+    await get("/api/approvals?waiting=1&botId=..%2Fx&opened=1");
+    expect(recheckBots).toEqual(["bot_a", undefined, undefined]);
   });
 
   it("answers nothing to a caller that is no person", async () => {

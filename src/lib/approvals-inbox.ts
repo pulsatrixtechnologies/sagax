@@ -22,8 +22,11 @@ export function inboxWhere(entry: Pick<InboxApproval, "roomName" | "routineName"
   return entry.threadTitle ?? "";
 }
 
-export async function loadInbox(history: boolean): Promise<InboxPayload> {
-  return api<InboxPayload>(`/api/approvals${history ? "?history=1" : ""}`);
+/** #4438: `opened`, the screen's first read: the bots re-check their cards
+ * whose facts are old (never on a poll). */
+export async function loadInbox(history: boolean, opened = false): Promise<InboxPayload> {
+  const query = [history ? "history=1" : "", opened ? "opened=1" : ""].filter(Boolean).join("&");
+  return api<InboxPayload>(`/api/approvals${query ? `?${query}` : ""}`);
 }
 
 export interface BulkAnswer {
@@ -116,7 +119,8 @@ export function useInbox(history: boolean, signal: string): {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadInbox(historyRef.current);
+      // the first read is the person opening the screen
+      const next = await loadInbox(historyRef.current, known.current === null);
       const keys = new Set(next.pending.map((entry) => entry.key));
       const fresh = known.current ? [...keys].filter((key) => !known.current!.has(key)) : [];
       known.current = keys;

@@ -1,16 +1,23 @@
 // The route table of a `client` session (what it may call), kept apart from the
 // auth resolver in request-auth.ts.
 
-/** What a `client` session may do: chat, rooms, approvals, attachments,
- * routines, its own session, and reads that carry no secrets. Everything
- * else needs `admin`: default deny, so a new route is admin-only until it is
- * deliberately listed here. Two client-allowed PATCH routes carry a body
- * filter in the handler (bot and room edits: display fields only). Loopback
- * holds both scopes. */
+/** What a `client` session may do: everything a person does for themselves
+ * and their own bots (chat, rooms, cards, approvals, their vault, secrets,
+ * computers, settings and accounts), each handler keeping it to the person.
+ * A route not listed here needs `admin`; #4471: such a route must be named in
+ * server/auth/admin-routes.ts with its reason, and route-scopes.test.ts fails
+ * on a route of the server that is in neither list. Two client-allowed PATCH
+ * routes carry a body filter in the handler (bot and room edits: display
+ * fields only). Loopback holds both scopes.
+ *
+ * `owner: "bot"`: the request gate (server/request-pipeline/authenticate.ts)
+ * lets a non-admin session through only on a bot it owns or may edit, for a
+ * route whose handler does not check that itself. */
 export type ClientFeature = "sharedComputers" | "orgPairing" | "orgDirectory" | "serverCatalogue";
 export type ClientFeatures = Partial<Record<ClientFeature, boolean>>;
+export interface ClientRoute { methods: readonly string[]; path: RegExp; feature?: ClientFeature; owner?: "bot" }
 
-export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: RegExp; feature?: ClientFeature }> = [
+export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // own session
   { methods: ["GET"], path: /^\/api\/auth\/session$/ },
   // in-app feedback (#2618, #3299, server/routes/feedback.ts): the session
@@ -132,10 +139,13 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // (server/desktop/desktop-bridge-routes.ts). The handler answers the session's own
   // person only, binds poll/results to a private desktop secret, and 404s on
   // a solo server.
-  { methods: ["POST"], path: /^\/api\/desktop-bridge\/(?:connect|[0-9a-f-]{36}\/(?:poll|lease|result|disconnect|system|local-models))$/ },
+  // #4471: progress and mac-apps are the same desktop's reports, bound to
+  // the same session and desktop secret as poll, lease and result.
+  { methods: ["POST"], path: /^\/api\/desktop-bridge\/(?:connect|[0-9a-f-]{36}\/(?:poll|lease|progress|result|disconnect|system|mac-apps|local-models))$/ },
   { methods: ["GET"], path: /^\/api\/me\/desktop-bridge$/ },
   { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/local-vm$/ },
-  { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/computers\/(?:rename|remove)$/ },
+  // #4471: access (always, ask or never) is set on the person's own computer, like rename and remove
+  { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/computers\/(?:rename|remove|access)$/ },
   { methods: ["GET", "PUT"], path: /^\/api\/me\/local-models$/ },
   // Organization server (SAGAX_IDENTITY=perspicax): a member pairs their own
   // phone or computer. The handler binds the code to the member's person and
@@ -819,4 +829,124 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/workers\/[\w-]+\/drop$/ },
   { methods: ["POST"], path: /^\/api\/workers\/queue\/[\w-]+\/cancel$/ },
   { methods: ["GET", "POST"], path: /^\/api\/workers\/[\w-]+\/turns\/[\w.-]+$/ },
+
+  // #4471: a person's own actions that fell to admin scope only because
+  // nobody had listed them. Each handler acts for the session's person, or
+  // `owner: "bot"` has the gate check the bot is theirs.
+  // A secret request card of the person's own conversation: a value kept
+  // behind the card (file or reference delivery), a key saved in Settings,
+  // or the paired phone's sealed entry. The handler checks the caller may
+  // write in that conversation (server/routes/bot-secret-cards.ts).
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:save|provided|provide)$/ },
+  // A login request card the person answers by signing in themselves in the
+  // bot's browser; the handler checks the card was made for them.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:self-start|self-status|signed-in)$/ },
+  // The rest of the person's own vault: payment settings and past purchases.
+  { methods: ["POST", "PATCH"], path: /^\/api\/me\/credentials\/payments$/ },
+  { methods: ["POST"], path: /^\/api\/me\/credentials\/purchases\/history$/ },
+  // Their own GitHub account and MCP servers (server/routes/person-connections.ts).
+  { methods: ["GET", "POST"], path: /^\/api\/me\/github$/, feature: "orgDirectory" },
+  { methods: ["POST"], path: /^\/api\/me\/mcp\/servers\/import$/, feature: "orgDirectory" },
+  // Their own plugins and capabilities (server/routes/bot-plugins.ts binds
+  // "me" to the session's person).
+  { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/me\/plugins(?:\/.*)?$/, feature: "orgDirectory" },
+  // Their own model accounts: the providers they may add, an account's
+  // models, their own model servers.
+  { methods: ["GET"], path: /^\/api\/me\/providers\/catalog$/ },
+  { methods: ["GET"], path: /^\/api\/me\/engines\/[\w.-]+\/models$/, feature: "orgDirectory" },
+  { methods: ["GET", "POST", "PATCH", "DELETE"], path: /^\/api\/me\/pi-model-servers(?:\/sx-[a-f0-9]{10}(?:\/test)?)?$/ },
+  // Their own phone call: hang up, hear the recording.
+  { methods: ["POST"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/hangup$/ },
+  { methods: ["GET"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/recording$/ },
+  // Their own enrolled computers as bot computers (server/routes/host-computers.ts:
+  // that person's hosts on bots they own), what bots may do on one, and the
+  // remote support sessions of their conversations (remote-sessions.ts,
+  // remote-control.ts, remote-session-files.ts: the session's person only).
+  { methods: ["GET"], path: /^\/api\/host-computers$/ },
+  { methods: ["PATCH"], path: /^\/api\/host-computers\/h_[0-9a-f]{32}$/ },
+  { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/bots\/[\w-]{1,80}\/host-computer$/ },
+  { methods: ["GET"], path: /^\/api\/remote-hosts\/h_[0-9a-f]{32}\/access$/ },
+  { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-sessions(?:\/[a-f0-9]{12}(?:\/(?:close|focus|shell|upload|download|screen|os|ls|control))?)?$/ },
+  // Their bot's computer: its state, who drives it, the viewer, typing into
+  // it and teaching it (the handlers check the person may drive it).
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/computer$/, owner: "bot" },
+  { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/computer\/control$/, owner: "bot" },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/computer\/viewer-close$/, owner: "bot" },
+  { methods: ["GET", "POST", "PUT"], path: /^\/api\/bots\/[\w-]+\/computer\/(?:input|clipboard|teach)$/ },
+  // Their bot's browser network log.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/browser\/network$/, owner: "bot" },
+  // Signed-in sites of their own bot's browser (the handler refuses another
+  // person's bot and a shared browser profile, server/routes/browser-sites.ts).
+  { methods: ["GET"], path: /^\/api\/browser-sites$/ },
+  { methods: ["POST"], path: /^\/api\/browser-sites\/sign-out$/ },
+  // "My Chrome" (the handler answers a viewer it is not offered to quietly).
+  { methods: ["POST"], path: /^\/api\/my-chrome\/[\w-]+$/ },
+  // Their own desktop app's tunnel and in-chat terminal (desktop-bridge-routes.ts
+  // binds them to the person's desktop secret).
+  { methods: ["GET", "POST"], path: /^\/api\/desktop-bridge\/[0-9a-f-]{36}\/(?:tunnel|terminal\/[a-f0-9]{48})$/ },
+  // Their own terminal session's socket.
+  { methods: ["GET"], path: /^\/api\/terminal\/sessions\/[\w-]+\/ws$/ },
+  // Their bot's setup: the model (ownerSettingsForbidden), its shared vault
+  // (mayManage), data (each person's own scope), event subscriptions
+  // (seesAll), a direct grant (direct-grants.ts), memory review (the lending
+  // owner), skill history (botSkillsRefusal: a restore needs the owner or a
+  // manager), the temporary pin (mayPin). SOUL.md file proposals and a saved
+  // recipe have no check of their own: `owner: "bot"`.
+  { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/model$/ },
+  // "Switch them too" after the bot's model changed: every conversation of
+  // the bot follows it, so only the bot's owner (the gate checks it)
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/threads\/follow-model$/, owner: "bot" },
+  { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/credentials(?:\/(?:list|[a-z0-9]{8,40}))?$/ },
+  { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/data(?:\/.*)?$/ },
+  { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/event-subscriptions(?:\/[\w-]+(?:\/test)?)?$/ },
+  { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/direct-grants\/[^/]+$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/reviewed$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/soul\/(?:apply-file|discard-file)$/, owner: "bot" },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/history$/, feature: "orgDirectory" },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/history\/restore$/, feature: "orgDirectory" },
+  { methods: ["PUT"], path: /^\/api\/bots\/[\w-]+\/temporary-pin$/ },
+  { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/saved-steps\/[^/]+$/, owner: "bot" },
+  // Using a bot: which model the next turn runs on, whether a message can be
+  // sent now, a request of their own conversation, a terminal card folded, a
+  // meeting card's Leave, the team work a reader may see, a pull of their
+  // branch. The send state's Fix changes the Codex account the bot's turns
+  // run on (the owner's), so only the owner: `owner: "bot"`.
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/auto-model$/ },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/send-state$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/send-state\/fix$/, owner: "bot" },
+
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/requests\/[A-Za-z0-9_-]{16,80}$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/requests\/[A-Za-z0-9_-]{16,80}\/interrupt$/ },
+  { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/terminal-embeds\/[\w-]+$/ },
+  { methods: ["POST"], path: /^\/api\/meetings\/[\w-]+$/ },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/team-work$/ },
+  // clearing the finished or named rows of a bot's team work is the reader's own
+  // view of a bot they can see (the handler resolves the bot for the caller and
+  // clears for that viewer only)
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/team-work\/clear$/ },
+  { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/code\/pull$/ },
+  // A conversation's live events, an archive's contents, a room's held bot.
+  { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/events$/ },
+  { methods: ["GET"], path: /^\/api\/attachments\/[\w.-]+\/manifest$/ },
+  { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/holds$/ },
+  // Their own cards: what waited while they were away, read.
+  { methods: ["POST"], path: /^\/api\/approvals\/held\/read$/ },
+  // Their own auto-review rules page reads the organization's policy.
+  { methods: ["GET"], path: /^\/api\/custom-rules\/policy$/ },
+  // A security key step for their own bot's approval mode.
+  { methods: ["POST"], path: /^\/api\/security-keys\/approval-mode$/ },
+  // Their own published pages: comments, reader comments, annotations, the
+  // shared state, versions, invitations and their own design systems
+  // (server/routes/published-pages.ts checks the owner or reader on every call).
+  { methods: ["GET", "POST"], path: /^\/api\/pages\/[\w-]+\/(?:comments|threads)$/ },
+  { methods: ["DELETE"], path: /^\/api\/pages\/[\w-]+\/(?:comments|threads|reader-comments)\/[\w-]+$/ },
+  { methods: ["GET"], path: /^\/api\/pages\/[\w-]+\/(?:reader-comments|live)$/ },
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/reader-comments\/[\w-]+\/approve$/ },
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/(?:invite|versions)$/ },
+  { methods: ["PUT", "DELETE"], path: /^\/api\/pages\/[\w-]+\/state$/ },
+  { methods: ["PUT"], path: /^\/api\/pages\/[\w-]+\/state\/lock$/ },
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/threads\/[\w-]+\/(?:replies|resolve|accept|decline)$/ },
+  { methods: ["DELETE"], path: /^\/api\/pages\/[\w-]+\/threads\/[\w-]+\/replies\/[\w-]+$/ },
+  { methods: ["GET"], path: /^\/api\/pages\/[\w-]+\/versions\/\d+\/(?:source|export)$/ },
+  { methods: ["DELETE"], path: /^\/api\/pages\/design-systems\/own-[a-z0-9-]+$/ },
 ];

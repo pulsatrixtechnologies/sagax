@@ -357,7 +357,7 @@ export async function applySkillAndPluginSwitches(
       // Turned off in the organization's library: its shared switch is the
       // verdict; a member's scope refusal says plainly who can turn it on.
       await switchOne(field, { method: "PATCH", path, body: { enabled } }, origin === "library"
-        ? (status, record) => status === 403 && /lacks the \w+ scope/i.test(`${String(record.error ?? "")} ${String(record.message ?? "")}`)
+        ? (status, record) => status === 403 && ((record as { code?: unknown }).code === "admin_route" || /lacks the \w+ scope/i.test(`${String(record.error ?? "")} ${String(record.message ?? "")}`))
           ? `the skill "${name}" is turned off in the organization's library, and only someone who manages the library can turn it back on`
           : undefined
         : undefined);

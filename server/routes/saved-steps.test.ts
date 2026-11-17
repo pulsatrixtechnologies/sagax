@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
+import { clientRouteOwnerBot, requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createSavedStepsRoutes } from "./saved-steps.ts";
 import { dispatchRoutes } from "./table.ts";
 
@@ -63,9 +63,10 @@ describe("DELETE /api/bots/:botId/saved-steps/:recipeId", () => {
     expect(forgets).toEqual([]);
   });
 
-  it("is an owner and admin action, never a client's", () => {
-    expect(requiredScope("DELETE", "/api/bots/b1/saved-steps/r1")).toBe("admin");
-    expect(requiredScope("DELETE", "/api/bots/b1/saved-steps/r1", { sharedComputers: true })).toBe("admin");
+  // #4471: the bot owner's, at client scope: the gate checks the owner
+  it("is the bot owner's action", () => {
+    expect(requiredScope("DELETE", "/api/bots/b1/saved-steps/r1")).toBe("client");
+    expect(clientRouteOwnerBot("DELETE", "/api/bots/b1/saved-steps/r1")).toBe("b1");
   });
 
   it("passes other methods and paths", async () => {

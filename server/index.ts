@@ -178,7 +178,9 @@ import { commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandRe
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
-import { AskKeyIndex, closedAskCard, raiseTextKeyedAsk } from "./widgets/ask-choice-keys.ts";
+import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
+import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
+import { serverCardKind } from "../shared/fix-card-keys.ts";
 import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
@@ -788,7 +790,8 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
-import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
+import { lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
+import { answerRoutineFix, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
 import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
@@ -2942,6 +2945,7 @@ bindLeafHost({
   get ownIntegrationsRefusal() { return ownIntegrationsRefusal; },
   get memberOwnsBot() { return memberOwnsBot; },
   get ownerOrAdminOf() { return ownerOrAdminOf; },
+  get callerOwnsBot() { return callerOwnsBot; },
   get companionRequest() { return companionRequest; },
   get botEditsNeedOwner() { return botEditsNeedOwner; },
   get computerOwnerFields() { return computerOwnerFields; },
@@ -6570,6 +6574,7 @@ bindLeafHost({
   get preemptAtSafePoint() { return preemptAtSafePoint; },
   get postedCardTurns() { return postedCardTurns; },
   get cardTurnSettled() { return cardTurnSettled; },
+  get serverCardAnswer() { return serverCardAnswer; },
   get cardTurnSettledByRequest() { return cardTurnSettledByRequest; },
   get stoppedRowSinceLastPerson() { return stoppedRowSinceLastPerson; },
   get autoApprovals() { return autoApprovals; },
@@ -7257,6 +7262,8 @@ bindLeafHost({
   get ensureViewerThread() { return ensureViewerThread; },
   get routeThreadIdUnguarded() { return routeThreadIdUnguarded; },
   get viewerBotActivity() { return viewerBotActivity; },
+  get botWaitingOn() { return botWaitingOn; },
+  get botWaitingOnTeammates() { return botWaitingOnTeammates; },
   get botForViewer() { return botForViewer; },
   get bodyForThreadViewer() { return bodyForThreadViewer; },
   get hideEarlierAgentThreads() { return hideEarlierAgentThreads; },
@@ -16772,12 +16779,12 @@ function pendingQuestionNotice(threadId: string, messageId: string): ReturnType<
  * card `messageId`, a keyed ask_choice the bot retired): expired, its
  * notice withdrawn, and an answer to it starts nothing. A passive card in
  * the chat (no request) is put away. */
-function retireThreadQuestions(threadId: string, only: { messageId?: string; since?: number } = {}): string[] {
+function retireThreadQuestions(threadId: string, only: { messageId?: string; since?: number; reason?: string } = {}): string[] {
   const { messageId } = only;
   if (messageId) {
     const row = store.messagesFor(threadId).find((message) => message.id === messageId);
     if (row?.card && !row.card.requestId) {
-      store.patchMessage(threadId, row.id, { card: closedAskCard(row.card) });
+      store.patchMessage(threadId, row.id, { card: closedAskCard(row.card, only.reason) });
       return [];
     }
   }
@@ -16889,8 +16896,73 @@ function routineAnswerLearning(threadId: string): Parameters<typeof createAgentC
 function routineAnswersNote(run: RoutineRun): string | undefined {
   if (run.target !== "bot" || !run.routineId) return undefined;
   const routine = routines?.routineById(run.routineId);
-  return routine ? answerLearningNote(answerHistory(signalLedger, routineAnswerScope(routine))) : undefined;
+  if (!routine) return undefined;
+  const said = [answerLearningNote(answerHistory(signalLedger, routineAnswerScope(routine))), routineOpenCardsNote(routine)].filter(Boolean);
+  return said.length ? said.join("\n") : undefined;
 }
+
+/** #4438: the routine's keyed cards still waiting on the person (raised by
+ * its earlier runs, chat-widgets.ts answerLearning names the routine), with
+ * when their facts were read: the run re-checks each and closes or rewrites
+ * the ones that are no longer true (ask-choice-keys.ts openCardsNote). The
+ * server's own cards (shared/fix-card-keys.ts) are the server's to keep. */
+function routineOpenCardsNote(routine: Routine): string | undefined {
+  const place = routineProblemPlace(routine, false);
+  if (!place) return undefined;
+  const own = (message: Message) => (!message.from || message.from.botId === place.bot.id) && message.card?.answerLearning?.routineId === routine.id;
+  const scope = askKeyScope(place.bot, place.threadId, place.threadId);
+  const cards: OpenCardFacts[] = [];
+  for (const key of askKeyIndex.keysWith("", scope, own)) {
+    if (serverCardKind(key)) continue;
+    const found = askKeyIndex.find(key, scope, own);
+    const card = found?.message.card;
+    if (!found || !card) continue;
+    const question = card.questionRequest?.questions?.[0]?.question || card.subtitle || card.title;
+    cards.push({ key, factsAt: card.factsAt ?? found.message.at, question });
+  }
+  return openCardsNote(cards);
+}
+
+/** #4438: the bots' keyed cards waiting on `person` in their direct
+ * conversations (a room's card is kept by the room's own turns), each with
+ * when its facts were read. The server's own cards (shared/fix-card-keys.ts)
+ * are the server's to keep. */
+function waitingKeyedCards(person: string, onlyBot?: string): WaitingKeyedCard[] {
+  const cards: WaitingKeyedCard[] = [];
+  for (const { key, threadId, message } of askKeyIndex.pendingRows()) {
+    if (serverCardKind(key) || store.groupByThread(threadId)) continue;
+    const bot = (message.from?.botId ? store.bot(message.from.botId) : null) ?? store.botByThread(threadId);
+    if (!bot || bot.hidden || (onlyBot && bot.id !== onlyBot)) continue;
+    const task = store.taskByThread(bot.id, threadId);
+    if (!task || task.confidential === true || pageOwnerFor(task, effectiveBotOwner(bot)) !== person) continue;
+    const card = message.card!;
+    const question = card.questionRequest?.questions?.[0]?.question || card.subtitle || card.title;
+    cards.push({ botId: bot.id, person, row: `${threadId}\u0000${message.id}`, key, factsAt: card.factsAt ?? message.at, question });
+  }
+  return cards;
+}
+
+/** #4438: when the person opens their waiting cards, the asking bot
+ * re-checks the ones whose facts are older than its last check, in a quiet
+ * turn of its own conversation for this (an outside caller's conversation,
+ * silent for the person): it closes with one line the ones already done and
+ * asks again the ones whose facts changed (widgets/open-cards-recheck.ts). */
+const openCardsRecheck = new OpenCardsRecheck({
+  now: () => Date.now(),
+  start: (botId, person, prompt) => {
+    const bot = store.bot(botId);
+    if (!bot || bot.hidden) return false;
+    // the bot's conversation for these checks, a fresh one once it has grown
+    // (its context never keeps growing with every check)
+    const kept = agentConversationFor(bot, person, CARD_CHECK_CALLER, false);
+    const threadId = kept && store.messagesFor(kept).length < CARD_CHECK_CONVERSATION_ROWS ? kept : agentConversationFor(bot, person, CARD_CHECK_CALLER, true);
+    if (!threadId || threadBusy(bot.id, threadId)) return false;
+    const speaker = personSpeaker(person);
+    void startTurn(bot.id, prompt, { threadId, cardContinuation: true, keepClosed: true, ...(speaker ? { speaker } : {}) })
+      .catch((error) => console.warn(`[card-check] ${botId}: ${error instanceof Error ? error.message : String(error)}`));
+    return true;
+  },
+});
 
 /** #4233: when a keyed ask made in a conversation last replaced its pending
  * card in place (that card may sit in an earlier run's conversation), so
@@ -16924,7 +16996,7 @@ function askKeysFor(owning: { id: string; ownerUserId?: unknown }, threadId: str
   return {
     find: (key: string, accepts: (message: Message) => boolean) => askKeyIndex.find(key, askKeyScope(owning, threadId, cardThread), accepts),
     remember: (key: string, cardThreadId: string, messageId: string) => askKeyIndex.remember(key, cardThreadId, messageId),
-    retire: (cardThreadId: string, message: Message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
+    retire: (cardThreadId: string, message: Message, reason?: string) => { retireThreadQuestions(cardThreadId, { messageId: message.id, ...(reason ? { reason } : {}) }); },
   };
 }
 
@@ -16999,13 +17071,52 @@ function routineProblemCardIn(place: { bot: BotRecord; threadId: string } | null
 
 /** #4233 (Q2): a lasting problem told as one keyed fix card
  * (routines/routine-problem-card.ts), raised by the needs watch's pass. */
-const routineProblemCards = new RoutineProblemCards<Routine>({
-  need: (routine) => routines ? routineNeedsPerson({ ...routine, needsPerson: undefined }, {
+/** #4233: a routine's need read without its cards and items: only a
+ * problem or a pause counts for its fix card. */
+function routineFixNeed(routine: Routine): RoutineNeedsPerson | null {
+  return routines ? routineNeedsPerson({ ...routine, needsPerson: undefined }, {
     runsOf: (routineId) => routines!.runsOfRoutineAsStored(routineId),
     cardOpen: () => false,
     problemToldAt: (target) => routines!.problemToldAt({ routineId: target.id }),
     now: () => Date.now(),
-  }, new Map()) : null,
+  }, new Map()) : null;
+}
+
+/** #4438: a server card's choice done at once, with no model turn
+ * (routines/routine-problem-answer.ts): the routine fix card's Run a check,
+ * Pause the routine and Open the routine, each as the person who answered,
+ * with the same rights as Run now and the routine's switch. Null: the
+ * answer is words of the person's own, which the bot reads. */
+function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean } = {}): RoutineFixAnswer | null {
+  if (!routines) return null;
+  const done = answerRoutineFix<Routine>(key, answer, {
+    opens: where.opens === true,
+    routine: (id) => routines!.listRoutines().find((candidate) => candidate.id === id),
+    words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
+    stillWrong: (routine) => Boolean(lastingProblem(routineFixNeed(routine))),
+    runNow: (routine) => {
+      if (routineNeedsRun(auth, routine.botId)) return { ok: false, error: NEEDS_RUN.error };
+      if (!mayRunRoutineNow(auth, routine)) return { ok: false, error: "Only the bot's owner, the person this routine runs as or an admin can run it now." };
+      if (routineInFlightRun(routine.id)) return { ok: false, running: true };
+      const run = routines!.runNow(routine.id, undefined, "person");
+      if (!run) return { ok: false, error: "no such routine" };
+      auditRoutineRunNow(auth, routine, run);
+      return { ok: true };
+    },
+    pause: (routine) => {
+      const patched = patchRoutineAs(auth, { headers: {} } as IncomingMessage, routine.id, { enabled: false });
+      const error = (patched.body as { error?: unknown } | null)?.error;
+      return patched.status === 200 ? { ok: true } : { ok: false, error: typeof error === "string" ? error : "The routine could not be paused." };
+    },
+  });
+  // the routine's need moved (a run started, it was turned off): its frame
+  // and its fix card follow at the watch's next pass
+  if (done) routineNeedsWatch.touch();
+  return done;
+}
+
+const routineProblemCards = new RoutineProblemCards<Routine>({
+  need: (routine) => routineFixNeed(routine),
   facts: (routine, need) => {
     const run = need.runId ? routines?.runsOfRoutineAsStored(routine.id).find((entry) => entry.id === need.runId) : undefined;
     const said = run && !run.redacted ? routines?.problemStreakTexts(run) ?? [] : [];
@@ -17033,6 +17144,8 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
       askKeys: askKeysFor(bot, threadId, threadId),
     });
     if (!posted.ok) console.warn(`routine ${routine.id} fix card: ${posted.error}`);
+    // #4438: the raw words its plain sentence replaced, under Details
+    else if ("question" in input) routineFixCardDetails(routine, input.key, input.technical);
   },
   // #4316: the run's routine-failed notification (onRunFailed, told once per
   // run and status) already told this failure
@@ -17065,6 +17178,16 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
   signals: signalLedger,
   person: (routine) => routineProblemPerson(routine),
 });
+/** #4438: the fix card keeps the raw words of the problem under Details
+ * (card.technicalDetails), the same on a replace; none: none kept. */
+function routineFixCardDetails(routine: Routine, key: string, technical: string | undefined): void {
+  const found = askKeyIndex.find(key, routineProblemCardIn(routineProblemPlace(routine, false)));
+  const card = found?.message.card;
+  if (!found || !card || (card.technicalDetails ?? "") === (technical ?? "")) return;
+  const { technicalDetails: _before, ...rest } = card;
+  store.patchMessage(found.threadId, found.message.id, { card: technical ? { ...rest, technicalDetails: technical } : rest });
+}
+
 /** #4250: whose signal ledger a routine's fix card is in. */
 function routineProblemPerson(routine: Routine): string {
   return routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) ?? "";
@@ -25596,6 +25719,17 @@ ROUTES.push(createRoomHoldRoutes({
   },
 }));
 ROUTES.push(createBrowserSiteRoutes({
+  // #4471: a person reaches the browser of their own bot; a profile several
+  // bots share stays an admin's.
+  refusal: (auth, which) => {
+    if (auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin")) return null;
+    if ("profile" in which) return { status: 403, error: "A shared browser profile holds the sign-ins of several bots: only an administrator manages it.", code: "shared_browser_profile" };
+    const bot = store.bot(which.bot);
+    if (!bot) return { status: 404, error: "no such bot" };
+    if (!callerOwnsBot(auth, bot)) return { status: 404, error: "no such bot" };
+    if (sharedBrowserProfileValue(bot.browserProfile)) return { status: 403, error: "This bot uses a shared browser profile, which holds the sign-ins of several bots: only an administrator manages it.", code: "shared_browser_profile" };
+    return null;
+  },
   target: (which) => {
     const engine = browserEngineStatus();
     if (engine.kind !== "ready") return { status: 409, error: engine.reason };
@@ -27270,6 +27404,14 @@ function inboxJournal(_auth: RequestAuth, viewer: InboxViewer, days: number): Jo
 ROUTES.push(createApprovalsInboxRoutes({
   viewer: inboxViewer,
   pending: inboxPending,
+  // #4438: the routines' fix cards follow their problem before the list;
+  // when the person opens it (never on a poll), the bots re-check their own
+  // cards whose facts are old: in one bot's chat or pinned panel only that
+  // bot, the one that asked; on Today every bot of the person
+  recheck: (viewer, opened, botId) => {
+    routineNeedsWatch.pass();
+    openCardsRecheck.listRead(opened, (only) => waitingKeyedCards(viewer.principalId, only), botId);
+  },
   history: inboxHistory,
   journal: inboxJournal,
   sealedJournal: () => readSealedChain(DATA_DIR),
@@ -29124,6 +29266,16 @@ function ownerOrAdminOf(auth: RequestAuth, bot: BotRecord): boolean {
   if (auth.scopes.includes("admin")) return true;
   if (memberOwnsBot(auth, bot)) return true;
   return IDENTITY.kind === "perspicax" && atLeast(viewerBotLevel(auth, bot), "edit");
+}
+/** #4471: the bot is the caller's own environment: the owner at this
+ * computer, an admin session, the person who owns it (whether or not they may
+ * still create bots), or someone granted edit on it. The gate's check for a
+ * client route marked `owner: "bot"`. */
+function callerOwnsBot(auth: RequestAuth, bot: BotRecord): boolean {
+  if (ownerOrAdminOf(auth, bot)) return true;
+  if (auth.kind !== "session") return false;
+  const actor = actorPrincipalId(auth).trim().toLowerCase();
+  return Boolean(actor) && effectiveBotOwner(bot) === actor;
 }
 /** This computer's own person (request-auth.ts clientSessionIsComputerOwner):
  * the owner at this computer, an admin session, or on a personal server a
@@ -36030,7 +36182,20 @@ const widgetCheckAttempts = new WidgetCheckAttempts();
 ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
-ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard }));
+ROUTES.push(createBotSecretCardRoutes({
+  getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard,
+  // #4471: a member answers the cards of their own conversations, never
+  // another person's (private threads, server/threads/thread-privacy.ts).
+  mayAnswer: (_auth, botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const viewerId = scopedThreadViewer();
+    if (!viewerId) return true;
+    const room = store.groupByThread(threadId);
+    if (room) return groupVisible(room, viewerId) && groupPostAllowed(room, viewerId);
+    return botThreadReadable(bot, threadId, viewerId, "thread.post");
+  },
+}));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
   // #4329 lot 5: a bot's engine and model are resolved together when written

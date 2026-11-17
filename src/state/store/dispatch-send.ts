@@ -6,7 +6,7 @@ import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { noteNewChatTopic } from "@/lib/fresh-topic";
 import { beginLocalSend, claimInFlightSend, finishSend } from "@/lib/send-cancel";
 import { restoreComposerDraft } from "@/lib/drafts";
-import { answerResponse, dismissResponse } from "@/lib/card-answer";
+import { answerResponse, cardAnswerOpen, dismissResponse } from "@/lib/card-answer";
 import { t } from "@/lib/i18n";
 import { voiceCallId } from "@/lib/call";
 import { devPodsTurnField } from "@/components/dev-pods/prefs";
@@ -198,6 +198,9 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                 rememberCommand: action.rememberCommand,
                 rule: action.rule,
                 ...(action.ruleScope ? { ruleScope: action.ruleScope } : {}),
+                // #4438: a question's answer: this device opens the place a
+                // server card's choice names (the fix card's Open the routine)
+                ...(action.behavior === "answer" ? { opens: true } : {}),
               }),
             });
           void waitForExecutionSettings(executionBotsBeforeAction, action.threadId)
@@ -225,6 +228,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               if (response?.settlementPending && typeof response.message === "string") {
                 showError(new Error(response.message));
               }
+              openCardAnswer(response, dispatch);
             })
             .catch((error) => {
               // settled already, elsewhere: the card shows the real outcome
@@ -283,7 +287,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                       ? { terminalDestination: action.terminalDestination }
                       : {}),
                   }),
-                });
+                }).then((reply) => { openCardAnswer(reply, dispatch); });
               }
               if (inRoom) return;
               // #4475: the card is settled where it lives (its own thread)
@@ -346,4 +350,12 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
           break;
         }
   }
+}
+
+/** #4438: a server card's choice the server did at once names the place
+ * it opens on this device (the fix card's Open the routine: its page). The
+ * request said `opens`, so the server's note already says it is open. */
+function openCardAnswer(response: unknown, dispatch: DispatchEnv["dispatch"]): void {
+  const open = cardAnswerOpen(response);
+  if (open) dispatch({ type: "showRoutines", routineId: open.routineId, ...(open.botId ? { botId: open.botId } : {}) });
 }

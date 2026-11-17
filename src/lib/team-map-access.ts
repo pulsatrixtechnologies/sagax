@@ -29,14 +29,15 @@ export function canManageTeamMap(
   return isOwnerOrAdmin(session);
 }
 
-/** Words for a Team map mutation that failed: the admin-scope refusal becomes
- * the same plain sentence the page shows when create is hidden on a solo
- * server; anything else goes through readableError so a raw English server
- * line never appears. */
+/** Words for a Team map mutation that failed: the gate's admin-only refusal
+ * (code `admin_route` since #4471, the scope phrase on an older server) becomes the
+ * same plain sentence the page shows when create is hidden on a solo server;
+ * anything else goes through readableError so a raw English server line
+ * never appears. */
 export function teamMapMutationError(cause: unknown): string {
   const raw = cause instanceof Error ? cause.message : String(cause);
   if (
-    (cause instanceof ApiError && cause.status === 403 && /lacks the admin scope/i.test(raw))
+    (cause instanceof ApiError && cause.status === 403 && (cause.body?.code === "admin_route" || /lacks the admin scope/i.test(raw)))
     || /forbidden:\s*this session lacks the admin scope/i.test(raw)
   ) {
     return t("team.adminOnly");

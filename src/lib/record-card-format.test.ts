@@ -73,6 +73,22 @@ describe("a calendar day (a date with no time) is the same day in every zone", (
     // the same instant is already the 6th in Auckland
     expect(formatAbsolute(DAY, onThe5thInToronto, "en", "Pacific/Auckland")).toBe("yesterday");
   });
+  it("words a bare day relatively by whole calendar days of the zone, never as hours since midnight UTC", () => {
+    // 2026-11-17 14:34 in Toronto is already 2026-11-18 08:34 in Auckland
+    expect(formatRelative("2026-11-17", NOW, "en", "America/Toronto")).toBe("today");
+    expect(formatRelative("2026-11-16", NOW, "en", "America/Toronto")).toBe("yesterday");
+    expect(formatRelative("2026-11-10", NOW, "en", "America/Toronto")).toBe("7 days ago");
+    expect(formatRelative("2026-11-18", NOW, "en", "America/Toronto")).toBe("tomorrow");
+    expect(formatRelative("2026-11-18", NOW, "en", "Pacific/Auckland")).toBe("today");
+    expect(formatRelative("2026-11-17", NOW, "en", "Pacific/Auckland")).toBe("yesterday");
+    expect(formatRelative("2026-11-17", NOW, "fr", "America/Toronto")).toMatch(/aujourd/);
+  });
+  it("says the year of a fact of the record even in this year, and of any day in another", () => {
+    const now = Date.parse("2026-11-17T14:34:00-05:00");
+    expect(formatAbsolute("2026-12-31", now, "en", "America/Toronto", { year: true })).toBe("Thu, Dec 31, 2026");
+    expect(formatAbsolute("2026-12-31", now, "en", "America/Toronto")).toBe("Thu, Dec 31");
+    expect(formatAbsolute("2027-01-01", now, "en", "America/Toronto")).toMatch(/2027/);
+  });
   it("leaves an instant as it was", () => {
     expect(formatLateness("2026-11-15T14:34:00-05:00", NOW, "fr", "America/Toronto")).toMatch(/^2\s+jours$/);
   });

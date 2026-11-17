@@ -107,6 +107,9 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
   );
 }
 
+/** The most cards one chip's card keeps to go back through. */
+export const RECORD_TRAIL_MAX = 8;
+
 /** The card, reading while it is on screen. A record the card names (a
  * company, an invoice's agreement, a ticket, a parent agreement: any kind) opens
  * in this card's place (a card from a card: never two stacked), with a back
@@ -135,16 +138,21 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
       read={read}
-      canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).product)}
+      canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).kind)}
       pinned={pinned}
       onClose={onClose}
       onAsk={onAsk ? () => onAsk(current.ref, current.label) : undefined}
       onConnect={onConnect}
       onSignIn={onSignIn}
       onOpenRecord={(ref, words) => {
-        if (current.ref.product === ref.product && current.ref.kind === ref.kind && current.ref.id === ref.id) return;
         pin();
-        setTrail((steps) => [...steps, { ref, label: words }]);
+        setTrail((steps) => {
+          // a record already on the way (the root card included) is gone back to, never pushed again
+          const way = [{ ref: record, label }, ...steps];
+          const at = way.findIndex((step) => step.ref.product === ref.product && step.ref.kind === ref.kind && step.ref.id === ref.id);
+          if (at >= 0) return steps.slice(0, at);
+          return [...steps, { ref, label: words }].slice(-RECORD_TRAIL_MAX);
+        });
       }}
       onBack={trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined}
     />

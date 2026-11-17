@@ -31,10 +31,13 @@ import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
 import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
-import { prefetchRecordCard, type UseRecordCard } from "@/lib/record-cards";
+import type { UseRecordCard } from "@/lib/record-cards";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
 import type { RecordCard as Card, RecordCardMiss, RecordField, RecordLevel, RecordRef, RecordTone } from "../../shared/record-cards";
+
+/** A description this short (one line) is not given a pane of its own. */
+const SHORT_TEXT_MAX = 90;
 
 /** The width below which the panes stack (the available width, in rem). */
 export const RECORD_CARD_STACK_REM = 34;
@@ -92,10 +95,15 @@ const TabContext = createContext<number | undefined>(undefined);
 
 /** What a record named inside the card does: opens in this card's place when
  * the person holds its product, else it is plain words. */
-const RefContext = createContext<{ open?: (ref: RecordRef, label: string) => void; can?: (ref: RecordRef) => boolean }>({});
+const RefContext = createContext<RefTarget>({});
+type RefTarget = { open?: (ref: RecordRef, label: string) => void; can?: (ref: RecordRef) => boolean };
+/** The one rule: a record named in the card opens in place only when the card
+ * can open records and the person holds that record's product (and kind). */
+function openerFor(target: RefTarget, ref: RecordRef | undefined): ((ref: RecordRef, label: string) => void) | undefined {
+  return ref && target.open && (!target.can || target.can(ref)) ? target.open : undefined;
+}
 function useOpenRef(ref: RecordRef | undefined): ((ref: RecordRef, label: string) => void) | undefined {
-  const { open, can } = useContext(RefContext);
-  return ref && open && (!can || can(ref)) ? open : undefined;
+  return openerFor(useContext(RefContext), ref);
 }
 
 // A chip's words are in the popover ink over the tone's own tint (4.5:1 in
@@ -284,7 +292,7 @@ function RecordRefChip({ name, refTo, onOpen, slot }: { name: string; refTo: Rec
       className={cn(REF_PILL_CLASS, "-ms-1.5 min-w-0 max-w-full items-center truncate font-sans text-[1em] no-underline")}
       onPointerEnter={(event) => {
         if (event.pointerType === "touch") return;
-        prefetchRecordCard(refTo);
+        // a crossing reads nothing: the card switches (and so reads, once) only after the pointer rests
         clear();
         timer.current = setTimeout(() => onOpen(refTo, name), 300);
       }}
@@ -323,12 +331,14 @@ function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label
   const open = useOpenRef(field.ref);
   switch (field.type) {
     case "money":
-      // the product's number and currency, right-aligned in its row, never computed
-      return <span dir="auto" data-record-money className="block text-end tabular-nums" title={field.currency}>{field.value}</span>;
+      // the product's number and currency as sent, never computed; left in the value column
+      // like every other value (the ticket card's rule), in tabular figures
+      return <span dir="auto" data-record-money className="tabular-nums" title={field.currency}>{field.value}</span>;
     case "date":
-      return <time dateTime={field.at} title={formatFull(field.at!, lang, tz)}>{formatAbsolute(field.at!, now, lang, tz)}</time>;
+      // a fact of the record (an invoice date, an agreement's start and end) always says its year
+      return <time dateTime={field.at} title={formatFull(field.at!, lang, tz)}>{formatAbsolute(field.at!, now, lang, tz, { year: true })}</time>;
     case "ago":
-      return <time dateTime={field.at} title={formatFull(field.at!, lang, tz)}>{formatRelative(field.at!, now, lang)}</time>;
+      return <time dateTime={field.at} title={formatFull(field.at!, lang, tz)}>{formatRelative(field.at!, now, lang, tz)}</time>;
     case "person":
       return <span className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={field.role}><PersonLine role={field.role} name={field.value} detail={field.detail} personRef={field.ref} /></span>;
     case "ref":
@@ -359,7 +369,7 @@ function Facts({ card, now, lang, part = "all", showPriority = false, chipRows =
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
   const time = (iso: string, mode: "relative" | "absolute") => (
-    <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang) : formatAbsolute(iso, now, lang, tz)}</time>
+    <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang, tz) : formatAbsolute(iso, now, lang, tz)}</time>
   );
   // a narrow head that cuts the priority chip: the full name is a row of the body, once
   if (showPriority && card.priority) rows.push({ key: "priority", label: t("recordCard.priority"), value: <span dir="auto">{card.priority.label}</span> });
@@ -373,7 +383,7 @@ function Facts({ card, now, lang, part = "all", showPriority = false, chipRows =
       key: "due",
       label: t("recordCard.date.due"),
       value: late ? (
-        <span>{time(dates.due, "absolute")}<span className="ms-1.5 inline-flex items-center gap-1 font-medium"><CircleAlert size={12} aria-hidden="true" className="text-danger" />{t("recordCard.late", { duration: late })}</span></span>
+        <span>{time(dates.due, "absolute")}<span className="ms-1.5 inline-flex items-center gap-1 whitespace-nowrap font-medium"><CircleAlert size={12} aria-hidden="true" className="text-danger" />{t("recordCard.late", { duration: late })}</span></span>
       ) : time(dates.due, "absolute"),
     });
   }
@@ -394,11 +404,22 @@ function Facts({ card, now, lang, part = "all", showPriority = false, chipRows =
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 text-[13px] leading-[18px]" data-record-facts>
         {shown.map((row) => (
           <div key={row.key} className="contents">
-            <dt data-fit-row={`f-${row.key}`} className={cn("max-w-[9rem] truncate whitespace-nowrap text-[12px] leading-4 text-popover-ink-secondary", row.gap && "mt-1")} title={row.label}>{row.label}</dt>
+            <dt data-fit-row={`f-${row.key}`} className={cn("max-w-[9rem] break-words text-[12px] leading-4 text-popover-ink-secondary", row.gap && "mt-1")} title={row.label}>{row.label}</dt>
             <dd data-fit-row={`f-${row.key}`} className={cn("min-w-0 break-words", row.gap && "mt-1")}>{row.value}</dd>
           </div>
         ))}
       </dl>
+    </>
+  );
+}
+
+function LineRow({ line }: { line: NonNullable<Card["lines"]>["items"][number] }) {
+  const open = useOpenRef(line.ref);
+  return (
+    <>
+      {line.ref && open ? <RecordRefChip name={line.label} refTo={line.ref} onOpen={open} /> : <span dir="auto" className="min-w-0 flex-1 truncate" title={line.label}>{line.label}</span>}
+      {line.detail && <span dir="auto" className="shrink-0 whitespace-nowrap text-[12px] text-popover-ink-secondary">{line.detail}</span>}
+      {line.value && <span dir="auto" className={cn("shrink-0 whitespace-nowrap text-end tabular-nums", !(line.ref && open) && "ms-auto")}>{line.value}</span>}
     </>
   );
 }
@@ -408,7 +429,6 @@ function Facts({ card, now, lang, part = "all", showPriority = false, chipRows =
  * is a unit of the fit pass, like a field. */
 function Lines({ card, above }: { card: Card; above: boolean }) {
   const { lines } = card;
-  const { open, can } = useContext(RefContext);
   if (!lines) return null;
   if (lines.state === "forbidden") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.forbidden")}</p>;
   if (lines.state === "unavailable") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.unavailable")}</p>;
@@ -420,9 +440,7 @@ function Lines({ card, above }: { card: Card; above: boolean }) {
       <ul className="flex flex-col">
         {lines.items.map((line, index) => (
           <li key={index} data-record-line data-fit-row={`l-${index}`} className="flex min-w-0 items-baseline gap-2 leading-[18px]">
-            {line.ref && open && (!can || can(line.ref)) ? <RecordRefChip name={line.label} refTo={line.ref} onOpen={open} /> : <span dir="auto" className="min-w-0 flex-1 truncate" title={line.label}>{line.label}</span>}
-            {line.detail && <span dir="auto" className="shrink-0 whitespace-nowrap text-[12px] text-popover-ink-secondary">{line.detail}</span>}
-            {line.value && <span dir="auto" className={cn("shrink-0 whitespace-nowrap text-end tabular-nums", !(line.ref && open) && "ms-auto")}>{line.value}</span>}
+            <LineRow line={line} />
           </li>
         ))}
       </ul>
@@ -594,7 +612,11 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const hasNotes = Boolean(card && (card.notes.items.length > 0 || (card.notes.total ?? 0) > card.notes.items.length || card.notes.state === "forbidden" || card.notes.state === "unavailable"));
   const hasLines = Boolean(card?.lines && (card.lines.items.length > 0 || (card.lines.total ?? 0) > card.lines.items.length || card.lines.state === "forbidden" || card.lines.state === "unavailable"));
   // the layout is the data's: a text, a list or an activity makes the two-pane card, none the single pane
-  const right = Boolean(card && (description || hasLines || hasNotes));
+  // a text of one short line is a row above the fields of the single-pane card, not a nearly empty pane
+  const shortText = Boolean(description && !hasLines && !hasNotes && card?.fields?.length && description.length <= SHORT_TEXT_MAX && !description.includes("\n"));
+  const right = Boolean(card && ((description && !shortText) || hasLines || hasNotes));
+  // a card of typed fields sizes its field pane from what the rows need (a share of the card, not a fixed ratio)
+  const sized = Boolean(card?.fields?.some((field) => field.type));
   const split = !card || right;
   // wider than tall, never taller than wide: stacked (a narrow space), the
   // card is no taller than it is wide
@@ -668,7 +690,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const upToDate = clockText ? t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) }) : "";
   const first = { "data-hover-card-first": "" };
 
-  const companyOpen = card.company?.ref && onOpenRecord && (!canOpenRecord || canOpenRecord(card.company.ref)) ? onOpenRecord : undefined;
+  const companyOpen = openerFor({ open: onOpenRecord, can: canOpenRecord }, card.company?.ref);
 
   return (
     <TabContext.Provider value={tab}>
@@ -678,7 +700,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
         <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
-          <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline" : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+          <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? cn(sized ? "@min-[34rem]:flex-[0_1_auto] @min-[34rem]:min-w-[45%] @min-[34rem]:max-w-[60%]" : "@min-[34rem]:flex-[2_1_0%]", "@min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline") : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
             {showPeopleBlock && (
               <div className="flex flex-col gap-1">
                 {card.company && (
@@ -695,10 +717,11 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
+            {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
             <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} showPriority={stacked && priorityClipped} chipRows={chipRows} />
           </Pane>
           {right && (
-            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
               {description && <p dir="auto" className={cn("whitespace-pre-line break-words", pinned ? "" : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
               {hasLines && <Lines card={card} above={Boolean(description)} />}
               {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description || hasLines)} pinned={pinned} stacked={stacked} />}

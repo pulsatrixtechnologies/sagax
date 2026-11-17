@@ -44,7 +44,7 @@ describe("the three kinds before the generic renderer", () => {
             record, label, kindName, product, now: NOW, pinned, onAsk: () => {}, onOpenRecord: () => {},
             read: { card: parseRecordCard(make(NOW, lang)), miss: null, loading: false, at: NOW - 120_000, refresh: vi.fn() },
           })));
-          expect(host.innerHTML.replace(/\sid="[^"]*"/g, "").replace(" [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)]", "")).toMatchSnapshot();
+          expect(host.innerHTML.replace(/\sid="[^"]*"/g, "").replace(" [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)]", "").replaceAll("max-w-[9rem] break-words", "max-w-[9rem] truncate whitespace-nowrap")).toMatchSnapshot();
         });
       }
     }

@@ -57,9 +57,13 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
 /** "il y a 29 min", "il y a 3 jours", "in 2 hours": age or last update. */
-export function formatRelative(iso: string, now: number, lang: string): string {
-  const then = Date.parse(iso);
+export function formatRelative(iso: string, now: number, lang: string, tz?: string): string {
   const tag = tagOf(lang);
+  // a calendar day is counted in whole days of the card's zone: today, yesterday, N days ago
+  const bare = isBareDay(iso);
+  const gap = bare ? bareDayNumber(iso) - dayNumber(new Date(now), tz) : 0;
+  if (bare && gap === 0) return new Intl.RelativeTimeFormat(tag, { numeric: "auto" }).format(0, "day");
+  const then = bare ? now + gap * DAY : Date.parse(iso);
   if (Number.isNaN(then)) return "";
   const diff = then - now;
   const abs = Math.abs(diff);
@@ -84,8 +88,8 @@ function clock(date: Date, tag: string, tz: string | undefined): string {
 
 /** "aujourd'hui 14 h 03", "hier 16 h 20", "mer. 18 nov., 17 h": a note's time
  * and a due date. The year shows only when it is not this year's. */
-export function formatAbsolute(iso: string, now: number, lang: string, tz: string | undefined, { time = true }: { time?: boolean } = {}): string {
-  if (isBareDay(iso)) return formatDay(iso, now, lang, tz);
+export function formatAbsolute(iso: string, now: number, lang: string, tz: string | undefined, { time = true, year = false }: { time?: boolean; /** say the year even in this year */ year?: boolean } = {}): string {
+  if (isBareDay(iso)) return formatDay(iso, now, lang, tz, year);
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const tag = tagOf(lang);
@@ -96,20 +100,20 @@ export function formatAbsolute(iso: string, now: number, lang: string, tz: strin
     return at ? `${day} ${at}` : day;
   }
   const sameYear = parts(date, "en", tz, { year: "numeric" }).year === parts(new Date(now), "en", tz, { year: "numeric" }).year;
-  const day = new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }), timeZone: safeZone(tz) }).format(date);
+  const day = new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", ...(sameYear && !year ? {} : { year: "numeric" }), timeZone: safeZone(tz) }).format(date);
   return at ? `${day}, ${at}` : day;
 }
 
 /** A calendar day, as the person's locale writes a date: "demain", "mer. 5 nov.",
  * with the year when it is not this year's. Today is read in the card's zone;
  * the day itself is never shifted. */
-function formatDay(day: string, now: number, lang: string, tz: string | undefined): string {
+function formatDay(day: string, now: number, lang: string, tz: string | undefined, withYear = false): string {
   const tag = tagOf(lang);
   const gap = bareDayNumber(day) - dayNumber(new Date(now), tz);
   if (Math.abs(gap) <= 1) return new Intl.RelativeTimeFormat(tag, { numeric: "auto" }).format(gap, "day");
   const date = bareDayDate(day);
   const sameYear = date.getUTCFullYear() === Number(parts(new Date(now), "en", tz, { year: "numeric" }).year);
-  return new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" }).format(date);
+  return new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", ...(sameYear && !withYear ? {} : { year: "numeric" }), timeZone: "UTC" }).format(date);
 }
 
 /** The hour of "à jour à 14 h 32": the clock time in the card's zone. */

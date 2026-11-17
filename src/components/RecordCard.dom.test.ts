@@ -423,10 +423,12 @@ describe("RecordCard without a layout engine's help", () => {
 
 // A kind the product declares (#4572): the same renderer, drawn by field type.
 describe("RecordCard draws any kind by field type", () => {
-  const invoice = (over: Partial<RecordCardProps> = {}) => show({ raw: invoiceCard(NOW, "fr"), record: INVOICE_REF, label: "INV-1042", kindName: "Facture", onOpenRecord: () => {}, ...over });
+  const invoice = (over: Partial<RecordCardProps> & { raw?: Record<string, unknown> } = {}) => show({ raw: invoiceCard(NOW, "fr"), record: INVOICE_REF, label: "INV-1042", kindName: "Facture", onOpenRecord: () => {}, ...over });
 
-  it("lays an invoice out as the two-pane landscape card, its chip beside its state, its kind from the data", () => {
-    const card = invoice();
+  it("lays an invoice out as the landscape card with its chip beside its state, its kind from the data", () => {
+    const raw = invoiceCard(NOW, "fr");
+    raw.description = { text: "Un long texte. ".repeat(20), more: false };
+    const card = invoice({ raw });
     expect(card.dataset.layout).toBe("split");
     const head = host.querySelector("[data-record-head]")!.textContent!;
     expect(head).toContain("Facture");
@@ -435,11 +437,11 @@ describe("RecordCard draws any kind by field type", () => {
     expect(head).toContain("Entente");
   });
 
-  it("shows money exactly as sent, right-aligned, never computed", () => {
+  it("shows money exactly as sent, left in the value column like every value, never computed", () => {
     invoice();
     const money = [...host.querySelectorAll("[data-record-money]")];
     expect(money.map((node) => node.textContent)).toEqual(["1 234,50 $", "1 234,50 $", "160,49 $"]);
-    expect(money.every((node) => node.className.includes("text-end"))).toBe(true);
+    expect(money.every((node) => node.className.includes("tabular-nums") && !node.className.includes("text-end"))).toBe(true);
     // no total, difference or tax of its own
     expect(text()).not.toContain("1 074");
   });
@@ -447,7 +449,7 @@ describe("RecordCard draws any kind by field type", () => {
   it("writes a calendar day as that day and reads the due day as late only once it is over", () => {
     invoice();
     const flat = text().replace(/\s/g, " ");
-    expect(flat).toContain("mar. 6 oct.");
+    expect(flat).toContain("mar. 6 oct. 2026");
     // due 2026-11-05, today 2026-11-17: twelve days late
     expect(flat).toContain("5 nov.");
     expect(flat).toMatch(/en retard de 12\s+jours/);
@@ -469,8 +471,24 @@ describe("RecordCard draws any kind by field type", () => {
     show({ raw: agreementCard(NOW, "fr"), record: AGREEMENT_REF, label: "Managed services", kindName: "Entente", onOpenRecord: () => {} });
     expect(host.querySelector("[data-record-company-link]")).not.toBeNull();
     expect(host.querySelector("[data-record-person=contact]")).not.toBeNull();
-    expect(text().replace(/\s/g, " ")).toContain("jeu. 31 déc.");
+    expect(text().replace(/\s/g, " ")).toContain("jeu. 31 déc. 2026");
     expect(host.querySelector("[data-record-money]")!.textContent).toBe("1 050,00 $");
+  });
+
+  it("keeps a late note on one line, and sizes the field pane from its rows when the text is long", () => {
+    const raw = invoiceCard(NOW, "fr");
+    raw.description = { text: "Un long texte. ".repeat(20), more: false };
+    const card = show({ raw, record: INVOICE_REF, label: "INV-1042" });
+    expect(card.dataset.layout).toBe("split");
+    expect(host.querySelector("[data-record-facts]")!.innerHTML).toContain("whitespace-nowrap font-medium");
+    expect(card.querySelector("[data-record-pane=left]")!.className).toContain("flex-[0_1_auto]");
+  });
+
+  it("puts a one-line text above the fields of the single-pane card, not in a nearly empty pane", () => {
+    const card = show({ raw: invoiceCard(NOW, "fr"), record: INVOICE_REF, label: "INV-1042" });
+    expect(card.dataset.layout).toBe("compact");
+    expect(card.querySelector("[data-record-pane=right]")).toBeNull();
+    expect(card.querySelector("[data-record-pane=left] [data-record-description]")!.textContent).toBe("Merci de votre confiance.");
   });
 
   it("is the narrower single-pane card when the kind has no text, list or activity", () => {

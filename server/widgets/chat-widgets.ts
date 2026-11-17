@@ -413,6 +413,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     const settled = args.store.appendMessage(args.threadId, {
       // a question of the chat, settled: it stays in the conversation with the
       // answer marked and says it is the person's "always" answer (#4558)
+      // full-access: ask-choice
       role: "bot", kind: "options", card: { ...shownCard, ...learned, requestType: "question", answered: "answer", answeredText: standing.answer, autoApplied: true, standingAnswer: { routineId: learned.answerLearning!.routineId } },
       ...from,
     });
@@ -421,10 +422,10 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   }
   const answered = decision ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: value.title, question: value.subtitle, options: value.options });
   if (answered) {
-    // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {
       // #4558: a question of the chat, settled, so it stays visible (an
       // untyped card read as the first-run quiz and hid once answered)
+      // full-access: ask-choice
       role: "bot", kind: "options", card: { ...shownCard, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
       ...from,
     });

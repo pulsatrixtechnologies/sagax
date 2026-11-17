@@ -267,18 +267,19 @@ describe("RecordCard without a layout engine's help", () => {
     const left = card.querySelector("[data-record-pane=left]")!;
     const keys = [...new Set([...left.querySelectorAll<HTMLElement>("[data-fit-row]")].map((node) => node.dataset.fitRow))];
     const hidden = [...left.querySelectorAll<HTMLElement>("[data-fit-hidden]")].map((node) => node.dataset.fitRow);
-    // rows 0..2 end at 28, 58, 88; the limit 110 - 20 = 90 keeps the first three whole
+    // rows 0..2 end at 28, 58, 88; the limit 110 - 24 (the line and its gap) = 86 keeps the first two whole
     expect(keys.length).toBeGreaterThan(4);
-    expect(new Set(hidden).size).toBe(keys.length - 3);
+    expect(new Set(hidden).size).toBe(keys.length - 2);
     expect(hidden).not.toContain(keys[0]);
-    expect(hidden).not.toContain(keys[2]);
+    expect(hidden).toContain(keys[2]);
     // the count is of ROWS (a date row is two nodes), it says what it counts, and the
     // line sits inside the pane's box, at its foot
     const more = left.querySelector<HTMLElement>("[data-fit-more]")!;
     expect(more.parentElement).toBe(left);
-    expect(more.className).toMatch(/\babsolute\b/);
-    expect(more.className).toMatch(/\bbottom-/);
-    const dropped = keys.length - 3;
+    // in flow, after the last row the pane keeps: it can never sit on a row
+    expect(more.className).not.toMatch(/\babsolute\b/);
+    expect(left.lastElementChild).toBe(more);
+    const dropped = keys.length - 2;
     expect(more.textContent).toMatch(new RegExp(`^${dropped} (champs|lignes) de plus$`));
     expect(hidden.length).toBeGreaterThan(dropped - 1);
     // pinned: nothing dropped, the pane scrolls
@@ -334,5 +335,62 @@ describe("RecordCard without a layout engine's help", () => {
     const first = reads;
     for (let again = 0; again < 5; again += 1) show({ raw: ticketCard(NOW, "fr") });
     expect(reads).toBe(first);
+  });
+
+  it.each([[110, "a short pane (the 1280 card with a two-line title)"], [150, "a taller pane (the 600 card)"], [64, "a very short pane"]])(
+    "never lets a shown row touch the line that counts the rest: %s px, %s",
+    (height) => {
+      // the stack of rows is laid out like the browser would: each row 28px tall, 2px apart;
+      // the line, in flow, starts 8px under the last row that shows
+      const boxes = new Map<Element, { top: number; bottom: number }>();
+      define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? height : 0; } });
+      define(Element.prototype, "getBoundingClientRect", {
+        value(this: HTMLElement) {
+          if (this.dataset?.recordPane === "left") return rect(0, height);
+          const left = document.querySelector("[data-record-pane=left]");
+          if (!left) return rect(0, 0);
+          const keys = [...new Set([...left.querySelectorAll<HTMLElement>("[data-fit-row]")].map((node) => node.dataset.fitRow))];
+          if (this.dataset?.fitMore !== undefined) {
+            const shownKeys = keys.filter((key) => !left.querySelector(`[data-fit-row="${key}"][data-fit-hidden]`));
+            const top = shownKeys.length ? shownKeys.length * 30 - 2 + 8 : 8;
+            return rect(top, top + 16);
+          }
+          const key = this.dataset?.fitRow;
+          if (!key) return rect(0, 0);
+          const at = keys.indexOf(key);
+          const box = rect(at * 30, at * 30 + 28);
+          boxes.set(this, { top: box.top, bottom: box.bottom });
+          return box;
+        },
+      });
+      const card = show({ raw: ticketCard(NOW, "fr") });
+      const left = card.querySelector("[data-record-pane=left]")!;
+      const more = left.querySelector<HTMLElement>("[data-fit-more]");
+      const keys = [...new Set([...left.querySelectorAll<HTMLElement>("[data-fit-row]")].map((node) => node.dataset.fitRow))];
+      const shown = keys.filter((key) => !left.querySelector(`[data-fit-row="${key}"][data-fit-hidden]`));
+      expect(more).not.toBeNull();
+      const line = more!.getBoundingClientRect();
+      for (const key of shown) {
+        const row = left.querySelector<HTMLElement>(`[data-fit-row="${key}"]`)!.getBoundingClientRect();
+        expect(row.bottom <= line.top || row.top >= line.bottom).toBe(true);
+      }
+      // and the line is inside the pane
+      expect(line.bottom).toBeLessThanOrEqual(height);
+    },
+  );
+
+  it("keeps the full priority name readable in the body of a narrow card, and names the glyph chip", () => {
+    define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    expect(card.querySelector("[data-record-head] [role=img]")!.getAttribute("aria-label")).toBe("Priorité 2 - Élevée");
+    const facts = card.querySelector("[data-record-facts]")!;
+    expect(facts.textContent).toContain("Priorité");
+    expect(facts.textContent).toContain("Priorité 2 - Élevée");
+    // wide: the chip says it, the body does not repeat it
+    restore.forEach((undo) => undo()); restore = [];
+    act(() => root.unmount());
+    root = createRoot(host);
+    const wide = show({ raw: ticketCard(NOW, "fr") });
+    expect(wide.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
   });
 });

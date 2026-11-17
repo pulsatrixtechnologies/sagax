@@ -111,16 +111,18 @@ const LEVEL_GLYPH: Record<RecordLevel, string> = {
   low: "",
 };
 
-function Chip({ className, children, title }: { className: string; children: ReactNode; title?: string }) {
-  return <span title={title} className={cn("inline-flex h-5 min-w-0 max-w-full items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
+function Chip({ className, children, title, role, label }: { className: string; children: ReactNode; title?: string; role?: "img"; label?: string }) {
+  return <span title={title} role={role} aria-label={label} className={cn("inline-flex h-5 min-w-0 max-w-full items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
 }
 
 function Bar({ className }: { className: string }) {
   return <span aria-hidden="true" className={cn("block animate-pulse rounded-md bg-popover-ink/10 motion-reduce:animate-none", className)} />;
 }
 
-/** The room the "N more" line takes at a pane's foot: its 16px and 6px of margin. */
-const MORE_ROOM = 22;
+/** The "N more" line is a row of the pane: 16px tall, after the 8px gap every
+ * pane keeps between its children. A fit reserves both, or the line would sit
+ * on the last row it leaves. */
+const MORE_ROOM = 16 + 8;
 
 /**
  * A pane. Pinned, it scrolls inside, with a 16px fade at an edge only while
@@ -130,7 +132,7 @@ const MORE_ROOM = 22;
  * left out, and a quiet "N more" at the pane's foot says how many and of what.
  * The pass runs when the pane's size or its content changes, never on a render.
  */
-function Pane({ pinned, fit = false, className, moreClass = "start-3", children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
+function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM, children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; moreRoom?: number; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ above: false, below: false });
   const [left, setLeft] = useState<{ count: number; kind: MoreKind } | null>(null);
@@ -164,7 +166,7 @@ function Pane({ pinned, fit = false, className, moreClass = "start-3", children,
       const paddingBottom = parseFloat(getComputedStyle(el).paddingBottom) || 0;
       const entries = [...groups.entries()];
       const bottoms = entries.map(([, nodes]) => Math.max(...nodes.map((node) => node.getBoundingClientRect().bottom - top)));
-      const shown = fitRows({ bottoms, full: el.clientHeight - paddingBottom, partial: el.clientHeight - MORE_ROOM });
+      const shown = fitRows({ bottoms, full: el.clientHeight - paddingBottom, partial: el.clientHeight - paddingBottom - moreRoom });
       const hiddenKeys = entries.slice(shown).map(([key]) => key);
       for (const [, nodes] of entries.slice(shown)) for (const node of nodes) node.setAttribute("data-fit-hidden", "");
       const next = hiddenKeys.length ? { count: hiddenKeys.length, kind: moreKind(hiddenKeys) } : null;
@@ -187,7 +189,7 @@ function Pane({ pinned, fit = false, className, moreClass = "start-3", children,
       mutations?.disconnect();
       el.removeEventListener("scroll", measureScroll);
     };
-  }, [fit, pinned]);
+  }, [fit, pinned, moreRoom]);
   const label = left ? t(`recordCard.more.${left.kind}${left.count === 1 ? "One" : "Many"}` as Parameters<typeof t>[0], { count: left.count }) : "";
   return (
     <div
@@ -199,7 +201,7 @@ function Pane({ pinned, fit = false, className, moreClass = "start-3", children,
       className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
-      {left && <p data-fit-more className={cn("pointer-events-none absolute bottom-1.5 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
+      {left && <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
     </div>
   );
 }
@@ -267,7 +269,7 @@ function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: R
 
 function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
   return (
-    <Chip className={cn(LEVEL_CLASS[priority.level], "min-w-8")} title={priority.label}>
+    <Chip className={cn(LEVEL_CLASS[priority.level], "min-w-8")} title={priority.label} role="img" label={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
       <span className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
     </Chip>
@@ -275,13 +277,15 @@ function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> })
 }
 
 /** The dates and key fields as one description list. */
-function Facts({ card, now, lang, part = "all" }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields" }) {
+function Facts({ card, now, lang, part = "all", stacked = false }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; stacked?: boolean }) {
   const tz = card.tz;
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
   const time = (iso: string, mode: "relative" | "absolute") => (
     <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang) : formatAbsolute(iso, now, lang, tz)}</time>
   );
+  // a narrow card truncates the priority chip in its head: the full name is a row of the body
+  if (stacked && card.priority) rows.push({ key: "priority", label: t("recordCard.priority"), value: <span dir="auto">{card.priority.label}</span> });
   if (dates.opened) rows.push({ key: "opened", label: t("recordCard.date.opened"), value: time(dates.opened, "relative") });
   if (dates.updated) rows.push({ key: "updated", label: t("recordCard.date.updated"), value: time(dates.updated, "relative") });
   if (dates.due) {
@@ -558,7 +562,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
         <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
-        <Pane pinned={pinned} fit={stacked} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
+        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
           <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline" : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
             {showPeopleBlock && (
               <div className="flex flex-col gap-1">
@@ -576,7 +580,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
-            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} />
+            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} stacked={stacked} />
           </Pane>
           {right && (
             <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>

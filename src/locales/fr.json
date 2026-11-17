@@ -15194,5 +15194,6 @@
   "recordCard.more.fieldOne": "1 champ de plus",
   "recordCard.more.fieldMany": "{count} champs de plus",
   "recordCard.more.rowOne": "1 ligne de plus",
-  "recordCard.more.rowMany": "{count} lignes de plus"
+  "recordCard.more.rowMany": "{count} lignes de plus",
+  "recordCard.priority": "Priorité"
 }

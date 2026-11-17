@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { AnchoredPopover, useAnchoredDismissRoot } from "../../AnchoredPopover";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "@/components/menu-look";
 import { PILL, PRIMARY_PILL } from "../../SettingsPrimitives";
 
 export interface AddMenuItem {
@@ -26,18 +27,18 @@ export interface AddMenuItem {
 function AddItem({ icon, title, description, onChoose, id, separatorBefore }: AddMenuItem) {
   return (
     <>
-    {separatorBefore && <div role="separator" className="mx-2 my-1 h-px bg-border" />}
+    {separatorBefore && <MenuDivider />}
     <button
       type="button"
       role="menuitem"
       tabIndex={-1}
       data-bot-profile-add-item={id}
       onClick={onChoose}
-      className={cn("flex w-full gap-3 rounded-lg px-2.5 py-2 text-left outline-none hover:bg-hover focus-visible:bg-hover", description ? "items-start" : "items-center")}
+      className={cn(menuRow(), description && "h-auto items-start py-1.5")}
     >
-      <span aria-hidden="true" className={cn("flex size-4 shrink-0 items-center justify-center text-ink-secondary [&>svg]:size-4", description && "mt-px")}>{icon}</span>
+      <MenuGlyph>{icon}</MenuGlyph>
       <span className="flex min-w-0 flex-col">
-        <span className="text-[13px] leading-[18px] text-ink">{title}</span>
+        <span className="truncate">{title}</span>
         {description && <span data-bot-profile-add-description="" className="text-[12px] leading-4 text-ink-secondary">{description}</span>}
       </span>
     </button>
@@ -132,7 +133,7 @@ export function AddMenu({ items, className, label = t("botProfile.add"), disable
           align="end"
           role="menu"
           aria-label={label}
-          className={cn(items.some((item) => item.description) ? "w-[280px]" : "min-w-[200px]", "rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1 text-ink shadow-xl")}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW)}
         >
           {items.map((item) => (
             <AddItem key={item.id} {...item} onChoose={() => { close(false); item.onChoose(); }} />

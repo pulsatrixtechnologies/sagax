@@ -16,7 +16,7 @@ function Harness() {
   const [open, setOpen] = useState(false);
   return createElement("div", { "data-scroller": "", style: { overflow: "auto", height: "200px" } },
     createElement("button", { ref: button, type: "button", "data-trigger": "", onClick: () => setOpen(true) }, "..."),
-    createElement(DevMenu, { open, anchorRef: button, onClose: () => setOpen(false), width: 200,
+    createElement(DevMenu, { open, anchorRef: button, onClose: () => setOpen(false),
       children: createElement("button", { type: "button", role: "menuitem" }, "Move up") }));
 }
 

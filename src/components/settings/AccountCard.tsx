@@ -25,6 +25,8 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
 import { openExternalLink } from "@/lib/app-links";
 import { useCopyFeedback } from "@/lib/copy-text";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { serverModeBridge } from "@/lib/launch";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -313,9 +315,9 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
           {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : <InitialsAvatar initials={profileInitials({ name, email })} size={44} />}
         </button>
         {menuOpen && (
-          <AnchoredPopover anchorRef={avatarButtonRef} popoverRef={avatarMenuRef} gap={8} className="flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
-            <button type="button" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.uploadPhoto")}</button>
-            {avatarUrl && <button type="button" onClick={() => { setAvatarUrl(""); setMenuOpen(false); save({ avatarUrl: "" }); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.removePhoto")}</button>}
+          <AnchoredPopover anchorRef={avatarButtonRef} popoverRef={avatarMenuRef} role="menu" aria-label={t("settings.profile.changeAvatar")} gap={8} className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
+            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className={MENU_ROW}>{t("settings.profile.uploadPhoto")}</button>
+            {avatarUrl && <button type="button" role="menuitem" onClick={() => { setAvatarUrl(""); setMenuOpen(false); save({ avatarUrl: "" }); }} className={MENU_ROW_DANGER}>{t("settings.profile.removePhoto")}</button>}
           </AnchoredPopover>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="hidden" aria-label={t("settings.profile.uploadAvatar")} onChange={(event) => { choosePhoto(event.target.files?.[0]); event.target.value = ""; }} />

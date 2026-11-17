@@ -25,6 +25,10 @@ export const MENU_FIT = "w-max max-w-[min(400px,calc(100vw-16px))]";
  * window narrower than that. */
 export const MENU_FIT_ROW = cn(MENU_FIT, "min-w-[min(228px,calc(100vw-16px))]");
 
+/** A submenu overlaps its row's trailing edge by 4px (the reference's
+ * offset, #4157). Negative: the next level sits 4px over the row. */
+export const SUBMENU_SIDE_OFFSET = -4;
+
 /** A row's shape: 32px, 8px inside each side, 6px from the glyph, 10px
  * corners. A row with a second line adds `h-auto py-1.5`. A disabled row
  * dims in src/styles.css (`.menu-surface` rows). */

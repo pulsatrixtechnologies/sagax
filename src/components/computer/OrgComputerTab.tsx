@@ -53,7 +53,7 @@ import { SandboxDesktopView } from "../SandboxDesktopView";
 import { RemoteScreenCard } from "../remote-session/RemoteScreenCard";
 import { ComputerScreen, type ScreenAction, type ScreenControls } from "./ComputerScreen";
 import { SandboxDesktopModal } from "./SandboxDesktopModal";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 /** Per-place menu actions for an unattended host in the Computer dropdown. */
 export type HostPlaceAction = "attach" | "detach";
@@ -470,7 +470,7 @@ export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: 
       </button>
       <div ref={list} id={`${id}-list`} role="listbox" aria-label={t("orgComputer.choice.label")} tabIndex={-1} hidden={!open}
         aria-activedescendant={open && !renaming && !menuKey ? optionId(active) : undefined} onKeyDown={onListKey}
-        className={cn(MENU_SURFACE, "absolute left-1/2 top-full z-30 mt-1 w-max min-w-[180px] max-w-[min(280px,90vw)] -translate-x-1/2 outline-none")}>
+        className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 outline-none")}>
         {items.map((item, index) => {
           const selected = item.key === current.key;
           const Icon = item.icon;
@@ -540,7 +540,7 @@ export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: 
                 <div
                   role="menu"
                   data-computer-host-menu=""
-                  className={cn(MENU_SURFACE, "absolute right-1 top-full z-40 mt-0.5 min-w-[140px]")}
+                  className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-1 top-full z-40 mt-0.5")}
                   onClick={(event) => event.stopPropagation()}
                 >
                   {onRename && (

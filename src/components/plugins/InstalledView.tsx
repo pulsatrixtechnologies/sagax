@@ -26,7 +26,7 @@ import { updateKindOf } from "@/lib/capability-updates";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
  * "plugin (claude-plugins-official) · 3 skills", "1 connector". */
@@ -240,12 +240,12 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
         {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70 [[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden" />}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-10 z-20")}>
           {actions.map((action) => (
             <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
               onClick={() => { setOpen(false); action.onPick(); }}
               className={MENU_ROW}>
-              {action.icon}
+              {action.icon && <MenuGlyph>{action.icon}</MenuGlyph>}
               {action.label}
             </button>
           ))}

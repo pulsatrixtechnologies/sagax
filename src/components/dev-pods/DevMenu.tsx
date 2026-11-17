@@ -7,16 +7,15 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { useMenuMotion } from "../MenuMotion";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 export const DEV_MENU_ITEM = MENU_ROW;
 
-export function DevMenu({ open, anchorRef, label, onClose, width = 210, children }: {
+export function DevMenu({ open, anchorRef, label, onClose, children }: {
   open: boolean;
   anchorRef: RefObject<HTMLElement | null>;
   label?: string;
   onClose: () => void;
-  width?: number;
   children: ReactNode;
 }) {
   const motion = useMenuMotion(open);
@@ -49,8 +48,7 @@ export function DevMenu({ open, anchorRef, label, onClose, width = 210, children
       {...(label ? { "aria-label": label } : {})}
       side="bottom"
       align="end"
-      className={cn(MENU_SURFACE, motion.className)}
-      style={{ width }}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, motion.className)}
     >
       {/* a closing menu is only a picture of one (useMenuMotion exitProps) */}
       <div className="contents" {...motion.exitProps}>{children}</div>

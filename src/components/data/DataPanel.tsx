@@ -10,6 +10,8 @@ import { DataCard, RunningStatus } from "./DataCard";
 import { DataResultFooter } from "./DataGrid";
 import { SqlEditor } from "./SqlEditor";
 import { cardsLatestFirst } from "./data-format";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 import { readableError } from "@/lib/plain-error";
 
 const QUERY_MIN_HEIGHT = 128;
@@ -262,10 +264,10 @@ function BotDataPanel({ bot, requestedCard }: { bot: Bot; requestedCard?: { id: 
           <summary role="button" className={`${control} cursor-pointer list-none [&::-webkit-details-marker]:hidden`} aria-label={t("data.history")} title={t("data.history")}>
             <History size={14} aria-hidden="true" /><span className="hidden @min-[460px]/data:inline">{t("data.history")}</span><ChevronDown size={12} aria-hidden="true" />
           </summary>
-          <div className="absolute right-0 bottom-full z-30 mb-1 flex max-h-[min(20rem,calc(100cqh-3rem))] w-72 max-w-[70vw] flex-col overflow-y-auto rounded-xl border border-hairline/50 bg-menu p-1.5 shadow-xl" role="menu" aria-label={t("data.history")}>
-            <button type="button" role="menuitemradio" aria-checked={selection === null} className={`${control} text-left`} onClick={(event) => { select(null); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{t("data.latest")}</button>
+          <div className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 bottom-full z-30 mb-1 flex max-h-[min(20rem,calc(100cqh-3rem))] flex-col overflow-y-auto")} role="menu" aria-label={t("data.history")}>
+            <button type="button" role="menuitemradio" aria-checked={selection === null} className={selection === null ? MENU_ROW_ACTIVE : MENU_ROW} onClick={(event) => { select(null); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{t("data.latest")}</button>
             {cards.map((candidate) => (
-              <button key={candidate.id} type="button" role="menuitemradio" aria-checked={selection !== null && card?.id === candidate.id} className={`${control} text-left`}
+              <button key={candidate.id} type="button" role="menuitemradio" aria-checked={selection !== null && card?.id === candidate.id} className={selection !== null && card?.id === candidate.id ? MENU_ROW_ACTIVE : MENU_ROW}
                 onClick={(event) => { select({ cardId: candidate.id }); event.currentTarget.closest("details")?.removeAttribute("open"); }}>
                 <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
                 {candidate.pinned && <Pin size={12} aria-label={t("data.card.pin")} />}

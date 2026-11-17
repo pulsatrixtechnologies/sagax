@@ -95,7 +95,7 @@ function RunsSection({ runs, now, period, onPeriod, loadingFigures, onFailedRuns
   </section>;
 }
 
-export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, loading, error, filtersMenu, newMenu, groupBy = "none", onGroupBy, allRoutines, onCreate, onDuplicate, onViewRuns, openRoomOf, trendRuns, now: nowGiven, onOpen, onOpenRun, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel, onFailedRuns }: {
+export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, loading, error, filtersMenu, groupBy = "none", onGroupBy, allRoutines, onCreate, onDuplicate, onViewRuns, openRoomOf, trendRuns, now: nowGiven, onOpen, onOpenRun, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel, onFailedRuns }: {
   /** The routines in the page's scope and bot filter. */
   routines: readonly Routine[];
   /** The runs in the same scope: the figures read them. */
@@ -104,9 +104,8 @@ export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, load
   viewerPrincipalId?: string | null;
   loading?: boolean;
   error?: boolean;
-  /** The page's Filters button and the New menu, drawn on the heading row. */
+  /** The page's Filters button, drawn on the heading row (New routine is the page header's, as Memory's New note). */
   filtersMenu: ReactNode;
-  newMenu: ReactNode;
   /** Group by Bot or Folder adds heading rows to the same table (None: no heading). */
   groupBy?: RoutineGroupBy;
   /** Changes the grouping (None, Bot, Folder): one control on the Routines heading row. */
@@ -180,7 +179,6 @@ export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, load
               <PageSegment label={t("routines.group.label")} value={groupBy} onChange={onGroupBy} data-routines-group-by="" options={(["none", "bot", "folder"] as const).map((value) => ({ value, label: t(`routines.group.${value}`) }))} /></div>
             <GroupByMenu value={groupBy} onChange={onGroupBy} />
           </>}
-          {newMenu}
         </div>
       </PageHeading>
       {error && <div role="alert" className="rounded-lg bg-danger/10 p-3 text-[12px] text-danger">{t("routines.loadError")}</div>}

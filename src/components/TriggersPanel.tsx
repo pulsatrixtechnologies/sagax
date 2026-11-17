@@ -146,8 +146,8 @@ export function TriggersPanel({
   };
 
   return (
-    <div data-triggers-view="" className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="mx-auto flex max-w-[880px] flex-col gap-4">
+    <div data-triggers-view="" className="min-h-0 flex-1 overflow-y-auto px-6 py-6 max-sm:px-4">
+      <div className="flex w-full flex-col gap-4">
         <header className="px-1">
           <h2 id="triggers-title" className="text-[16px] font-medium text-ink">{t("triggers.title")}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{t("triggers.subtitle")}</p>

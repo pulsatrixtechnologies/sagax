@@ -53,7 +53,7 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   const filtered = runs.filter((run) => (!routineId || run.routineId === routineId) && (!botId || run.botId === botId) && routineRunTime(run) >= since && routineRunMatchesStatus(run, status)
     && `${run.routineName} ${bots.find((bot) => bot.id === run.botId)?.name ?? ""} ${run.output ?? ""} ${run.error ?? ""} ${run.attention ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => routineRunTime(b) - routineRunTime(a));
-  return <section className="mx-auto w-full max-w-5xl space-y-4 p-4 sm:p-6" aria-label={t("routines.logs")}>
+  return <section className="w-full space-y-4 px-6 py-6 max-sm:px-4" aria-label={t("routines.logs")}>
     <div><h2 className="text-[17px] font-semibold text-ink">{t("routines.logs")}</h2><p className="mt-1 text-[12px] text-ink-secondary">{t("routines.logsHint")}</p></div>
     <div className="flex flex-wrap items-center gap-2">
       <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-ink-secondary focus-within:border-focus"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>

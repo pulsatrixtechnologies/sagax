@@ -9,9 +9,17 @@ now means the section of that title in one of the files of `docs/code/`.
 ## The Routines page, Overview tab (2026-11-17)
 
 The page is "Routines" everywhere (title, sidebar entry; the locale key ids keep
-their old `automations` names). It has pill tabs under its title (`PageTabs`
-in `content-page.tsx`, one line, scrolling sideways when needed): Overview,
-Calendar, Run logs (with the unread problems count) and Webhooks. The
+their old `automations` names). Its header is the Memory page's, the one `PageHeader` of
+`content-page.tsx` (same left edge, heights and styles): icon, title, count and
+description, then the page's tabs as one bordered `PageSegment` with an icon
+each (Overview, Calendar, Run logs with the unread problems count, Webhooks),
+and on the title's line "New routine" (the page's one primary action, not
+repeated in the table), the "..." menu (Move to after the reset, while it
+applies) and the close X. The calendar's week and Filters, and the log's
+Filters, sit on a toolbar row under the header, on the same edges. Every tab's
+content uses the page's full width with the header's side margins (`PAGE_FULL`,
+24 px, 16 px on a phone), no centred column. On a phone only, the title row
+sits under the drawer button with a 16 px gutter (`aligned`). The
 Overview (`components/routines/RoutinesOverview.tsx`) follows the reference
 dashboard's Cloud Agents page (the reference app itself has no routines page,
 only a card on a bot's page).

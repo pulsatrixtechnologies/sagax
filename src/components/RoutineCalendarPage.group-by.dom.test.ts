@@ -433,10 +433,13 @@ describe("Automations header", () => {
     expect(header.querySelector("h1")?.textContent).toBe("Routines");
     expect(header.querySelector("[data-page-count]")?.textContent).toBe("4 routines");
     expect(header.querySelector("[data-page-subtitle]")?.textContent).toBeTruthy();
-    const create = container.querySelector("[data-routines-table] [data-automations-create]");
+    // New routine is the header's one primary action (as Memory's New note): an outlined button on the title's line, not repeated in the table
+    const create = header.querySelector("[data-page-actions] [data-automations-create]");
     expect(create?.className).toContain("border-hairline/50");
     expect(create?.className).not.toContain("bg-accent");
-    // the tabs sit in the toolbar row under the title (2026-11-17)
+    expect(container.querySelectorAll("[data-automations-create]")).toHaveLength(1);
+    // the tabs sit in the toolbar row under the title, as one bordered segmented control with an icon each (2026-11-17)
+    expect(header.querySelectorAll("[data-page-toolbar] [data-page-tab] svg").length).toBeGreaterThanOrEqual(3);
     expect(header.querySelector("[data-page-toolbar]")?.textContent).toContain("Overview");
   });
 
@@ -444,15 +447,34 @@ describe("Automations header", () => {
     await mount();
     const tab = (name: string) => container.querySelector<HTMLButtonElement>(`[data-page-tab="${name}"]`)!;
     expect(container.querySelector("[data-automations-crumb]")).toBeNull();
-    expect(tab("overview").getAttribute("aria-selected")).toBe("true");
+    expect(tab("overview").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector("[data-routines-overview]")).not.toBeNull();
     await act(async () => { tab("logs").click(); });
-    expect(tab("logs").getAttribute("aria-selected")).toBe("true");
+    expect(tab("logs").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector("[data-routines-overview]")).toBeNull();
     expect(container.querySelector('section[aria-label="Run logs"]')).not.toBeNull();
     await act(async () => { tab("calendar").click(); });
     expect(container.querySelector("[data-automations-range]")).not.toBeNull();
     await act(async () => { tab("overview").click(); });
     expect(container.querySelector("[data-routines-overview]")).not.toBeNull();
+  });
+
+  it("keeps the calendar's week and Filters on a row under the header, not on the tabs' line, and every tab's content full width", async () => {
+    await mount();
+    const tab = (name: string) => container.querySelector<HTMLButtonElement>(`[data-page-tab="${name}"]`)!;
+    await act(async () => { tab("calendar").click(); });
+    const tabsRow = container.querySelector("[data-page-toolbar]")!;
+    expect(tabsRow.querySelector("[data-automations-range]")).toBeNull();
+    expect(tabsRow.querySelector("[data-automations-filters]")).toBeNull();
+    const toolbar = container.querySelector("[data-routines-toolbar]")!;
+    expect(toolbar.closest("header")).not.toBeNull();
+    expect(toolbar.querySelector("[data-automations-range]")).not.toBeNull();
+    expect(toolbar.querySelector("[data-automations-filters]")).not.toBeNull();
+    // no centred max-width column on the Overview, the logs or the webhooks
+    await act(async () => { tab("overview").click(); });
+    expect(container.querySelector("[data-routines-overview]")!.parentElement!.className).toContain("w-full");
+    for (const el of container.querySelectorAll("[data-routines-overview], [data-routines-overview] *")) expect(el.className).not.toMatch(/max-w-(4xl|5xl|6xl|\[69rem\])/);
+    await act(async () => { tab("logs").click(); });
+    expect(container.querySelector('section[aria-label="Run logs"]')!.className).not.toMatch(/max-w-|mx-auto/);
   });
 });

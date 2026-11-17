@@ -4,9 +4,12 @@
 // Forwards each ask over a unix socket to the broker living in the
 // Sagax server and waits for the human's answer.
 //
-//   approve   — the CLI calls this for any tool use its permission mode
-//               would deny; the answer is the --permission-prompt-tool
-//               JSON contract ({behavior:"allow"|"deny", …}).
+//   approve:  the --permission-prompt-tool JSON contract
+//               ({behavior:"allow"|"deny", …}). Since #4525 the Claude
+//               driver launches with --permission-prompt-tool stdio
+//               (server/drivers/claude/can-use-tool.ts, the same rules in
+//               permission-prompt.ts); this tool stays for a caller that
+//               names it.
 //   ask_user  — the agent can pose a question mid-run and wait; the
 //               human's words come back verbatim. With multiSelect it is
 //               asked as a question card the person can pick several from.

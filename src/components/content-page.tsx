@@ -188,6 +188,30 @@ export function PageSegment<T extends string | number>({ label, value, options, 
   );
 }
 
+/** The page's tabs under its title (the reference's Cloud Agents page, 2026-11-17):
+ * text pills, the chosen one filled; an optional small count after a label. */
+export function PageTabs<T extends string>({ label, value, options, onChange, ...rest }: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; badge?: number }>;
+  onChange: (next: T) => void;
+} & DataAttributes) {
+  return (
+    <div {...rest} role="tablist" aria-label={label} className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
+      {options.map((option) => {
+        const on = value === option.value;
+        return (
+          <button key={option.value} type="button" role="tab" aria-selected={on} data-page-tab={option.value} onClick={() => onChange(option.value)}
+            className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none", on ? "bg-ink/[0.08] font-medium text-ink" : "text-ink-secondary hover:text-ink")}>
+            {option.label}
+            {option.badge ? <span className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** A search field of the header row, as tall as its buttons. */
 export function PageSearch({ value, onChange, placeholder, label, compact = false, ...rest }: {
   value: string;
@@ -209,8 +233,10 @@ export function PageSearch({ value, onChange, placeholder, label, compact = fals
 }
 
 /** Filters: one button with the count of what narrows the page, its fields in a popover. */
-export function PageFilters({ name, menuRef, activeCount, children }: {
+export function PageFilters({ name, menuRef, activeCount, labelled = false, children }: {
   name: string;
+  /** Always show the word beside the icon (a button on a section row, outside the header). */
+  labelled?: boolean;
   menuRef?: RefObject<HTMLDetailsElement | null>;
   activeCount: number;
   children: ReactNode;
@@ -219,9 +245,9 @@ export function PageFilters({ name, menuRef, activeCount, children }: {
   return (
     <details ref={menuRef} {...{ [`data-${name}-filters`]: "" }} className="relative">
       <summary role="button" aria-label={label} title={label}
-        className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
+        className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", labelled && "w-auto gap-1.5 px-3", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
         <SlidersHorizontal size={15} aria-hidden="true" />
-        <span className="@max-[60rem]/page-header:sr-only">{t("routineCalendar.filters")}</span>
+        <span className={labelled ? undefined : "@max-[60rem]/page-header:sr-only"}>{t("routineCalendar.filters")}</span>
         {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">{activeCount}</span>}
       </summary>
       <div role="group" aria-label={t("routineCalendar.filters")} className={cn(PAGE_POPOVER, "w-[280px] gap-3 p-3")}>

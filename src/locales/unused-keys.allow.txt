@@ -541,6 +541,7 @@ routines.scheduleNote.leave
 routines.scheduleNote.openCloud
 routines.skippedRuns
 routines.starting
+routines.view.list
 serverEnvironment.help
 serverEnvironment.idle
 serverEnvironment.idleValue

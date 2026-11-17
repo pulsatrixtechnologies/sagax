@@ -1099,7 +1099,7 @@ function ExternalLink({ href, github, children }: { href: string; github: Return
 
 const LINK_CLASS = "break-words text-accent-text underline decoration-accent/40 hover:decoration-accent [unicode-bidi:isolate]";
 const GITHUB_REF_CLASS =
-  "inline-flex items-baseline gap-1 whitespace-nowrap rounded-full bg-inset px-1.5 align-baseline font-mono text-[0.88em] text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [unicode-bidi:isolate]";
+  "inline-flex items-baseline gap-1 whitespace-nowrap rounded-full bg-inset px-1.5 align-baseline font-mono text-[0.88em] text-accent-text underline decoration-accent/40 underline-offset-2 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [unicode-bidi:isolate]";
 
 // GitHub alerts: "> [!NOTE]" (and TIP, IMPORTANT, WARNING, CAUTION) as the
 // first line of a blockquote turns it into a callout. The marker is removed

@@ -96,6 +96,8 @@ export const USER_PREFERENCE_KEYS = [
   // a bot's reply grows in its bubble as it is written, "on" | "off"; absent
   // is on (src/lib/stream-replies-preference.ts, ios StreamReplies)
   "sagax.streamReplies.v1",
+  // a bot's reply drawn in a bubble, "on" | "off"; absent is on (src/lib/bot-reply-bubbles.ts)
+  "sagax.botReplyBubbles.v1",
   // Settings > Appearance > Conversation: reading (960), wide (1280) or full (#2004)
   "sagax.chatWidth.v1",
   // single stream: hours away or quiet before a return opens a fresh topic

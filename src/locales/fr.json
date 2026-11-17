@@ -15150,5 +15150,7 @@
   "composer.commands.app.newChat": "Commencer une nouvelle conversation avec ce bot",
   "composer.commands.app.model": "Ouvrir le modèle et l'effort de ce bot",
   "composer.commands.app.permissions": "Ouvrir les approbations de ce bot",
-  "composer.commands.app.settings": "Ouvrir les réglages de ce bot"
+  "composer.commands.app.settings": "Ouvrir les réglages de ce bot",
+  "settings.botReplyBubbles.title": "Afficher les réponses du bot dans des bulles",
+  "settings.botBubbleAccent.title": "Accent sur les bulles du bot"
 }

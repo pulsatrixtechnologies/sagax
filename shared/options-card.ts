@@ -1,5 +1,5 @@
-import { ANSWER_KINDS, CHOICE_KINDS, FORM_MAX_QUESTIONS, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_QUESTION_TEXT, type AnswerKind, type AskQuestion, type AskQuestionOption } from "./ask-question.ts";
-import { CARD_LIMITS, cardRefusalText, cardRuleBreak } from "./card-rules.ts";
+import { ANSWER_KINDS, CHOICE_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_QUESTION_TEXT, type AnswerKind, type AskQuestion, type AskQuestionOption } from "./ask-question.ts";
+import { cardRefusalText, cardRuleBreak } from "./card-rules.ts";
 import { CHOICE_LABEL_MAX, choiceQuestionMismatch } from "./notification-context.ts";
 
 /** The one bot allowed to create passive choice cards for the Watcher flow. */
@@ -199,9 +199,6 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
   // #2909: "A or B?" answered with Yes / No cannot be answered at all
   const mismatch = choiceQuestionMismatch(question, parsed.value.options);
   if (mismatch) return { ok: false, error: mismatch };
-  // #4490: one question, its answers as buttons, never a wall of text
-  const broken = cardRuleBreak({ questions: [{ question, options: parsed.value.options.map((label) => ({ label })) }] });
-  if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
   return { ok: true, value: { ...parsed.value, ...(details.some(Boolean) ? { details } : {}), ...extra } };
 }
 
@@ -209,9 +206,6 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
 export const FORM_HEADER_MAX = 40;
 
 const YES_NO: AskQuestionOption[] = [{ label: "Yes", id: "yes" }, { label: "No", id: "no" }];
-
-/** #4490: a checklist item's text (a draft to post). */
-export const ITEM_DETAIL_MAX = 600;
 
 function rowOptions(raw: unknown, field: string, detailMax: number = ASK_CHOICE_DETAIL_MAX): AskQuestionOption[] | { error: string } {
   if (!Array.isArray(raw)) return { error: `${field}: an array of short answers.` };
@@ -240,14 +234,10 @@ export function parseAskChoiceRows(value: Record<string, unknown>, context: stri
   const fail = (error: string) => ({ ok: false as const, error: `${error} A form: questions [{question, kind, options for a choice}]. A checklist: items [{label, detail, checked}] and actions ["Post selected", "Skip tonight"].` });
   if (value.questions !== undefined && value.items !== undefined) return fail("Give questions (a form) or items (a checklist), not both.");
   if (Array.isArray(value.options) && value.options.length) return fail("Leave options out: each row of a form carries its own, and a checklist's buttons are its actions.");
-  if (context.length > CARD_LIMITS.context) {
-    const broken = cardRuleBreak({ context, questions: [] });
-    if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
-  }
   let questions: AskQuestion[];
   if (value.items !== undefined) {
     if (!Array.isArray(value.items) || value.items.length < 2 || value.items.length > MAX_ITEMS) return fail(`items: 2-${MAX_ITEMS} rows the person checks.`);
-    const options = rowOptions(value.items, "items", ITEM_DETAIL_MAX);
+    const options = rowOptions(value.items, "items", MAX_DESCRIPTION);
     if (!Array.isArray(options)) return fail(options.error);
     // proposed checked unless the bot says otherwise
     const items: unknown[] = value.items;
@@ -293,7 +283,7 @@ export function parseAskChoiceRows(value: Record<string, unknown>, context: stri
       } else if (CHOICE_KINDS.has(kind)) {
         const parsed = rowOptions(given ?? [], `${field}.options`);
         if (!Array.isArray(parsed)) return fail(parsed.error);
-        if (parsed.length < 2 || parsed.length > 8) return fail(`${field}.options: 2-8 short answers for a ${kind} row.`);
+        if (parsed.length < 2 || parsed.length > FORM_MAX_OPTIONS) return fail(`${field}.options: 2-${FORM_MAX_OPTIONS} short answers for a ${kind} row.`);
         options = parsed;
       } else if (hasOptions) {
         return fail(`${field}: a ${kind} row takes no options; make it kind choice to offer answers.`);
@@ -305,7 +295,19 @@ export function parseAskChoiceRows(value: Record<string, unknown>, context: stri
       });
     }
   }
-  const broken = cardRuleBreak({ context, questions });
-  if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
   return { ok: true, questions };
+}
+
+/** #4490: what the card rules say of a bot's own ask_choice call, or null
+ * when it is well formed (or malformed in shape: the parser says that).
+ * Only the bot's call is held to them (server/approvals/card-refusal-turns.ts):
+ * a card the server writes itself has no bot to ask again. */
+export function askChoiceRefusal(input: unknown): string | null {
+  const parsed = parseAskChoiceInput(input);
+  if (!parsed.ok || !("value" in parsed) || parsed.value.tell) return null;
+  const { value } = parsed;
+  const broken = value.questions
+    ? cardRuleBreak({ context: value.subtitle, questions: value.questions })
+    : cardRuleBreak({ questions: [{ question: value.subtitle, options: value.options.map((label) => ({ label })) }] });
+  return broken ? cardRefusalText(broken, "ask_choice") : null;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BAD_DRAFTS_CARD, BAD_TIME_CARD, GOOD_DRAFTS_CARD, GOOD_TIME_CARD } from "./card-rules.fixtures";
+import { BAD_DRAFTS_CARD, BAD_TIME_CARD, GOOD_DRAFTS_CARD, GOOD_TIME_CARD, PROBED_BAD, PROBED_GOOD } from "./card-rules.fixtures";
 import { CARD_LIMITS, cardRefusalText, cardRuleBreak, nativeCardRuleBreak } from "./card-rules";
 
 const single = (question: string, options: string[] = []) => ({ questions: [{ question, options: options.map((label) => ({ label })) }] });
@@ -117,5 +117,18 @@ describe("a long single question in paragraphs (#4205, #4490)", () => {
     const paragraphs = Array.from({ length: 5 }, () => "The import found rows it could not match to a customer. ".repeat(6).trim()).join("\n\n");
     expect(paragraphs.length).toBeGreaterThan(CARD_LIMITS.single);
     expect(cardRuleBreak(single(`${paragraphs}\n\nImport the rest?`, ["Import", "Wait"]))).toBeNull();
+  });
+});
+
+describe("the review's probed inputs (#4490)", () => {
+  it.each(PROBED_GOOD.map((entry) => [entry.question, entry.options] as const))("keeps %j", (question, options) => {
+    expect(cardRuleBreak(single(question, [...options]))).toBeNull();
+  });
+  it.each(PROBED_BAD.map((entry) => [entry.question, entry.options, entry.rule] as const))("refuses %j", (question, options, rule) => {
+    expect(cardRuleBreak(single(question, [...options]))?.rule).toBe(rule);
+  });
+  it("still refuses the French drafts card in prose", () => {
+    const text = "Six brouillons sont prêts :\n1. Notes de version\n2. Fil de la rencontre\n3. Réponse hors ligne\nTout est coché. Publier la sélection les envoie. Sauter ce soir n'envoie rien.";
+    expect(cardRuleBreak(single(text, ["OK", "Plus tard"]))?.rule).toBe("list-in-prose");
   });
 });

@@ -59,7 +59,7 @@ import { oldCardBody, oldCardOption, oldCardTitle } from "../../shared/old-card-
 import type { RunStatusNote } from "../../shared/person-attention.ts";
 import { routineRunFallbackText } from "../routines/routine-run-card.ts";
 
-import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
+import { FORM_MAX_QUESTIONS, formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AnswerKind, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
 import { APPROVAL_EN, type ApprovalTranslate } from "../../shared/approval-describe.ts";
 import { buildNotificationContext } from "../../shared/notification-context.ts";
@@ -453,6 +453,10 @@ export interface ApprovalQuestion {
   question: string;
   multiSelect: boolean;
   options: ApprovalChoice[];
+  /** #4490, additive: a form row's control, an optional row, a checklist's buttons */
+  kind?: AnswerKind;
+  optional?: true;
+  actions?: string[];
 }
 
 /** #3512, additive (an older client ignores them): what waits, read from
@@ -526,7 +530,8 @@ const choicesOf = (labels: readonly (string | { label: string; description?: str
 /** The questions of a card that carries a structured set (AskUserQuestion). */
 function cardQuestions(card: Record<string, unknown>): AskQuestion[] | null {
   const request = objectOf(card.questionRequest);
-  return request ? parseAskQuestions({ questions: request.questions }) : null;
+  // #4490: a form holds up to FORM_MAX_QUESTIONS rows, all read
+  return request ? parseAskQuestions({ questions: request.questions }, FORM_MAX_QUESTIONS) : null;
 }
 
 /** A card as an AI client reads it. Not shared/approval-describe's tool-card
@@ -565,7 +570,10 @@ export function describeMemberApproval(
     kind,
     answerWith: kind === "question" ? "option" : "decision",
     choices,
-    ...(several ? { questions: several.map((q) => ({ question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options) })) } : {}),
+    ...(several ? { questions: several.map((q) => ({
+      question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options),
+      ...(q.kind ? { kind: q.kind } : {}), ...(q.optional ? { optional: true as const } : {}), ...(q.actions?.length ? { actions: q.actions } : {}),
+    })) } : {}),
     freeText: kind === "question" && (questions ? questions.every((q) => q.custom !== false) : true),
     context: buildNotificationContext({
       question: single?.question || title,

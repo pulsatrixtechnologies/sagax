@@ -2,8 +2,8 @@
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
-import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, FORM_HEADER_MAX, ITEM_DETAIL_MAX, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
-import { ANSWER_KINDS, FORM_MAX_QUESTIONS, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS } from "../../../shared/ask-question.ts";
+import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, FORM_HEADER_MAX, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
+import { ANSWER_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS } from "../../../shared/ask-question.ts";
 import { CARD_LIMITS } from "../../../shared/card-rules.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
@@ -67,7 +67,7 @@ export const ASK_CHOICE_DEF = {
               question: { type: "string", maxLength: CARD_LIMITS.row },
               header: { type: "string", maxLength: FORM_HEADER_MAX },
               kind: { type: "string", enum: [...ANSWER_KINDS], description: "text only when the answer is truly free." },
-              options: { type: "array", maxItems: 8, items: { type: "string", maxLength: OPTIONS_CARD_LIMITS.option }, description: "choice and multi: 2-8." },
+              options: { type: "array", maxItems: FORM_MAX_OPTIONS, items: { type: "string", maxLength: OPTIONS_CARD_LIMITS.option }, description: `choice and multi: 2-${FORM_MAX_OPTIONS}.` },
               optional: { type: "boolean" },
             },
             required: ["question"],
@@ -83,7 +83,7 @@ export const ASK_CHOICE_DEF = {
             additionalProperties: false,
             properties: {
               label: { type: "string", maxLength: OPTIONS_CARD_LIMITS.option },
-              detail: { type: "string", maxLength: ITEM_DETAIL_MAX },
+              detail: { type: "string", maxLength: MAX_DESCRIPTION },
               checked: { type: "boolean", description: "Default true." },
             },
             required: ["label"],

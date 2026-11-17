@@ -82,7 +82,7 @@ describe("a list the person picks one row from", () => {
     await press(radios()[1]!.querySelector<HTMLElement>("div div")!);
     expect(checked()).toEqual(["false", "true", "false"]);
     expect(radios()[1]!.className).toContain("bg-inset");
-    expect(radios()[1]!.firstElementChild!.className).toContain("bg-ink/[0.16]");
+    expect(radios()[1]!.firstElementChild!.className).toContain("bg-accent");
     expect(radios().map((radio) => radio.tabIndex)).toEqual([-1, 0, -1]);
     expect(fetchMock).not.toHaveBeenCalled();
 

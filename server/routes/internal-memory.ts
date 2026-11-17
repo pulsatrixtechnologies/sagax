@@ -4,6 +4,7 @@
 //
 // Answers only behind the per-turn capability the internal block of
 // server/index.ts checks first. Capability gate and refusal checks stay there.
+import { botCardRefusal } from "../approvals/card-refusal-turns.ts";
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { applySuggestion, commentsForModel, parseThreadText, suggestable } from "../../shared/page-threads.ts";
@@ -223,6 +224,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       }
       const body = await readBody();
       deps.requireActive(capability);
+      // #4490: the bot's own card is held to the card rules, once per turn
+      const refusal = botCardRefusal(body, `${capability.threadId}:${capability.generation}`);
+      if (refusal) return json(res, 400, { error: refusal });
       const result = deps.createCard({
         bot: sender,
         threadId: capability.threadId,

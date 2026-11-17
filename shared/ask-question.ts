@@ -31,8 +31,11 @@ export const MAX_QUESTION_TEXT = 8_000;
  * text below. */
 export const QUESTION_TITLE_MAX = 160;
 const MAX_LABEL = 120;
-/** #4490: a checklist item's text (a draft to post) rides as its description. */
-const MAX_DESCRIPTION = 600;
+/** #4490: a checklist item's text (a draft to post) rides as its
+ * description: the one limit of an item's text, in the tool and the parser. */
+export const MAX_DESCRIPTION = 600;
+/** #4490: a form row's answers to pick from (choice, multi). */
+export const FORM_MAX_OPTIONS = 8;
 /** #4490: a form holds up to this many rows (a time sheet's lines). */
 export const FORM_MAX_QUESTIONS = 12;
 /** #4490: a checklist's action buttons and their length. */
@@ -195,14 +198,14 @@ function parseQuestion(value: unknown): AskQuestion | null {
 
 /** The questions inside an AskUserQuestion tool input, or null when the
  * payload is not one (a malformed call falls back to the ordinary card). */
-export function parseAskQuestions(input: unknown): AskQuestion[] | null {
+export function parseAskQuestions(input: unknown, limit: number = MAX_QUESTIONS): AskQuestion[] | null {
   if (!isRecord(input) || !Array.isArray(input.questions)) return null;
   const questions: AskQuestion[] = [];
   for (const raw of input.questions) {
     const question = parseQuestion(raw);
     if (!question) continue;
     questions.push(question);
-    if (questions.length === MAX_QUESTIONS) break;
+    if (questions.length === limit) break;
   }
   return questions.length ? questions : null;
 }
@@ -355,6 +358,8 @@ export function formatQuestionAnswers(
 export const ACTION_QUESTION = "Action";
 /** #4490: a checklist sent with no row checked. */
 export const NOTHING_PICKED = "(none)";
+/** #4490: an optional form row the person left empty (not "not asked"). */
+export const LEFT_EMPTY = "(left empty)";
 
 /** #4490: a card drawn as rows with their controls (a form or a checklist)
  * rather than an engine's own question set. */

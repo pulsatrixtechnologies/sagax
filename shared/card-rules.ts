@@ -36,13 +36,28 @@ const CODE = /```[\s\S]*?```|`[^`\n]*`/g;
 const URL = /\bhttps?:\/\/\S+/g;
 const LIST_LINE = /^\s*(?:[-*•▪◦‣]|\d{1,2}[.)]|\[[ xX✓]\]|[☐☑✅✔])\s+(\S.*)$/;
 const CHECK_GLYPH = /\[[ xX✓]\]|[☐☑✅✔]/;
-// words that ask the person to pick among listed items
-const PICK_WORDS = /\b(?:select(?:ed|ion)?|pick(?:ed)?|tick(?:ed)?|untick|uncheck(?:ed)?|checked|which ones|s[ée]lectionn\w*|coch\w*|d[ée]coch\w*|lesquel(?:le)?s)\b/iu;
+// words that ask the PERSON to pick among listed items: an imperative at a
+// sentence start ("Uncheck any...", "Décoche..."), "all checked", "which
+// ones", or an action on the picks ("Post selected"). A past tense ("I
+// checked", "J'ai coché") or an adjective ("the selected backup") is not.
+const PICK_WORDS = [
+  /(?:^|[.!?:;\n]\s*)(?:please\s+)?(?:select|pick|choose|tick|untick|uncheck|d[ée]coche[sz]?|coche[sz]?|s[ée]lectionne[sz]?|choisis(?:sez)?)\b/iu,
+  /\b(?:all|tout(?:es)?)\s+(?:are\s+|is\s+|est\s+|sont\s+)?(?:checked|selected|coch[ée]e?s?|s[ée]lectionn[ée]e?s?)/iu,
+  /\b(?:which ones|lesquel(?:le)?s)\b/iu,
+  /\b(?:post|send|publish|keep|publier|envoyer|garder)\s+(?:the\s+|la\s+|les\s+)?(?:selected|checked|selection|s[ée]lection|coch[ée]s)/iu,
+];
 // a quoted answer after a verb that asks to give it, at the start of a
 // sentence or after "or", "then", "please" ("the file type "pdf"" is no ask)
 const QUOTED_ANSWER = /(?:^|[.!?:;(\n]\s*|\b(?:or|ou|then|puis|please|just|simply|sinon)\s+)(?:reply|answer|respond|type|click|press|tap|hit|choose|r[\u00e9e]pond\w*|tape[sz]?|clique[sz]?|appuie[sz]?|choisis\w*)\b[^.\n?!"\u201c\u00ab]{0,20}["\u201c\u00ab]\s?([^"\u201d\u00bb\n]{1,40}?)\s?["\u201d\u00bb]/giu;
-// "Post selected sends them": an action named at a sentence start
-const NAMED_ACTION = /(?:^|[.!?:]\s+|\n\s*)(["“«]?)(\p{Lu}[\p{L}'’-]*(?:\s+[\p{L}'’-]+){0,3}?)["”»]?\s+(?:sends?|skips?|posts?|publishes|cancels?|discards?|envoie|publie|annule|ignore)\b/gu;
+// "Post selected sends them.": an action of two words or more named at a
+// sentence start, the sentence short ("Sales sends the weekly report on
+// Friday" is a fact; "Blog posts:" is a heading)
+const NAMED_ACTION = /(?:^|[.!?]\s+|\n\s*)(["“«]?)(\p{Lu}[\p{L}'’-]*(?:\s+[\p{L}'’-]+){0,3}?)["”»]?\s+(?:sends?|skips?|posts?|publishes|cancels?|discards?|envoie|publie|annule|ignore)\b(?=(?!\s*:)[^.!?\n]{0,20}(?:[.!?\n]|$))/gu;
+// "For each line say done, not done or move: a, b, c": one question asked of
+// several items is several questions
+const FOR_EACH = /\b(?:for each|for every|per (?:line|item|entry)|pour chaque|pour chacune?|chacune? (?:des|de ces))\b/iu;
+// quoted text (a ticket, a message) is not the bot's own words
+const QUOTED_TEXT = /"[^"\n]*"|\u201c[^\u201d\n]*\u201d|\u00ab[^\u00bb\n]*\u00bb|^>.*$/gmu;
 const NOT_AN_ACTION = new Set([
   "the", "this", "that", "these", "those", "it", "i", "we", "you", "he", "she", "they", "your", "my", "our", "a", "an", "each", "every", "nothing", "who", "what", "which", "one",
   "le", "la", "les", "l'", "ce", "cet", "cette", "ces", "cela", "ça", "il", "elle", "on", "je", "nous", "vous", "ils", "elles", "un", "une", "chaque", "rien", "qui",
@@ -55,7 +70,7 @@ function plain(text: string): string {
 /** Sentences that end with a question mark ("?" then a space, a quote, a
  * bracket or the end), outside code and links. */
 export function questionCount(text: string): number {
-  return (plain(text).match(/\?(?=\s|$|["'”»)\]])/g) ?? []).length;
+  return (plain(text).replace(QUOTED_TEXT, " ").match(/\?(?=\s|$|["'”»)\]])/g) ?? []).length;
 }
 
 function listLines(text: string): string[] {
@@ -77,6 +92,8 @@ function namedAnswersMissing(text: string, controls: ReadonlySet<string>): strin
     const phrase = match[2]!.trim();
     const first = phrase.split(/\s+/)[0]!.toLowerCase();
     if (NOT_AN_ACTION.has(first) || /^l['’]/.test(first)) continue;
+    // one word is a subject ("Sales sends"), never a button's label in words
+    if (!match[1] && phrase.split(/\s+/).length < 2) continue;
     // a quoted "X" sends ... is as clear as a quoted reply
     (match[1] ? strong : named).push(phrase);
   }
@@ -86,6 +103,18 @@ function namedAnswersMissing(text: string, controls: ReadonlySet<string>): strin
   // one capitalized "X sends" alone can be a subject ("Ada posts on Monday"):
   // only two of them read as the card's actions in words
   return [...missingStrong, ...(missingNamed.length >= 2 ? missingNamed : [])];
+}
+
+/** How many items a "for each ... say" sentence covers: its listed lines,
+ * or the comma list after its colon; 0 without "for each". */
+function forEachItems(text: string): number {
+  const body = plain(text);
+  const at = body.search(FOR_EACH);
+  if (at < 0) return 0;
+  const sentence = body.slice(at).split(/[.!?](?:\s|$)/)[0] ?? "";
+  const colon = sentence.indexOf(":");
+  const inline = colon >= 0 ? sentence.slice(colon + 1).split(/\s*(?:,|;|\bet\b|\band\b)\s*/).filter((item) => item.trim()).length : 0;
+  return Math.max(inline, listLines(body.slice(at)).length);
 }
 
 /** The first rule a card breaks, or null for a well formed card. */
@@ -105,14 +134,21 @@ export function cardRuleBreak(card: CardShape): CardRuleBreak | null {
   for (const { text, row, question } of texts) {
     // a list of questions, one per line, is a form
     const lines = listLines(text);
-    const asked = lines.filter((line) => /\?["'”»)]?$/.test(line)).length;
+    // a listed line that repeats one of the card's own choices is that choice
+    const ownChoice = (line: string) => [...controls].some((label) => label && ` ${norm(line)} `.includes(` ${label} `));
+    const listed = lines.filter((line) => !ownChoice(line));
+    const asked = listed.filter((line) => /\?["'”»)]?$/.test(line)).length;
     if (asked >= 2) return { rule: "several-questions", reason: `the text lists ${asked} questions, one per line` };
-    // a list of items to pick from in prose is a checklist; a list that
-    // repeats the card's own choices is fine
-    const listed = lines.filter((line) => ![...controls].some((label) => label && ` ${norm(line)} `.includes(` ${label} `)));
-    const pickable = question?.actions?.length ? false : PICK_WORDS.test(plain(text)) || lines.some((line) => CHECK_GLYPH.test(line)) || CHECK_GLYPH.test(text);
+    // "for each ... say": one question over several items
+    const each = forEachItems(text);
+    if (each >= 3) return { rule: "several-questions", reason: `the text asks the same question of ${each} items, one answer each` };
+    // a list of items the person picks from, in prose, is a checklist; a
+    // list that is context, or repeats the card's own choices, is fine
+    const body = plain(text);
+    const pickable = question?.actions?.length ? false : PICK_WORDS.some((words) => words.test(body)) || lines.some((line) => CHECK_GLYPH.test(line)) || CHECK_GLYPH.test(text);
     if (listed.length >= 3 && pickable) return { rule: "list-in-prose", reason: `${lines.length} listed items to pick from, written as text` };
-    const count = questionCount(text);
+    // the card's own choices written as list lines are not questions
+    const count = questionCount(text.split("\n").filter((line) => { const match = LIST_LINE.exec(line); return !match || !ownChoice(match[1]!); }).join("\n"));
     if (count >= (row ? 2 : 3)) return { rule: "several-questions", reason: row ? `this row asks ${count} questions` : `the text asks ${count} questions` };
     const missing = namedAnswersMissing(text, controls);
     if (missing.length) return { rule: "choices-in-text", reason: "the text names answers the card does not carry as controls", missing };

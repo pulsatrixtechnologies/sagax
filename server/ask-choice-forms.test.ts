@@ -4,12 +4,16 @@
 // ask again; their rebuilt forms are drawn as rows.
 import { describe, expect, it, vi } from "vitest";
 
-import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
+import { ASK_CHOICE_TOOL, askChoiceRefusal, parseAskChoiceInput } from "../shared/options-card.ts";
+import { botCardRefusal, CardRefusalTurns } from "./approvals/card-refusal-turns.ts";
 import { BAD_DRAFTS_CARD, BAD_TIME_CARD, GOOD_DRAFTS_CARD, GOOD_TIME_CARD } from "../shared/card-rules.fixtures.ts";
 import { ASK_CHOICE_DEF } from "./drivers/agents-tools/extras.ts";
 import { createAgentCard, type AgentCardStore } from "./widgets/chat-widgets.ts";
 import { buildSystemPrompt } from "./system-prompt.ts";
 import type { Message } from "./store.ts";
+import { callTool } from "./drivers/agents-call.ts";
+import type { ToolCallContext } from "./drivers/agents-call-types.ts";
+import type { HarnessClient } from "./drivers/agents-client.ts";
 
 const BOT = { id: "bot-any", name: "Nimbus", color: "blue" as const };
 
@@ -30,29 +34,43 @@ function store() {
 
 describe("ask_choice refuses a badly made card (#4490)", () => {
   it("refuses the time card and tells the bot to ask again as one form", () => {
-    const parsed = parseAskChoiceInput(BAD_TIME_CARD);
-    expect(parsed.ok).toBe(false);
-    const error = (parsed as { error: string }).error;
+    expect(parseAskChoiceInput(BAD_TIME_CARD).ok).toBe(true);
+    const error = askChoiceRefusal(BAD_TIME_CARD)!;
     expect(error).toMatch(/^Card refused \(rule several-questions/);
     expect(error).toMatch(/same turn/);
     expect(error).toMatch(/ask_choice \{.*"questions":\[/);
   });
 
   it("refuses the drafts card and tells the bot to ask again as a checklist", () => {
-    const parsed = parseAskChoiceInput(BAD_DRAFTS_CARD);
-    expect(parsed.ok).toBe(false);
-    const error = (parsed as { error: string }).error;
+    const error = askChoiceRefusal(BAD_DRAFTS_CARD)!;
     expect(error).toMatch(/^Card refused \(rule list-in-prose/);
     expect(error).toMatch(/"items":\[.*"actions":\["Post selected","Skip tonight"\]/);
   });
 
-  it("draws nothing for a refused card", () => {
+  it("refuses the bot's own card once per turn, then shows the next one as asked", () => {
+    const turns = new CardRefusalTurns();
+    const body = { tool: ASK_CHOICE_TOOL, ...BAD_DRAFTS_CARD };
+    expect(botCardRefusal(body, "t:1", turns)).toMatch(/^Card refused/);
+    expect(botCardRefusal(body, "t:1", turns)).toBeNull();
+    expect(botCardRefusal(body, "t:2", turns)).toMatch(/^Card refused/);
+    expect(botCardRefusal({ tool: ASK_CHOICE_TOOL, ...GOOD_DRAFTS_CARD }, "t:3", turns)).toBeNull();
+    expect(botCardRefusal({ tool: "show_widget" }, "t:4", turns)).toBeNull();
+  });
+
+  it("hands the bot the server's refusal word for word", async () => {
+    const error = askChoiceRefusal(BAD_TIME_CARD)!;
+    const api = vi.fn<HarnessClient["api"]>(async () => ({}));
+    const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => ({ ok: false, status: 400, body: { error } }));
+    const context: ToolCallContext = { botId: "b", threadId: "t", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api, apiResponse } };
+    expect(await callTool(ASK_CHOICE_TOOL, { ...BAD_TIME_CARD }, context)).toEqual({ text: error, isError: true });
+  });
+
+  it("never refuses a card the server writes itself (a routine problem card)", () => {
     const { fake, rows } = store();
-    const raiseQuestion = vi.fn(() => ({ messageId: "q1" }));
-    const result = createAgentCard({ store: fake, bot: BOT, threadId: "t", input: { tool: ASK_CHOICE_TOOL, ...BAD_DRAFTS_CARD }, raiseQuestion });
-    expect(result).toMatchObject({ ok: false, status: 400 });
-    expect(raiseQuestion).not.toHaveBeenCalled();
-    expect(rows).toHaveLength(0);
+    const question = "Evening timesheet failed 3 times.\n- the calendar could not be read?\n- the token expired?\n- the network dropped?\nWhat do I do? Check it? Pause it?";
+    const result = createAgentCard({ store: fake, bot: BOT, threadId: "t", input: { tool: ASK_CHOICE_TOOL, question, options: ["Check", "Pause", "Open"] } });
+    expect(result).toMatchObject({ ok: true });
+    expect(rows).toHaveLength(1);
   });
 
   it.each([

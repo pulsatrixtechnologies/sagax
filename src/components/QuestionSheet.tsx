@@ -86,7 +86,7 @@ export function QuestionSheet({
       // focusable so A, B, C work as soon as the card is clicked
       tabIndex={settled ? undefined : -1}
       onKeyDown={onKeyDown}
-      className={cn("w-full", !embedded && "rounded-2xl bg-card p-4", "text-start text-ink outline-none")}
+      className={cn("w-full", !embedded && "rounded-2xl bg-card p-3", "text-start text-ink outline-none")}
     >
       {(title || meta || onDismiss) && (
         <div className="mb-2.5 flex min-w-0 items-start gap-2">
@@ -162,7 +162,7 @@ export function SheetChoices({
 }) {
   if (!choices.length) return null;
   return (
-    <div role={multi ? "group" : "radiogroup"} aria-label={ariaLabel} onKeyDown={moveChoiceFocus} className="-mx-2 flex flex-col gap-0.5">
+    <div role={multi ? "group" : "radiogroup"} aria-label={ariaLabel} onKeyDown={moveChoiceFocus} className="flex flex-col gap-px">
       {choices.map((choice, index) => {
         const id = choice.id ?? choice.label;
         const on = picked.includes(id);
@@ -181,7 +181,7 @@ export function SheetChoices({
             disabled={rowOff}
             onClick={() => onPick(id)}
             className={cn(
-              "flex w-full items-center gap-3 rounded-[10px] px-2 py-[7px] text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default",
+              "flex w-full items-center gap-2.5 rounded-2xl p-[7px] text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default",
               settled
                 ? on ? quietPicked ? "" : "bg-ink/[0.06]" : "opacity-45"
                 : choice.disabled ? "opacity-45"
@@ -192,9 +192,9 @@ export function SheetChoices({
             {Icon && <Icon size={16} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
             <span className="min-w-0 flex-1">
               {/* plaintext bidi: each label orders its own script */}
-              <span className="block break-words text-[13.5px] leading-5 text-ink [unicode-bidi:plaintext]">{choice.label}</span>
+              <span className="block break-words text-[14px] leading-5 text-ink [unicode-bidi:plaintext]">{choice.label}</span>
               {choice.description && (
-                <span className="block break-words text-[12.5px] leading-snug text-ink-secondary [unicode-bidi:plaintext]">{choice.description}</span>
+                <span className="block break-words text-[13px] leading-[18px] text-ink-tertiary [unicode-bidi:plaintext]">{choice.description}</span>
               )}
             </span>
             {settled && on && !quietPicked && <Check size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
@@ -205,14 +205,15 @@ export function SheetChoices({
   );
 }
 
-/** The 22px key on a row: a slightly lighter square with a hairline. */
+/** The 24px key on a row (the reference's large key cap, #4490): 8px
+ * corners, a hairline, 12/16 medium; the picked key in the accent fill. */
 export function SheetKey({ letter, on, invalid = false }: { letter: string; on: boolean; invalid?: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-[22px] shrink-0 items-center justify-center rounded-md border text-[11.5px] font-medium leading-none transition-colors",
-        on ? "border-ink/[0.28] bg-ink/[0.16] text-ink" : invalid ? "border-danger bg-ink/[0.06] text-ink-secondary" : "border-ink/[0.14] bg-ink/[0.06] text-ink-secondary",
+        "flex size-6 shrink-0 items-center justify-center rounded-lg border-[0.5px] text-[12px] font-medium leading-4 transition-colors",
+        on ? "border-ink/20 bg-accent text-accent-ink" : invalid ? "border-danger bg-ink/[0.06] text-ink-secondary" : "border-ink/[0.14] bg-ink/[0.06] text-ink-secondary",
       )}
     >
       {letter}
@@ -220,10 +221,10 @@ export function SheetKey({ letter, on, invalid = false }: { letter: string; on: 
   );
 }
 
-/** A choose-several row's box, in the key's 22px slot. */
+/** A choose-several row's box, in the key's 24px slot. */
 export function SheetBox({ on }: { on: boolean }) {
   return (
-    <span aria-hidden="true" className="flex size-[22px] shrink-0 items-center justify-center">
+    <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
       <span
         className={cn(
           "flex size-[18px] items-center justify-center rounded-[5px] border transition-colors",
@@ -235,6 +236,11 @@ export function SheetBox({ on }: { on: boolean }) {
     </span>
   );
 }
+
+/** The field look of every question card: an answer in words, and a form
+ * row's time, date, number or duration (#4490). */
+export const SHEET_FIELD =
+  "rounded-[10px] border border-ink/[0.12] bg-ink/[0.04] py-2 px-3 text-[13.5px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-ink/[0.28] focus-visible:ring-2 focus-visible:ring-accent/60";
 
 /** One plain field for an answer in words. Enter sends (Shift+Enter is a
  * new line); the small arrow sends too. It never takes focus on its own. */
@@ -278,7 +284,7 @@ export function SheetField({
           event.preventDefault();
           if (canSend) onSend();
         }}
-        className="block max-h-40 min-h-9 w-full resize-none rounded-[10px] border border-ink/[0.12] bg-ink/[0.04] py-2 pe-10 ps-3 text-[13.5px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-ink/[0.28] focus-visible:ring-2 focus-visible:ring-accent/60 [field-sizing:content]"
+        className={cn(SHEET_FIELD, "block max-h-40 min-h-9 w-full resize-none pe-10 [field-sizing:content]")}
       />
       {value.trim() && (
         <button
@@ -296,18 +302,36 @@ export function SheetField({
   );
 }
 
-/** The quiet send for a choose-several question or a set: text, no fill. */
-export function SheetSend({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
+// the reference's Submit (#4490): a filled pill, 8px by 16px, 14/20 medium;
+// a second action is the same pill with no fill
+const SEND = "rounded-full px-4 py-2 text-[14px] font-medium leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:opacity-35";
+const SEND_MAIN = "bg-ink text-app hover:opacity-90";
+const SEND_OTHER = "text-ink hover:bg-ink/[0.07]";
+
+/** The send of a choose-several question, a set or a form: the reference's
+ * filled pill. Several actions (a checklist's buttons, #4490) sit side by side, the
+ * main one last. */
+export function SheetSend({ label, disabled = false, onClick, actions }: {
+  label?: string;
+  disabled?: boolean;
+  onClick?: () => void;
+  actions?: readonly { label: string; onClick: () => void }[];
+}) {
+  const all = actions ?? (label && onClick ? [{ label, onClick }] : []);
   return (
-    <div className="mt-2.5 flex justify-end">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className="h-7 rounded-full px-3 text-[13px] font-medium text-ink-secondary transition-colors hover:bg-ink/[0.07] hover:text-ink disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
-      >
-        {label}
-      </button>
+    <div className="mt-2.5 flex flex-wrap justify-end gap-1">
+      {all.map((action, index) => (
+        <button
+          key={action.label}
+          type="button"
+          data-sheet-send=""
+          onClick={action.onClick}
+          disabled={disabled}
+          className={cn(SEND, index === all.length - 1 ? SEND_MAIN : SEND_OTHER)}
+        >
+          {action.label}
+        </button>
+      ))}
     </div>
   );
 }

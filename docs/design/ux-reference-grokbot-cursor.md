@@ -2527,13 +2527,18 @@ Electron restart (no HMR); launch-test them before committing.
 #### One look for every interactive question (2026-10-20)
 
 The maintainer's capture: every question a bot asks looks the same. Under the bot's
-bubble, a separate card in the bubble's own fill (`bg-card`), 16px corners
-and padding, the bubble's width; the question in bold; one row per answer:
-a 22px rounded key (A, B, C, a lighter fill and a hairline) then the label
-in plain text. No outline, no filled buttons, no technical header, no Send
-for a one-pick question. A row lights up under the pointer, a click is the
-answer, the letter keys answer once the card has focus. Choose several:
-boxes in place of keys and a quiet send. An answer in words: one plain
+bubble, a separate card in the bubble's own fill (`bg-card`), 16px corners,
+12px padding (the reference's bubble surface, measured 2026-11-16, #4490),
+the bubble's width; the question in bold; one row per answer (7px padding,
+16px corners): a 24px key with 8px corners (A, B, C, a lighter fill and a
+hairline, the picked key in the accent fill) then the label in 14/20 plain
+text. No outline, no technical header, no Send for a one-pick question. A
+row lights up under the pointer, a click is the answer, the letter keys
+answer once the card has focus. Choose several, a set or a form: boxes in
+place of keys and the reference's Submit, a filled ink pill (8px by 16px,
+14/20 medium); a checklist's other buttons are the same pill unfilled. A
+form's rows (#4490) draw their choices as the set's tab pills and their
+fields as the answer-in-words field. An answer in words: one plain
 field (the "Other" row opens it). Once answered the card stays, the chosen
 row marked and the others dimmed (never folded into a line).
 

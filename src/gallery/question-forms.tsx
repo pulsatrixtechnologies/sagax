@@ -105,6 +105,49 @@ function card(id: string, questions: AskQuestion[], title: string, subtitle: str
 const TIME_ANSWER = formatQuestionAnswers(TIME, [[TIME[0]!.options[0]!.label], ["90 min"], ["4512"], ["45 min"], [TIME[4]!.options[0]!.label], ["yes"], []]);
 const DRAFTS_ANSWER = formatQuestionAnswers(DRAFTS, [DRAFTS[0]!.options.filter((_, index) => index !== 3 && index !== 1).map((option) => option.label)], drafts.actions[0]);
 
+/** The reference app's question card, built from its own measured styles
+ * (app.asar, read only, #4490): bubble surface 12px padding, 16px corners,
+ * 10px gap; the prompt 14/20 semibold; flat rows 7px padding, 16px corners,
+ * 4px gap; a 24px key with 8px corners, a hairline and 12/16 medium type,
+ * the picked key in the accent fill; the label 14/20; Submit a filled pill,
+ * 8px by 16px, 14/20 medium. Colours are this skin's tokens (the reference's
+ * own palette is not ours to copy). */
+function ReferenceCard({ prompt, options, picked = [], multi = false }: { prompt: string; options: string[]; picked?: string[]; multi?: boolean }) {
+  return (
+    <div data-reference-card="" className="flex w-full flex-col gap-[10px] rounded-[16px] bg-card p-3 text-ink">
+      <p className="m-0 text-[14px] font-semibold leading-5">{prompt}</p>
+      <div className="flex flex-col gap-px">
+        {options.map((label, index) => {
+          const on = picked.includes(label);
+          return (
+            <div key={label} className="flex items-start gap-1 rounded-[16px] p-[7px]">
+              <span className={`inline-flex size-6 shrink-0 items-center justify-center rounded-[8px] border-[0.5px] text-[12px] font-medium leading-4 ${on ? "border-ink/20 bg-accent text-accent-ink" : "border-ink/15 bg-ink/[0.06] text-ink-secondary"}`}>{String.fromCharCode(65 + index)}</span>
+              <span className="px-1.5 pt-0.5 text-[14px] leading-5">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+      {multi && (
+        <div className="flex justify-end">
+          <span className="rounded-full bg-ink px-4 py-2 text-[14px] font-medium leading-5 text-app">Submit</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SideBySide({ id, label, reference, ours }: { id: string; label: string; reference: ReactNode; ours: ReactNode }) {
+  return (
+    <section data-gallery-sample={id} className="flex flex-col gap-2 p-4">
+      <div className="text-[11px] uppercase tracking-wide text-ink-tertiary">{label}</div>
+      <div className="grid grid-cols-2 items-start gap-4">
+        <div className="flex flex-col gap-1"><div className="text-[11px] text-ink-tertiary">{FR ? "Référence (styles mesurés)" : "Reference (measured styles)"}</div>{reference}</div>
+        <div className="flex flex-col gap-1"><div className="text-[11px] text-ink-tertiary">Sagax</div>{ours}</div>
+      </div>
+    </section>
+  );
+}
+
 function Bubble({ children }: { children: ReactNode }) {
   return <div className={`rounded-[18px] bg-card px-3 py-[7px] text-[13px] leading-5 text-ink ${CHAT_BUBBLE_WIDTH_CLASS.fit}`}>{children}</div>;
 }
@@ -125,6 +168,23 @@ function Preview() {
   const draftsLead = FR ? "Les publications de ce soir sont prêtes." : "Tonight's posts are ready.";
   return (
     <div className="min-h-screen bg-app text-ink">
+      <div className="mx-auto flex max-w-[1180px] flex-col">
+        <SideBySide
+          id="side-by-side-single"
+          label={FR ? "Une question, côte à côte" : "One question, side by side"}
+          reference={<ReferenceCard prompt={FR ? "Quelle salle ?" : "Which room?"} options={FR ? ["Nord", "Sud", "Ouest"] : ["North", "South", "West"]} picked={[FR ? "Sud" : "South"]} />}
+          ours={<QuestionCard threadId="t" bot={bot} message={card("sbs1", [{ question: FR ? "Quelle salle ?" : "Which room?", options: (FR ? ["Nord", "Sud", "Ouest"] : ["North", "South", "West"]).map((label) => ({ label })) }], "", "")} />}
+        />
+        <SideBySide
+          id="side-by-side-form"
+          label={FR ? "Plusieurs choses à décider, côte à côte" : "Several things to decide, side by side"}
+          reference={<div className="flex flex-col gap-2">
+            <ReferenceCard prompt={TIME[0]!.question} options={TIME[0]!.options.map((option) => option.label)} />
+            <ReferenceCard prompt={TIME[4]!.question} options={TIME[4]!.options.map((option) => option.label)} multi />
+          </div>}
+          ours={<QuestionCard threadId="t" bot={bot} message={card("sbs2", [TIME[0]!, TIME[1]!, TIME[4]!, TIME[5]!], time.title, time.question)} />}
+        />
+      </div>
       <div className="mx-auto flex max-w-[760px] flex-col">
         <Sample id="before-time" label={FR ? "Avant : sept questions dans un texte" : "Before: seven questions in one text"} lead={timeLead}>
           <QuestionCard threadId="t" bot={bot} message={card("bt", [{ question: FR ? BAD_TIME_FR : BAD_TIME_CARD.question, options: [] }], "", "")} />

@@ -68,3 +68,21 @@ export const GOOD_DRAFTS_CARD = {
   ],
   actions: ["Post selected", "Skip tonight"],
 } as const;
+
+/** #4490 review: inputs probed against the heuristics. Each must be kept:
+ * a list that is context, past-tense "checked", quoted text, labels that
+ * repeat the card's own options. */
+export const PROBED_GOOD: readonly { question: string; options: readonly string[] }[] = [
+  { question: "I checked the following:\n- disk\n- memory\n- network\nRestart?", options: ["Restart", "Wait"] },
+  { question: "The selected backup holds:\n- the mail database\n- the shared drive\n- the CRM export\nRestore it now?", options: ["Restore", "Wait"] },
+  { question: "J'ai coché ces étapes :\n- sauvegarde\n- mise à jour\n- redémarrage\nJe ferme le billet ?", options: ["Fermer", "Attendre"] },
+  { question: "Blog posts: three drafts are ready for review. Social posts: two are scheduled for Friday. Publish the blog drafts now?", options: ["Publish", "Wait"] },
+  { question: "Marketing posts on Monday. Sales sends the weekly report on Friday. Keep this schedule?", options: ["Keep", "Change"] },
+  { question: "Ada's ticket says: \"Is the server down? Why is mail so slow? When will it be fixed?\" Reply with the outage notice?", options: ["Send notice", "Hold"] },
+  { question: "The deploy failed twice. What now?\n- Retry the deploy?\n- Roll back?", options: ["Retry the deploy", "Roll back"] },
+];
+
+/** #4490 review: inputs probed against the heuristics that must be refused. */
+export const PROBED_BAD: readonly { question: string; options: readonly string[]; rule: string }[] = [
+  { question: "For each line say done, not done or move: standup, review, lunch, receipt, summary, call.", options: ["Done", "Not done", "Move"], rule: "several-questions" },
+];

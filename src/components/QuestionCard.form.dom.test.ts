@@ -40,8 +40,8 @@ function mount(questions: AskQuestion[], card: Record<string, unknown> = {}) {
 const formRow = (index: number) => host.querySelectorAll<HTMLElement>("[data-form-row]")[index]!;
 const pill = (index: number, label: string) =>
   Array.from(formRow(index).querySelectorAll<HTMLButtonElement>("[data-form-choice]")).find((button) => button.textContent?.trim() === label)!;
-const submit = () => host.querySelector<HTMLButtonElement>("[data-form-submit]")!;
-const action = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-form-action]")).find((button) => button.textContent?.trim() === label)!;
+const submit = () => host.querySelector<HTMLButtonElement>("[data-sheet-send]")!;
+const action = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-sheet-send]")).find((button) => button.textContent?.trim() === label)!;
 
 function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const proto = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -77,7 +77,8 @@ describe("a form card draws a row per question with its control (#4490)", () => 
     expect(formRow(0).querySelector('[role="radiogroup"]')).not.toBeNull();
     expect(formRow(0).querySelectorAll("[data-form-choice]")).toHaveLength(3);
     expect(formRow(1).querySelectorAll('input[type="number"]')).toHaveLength(2);
-    expect(formRow(2).querySelector('input[type="text"]')).not.toBeNull();
+    // a row in words is the answer field of every question card
+    expect(formRow(2).querySelector("textarea[data-question-field]")).not.toBeNull();
     expect(pill(5, "Yes")).toBeTruthy();
     expect(pill(5, "No")).toBeTruthy();
     expect(formRow(6).textContent).toMatch(/Optional/);
@@ -105,7 +106,7 @@ describe("a form card draws a row per question with its control (#4490)", () => 
     const [hours, minutes] = Array.from(formRow(1).querySelectorAll<HTMLInputElement>('input[type="number"]'));
     setValue(hours!, "1");
     setValue(minutes!, "30");
-    setValue(formRow(2).querySelector<HTMLInputElement>('input[type="text"]')!, "4512");
+    setValue(formRow(2).querySelector<HTMLTextAreaElement>("textarea")!, "4512");
     setValue(formRow(3).querySelectorAll<HTMLInputElement>('input[type="number"]')[1]!, "45");
     act(() => pill(4, "Travel").click());
     expect(submit().disabled).toBe(true);
@@ -120,11 +121,12 @@ describe("a form card draws a row per question with its control (#4490)", () => 
     expect(answers[TIME[2]!.question]).toBe("4512");
     expect(answers[TIME[3]!.question]).toBe("45 min");
     expect(answers[TIME[5]!.question]).toBe("yes");
-    expect(answers[TIME[6]!.question]).toBeUndefined();
+    // the optional row left empty says so
+    expect(answers[TIME[6]!.question]).toBe("(left empty)");
   });
 
   it("shows per row what was answered once settled", () => {
-    const answer = formatQuestionAnswers(TIME, [["Done"], ["90 min"], ["4512"], ["45 min"], ["Travel"], ["yes"], []]);
+    const answer = formatQuestionAnswers(TIME, [["Done"], ["90 min"], ["4512"], ["45 min"], ["Travel"], ["yes"], ["(left empty)"]]);
     mount(TIME, { answered: "answer", answeredText: answer });
     expect(host.querySelector('[data-ask-card="settled"]')).not.toBeNull();
     expect(host.querySelectorAll("[data-form-row]")).toHaveLength(7);
@@ -132,7 +134,7 @@ describe("a form card draws a row per question with its control (#4490)", () => 
     expect(formRow(1).querySelector("[data-form-answer]")?.textContent).toBe("1 h 30 min");
     expect(formRow(5).querySelector("[data-form-answer]")?.textContent).toBe("Yes");
     expect(formRow(6).querySelector("[data-form-answer]")?.textContent).toMatch(/Not answered/);
-    expect(host.querySelector("[data-form-submit]")).toBeNull();
+    expect(host.querySelector("[data-sheet-send]")).toBeNull();
   });
 });
 
@@ -172,6 +174,20 @@ describe("a checklist draws a checkbox per item and its actions as buttons (#449
     const boxes = host.querySelectorAll<HTMLButtonElement>('[role="checkbox"]');
     expect(Array.from(boxes).filter((box) => box.getAttribute("aria-checked") === "true")).toHaveLength(2);
     expect(host.querySelector("[data-form-action-sent]")?.textContent).toContain("Post selected");
-    expect(host.querySelector("[data-form-action]")).toBeNull();
+    expect(host.querySelector("[data-sheet-send]")).toBeNull();
+  });
+});
+
+describe("a duration of zero is no answer (#4490 review)", () => {
+  it("keeps the send off for 0 h 0 min", () => {
+    mount([{ question: "How long?", kind: "duration", options: [] }]);
+    const [hours, minutes] = Array.from(formRow(0).querySelectorAll<HTMLInputElement>('input[type="number"]'));
+    setValue(hours!, "0");
+    setValue(minutes!, "0");
+    expect(submit().disabled).toBe(true);
+    setValue(minutes!, "0.2");
+    expect(submit().disabled).toBe(true);
+    setValue(minutes!, "15");
+    expect(submit().disabled).toBe(false);
   });
 });

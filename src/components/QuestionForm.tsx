@@ -13,13 +13,15 @@ import { t } from "@/lib/i18n";
 import {
   answeredAction,
   formatQuestionAnswers,
+  LEFT_EMPTY,
   MAX_CUSTOM_ANSWER,
   NOTHING_PICKED,
   questionAnswersByQuestion,
   type AskQuestion,
 } from "../../shared/ask-question";
+import { ASK_SMALL_PILL } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
-import { picksInAnswer, QuestionSheet, SheetChoices, SheetNote } from "./QuestionSheet";
+import { picksInAnswer, QuestionSheet, SHEET_FIELD, SheetChoices, SheetField, SheetNote, SheetSend } from "./QuestionSheet";
 
 /** One row's draft: the picks of a choice, or the words or numbers typed. */
 interface RowDraft {
@@ -84,10 +86,6 @@ function shownAnswer(question: AskQuestion, value: string): string {
 
 const CHOICE_ROW = (question: AskQuestion) => question.kind === "choice" || question.kind === "multi" || question.kind === "yes_no";
 
-const FIELD = "w-full rounded-[10px] border border-ink/[0.12] bg-ink/[0.04] px-3 py-1.5 text-[13.5px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-ink/[0.28] focus-visible:ring-2 focus-visible:ring-accent/60";
-const PRIMARY = "h-8 rounded-full bg-ink px-3.5 text-[13px] font-medium text-app transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
-const QUIET = "h-8 rounded-full px-3.5 text-[13px] font-medium text-ink-secondary transition-colors hover:bg-ink/[0.07] hover:text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
-
 /** A choice row's answers as pills: one tap picks (several for multi). */
 function ChoicePills({ question, picked, onPick }: { question: AskQuestion; picked: readonly string[]; onPick: (key: string) => void }) {
   const multi = question.kind === "multi";
@@ -105,12 +103,10 @@ function ChoicePills({ question, picked, onPick }: { question: AskQuestion; pick
             aria-checked={on}
             title={option.description}
             onClick={() => onPick(key)}
-            className={cn(
-              "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-3 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-              on ? "border-ink/[0.3] bg-ink/[0.12] font-medium text-ink" : "border-ink/[0.14] text-ink-secondary hover:bg-ink/[0.05] hover:text-ink",
-            )}
+            // the pills of a question set's tabs (QuestionCard): one look
+            className={cn(ASK_SMALL_PILL, "max-w-full", on ? "bg-ink/[0.08] text-ink" : "bg-ink/[0.04] text-ink-secondary hover:bg-ink/[0.07] hover:text-ink")}
           >
-            {on && <Check size={13} strokeWidth={2.6} aria-hidden="true" className="shrink-0" />}
+            {on && <Check size={14} className="text-success" aria-hidden="true" />}
             <span className="truncate">{optionLabel(question, option)}</span>
           </button>
         );
@@ -120,7 +116,7 @@ function ChoicePills({ question, picked, onPick }: { question: AskQuestion; pick
 }
 
 /** The control one row draws for its kind. */
-function RowControl({ question, draft, onChange }: { question: AskQuestion; draft: RowDraft; onChange: (next: Partial<RowDraft>) => void }) {
+function RowControl({ question, draft, onChange, fieldId, canSend, onSend }: { question: AskQuestion; draft: RowDraft; onChange: (next: Partial<RowDraft>) => void; fieldId: string; canSend: boolean; onSend: () => void }) {
   const label = question.question;
   switch (question.kind) {
     case "choice": case "yes_no":
@@ -130,18 +126,30 @@ function RowControl({ question, draft, onChange }: { question: AskQuestion; draf
     case "duration":
       return (
         <div className="flex items-center gap-2 text-[13px] text-ink-secondary">
-          <input type="number" inputMode="numeric" min={0} step={1} value={draft.hours} aria-label={t("question.form.hoursAria", { question: label })} onChange={(event) => onChange({ hours: event.target.value })} className={cn(FIELD, "w-16 tabular-nums")} />
+          <input type="number" inputMode="numeric" min={0} step={1} value={draft.hours} aria-label={t("question.form.hoursAria", { question: label })} onChange={(event) => onChange({ hours: event.target.value })} className={cn(SHEET_FIELD, "w-16 tabular-nums")} />
           <span>{t("question.form.hours")}</span>
-          <input type="number" inputMode="numeric" min={0} max={59} step={5} value={draft.minutes} aria-label={t("question.form.minutesAria", { question: label })} onChange={(event) => onChange({ minutes: event.target.value })} className={cn(FIELD, "w-16 tabular-nums")} />
+          <input type="number" inputMode="numeric" min={0} max={59} step={5} value={draft.minutes} aria-label={t("question.form.minutesAria", { question: label })} onChange={(event) => onChange({ minutes: event.target.value })} className={cn(SHEET_FIELD, "w-16 tabular-nums")} />
           <span>{t("question.form.minutes")}</span>
         </div>
       );
     case "time": case "date": case "number":
-      return <input type={question.kind} {...(question.kind === "number" ? { inputMode: "decimal" as const } : {})} value={draft.value} aria-label={label} onChange={(event) => onChange({ value: event.target.value })} className={cn(FIELD, question.kind === "number" ? "w-32 tabular-nums" : "w-40")} />;
-    case "long_text":
-      return <textarea dir="auto" rows={3} maxLength={MAX_CUSTOM_ANSWER} value={draft.value} aria-label={label} placeholder={t("question.answerPlaceholder")} onChange={(event) => onChange({ value: event.target.value })} className={cn(FIELD, "resize-y")} />;
+      return <input type={question.kind} {...(question.kind === "number" ? { inputMode: "decimal" as const } : {})} value={draft.value} aria-label={label} onChange={(event) => onChange({ value: event.target.value })} className={cn(SHEET_FIELD, question.kind === "number" ? "w-32 tabular-nums" : "w-40")} />;
     default:
-      return <input type="text" dir="auto" maxLength={MAX_CUSTOM_ANSWER} value={draft.value} aria-label={label} placeholder={t("question.answerPlaceholder")} onChange={(event) => onChange({ value: event.target.value })} className={FIELD} />;
+      // text and long_text: the answer-in-words field of every question card
+      // (it grows with what is typed; Enter sends once the form is complete)
+      return (
+        <SheetField
+          value={draft.value}
+          maxLength={MAX_CUSTOM_ANSWER}
+          ariaLabel={label}
+          placeholder={t("question.answerPlaceholder")}
+          canSend={canSend}
+          sendLabel={t("question.form.submit")}
+          onChange={(value) => onChange({ value })}
+          onSend={onSend}
+          fieldId={fieldId}
+        />
+      );
   }
 }
 
@@ -206,7 +214,7 @@ export function QuestionForm({
       <QuestionSheet ariaLabel={t("question.aria.card")} settled title={title} embedded={embedded}>
         {contextLine && <ExpandableText text={contextLine} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
         {checklist ? (
-          <div data-form-list="" className="-mx-2 max-h-[360px] overflow-y-auto px-2">
+          <div data-form-list="" className="max-h-[360px] overflow-y-auto">
             <SheetChoices
               choices={questions[0]!.options}
               picked={picksInAnswer(byQuestion[questions[0]!.question] === NOTHING_PICKED ? "" : byQuestion[questions[0]!.question] ?? "", questions[0]!.options.map(optionKey)).picked}
@@ -216,7 +224,8 @@ export function QuestionForm({
         ) : (
           <div className="flex flex-col">
             {questions.map((question, index) => {
-              const value = byQuestion[question.question]?.trim() ?? "";
+              const given = byQuestion[question.question]?.trim() ?? "";
+              const value = given === LEFT_EMPTY ? "" : given;
               return (
                 <div key={`${index}-${question.question}`} data-form-row="" className={cn("flex min-w-0 items-baseline justify-between gap-3 py-1.5", index > 0 && "border-t border-ink/[0.06]")}>
                   <span dir="auto" className="min-w-0 break-words text-[13px] leading-5 text-ink-secondary">{question.question}</span>
@@ -251,7 +260,7 @@ export function QuestionForm({
         dismissLabel={dismissLabel}
       >
         {contextLine && <div data-form-context=""><ExpandableText text={contextLine} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" /></div>}
-        <div data-form-list="" className="-mx-2 max-h-[360px] overflow-y-auto px-2">
+        <div data-form-list="" className="max-h-[360px] overflow-y-auto">
           <SheetChoices
             choices={only.options}
             picked={picked}
@@ -263,22 +272,19 @@ export function QuestionForm({
           />
         </div>
         {failed && <div role="alert" className="mt-2 text-[12.5px] leading-snug text-danger">{t("question.answerFailed")}</div>}
-        {!readOnly && (
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
-            {/* the main action last, where the eye ends, the way the reference's Submit sits */}
-            {[...actions.slice(1), actions[0]!].map((action, index, all) => (
-              <button key={action} type="button" data-form-action="" onClick={() => send(action)} className={index === all.length - 1 ? PRIMARY : QUIET}>
-                {action}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* the main action last, where the eye ends */}
+        {!readOnly && <SheetSend actions={[...actions.slice(1), actions[0]!].map((action) => ({ label: action, onClick: () => send(action) }))} />}
       </QuestionSheet>
     );
   }
 
   const answers = questions.map((question, index) => rowAnswer(question, draftOf(index)));
   const owed = questions.filter((question, index) => !question.optional && !answers[index]!.length).length;
+  // an optional row left empty says so, so the bot tells "left empty" from "not asked"
+  const submit = () => {
+    if (owed > 0) return;
+    onSend(formatQuestionAnswers(questions as AskQuestion[], answers.map((entry) => (entry.length ? entry : [LEFT_EMPTY]))));
+  };
   const required = questions.filter((question) => !question.optional).length;
   return (
     <QuestionSheet
@@ -294,18 +300,12 @@ export function QuestionForm({
         {questions.map((question, index) => (
           <div key={`${index}-${question.question}`} data-form-row="" role="group" aria-labelledby={`${cardId}-row-${index}`} className={cn("py-2.5", index > 0 && "border-t border-ink/[0.06]")}>
             <RowLabel question={question} id={`${cardId}-row-${index}`} />
-            {readOnly ? null : <RowControl question={question} draft={draftOf(index)} onChange={(next) => update(index, next)} />}
+            {readOnly ? null : <RowControl question={question} draft={draftOf(index)} onChange={(next) => update(index, next)} fieldId={`${cardId}-${index}`} canSend={owed === 0} onSend={submit} />}
           </div>
         ))}
       </div>
       {failed && <div role="alert" className="mt-2 text-[12.5px] leading-snug text-danger">{t("question.answerFailed")}</div>}
-      {!readOnly && (
-        <div className="mt-2 flex justify-end">
-          <button type="button" data-form-submit="" disabled={owed > 0} onClick={() => onSend(formatQuestionAnswers(questions as AskQuestion[], answers))} className={PRIMARY}>
-            {t("question.form.submit")}
-          </button>
-        </div>
-      )}
+      {!readOnly && <SheetSend label={t("question.form.submit")} disabled={owed > 0} onClick={submit} />}
     </QuestionSheet>
   );
 }

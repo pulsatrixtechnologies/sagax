@@ -12,6 +12,7 @@ import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { cardRefusalText, nativeCardRuleBreak } from "../../shared/card-rules.ts";
+import { cardRefusalTurns } from "../approvals/card-refusal-turns.ts";
 import { formatQuestionAnswers, type AskQuestion } from "../../shared/ask-question.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
 
@@ -141,7 +142,16 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // and a Yes/No on "A, or B?" keeps its card on both (#2911,
       // fullAccessChoiceAnswer reads choiceOptionsFor).
       // #4490: a badly made card is sent back below, never answered for the person
-      const badCard = !permission && !event.harnessAsk && Boolean(nativeChoiceMismatch(event, questions, permission)?.startsWith("Card refused"));
+      // #4490: an engine's own question that breaks the card rules is sent
+      // back once per turn with how to ask again; the next one of the same
+      // turn, or one that cannot be sent back, is shown as asked
+      const rawMismatch = event.sentBackFailed ? undefined : nativeChoiceMismatch(event, questions, permission);
+      const badCard = Boolean(rawMismatch?.startsWith("Card refused"));
+      const sendBackTo = rawMismatch && asker && event.requestId && !guestDriven && !event.harnessAsk
+        ? (event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId))
+        : undefined;
+      const turnKey = `${event.threadId}:${host.activeInternalGenerationByThread?.get?.(event.threadId) ?? ""}`;
+      const mismatch = badCard && !(sendBackTo && cardRefusalTurns.refuse(turnKey)) ? undefined : rawMismatch;
       if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk && !badCard) {
         const single = questions?.length === 1 ? questions[0] : undefined;
         const choice = single
@@ -178,23 +188,24 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // rule as ask_choice (shared/options-card.ts). The engine gets the
       // reason back and asks again with the alternatives as options; the
       // chat shows that it happened (nothing invisible).
-      const mismatch = nativeChoiceMismatch(event, questions, permission);
-      if (mismatch && asker && event.requestId && !guestDriven && !event.harnessAsk) {
-        const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
-        if (instance) {
+      if (mismatch && sendBackTo) {
+        const instance = sendBackTo;
+        {
           const requestId = event.requestId;
           void (async () => {
             const outcome = await instance.adapter
               .respondToRequest(event.threadId, requestId, { behavior: "answer", message: sentBackAnswer(mismatch, questions) })
               .catch(() => "unavailable" as const);
             // #4490: a badly made card is sent back with how to ask again
-            const badCard = /^Card refused \(rule ([a-z-]+)/.exec(mismatch)?.[1];
+            const brokenRule = /^Card refused \(rule ([a-z-]+)/.exec(mismatch)?.[1];
             pushMessage({
               role: "bot", kind: "activity",
               tool: outcome === "answered"
-                ? { name: badCard ? `Question sent back to the bot to ask again properly (${badCard}).` : "Question sent back: its options did not match it (Yes / No on a pick between alternatives).", ok: true }
-                : { name: badCard ? "A badly made question could not be sent back to the engine." : "A question with options that did not match it could not be sent back to the engine.", ok: false },
+                ? { name: brokenRule ? `Question sent back to the bot to ask again properly (${brokenRule}).` : "Question sent back: its options did not match it (Yes / No on a pick between alternatives).", ok: true }
+                : { name: brokenRule ? "A badly made question could not be sent back to the engine; it is shown as asked." : "A question with options that did not match it could not be sent back to the engine; it is shown as asked.", ok: false },
             });
+            // never a turn left with no card and no answer: shown as asked
+            if (outcome !== "answered") presentRequestOpened({ ...event, sentBackFailed: true }, ctx, host, s);
           })().catch(() => console.error("[approval] Could not send back a mismatched question."));
           return;
         }

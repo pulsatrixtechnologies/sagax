@@ -16,7 +16,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "question-forms"));
 const port = Number(arg("--port") ?? 5187);
-const SAMPLES = ["before-time", "before-drafts", "time-form", "drafts-checklist", "control-kinds", "time-settled", "drafts-settled"];
+const SAMPLES = ["side-by-side-single", "side-by-side-form", "before-time", "before-drafts", "time-form", "drafts-checklist", "control-kinds", "time-settled", "drafts-settled"];
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -47,7 +47,7 @@ try {
   for (const skin of ["pulsatrix", "pulsatrix-light"]) {
     for (const lang of ["en", "fr"]) {
       const theme = skin === "pulsatrix" ? "dark" : "light";
-      const page = await browser.newPage({ viewport: { width: 900, height: 1000 }, deviceScaleFactor: 2 });
+      const page = await browser.newPage({ viewport: { width: 1240, height: 1000 }, deviceScaleFactor: 2 });
       const errors = [];
       page.on("pageerror", (error) => errors.push(String(error?.stack ?? error).slice(0, 800)));
       await page.goto(`${base}?${new URLSearchParams({ skin, lang })}`, { waitUntil: "load" });

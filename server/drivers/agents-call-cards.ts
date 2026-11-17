@@ -55,7 +55,10 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
   if (name === ASK_CHOICE_TOOL) {
     const parsed = parseAskChoiceInput(args);
     if (!parsed.ok) return { text: parsed.error, isError: true };
-    const result = await api(CARD_ROUTE, { method: "POST", body: JSON.stringify({ tool: ASK_CHOICE_TOOL, ...args }) });
+    // #4490: a badly made card comes back as the server's refusal, word for word
+    const sent = await apiResponse(CARD_ROUTE, { method: "POST", body: JSON.stringify({ tool: ASK_CHOICE_TOOL, ...args }) });
+    if (!sent.ok) return { text: String(sent.body.error ?? `HTTP ${sent.status}`), isError: true };
+    const result = sent.body;
     // #1905: under Full access a may-I was answered with the recommended
     // option (server/widgets/chat-widgets.ts createChoiceCard); the turn goes on.
     const answered = result && typeof result === "object" && typeof (result as { answered?: { choice?: unknown } }).answered?.choice === "string"
@@ -96,7 +99,7 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
       : people ? "the room's people (any of them may answer; the answer names who answered)" : "the person";
     // #4490: a form's answers come back row by row
     const rows = args?.questions !== undefined || args?.items !== undefined
-      ? " Its answer comes back per row (Q: the row, A: its answer; a checklist adds Action: the button pressed)."
+      ? " Its answer comes back per row (Q: the row, A: its answer, (left empty) for an optional row left empty; a checklist adds Action: the button pressed)."
       : "";
     const placed = (body.replaced === true ? `Your pending card${named} now asks this, in its place${to ? `, addressed to ${waiting}` : ""}.` : `The question card${named} is waiting for ${waiting}.`) + people + rows;
     // #4205: wait false holds nothing: the turn and the run go on

@@ -213,7 +213,11 @@ const BUDGET_BASELINE: Record<string, number> = {
   // nothing; the goldens move to the measured wire (room+non-chief to 86,598).
   // 2026-11-16 (#4490): ask_choice takes a form (questions) and a checklist
   // (items, actions) and says a card is one question per control; raised on
-  // purpose to the measured wire.
+  // purpose to the measured wire. Every profile grows by the same ask_choice
+  // bytes (+3,150 direct and room, +1,040 room non-chief); the room non-chief
+  // pair room+own-thread+skills+shared(+voice) moved +2,836 because its old
+  // baseline already sat 1.8% under its wire (earlier lots), so all room
+  // non-chief profiles move to the measured wire together.
   "direct": 108058,
   "direct+voice": 109022,
   "direct+shared": 109952,
@@ -248,20 +252,20 @@ const BUDGET_BASELINE: Record<string, number> = {
   "direct+skills+shared+non-chief": 100541,
   "direct+skills+shared+voice+non-chief": 101505,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 86598,
-  "room+voice+non-chief": 87643,
-  "room+shared+non-chief": 88573,
-  "room+shared+voice+non-chief": 89537,
-  "room+skills+non-chief": 88040,
-  "room+skills+voice+non-chief": 89004,
-  "room+skills+shared+non-chief": 89934,
-  "room+skills+shared+voice+non-chief": 90898,
-  "room+own-thread+non-chief": 88706,
-  "room+own-thread+voice+non-chief": 89670,
-  "room+own-thread+shared+non-chief": 90600,
-  "room+own-thread+shared+voice+non-chief": 91564,
-  "room+own-thread+skills+non-chief": 90067,
-  "room+own-thread+skills+voice+non-chief": 91031,
+  "room+non-chief": 87718,
+  "room+voice+non-chief": 88682,
+  "room+shared+non-chief": 89612,
+  "room+shared+voice+non-chief": 90576,
+  "room+skills+non-chief": 89079,
+  "room+skills+voice+non-chief": 90043,
+  "room+skills+shared+non-chief": 90973,
+  "room+skills+shared+voice+non-chief": 91937,
+  "room+own-thread+non-chief": 89745,
+  "room+own-thread+voice+non-chief": 90709,
+  "room+own-thread+shared+non-chief": 91639,
+  "room+own-thread+shared+voice+non-chief": 92603,
+  "room+own-thread+skills+non-chief": 91106,
+  "room+own-thread+skills+voice+non-chief": 92070,
   "room+own-thread+skills+shared+non-chief": 93000,
   "room+own-thread+skills+shared+voice+non-chief": 93964,
   // Annotations on check_delegation / wait_delegation (read-only policy).

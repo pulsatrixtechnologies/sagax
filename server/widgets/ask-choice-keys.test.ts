@@ -5,7 +5,7 @@
 // answer, its question whole.
 import { describe, expect, it, vi } from "vitest";
 
-import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
+import { ASK_CHOICE_TOOL, askChoiceRefusal, parseAskChoiceInput } from "../../shared/options-card.ts";
 import { postedCardWaits } from "../approvals/card-turn-handoff.ts";
 import { retireOpenQuestions } from "../approvals/retire-open-questions.ts";
 import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
@@ -86,12 +86,12 @@ describe("ask_choice parses the decision form (#4205)", () => {
     });
     expect(parseAskChoiceInput({ key: "ticket-1", retire: true })).toEqual({ ok: true, retire: { key: "ticket-1" } });
     expect(parseAskChoiceInput({ retire: true })).toMatchObject({ ok: false });
-    // #4490: a long context is kept whole when it is written in paragraphs;
-    // one unbroken block over 1,500 characters is a wall of text
-    const long = Array.from({ length: 7 }, () => "The entry needs a decision about the hours logged during the migration. ".repeat(6).trim()).join("\n\n");
+    const long = "The entry needs a decision about the hours logged during the migration. ".repeat(42);
     expect(long.length).toBeGreaterThan(3000);
     expect(parseAskChoiceInput({ question: long, options: ["Approve", "Refuse"] })).toMatchObject({ ok: true, value: { subtitle: long.trim() } });
-    expect(parseAskChoiceInput({ question: long.replace(/\n\n/g, " "), options: ["Approve", "Refuse"] })).toMatchObject({ ok: false });
+    // #4490: the bot's own unbroken block is a wall of text; in paragraphs it is kept
+    expect(askChoiceRefusal({ question: long, options: ["Approve", "Refuse"] })).toMatch(/wall-of-text/);
+    expect(askChoiceRefusal({ question: long.trim().split(". ").join(".\n\n"), options: ["Approve", "Refuse"] })).toBeNull();
   });
 });
 

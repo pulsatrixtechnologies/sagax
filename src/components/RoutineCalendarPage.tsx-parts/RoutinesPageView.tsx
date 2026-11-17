@@ -147,6 +147,12 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
   // The tabs under the title: the Overview (list view), the Calendar, the Run
   // log and the Webhooks (2026-11-17); they replace the List and Calendar
   // switch and the ☰ menu's section entries.
+  // Row menu: "View runs" opens the run log on that routine; a team goal's room opens from its row too.
+  const viewRuns = (routine: Routine) => { setStatusFilter("all"); setRoutineFilter(routine.id); setSection("logs"); };
+  const openRoomOf = (routine: Routine) => {
+    const room = routine.target === "room-goal" ? state.groups.find((group) => group.id === routine.groupId) : undefined;
+    return room ? () => onOpenRoom(room.id) : undefined;
+  };
   const tab = section === "logs" ? "logs" : section === "webhooks" ? "webhooks" : scheduleView === "calendar" ? "calendar" : "overview";
   const selectTab = (next: "overview" | "calendar" | "logs" | "webhooks") => {
     if (next === "logs") { setRoutineFilter(undefined); setSection("logs"); return; }
@@ -175,7 +181,7 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
             <PageTabs label={t("routines.view.label")} value={tab} onChange={selectTab} data-routines-tabs="" options={[
               { value: "overview", label: t("routinesOverview.tab.overview") },
               { value: "calendar", label: t("connectApps.capabilities.calendar") },
-              { value: "logs", label: t("routines.logs"), badge: unseenFailures },
+              { value: "logs", label: t("routines.logs"), badge: unseenFailures, badgeLabel: t("routineCalendar.openProblemLogs"), onBadge: () => setStatusFilter("problems") },
               ...(routinesOnly ? [] : [{ value: "webhooks" as const, label: t("routines.webhooks"), badge: undefined }]),
             ]} />
             {section === "calendar" && scheduleView === "calendar" && <>
@@ -221,7 +227,7 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
             onOpen={openRoutine} onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)}
             onFailedRuns={(period) => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems", period })}
-            groupBy={groupBy} onGroupBy={setGroupBy} allRoutines={scopedRoutines} onCreate={createInGroup} onDuplicate={duplicateRoutine}
+            groupBy={groupBy} onGroupBy={setGroupBy} allRoutines={scopedRoutines} onCreate={createInGroup} onDuplicate={duplicateRoutine} onViewRuns={viewRuns} openRoomOf={openRoomOf}
             onOpenRun={openRun} onRenameStart={(routine) => setRenamingId(routine.id)} />
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
@@ -229,6 +235,8 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               onOpen: () => openRoutine(rowMenu.routine),
               onDuplicate: () => duplicateRoutine(rowMenu.routine),
               onRename: () => setRenamingId(rowMenu.routine.id),
+              onViewRuns: () => viewRuns(rowMenu.routine),
+              onOpenRoom: openRoomOf(rowMenu.routine),
               moveTo: folderMoveTargets(rowMenu.routine, state.routineFolders?.[rowMenu.routine.botId] ?? [], (folder) => void moveRoutinesToFolder(dispatch, rowMenu.routine.botId, [rowMenu.routine], folder)),
             })} />
           </RoutineMenuPortal>}

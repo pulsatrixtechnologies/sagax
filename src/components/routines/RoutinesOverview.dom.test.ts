@@ -8,7 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 
-vi.mock("@/state/older-routine-runs", () => ({ useRoutineRunsFrom: () => {} }));
+// The reads are recorded: the trend asks once for its range, and the month's figures wait for theirs.
+const reads = vi.hoisted(() => ({ trend: [] as Array<[number, number]>, from: [] as number[], covered: true }));
+vi.mock("@/state/older-routine-runs", () => ({
+  useRoutineRunsFrom: (start: number) => { reads.from.push(start); },
+  useRoutineTrendRuns: (start: number, per: number) => { reads.trend.push([start, per]); return "ready"; },
+  useRoutineRunsCover: () => reads.covered,
+}));
 const { RoutinesOverview } = await import("./RoutinesOverview");
 
 const NOW = Date.UTC(2026, 10, 17, 12);
@@ -22,9 +28,10 @@ const run = (id: string, routineId: string, status: RoutineRun["status"], hoursA
 let host: HTMLDivElement;
 let root: Root;
 const calls: string[] = [];
-const mount = async (routines: Routine[], runs: RoutineRun[]) => {
+const mount = async (routines: Routine[], runs: RoutineRun[], extra: Record<string, unknown> = {}) => {
   await act(async () => {
     root.render(createElement(RoutinesOverview, {
+      ...extra,
       routines, runs, bots: bots as never, now: NOW, filtersMenu: createElement("span", { "data-filters": "" }), newMenu: createElement("span", { "data-new": "" }),
       onOpen: (r: Routine) => { calls.push(`open:${r.id}`); },
       onOpenRun: (r: RoutineRun) => { calls.push(`run:${r.id}`); },
@@ -42,6 +49,9 @@ beforeEach(() => {
   document.body.append(host);
   root = createRoot(host);
   calls.length = 0;
+  reads.trend.length = 0;
+  reads.from.length = 0;
+  reads.covered = true;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -78,17 +88,17 @@ describe("RoutinesOverview", () => {
     expect(rows[1]!.querySelector("[data-routine-state]")?.textContent).toBe("Paused");
   });
 
-  it("draws the trend as 7 marks, oldest at the left, a shape per result, and says it in words", async () => {
+  it("draws the trend as 7 marks, oldest at the left, a colour per result, and says it in words", async () => {
     await mount(routines, runs);
     const trend = host.querySelector('[data-routine-id="r1"] [data-routine-trend]')!;
     const marks = [...trend.querySelectorAll("[data-trend-mark]")].map((mark) => mark.getAttribute("data-trend-mark"));
     expect(marks).toEqual(["empty", "empty", "empty", "success", "failed", "success", "success"]);
-    expect(trend.getAttribute("aria-label")).toBe("Last 7 runs: succeeded: 3, failed: 1; most recent 3 h ago");
+    expect(trend.getAttribute("aria-label")).toBe("Last 7 runs: 3 succeeded, 1 failed; most recent 3 h ago");
     expect(trend.querySelector("[data-trend-ago]")?.textContent).toBe("3 h ago");
-    // seven bars of the same size, each in its result's colour; no outline, triangle or diamond
+    // seven bars of the same size (colour alone says the result), each in the skin's colour for it
     const bars = [...trend.querySelectorAll("[data-trend-mark]")] as HTMLElement[];
     expect(bars.every((bar) => bar.className.includes("h-4") && bar.className.includes("w-1"))).toBe(true);
-    expect(bars.map((bar) => /bg-(success|danger|warning|accent|ink)/.exec(bar.className)?.[1])).toEqual(["ink", "ink", "ink", "success", "danger", "success", "success"]);
+    expect(bars.map((bar) => /bg-(trend-success|trend-failed|trend-problems|accent|ink)/.exec(bar.className)?.[1])).toEqual(["ink", "ink", "ink", "trend-success", "trend-failed", "trend-success", "trend-success"]);
     expect(trend.querySelector("svg")).toBeNull();
   });
 
@@ -101,7 +111,7 @@ describe("RoutinesOverview", () => {
     expect(calls).toEqual(["run:c"]);
   });
 
-  it("shows 7 faint outlines and Not run yet for a routine that never ran", async () => {
+  it("shows 7 faint empty bars and Not run yet for a routine that never ran", async () => {
     await mount(routines, runs);
     const trend = host.querySelector('[data-routine-id="r2"] [data-routine-trend]')!;
     expect([...trend.querySelectorAll("[data-trend-mark]")].every((mark) => mark.getAttribute("data-trend-mark") === "empty")).toBe(true);
@@ -131,5 +141,88 @@ describe("RoutinesOverview", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(host.textContent).toContain("No routine matches.");
+  });
+
+  it("draws a blocked or missed run as the outline of the same bar, not a paler failure", async () => {
+    const blocked = [run("a", "r1", "blocked", 5), run("b", "r1", "failed", 4), run("c", "r1", "missed", 3), run("d", "r1", "waiting", 2), run("e", "r1", "completed", 1)];
+    await mount(routines, blocked);
+    const bar = (kind: string) => host.querySelector<HTMLElement>(`[data-routine-id="r1"] [data-trend-mark="${kind}"]`)!;
+    expect(bar("failed").className).toContain("bg-trend-failed");
+    expect(bar("blocked").className).toContain("ring-trend-failed");
+    expect(bar("blocked").className).toContain("bg-transparent");
+    expect(bar("blocked").className).not.toMatch(/bg-trend-failed|bg-danger/);
+    expect(bar("waiting").className).toContain("ring-trend-problems");
+    for (const kind of ["failed", "blocked", "waiting", "success"]) expect(bar(kind).className).toContain("h-4");
+    // the meaning stays in words: the label and the sentence
+    expect(bar("blocked").getAttribute("aria-label")).toMatch(/Blocked|Missed/);
+    expect(host.querySelector('[data-routine-id="r1"] [data-routine-trend]')!.getAttribute("aria-label")).toContain("2 blocked or missed");
+  });
+
+  it("makes the trend one tab stop with the arrow keys moving between bars and Enter opening the run", async () => {
+    await mount(routines, runs);
+    const marks = [...host.querySelectorAll<HTMLElement>('[data-routine-id="r1"] [data-trend-run]')];
+    expect(marks.map((mark) => mark.tabIndex)).toEqual([-1, -1, -1, 0]);
+    act(() => marks[3]!.focus());
+    act(() => { marks[3]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })); });
+    expect(document.activeElement).toBe(marks[2]);
+    expect(marks.map((mark) => mark.tabIndex)).toEqual([-1, -1, 0, -1]);
+    act(() => { marks[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })); });
+    expect(document.activeElement).toBe(marks[0]);
+    act(() => { marks[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    expect(calls).toEqual(["run:d"]);
+  });
+
+  it("puts the first words of what the run said in the bar's tooltip", async () => {
+    const said = { ...run("p", "r1", "completed", 1), output: "Nine invoices sent, one waiting on a PO number." } as RoutineRun;
+    await mount(routines, [said]);
+    expect(host.querySelector<HTMLElement>('[data-routine-id="r1"] [data-trend-mark="success"]')!.title).toContain("Nine invoices sent");
+  });
+
+  it("says a suspended or auto-paused routine's reason as text in its Next run cell", async () => {
+    const stopped = routine("r4", "Flaky", { enabled: false, nextRunAt: null, suspended: { reason: "usage_limit" } as never });
+    await mount([...routines, stopped], runs);
+    const state = host.querySelector('[data-routine-id="r4"] [data-routine-state]')!;
+    expect(state.textContent).not.toBe("");
+    expect(state.textContent).toBe(state.getAttribute("title"));
+  });
+
+  it("reads the trend once for the day, not again on each render or minute", async () => {
+    await mount(routines, runs);
+    await mount(routines, [...runs, run("z", "r1", "completed", 1)]);
+    await mount(routines, runs, { now: NOW + 59 * 60_000 });
+    expect(new Set(reads.trend.map(([start]) => start)).size).toBe(1);
+    expect(reads.trend[0]![1]).toBe(7);
+    expect(reads.trend[0]![0] % 86_400_000).toBe(0);
+  });
+
+  it("shows 30-day figures as loading until the older runs are in, never the 14 days already held", async () => {
+    await mount(routines, runs);
+    const choose = async (value: string) => {
+      const select = host.querySelector<HTMLElement>('[aria-label="Period"]')!;
+      await act(async () => { select.click(); });
+      await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="option"], [role="menuitemradio"], button')].find((item) => item.textContent === value)?.click(); });
+    };
+    reads.covered = false;
+    await choose("Last 30 days");
+    expect(host.querySelector("[data-routines-figures-loading]")).not.toBeNull();
+    expect(text('[data-testid="routines-total"]')).toContain("…");
+    expect(host.querySelector("[data-routines-failed-runs]")).toBeNull();
+    expect(reads.from.at(-1)).toBeLessThan(NOW);
+    reads.covered = true;
+    await mount(routines, runs);
+    expect(host.querySelector("[data-routines-figures-loading]")).toBeNull();
+    expect(text('[data-testid="routines-total"]')).toContain("4");
+  });
+
+  it("closes the narrow Group by menu on Escape and moves between its choices with the arrows", async () => {
+    await mount(routines, runs, { onGroupBy: () => {} });
+    const details = host.querySelector<HTMLDetailsElement>("[data-routines-group-menu]")!;
+    details.setAttribute("open", "");
+    const items = [...details.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+    act(() => items[0]!.focus());
+    act(() => { items[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    expect(document.activeElement).toBe(items[1]);
+    act(() => { items[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(details.hasAttribute("open")).toBe(false);
   });
 });

@@ -2,12 +2,12 @@
 // grouped one: the six-column row (name, bot, schedule, the trend of the last 7
 // runs, next run, "..."), its head, and a group's heading row. At a narrow page
 // the row is two lines under the name: the trend, then the bot and schedule.
-import { ChevronRight, MoreHorizontal } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { ChevronRight, Loader2, MoreHorizontal } from "lucide-react";
+import { memo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
-import { routineDateTime, routineNextText, routineRunAgo, routineRunDuration, routineRunLabel, routineRunTime, routineState } from "@/lib/routine-display";
+import { routineDateTime, routineNextText, routineRunAgo, routineRunDuration, routineRunLabel, routineRunPreview, routineRunTime, routineState } from "@/lib/routine-display";
 import type { RoutineTableRow } from "@/lib/routine-table";
 import { TREND_RUN_KINDS, type RoutineTrend, type TrendKind } from "@/lib/routine-trend";
 import { RoutineNameInput } from "./RoutineRowMenu";
@@ -29,35 +29,65 @@ export const COLUMNS: Record<ColumnsMode, string> = {
 const HEAD_CELL = "text-[12px] leading-4 text-ink-secondary";
 
 
-// One bar per run, like an uptime strip: the same size for every result, its colour the result's. Colour is
-// backed by the tooltip and the cell's sentence in words, never by a shape.
+// One bar per run, like an uptime strip: the SAME size for every result (owner, 2026-11-17: "same height, colour
+// alone"), its colour the result's. The three colours are the skin's own, a stronger step of them where a skin keeps
+// two too close for a colour-blind eye (--trend-* in styles.css, measured in src/lib/trend-colors.test.ts). A blocked or
+// missed run, and one that waits on the person, are the OUTLINE of the same bar, so neither reads as a paler failure
+// or problem. The meaning is also in the tooltip and the accessible label, never in the colour alone.
 const BAR_TONE: Record<TrendKind, string> = {
-  success: "bg-success", problems: "bg-warning", failed: "bg-danger", blocked: "bg-danger/70",
-  running: "bg-accent animate-pulse motion-reduce:animate-none", waiting: "bg-warning/45", empty: "bg-ink/10",
+  success: "bg-trend-success", problems: "bg-trend-problems", failed: "bg-trend-failed", blocked: "bg-transparent ring-1 ring-inset ring-trend-failed",
+  running: "bg-accent animate-pulse motion-reduce:animate-none", waiting: "bg-transparent ring-1 ring-inset ring-trend-problems", empty: "bg-ink/10",
 };
 const BAR = "block h-4 w-1 shrink-0 rounded-[1px]";
 
 /** The trend in words: "Last 7 runs: succeeded: 5, with problems: 1; most recent 3 min ago". */
 export function trendSentence(trend: RoutineTrend, now: number): string {
   if (!trend.newest) return t("routinesOverview.trend.none");
-  const counts = TREND_RUN_KINDS.filter((kind) => trend.counts[kind]).map((kind) => t("routinesOverview.trend.part", { label: t(`routinesOverview.trend.${kind}`), count: trend.counts[kind]! }));
+  const counts = TREND_RUN_KINDS.filter((kind) => trend.counts[kind]).map((kind) => t(trend.counts[kind] === 1 ? `routinesOverview.trend.${kind}One` : `routinesOverview.trend.${kind}`, { count: trend.counts[kind]! }));
   return t("routinesOverview.trend.label", { counts: counts.join(", "), ago: routineRunAgo(routineRunTime(trend.newest), now) });
 }
 
-function markTitle(run: RoutineRun, now: number): string {
+/** What a bar says in words: when, the result, how long. */
+function markLabel(run: RoutineRun, now: number): string {
   return [routineDateTime(routineRunTime(run)), routineRunLabel(run), routineRunDuration(run, now)].filter(Boolean).join(" · ");
 }
 
-/** The last 7 runs, oldest at the left, then how long ago the newest was. */
+/** The tooltip adds the first words of what the run reported. */
+function markTitle(run: RoutineRun, now: number): string {
+  const preview = routineRunPreview(run).replace(/\s+/g, " ").trim();
+  return [markLabel(run, now), preview.length > 140 ? `${preview.slice(0, 139)}…` : preview].filter(Boolean).join("\n");
+}
+
+/** The last 7 runs, oldest at the left, then how long ago the newest was. One tab stop for the whole strip: the
+ * arrow keys (Home and End too) move between its bars and Enter or Space opens the focused run. */
 function TrendCell({ trend, now, onOpenRun }: { trend: RoutineTrend; now: number; onOpenRun: (run: RoutineRun) => void }) {
+  const runs = trend.marks.flatMap((mark) => mark.run ? [mark.run] : []);
+  const [active, setActive] = useState(runs.length - 1);
+  const stop = Math.min(Math.max(active, 0), runs.length - 1);
+  const strip = useRef<HTMLSpanElement>(null);
+  const focusAt = (index: number) => {
+    const next = Math.min(Math.max(index, 0), runs.length - 1);
+    setActive(next);
+    strip.current?.querySelectorAll<HTMLElement>("[data-trend-run]")[next]?.focus();
+  };
+  let runIndex = -1;
   return <div role="group" data-routine-trend aria-label={trendSentence(trend, now)} className="flex min-w-0 items-center gap-2">
-    <span className="flex h-4 shrink-0 items-center gap-[3px]">
-      {trend.marks.map((mark, index) => mark.run
+    <span ref={strip} className="flex h-4 shrink-0 items-center gap-[3px]">
+      {trend.marks.map((mark, index) => {
+        if (!mark.run) return <span key={`empty-${index}`} data-trend-mark="empty" aria-hidden="true" className={cn(BAR, BAR_TONE.empty)} />;
+        const own = ++runIndex;
+        const run = mark.run;
         // A span with a link role, not a button: a skin that paints buttons (the retro one) would give the bar a button face.
-        ? <span key={mark.run.id} role="link" tabIndex={0} data-trend-mark={mark.kind} title={markTitle(mark.run, now)} aria-label={markTitle(mark.run, now)} onClick={() => onOpenRun(mark.run!)}
-          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenRun(mark.run!); } }}
-          className={cn(BAR, BAR_TONE[mark.kind], "relative z-10 cursor-pointer hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")} />
-        : <span key={`empty-${index}`} data-trend-mark="empty" aria-hidden="true" className={cn(BAR, BAR_TONE.empty)} />)}
+        return <span key={run.id} role="link" data-trend-run="" tabIndex={own === stop ? 0 : -1} data-trend-mark={mark.kind} title={markTitle(run, now)} aria-label={markLabel(run, now)} onClick={() => onOpenRun(run)} onFocus={() => setActive(own)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenRun(run); }
+            else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); focusAt(own - 1); }
+            else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); focusAt(own + 1); }
+            else if (event.key === "Home") { event.preventDefault(); focusAt(0); }
+            else if (event.key === "End") { event.preventDefault(); focusAt(runs.length - 1); }
+          }}
+          className={cn(BAR, BAR_TONE[mark.kind], "relative z-10 cursor-pointer hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")} />;
+      })}
     </span>
     <span data-trend-ago className="hidden min-w-0 whitespace-nowrap text-[12px] leading-4 text-ink-tertiary @[64rem]/routines:inline">{trend.newest ? routineRunAgo(routineRunTime(trend.newest), now) : t("routinesOverview.neverRan")}</span>
   </div>;
@@ -66,14 +96,14 @@ function TrendCell({ trend, now, onOpenRun }: { trend: RoutineTrend; now: number
 function NextRun({ routine }: { routine: Routine }) {
   const state = routineState(routine);
   if (!routine.enabled || routine.suspended) {
-    return <span data-routine-state={state.tone} title={state.label} className={cn("inline-block rounded-md px-1.5 text-[12px] leading-[18px]", state.tone === "warning" ? "bg-warning/15 text-warning" : "bg-inset text-ink-secondary")}>{state.tone === "neutral" ? state.label : t("routines.pausedSchedule")}</span>;
+    return <span data-routine-state={state.tone} title={state.label} className={cn("inline-block max-w-full truncate rounded-md px-1.5 align-top text-[12px] leading-[18px]", state.tone === "warning" ? "bg-warning/15 text-warning" : "bg-inset text-ink-secondary")}>{state.label}</span>;
   }
   // A routine that starts on a trigger has no next time: its Schedule column already says what starts it.
   if (routine.nextRunAt == null) return <span data-routine-next="" aria-hidden="true" className="text-[12px] leading-4 text-ink-tertiary">-</span>;
   return <span data-routine-next className="text-[12px] leading-4 text-ink-secondary">{routineNextText(routine)}</span>;
 }
 
-export function RoutineTableRowView({ columns = "both", row, now, viewerPrincipalId, onOpen, onOpenRun, onRowMenu, onDragStart, onStep, renaming, onRenameStart, onRenameSave, onRenameCancel }: {
+export const RoutineTableRowView = memo(function RoutineTableRowView({ columns = "both", row, now, viewerPrincipalId, onOpen, onOpenRun, onRowMenu, onDragStart, onStep, dropSection, renaming, onRenameStart, onRenameSave, onRenameCancel }: {
   /** Which of the Bot and Folder columns this table shows. */
   columns?: ColumnsMode;
   row: RoutineTableRow; now: number; viewerPrincipalId?: string | null; onOpen: (routine: Routine) => void; onOpenRun: (run: RoutineRun) => void; onRowMenu?: RowMenu;
@@ -81,6 +111,8 @@ export function RoutineTableRowView({ columns = "both", row, now, viewerPrincipa
   onDragStart?: (routine: Routine, event: ReactPointerEvent<HTMLElement>) => void;
   /** Alt+Up / Alt+Down on the focused name: to the previous or next folder. */
   onStep?: (routine: Routine, direction: -1 | 1) => void;
+  /** Dragging is on in this block: the row is a drop place for its own folder, lit while a row is over it. */
+  dropSection?: { active: boolean };
   renaming: boolean; onRenameStart?: (routine: Routine) => void; onRenameSave?: (routine: Routine, name: string) => void; onRenameCancel?: () => void;
 }) {
   const { routine } = row;
@@ -93,14 +125,14 @@ export function RoutineTableRowView({ columns = "both", row, now, viewerPrincipa
   const reset = "@[44rem]/routines:[grid-area:auto]";
   // Phone: one muted line (never a third), cut at the edge; the whole line is its tooltip.
   const folded = [columns === "folder" ? null : row.botName, columns === "bot" ? null : routine.folder, row.paused ? routineState(routine).label : row.when, !row.paused && routine.enabled && routine.nextRunAt != null ? routineNextText(routine) : null].filter(Boolean).join(" · ");
-  return <div role="row" data-routine-row data-routine-id={routine.id} data-routine-enabled={routine.enabled ? "" : undefined}
+  return <div role="row" data-routine-row data-routine-id={routine.id} data-routine-enabled={routine.enabled ? "" : undefined} data-routine-folder-section={dropSection ? (routine.folder ?? "") : undefined}
     onPointerDown={onDragStart && !readOnly ? (event) => {
       if (event.pointerType === "touch" || event.button !== 0) return;
       if ((event.target as HTMLElement).closest?.("[data-routine-row-menu],[data-trend-mark]")) return;
       onDragStart(routine, event);
     } : undefined}
     onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
-    className={cn("relative grid items-center border-b border-hairline/40 py-2.5 hover:bg-hover", onDragStart && !readOnly && "cursor-grab select-none", COLUMNS[columns])}>
+    className={cn("relative grid items-center border-b border-hairline/40 py-2.5 hover:bg-hover", onDragStart && !readOnly && "cursor-grab select-none", dropSection?.active && "bg-hover/60 ring-1 ring-accent/50", COLUMNS[columns])}>
     <div role="cell" className={cn("flex min-w-0 flex-col [grid-area:1/1]", reset)}>
       {renaming && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : (
         <span className="flex min-w-0 items-center gap-2">
@@ -126,7 +158,7 @@ export function RoutineTableRowView({ columns = "both", row, now, viewerPrincipa
         className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><MoreHorizontal size={16} aria-hidden="true" /></button>}
     </div>
   </div>;
-}
+});
 
 /** The table's column titles, once at the top, whatever the grouping. */
 export function RoutineTableHead({ columns = "both" }: { columns?: ColumnsMode }) {
@@ -142,33 +174,40 @@ export function RoutineTableHead({ columns = "both" }: { columns?: ColumnsMode }
   </div>;
 }
 
-/** A group's header band: a filled row (a bot's mascot or a folder's icon, the name, the count, one problem
- * figure when there is one) that folds or opens its block; its "..." is the group's menu. */
-export function GroupBand({ lead, name, count, failing, collapsed, onToggle, menuLabel, onMenu, children, ...rest }: {
+/** A group's header band, a table row of its own: one header cell that spans every column, holding a filled band
+ * (a bot's mascot or a folder's icon, the name, the count, how many are running, one problem figure when there is one)
+ * that folds or opens its block; its "..." is the group's menu. */
+export function GroupBand({ lead, name, count, running, failing, collapsed, onToggle, menuLabel, onMenu, columnCount = 6, children, ...rest }: {
   lead: ReactNode;
   name: ReactNode;
   count: number;
+  /** Routines of the group with a run in progress: shown only above zero. */
+  running?: number;
   /** Routines with a problem in the group: one compact figure, only when above zero. */
   failing?: number;
   collapsed: boolean;
   onToggle: () => void;
   menuLabel?: string;
   onMenu?: (at: { x: number; y: number }, trigger: HTMLElement) => void;
+  /** The columns the table has at this grouping: the header cell spans them. */
+  columnCount?: number;
   children?: ReactNode;
 } & Record<`data-${string}`, string | number | undefined>) {
-  return <div role="row" {...rest} onContextMenu={onMenu ? (event) => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }, event.currentTarget); } : undefined}
-    className="-mx-3 flex min-w-0 items-center gap-1 rounded-lg bg-inset pr-3">
-    <button type="button" aria-expanded={!collapsed} data-group-toggle onClick={onToggle}
-      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
-      <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", !collapsed && "rotate-90")} />
-      <span aria-hidden="true" className="flex shrink-0 items-center text-ink-secondary">{lead}</span>
-      <span className="min-w-0 break-words text-[13px] font-medium leading-[18px] text-ink">{name}</span>
-      <span data-group-count={count} className="shrink-0 text-[12px] leading-4 tabular-nums text-ink-secondary">{count === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count })}</span>
-      {failing ? <span data-group-failing={failing} title={t("routines.group.failing", { count: failing })} aria-label={t("routines.group.failing", { count: failing })} className="shrink-0 rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{failing}</span> : null}
-    </button>
-    {children}
-    {onMenu && menuLabel && <button type="button" data-group-menu aria-haspopup="menu" aria-label={menuLabel} title={menuLabel}
-      onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onMenu({ x: rect.left, y: rect.bottom + 4 }, event.currentTarget); }}
-      className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><MoreHorizontal size={16} aria-hidden="true" /></button>}
+  return <div role="row" {...rest} onContextMenu={onMenu ? (event) => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }, event.currentTarget); } : undefined}>
+    <div role="rowheader" aria-colspan={columnCount} className="-mx-3 flex min-w-0 items-center gap-1 rounded-lg bg-inset pr-3">
+      <button type="button" aria-expanded={!collapsed} data-group-toggle onClick={onToggle}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+        <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", !collapsed && "rotate-90")} />
+        <span aria-hidden="true" className="flex shrink-0 items-center text-ink-secondary">{lead}</span>
+        <span className="min-w-0 break-words text-[13px] font-medium leading-[18px] text-ink">{name}</span>
+        <span data-group-count={count} className="shrink-0 text-[12px] leading-4 tabular-nums text-ink-secondary">{count === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count })}</span>
+        {running ? <span data-group-running={running} title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className="flex shrink-0 items-center gap-1 text-[12px] leading-4 tabular-nums text-accent"><Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />{running}</span> : null}
+        {failing ? <span data-group-failing={failing} title={t("routines.group.failing", { count: failing })} aria-label={t("routines.group.failing", { count: failing })} className="shrink-0 rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{failing}</span> : null}
+      </button>
+      {children}
+      {onMenu && menuLabel && <button type="button" data-group-menu aria-haspopup="menu" aria-label={menuLabel} title={menuLabel}
+        onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onMenu({ x: rect.left, y: rect.bottom + 4 }, event.currentTarget); }}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><MoreHorizontal size={16} aria-hidden="true" /></button>}
+    </div>
   </div>;
 }

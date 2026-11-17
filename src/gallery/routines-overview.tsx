@@ -93,6 +93,8 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/limit-resets")) {
     return json({ checkedAt: NOW, engines: [{ engine: "grok", name: "Grok", driver: "grok", window: "5-hour", usedPercent: 94, resetsAt: NOW + 3 * H, blocked: false }] });
   }
+  // A folder action answers like the server's: the folders left and the routines it changed (none here).
+  if (url.includes("/api/routines/folders")) return json({ folders: ["Reports"], routines: [] });
   if (url.includes("/api/routines")) {
     return json({
       routines, runs, scope: "mine", allowed: { mine: true, team: true, all: true },

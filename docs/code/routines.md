@@ -21,30 +21,52 @@ the runs the app holds by one rule (`src/lib/routine-figures.ts`): settled runs
 only; a run with nothing to report is a success; a completed run with problems,
 a block and a miss are failures; no run gives a dash. "View failed runs" opens
 the Run logs on the problems filter and on the same period (`showRoutines` with
-`period`). No server route serves a figure.
+`period`). No server route serves a figure. The app holds two weeks: choosing 30
+days loads the older runs of those days (`useRoutineRunsFrom`, only while it is
+chosen) and the figures say Loading until they are here, never the 14 days
+already held. The period lengths are `RUNS_PERIOD_MS`, which the Run log reads too.
 
 Routines: search, Filters, Group by (None, Bot, Folder: one control, an icon
-menu on a narrow page) and New on the section's heading row, then ONE table
-(`RoutineTable.tsx`, rows from `src/lib/routine-table.ts`): Routine, Bot,
-Folder, Schedule, the trend of the last 7 runs, Next run (or a Paused chip),
-and the row menu. The trend (`src/lib/routine-trend.ts`) is seven bars of one
-size, oldest at the left, coloured by result (success, problems, failed, muted
-danger for blocked or missed, accent pulse for running, a faint track for an
-empty slot); each bar has a tooltip and opens its run; the cell says it in
-words. It is a `span` with a link role, never a button, because the retro skin
-paints buttons. The app holds two weeks of runs, so the Overview loads eight
-weeks (`useRoutineRunsFrom`) for a weekly routine's seven runs.
+menu on a narrow page that closes on Escape and moves with the arrows) and New
+on the section's heading row, then ONE table (`RoutineTable.tsx`, rows from
+`src/lib/routine-table.ts`, memoized, handlers of stable identity): Routine,
+Bot, Folder, Schedule, the trend of the last 7 runs, Next run (the reason as
+text for a paused, suspended or auto-paused routine), and the row menu (Run now
+or Stop, Pause or Resume, Rename, Open, View runs, Open team room for a team
+goal, Move to folder, Duplicate, Delete). View runs opens the Run log filtered
+to that routine. The trend (`src/lib/routine-trend.ts`) is seven bars of ONE
+size (owner's decision: same height, colour alone), oldest at the left: the
+skin's success, warning and danger colours (`--color-trend-*`, a stronger step
+of the skin's own tokens where a skin keeps two too close for a colour-blind
+eye; `src/lib/trend-colors.test.ts` measures every skin under protan, deutan
+and tritan simulation), the OUTLINE of the same bar for a blocked or missed run
+(and a run waiting on the person), an accent pulse for running, a faint track
+for an empty slot. The tooltip says when, the result, how long and the first
+words the run reported; the cell says the counts in words ("3 succeeded, 1
+failed"). The strip is ONE tab stop per row: arrow keys (Home, End) move between
+bars, Enter or Space opens the run. A bar is a `span` with a link role, never a
+button, because the retro skin paints buttons.
+
+The trend read: the app holds two weeks, a weekly routine needs about seven.
+`useRoutineTrendRuns` asks `GET /api/routines?from&to&perRoutine=7` once per
+day-rounded start: each routine's 7 newest runs in the range (the server's
+`newestPerRoutine`), not every run of eight weeks; the answer carries no range,
+so the app's window stays put. The page's clock moves on every minute, not on
+every render.
 
 Grouping (`RoutineGroupedTable.tsx`) is one level at a time, in the same table:
-each group is a block with a filled header band (click to fold, open by
-default, remembered per person) and its rows. Group by Bot hides the Bot
-column and shows Folder (rows by folder then name; the bot band's menu: New
-routine, New folder, Sort by prefix); Group by Folder hides Folder and shows
-Bot (the folder band's menu renames, pauses or deletes that folder in every bot
-that has it; a last block holds the routines with no folder). Move to folder is
-in every routine's row menu (`folderMoveTargets`, `moveRoutinesToFolder`). The
-bot panel's folder list keeps drag and drop (`useRoutineFolders`); the table
-has no folder heading rows to drop on.
+each group is a block with a header row (one header cell spanning the columns:
+click to fold, open by default, remembered per person; count, running count and
+a problem figure) and its rows. Group by Bot hides the Bot column and shows
+Folder (rows by folder then name; the bot band's menu: New routine, each of the
+bot's folders with its own Rename, Move up, Move down, Pause or Resume, Delete,
+then New folder and Sort by prefix; rows drag onto a folder and Alt+Up or
+Alt+Down step); Group by Folder hides Folder and shows Bot (the folder band's
+menu renames, pauses or deletes that folder; a last block holds the routines
+with no folder; New folder at the end asks which bot when there are several). A
+folder action from a band reaches every routine of the folder that belongs to
+the person's own bots, whatever a search or filter hides, never another
+person's; a delete shows the same Undo as the bot panel (one snapshot per bot).
 
 Layout: the table has its columns from 44rem of page (the trend with its text
 from 64rem); under that a row is the name, the bars and the menu on one line
@@ -53,9 +75,13 @@ the body share the 16 px gutter on a phone; only the title row keeps clear of
 the drawer button. The container query classes are literal (a template string
 once made the wide table fall back to the phone row). The usage notice is gone:
 its one action, move to after the reset, is one row of the header menu while a
-provider is near its limit (`LimitMoveMenu`). Tests: `routine-figures`,
-`routine-table`, `routine-trend`, `RoutinesOverview.dom`,
-`RoutineTable.layout`, `RoutineCalendarPage`, `RoutineCalendarPage.group-by.dom`.
+provider is near its limit (`LimitMoveMenu`: a failure on the store's error
+line, a success confirmed beside the menu). The Run log tab's count opens the
+log on the problems filter. Tests: `routine-figures`, `routine-table`,
+`routine-trend`, `trend-colors`, `RoutinesOverview.dom`, `RoutineTable.layout`
+and `RoutineTable.layout.dom` (the rendered table at wide and narrow container
+widths; both in the push gate's source-text list), `RoutineCalendarPage`,
+`RoutineCalendarPage.group-by.dom`, `LimitMoveMenu.dom`, `older-routine-runs`.
 `node scripts/capture/routines-page.mjs` takes the captures at nine widths and
 fails on a missing column header, a row taller than one line (from 1024 wide),
 a phone row over two lines, a left edge off the gutter, controls on several

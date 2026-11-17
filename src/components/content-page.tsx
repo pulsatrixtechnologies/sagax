@@ -199,7 +199,7 @@ export function PageSegment<T extends string | number>({ label, value, options, 
 export function PageTabs<T extends string>({ label, value, options, onChange, ...rest }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; badge?: number }>;
+  options: ReadonlyArray<{ value: T; label: string; badge?: number; /** Pressing the count itself (the tab opens too): the Run log's opens on its problems. */ onBadge?: () => void; badgeLabel?: string }>;
   onChange: (next: T) => void;
 } & DataAttributes) {
   // One line, scrolling sideways when the pills do not fit; the chosen one is brought into view.
@@ -232,7 +232,7 @@ export function PageTabs<T extends string>({ label, value, options, onChange, ..
           <button key={option.value} type="button" role="tab" aria-selected={on} data-page-tab={option.value} onClick={() => onChange(option.value)}
             className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none", on ? "bg-ink/[0.08] font-medium text-ink" : "text-ink-secondary hover:text-ink")}>
             {option.label}
-            {option.badge ? <span className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
+            {option.badge ? <span data-page-tab-badge="" title={option.badgeLabel} onClick={option.onBadge} className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
           </button>
         );
       })}

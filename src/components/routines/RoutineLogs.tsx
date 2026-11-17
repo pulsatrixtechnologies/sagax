@@ -6,12 +6,12 @@ import { t } from "@/lib/i18n";
 import { isRoutineProblemRun, routineRunMatchesStatus, type RoutineRun, type RoutineRunStatusFilter } from "@/lib/routines";
 import { routineAutoPausedText, routineDateTime, routineRunDuration, routineRunLabel, routineRunPreview, routineRunTime, routineRunTone } from "@/lib/routine-display";
 import { formatUsd } from "@/lib/usage";
+import { RUNS_PERIOD_MS } from "@/lib/routine-figures";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { runActivityStatus } from "./RoutineRunDetail";
 
 /** 2026-10-29: the period a person narrows the logs to. */
 export type RoutineLogPeriod = "all" | "day" | "week" | "month";
-const PERIOD_MS: Record<Exclude<RoutineLogPeriod, "all">, number> = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000 };
 const SELECT = "min-w-0 max-w-[200px] truncate rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink";
 import type { Bot } from "@/state/store";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
@@ -49,7 +49,7 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   // deleted routine included (its runs stay, #1567).
   const routineChoices = [...new Map(runs.map((run) => [run.routineId, run.routineName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const botChoices = [...new Set(runs.map((run) => run.botId))].map((id) => ({ id, name: bots.find((bot) => bot.id === id)?.name ?? ownerOf?.(runs.find((run) => run.botId === id)!)?.bot?.name ?? t("routines.unavailableBot") })).sort((a, b) => a.name.localeCompare(b.name));
-  const since = period === "all" ? -Infinity : now - PERIOD_MS[period];
+  const since = period === "all" ? -Infinity : now - RUNS_PERIOD_MS[period];
   const filtered = runs.filter((run) => (!routineId || run.routineId === routineId) && (!botId || run.botId === botId) && routineRunTime(run) >= since && routineRunMatchesStatus(run, status)
     && `${run.routineName} ${bots.find((bot) => bot.id === run.botId)?.name ?? ""} ${run.output ?? ""} ${run.error ?? ""} ${run.attention ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => routineRunTime(b) - routineRunTime(a));

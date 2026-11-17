@@ -2,7 +2,7 @@
 /**
  * Headless screenshots of the Routines page (2026-11-17): the Overview tab
  * (Runs figures, the routines table), its Filters popover and the grouped
- * view, in French dark and English light, at 1280 and 390 wide. Playwright,
+ * view, the row and band menus and the folder delete's Undo notice, in French dark and English light, at 1280 and 390 wide. Playwright,
  * no window, no focus taken; mocked API, no server.
  * Usage: node scripts/capture/routines-page.mjs [--out DIR] [--port N]
  */
@@ -24,6 +24,11 @@ const shots = [
   { name: "filters", query: "tab=overview", filters: true },
   { name: "grouped-bot", query: "tab=overview&groupBy=bot" },
   { name: "grouped-folder", query: "tab=overview&groupBy=folder" },
+  // the menus and the Undo notice a folder delete leaves (the gallery answers the folder call)
+  { name: "row-menu", query: "tab=overview", open: '[data-routine-id="r2"] [data-routine-row-menu]', wait: '[data-routine-folder-menu="row"]' },
+  { name: "band-menu-bot", query: "tab=overview&groupBy=bot", open: '[data-routine-group-bot="atlas"] [data-group-menu]', wait: '[data-routine-folder-menu="section"]' },
+  { name: "band-menu-folder", query: "tab=overview&groupBy=folder", open: '[data-routine-group-folder="Clients"] [data-group-menu]', wait: '[data-routine-folder-menu="section"]' },
+  { name: "folder-undo", query: "tab=overview&groupBy=folder", open: '[data-routine-group-folder="Clients"] [data-group-menu]', confirm: '[data-routine-folder-action="delete"]', wait: "[data-routine-folder-notice]" },
   { name: "logs", query: "tab=logs" },
   { name: "empty", query: "tab=overview&empty=1" },
   { name: "all-good", query: "tab=overview&quiet=1" },
@@ -79,6 +84,11 @@ try {
         if (shot.filters) {
           await page.locator("[data-automations-filters] > summary").click();
           await page.locator('[data-routine-filter="status"]').waitFor();
+        }
+        if (shot.open) {
+          await page.locator(shot.open).first().click();
+          if (shot.confirm) await page.locator(shot.confirm).first().click();
+          await page.locator(shot.wait).first().waitFor();
         }
         await page.waitForTimeout(400);
         // The layout, at every width: nothing scrolls sideways; from 768 up the table has its five column

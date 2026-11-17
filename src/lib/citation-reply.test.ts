@@ -22,7 +22,7 @@ describe("reply to a selected passage", () => {
 
   it("uses the same send path in a group", () => {
     expect(citationReplyAction(citation, "group", "team", "room")).toMatchObject({
-      type: "sendGroup", groupId: "team", threadId: "room", onError: expect.any(Function),
+      type: "sendGroup", groupId: "team", threadId: "room", mode: "chat", onError: expect.any(Function),
     });
   });
 });

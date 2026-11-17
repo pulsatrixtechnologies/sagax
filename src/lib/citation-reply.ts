@@ -12,5 +12,5 @@ export function citationReplyAction(citation: CitationAttachment, ownerType: "bo
     text: composeMessage(text, [quote]), threadId, sendId: crypto.randomUUID(),
     onError: () => { appendComposerDraft(draftId, text); appendDraftAttachments(draftId, [quote]); },
   };
-  return ownerType === "bot" ? { type: "send", botId: ownerId, ...send } : { type: "sendGroup", groupId: ownerId, ...send };
+  return ownerType === "bot" ? { type: "send", botId: ownerId, ...send } : { type: "sendGroup", groupId: ownerId, mode: "chat", ...send };
 }

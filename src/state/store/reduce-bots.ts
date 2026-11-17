@@ -1,7 +1,8 @@
 // Domain slice of the client store reduce(bots).
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
-import {clearThreadReturnIfHome, currentTaskBot, mergeTaskStamps, openedUnreadDivider, panelFollowsSelection, patchCard, patchGroupCard, readOnScreen, reconcileModelVariantSessions, reconcileSnapshotQueues, taskPatchFields, updateBot, visibleMessages, withMascotMotion, type Bot} from "./model";
+import {clearThreadReturnIfHome, currentTaskBot, mergeTaskStamps, openedUnreadDivider, optimisticUserMessage, panelFollowsSelection, patchCard, patchGroupCard, readOnScreen, reconcileModelVariantSessions, reconcileSnapshotQueues, taskPatchFields, bumpThreadUpdatedAt, updateBot, visibleMessages, withMascotMotion, type Bot} from "./model";
+import { choiceContinuing } from "./choice-continuing";
 import {fallbackSelection} from "@/lib/selection-fallback";
 import {threadOpensUnread, threadReadCursor} from "@/lib/unread-divider";
 import {sameModelSelection} from "../../../shared/thread-model";
@@ -59,10 +60,14 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
     }
     // optimistic card settle; the server's message.patch confirms it later
     case "answerCard": {
-      if (action.groupId) return patchGroupCard(state, action.groupId, action.messageId, { answered: action.answer });
+      // #4489: the card keeps its answered state (a quiz hides, and the
+      // pick is the person's message). The working line comes on now.
+      if (action.groupId) {
+        return choiceContinuing(patchGroupCard(state, action.groupId, action.messageId, { answered: action.answer }), action.botId, action.threadId);
+      }
       const bot = state.bots.find((candidate) => candidate.id === action.botId);
       const card = bot?.messages.find((message) => message.id === action.messageId)?.card;
-      return withMascotMotion(
+      let next = choiceContinuing(
         patchCard(state, action.botId, action.messageId, {
           answered: action.answer,
           // talking past the first-run quiz hides it; live asks, a bot's
@@ -72,9 +77,21 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
           ...(card?.proactiveProposal ? { answeredText: action.answer } : {}),
         }),
         action.botId,
-        "working",
+        action.threadId,
       );
+      if (!action.sendId) return next;
+      const owner = next.bots.find((candidate) => candidate.id === action.botId);
+      const threadId = action.threadId ?? owner?.threadId;
+      if (!owner || threadId !== owner.threadId || owner.messages.some((message) => message.sendId === action.sendId)) return next;
+      const message = optimisticUserMessage(action.answer, action.sendId, undefined, owner.activeLeafId);
+      return bumpThreadUpdatedAt(updateBot(next, owner.id, (current) => ({
+        ...current,
+        messages: [...current.messages, message],
+        activeLeafId: message.id,
+      })), threadId, message.at);
     }
+    case "choiceContinuing":
+      return choiceContinuing(state, action.botId, action.threadId);
     case "dismissCard":
       if (action.groupId) return patchGroupCard(state, action.groupId, action.messageId, { dismissed: true });
       return patchCard(state, action.botId, action.messageId, { dismissed: true });

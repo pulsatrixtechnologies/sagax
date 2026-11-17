@@ -22,7 +22,7 @@ const lang = arg("--lang", "en");
 const scheme = arg("--scheme", "dark");
 const widths = arg("--widths", "1280,700").split(",").map(Number);
 const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "connect-apps-details")));
-const port = Number(arg("--port", "5192"));
+const port = Number(arg("--port", "5202"));
 const skin = scheme === "light" ? "pulsatrix-light" : "pulsatrix";
 
 const vite = spawn(process.execPath, [join(root, "node_modules", "vite", "bin", "vite.js"), "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], { cwd: root, stdio: "ignore", env: { ...process.env, NODE_ENV: "development" } });

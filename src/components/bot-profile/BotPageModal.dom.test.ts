@@ -144,7 +144,7 @@ describe("regression #4470: the bot page's modal shell", () => {
     // a page drawn in a modal: the Settings window's size, no title row, no
     // second close over the page's own header, named for readers
     const second = modal("second")!;
-    expect(second.className).toContain("w-[min(900px,calc(100vw-32px))]");
+    expect(second.className).toContain("w-[min(1100px,calc(100vw-32px))]");
     expect(second.querySelector("[data-bot-page-modal-header]")).toBeNull();
     expect(second.getAttribute("aria-label")).toBe("Memory");
     expect(second.querySelector("[data-dialog-close]")).toBeNull();

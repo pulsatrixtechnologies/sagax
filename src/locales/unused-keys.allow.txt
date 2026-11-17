@@ -403,6 +403,8 @@ persona.action.rename
 persona.categories
 persona.files.new
 persona.overview.actions
+persona.overview.description
+persona.overview.noDescription
 persona.rules.editorLabel
 persona.rules.over
 persona.rules.sets.title

@@ -23,8 +23,8 @@ const FORMS: CapabilityForm[] = ["plugin", "skill", "mcp", "connector", "role", 
 const ITEM_KINDS: PluginKind[] = ["app", "mcp", "featured", "skill", "plugin"];
 
 describe("the three kinds of Connect Apps", () => {
-  it("names the tabs in the reference's order", () => {
-    expect(CONNECT_APPS_KINDS).toEqual(["skills", "connectors", "plugins"]);
+  it("names the tabs in the owner's order: Connectors, Plugins, Skills", () => {
+    expect(CONNECT_APPS_KINDS).toEqual(["connectors", "plugins", "skills"]);
   });
 
   it("puts every resolved form and every catalog kind in exactly one tab", () => {
@@ -55,7 +55,7 @@ describe("the three kinds of Connect Apps", () => {
     expect([...keys].sort()).toEqual(rows.map((row) => row.key).sort());
     const counts = kindCounts(rows, kindOf);
     expect(counts.skills + counts.connectors + counts.plugins).toBe(rows.length);
-    expect(byTab.map((list) => list.length)).toEqual([counts.skills, counts.connectors, counts.plugins]);
+    expect(byTab.map((list) => list.length)).toEqual([counts.connectors, counts.plugins, counts.skills]);
   });
 
   it("sorts an installed entry by the row that stands for it", () => {

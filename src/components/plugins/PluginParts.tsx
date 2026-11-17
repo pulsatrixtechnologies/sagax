@@ -165,13 +165,16 @@ export function PluginPageHeader({ title, trail, onBack, named = false }: {
   const crumbs = trail ?? [{ label: t("connectApps.title"), onSelect: onBack }];
   const from = crumbs[crumbs.length - 1]?.label;
   return (
-    <div className={cn("relative flex shrink-0 items-center px-3 pr-14", named ? "h-10" : "h-12")} data-plugins-page-bar data-breadcrumb="">
+    // The row's centre line is the window close button's (CATEGORY_MODAL.close: top 10px, 32px tall, centre 26px):
+    // a named bar sits its 32px link 10px down (pt-2.5), a titled bar is 52px tall and centres. A named bar's
+    // link glyph starts on the page's own left edge (px-4, sm:px-[34px], as the header below); the hover pill leans left of it.
+    <div className={cn("relative flex shrink-0 pr-14", named ? "items-start px-4 pb-1 pt-2.5 sm:px-[34px]" : "h-[52px] items-center px-3")} data-plugins-page-bar data-breadcrumb="">
       <button
         type="button"
         onClick={onBack}
         aria-label={from ? t("connectApps.backTo", { name: from }) : t("breadcrumb.back")}
         title={crumbs.map((crumb) => crumb.label).join(" / ")}
-        className={cn("flex h-8 shrink-0 items-center gap-1 rounded-full text-ink hover:bg-hover", named && from ? "min-w-0 max-w-[60%] pl-1.5 pr-3 text-[13px] leading-5" : "w-8 justify-center")}
+        className={cn("flex h-8 shrink-0 items-center gap-1 rounded-full text-ink hover:bg-hover", named && from ? "-ml-3.5 min-w-0 max-w-[60%] pl-1.5 pr-3 text-[13px] leading-5" : "w-8 justify-center")}
         data-breadcrumb-back=""
         data-plugins-back=""
       >
@@ -184,14 +187,16 @@ export function PluginPageHeader({ title, trail, onBack, named = false }: {
 }
 
 /** One card of a page (#2104): a gray label over a card with a subtle
- * border on the window's own background. */
+ * border on the window's own background. The label sits on the card's own left
+ * edge, which is the page's (the header, the tabs and the cards share one
+ * edge); a section's actions sit at the label's right. */
 export function PluginCard({ title, children, action }: { title?: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
     <section>
       {(title || action) && (
-        <div className="mb-2.5 flex items-center justify-between gap-3 px-[14px]">
+        <div className="mb-2 flex min-h-[26px] flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {title && <h3 className="min-w-0 text-[13px] font-normal leading-5 text-ink-secondary">{title}</h3>}
-          {action}
+          {action && <div className="ml-auto flex flex-wrap items-center gap-2">{action}</div>}
         </div>
       )}
       <div className="rounded-[14px] border-[0.5px] border-ink/10 px-[14px] py-2">{children}</div>

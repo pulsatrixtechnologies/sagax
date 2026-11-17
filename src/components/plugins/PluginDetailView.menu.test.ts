@@ -47,8 +47,8 @@ describe("plugin detail menu: the uninstall of the person's or a bot's own insta
     flushSync(() => root.render(createElement(PluginDetailView, {
       item: items[0]!, subtitle: "", busy: false, onBack: noop, onUninstall, uninstallLabel: "Remove for me", details: [],
     })));
-    click(host.querySelector("[data-entry-menu]"));
-    const remove = host.querySelector('[role="menu"] [data-entry-action="remove"]');
+    click(document.querySelector("[data-entry-menu]"));
+    const remove = document.querySelector('[role="menu"] [data-entry-action="remove"]');
     expect(remove?.textContent).toContain("Remove for me");
     click(remove);
     expect(onUninstall).toHaveBeenCalledTimes(1);
@@ -64,24 +64,24 @@ describe("plugin detail menu", () => {
       item: items[0]!, subtitle: "https://qc1.example.net/mcp", busy: false, onBack: noop,
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     // Update is the header's main action (the Customize page's shape), it is not said twice (no dot on "...", nothing in Details)
-    expect(host.querySelector('[data-plugin-action="update"]')?.textContent).toBe("Update");
-    expect(host.querySelector("[data-plugin-update-row]")).toBeNull();
+    expect(document.querySelector('[data-plugin-action="update"]')?.textContent).toBe("Update");
+    expect(document.querySelector("[data-plugin-update-row]")).toBeNull();
     // the dot would repeat the Update button beside it: none
-    expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
-    click(host.querySelector('[data-plugin-action="update"]'));
+    expect(document.querySelector("[data-plugin-update-dot]")).toBeNull();
+    click(document.querySelector('[data-plugin-action="update"]'));
     expect(onUpdate).toHaveBeenCalledTimes(1);
     // Uninstall is in the one "..." menu (the same menu as a row's, never a second pill)
-    expect(host.querySelector('[data-plugin-action="uninstall"]')).toBeNull();
-    click(host.querySelector("[data-entry-menu]"));
-    const actions = [...host.querySelectorAll('[role="menu"] [data-entry-action]')].map((node) => node.getAttribute("data-entry-action"));
+    expect(document.querySelector('[data-plugin-action="uninstall"]')).toBeNull();
+    click(document.querySelector("[data-entry-menu]"));
+    const actions = [...document.querySelectorAll('[role="menu"] [data-entry-action]')].map((node) => node.getAttribute("data-entry-action"));
     expect(actions).toEqual(["test", "edit", "remove"]);
-    click(host.querySelector('[data-entry-action="test"]'));
+    click(document.querySelector('[data-entry-action="test"]'));
     expect(onTest).toHaveBeenCalledTimes(1);
-    expect(host.querySelector('[role="menu"]')).toBeNull();
-    click(host.querySelector("[data-entry-menu]"));
-    click(host.querySelector('[role="menu"] [data-entry-action="remove"]'));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    click(document.querySelector("[data-entry-menu]"));
+    click(document.querySelector('[role="menu"] [data-entry-action="remove"]'));
     expect(onUninstall).toHaveBeenCalledTimes(1);
   });
 
@@ -89,7 +89,7 @@ describe("plugin detail menu", () => {
     flushSync(() => root.render(createElement(PluginDetailView, {
       item: items[0]!, subtitle: "", busy: false, onBack: noop, details: [],
     })));
-    expect(host.querySelector("[data-entry-menu]")).toBeNull();
+    expect(document.querySelector("[data-entry-menu]")).toBeNull();
   });
 });
 
@@ -103,45 +103,45 @@ describe("The filter button (#4453: the categories left the row of pills)", () =
 
   it("Discover draws no row of category pills", () => {
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: rows }))));
-    expect(host.querySelector("[data-plugins-chip]")).toBeNull();
-    expect(host.querySelector("[data-plugins-chips]")).toBeNull();
+    expect(document.querySelector("[data-plugins-chip]")).toBeNull();
+    expect(document.querySelector("[data-plugins-chips]")).toBeNull();
   });
 
   it("All, then each category that has a row, in the button's menu; a click filters on it", () => {
     const onPick = vi.fn();
     flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "all"), filter: "all", onPick, label: (chip) => filterLabel(chip) })));
-    const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
+    const button = document.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
     // icon only: its name is the aria-label
     expect(button.textContent).toBe("");
     expect(button.getAttribute("aria-label")).toBe("Filter");
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     click(button);
-    const pills = [...host.querySelectorAll("[data-plugins-chip]")].map((node) => node.getAttribute("data-plugins-chip"));
+    const pills = [...document.querySelectorAll("[data-plugins-chip]")].map((node) => node.getAttribute("data-plugins-chip"));
     expect(pills[0]).toBe("all");
     expect(pills).toEqual([...categoryPills(rows, "all"), ...moreCategoryPills(rows, "all")]);
     expect(pills).toContain("productivity");
     expect(pills).toContain("design");
     expect(pills).not.toContain("finance");
     expect(pills.filter((pill) => pill !== "all").every((pill) => (CATEGORY_ORDER as readonly string[]).includes(pill!))).toBe(true);
-    click(host.querySelector('[data-plugins-chip="design"]'));
+    click(document.querySelector('[data-plugins-chip="design"]'));
     expect(onPick).toHaveBeenCalledWith("design");
     // the menu closes on a pick
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 
   it("a chosen category is named on the button and checked in its menu", () => {
     flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "design"), filter: "design", onPick: noop, label: (chip) => filterLabel(chip) })));
-    const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
+    const button = document.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
     expect(button.textContent).toBe("");
     expect(button.getAttribute("aria-label")).toContain(filterLabel("design"));
     click(button);
-    expect(host.querySelector('[data-plugins-chip="design"]')?.getAttribute("aria-checked")).toBe("true");
-    expect(host.querySelector('[data-plugins-chip="all"]')?.getAttribute("aria-checked")).toBe("false");
+    expect(document.querySelector('[data-plugins-chip="design"]')?.getAttribute("aria-checked")).toBe("true");
+    expect(document.querySelector('[data-plugins-chip="all"]')?.getAttribute("aria-checked")).toBe("false");
   });
 
   it("no button when there is nothing to filter (only All)", () => {
     flushSync(() => root.render(createElement(DiscoverFilter, { chips: ["all"], filter: "all", onPick: noop, label: (chip) => filterLabel(chip) })));
-    expect(host.querySelector("[data-plugins-filter]")).toBeNull();
+    expect(document.querySelector("[data-plugins-filter]")).toBeNull();
   });
 });
 
@@ -154,11 +154,11 @@ describe("View all and the breadcrumb", () => {
       })),
     });
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onFilter }))));
-    const viewAll = host.querySelector("[data-plugins-view-all=\"productivity\"]");
+    const viewAll = document.querySelector("[data-plugins-view-all=\"productivity\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onFilter).toHaveBeenCalledWith("productivity");
-    expect(host.querySelector("[data-breadcrumb]")).toBeNull();
+    expect(document.querySelector("[data-breadcrumb]")).toBeNull();
   });
 
   it("Recommended has its View all on the right, like the reference app's, and View all lists every pick (#4207)", () => {
@@ -172,19 +172,19 @@ describe("View all and the breadcrumb", () => {
     const action = (item: { action: string | null }) => (item.action ? createElement("button", { type: "button" }, "Connect") : null);
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType, renderAction: action }))));
     // the shelf previews six picks: the first three are the slides of the featured block, the other three its cards
-    expect(host.querySelector("[data-featured-banner]")).not.toBeNull();
-    expect(host.querySelectorAll("[data-featured-dot]")).toHaveLength(3);
-    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(3);
-    expect(host.querySelector('[data-plugins-section="recommended"] [data-section-count]')?.getAttribute("data-section-count")).toBe("5");
-    const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
+    expect(document.querySelector("[data-featured-banner]")).not.toBeNull();
+    expect(document.querySelectorAll("[data-featured-dot]")).toHaveLength(3);
+    expect(document.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(3);
+    expect(document.querySelector('[data-plugins-section="recommended"] [data-section-count]')?.getAttribute("data-section-count")).toBe("5");
+    const viewAll = document.querySelector("[data-plugins-view-all=\"recommended\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onType).toHaveBeenCalledWith("recommended");
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, type: "recommended", renderAction: action }))));
-    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(8);
-    expect(host.querySelector("[data-featured-banner]")).toBeNull();
+    expect(document.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(8);
+    expect(document.querySelector("[data-featured-banner]")).toBeNull();
     // the type pill names it
-    expect(host.querySelector('[data-plugins-type="recommended"]')?.textContent).toContain("Recommended for you");
+    expect(document.querySelector('[data-plugins-type="recommended"]')?.textContent).toContain("Recommended for you");
   });
 
   it("the back button and a crumb go back; the current page is not a link", () => {
@@ -195,15 +195,15 @@ describe("View all and the breadcrumb", () => {
       current: "Notion",
       onBack,
     })));
-    click(host.querySelector("[data-breadcrumb-back]"));
+    click(document.querySelector("[data-breadcrumb-back]"));
     expect(onBack).toHaveBeenCalledTimes(1);
-    click(host.querySelector('[data-breadcrumb-crumb="0"]'));
+    click(document.querySelector('[data-breadcrumb-crumb="0"]'));
     expect(toRoot).toHaveBeenCalledTimes(1);
-    const current = host.querySelector("[data-breadcrumb-current]");
+    const current = document.querySelector("[data-breadcrumb-current]");
     expect(current?.getAttribute("aria-current")).toBe("page");
     expect(current?.textContent).toBe("Notion");
     expect(current?.querySelector("button")).toBeNull();
-    expect(host.querySelector("nav")?.getAttribute("aria-label")).toBe("Breadcrumb");
+    expect(document.querySelector("nav")?.getAttribute("aria-label")).toBe("Breadcrumb");
   });
 });
 

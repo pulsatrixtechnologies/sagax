@@ -9,7 +9,7 @@ import { t } from "@/lib/i18n";
 import type { MemberOrgCapability } from "@/lib/org-capabilities";
 import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
-import { DetailHeader, DetailsBlock, FileExplorer, OverviewColumns, sourceLine, VersionPill } from "./DetailParts";
+import { DetailHeader, DetailsBlock, FileExplorer, OverviewColumns, sourceLine, VersionPill, DETAIL_BODY } from "./DetailParts";
 import { NeutralTile, PluginPageHeader } from "./PluginParts";
 import { formWords } from "./OrgCapabilitiesSection";
 
@@ -23,7 +23,7 @@ export function OrgItemPage({ item, consoleName, onBack, trail, outdated = false
   return (
     <>
       <PluginPageHeader title={item.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-org-item-page={item.id}>
+      <div className={DETAIL_BODY} data-org-item-page={item.id}>
         <DetailHeader
           icon={<NeutralTile kind={item.form === "skill" ? "skill" : "plugin"} className="size-14 rounded-[14px]" />}
           name={item.name}

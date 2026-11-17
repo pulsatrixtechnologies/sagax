@@ -203,14 +203,15 @@ export function PluginsPanelSubpage({
     // the versions (from, to) and the notes when the source gives them: said once, in the Overview
     const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     const updateWaiting = upd ? { from: upd.installedVersion, to: upd.availableVersion, notes: upd.updateNotes } : detailItem.updateAvailable ? { from: detailItem.installedVersion, to: detailItem.version } : undefined;
+    const { reinstall, ...head } = detailHead(detailItem);
     return (
       <PluginDetailView
         {...base}
-        {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : {})}
+        {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : !base.onUpdate && reinstall ? reinstall : {})}
         details={[...base.details, ...(engines.row ? [engines.row] : [])]}
         update={updateWaiting}
         notice={engines.notice}
-        {...detailHead(detailItem)}
+        {...head}
         displayName={identity.name}
         icon={identity.icon}
         onBack={back}

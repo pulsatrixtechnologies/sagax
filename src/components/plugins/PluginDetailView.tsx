@@ -22,7 +22,7 @@ import type { RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
 import { ItemTrailer } from "./ItemTrailer";
-import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, UpdateNote, VersionPill, type ConnectorWord, type TreeFile } from "./DetailParts";
+import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, UpdateNote, VersionPill, type ConnectorWord, type TreeFile, DETAIL_BODY, HEADER_ACTION } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 
 export interface DetailTool {
@@ -158,7 +158,7 @@ export function PluginDetailView(props: PluginDetailProps) {
   return (
     <>
       <PluginPageHeader title={name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-plugins-detail={item.key}>
+      <div className={DETAIL_BODY} data-plugins-detail={item.key}>
         <DetailHeader
           icon={<PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />}
           name={name}
@@ -168,7 +168,7 @@ export function PluginDetailView(props: PluginDetailProps) {
             <>
               {primaryAction}
               {onUpdate && (
-                <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update" className={cn(PLUGINS.fillPill, "h-8 px-5")}>
+                <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update" className={cn(PLUGINS.fillPill, HEADER_ACTION)}>
                   {updating ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
                   {t("connectApps.plugin.update")}
                 </button>
@@ -313,27 +313,19 @@ export function PluginDetailView(props: PluginDetailProps) {
         {installState && installState.length > 0 && (
           <section data-plugin-install-section="">
             <DetailLabel>{t("connectApps.detail.installedWhere")}</DetailLabel>
-            <ul className="flex flex-wrap items-center gap-x-4 gap-y-2" data-plugins-install-state>
+            {/* compact: each sentence with its switch right beside it, no stretched card */}
+            <ul className="flex flex-col gap-1.5" data-plugins-install-state>
               {installState.map((state) => (
-                <li key={state.id} className="flex items-center gap-2">
-                  <span
-                    data-install-state={state.id}
-                    data-install-on={state.on ? "yes" : "no"}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
-                      state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
-                    )}
-                  >
-                    <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
-                    {state.label}
-                  </span>
+                <li key={state.id} className="flex min-h-8 items-center gap-3" data-install-state={state.id} data-install-on={state.on ? "yes" : "no"}>
+                  <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
+                  <span className={cn("min-w-0 truncate text-[13px] leading-5", state.on ? "text-ink" : "text-ink-secondary")}>{state.label}</span>
                   {state.toggle && <Switch checked={state.toggle.on} disabled={state.toggle.busy} aria-label={state.toggle.label} data-install-toggle={state.id} onClick={state.toggle.onToggle} />}
                 </li>
               ))}
             </ul>
           </section>
         )}
-        {more && <div className="space-y-4" data-plugin-more="">{more}</div>}
+        {more && <div className="space-y-5" data-plugin-more="">{more}</div>}
 
         <DetailsBlock rows={technical && !details.some((row) => row.value.includes(technical)) ? [...details, { label: t("connectApps.detail.id"), value: technical, mono: true }] : details} />
           </>

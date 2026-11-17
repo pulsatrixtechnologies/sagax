@@ -11,7 +11,7 @@ import { Check, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, Wrench, X
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
 import { readableError } from "@/lib/plain-error";
 import {
@@ -21,20 +21,12 @@ import {
 import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
 import { GlyphTile, PluginCard, PluginPageHeader } from "./PluginParts";
-import { DetailHeader, OverviewColumns, sourceLine } from "./DetailParts";
+import { DetailHeader, OverviewColumns, sourceLine, DETAIL_BODY, FactRow, FactRows, HEADER_ACTION } from "./DetailParts";
 import { ItemTrailer } from "./ItemTrailer";
 import { ProductKeyForm } from "./ProductKeyForm";
 import { ProductMark, productMenuActions, ProductStateLabel } from "./ProductRows";
 import { PLUGINS } from "./plugins-style";
 
-function KeyRow({ label, value, title }: { label: string; value: string; title?: string }) {
-  return (
-    <div className="contents">
-      <dt className="py-[9px] text-ink-tertiary">{label}</dt>
-      <dd className="min-w-0 break-words py-[9px] text-right text-ink-secondary" title={title}>{value}</dd>
-    </div>
-  );
-}
 
 function when(at: string | undefined): string | null {
   const ms = at ? Date.parse(at) : NaN;
@@ -62,7 +54,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
   const day = (at: string | undefined) => {
     if (!at) return null;
     const ms = Date.parse(at);
-    return Number.isFinite(ms) ? new Date(ms).toLocaleDateString() : at;
+    return Number.isFinite(ms) ? new Date(ms).toLocaleDateString(activeLocale(), { dateStyle: "medium" }) : at;
   };
   const expired = day(key?.expiredAt);
   const expires = expired ? null : day(key?.expiresAt);
@@ -104,10 +96,43 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
     </span>
   ) : null;
 
+  // the section's actions, at the label's right: one primary at most (adding the first key), the rest quiet, the destructive one in the danger pill; one height, 14px glyphs
+  const keyActions = (targets.length > 0 || product.actions.includes("test") || product.actions.includes("remove_own_key")) ? (
+    <>
+      {targets.map((target, index) => {
+        // own: add the person's key, or replace it when the serving key is theirs; serving: replace the key that serves them
+        const action = target === "serving" ? "replace_shared" : key?.own ? "replace_own" : "add_own";
+        return (
+          <button key={target} type="button" className={cn(!key && index === 0 ? PLUGINS.primaryPill : PLUGINS.fillPill, HEADER_ACTION)} disabled={busy !== null} onClick={() => setEditing(target)} data-person-product-action={action}>
+            <KeyRound size={14} aria-hidden="true" />
+            {action === "replace_shared" ? t("personProducts.action.replaceShared")
+              : action === "replace_own" ? t("personProducts.action.replaceOwn") : t("personProducts.action.addOwn")}
+          </button>
+        );
+      })}
+      {product.actions.includes("test") && (
+        <button type="button" className={cn(PLUGINS.fillPill, HEADER_ACTION)} disabled={busy !== null} onClick={() => void run("test", () => testPersonProduct(product.id))} data-person-product-action="test">
+          {busy === "test" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <FlaskConical size={14} aria-hidden="true" />}
+          {t("personProducts.action.test")}
+        </button>
+      )}
+      {product.actions.includes("remove_own_key") && (
+        <button type="button" className={PLUGINS.dangerPill} disabled={busy !== null} onClick={() => void run("remove", () => removePersonProductKey(product.id))} data-person-product-action="remove">
+          {busy === "remove" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
+          {t("personProducts.action.remove")}
+        </button>
+      )}
+    </>
+  ) : product.actions.length === 0 && product.consoleUrl ? (
+    <button type="button" className={cn(PLUGINS.fillPill, HEADER_ACTION)} onClick={() => void openExternalLink(product.consoleUrl!)} data-person-product-action="console">
+      <ExternalLink size={14} aria-hidden="true" /> {t("personProducts.openInPerspicax")}
+    </button>
+  ) : null;
+
   return (
     <>
       <PluginPageHeader title={product.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-person-product-page={product.id}>
+      <div className={DETAIL_BODY} data-person-product-page={product.id}>
         <DetailHeader
           icon={<ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className="size-14 rounded-[14px]" />}
           name={product.name}
@@ -146,27 +171,24 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
 
         {error && <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</p>}
 
-        <PluginCard title={t("personProducts.key.title")}>
+        <PluginCard title={t("personProducts.key.title")} action={!editing ? keyActions : undefined}>
           {key ? (
-            <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[13px] leading-5" data-person-product-key={key.source}>
-              <KeyRow label={t("personProducts.key.from")} value={productKeySourceLabel(key, product)} title={key.name} />
-              {key.kind && <KeyRow label={t("personProducts.key.kind")} value={productKindLabel(key.kind)} />}
-              {key.ending && <KeyRow label={t("personProducts.key.ending")} value={`•••• ${key.ending}`} title={endingFrom} />}
-              {expired && <KeyRow label={t("personProducts.key.expired")} value={expired} />}
-              {expires && <KeyRow label={t("personProducts.key.expires")} value={expires} />}
+            <FactRows attrs={{ "data-person-product-key": key.source }}>
+              <FactRow label={t("personProducts.key.from")} title={key.name}>{productKeySourceLabel(key, product)}</FactRow>
+              {key.kind && <FactRow label={t("personProducts.key.kind")}>{productKindLabel(key.kind)}</FactRow>}
+              {key.ending && <FactRow label={t("personProducts.key.ending")} title={endingFrom}>{`•••• ${key.ending}`}</FactRow>}
+              {expired && <FactRow label={t("personProducts.key.expired")}>{expired}</FactRow>}
+              {expires && <FactRow label={t("personProducts.key.expires")}>{expires}</FactRow>}
               {testLine && (
-                <div className="contents">
-                  <dt className="py-[9px] text-ink-tertiary">{t("personProducts.key.lastTest")}</dt>
-                  <dd className="min-w-0 py-[9px] text-right" data-person-product-test={lastTest!.ok ? "ok" : "refused"}
-                    title={failingSince ? t("personProducts.test.since", { when: failingSince }) : undefined}>{testLine}</dd>
-                </div>
+                <FactRow label={t("personProducts.key.lastTest")} title={failingSince ? t("personProducts.test.since", { when: failingSince }) : undefined}
+                  attrs={{ "data-person-product-test": lastTest!.ok ? "ok" : "refused" }}>{testLine}</FactRow>
               )}
-            </dl>
+            </FactRows>
           ) : (
-            <p className="py-[9px] text-[13px] leading-5 text-ink-secondary" data-person-product-key="none">{t("personProducts.key.none")}</p>
+            <p className="py-[7px] text-[13px] leading-5 text-ink-secondary" data-person-product-key="none">{t("personProducts.key.none")}</p>
           )}
-          {editing && product.form && targets.includes(editing) ? (
-            <div className="border-t-[0.5px] border-ink/10 py-3">
+          {editing && product.form && targets.includes(editing) && (
+            <div className="mt-2 border-t-[0.5px] border-ink/10 py-3">
               <ProductKeyForm
                 form={product.form}
                 productName={product.name}
@@ -175,44 +197,12 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
                 onCancel={() => setEditing(null)}
               />
             </div>
-          ) : (targets.length > 0 || product.actions.includes("test") || product.actions.includes("remove_own_key")) ? (
-            <div className="flex flex-wrap items-center gap-2 border-t-[0.5px] border-ink/10 py-2.5" data-person-product-actions>
-              {targets.map((target, index) => {
-                // own: add the person's key, or replace it when the serving key is theirs; serving: replace the key that serves them
-                const action = target === "serving" ? "replace_shared" : key?.own ? "replace_own" : "add_own";
-                return (
-                  <button key={target} type="button" className={index === 0 ? PLUGINS.primaryPill : PLUGINS.fillPill} disabled={busy !== null} onClick={() => setEditing(target)} data-person-product-action={action}>
-                    <KeyRound size={14} aria-hidden="true" />
-                    {action === "replace_shared" ? t("personProducts.action.replaceShared")
-                      : action === "replace_own" ? t("personProducts.action.replaceOwn") : t("personProducts.action.addOwn")}
-                  </button>
-                );
-              })}
-              {product.actions.includes("test") && (
-                <button type="button" className={PLUGINS.fillPill} disabled={busy !== null} onClick={() => void run("test", () => testPersonProduct(product.id))} data-person-product-action="test">
-                  {busy === "test" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <FlaskConical size={14} aria-hidden="true" />}
-                  {t("personProducts.action.test")}
-                </button>
-              )}
-              {product.actions.includes("remove_own_key") && (
-                <button type="button" className={PLUGINS.fillPill} disabled={busy !== null} onClick={() => void run("remove", () => removePersonProductKey(product.id))} data-person-product-action="remove">
-                  {busy === "remove" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
-                  {t("personProducts.action.remove")}
-                </button>
-              )}
-            </div>
-          ) : product.actions.length === 0 && product.consoleUrl ? (
-            <div className="border-t-[0.5px] border-ink/10 py-2.5">
-              <button type="button" className={PLUGINS.fillPill} onClick={() => void openExternalLink(product.consoleUrl!)} data-person-product-action="console">
-                <ExternalLink size={14} aria-hidden="true" /> {t("personProducts.openInPerspicax")}
-              </button>
-            </div>
-          ) : null}
+          )}
         </PluginCard>
 
         {product.address && (
           <PluginCard title={t("personProducts.address")}>
-            <p className="break-all py-[9px] text-[13px] leading-5 text-ink-secondary" data-person-product-address>{product.address}</p>
+            <p className="break-all py-[7px] text-[13px] leading-5 text-ink" data-person-product-address>{product.address}</p>
           </PluginCard>
         )}
 

@@ -7,8 +7,8 @@ import type { PluginKind } from "./plugins-model";
 
 export type ConnectAppsKind = "skills" | "connectors" | "plugins";
 
-/** The tabs, in the reference's order. */
-export const CONNECT_APPS_KINDS: readonly ConnectAppsKind[] = ["skills", "connectors", "plugins"];
+/** The tabs, in the owner's order (2026-11-17): Connectors, Plugins, Skills. */
+export const CONNECT_APPS_KINDS: readonly ConnectAppsKind[] = ["connectors", "plugins", "skills"];
 
 const FORM_KIND: Record<CapabilityForm, ConnectAppsKind> = {
   plugin: "plugins",

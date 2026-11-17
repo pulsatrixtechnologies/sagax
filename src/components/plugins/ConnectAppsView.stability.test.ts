@@ -82,14 +82,14 @@ describe("the header", () => {
     const onKind = vi.fn();
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab, kind: "skills", onKind, refreshing: false, onRefresh: noop })));
     const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"] [role="tab"]')];
-    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")])).toEqual([["Skills", "true"], ["Connectors", "false"], ["Plugins", "false"]]);
-    flushSync(() => tabs[2]!.click());
+    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")])).toEqual([["Connectors", "false"], ["Plugins", "false"], ["Skills", "true"]]);
+    flushSync(() => tabs[1]!.click());
     expect(onKind).toHaveBeenCalledWith("plugins");
     flushSync(() => host.querySelector<HTMLButtonElement>('[data-plugins-view="discover"]')!.click());
     expect(onTab).toHaveBeenCalledWith("discover");
     // "...": Bot templates, Published pages, Sources, each opening its view
     flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-more-button]")!.click());
-    const links = [...host.querySelectorAll<HTMLButtonElement>("[data-plugins-view-link]")];
+    const links = [...document.querySelectorAll<HTMLButtonElement>("[data-plugins-view-link]")];
     expect(links.map((link) => link.textContent)).toEqual(["Bot templates", "Published pages", "Sources"]);
     flushSync(() => links[1]!.click());
     expect(onTab).toHaveBeenCalledWith("pages");
@@ -149,7 +149,7 @@ describe("a plugin's page in its tab", () => {
     expect(host.querySelector("[data-plugins-detail-head] img")).not.toBeNull();
     // the technical name and source as small metadata
     expect(host.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("example/marketplace");
-    const states = [...host.querySelectorAll("[data-install-state]")].map((node) => [node.getAttribute("data-install-state"), node.getAttribute("data-install-on")]);
+    const states = [...document.querySelectorAll("[data-install-state]")].map((node) => [node.getAttribute("data-install-state"), node.getAttribute("data-install-on")]);
     expect(states).toEqual([["everyone", "yes"], ["bot", "no"]]);
     expect(host.querySelector("[data-plugins-detail-head] [data-test-primary]")).not.toBeNull();
     flushSync(() => host.querySelector<HTMLElement>("[data-plugins-back]")!.click());

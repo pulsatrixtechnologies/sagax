@@ -69,7 +69,7 @@ describe("the vendor as one bundle row under Plugins", () => {
   it("offers for all bots and the bots I choose in its menu", async () => {
     const view = await render(createElement("div", null, rows(vi.fn(), { bots: [{ id: "bot-a", name: "Rocket", products: { desk: false } }, { id: "bot-b", name: "Orbit" }] })[0]!.node));
     await click(view.querySelector("[data-entry-menu]"));
-    const ids = [...view.querySelectorAll("[data-entry-action]")].map((node) => node.getAttribute("data-entry-action"));
+    const ids = [...document.querySelectorAll("[data-entry-action]")].map((node) => node.getAttribute("data-entry-action"));
     expect(ids).toEqual(expect.arrayContaining(["all", "choose", "off"]));
   });
 });

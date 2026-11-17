@@ -11,14 +11,14 @@
 // #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
 // left the home, it repeated Yours.
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, Loader2, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Pause, Play } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { kindOf, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
 import { PICK_WHY, recommendedPicks } from "@/lib/recommended-picks";
-import { CARD_GRID, ConnectedMark, DiscoverCard, filterLabel, sectionTitle, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
+import { CARD_GRID, ConnectedMark, DiscoverCard, SectionHead, filterLabel, sectionTitle, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
 import { PluginIcon } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
@@ -158,7 +158,7 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
         <section key={group.id} data-plugins-section={`from-${group.id}`} data-harness-group={group.id} className="mt-[30px]">
           <SectionHead title={t("connectApps.section.fromProvider", { provider: group.source })} count={rows.length}
             link={{ label: t("connectApps.providers.manage", { provider: group.name }), onClick: () => openAccountManage(group.manageUrl), manage: group.id }} />
-          {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "pl-3")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
+          {group.id === "grok" && rows.length > 0 && <p className={PLUGINS.rowSub} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
           <div className={CARD_GRID}>
             {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} manageInHead />}
             {rows.map((row) => {
@@ -322,23 +322,3 @@ export function FeaturedCarousel({ slides }: { slides: readonly FeaturedSlide[] 
   );
 }
 
-function SectionHead({ title, id, count, onViewAll, link }: { title: string; id?: string; /** the count in a small rounded badge next to the title */ count?: number; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <h3 className={PLUGINS.sectionTitle}>{title}</h3>
-        {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
-      </div>
-      {link && (
-        <button type="button" data-harness-manage={link.manage} className={PLUGINS.sectionLink} onClick={link.onClick}>
-          {link.label}
-        </button>
-      )}
-      {!link && onViewAll && (
-        <button type="button" data-plugins-view-all={id ?? ""} className={PLUGINS.sectionLink} onClick={onViewAll}>
-          {t("connectApps.viewAll")}<ArrowRight size={12} aria-hidden="true" className="ml-1 inline" />
-        </button>
-      )}
-    </div>
-  );
-}

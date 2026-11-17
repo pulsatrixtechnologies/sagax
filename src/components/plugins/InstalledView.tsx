@@ -9,7 +9,7 @@
 // from the bot's one resolved list (GET /api/bots/:id/capabilities): the
 // organization's Flow ("imposed by the organization") and its Perspicax
 // Roles ("held" / "not held"). Every empty section is hidden.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { BookOpen, Building2, ChevronDown, ExternalLink, Plug, Puzzle, FileText, KeyRound, Plus, RefreshCw, Settings2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -19,7 +19,7 @@ import type { PluginItem } from "@/lib/plugins-model";
 import { botPluginKey, capabilityName, isBotSwitch, formWord, installationServerName, reasonText, scopeWord, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
 import { entryKind, fromOrganization, kindOf, ORGANIZATION_PREVIEW, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
-import { filterLabel, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
+import { CARD_BOX, CARD_GRID, CARD_ICON, CardTrail, SectionHead, filterLabel, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
 import { ItemTrailer, ITEM_ROW_ATTR } from "./ItemTrailer";
 import { statusState } from "./StateIcon";
 import { updateKindOf } from "@/lib/capability-updates";
@@ -27,6 +27,7 @@ import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
+import { AnchoredMenu, useAnchoredDismiss } from "../AnchoredMenu";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
  * "plugin (claude-plugins-official) · 3 skills", "1 connector". */
@@ -171,15 +172,8 @@ export function CategoryChip({ category }: { category?: string }) {
   return <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-row-category="">{filterLabel(category)}</span>;
 }
 
-/** A section's title with its count in a small rounded badge next to it. */
-export function SectionTitle({ title, count }: { title: string; count?: number }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <h3 className={PLUGINS.sectionTitle}>{title}</h3>
-      {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
-    </div>
-  );
-}
+/** A section's title with its count: the one heading of Yours and Discover (ConnectAppsView). */
+export const SectionTitle = SectionHead;
 
 const FIRST_KEY = {
   skills: "connectApps.first.skills",
@@ -193,7 +187,7 @@ const FIRST_ICON = { skills: BookOpen, connectors: Plug, plugins: Puzzle } as co
 export function FirstBanner({ kind, onDiscover }: { kind: ConnectAppsKind; onDiscover?: () => void }) {
   const Glyph = FIRST_ICON[kind];
   return (
-    <section data-plugins-empty="" data-first-banner={kind} className="mb-6 flex items-center gap-4 rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.06] to-ink/[0.015] p-5">
+    <section data-plugins-empty="" data-first-banner={kind} className="mb-[30px] flex items-center gap-4 rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.06] to-ink/[0.015] p-5">
       <div className="min-w-0 flex-1">
         <h3 className="text-[14px] font-medium leading-5 text-ink">{t(FIRST_KEY[kind])}</h3>
         <p className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t("connectApps.first.line")}</p>
@@ -208,7 +202,7 @@ export function FirstBanner({ kind, onDiscover }: { kind: ConnectAppsKind; onDis
 
 /** #4453: Yours of one kind is one column (the design's row: the state, the
  * scope pill, "..." and the switch need the width); the reference's row look */
-const YOURS_LIST = "flex flex-col divide-y divide-hairline-weak *:min-w-0 *:px-3";
+const YOURS_LIST = CARD_GRID;
 
 /** one entry of the "+ Add" menu */
 export interface AddAction {
@@ -224,14 +218,8 @@ export interface AddAction {
 export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /** #4453: the reference's filled "+ Add" beside the search */ filled?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
-    const esc = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc, true);
-    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc, true); };
-  }, [open]);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => setOpen(false));
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add aria-label={t("connectApps.add")} title={t("connectApps.add")}
@@ -240,7 +228,7 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
         {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70 [[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden" />}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-10 z-20")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
           {actions.map((action) => (
             <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
               onClick={() => { setOpen(false); action.onPick(); }}
@@ -249,7 +237,7 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
               {action.label}
             </button>
           ))}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );
@@ -368,14 +356,14 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
     : resolved !== null && resolvedOwn.length === 0);
   // the section's LAST row, under the text of the rows above it: what is folded, counted so the heading's number adds up
   const moreRow = shownProducts.length > ORGANIZATION_PREVIEW ? (
-    <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.sectionLink, "ml-[56px] mt-1")} data-plugins-organization-all>
+    <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.groupLink, "mt-2 -ml-2")} data-plugins-organization-all>
       {allOrganization ? t("connectApps.manage.showFewer") : t("connectApps.showMoreRows", { count: shownProducts.length - ORGANIZATION_PREVIEW })}
     </button>
   ) : null;
   const consoleShown = kind !== undefined && (shownProducts.length > 0 || resolvedOrganization.length > 0 || consoleHasExtras);
   const nothing = resolved === undefined && shownEntries.length === 0 && shownPersonal.length === 0 && shownProducts.length === 0 && accountRowCount === 0 && shownSkills.length === 0 && shownOrganization.length === 0 && !loading;
   return (
-    <div data-plugins-installed-tab data-plugins-installed-kind={kind}>
+    <div className="pt-4" data-plugins-installed-tab data-plugins-installed-kind={kind}>
       {add.length > 0 && !addInTitle && (
         <div className="mb-3 flex items-center justify-end" data-plugins-installed-tools>
           <AddMenu actions={add} />
@@ -385,10 +373,10 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       {kind !== undefined && ownEmpty && <FirstBanner kind={kind} onDiscover={onDiscover} />}
       {resolved !== undefined && kind === undefined && capabilityList(resolved)}
       {consoleShown && (
-        <section data-plugins-organization-group="" data-plugins-console-section="" className="mb-6">
+        <section data-plugins-organization-group="" data-plugins-console-section="" className="mb-[30px] [&>ul+*]:mt-3">
           <SectionTitle title={consoleTitle ?? t("connectApps.group.organization")} count={shownProducts.length + consoleCount || undefined} />
           {shownProducts.length > 0 && (
-            <ul className={cn(YOURS_LIST, "mt-1")}>
+            <ul className={YOURS_LIST}>
               {shownProductRows.map((row) => <li key={row.key}>{row.node}</li>)}
             </ul>
           )}
@@ -414,11 +402,11 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </EmptyLine>
       )}
       {lines.length > 0 && (
-        <section data-plugins-installed className={cn(resolved !== undefined && "mt-8")}>
+        <section data-plugins-installed className={cn(resolved !== undefined && "mt-[30px]")}>
           {kind ? (
             <SectionTitle title={t(consoleShown ? "connectApps.group.added" : "connectApps.view.yours")} count={lines.filter((line) => line.kind !== "notice").length} />
           ) : <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>}
-          <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
+          <ul className={kind ? YOURS_LIST : PLUGINS.grid}>
             {shownLines.map((line) => (
               <li key={line.key} className={cn(line.kind === "notice" && "col-span-full")}>{renderLine(line)}</li>
             ))}
@@ -431,7 +419,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </section>
       )}
       {resolved === undefined && shownOrganization.length > 0 && (
-        <section className="mt-6 first:mt-0" data-plugins-organization>
+        <section className="mt-[30px] first:mt-0" data-plugins-organization>
           <h3 className={cn(PLUGINS.label, "mb-2")}>{t("capabilities.installed.organization")}</h3>
           <ul className={cn(PLUGINS.card, "divide-y divide-hairline-weak")}>
             {shownOrganization.map((item) => (
@@ -441,14 +429,14 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </section>
       )}
       {resolved === undefined && shownSkills.length > 0 && (
-        <section className="mt-8 first:mt-0" data-plugins-skills>
+        <section className="mt-[30px] first:mt-0" data-plugins-skills>
           <SectionTitle title={t("connectApps.manage.privateSkills")} count={shownSkills.length} />
-          <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
+          <ul className={kind ? YOURS_LIST : PLUGINS.grid}>
             {shownSkills.map((skill) => {
               return (
-                <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className="group flex flex-wrap items-center gap-2">
-                  <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
+                <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className={cn("group flex-wrap", CARD_BOX)}>
+                  <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left">
+                    <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><FileText size={20} aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span className={cn(PLUGINS.rowName, "min-w-0")} title={skill.name}>{skill.name}</span>
@@ -458,7 +446,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
                     </span>
                     {skill.status === "off" && !skillTrailer && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                   </button>
-                  {skillTrailer?.(skill)}
+                  {skillTrailer && <CardTrail>{skillTrailer(skill)}</CardTrail>}
                   {rowNotice && <div className="basis-full">{rowNotice([skill.updateKey])}</div>}
                 </li>
               );
@@ -468,7 +456,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       )}
       {has("connectors") && macApps}
       {has("connectors") && providers && (
-        <section className="mt-8 first:mt-0" id="plugins-providers" data-plugins-providers>
+        <section className="mt-[30px] first:mt-0" id="plugins-providers" data-plugins-providers>
           {providers}
         </section>
       )}
@@ -484,9 +472,9 @@ function skillLine(skill: { source: string; description?: string }, sourceLabel:
 export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = false }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions; trailer?: ReactNode; /** the section title already says it (Added by you): the line starts with what it does */ hideOrigin?: boolean }) {
   const icon = entryIcon(entry);
   return (
-    <div className="group flex items-center gap-2 py-3" data-installed-entry={entry.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
-        <PluginIcon item={icon} className="size-10 rounded-[10px]" />
+    <div className={cn("group", CARD_BOX)} data-installed-entry={entry.key} {...{ [ITEM_ROW_ATTR]: "" }}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
+        <PluginIcon item={icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
           <span className="flex min-w-0 items-center gap-1.5">
@@ -500,7 +488,7 @@ export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = fal
         </span>
         {!trailer && <PluginStatusLabel status={entry.status} className="text-[12px] font-normal" />}
       </button>
-      {trailer ?? <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />}
+      <CardTrail>{trailer ?? <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />}</CardTrail>
     </div>
   );
 }
@@ -526,18 +514,18 @@ export function AccountInstalledRow({ row, onOpen, scoped = false }: { row: Acco
     ],
   };
   return (
-    <div className="group flex items-center gap-2 py-3" data-installed-entry={`account:${row.key}`} data-harness-connector={row.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <span className="flex min-w-0 flex-1 items-center gap-3">
+    <div className={cn("group", CARD_BOX)} data-installed-entry={`account:${row.key}`} data-harness-connector={row.key} {...{ [ITEM_ROW_ATTR]: "" }}>
+      <span className="flex min-w-0 flex-1 items-start gap-3">
         {onOpen ? (
-          <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
-        ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
+          <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
+        ) : <span className="flex min-w-0 flex-1 items-start gap-3">{body}</span>}
         {/* connected is the state icon at the right (scoped); the pills that ask for a sign-in stay */}
         <AccountConnectorStatus row={row} installedMark={scoped ? null : <PluginStatusLabel status="connected" className="text-[12px] font-normal" />} />
       </span>
       {/* #4453: kept by the engine account, switched there: a locked switch */}
-      {scoped
+      <CardTrail>{scoped
         ? <ItemTrailer state={row.status === "connected" ? statusState("connected") : null} name={row.name} where={scopeWord("account")} on={row.status === "connected"} lockedReason={t("capabilities.detail.where.account")} actions={{ links: actions.links }} />
-        : <EntryMenu name={row.name} actions={actions} updateWaiting={false} hoverOnly />}
+        : <EntryMenu name={row.name} actions={actions} updateWaiting={false} hoverOnly />}</CardTrail>
     </div>
   );
 }

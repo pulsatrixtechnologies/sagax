@@ -10,7 +10,7 @@ import { t } from "@/lib/i18n";
 import type { BotPluginsView } from "@/lib/my-connections";
 import type { BotPluginState } from "@/lib/plugin-scope";
 import { Switch } from "../SettingsPrimitives";
-import { DetailLabel } from "./DetailParts";
+import { FactRow, FactRows } from "./DetailParts";
 import { PluginCard } from "./PluginParts";
 import { PluginConfigForm } from "./PluginConfigForm";
 
@@ -36,10 +36,7 @@ export interface BotPluginCardProps {
 function Names({ label, names }: { label: string; names: string[] }) {
   if (!names.length) return null;
   return (
-    <div className="contents">
-      <dt className="text-ink-secondary">{label}</dt>
-      <dd className="min-w-0 break-words text-right font-mono text-[12px] text-ink">{names.join(", ")}</dd>
-    </div>
+    <FactRow label={label}>{names.join(", ")}</FactRow>
   );
 }
 
@@ -51,9 +48,8 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
   return (
     <div data-bot-plugin={plugin.key} data-bot-plugin-installed={installed ? "yes" : "no"}>
       {/* under a page that states where it is installed, the card is a section of that page: its label is the page's */}
-      {statedAbove && <DetailLabel>{t("connectApps.botPlugin.brings")}</DetailLabel>}
       <PluginCard
-        title={statedAbove ? undefined : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
+        title={statedAbove ? t("connectApps.botPlugin.brings") : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
         action={!statedAbove && installed && change ? (
           <Switch checked={installed.enabled} disabled={busy !== null} aria-label={t("plugins.enabled", { name: plugin.plugin })} onClick={() => onToggle(!installed.enabled)} />
         ) : undefined}
@@ -64,11 +60,11 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
         {!view.engine.loadsPlugins && <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("plugins.claudeOnly")}</p>}
         {contents ? (
           empty ? <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.nothing")}</p> : (
-            <dl className="mt-2 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+            <FactRows>
               <Names label={t("connectApps.botPlugin.agents")} names={contents.agents} />
               <Names label={t("connectApps.botPlugin.commands")} names={contents.commands} />
               <Names label={t("connectApps.botPlugin.skills")} names={contents.skills} />
-            </dl>
+            </FactRows>
           )
         ) : (
           <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.readAtInstall")}</p>

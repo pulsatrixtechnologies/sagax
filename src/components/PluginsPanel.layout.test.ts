@@ -38,7 +38,7 @@ describe("Plugins panel views", () => {
     expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps<\/h2>/);
     expect(html).not.toContain("Manage plugins and skills");
     // the kinds, in the reference's order, the chosen one pressed, a count only where there is one
-    expect([...html.matchAll(/data-plugins-kind-tab="([a-z]+)"/g)].map((match) => match[1])).toEqual(["skills", "connectors", "plugins"]);
+    expect([...html.matchAll(/data-plugins-kind-tab="([a-z]+)"/g)].map((match) => match[1])).toEqual(["connectors", "plugins", "skills"]);
     expect(html).toMatch(/role="tab"[^>]*data-plugins-kind-tab="connectors"[^>]*aria-selected="true"/);
     // the owner's layout (2026-11-16): the pill tabs carry no counts
     expect(html).toMatch(/data-plugins-kind-tab="skills"[\s\S]*?>Skills<\/span><\/button>/);

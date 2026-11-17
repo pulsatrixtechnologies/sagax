@@ -247,29 +247,29 @@ describe("the \"...\" menu of an entry", () => {
     }))));
     const github = host.querySelector('[data-installed-entry="plugin:github@claude-plugins-official"]')!;
     expect(github.querySelector("[data-entry-update-dot]")).not.toBeNull();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     click(github.querySelector("[data-entry-menu]"));
-    const actions = [...host.querySelectorAll("[data-entry-action]")].map((node) => [node.getAttribute("data-entry-action"), node.textContent]);
+    const actions = [...document.querySelectorAll("[data-entry-action]")].map((node) => [node.getAttribute("data-entry-action"), node.textContent]);
     expect(actions).toEqual([["update", "Update"], ["bots", "For which bots"], ["remove", "Uninstall"]]);
-    click(host.querySelector('[data-entry-action="bots"]'));
+    click(document.querySelector('[data-entry-action="bots"]'));
     expect(bots).toHaveBeenCalledTimes(1);
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     // the other entry offers only what it can do
     click(host.querySelector('[data-installed-entry="mcp:twilio-docs"] [data-entry-menu]'));
-    expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.getAttribute("data-entry-action"))).toEqual(["bots"]);
+    expect([...document.querySelectorAll("[data-entry-action]")].map((node) => node.getAttribute("data-entry-action"))).toEqual(["bots"]);
   });
 
   it("French labels", () => {
     setLocale("fr");
     flushSync(() => root.render(createElement(ManageView, props({ entryActions: () => ({ update: noop, bots: noop, remove: noop }) }))));
     click(host.querySelector("[data-entry-menu]"));
-    expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Désinstaller"]);
+    expect([...document.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Désinstaller"]);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh: noop })));
     expect(host.querySelector("#plugins-title")?.textContent).toBe("Connecter des apps");
-    expect([...host.querySelectorAll("[data-plugins-kind-tab]")].map((node) => node.textContent)).toEqual(["Skills", "Connecteurs", "Plugins"]);
+    expect([...host.querySelectorAll("[data-plugins-kind-tab]")].map((node) => node.textContent)).toEqual(["Connecteurs", "Plugins", "Skills"]);
     expect([...host.querySelectorAll("[data-plugins-view]")].map((node) => node.textContent)).toEqual(["Les tiens", "Découvrir"]);
     click(host.querySelector("[data-plugins-more-button]"));
-    expect([...host.querySelectorAll("[data-plugins-view-link]")].map((node) => node.textContent)).toEqual(["Modèles de bots", "Pages publiées", "Sources"]);
+    expect([...document.querySelectorAll("[data-plugins-view-link]")].map((node) => node.textContent)).toEqual(["Modèles de bots", "Pages publiées", "Sources"]);
   });
 });
 
@@ -650,7 +650,7 @@ describe("#4453: Yours and Discover of one kind", () => {
     expect(html).not.toContain("Show all 9");
     const section = html.slice(html.indexOf("data-plugins-console-section"));
     expect(section.indexOf("data-plugins-organization-all")).toBeGreaterThan(section.lastIndexOf("data-test-product="));
-    expect(html).toMatch(/class="[^"]*ml-\[56px\][^"]*"[^>]*data-plugins-organization-all|data-plugins-organization-all[^>]*class="[^"]*ml-\[56px\]/);
+    expect(html).toMatch(/class="[^"]*-ml-2[^"]*"[^>]*data-plugins-organization-all|data-plugins-organization-all[^>]*class="[^"]*-ml-2/);
     expect(renderToStaticMarkup(createElement(InstalledView, props({ kind: "skills", products })))).not.toContain("data-test-product");
   });
 
@@ -868,12 +868,12 @@ describe("the control row is ONE line at every width (the owner: it should not b
     await act(async () => { watched?.(); });
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!.click(); });
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-expanded] [data-plugins-filter-button]")!.click(); });
-    expect(host.querySelector("[data-plugins-search-expanded] [role='menu']")).not.toBeNull();
+    expect(document.querySelector("[role='menu']")).not.toBeNull();
     const press = async (target: Element) => act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     const input = () => host.querySelector<HTMLInputElement>("[data-plugins-search-expanded] input")!;
     // 1: the menu closes, the text and the opened search stay
     await press(input());
-    expect(host.querySelector("[data-plugins-search-expanded] [role='menu']")).toBeNull();
+    expect(document.querySelector("[data-plugins-search-expanded] [role='menu']")).toBeNull();
     expect(query).toBe("tick");
     expect(host.querySelector("[data-plugins-search-expanded]")).not.toBeNull();
     // 2: the field empties, the search stays opened
@@ -934,7 +934,7 @@ describe("Connect Apps' menu", () => {
     const root = createRoot(host);
     await act(async () => { root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh, installed: "I" })); });
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-more-button]")!.click(); });
-    const first = host.querySelector('[role="menu"] [role="menuitem"]')!;
+    const first = document.querySelector('[role="menu"] [role="menuitem"]')!;
     expect(first.textContent).toBe("Refresh");
     await act(async () => { (first as HTMLButtonElement).click(); });
     expect(onRefresh).toHaveBeenCalledTimes(1);
@@ -1067,13 +1067,16 @@ describe("#4453 (2026-11-16, the owner's references): Discover's cards, banner a
     expect(html).toMatch(/data-plugins-view-all="productivity"[^>]*>View all<svg/);
   });
 
-  it("Yours: a row is a rule-separated list row, its category chip after the name, how it got there then what it does", () => {
+  it("Yours: a row is Discover's card in the same two-column grid, its category chip after the name, how it got there then what it does", () => {
     const withCategory = buildPluginItems({
       marketplaces: [{ name: "kit", plugins: [{ name: "reviewer", description: "Reviews a pull request", category: "development", installed: true, servers: [], skills: [] }] }],
     });
     const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "plugins", entries: installedEntries(withCategory), skills: [] })));
-    expect(html).toContain("divide-y");
-    expect(html).not.toMatch(/hover:bg-ink\/\[0\.05\]/);
+    // one card and one grid for Yours and Discover (the owner: "le layout de discover doit etre le meme")
+    expect(html).toContain("grid-cols-2");
+    expect(html).toMatch(/data-installed-entry="[^"]*"/);
+    expect(html).toMatch(/class="group flex items-start gap-3 p-3 rounded-2xl border-\[0\.5px\][^"]*"[^>]*data-installed-entry/);
+    expect(html).not.toContain("divide-y");
     expect(html).toMatch(/Reviewer<\/span><span[^>]*data-row-category[^>]*>Code<\/span>/);
     expect(html).toContain("Added by you · Reviews a pull request");
   });
@@ -1118,9 +1121,9 @@ describe("#4453: the sort button", () => {
     expect(button.textContent).toBe("");
     expect(button.getAttribute("aria-label")).toBe("Sort");
     await act(async () => { button.click(); });
-    expect([...host.querySelectorAll("[data-plugins-sort-option]")].map((option) => option.getAttribute("data-plugins-sort-option"))).toEqual(["default", "name"]);
-    expect(host.querySelector('[data-plugins-sort-option="name"]')?.getAttribute("aria-checked")).toBe("true");
-    await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugins-sort-option="default"]')!.click(); });
+    expect([...document.querySelectorAll("[data-plugins-sort-option]")].map((option) => option.getAttribute("data-plugins-sort-option"))).toEqual(["default", "name"]);
+    expect(document.querySelector('[data-plugins-sort-option="name"]')?.getAttribute("aria-checked")).toBe("true");
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-plugins-sort-option="default"]')!.click(); });
     expect(onSort).toHaveBeenCalledWith("default");
     await act(async () => root.unmount());
     host.remove();
@@ -1169,8 +1172,8 @@ describe("#4453: filter and sort live inside the search field; the kinds and the
   it("the kinds are the shared PillTabs: roving tab stop, aria-controls, arrows move the kind", async () => {
     const { host, root, onKind } = await mountView();
     const tabs = [...host.querySelectorAll<HTMLElement>('[data-plugins-kinds] [role="tab"]')];
-    expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
-    expect(tabs[0]!.getAttribute("aria-controls")).toBe("connect-apps-kind-panel-skills");
+    expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
+    expect(tabs[0]!.getAttribute("aria-controls")).toBe("connect-apps-kind-panel-connectors");
     await act(async () => { host.querySelector("[data-plugins-kinds]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
     expect(onKind).toHaveBeenCalledWith("plugins");
     await act(async () => root.unmount());

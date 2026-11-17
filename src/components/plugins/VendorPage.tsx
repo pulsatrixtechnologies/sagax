@@ -14,8 +14,8 @@ import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
 import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, type ProductRowsContext } from "./ProductRows";
 import { PluginPageHeader } from "./PluginParts";
-import { DetailHeader, OverviewColumns, ReachPanel, SkillCards, sourceLine } from "./DetailParts";
-import { PLUGINS } from "./plugins-style";
+import { DetailHeader, OverviewColumns, ReachPanel, SkillCards, sourceLine, DETAIL_BODY } from "./DetailParts";
+import { CARD_GRID, PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
 
 type VendorTab = "overview" | "skills" | "connectors";
@@ -42,7 +42,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
   return (
     <>
       <PluginPageHeader title={vendor.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-vendor-page={vendor.key}>
+      <div className={DETAIL_BODY} data-vendor-page={vendor.key}>
         <DetailHeader
           attrs={{ "data-vendor-head": "" }}
           icon={<ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}
@@ -71,7 +71,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
         ) : (
           <div data-vendor-panel="connectors" role="tabpanel" id="vendor-panel-connectors" aria-labelledby="vendor-tab-connectors">
             <p className={cn(PLUGINS.rowSub, "mb-2")}>{t("connectApps.detail.connectorsLine")}</p>
-            <ul className="flex flex-col divide-y divide-hairline-weak">
+            <ul className={CARD_GRID}>
               {vendor.products.map((product) => (
                 <li key={product.id}><ProductRow product={product} ctx={ctx} hideOrigin /></li>
               ))}

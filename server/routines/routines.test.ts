@@ -5621,6 +5621,72 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).error).toContain("flow_run failed");
   });
 
+  // #4432: the routine sees tool titles only, never which product a
+  // connection serves. A tool missing on one connection stays a problem
+  // even when a tool of the same name then ran on another: every gateway
+  // connector has `api_search`, `query`, `act`, and the work planned on the
+  // first one never ran. The line names the connection the bot called.
+  it("a tool missing on one connection stays a problem when the same name ran on another, and names its connection (#4432)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "b", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "c", "mcp__own_connection__flow", true);
+    say(h, "thread-1", "The journal is up to date.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Flow failed 2 times and never succeeded after: Tool not found: Flow · gateway");
+  });
+
+  it("a search missing on one product is not settled by the same search on another product (#4432 review)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__crm__api_search", false, "Tool not found: crm__api_search");
+    tool(h, "thread-1", "b", "mcp__crm__api_search", false, "Tool not found: crm__api_search");
+    tool(h, "thread-1", "c", "mcp__helpdesk__api_search", true);
+    say(h, "thread-1", "Nothing found.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Api search failed 2 times and never succeeded after: Tool not found: Api search · crm");
+  });
+
+  it("a tool's own refusal that says \"Unknown tool\" is a real failure, never a missing tool (#4432 review)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "Unknown tool: create_invoice is not an operation of this API";
+    tool(h, "thread-1", "a", "mcp__crm__act", false, refusal);
+    tool(h, "thread-1", "b", "mcp__crm__act", false, refusal);
+    tool(h, "thread-1", "c", "mcp__helpdesk__act", true);
+    say(h, "thread-1", "Done.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain(`Act failed 2 times and never succeeded after: ${refusal}`);
+  });
+
+  it("a refusal followed by a miss of the same tool is never erased by a run elsewhere (#4432 review)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__crm__query", false, "403 Forbidden");
+    tool(h, "thread-1", "b", "mcp__crm__query", false, "Tool not found: crm__query");
+    tool(h, "thread-1", "c", "mcp__other__query", true);
+    say(h, "thread-1", "Read.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Query failed 2 times and never succeeded after");
+  });
+
+  it("a real failure of one connection's tool is not settled by the same tool name on another (#4432)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, "403 Forbidden");
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, "403 Forbidden");
+    tool(h, "thread-1", "c", "mcp__gmail__get_message", true);
+    say(h, "thread-1", "Read the message.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Get message failed 2 times and never succeeded after: 403 Forbidden");
+  });
+
   it("a tool that kept failing under its alias still names the title it was first called by", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

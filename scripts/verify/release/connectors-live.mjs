@@ -244,7 +244,9 @@ export function client(origin, token) {
   const base = origin.replace(/\/+$/, "");
   return async (method, path, body) => {
     const headers = { ...(body ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) };
-    const res = await fetch(`${base}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30_000) });
+    const init = { method, headers, signal: AbortSignal.timeout(30_000) };
+    if (body) init.body = JSON.stringify(body);
+    const res = await fetch(`${base}${path}`, init);
     const text = await res.text();
     let parsed = text;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }

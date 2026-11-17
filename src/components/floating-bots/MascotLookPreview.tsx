@@ -22,6 +22,8 @@ const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
  * left, the owner 2026-11-09): the reference's avatar reads larger than the
  * owl drawn at 84px, whose art leaves room around it (#4420). */
 export const MASCOT_HERO_SIZE = 96;
+/** The ringed hero's mascot (the reference's 64px avatar inside a 3px ring). */
+export const MASCOT_RING_SIZE = 64;
 /** The preview card's Randomize button (and the tab row's, beside Reset). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
@@ -46,6 +48,8 @@ export interface MascotLookPreviewProps {
    * bare hero (the mascot, the name and label under it), no card. */
   heading?: ReactNode;
   subheading?: ReactNode;
+  /** The profile page's hero: a 3px ring in the page colour (70px plate, 64px mascot) as the reference; no other mascot has it. */
+  ringed?: boolean;
   /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
   /** The bot's live state and the moves it plays across the app. */
@@ -116,6 +120,7 @@ export function MascotLookPreview({
   onRandomize,
   heading,
   subheading,
+  ringed,
   picture,
   liveState,
   liveMotion,
@@ -131,9 +136,15 @@ export function MascotLookPreview({
         data-mascot-detail={shown}
         data-mascot-hero=""
         aria-label={t("appearance.preview", { name: shownName })}
-        className="relative flex w-full flex-col items-start gap-1 text-left"
+        className={cn("relative flex w-full flex-col items-start text-left", ringed ? "gap-2" : "gap-1")}
       >
-        <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />
+        {ringed ? (
+          <span data-mascot-ring="" className="grid size-[70px] shrink-0 place-items-center rounded-full bg-app">
+            <MascotStage {...stage} size={MASCOT_RING_SIZE} pad={0} />
+          </span>
+        ) : (
+          <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />
+        )}
         <div data-mascot-heading="" className="flex min-w-0 max-w-full flex-col items-start">
           {heading}
           {subheading}

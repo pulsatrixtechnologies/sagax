@@ -96,6 +96,7 @@ const heading = "text-[11px] font-medium text-ink-secondary";
 const card = "flex flex-col items-center justify-center gap-0.5 rounded-lg bg-inset p-1 transition-colors hover:bg-control disabled:opacity-50";
 const on = "ring-2 ring-accent-border";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
+const APPEARANCE_ACTION = cn("inline-flex items-center justify-center gap-1.5 rounded-lg border border-hairline-weak px-2.5 py-1.5 text-[13px] leading-4 text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50", focusRing);
 const chip = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] leading-4 transition-colors";
 const chipOn = "border-accent-border bg-selected text-ink";
 const chipOff = "border-hairline-weak text-ink-secondary hover:text-ink";
@@ -681,6 +682,7 @@ export default function MascotLookEditor({
         onRandomize={slot || randomizeInTabRow ? undefined : randomize}
         heading={slot?.heading}
         subheading={slot?.subheading}
+        ringed={slot?.ringed}
         liveState={slot?.state}
         liveMotion={slot?.motion}
       />
@@ -691,10 +693,11 @@ export default function MascotLookEditor({
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
       {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
 
-      {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right.
-          Narrow (a phone), the tabs keep the full width and wrap rather than scroll out of sight, and Reset and Randomize sit on their own row under them (#4076). */}
-      <div className="flex min-w-0 flex-col gap-2 @[34rem]:flex-row @[34rem]:items-center @[34rem]:border-b @[34rem]:border-hairline-weak" data-appearance-tab-bar="">
-        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-wrap gap-1 border-b border-hairline-weak @[34rem]:flex-1 @[34rem]:flex-nowrap @[34rem]:overflow-x-auto @[34rem]:border-b-0" data-appearance-tabs="">
+      {/* ONE row (owner 2026-11-17, save vertical space): each tab on a single line with its current value inline
+          ("Mascot · Shapes", "Color ● Clay"), the open one underlined in the bot's color; Reset and Randomize at the right,
+          icon only when the width is short. The tabs scroll sideways rather than wrap. */}
+      <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">
+        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto" data-appearance-tabs="">
           {tabs.map((id) => {
             const selected = id === tab;
             return (
@@ -717,24 +720,25 @@ export default function MascotLookEditor({
                 }}
                 style={{ borderBottomColor: selected ? ink : "transparent" }}
                 className={cn(
-                  "-mb-px flex min-w-0 shrink-0 flex-col items-start gap-0.5 border-b-2 px-3 pb-2.5 pt-2 text-left transition-colors @[34rem]:px-4",
+                  "-mb-px flex min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-left transition-colors",
                   focusRing,
                   selected ? "text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
                 <span className="text-[14px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
-                <span className="max-w-[10rem] truncate text-[12px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
+                {id !== "color" && <span aria-hidden="true" className="text-[12px] text-ink-tertiary">·</span>}
+                <span className="max-w-[9rem] truncate text-[12px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
               </button>
             );
           })}
         </div>
         {(tabActions || randomizeInTabRow) && (
-          <div className="flex shrink-0 items-center justify-end gap-2 @[34rem]:pb-1.5" data-appearance-tab-actions="">
+          <div className="flex shrink-0 items-center justify-end gap-1.5" data-appearance-tab-actions="">
             {tabActions}
             {randomizeInTabRow && (
-              <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} className={MASCOT_HERO_BUTTON}>
+              <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} title={t("appearance.randomize")} className={APPEARANCE_ACTION}>
                 <Shuffle size={13} aria-hidden="true" />
-                {t("appearance.randomize")}
+                <span className="sr-only @[34rem]:not-sr-only">{t("appearance.randomize")}</span>
               </button>
             )}
           </div>
@@ -745,29 +749,42 @@ export default function MascotLookEditor({
         {tab === "mascot" && (
           <div ref={browser} data-mascot-browser="" className="flex min-w-0 flex-col gap-3">
             {picturePanel ?? (
-              <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
-                {filters.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={filter === id}
-                    data-mascot-filter={id}
-                    onClick={() => setFilter(id)}
-                    className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
-                  >
-                    {filterLabel(id)}
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5" data-mascot-filter-row="">
+                {/* the first shelf's heading and count share the filters' row */}
+                {shelves[0] && (
+                  <div className="flex items-baseline gap-2" data-mascot-first-shelf-heading="">
+                    <h3 id={`mascot-shelf-${shelves[0].shelf}`} className={heading}>{t(SHELF_LABEL[shelves[0].shelf])}</h3>
+                    <span className="text-[11px] tabular-nums text-ink-tertiary">
+                      {shelves[0].shelf === "yours" ? t("appearance.shelf.count", { count: owned, total: listed.length }) : shelves[0].entries.length}
+                    </span>
+                  </div>
+                )}
+                <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
+                  {filters.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={filter === id}
+                      data-mascot-filter={id}
+                      onClick={() => setFilter(id)}
+                      className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
+                    >
+                      {filterLabel(id)}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
-            {!picturePanel && shelves.map(({ shelf, entries }) => (
+            {!picturePanel && shelves.map(({ shelf, entries }, index) => (
               <section key={shelf} data-mascot-shelf={shelf} aria-labelledby={`mascot-shelf-${shelf}`}>
-                <div className="mb-1.5 flex items-baseline gap-2">
-                  <h3 id={`mascot-shelf-${shelf}`} className={heading}>{t(SHELF_LABEL[shelf])}</h3>
-                  <span className="text-[11px] tabular-nums text-ink-tertiary">
-                    {shelf === "yours" ? t("appearance.shelf.count", { count: owned, total: listed.length }) : entries.length}
-                  </span>
-                </div>
+                {index > 0 && (
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <h3 id={`mascot-shelf-${shelf}`} className={heading}>{t(SHELF_LABEL[shelf])}</h3>
+                    <span className="text-[11px] tabular-nums text-ink-tertiary">
+                      {shelf === "yours" ? t("appearance.shelf.count", { count: owned, total: listed.length }) : entries.length}
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2" data-character-row="">
                   {entries.map((option) => (
                     <MascotTile

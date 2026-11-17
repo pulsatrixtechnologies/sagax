@@ -17,6 +17,8 @@ export interface MascotHeroSlot {
   heading: ReactNode;
   /** Under the heading: the bot's label. */
   subheading?: ReactNode;
+  /** The profile page's hero only: a ring in the page colour around the mascot (owner 2026-11-17). */
+  ringed?: boolean;
   /** The bot's live state and the moves it plays across the app. */
   state?: MausState;
   motion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;

@@ -90,6 +90,13 @@ describe("fleet-agent-settings (#1944)", () => {
     expect(parts.primary).toBe(true);
   });
 
+  it("a bot changes its own description through update_agent_settings (the profile header no longer edits it, owner 2026-11-17)", () => {
+    expect(AGENT_SETTINGS_FIELDS).toContain("description");
+    const parts = partitionAgentSettings({ description: "Finds sources and drafts the weekly digest." });
+    expect(parts.patch).toEqual({ description: "Finds sources and drafts the weekly digest." });
+    expect(parts.runtime).toEqual({});
+  });
+
   it("#4172: skills, plugins and grants are switch maps beside the bot PATCH; hidden still archives through it", () => {
     expect(AGENT_SETTINGS_FIELDS).toEqual(expect.arrayContaining(["skills", "plugins", "grants", "soul", "title", "approvalMode", "visibility", "mascotBody", "hidden"]));
     const parts = partitionAgentSettings({

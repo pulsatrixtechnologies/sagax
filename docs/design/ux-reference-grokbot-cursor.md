@@ -362,8 +362,12 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   mesurées sur la page du bot de la référence (#4420).
 - En-tête (#4420, mesuré sur la référence) : une bannière de 124 px dans la couleur de la
   mascotte, la mascotte à gauche, son milieu sur le bord bas de la bannière, le nom à
-  26 px (interligne 32, medium, -0,015 em) avec le titre du bot dessous, qui le voit et
-  son propriétaire, la description éditée en place. La mascotte, le nom, ces lignes, le
+  26 px (interligne 32, medium, -0,015 em) suivi du titre du bot sur la MÊME ligne
+  (« Nom · Titre », le titre en gris secondaire, tronqué en premier, jamais une
+  deuxième ligne au bureau), puis qui le voit et son propriétaire. Aucune description
+  dans l'en-tête (JC 2026-11-17) : on la change en la demandant au bot
+  (update_agent_settings). La mascotte (64 px) porte un anneau de 3 px de la couleur de
+  la page (plaque de 70 px), sur cette page seulement. La mascotte, le nom, ces lignes, le
   texte des onglets et les étiquettes grises des cartes partagent un même bord gauche,
   12 px dans la colonne. Partager (le mot seul) puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des

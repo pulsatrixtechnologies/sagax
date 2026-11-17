@@ -130,21 +130,33 @@ describe("the Appearance pane", () => {
     expect(inside("[data-mascot-randomize]", "[data-appearance-tab-actions]")).toBe(true);
   });
 
-  it("regression #4076: on a narrow pane the tabs wrap at full width, Reset and Randomize on their own row, so no label is cut", async () => {
+  it("regression (the owner 2026-11-17, save vertical space): the four tabs are single-line items with their value inline, ONE row with Reset and Randomize at the right, scrolling sideways when narrow", async () => {
     await mountPane(makeBot(), true);
     const classes = (selector: string) => (host.querySelector(selector)?.getAttribute("class") ?? "").split(/\s+/);
-    // narrow: one column, the tabs wrap instead of scrolling out of sight
     const bar = classes("[data-appearance-tab-bar]");
-    expect(bar).toContain("flex-col");
-    expect(bar).toContain("@[34rem]:flex-row");
+    expect(bar).toContain("flex");
+    expect(bar).not.toContain("flex-col");
     const tabs = classes("[data-appearance-tabs]");
-    expect(tabs).toContain("flex-wrap");
-    expect(tabs).not.toContain("overflow-x-auto");
-    expect(tabs).toContain("@[34rem]:overflow-x-auto");
-    // the actions come after the tabs, on their own row
+    expect(tabs).toContain("flex-nowrap");
+    expect(tabs).toContain("overflow-x-auto");
+    // each tab: its label then its value on ONE line ("Mascot · Shapes", "Color ● Clay")
+    for (const button of host.querySelectorAll("[data-appearance-tab]")) {
+      expect(button.getAttribute("role")).toBe("tab");
+      expect(button.querySelector("[data-appearance-tab-value]")).not.toBeNull();
+      expect(button.getAttribute("class")).toContain("items-center");
+      expect(button.getAttribute("class")).not.toContain("flex-col");
+    }
+    // the actions come after the tabs, on the same row, icon only when short
     const tablist = host.querySelector("[data-appearance-tabs]")!;
     const actions = host.querySelector("[data-appearance-tab-actions]")!;
     expect(tablist.compareDocumentPosition(actions) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions.parentElement).toBe(host.querySelector("[data-appearance-tab-bar]"));
+    expect(host.querySelector("[data-appearance-reset]")?.getAttribute("title")).toBeTruthy();
+    expect(host.querySelector("[data-mascot-randomize]")?.getAttribute("title")).toBeTruthy();
+    // the filters and the first shelf's count share ONE row
+    const row = host.querySelector("[data-mascot-filter-row]")!;
+    expect(row.querySelector("[data-mascot-filters]")).not.toBeNull();
+    expect(row.querySelector("[data-mascot-first-shelf-heading]")).not.toBeNull();
   });
 });
 

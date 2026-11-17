@@ -1,8 +1,9 @@
 // The page's header (#2313, split from BotProfilePage for #1383): the
-// mascot small on the left of the column over the banner's lower edge, no
-// card around it (Grok Bot, the owner 2026-11-09), the bot's name with its label
-// under it, who sees it, who owns it and its description edited in place,
-// all aligned left and tight. The mascot editor
+// mascot on the left of the column over the banner's lower edge in a 3px ring
+// of the page colour (the reference, the owner 2026-11-17), the bot's name and
+// label on ONE line "Name · Label", then who sees it and who owns it, all
+// aligned left and tight. No description line: the bot changes its own
+// description when asked (update_agent_settings). The mascot editor
 // itself is the Appearance tab.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
@@ -57,37 +58,45 @@ export function useBotProfileHero({ bot, derived }: {
   const shown = splitBotNameTitle(bot.name, (bot.title ?? ""));
   const gluedTitle = shown.merged && !bot.title?.trim() ? { title: shown.title } : {};
   const heroTitle = (
-    // The name alone on its line, the reference's heading (26px over 32,
-    // medium, -0.015em, #4420), the label under it, smaller and secondary
-    // (JC: never "Name · Label" on one line).
-    <h2 id="bot-profile-title" data-bot-profile-title="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink">
-      <InlineEditableText
-        value={shown.name}
-        required
-        maxLength={BOT_PROFILE_LIMITS.name}
-        ariaLabel={t("botPanel.name.edit")}
-        onSave={canName ? (name) => derived.patch({ name, ...gluedTitle }) : undefined}
-        className="min-w-0 justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink"
-      />
+    // One line "Name · Label" as the reference (owner 2026-11-17): the name in
+    // the heading style (26px over 32, medium, -0.015em, #4420), the label
+    // after the separator, secondary and regular. The label shrinks and
+    // truncates first, never a second line at desktop widths; under 640px
+    // the line may wrap. Both are edited in place.
+    <h2 id="bot-profile-title" data-bot-profile-title="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] flex-wrap items-baseline justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink sm:flex-nowrap">
+      {/* the separator travels with the name: when the label wraps (a phone) the dot ends the first line */}
+      <span className="flex min-w-0 shrink-0 items-baseline max-sm:shrink">
+        <InlineEditableText
+          value={shown.name}
+          required
+          maxLength={BOT_PROFILE_LIMITS.name}
+          ariaLabel={t("botPanel.name.edit")}
+          onSave={canName ? (name) => derived.patch({ name, ...gluedTitle }) : undefined}
+          className="min-w-0 justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink"
+        />
+        {(shown.title || canLabel) && (
+          <span data-bot-profile-separator="" aria-hidden="true" className="shrink-0 px-1 font-normal text-ink-secondary">·</span>
+        )}
+      </span>
+      {(shown.title || canLabel) && (
+        <span data-bot-profile-label="" className="flex min-w-0 shrink justify-start font-normal text-ink-secondary">
+          <InlineEditableText
+            value={shown.title}
+            maxLength={BOT_PROFILE_LIMITS.title}
+            placeholder={t("botPanel.label.add")}
+            ariaLabel={t("botPanel.label.edit")}
+            onSave={canLabel ? (title) => derived.patch(shown.merged ? { title, name: shown.name } : { title }) : undefined}
+            className="min-w-0 justify-start text-left text-[26px] font-normal leading-8 tracking-[-0.015em] text-ink-secondary"
+          />
+        </span>
+      )}
     </h2>
   );
-  const heroLabel = (shown.title || canLabel) ? (
-    <div data-bot-profile-label="" className="-ml-1.5 mt-1 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[14px] leading-5 text-ink-secondary">
-      <InlineEditableText
-        value={shown.title}
-        maxLength={BOT_PROFILE_LIMITS.title}
-        placeholder={t("botPanel.label.add")}
-        ariaLabel={t("botPanel.label.edit")}
-        onSave={canLabel ? (title) => derived.patch(shown.merged ? { title, name: shown.name } : { title }) : undefined}
-        className="min-w-0 justify-start text-left text-[14px] leading-5 text-ink-secondary"
-      />
-    </div>
-  ) : undefined;
   const heroSlot: MascotHeroSlot = {
     target: heroTarget,
     claim: claimHero,
     heading: heroTitle,
-    subheading: heroLabel,
+    ringed: true,
     state: derived.activeState,
     motion: derived.mascotMotion,
   };
@@ -111,7 +120,7 @@ export function useBotProfileHero({ bot, derived }: {
       onPlay={() => {}}
       onPlayNext={() => {}}
       heading={heroTitle}
-      subheading={heroLabel}
+      ringed
       picture={heroPicture}
       liveState={derived.activeState}
       liveMotion={derived.mascotMotion}
@@ -147,8 +156,8 @@ export function useBotProfileHero({ bot, derived }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        // the mascot's middle on the banner's lower edge (#4420)
-        className={cn("relative -mt-[50px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+        // the ringed mascot's middle (70px plate) on the banner's lower edge (#4420)
+        className={cn("relative -mt-[35px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
         {!heroClaimed && (
@@ -171,12 +180,10 @@ export function useBotProfileHero({ bot, derived }: {
   return { heroSlot, hero };
 }
 
-/** The header: the bare mascot with the bot's name and label, then who
- * sees it and its description, edited in place, all aligned left on the
- * column (Grok Bot, the owner 2026-11-09). */
-export function BotProfileHeader({ bot, derived, hero }: {
+/** The header: the ringed mascot with the bot's name and label on one line,
+ * then who sees it, all aligned left on the column. */
+export function BotProfileHeader({ bot, hero }: {
   bot: Bot;
-  derived: Derived;
   hero: ReactNode;
 }) {
   const { state } = useStore();
@@ -190,7 +197,6 @@ export function BotProfileHeader({ bot, derived, hero }: {
   const ownerId = bot.ownerUserId?.trim() ?? "";
   const ownerPerson = people.get(ownerId.toLowerCase());
   const owner = ownerId && !viewerOwnsBot(bot, viewerId) ? personLabel(ownerPerson?.name, ownerPerson?.login, ownerId) : "";
-  const canDescribe = canEditBotField(state.config, bot, "description");
 
   return (
     // #4420: the mascot, the name, the lines under it and the description
@@ -198,7 +204,7 @@ export function BotProfileHeader({ bot, derived, hero }: {
     // labels and the cards' grey labels.
     <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col px-3">
       {hero}
-      <div className="mt-1 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13px] leading-5 text-ink-secondary">
+      <div className="flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13px] leading-5 text-ink-secondary">
         {/* The mark says what the words say (#3402): people when someone
             else sees the bot, the lock only when it is private. */}
         <span data-bot-profile-audience={notShared ? "private" : "shared"} className="inline-flex items-center gap-1.5">
@@ -215,23 +221,7 @@ export function BotProfileHeader({ bot, derived, hero }: {
           </span>
         )}
       </div>
-      {/* The description, typed in place; grows with its text. */}
-      {canDescribe ? (
-        <textarea
-          data-bot-profile-description=""
-          rows={2}
-          maxLength={BOT_PROFILE_LIMITS.description}
-          placeholder={t("botPanel.identity.blurbPlaceholder")}
-          aria-label={t("persona.overview.description")}
-          value={bot.description}
-          onChange={(event) => derived.patch({ description: event.target.value })}
-          className="mt-1.5 max-h-[12lh] w-full resize-none text-left rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-        />
-      ) : (
-        <p data-bot-profile-description="" className="mt-1.5 whitespace-pre-wrap text-left text-[14px] leading-6 text-ink">
-          {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
-        </p>
-      )}
+      {/* No description line here (owner, 2026-11-17): the bot keeps its own description, changed by asking it. */}
     </header>
   );
 }

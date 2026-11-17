@@ -37,7 +37,7 @@ import {
 } from "@/lib/provider-rows";
 import { COMPUTER_PROVIDER_ID } from "../../../shared/model-provider";
 import { PERSONAL_PROVIDER_NAMES } from "../../../shared/provider-accounts";
-import { removableAccount } from "../../../shared/added-account";
+import { addedAccount, removableAccount } from "../../../shared/added-account";
 import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
 import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
@@ -531,7 +531,7 @@ function AccountLine({ row, group, list, index, total, open, show }: {
     .map((other) => accountLead(other, list))
     .filter((other) => other?.driver === driver)
     .map((other) => other!.instanceId);
-  const removable = Boolean(lead) && !row.slot && removableAccount(lead!, others) && (list.organization || !list.member);
+  const removable = Boolean(lead) && !row.slot && (addedAccount(lead!, driver) || removableAccount(lead!, others)) && (list.organization || !list.member);
   const run = (work: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);

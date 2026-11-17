@@ -1,11 +1,11 @@
 // Settings > Account > Language and region > Time zone (parity 2E, #2080 L2):
-// one row. The first option is Automatic (this computer's zone); picking a
+// one row, the page's plain select (PillSelect) like Language. The first option is Automatic (this computer's zone); picking a
 // named zone turns auto off. sagax_settings: account.timeZone / timeZoneAuto.
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
-import { DescribedRow } from "../SettingsPrimitives";
+import { CompactRow, PillSelect } from "../SettingsPrimitives";
 
 interface BotSettingsAnswer {
   settings: { timeZone: string | null; timeZoneAuto: boolean };
@@ -42,16 +42,8 @@ export function timeZoneChoices(): string[] {
   }
 }
 
-/** The field's CSS width for a value: its characters plus the padding, at
- * least the width the empty field always had (14rem). */
-export function timeZoneFieldWidth(value: string): string {
-  return `max(14rem, calc(${value.length}ch + 1.75rem))`;
-}
-
 export function TimeZoneRows() {
-  const listId = useId();
   const [answer, setAnswer] = useState<BotSettingsAnswer | null>(null);
-  const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const zones = useMemo(timeZoneChoices, []);
   const latest = useRef(0);
@@ -62,7 +54,6 @@ export function TimeZoneRows() {
       const next = await api<BotSettingsAnswer>("/api/settings/bot", { method: "PUT", body: JSON.stringify(patch) });
       if (mine !== latest.current) return;
       setAnswer(next);
-      setDraft(next.settings.timeZoneAuto ? AUTO_VALUE : (next.settings.timeZone ?? ""));
       setError("");
     } catch {
       setError(t("settings.timeZone.failed"));
@@ -74,7 +65,6 @@ export function TimeZoneRows() {
     void api<BotSettingsAnswer>("/api/settings/bot", { cache: "no-store" }).then((next) => {
       if (!live) return;
       setAnswer(next);
-      setDraft(next.settings.timeZoneAuto ? AUTO_VALUE : (next.settings.timeZone ?? next.effectiveTimeZone));
       const here = detectedTimeZone();
       if (next.settings.timeZoneAuto && next.settings.timeZone !== here) void save({ timeZone: here, timeZoneAuto: true });
     }).catch(() => {
@@ -82,66 +72,35 @@ export function TimeZoneRows() {
       if (!live) return;
       const here = detectedTimeZone();
       setAnswer({ settings: { timeZone: here, timeZoneAuto: true }, hostTimeZone: here, effectiveTimeZone: here });
-      setDraft(AUTO_VALUE);
     });
     return () => { live = false; };
   }, [save]);
 
-  if (!answer) {
-    const here = detectedTimeZone();
-    return (
-      <DescribedRow label={t("settings.timeZone.title")} rowId="timeZone" description={t("settings.timeZone.autoOption", { zone: here })}>
-        <div className="h-8 w-56 max-w-full rounded-full bg-control" aria-hidden="true" />
-      </DescribedRow>
-    );
-  }
-  const auto = answer.settings.timeZoneAuto;
   const here = detectedTimeZone();
-  const shown = auto ? t("settings.timeZone.autoOption", { zone: here }) : draft;
-  const commit = () => {
-    const value = draft.trim();
-    if (!value || value === AUTO_VALUE || value === t("settings.timeZone.autoOption", { zone: here })) {
-      if (!auto) void save({ timeZone: here, timeZoneAuto: true });
-      return;
-    }
-    if (value === answer.settings.timeZone && !auto) return;
-    const match = zones.find((zone) => zone.toLowerCase() === value.toLowerCase()) ?? (isTimeZone(value) ? value : null);
-    if (!match) {
-      setError(t("settings.timeZone.invalid"));
-      return;
-    }
-    void save({ timeZone: match, timeZoneAuto: false });
-  };
+  const auto = answer ? answer.settings.timeZoneAuto : true;
+  const zone = answer ? (answer.settings.timeZone ?? answer.effectiveTimeZone) : here;
+  // the value is said once, in the control; a zone this runtime does not list stays selectable
+  const named = zones.includes(zone) ? zones : [zone, ...zones];
+  const options = [
+    { value: AUTO_VALUE, label: t("settings.timeZone.autoOption", { zone: here }) },
+    ...named.map((name) => ({ value: name, label: name })),
+  ];
   return (
-    <DescribedRow
-      label={t("settings.timeZone.title")}
-      rowId="timeZone"
-      description={auto ? t("settings.timeZone.autoOption", { zone: here }) : undefined}
-    >
+    <CompactRow label={t("settings.timeZone.title")} rowId="timeZone">
       <div className="flex min-w-0 flex-col items-end gap-1">
-        <input
-          type="text"
-          list={listId}
-          value={shown}
-          spellCheck={false}
-          autoComplete="off"
-          aria-label={t("settings.timeZone.title")}
-          placeholder={t("settings.timeZone.search")}
-          onFocus={() => { if (auto) setDraft(""); }}
-          onChange={(event) => { setDraft(event.target.value); setError(""); }}
-          onBlur={commit}
-          onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
-          // As wide as its value (Automatic (America/Toronto), a long zone
-          // name), never a fixed pill that cuts it (#3041); capped by the row.
-          style={{ width: timeZoneFieldWidth(shown) }}
-          className="h-8 max-w-full rounded-full bg-control px-3 text-right text-[13px] text-ink outline-none placeholder:text-ink-secondary focus-visible:ring-2 focus-visible:ring-accent/70"
+        <PillSelect
+          value={auto ? AUTO_VALUE : zone}
+          ariaLabel={t("settings.timeZone.title")}
+          disabled={!answer}
+          onChange={(next) => {
+            if (next === AUTO_VALUE) { if (!auto) void save({ timeZone: here, timeZoneAuto: true }); return; }
+            if (next === answer?.settings.timeZone && !auto) return;
+            void save({ timeZone: next, timeZoneAuto: false });
+          }}
+          options={options}
         />
-        <datalist id={listId}>
-          <option value={t("settings.timeZone.autoOption", { zone: here })} />
-          {zones.map((zone) => <option key={zone} value={zone} />)}
-        </datalist>
         {error ? <span role="alert" className="text-[12px] text-danger">{error}</span> : null}
       </div>
-    </DescribedRow>
+    </CompactRow>
   );
 }

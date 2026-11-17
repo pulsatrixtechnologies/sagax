@@ -1009,7 +1009,7 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
   });
 
   describe("on a solo server (the server's own sign-ins)", () => {
-    it("Claude, the first account, connected, is removed from the server in one gesture; the only one has nothing to remove (#4426)", async () => {
+    it("Claude, the first account, connected, is removed from the server in one gesture; an account the person added stays removable, the sole first account has nothing to remove (#4426)", async () => {
       const id = `claude-${uuid(9)}`;
       const connected = { access: "subscription" as const, snapshot: { state: "available" as const, authenticated: true, account: { email: "ada@example.com" } } };
       fixture.instances = [instance("claude", "claudeAgent", "Claude Code", connected), instance(id, "claudeAgent", "Work", connected)];
@@ -1025,7 +1025,15 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       await click(remove);
       expect(apiCalls("DELETE").map(([path]) => path)).toEqual(["/api/instances/claude"]);
       await page("anthropic");
-      expect(line(`account:${id}`).querySelector('[data-provider-action="remove"]'), "now the only one").toBeNull();
+      // the account the person added can still be removed (the server accepts it, #4426)
+      expect(line(`account:${id}`).querySelector('[data-provider-action="remove"]'), "an added account stays removable").not.toBeNull();
+    });
+
+    it("the only account of a provider, the first one, has nothing to remove (#4426)", async () => {
+      const connected = { access: "subscription" as const, snapshot: { state: "available" as const, authenticated: true, account: { email: "ada@example.com" } } };
+      fixture.instances = [instance("claude", "claudeAgent", "Claude Code", connected)];
+      await page("anthropic");
+      expect(line("account:claude").querySelector('[data-provider-action="remove"]')).toBeNull();
     });
 
     it("OpenAI, several accounts all signed out: one Sign in each, Remove on each", async () => {

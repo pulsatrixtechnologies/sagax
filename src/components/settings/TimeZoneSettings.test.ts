@@ -1,7 +1,9 @@
 // #2080 L2: Account > Language and region keeps one time-zone row whose
 // first option is Automatic (this computer's zone).
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { detectedTimeZone, isTimeZone, timeZoneChoices, timeZoneFieldWidth } from "./TimeZoneSettings";
+import { TimeZoneRows, detectedTimeZone, isTimeZone, timeZoneChoices } from "./TimeZoneSettings";
 import { t } from "@/lib/i18n";
 
 describe("TimeZoneSettings helpers", () => {
@@ -12,12 +14,17 @@ describe("TimeZoneSettings helpers", () => {
     expect(timeZoneChoices()[0]).toBe("UTC");
     expect(timeZoneChoices()).toContain(zone);
   });
+});
 
-  // #3041: the field grows with its value so "Automatic (America/Toronto)"
-  // is never clipped, and keeps the old 14rem floor for short zones.
-  it("sizes the field to its value", () => {
-    expect(timeZoneFieldWidth("UTC")).toBe("max(14rem, calc(3ch + 1.75rem))");
-    const label = "Automatique (America/Argentina/ComodRivadavia)";
-    expect(timeZoneFieldWidth(label)).toContain(`${label.length}ch`);
+// The time zone is the page's plain select, like Language and Send key, and the
+// row says its value once, in the control (no muted second line).
+describe("TimeZoneRows", () => {
+  it("draws one select with the value and no description line", () => {
+    const html = renderToStaticMarkup(createElement(TimeZoneRows));
+    const label = t("settings.timeZone.autoOption", { zone: detectedTimeZone() });
+    expect(html).toContain('aria-haspopup="listbox"');
+    const text = html.replace(/<[^>]*>/g, "|");
+    expect(text.split(label).length - 1).toBe(1);
+    expect(html).not.toContain("<input");
   });
 });

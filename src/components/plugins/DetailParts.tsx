@@ -29,6 +29,27 @@ export function sourceLine(parts: ReadonlyArray<string | null | undefined | fals
   return parts.filter((part): part is string => Boolean(part)).join(" · ");
 }
 
+/** The body of every detail page (plugin, bundle, skill, connector): one
+ * left and right edge, one 20px rhythm between the header, the tabs and the sections. */
+export const DETAIL_BODY = "min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]";
+
+/** One fact of a section: the label, then its value right beside it (the
+ * Details block's pairs), never the value pushed to the far edge. */
+export function FactRows({ children, attrs }: { children: ReactNode; attrs?: Record<`data-${string}`, string | undefined> }) {
+  return <dl className="grid grid-cols-[minmax(88px,max-content)_minmax(0,1fr)] gap-x-4 text-[13px] leading-5" {...attrs}>{children}</dl>;
+}
+export function FactRow({ label, children, title, attrs }: { label: string; children: ReactNode; title?: string; attrs?: Record<`data-${string}`, string | undefined> }) {
+  return (
+    <div className="contents" {...attrs}>
+      <dt className="py-[7px] text-ink-tertiary">{label}</dt>
+      <dd className="min-w-0 break-words py-[7px] text-ink" title={title}>{children}</dd>
+    </div>
+  );
+}
+
+/** A header action (Update, Publish, Delete): one height and one inset on every detail page. */
+export const HEADER_ACTION = "h-[26px] px-3";
+
 /** The header of a detail page: the tile, the name (once), a small "New"
  * badge when the item is new, one grey line, the main action at the right. */
 export function DetailHeader({ icon, name, line, isNew = false, actions, attrs }: {
@@ -117,9 +138,9 @@ export function OverviewColumns({ description, categories = [], reach, children,
   const left = Boolean(description) || categories.length > 0 || Boolean(children) || Boolean(beneath);
   if (!left && !reach) return null;
   return (
-    <div className={cn("grid gap-x-8 gap-y-6", reach && left && "md:grid-cols-[minmax(0,1fr)_minmax(220px,300px)]")} data-detail-overview="">
+    <div className={cn("grid gap-x-8 gap-y-5", reach && left && "md:grid-cols-[minmax(0,1fr)_minmax(220px,300px)]")} data-detail-overview="">
       {left && (
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-5">
           {description && (
             <section data-detail-description="">
               <DetailLabel>{t("connectApps.detail.about")}</DetailLabel>

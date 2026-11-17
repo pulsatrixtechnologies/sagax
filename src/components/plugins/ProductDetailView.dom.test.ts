@@ -97,15 +97,17 @@ describe("product rows", () => {
     const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state, console_url: "https://console.example/p" })), ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
     for (const row of view.querySelectorAll("[data-person-product]")) {
-      expect(row.lastElementChild?.querySelector("[data-entry-menu]")).not.toBeNull();
-      expect(row.lastElementChild?.lastElementChild?.matches("[data-entry-menu]")).toBe(true);
+      // the card's right side (CardTrail) holds the state, the switch and the "..." last
+      const trail = row.lastElementChild;
+      expect(trail?.querySelector("[data-entry-menu]")).not.toBeNull();
+      expect(trail?.firstElementChild?.lastElementChild?.matches("[data-entry-menu]")).toBe(true);
     }
   });
 
   it("offer the page's own \"...\" actions in the row: open in Perspicax, copy the id", async () => {
     const view = await render(createElement("div", null, productRows([px({ console_url: "https://console.example/p" })], ctx())[0]!.node));
     await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
-    const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    const ids = [...document.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
     // the product's menu: the bots it is on, its detail, then the console's links
     expect(ids).toEqual(["choose", "off", "detail", "open-console", "copy-id"]);
   });
@@ -113,7 +115,7 @@ describe("product rows", () => {
   it("hide Open in Perspicax when Perspicax names no console page", async () => {
     const view = await render(createElement("div", null, productRows([base], ctx())[0]!.node));
     await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
-    const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    const ids = [...document.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
     expect(ids).toEqual(["choose", "off", "detail", "copy-id"]);
   });
 

@@ -17,6 +17,10 @@ export const PLUGINS = {
   /** "From Sagax", "Recommended for you": the reference's group title
    * (#4097, measured): 14px medium, 8px over, 6px under, in line with the rows' text */
   sectionTitle: "pb-1.5 pl-3 pt-2 text-[14px] font-medium leading-5 text-ink",
+  /** a group's title in Yours and Discover (2026-11-17): the same type, on the cards' own left edge (no inset) */
+  groupTitle: "pb-1.5 pt-2 text-[14px] font-medium leading-5 text-ink",
+  /** a group's right-hand link: its text on the cards' right edge, the hover pill leaning out */
+  groupLink: "-mr-2 rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none",
   /** "View all", "Manage on ...": a quiet 12px pill at the group title's right */
   sectionLink: "mr-1 rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none",
   /** the one type scale of Connect Apps and its pages (#4453, measured on the
@@ -76,3 +80,10 @@ export function pluginActionClass(variant: "fill" | "outline" = "fill"): string 
     variant === "fill" ? "bg-ink/[0.06] hover:bg-ink/10" : "border border-border hover:bg-hover",
   );
 }
+
+/** The one card of Connect Apps (Discover's, and Yours' with its controls at the right). */
+export const CARD_FRAME = "rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] transition-colors hover:bg-ink/[0.04] motion-reduce:transition-none";
+export const CARD_BOX = `flex items-start gap-3 p-3 ${CARD_FRAME}`;
+export const CARD_ICON = "size-12 rounded-xl";
+/** Two columns of cards (one under 560px), the same grid in Yours and Discover. */
+export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[560px]:col-span-full";

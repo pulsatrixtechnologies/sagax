@@ -29,7 +29,8 @@ import {
 } from "@/lib/capabilities";
 import { Switch } from "../SettingsPrimitives";
 import { fromOrganization } from "@/lib/capability-kinds";
-import { ItemTrailer, ITEM_ROW_ATTR, type ItemMenuActions } from "../plugins/ItemTrailer";
+import { CardTrail, ItemTrailer, ITEM_ROW_ATTR, type ItemMenuActions } from "../plugins/ItemTrailer";
+import { CARD_FRAME, CARD_GRID, CARD_ICON } from "../plugins/plugins-style";
 
 const CHIP = "shrink-0 rounded-full px-2 py-0.5 text-[12px] leading-4";
 const TONE: Record<"good" | "accent" | "warn" | "muted", string> = {
@@ -126,7 +127,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
             {t("capabilities.panel.empty", { name: botName })}
           </div>
         ) : (
-          <ul className={menuActions ? "flex flex-col divide-y divide-hairline-weak" : "flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated"}>
+          <ul className={menuActions ? CARD_GRID : "flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated"}>
             {(fold !== undefined && !all ? items.slice(0, fold) : items).map((item) => (
               <CapabilityRow
                 key={item.key}
@@ -237,23 +238,23 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
     const line = [origin, source].filter(Boolean).join(" \u00b7 ");
     return (
       <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} {...{ [ITEM_ROW_ATTR]: "" }}
-        className="px-3">
-        <div className={cn("flex min-w-0 items-center gap-3 py-3", item.supersededBy && "flex-wrap")}>
+        className={CARD_FRAME}>
+        <div className={cn("flex min-w-0 items-start gap-3 p-3", item.supersededBy && "flex-wrap")}>
           <button type="button" aria-expanded={expanded} onClick={onExpand} aria-label={t("capabilities.row.openAria", { name })}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Glyph size={18} aria-hidden="true" /></span>
+            className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+            <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><Glyph size={20} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
-              <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
+              <span className="block break-words text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
+              <span className="mt-px line-clamp-2 break-normal text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
             </span>
           </button>
-          {actions}
+          <CardTrail>{actions}
           <ItemTrailer state={required || !tone ? null : { tone: tone === "good" ? "ok" : tone === "warn" ? "fix" : "info", text: reason ? `${stateWord(item.state)} \u00b7 ${reason}` : stateWord(item.state), onFix: onExpand }} name={name} where={scopeWord(item.scope)} on={required ? undefined : switchable || lockedReason ? item.enabled : undefined}
-            onToggle={switchable && !busy ? onToggle : undefined} busy={busy || locked && switchable} lockedReason={lockedReason} actions={menu} />
+            onToggle={switchable && !busy ? onToggle : undefined} busy={busy || locked && switchable} lockedReason={lockedReason} actions={menu} /></CardTrail>
         </div>
-        {item.supersededBy && <p data-capability-superseded="" className="pb-2.5 pl-[52px] text-[12px] leading-4 text-ink-secondary">{reason}</p>}
+        {item.supersededBy && <p data-capability-superseded="" className="px-3 pb-3 pl-[72px] text-[12px] leading-4 text-ink-secondary">{reason}</p>}
         {expanded && (
-          <dl data-capability-detail="" className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-3 gap-y-1 pb-3 pl-[52px] text-[12px] leading-4">
+          <dl data-capability-detail="" className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-3 gap-y-1 px-3 pb-3 pl-[72px] text-[12px] leading-4">
             {about && <Detail label={t("capabilities.detail.about")} value={about} />}
             <Detail label={t("capabilities.detail.state")} value={reason ? `${stateWord(item.state)} \u00b7 ${reason}` : stateWord(item.state)} />
             {brings && brings.skills.length > 0 && <Detail label={t("capabilities.detail.skills")} value={brings.skills.join(", ")} />}

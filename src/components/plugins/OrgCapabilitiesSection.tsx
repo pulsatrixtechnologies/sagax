@@ -28,6 +28,8 @@ import {
   type Capability as Declaration, type CapabilityDraft, type DraftErrors, type DraftField, type FieldError,
 } from "../../../shared/org-capability-form";
 import { Switch } from "../SettingsPrimitives";
+import { CardTrail } from "./ItemTrailer";
+import { CARD_BOX, CARD_GRID, CARD_ICON } from "./plugins-style";
 
 const CHIP = "rounded-full px-2 py-0.5 text-[11px] font-medium";
 const fieldClass = "w-full rounded-lg border border-border bg-raised px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
@@ -119,14 +121,14 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen
   const shown = orgCapabilitiesOfForms({ items } as OrgCapabilitiesForMeState, forms);
   if (shown.length === 0) return null;
   const rows = (
-    <ul className={bare ? "flex flex-col divide-y divide-hairline-weak" : "divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]"}>
+    <ul className={bare ? CARD_GRID : "divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]"}>
       {shown.map((item) => {
         const state = installWords(item.state, item.enabled);
         return (
-          <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} data-item-row="" className={cn("flex items-center gap-3", bare ? "px-3 py-3" : "px-3 py-2")}>
+          <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} data-item-row="" className={cn("flex gap-3", bare ? CARD_BOX : "items-center px-3 py-2")}>
             {bare && (
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary" aria-hidden="true">
-                {item.form === "plugin" ? <Puzzle size={18} /> : item.form === "skill" ? <BookOpen size={18} /> : <Plug size={18} />}
+              <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)} aria-hidden="true">
+                {item.form === "plugin" ? <Puzzle size={20} /> : item.form === "skill" ? <BookOpen size={20} /> : <Plug size={20} />}
               </span>
             )}
             {(() => {
@@ -143,16 +145,15 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen
                 : <span className="min-w-0 flex-1">{text}</span>;
             })()}
             {!bare && <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>}
-            {/* the same columns as every row's right side (state, switch, "..."), so the switches line up */}
-            <span className={cn("flex shrink-0 items-center", bare && "gap-2")}>
-              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
-              {item.canToggle ? (
+            {/* the switch at the card's right, where Discover has its "+" */}
+            {(() => {
+              const control = item.canToggle ? (
                 busy === item.id
                   ? <LoaderCircle size={14} className="mx-3 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" />
                   : <Switch checked={item.on} onClick={() => void toggle(item)} aria-label={t(item.on ? "orgCapabilities.me.offAria" : "orgCapabilities.me.onAria", { name: item.name })} />
-              ) : bare ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
-              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
-            </span>
+              ) : null;
+              return bare ? <CardTrail>{control}</CardTrail> : <span className="flex shrink-0 items-center">{control}</span>;
+            })()}
           </li>
         );
       })}
@@ -163,7 +164,7 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen
       {!bare && <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>}
       {rows}
       {after}
-      <p className={cn("text-[12px] leading-4 text-ink-secondary", bare ? "mt-1.5 px-3" : "mt-1.5")}>{t("orgCapabilities.me.hint")}</p>
+      <p className={cn("text-[12px] leading-4 text-ink-secondary", "mt-1.5")}>{t("orgCapabilities.me.hint")}</p>
     </section>
   );
 }

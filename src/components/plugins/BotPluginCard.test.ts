@@ -83,11 +83,11 @@ describe("For <bot> on a plugin's page", () => {
   it("titles what the card holds when the page above already says where it is installed", () => {
     const html = renderToStaticMarkup(createElement(BotPluginCard, { botName: "Maya", view, plugin: botPluginState(view, "reviewer@acme-tools")!, busy: null, onInstall: () => {}, onToggle: () => {}, statedAbove: true }));
     expect(html).toContain("What this plugin brings");
-    // the page's own section label (one x, size and weight with "Where it is installed"), not the card's padded title
-    expect(html).toMatch(/<h3 class="mb-2 text-\[13px\] font-normal leading-5 text-ink-secondary">What this plugin brings<\/h3>/);
+    // the card's own title, on the card's left edge (the page's): one label style, no padded title
+    expect(html).toMatch(/<h3 class="min-w-0 text-\[13px\] font-normal leading-5 text-ink-secondary">What this plugin brings<\/h3>/);
     expect(html).not.toContain("px-[14px] mb-2.5");
     expect(html.indexOf("What this plugin brings")).toBeLessThan(html.indexOf("rounded-[14px]"));
-    expect(html).not.toMatch(/mb-2\.5 flex items-center justify-between gap-3 px-\[14px\]/);
+    expect(html).not.toMatch(/justify-between gap-x-3 gap-y-2 px-\[14px\]/);
   });
 
   it("offers the install on the bot for a plugin it does not have", () => {

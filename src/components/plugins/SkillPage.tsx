@@ -19,12 +19,12 @@ import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import type { Crumb } from "../Breadcrumb";
 import { PluginPageHeader } from "./PluginParts";
 import { PillTabs } from "../PillTabs";
-import { DetailHeader, DetailsBlock, FileExplorer, sourceLine, UpdateNote, VersionPill } from "./DetailParts";
+import { DetailHeader, DetailsBlock, FileExplorer, sourceLine, UpdateNote, VersionPill, DETAIL_BODY, HEADER_ACTION } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { copyText } from "@/lib/copy-text";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredMenu, useAnchoredDismiss } from "../AnchoredMenu";
 import { enginesLine } from "@/lib/capabilities";
 import { readableError } from "@/lib/plain-error";
 import { Switch } from "../SettingsPrimitives";
@@ -173,7 +173,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
   return (
     <>
       <PluginPageHeader title={title} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-plugins-skill={skill?.name ?? "new"}>
+      <div className={DETAIL_BODY} data-plugins-skill={skill?.name ?? "new"}>
         <DetailHeader
           attrs={{ "data-skill-head": "" }}
           icon={<div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>}
@@ -182,7 +182,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           actions={skill ? (
             <>
               {update?.onUpdate && (
-                <button type="button" data-plugin-action="update" disabled={update.running || busy !== null} onClick={update.onUpdate} className={cn(PLUGINS.fillPill, "h-8 px-5")}>
+                <button type="button" data-plugin-action="update" disabled={update.running || busy !== null} onClick={update.onUpdate} className={cn(PLUGINS.fillPill, HEADER_ACTION)}>
                   {update.running ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
                   {t("connectApps.plugin.update")}
                 </button>
@@ -285,22 +285,23 @@ function PublishMenu({ text, fileName, disabled }: { text: () => string; fileNam
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => setOpen(false));
   const download = () => saveTextFile(fileName, text());
   return (
     <div className="relative" ref={ref}>
-      <button type="button" data-skill-publish aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn(PLUGINS.outlinePill, "h-[26px] px-3")}>
+      <button type="button" data-skill-publish aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn(PLUGINS.outlinePill, HEADER_ACTION)}>
         <Link2 size={14} aria-hidden="true" /> {copied ? t("connectApps.skill.copied") : t("connectApps.skill.publish")} <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-9 z-10")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
           <button type="button" role="menuitem" data-skill-publish-copy className={MENU_ROW} onClick={() => { setOpen(false); void copyText(text()).then((result) => setCopied(result === "copied")); }}>
             <Copy aria-hidden="true" />{t("connectApps.skill.copyMd")}
           </button>
           <button type="button" role="menuitem" data-skill-publish-file className={MENU_ROW} onClick={() => { setOpen(false); download(); }}>
             <Download aria-hidden="true" />{t("connectApps.skill.saveMd")}
           </button>
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );

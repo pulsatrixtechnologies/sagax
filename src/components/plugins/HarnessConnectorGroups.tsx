@@ -26,7 +26,7 @@ import { CLAUDE_AI_CONNECTORS_URL } from "../../../shared/connector-setup";
 import { ClaudeMark, GrokMark, CodexMark } from "../ProviderIcons";
 import { PluginIcon } from "./PluginParts";
 import { CapabilityTags } from "./EngineCapabilities";
-import { PLUGINS, pluginActionClass } from "./plugins-style";
+import { CARD_FRAME, CARD_ICON, PLUGINS, pluginActionClass } from "./plugins-style";
 import type { ConnectorCapability } from "../../../shared/engine-connectors";
 import {
   accountConnectorCapabilities, accountConnectorProviders,
@@ -247,7 +247,7 @@ export function AccountConnectorBody({ row }: { row: AccountConnectorRow }) {
   const tip = row.engine === "grok" ? `${sub}\n${t("connectApps.capabilities.grokOrg")}` : sub;
   return (
     <>
-      <PluginIcon item={{ kind: "app", name: row.name, logo: mark.logo, domain: mark.site }} className="size-10 rounded-[10px]" />
+      <PluginIcon item={{ kind: "app", name: row.name, logo: mark.logo, domain: mark.site }} className={CARD_ICON} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-2">
           <span className={cn(PLUGINS.rowName, "min-w-0")}>{row.name}</span>
@@ -272,9 +272,9 @@ export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp, manage
   const action = noticeAction(notice);
   const text = noticeText(group);
   return (
-    <div className={cn("col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 py-3", className)} data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
+    <div className={cn("col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 p-3", CARD_FRAME, className)} data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
       role={notice.kind === "loading" ? "status" : undefined}>
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary">
+      <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}>
         {notice.kind === "loading" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <EngineMark id={group.id} />}
       </span>
       <span className="min-w-[min(100%,12rem)] flex-1">

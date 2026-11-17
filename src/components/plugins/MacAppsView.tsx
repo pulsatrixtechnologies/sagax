@@ -3,9 +3,11 @@
 // its setup page. Shown only in the desktop app on macOS (macAppsSectionVisible).
 import { BookUser, CalendarDays, ChevronRight, ListChecks, Mail, MessageSquare, StickyNote, type LucideIcon } from "lucide-react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { MAC_APP_SETUP_IDS, type MacAppSetupId, type MacAppsSetupStatus } from "../../../shared/mac-apps-setup.ts";
-import { PLUGINS } from "./plugins-style";
+import { SectionHead } from "./ConnectAppsView";
+import { CARD_BOX, CARD_GRID, CARD_ICON, PLUGINS } from "./plugins-style";
 
 /** Icon and tile color of each app (close to the macOS app icons). */
 export const MAC_APP_LOOK: Record<MacAppSetupId, { icon: LucideIcon; tile: string }> = {
@@ -39,9 +41,9 @@ export function MacAppsInstalledSection({
   onOpen: (app: MacAppSetupId) => void;
 }) {
   return (
-    <section className="mt-8 first:mt-0" data-plugins-mac>
-      <h3 className={PLUGINS.label}>{t("connectApps.mac.section")}</h3>
-      <ul className={`${PLUGINS.grid} mt-1`}>
+    <section className="mt-[30px] first:mt-0" data-plugins-mac>
+      <SectionHead title={t("connectApps.mac.section")} />
+      <ul className={CARD_GRID}>
         {MAC_APP_SETUP_IDS.map((app) => {
           const look = MAC_APP_LOOK[app];
           const Icon = look.icon;
@@ -53,10 +55,10 @@ export function MacAppsInstalledSection({
                 data-mac-app={app}
                 data-mac-app-enabled={enabled ? "true" : "false"}
                 onClick={() => onOpen(app)}
-                className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-2xl px-3 py-3 text-left"
+                className={cn("w-full text-left", CARD_BOX)}
               >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-white" style={{ background: look.tile }}>
-                  <Icon size={18} aria-hidden="true" />
+                <span className={cn("flex shrink-0 items-center justify-center text-white", CARD_ICON)} style={{ background: look.tile }}>
+                  <Icon size={20} aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={PLUGINS.rowName}>{macAppName(app)}</span>
@@ -64,7 +66,7 @@ export function MacAppsInstalledSection({
                     {enabled ? t("connectApps.mac.messages.rowOn") : t("connectApps.mac.messages.rowOff")}
                   </span>
                 </span>
-                <ChevronRight size={15} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+                <span className="flex h-12 shrink-0 items-center"><ChevronRight size={15} className="text-ink-secondary" aria-hidden="true" /></span>
               </button>
             </li>
           );

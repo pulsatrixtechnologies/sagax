@@ -225,7 +225,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         key={`${scope}:${item.key}`}
         installInHeader={scope !== "workspace"}
         statedAbove={scope !== "workspace"}
-        updateInHeader={headerUpdates || Boolean(item.installed && item.updateAvailable)}
+        updateInHeader={headerUpdates || scope !== "workspace" || Boolean(item.installed && item.updateAvailable)}
         personal={scope === "me"}
         botName={scopedPluginName}
         view={scopedPluginView}
@@ -244,7 +244,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
    * (for everyone, on the bot in reach) and Install for <bot> beside the name
    * when that bot still needs it. Update lives in the Details card (Grok Bot
    * shows no Update pill in the header). */
-  const detailHead = (item: PluginItem): Pick<PluginDetailProps, "installState" | "primaryAction" | "onUninstall" | "uninstallLabel"> => {
+  const detailHead = (item: PluginItem): Pick<PluginDetailProps, "installState" | "primaryAction" | "onUninstall" | "uninstallLabel"> & { reinstall?: Pick<PluginDetailProps, "onUpdate" | "updating"> } => {
     if (item.kind !== "plugin") return {};
     const [plugin, marketplace] = [item.id.slice(0, item.id.lastIndexOf("@")), item.id.slice(item.id.lastIndexOf("@") + 1)];
     // the workspace's own install: this list in its scope, else the
@@ -280,7 +280,11 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     const removal = scope !== "workspace" && onBot?.installed && scopedPluginView?.canChange
       ? { onUninstall: () => uninstallForBot(item.id), uninstallLabel: scope === "me" ? t("connectApps.mePlugin.uninstall") : t("connectApps.botPlugin.uninstall", { name: scopedPluginName }) }
       : {};
-    return { installState, primaryAction, ...removal };
+    // "Update" on a copy the person or bot holds: a button in the header beside the "..." (the card no longer carries it)
+    const reinstall = scope !== "workspace" && onBot?.installed && scopedPluginView?.canChange
+      ? { onUpdate: () => installForBot(item.id), updating: botBusy === `install:${item.id}` }
+      : undefined;
+    return { installState, primaryAction, ...removal, ...(reinstall ? { reinstall } : {}) };
   };
   /** What a page's capability brings, for its "Engines" line and the
    * warning before an install (lib/capabilities, shared engineReceipt): a

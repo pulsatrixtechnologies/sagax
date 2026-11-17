@@ -118,7 +118,7 @@ let root: Root;
 const settle = async () => {
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 };
-const $ = (selector: string) => host.querySelector<HTMLElement>(selector);
+const $ = (selector: string) => document.querySelector<HTMLElement>(selector);
 const click = async (element: HTMLElement | null) => {
   expect(element).not.toBeNull();
   await act(async () => { element!.click(); });
@@ -140,7 +140,7 @@ const key = async (name: string) => {
   await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true })); });
   await settle();
 };
-const groups = () => [...host.querySelectorAll<HTMLElement>("[data-plugins-search-group]")].map((group) => group.getAttribute("data-plugins-search-group"));
+const groups = () => [...document.querySelectorAll<HTMLElement>("[data-plugins-search-group]")].map((group) => group.getAttribute("data-plugins-search-group"));
 /** The view on screen: installed (Yours), discover, bots, pages or sources. */
 const selected = () => $("[data-plugins-main]")?.getAttribute("data-plugins-main") ?? null;
 const title = () => $("#plugins-title")?.textContent;
@@ -158,7 +158,7 @@ const go = async (view: "installed" | "discover" | "bots" | "pages" | "sources")
 };
 /** A kind's tab. */
 const kind = (name: "skills" | "connectors" | "plugins") => click($(`[data-plugins-kind-tab="${name}"]`));
-const installedNames = () => [...host.querySelectorAll<HTMLElement>("[data-installed-entry]")].map((row) => row.querySelector("span.truncate")?.textContent);
+const installedNames = () => [...document.querySelectorAll<HTMLElement>("[data-installed-entry]")].map((row) => row.querySelector("span.truncate")?.textContent);
 
 beforeEach(async () => {
   // any raw request (no server here) answers 404 at once
@@ -242,7 +242,7 @@ describe("Plugins, driven like the owner does", () => {
     expect(mark.textContent).toBe("Update");
     // its menu offers Update too
     await click(row.querySelector("[data-entry-menu]"));
-    expect(row.querySelector('[data-entry-action="update"]')).not.toBeNull();
+    expect(document.querySelector('[data-entry-action="update"]')).not.toBeNull();
     await click(row.querySelector("[data-entry-menu]"));
     // its page: the versions (from, to) and the notes
     await click(row.querySelector("button[aria-label]"));
@@ -284,12 +284,12 @@ describe("Plugins, driven like the owner does", () => {
     const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 30, clientY: 30 });
     await act(async () => { row.querySelector("span.truncate")!.dispatchEvent(event); });
     expect(event.defaultPrevented).toBe(true);
-    const lines = [...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    const lines = [...document.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
     expect(lines).toEqual(expect.arrayContaining(["off", "detail", "remove"]));
     // a person's plugin is on for all their bots already: no Turn on
     expect(lines).not.toContain("all");
     // See the detail opens the plugin's page
-    await click(row.querySelector('[data-entry-action="detail"]'));
+    await click(document.querySelector('[data-entry-action="detail"]'));
     expect($("[data-plugins-subpage]")).not.toBeNull();
   });
 
@@ -298,7 +298,7 @@ describe("Plugins, driven like the owner does", () => {
     await open();
     expect(["installed", "discover"]).toContain(selected());
     expect(title()).toBe("Connect Apps");
-    expect([...host.querySelectorAll("[data-plugins-kind-tab]")].map((tab) => tab.textContent?.replace(/\d+$/, ""))).toEqual(["Skills", "Connectors", "Plugins"]);
+    expect([...document.querySelectorAll("[data-plugins-kind-tab]")].map((tab) => tab.textContent?.replace(/\d+$/, ""))).toEqual(["Connectors", "Plugins", "Skills"]);
     expect($("[data-plugins-search]")).not.toBeNull();
     await go("installed");
     expect(selected()).toBe("installed");
@@ -306,7 +306,7 @@ describe("Plugins, driven like the owner does", () => {
     await go("discover");
     expect(selected()).toBe("discover");
     await click($("[data-plugins-more-button]"));
-    expect([...host.querySelectorAll("[data-plugins-view-link]")].map((link) => link.getAttribute("data-plugins-view-link"))).toEqual(["bots", "pages", "sources"]);
+    expect([...document.querySelectorAll("[data-plugins-view-link]")].map((link) => link.getAttribute("data-plugins-view-link"))).toEqual(["bots", "pages", "sources"]);
     await click($("[data-plugins-more-button]"));
     for (const view of ["pages", "sources", "bots"] as const) {
       await go(view);
@@ -346,7 +346,7 @@ describe("Plugins, driven like the owner does", () => {
   it("one search looks everywhere, grouped by kind; empty, the list is back", async () => {
     await open();
     await go("discover");
-    expect(host.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
     await type("review");
     expect($("[data-plugins-results]")).not.toBeNull();
     expect($("[data-plugins-discover]")).toBeNull();
@@ -443,25 +443,25 @@ describe("Plugins, driven like the owner does", () => {
     await open();
     await go("installed");
     await kind("connectors");
-    expect(host.querySelectorAll("[data-plugins-scope-bar]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-plugins-scope-bar]")).toHaveLength(0);
     // Refresh left the header: it is the first line of the title bar's "..." menu
-    expect(host.querySelectorAll('button[aria-label^="Refresh"]')).toHaveLength(0);
+    expect(document.querySelectorAll('button[aria-label^="Refresh"]')).toHaveLength(0);
     expect($("[data-plugins-refresh]")).toBeNull();
     await click($("[data-plugins-more-button]"));
-    expect([...host.querySelectorAll('[role="menu"] [role="menuitem"]')][0]?.getAttribute("data-plugins-refresh")).toBe("");
-    expect([...host.querySelectorAll('[role="menu"] [role="menuitem"]')][0]?.textContent).toBe("Refresh");
+    expect([...document.querySelectorAll('[role="menu"] [role="menuitem"]')][0]?.getAttribute("data-plugins-refresh")).toBe("");
+    expect([...document.querySelectorAll('[role="menu"] [role="menuitem"]')][0]?.textContent).toBe("Refresh");
     await click($("[data-plugins-more-button]"));
-    expect(host.querySelectorAll("[data-plugins-add]")).toHaveLength(1);
-    expect(host.querySelectorAll("[data-plugins-add-server]")).toHaveLength(0);
-    expect(host.querySelectorAll("[data-plugins-new-skill]")).toHaveLength(0);
-    expect(host.querySelectorAll("[data-accounts-service-pill]")).toHaveLength(0);
-    expect(host.querySelectorAll("[data-connect-from-engine]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-plugins-add]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-plugins-add-server]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-plugins-new-skill]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-accounts-service-pill]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-connect-from-engine]")).toHaveLength(0);
     expect(host.textContent).not.toContain("See all");
     // Manage on <engine> lives in each account row's menu here, and once per engine on Discover's section heads (#2306)
-    expect(host.querySelectorAll("[data-harness-manage]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-harness-manage]")).toHaveLength(0);
     const addMenu = async () => {
       await click($("[data-plugins-add]"));
-      const ids = [...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
+      const ids = [...document.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
       return ids;
     };
     // the + Add of each kind: its own ways, each once
@@ -488,9 +488,9 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-kind-count]")).toBeNull();
     // GitHub, Code Review, Frontend Design, Ops Flow are plugins; Twilio Docs and the engine accounts' rows connectors
     await kind("plugins");
-    expect(host.querySelectorAll("[data-installed-entry]")).toHaveLength(4);
+    expect(document.querySelectorAll("[data-installed-entry]")).toHaveLength(4);
     await kind("connectors");
-    expect(host.querySelectorAll("[data-installed-entry]").length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelectorAll("[data-installed-entry]").length).toBeGreaterThanOrEqual(3);
   });
 
   it("an old link to My accounts or Providers opens Manage, with the Providers section; a link to the pages opens Pages", async () => {
@@ -542,9 +542,9 @@ describe("Plugins, driven like the owner does", () => {
     await kind("connectors");
     // a server, then the engine accounts' connectors, connected first (#2306)
     expect(installedNames()[0]).toBe("Twilio Docs");
-    expect(host.querySelectorAll("[data-installed-entry]")[1]?.getAttribute("data-installed-entry")).toBe("account:claude:Gmail");
+    expect(document.querySelectorAll("[data-installed-entry]")[1]?.getAttribute("data-installed-entry")).toBe("account:claude:Gmail");
     await kind("plugins");
-    const rows = [...host.querySelectorAll<HTMLElement>("[data-installed-entry]")];
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-installed-entry]")];
     expect(installedNames()).toEqual(["Code Review", "Frontend Design", "GitHub", "Ops Flow"]);
     const mark = (name: string) => {
       const row = rows.find((candidate) => candidate.querySelector("span.truncate")?.textContent === name)!;
@@ -562,7 +562,7 @@ describe("Plugins, driven like the owner does", () => {
     await open();
     await go("installed");
     await kind("plugins");
-    const row = () => [...host.querySelectorAll<HTMLElement>("[data-installed-entry] button[aria-label]")].find((button) => button.textContent?.includes("GitHub"))!;
+    const row = () => [...document.querySelectorAll<HTMLElement>("[data-installed-entry] button[aria-label]")].find((button) => button.textContent?.includes("GitHub"))!;
     const openerKey = row().closest("[data-installed-entry]")!.getAttribute("data-installed-entry");
     row().focus();
     await click(row());
@@ -572,7 +572,7 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-detail-name]")?.textContent).toBe("GitHub");
     expect($("[data-plugins-detail-head] img")).not.toBeNull();
     expect($("[data-plugins-detail-meta]")?.textContent).toMatch(/^from anthropics\/claude-plugins-official/);
-    expect([...host.querySelectorAll("[data-install-state]")].map((node) => node.textContent)).toEqual(["Installed for everyone", "Not installed on Rocket"]);
+    expect([...document.querySelectorAll("[data-install-state]")].map((node) => node.textContent)).toEqual(["Installed for everyone", "Not installed on Rocket"]);
     // back to the list: the focus returns to the row that opened the page
     await click($("[data-plugins-back]"));
     expect($("[data-plugins-subpage]")).toBeNull();
@@ -618,7 +618,7 @@ describe("Plugins, driven like the owner does", () => {
     const servers = (API["/api/mcp/servers"] as { servers: Array<Record<string, unknown>> }).servers;
     const plugin = servers.find((server) => server.name === "github-github")!;
     plugin.github = "missing";
-    const githubRow = () => [...host.querySelectorAll<HTMLElement>("[data-installed-entry] button[aria-label]")].find((button) => button.textContent?.includes("GitHub"))!;
+    const githubRow = () => [...document.querySelectorAll<HTMLElement>("[data-installed-entry] button[aria-label]")].find((button) => button.textContent?.includes("GitHub"))!;
     try {
       await open();
       // the engine accounts: no GitHub card nor section

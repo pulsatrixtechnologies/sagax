@@ -54,6 +54,24 @@ describe("the header and its back link", () => {
     expect(view.querySelector("[data-plugins-page-title]")).toBeNull();
     expect(view.querySelector("[data-plugins-back]")?.getAttribute("aria-label")).toBe("Back to Skills");
   });
+  it("puts the back link on the close button's line and on the page's left edge", async () => {
+    const named = await render(createElement(PluginPageHeader, { title: "Harbor Suite", named: true, onBack: vi.fn(), trail: [{ label: "Skills", onSelect: vi.fn() }] }));
+    const bar = named.querySelector("[data-plugins-page-bar]")!;
+    const link = named.querySelector("[data-plugins-back]")!;
+    // the close button: top-2.5 + size-8, so its centre is 26px; the link is h-8 under pt-2.5
+    expect(bar.className).toContain("pt-2.5");
+    expect(link.className).toContain("h-8");
+    expect(bar.className).not.toMatch(/(^|\s)(h-10|items-center)(\s|$)/);
+    // the bar and the page body below share one left edge, the glyph sits on it (the pill leans left by the link's own margin and padding)
+    expect(bar.className).toContain("px-4");
+    expect(bar.className).toContain("sm:px-[34px]");
+    expect(link.className).toContain("-ml-3.5");
+    expect(link.className).toContain("pl-1.5");
+    const plain = await render(createElement(PluginPageHeader, { title: "GitHub", onBack: vi.fn() }));
+    // a titled bar is 52px: its centred 32px link and title are on the same 26px line
+    expect(plain.querySelector("[data-plugins-page-bar]")!.className).toContain("h-[52px]");
+    expect(plain.querySelector("[data-plugins-page-bar]")!.className).toContain("items-center");
+  });
   it("a page with no name of its own keeps its centred title", async () => {
     const view = await render(createElement(PluginPageHeader, { title: "GitHub", onBack: vi.fn() }));
     expect(view.querySelector("[data-plugins-page-title]")?.textContent).toBe("GitHub");
@@ -306,7 +324,7 @@ describe("the plugin page is tight and has no orphan disclosure (coordinator's r
   });
   it("the back bar is a short line and the content starts right under it", async () => {
     const view = await page();
-    expect(view.querySelector("[data-plugins-page-bar]")?.className).toContain("h-10");
+    expect(view.querySelector("[data-plugins-page-bar]")?.className).toContain("pt-2.5");
     expect(view.querySelector("[data-plugins-detail]")?.className).toMatch(/\bpt-1\b/);
     expect(view.querySelector("[data-plugins-detail]")?.className).not.toMatch(/\bpt-6\b/);
   });

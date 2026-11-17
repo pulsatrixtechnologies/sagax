@@ -129,19 +129,19 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await act(async () => { root.render(createElement(PluginsPanel)); });
     await settle();
     // #4453: Connectors, Yours
-    const yours = host.querySelector<HTMLButtonElement>('[data-plugins-view="installed"]');
+    const yours = document.querySelector<HTMLButtonElement>('[data-plugins-view="installed"]');
     if (yours) await act(async () => { yours.click(); });
     await settle();
-    expect(host.querySelector('[data-plugins-kind-tab="connectors"]')?.getAttribute("aria-selected")).toBe("true");
-    expect(host.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
+    expect(document.querySelector('[data-plugins-kind-tab="connectors"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
   };
   const kind = async (name: string) => {
-    await act(async () => { host.querySelector<HTMLButtonElement>(`[data-plugins-kind-tab="${name}"]`)!.click(); });
+    await act(async () => { document.querySelector<HTMLButtonElement>(`[data-plugins-kind-tab="${name}"]`)!.click(); });
     await settle();
   };
   const pick = async (id: string) => {
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
-    await act(async () => { host.querySelector<HTMLButtonElement>(`[data-plugins-add-action="${id}"]`)!.click(); });
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    await act(async () => { document.querySelector<HTMLButtonElement>(`[data-plugins-add-action="${id}"]`)!.click(); });
     await settle();
   };
   const calls = (method: string) => vi.mocked(api).mock.calls.filter(([, init]) => (init as { method?: string } | undefined)?.method === method).map(([path]) => path);
@@ -149,29 +149,29 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
   it.each(["en", "fr"])("no My MCP servers card; the person's servers are Installed rows (%s)", async (lang) => {
     await loadLocale(lang);
     await open();
-    expect(host.querySelector("[data-plugins-personal]")).toBeNull();
+    expect(document.querySelector("[data-plugins-personal]")).toBeNull();
     expect(host.textContent).not.toMatch(/My MCP servers|Mes serveurs MCP|No MCP server of your own yet|Aucun serveur MCP/);
-    const row = host.querySelector("[data-plugins-installed] [data-personal-server=\"notes\"]");
+    const row = document.querySelector("[data-plugins-installed] [data-personal-server=\"notes\"]");
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain("mcp.example.com");
   });
 
   it("+ Add under Me has the entries of Organization, each in its kind (#4453)", async () => {
     await open();
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
-    const ids = [...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    const ids = [...document.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
     expect(ids).toEqual(["catalog", "server", "paste"]);
-    expect([...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.textContent)).toEqual(["From the catalog", "Add an MCP server", "Paste config"]);
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    expect([...document.querySelectorAll("[data-plugins-add-action]")].map((item) => item.textContent)).toEqual(["From the catalog", "Add an MCP server", "Paste config"]);
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
     await kind("skills");
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
-    expect([...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.textContent)).toEqual(["New skill"]);
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    expect([...document.querySelectorAll("[data-plugins-add-action]")].map((item) => item.textContent)).toEqual(["New skill"]);
   });
 
   it("Add an MCP server opens the person's own form and saves to /api/me", async () => {
     await open();
     await pick("server");
-    const form = host.querySelector<HTMLFormElement>("[data-add-personal-server]")!;
+    const form = document.querySelector<HTMLFormElement>("[data-add-personal-server]")!;
     expect(form).not.toBeNull();
     expect(form.textContent).toContain("never on the Sagax server");
     await act(async () => { type(form.querySelector<HTMLInputElement>("input[aria-label=\"Address\"]") ?? form.querySelectorAll<HTMLInputElement>("input")[1]!, "https://mcp.example.org/mcp"); });
@@ -183,7 +183,7 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
   it("Paste config imports into the person's own servers", async () => {
     await open();
     await pick("paste");
-    const box = host.querySelector<HTMLElement>("[data-import-personal-servers]")!;
+    const box = document.querySelector<HTMLElement>("[data-import-personal-servers]")!;
     expect(box).not.toBeNull();
     await act(async () => { type(box.querySelector("textarea")!, '{"mcpServers":{"wiki":{"url":"https://wiki.example.com/mcp"}}}'); });
     const importButton = [...box.querySelectorAll<HTMLButtonElement>("button")].at(-1)!;
@@ -197,21 +197,21 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await kind("skills");
     vi.mocked(api).mockClear();
     await pick("skill");
-    expect(host.querySelector("[data-skill-head]")).not.toBeNull();
+    expect(document.querySelector("[data-skill-head]")).not.toBeNull();
     expect(vi.mocked(api).mock.calls.some(([path]) => path === "/api/skills-library")).toBe(false);
   });
 
   it("a row's menu edits the server in place, with the same form", async () => {
     await open();
-    const row = host.querySelector<HTMLElement>("[data-personal-server=\"notes\"]")!;
+    const row = document.querySelector<HTMLElement>("[data-personal-server=\"notes\"]")!;
     await act(async () => { row.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
-    expect([...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"))).toEqual(["off", "edit", "signout", "remove"]);
+    expect([...document.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"))).toEqual(["off", "edit", "signout", "remove"]);
     // #4453: on or off is the row's own switch, after where it is on (all the person's bots)
     expect(row.querySelector("[data-row-switch]")?.getAttribute("role")).toBe("switch");
     // all the person's bots is the default: not printed on the row, said in the menu
     expect(row.querySelector("[data-row-scope]")).toBeNull();
-    await act(async () => { row.querySelector<HTMLButtonElement>("[data-entry-action=\"edit\"]")!.click(); });
-    const form = host.querySelector<HTMLFormElement>("[data-edit-personal-server=\"notes\"]")!;
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-entry-action=\"edit\"]")!.click(); });
+    const form = document.querySelector<HTMLFormElement>("[data-edit-personal-server=\"notes\"]")!;
     expect(form).not.toBeNull();
     await act(async () => { form.querySelector<HTMLButtonElement>("button[type=submit]")!.click(); });
     await settle();
@@ -223,10 +223,10 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await act(async () => { root.render(createElement(PluginsPanel)); });
     await settle();
     // no click on the home's link: it opens on Manage
-    expect(host.querySelector("[data-plugins-installed]")).not.toBeNull();
-    expect(host.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
-    const ids = [...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
+    expect(document.querySelector("[data-plugins-installed]")).not.toBeNull();
+    expect(document.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    const ids = [...document.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
     expect(ids).toContain("server");
   });
 
@@ -238,7 +238,7 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     openedFrom = { pluginsBotId: state.pluginsBotId, pluginsSurface: state.pluginsSurface };
     await act(async () => { root.render(createElement(PluginsPanel)); });
     await settle();
-    expect(host.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("bot");
+    expect(document.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("bot");
   });
 });
 
@@ -284,21 +284,21 @@ describe("Connect Apps > Me: Recommended for you first, from the catalog", () =>
   const home = async () => {
     await act(async () => { root.render(createElement(PluginsPanel)); });
     await settle();
-    await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugins-view="discover"]')!.click(); });
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-plugins-view="discover"]')!.click(); });
     await settle();
   };
-  const shelf = () => [...host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')].map((row) => row.getAttribute("data-plugin-row"));
+  const shelf = () => [...document.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')].map((row) => row.getAttribute("data-plugin-row"));
 
   it.each(["en", "fr"])("Connectors > Discover opens on Me with the picks as its first section (%s)", async (lang) => {
     await loadLocale(lang);
     await home();
-    const sections = [...host.querySelectorAll("[data-plugins-section]")].map((section) => section.getAttribute("data-plugins-section"));
+    const sections = [...document.querySelectorAll("[data-plugins-section]")].map((section) => section.getAttribute("data-plugins-section"));
     // the first pick is the one featured banner, the rest is the shelf (no carousel)
     expect(sections[0]).toBe("featured");
-    expect(host.querySelector('[data-plugins-section="featured"]')?.getAttribute("data-plugin-row")).toBe("featured:slack");
+    expect(document.querySelector('[data-plugins-section="featured"]')?.getAttribute("data-plugin-row")).toBe("featured:slack");
     // chat before tickets; what the person has, a key to paste and a data center to choose are left out:
     // both picks are slides of the featured block, so no shelf is left
-    expect(host.querySelectorAll("[data-featured-dot]")).toHaveLength(2);
+    expect(document.querySelectorAll("[data-featured-dot]")).toHaveLength(2);
     expect(shelf()).toEqual([]);
   });
 
@@ -306,8 +306,8 @@ describe("Connect Apps > Me: Recommended for you first, from the catalog", () =>
     await home();
     // #4453: Install; a person's own server has no "one bot" (it serves all of their bots), so no menu to open
     // (the featured banner's button is the labelled one; a card's is the square "+")
-    expect(host.querySelector('[data-plugin-row="featured:slack"] [data-install-button]')?.textContent).toBe("Install");
-    await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugin-row="featured:slack"] [data-install-button]')!.click(); });
+    expect(document.querySelector('[data-plugin-row="featured:slack"] [data-install-button]')?.textContent).toBe("Install");
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-plugin-row="featured:slack"] [data-install-button]')!.click(); });
     await settle();
     const posts = vi.mocked(api).mock.calls.filter(([, init]) => (init as { method?: string } | undefined)?.method === "POST");
     const add = posts.find(([path]) => path === "/api/me/mcp/servers");

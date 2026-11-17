@@ -4,11 +4,11 @@
 // the item, never in the window's header. Opened from a bot's page the
 // button is a plain Install for that bot (no menu).
 import { useRef, useState, type ReactNode } from "react";
+import { AnchoredMenu, useAnchoredDismiss } from "../AnchoredMenu";
 import { ChevronDown, Loader2, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { pluginActionClass } from "./plugins-style";
 import { ChooseBotsPanel } from "./ItemTrailer";
@@ -29,7 +29,8 @@ export function InstallMenu({ label, busy = false, disabled = false, onAll, bots
   const [open, setOpen] = useState(false);
   const [list, setList] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => { setOpen(false); setList(false); });
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => { setOpen(false); setList(false); });
   const chooser = Boolean(onBots && bots && bots.length > 0);
   const close = () => { setOpen(false); setList(false); };
   const face = (extra: string) => iconOnly
@@ -69,9 +70,9 @@ export function InstallMenu({ label, busy = false, disabled = false, onAll, bots
         {busy ? <Loader2 size={13} className="mx-auto animate-spin" /> : iconOnly ? <Plus size={16} aria-hidden="true" /> : <>{label}<ChevronDown size={13} aria-hidden="true" /></>}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-8 z-30 w-max min-w-[200px] max-w-[min(300px,calc(100vw-16px))]")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" className={cn(MENU_SURFACE, "w-max min-w-[200px] max-w-[min(300px,calc(100vw-16px))]")}>
           {rows}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );

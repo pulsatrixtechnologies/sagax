@@ -14,10 +14,10 @@ import { productRowSub, productStateLabel, productStateTone, type PersonProduct 
 import { cn } from "@/lib/cn";
 import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-kinds";
 import { botProductEnabled } from "../../../shared/bot-products";
-import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
+import { CardTrail, ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
 import type { RowState } from "./StateIcon";
 import { NeutralTile, PluginIcon, PluginStatusLabel, RemoteImage, type NeutralKind } from "./PluginParts";
-import { PLUGINS } from "./plugins-style";
+import { CARD_BOX, CARD_ICON, PLUGINS } from "./plugins-style";
 
 /** The "..." actions of a product, the same in its row and on its page:
  * open it in Perspicax (only when Perspicax names that page), copy its id. */
@@ -157,16 +157,16 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
   // how it got there, then what it does (a vendor's products sit under its own line)
   const sub = nested || hideOrigin ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
   return (
-    <div className={cn("group flex min-h-16 items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
+    <div className={nested ? "group flex min-h-16 items-center gap-3 py-3 pl-[52px]" : cn("group", CARD_BOX)} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}
-      <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl">
+      <div className="relative flex min-w-0 flex-1 items-start gap-3 rounded-xl">
         <button type="button" onClick={() => ctx.onOpen(product)} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
           aria-label={t("connectApps.openAria", { name: product.name })} />
-        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : "size-10")} />
+        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : CARD_ICON)} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="pointer-events-none min-w-0 flex-1" data-person-product-line>
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0")}>{product.name}</span>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")}>{product.name}</span>
             {partOf && (
               <button type="button" data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
                 onClick={() => partOf.onOpen()}
@@ -175,10 +175,10 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
               </button>
             )}
           </span>
-          {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
+          {sub && <span className={PLUGINS.rowSub} title={sub}>{sub}</span>}
         </span>
       </div>
-      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}
+      <CardTrail>{productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}</CardTrail>
     </div>
   );
 }
@@ -191,16 +191,16 @@ export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor
   const worst = worstState(vendor.products);
   const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
   return (
-    <div className="group flex items-center gap-3 py-3" data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+    <div className={cn("group", CARD_BOX)} data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         aria-label={t("connectApps.openAria", { name: vendor.name })}>
-        <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
+        <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           <span className={PLUGINS.rowName}>{vendor.name}</span>
           <span className={PLUGINS.rowSub}>{vendorLine(vendor.products.length, on)}</span>
         </span>
       </button>
-      {productTrailer(ctx, vendor.name, ids, { detail: onOpen }, productRowState(worst, onOpen))}
+      <CardTrail>{productTrailer(ctx, vendor.name, ids, { detail: onOpen }, productRowState(worst, onOpen))}</CardTrail>
     </div>
   );
 }

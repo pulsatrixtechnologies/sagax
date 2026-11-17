@@ -6,7 +6,7 @@
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
 import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
+import { ArrowRight, ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
@@ -22,7 +22,7 @@ import {
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
 import { CONNECT_APPS_KINDS, type ConnectAppsKind } from "@/lib/capability-kinds";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredMenu, useAnchoredDismiss } from "../AnchoredMenu";
 import { MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
 import { BackButton } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
@@ -30,7 +30,7 @@ import { SEGMENT_GROUP, segmentOptionClass } from "./ScopeToggle";
 import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
-import { PLUGINS } from "./plugins-style";
+import { CARD_BOX, CARD_FRAME, CARD_GRID, CARD_ICON, PLUGINS } from "./plugins-style";
 
 /** The pills: All, then each category in the section order (only those with
  * a row, and the chosen one). Kinds and sources are not pills. */
@@ -366,7 +366,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               ))}
             </div>
             <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2.5" data-plugins-actions="">
-              {field && !narrow && <div className="min-w-[140px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
+              {field && !narrow && <div className="w-[220px] min-w-[140px] shrink" data-plugins-search-slot="">{field}</div>}
               {narrow && layout !== "minimal" && controls}
               {search && narrow && (
                 <button ref={searchToggle} type="button" onClick={() => setSearchOpen(true)} aria-expanded={searchOpen} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
@@ -382,7 +382,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                   // the field empties on its own Escape; empty, Escape folds the search, and only the next one is the window's
                   if (event.key !== "Escape") return;
                   // a filter or sort menu open in the field closes first (its own Escape, heard at the window)
-                  if (event.currentTarget.querySelector('[role="menu"]')) return;
+                  if (document.querySelector("[data-anchored-menu]")) return;
                   event.preventDefault();
                   event.stopPropagation();
                   setSearchOpen(false);
@@ -483,7 +483,8 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
 export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readonly PluginFilter[]; filter: PluginFilter; onPick: (filter: PluginFilter) => void; label: (chip: PluginFilter) => string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => setOpen(false));
   if (chips.length <= 1) return null;
   return (
     <div ref={ref} className="relative shrink-0" data-plugins-filter="">
@@ -495,7 +496,7 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
         {filter !== "all" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "min-w-48")}>
           {chips.map((chip) => (
             <button key={chip} type="button" role="menuitemradio" aria-checked={filter === chip} data-plugins-chip={chip}
               onClick={() => { setOpen(false); onPick(chip); }} className={filter === chip ? MENU_ROW_ACTIVE : MENU_ROW}>
@@ -503,7 +504,7 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
               {filter === chip && <Check size={14} className="shrink-0" aria-hidden="true" />}
             </button>
           ))}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );
@@ -533,7 +534,8 @@ export type ConnectAppsSort = "default" | "name" | "on" | "update";
 export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; onSort: (sort: ConnectAppsSort) => void; options: readonly ConnectAppsSort[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => setOpen(false));
   const LABEL: Record<ConnectAppsSort, LocaleKey> = { default: "connectApps.sort.default", name: "connectApps.sort.name", on: "connectApps.sort.on", update: "connectApps.sort.update" };
   return (
     <div ref={ref} className="relative shrink-0" data-plugins-sort="">
@@ -544,7 +546,7 @@ export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; 
         {sort !== "default" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "min-w-48")}>
           {options.map((option) => (
             <button key={option} type="button" role="menuitemradio" aria-checked={sort === option} data-plugins-sort-option={option}
               onClick={() => { setOpen(false); onSort(option); }} className={sort === option ? MENU_ROW_ACTIVE : MENU_ROW}>
@@ -552,7 +554,7 @@ export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; 
               {sort === option && <Check size={14} className="shrink-0" aria-hidden="true" />}
             </button>
           ))}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );
@@ -570,7 +572,8 @@ export function sortRows<T>(rows: readonly T[], sort: ConnectAppsSort, nameOf: (
 function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: ReadonlyArray<{ id: ConnectAppsTab; key: LocaleKey; icon: ReactNode }>; onPick: (tab: ConnectAppsTab) => void; onRefresh: () => void; refreshing: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open, ref, menuRef, () => setOpen(false));
   return (
     <div ref={ref} className="relative shrink-0" data-plugins-more="">
       <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("connectApps.more.aria")} title={t("connectApps.more.aria")}
@@ -578,7 +581,7 @@ function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: Readon
         <MoreHorizontal size={16} aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+        <AnchoredMenu anchor={ref} menuRef={menuRef} role="menu" className={cn(MENU_SURFACE, "min-w-48")}>
           {/* Refresh: plugins, servers, skills and the engine accounts' connectors, together */}
           <button type="button" role="menuitem" data-plugins-refresh="" disabled={refreshing}
             onClick={() => { setOpen(false); onRefresh(); }} className={MENU_ROW}>
@@ -592,15 +595,36 @@ function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: Readon
               {t(view.key)}
             </button>
           ))}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );
 }
 
-/** The cards of Discover (#4453, the owner's layout): two columns of
- * rounded tiles. */
-export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[560px]:col-span-full";
+export { CARD_BOX, CARD_FRAME, CARD_GRID, CARD_ICON };
+export { CardTrail } from "./ItemTrailer";
+
+/** A group's heading: the title with its count badge, and at the right the group's link ("View all", "Manage on ..."); one component for Yours and Discover. */
+export function SectionHead({ title, id, count, onViewAll, link }: { title: string; id?: string; /** the count in a small rounded badge next to the title */ count?: number; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <h3 className={PLUGINS.groupTitle}>{title}</h3>
+        {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
+      </div>
+      {link && (
+        <button type="button" data-harness-manage={link.manage} className={PLUGINS.groupLink} onClick={link.onClick}>
+          {link.label}
+        </button>
+      )}
+      {!link && onViewAll && (
+        <button type="button" data-plugins-view-all={id ?? ""} className={PLUGINS.groupLink} onClick={onViewAll}>
+          {t("connectApps.viewAll")}<ArrowRight size={12} aria-hidden="true" className="ml-1 inline" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** A Discover card: a square icon tile; the name (a reviewed mark when the
  * item comes from the reviewed catalog) and, where it applies, a small
@@ -612,10 +636,10 @@ export function DiscoverCard({ item, onOpen, action, from, sub, openable = false
   const reviewed = item.source === "catalog";
   const chip = !item.installed && item.action === "add" && (item.kind === "featured" || item.kind === "mcp" || item.kind === "app") ? t("connectApps.card.noSignIn") : null;
   return (
-    <div data-plugin-row={item.key} data-discover-card="" className="flex items-start gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] p-3 transition-colors hover:bg-ink/[0.04] motion-reduce:transition-none">
+    <div data-plugin-row={item.key} data-discover-card="" className={CARD_BOX}>
       <button type="button" disabled={!opens} onClick={() => onOpen(item)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left disabled:cursor-default"
         aria-label={opens ? t("connectApps.openAria", { name: item.name }) : undefined}>
-        <PluginIcon item={item} className="size-12 rounded-xl" />
+        <PluginIcon item={item} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className={cn(PLUGINS.rowName, "min-w-0")}>{item.name}</span>

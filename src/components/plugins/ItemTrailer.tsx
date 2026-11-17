@@ -6,13 +6,13 @@
 // everywhere, See the detail, Uninstall. "Choose the bots" is a small
 // checklist of the person's bots with Save, in the menu's own place. The
 // scope is chosen here, on the item, never in the window's header.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronRight, LoaderCircle, MoreHorizontal, RotateCw, Trash2, Users, Eye, Power, PowerOff } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { WhereLabel } from "@/lib/capability-kinds";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredMenu, useAnchoredDismiss } from "../AnchoredMenu";
 import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
 import { Switch } from "../SettingsPrimitives";
 import { StateIcon, type RowState } from "./StateIcon";
@@ -81,6 +81,11 @@ export function RowSwitch({ name, on, onChange, lockedReason, busy = false }: { 
   );
 }
 
+/** What sits at a card's right: Discover's "+" or Installed mark, Yours' state, switch and "..." (on the icon's line). */
+export function CardTrail({ children }: { children: ReactNode }) {
+  return <div className="flex h-12 shrink-0 items-center gap-2" data-card-action="">{children}</div>;
+}
+
 /** The row an item sits in: a right click on it opens the item's menu. */
 export const ITEM_ROW_ATTR = "data-item-row";
 
@@ -103,9 +108,10 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
   actions?: ItemMenuActions;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState<{ side: "left" | "right"; x: number; y: number } | null>(null);
+  const [open, setOpen] = useState<{ side: "left" | "right"; point?: { x: number; y: number } } | null>(null);
   const [panel, setPanel] = useState<"menu" | "choose">("menu");
-  usePopoverDismiss(open !== null, rootRef, () => { setOpen(null); setPanel("menu"); });
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useAnchoredDismiss(open !== null, rootRef, menuRef, () => { setOpen(null); setPanel("menu"); });
   const hasMenu = Object.entries(actions).some(([key, value]) => key !== "updateWaiting" && (Array.isArray(value) ? value.length > 0 : Boolean(value)));
 
   // a right click anywhere on the row opens this menu at the pointer
@@ -118,28 +124,17 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
       // a field or a link keeps the browser's own menu
       if (target?.closest("input, textarea, a[href]")) return;
       pointer.preventDefault();
-      const box = rootRef.current?.getBoundingClientRect();
       const rowBox = row.getBoundingClientRect();
-      if (!box) return;
       // the menu opens at the pointer, toward the room the row has left
       const leftHalf = pointer.clientX - rowBox.left < rowBox.width / 2;
       setPanel("menu");
-      setOpen({ side: leftHalf ? "left" : "right", x: leftHalf ? pointer.clientX - box.left : box.right - pointer.clientX, y: pointer.clientY - box.bottom + 4 });
+      setOpen({ side: leftHalf ? "left" : "right", point: { x: pointer.clientX, y: pointer.clientY } });
     };
     row.addEventListener("contextmenu", onContext);
     return () => row.removeEventListener("contextmenu", onContext);
   }, [hasMenu]);
 
   const close = () => { setOpen(null); setPanel("menu"); };
-  // a menu that would run past the window's bottom opens upward instead
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [flip, setFlip] = useState(false);
-  useLayoutEffect(() => {
-    if (!open || !menuRef.current) { setFlip(false); return; }
-    const box = menuRef.current.getBoundingClientRect();
-    const room = window.innerHeight - 8;
-    setFlip((was) => was ? box.top > box.height + 8 : box.bottom > room && box.top - box.height - 40 > 0);
-  }, [open, panel]);
   const all = whereKind === "all";
   const none = whereKind === "none";
   const lines: Array<{ id: string; label: string; icon: ReactNode; run: () => void; danger?: boolean }> = [];
@@ -165,15 +160,15 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
       {on !== undefined ? <RowSwitch name={name} on={on} onChange={onToggle} lockedReason={lockedReason} busy={busy} /> : columns ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
       {hasMenu ? (
         <button type="button" data-entry-menu="" aria-haspopup="menu" aria-expanded={open !== null} aria-label={t("connectApps.entry.menuAria", { name })}
-          onClick={() => { setPanel("menu"); setOpen((value) => value ? null : { side: "right", x: 0, y: 4 }); }}
+          onClick={() => { setPanel("menu"); setOpen((value) => value ? null : { side: "right" }); }}
           className="ui-icon-button relative text-ink-tertiary hover:text-ink">
           <MoreHorizontal size={16} />
           {actions.updateWaiting && actions.update && <span data-entry-update-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
         </button>
       ) : <span className="size-7 shrink-0" aria-hidden="true" />}
       {open && (
-        <div ref={menuRef} role="menu" data-item-menu={panel} data-item-menu-flipped={flip ? "" : undefined} style={{ [open.side]: open.x, ...(flip ? { bottom: "calc(100% + 4px)" } : { top: `calc(100% + ${open.y}px)` }) }}
-          className={cn(MENU_SURFACE, "absolute z-30 w-max min-w-[228px] max-w-[min(320px,calc(100vw-16px))]")}>
+        <AnchoredMenu anchor={rootRef} menuRef={menuRef} align={open.side === "left" ? "start" : "end"} point={open.point} role="menu" data-item-menu={panel}
+          className={cn(MENU_SURFACE, "w-max min-w-[228px] max-w-[min(320px,calc(100vw-16px))]")}>
           {panel === "menu" && where !== undefined && (
             <div role="presentation" data-item-where="" className="px-2 pb-1 pt-0.5 text-[12px] leading-4 text-ink-tertiary">{whereText(where)}</div>
           )}
@@ -186,7 +181,7 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
               {line.id === "choose" && <ChevronRight size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />}
             </button>
           )) : actions.choose && <ChooseBotsPanel choose={actions.choose} onDone={close} />}
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );

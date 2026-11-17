@@ -7,10 +7,10 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/i18n", () => ({ t: (key: string) => key }));
 
 import { MacAppsInstalledSection } from "./MacAppsView";
-import { PLUGINS } from "./plugins-style";
+import { CARD_GRID, PLUGINS } from "./plugins-style";
 
 describe("MacAppsInstalledSection", () => {
-  it("renders its rows in the shared PLUGINS.grid", async () => {
+  it("renders its rows as the shared cards in the shared CARD_GRID", async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const host = document.createElement("div");
     document.body.append(host);
@@ -19,7 +19,7 @@ describe("MacAppsInstalledSection", () => {
       root.render(createElement(MacAppsInstalledSection, { status: null, onOpen: () => {} }));
     });
     const list = host.querySelector("[data-plugins-mac] ul");
-    expect(list?.className.split(" ")).toEqual(expect.arrayContaining(PLUGINS.grid.split(" ")));
+    expect(list?.className.split(" ")).toEqual(expect.arrayContaining(CARD_GRID.split(" ")));
     // the reference's two columns of rows, one when the list is under 560px (#4097)
     expect(list?.className).toContain("grid-cols-2");
     expect(list?.className).not.toContain("auto-fill");
@@ -28,7 +28,8 @@ describe("MacAppsInstalledSection", () => {
     expect(PLUGINS.rowSub).toContain("line-clamp-2");
     // each row keeps its chevron and fills its card
     expect(host.querySelector("[data-mac-app] svg.lucide-chevron-right, [data-mac-app] svg:last-child")).toBeTruthy();
-    expect(host.querySelector("[data-mac-app]")?.className).toContain("w-[calc(100%+24px)]");
+    expect(host.querySelector("[data-mac-app]")?.className).toContain("w-full");
+    expect(host.querySelector("[data-mac-app]")?.className).toContain("rounded-2xl");
     expect(host.querySelectorAll("[data-mac-app]").length).toBe(6);
     await act(async () => root.unmount());
     host.remove();

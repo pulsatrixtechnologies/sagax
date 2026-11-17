@@ -6,6 +6,7 @@
 // electron/mac-apps.mjs). The setup page then reads them over IPC.
 
 import { messagesOnBotMac, type MessagesHost } from "./imessage.ts";
+import type { MacAppSetupAction } from "./mac-apps-setup.ts";
 
 export type MessagesPermissionState = "granted" | "denied" | "unknown" | "notAsked" | "unsupported";
 
@@ -24,6 +25,9 @@ export type MessagesSetupStatus = {
   reason?: "not_darwin" | "organization_server" | "bridge_refused" | "web_or_remote";
   useMessages: boolean;
   permissions: MessagesSetupPermissions;
+  /** What this Mac offers. Absent from /api/messages and from an older app:
+   * the detail then keeps its two paragraphs. */
+  actions?: MacAppSetupAction[];
 };
 
 export type MessagesSetupTestResult = {

@@ -52,6 +52,7 @@ export function messagesFromMacApps(status: MacAppsSetupStatus): MessagesSetupSt
       fullDiskAccess: row?.permissions.fullDiskAccess ?? "unknown",
       automation: row?.permissions.automation ?? "unknown",
     },
+    ...(row?.actions && row.actions.length > 0 ? { actions: row.actions } : {}),
   };
 }
 

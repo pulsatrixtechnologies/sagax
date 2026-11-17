@@ -1,7 +1,7 @@
 // A marketplace plugin's detail page, "For <bot>": the whole plugin (its
 // agents, commands and skills) installed on that one bot, from the same
 // marketplace as the workspace install. The bot's owner, or a person who
-// manages it, installs, switches, updates and removes it; anyone else who
+// manages it, installs, switches and updates it (it is removed from the page's "..." menu); anyone else who
 // uses the bot reads it. Hooks and the plugin's MCP servers are left out at
 // install (server/bots/bot-plugins.ts): they would run on the server.
 import { Loader2 } from "lucide-react";
@@ -22,7 +22,6 @@ export interface BotPluginCardProps {
   busy: string | null;
   onInstall: () => void;
   onToggle: (enabled: boolean) => void;
-  onUninstall: () => void;
   /** Save the plugin's configuration values for this bot (throws the refusal). */
   onSaveConfig?: (values: Record<string, string | number | boolean>) => Promise<void>;
   /** the page's header already offers "Install for <bot>" (not installed yet) */
@@ -43,7 +42,7 @@ function Names({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig, installInHeader = false, statedAbove = false, updateInHeader = false }: BotPluginCardProps) {
+export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onSaveConfig, installInHeader = false, statedAbove = false, updateInHeader = false }: BotPluginCardProps) {
   const installed = plugin.installed;
   const change = view.canChange;
   const contents = plugin.contents;
@@ -51,7 +50,7 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
   return (
     <div data-bot-plugin={plugin.key} data-bot-plugin-installed={installed ? "yes" : "no"}>
       <PluginCard
-        title={statedAbove ? undefined : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
+        title={statedAbove ? t("connectApps.botPlugin.brings") : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
         action={!statedAbove && installed && change ? (
           <Switch checked={installed.enabled} disabled={busy !== null} aria-label={t("plugins.enabled", { name: plugin.plugin })} onClick={() => onToggle(!installed.enabled)} />
         ) : undefined}
@@ -83,11 +82,6 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
               {busy === "install" && <Loader2 size={13} className="animate-spin" />}
               {busy === "install" ? t("plugins.installing") : installed ? t("plugins.update") : personal ? t("connectApps.mePlugin.install") : t("connectApps.botPlugin.install", { name: botName })}
             </button>}
-            {installed && (
-              <button type="button" data-bot-plugin-uninstall disabled={busy !== null} onClick={onUninstall} className="rounded-lg border border-danger/40 px-3 py-1.5 text-[12px] font-medium text-danger hover:bg-danger/10 disabled:opacity-40">
-                {personal ? t("connectApps.mePlugin.uninstall") : t("connectApps.botPlugin.uninstall", { name: botName })}
-              </button>
-            )}
           </div>
         )}
       </PluginCard>

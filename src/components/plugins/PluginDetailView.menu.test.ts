@@ -41,6 +41,20 @@ const discover = (overrides: Partial<DiscoverViewProps>): DiscoverViewProps => (
   sourceLabel: (source) => source, onOpenItem: noop, renderAction: () => null, ...overrides,
 });
 
+describe("plugin detail menu: the uninstall of the person's or a bot's own install", () => {
+  it("says what it removes and from where, in the one \"...\" menu", () => {
+    const onUninstall = vi.fn();
+    flushSync(() => root.render(createElement(PluginDetailView, {
+      item: items[0]!, subtitle: "", busy: false, onBack: noop, onUninstall, uninstallLabel: "Remove for me", details: [],
+    })));
+    click(host.querySelector("[data-entry-menu]"));
+    const remove = host.querySelector('[role="menu"] [data-entry-action="remove"]');
+    expect(remove?.textContent).toContain("Remove for me");
+    click(remove);
+    expect(onUninstall).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("plugin detail menu", () => {
   it("opens on the \"...\" button and runs the chosen action", () => {
     const onUpdate = vi.fn();

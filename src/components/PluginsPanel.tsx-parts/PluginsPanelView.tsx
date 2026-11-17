@@ -512,7 +512,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}
               consoleCount={scope === "me" ? orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length : 0}
-              consoleExtras={scope === "me" ? <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} onOpen={(item) => push({ page: "orgItem", id: item.id })} /> : undefined}
+              consoleExtras={scope === "me" ? (after) => <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} onOpen={(item) => push({ page: "orgItem", id: item.id })} after={after} /> : undefined}
               entryTrailer={entryTrailer}
               skillTrailer={skillTrailer}
               readOnlyReason={scope === "bot" && botView && !botView.canChange ? t("plugins.readOnly") : undefined}

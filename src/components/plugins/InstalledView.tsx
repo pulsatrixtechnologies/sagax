@@ -125,7 +125,7 @@ export interface InstalledViewProps {
   consoleTitle?: string;
   /** what the console offers the person of this kind (its capabilities with
    * their own switch); `consoleHasExtras` says there is something to list */
-  consoleExtras?: ReactNode;
+  consoleExtras?: ReactNode | ((after: ReactNode) => ReactNode);
   consoleHasExtras?: boolean;
   /** how many rows the console offers or requires of this kind (the badge next to its title) */
   consoleCount?: number;
@@ -234,7 +234,7 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add aria-label={t("connectApps.add")}
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add aria-label={t("connectApps.add")} title={t("connectApps.add")}
         className={cn(filled ? cn(PLUGINS.primaryPill, "gap-1.5 pl-3.5 pr-3 [[data-plugins-layout=compact]_&]:size-8 [[data-plugins-layout=compact]_&]:justify-center [[data-plugins-layout=compact]_&]:p-0 [[data-plugins-layout=minimal]_&]:size-8 [[data-plugins-layout=minimal]_&]:justify-center [[data-plugins-layout=minimal]_&]:p-0") : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
         <Plus size={14} /> <span className={cn(filled && "[[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden")}>{t("connectApps.add")}</span>
         {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70 [[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden" />}
@@ -366,6 +366,12 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   const ownEmpty = kind !== undefined && !loading && (resolved === undefined
     ? lines.filter((line) => line.kind !== "notice").length === 0 && shownSkills.length === 0
     : resolved !== null && resolvedOwn.length === 0);
+  // the section's LAST row, under the text of the rows above it: what is folded, counted so the heading's number adds up
+  const moreRow = shownProducts.length > ORGANIZATION_PREVIEW ? (
+    <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.sectionLink, "ml-[56px] mt-1")} data-plugins-organization-all>
+      {allOrganization ? t("connectApps.manage.showFewer") : t("connectApps.showMoreRows", { count: shownProducts.length - ORGANIZATION_PREVIEW })}
+    </button>
+  ) : null;
   const consoleShown = kind !== undefined && (shownProducts.length > 0 || resolvedOrganization.length > 0 || consoleHasExtras);
   const nothing = resolved === undefined && shownEntries.length === 0 && shownPersonal.length === 0 && shownProducts.length === 0 && accountRowCount === 0 && shownSkills.length === 0 && shownOrganization.length === 0 && !loading;
   return (
@@ -386,12 +392,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
               {shownProductRows.map((row) => <li key={row.key}>{row.node}</li>)}
             </ul>
           )}
-          {shownProducts.length > ORGANIZATION_PREVIEW && (
-            <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.sectionLink, "mt-2")} data-plugins-organization-all>
-              {allOrganization ? t("connectApps.manage.showFewer") : t("connectApps.showAllRows", { count: shownProducts.length })}
-            </button>
-          )}
-          {consoleExtras}
+          {typeof consoleExtras === "function" ? (consoleHasExtras ? consoleExtras(moreRow) : moreRow) : <>{consoleExtras}{moreRow}</>}
           {resolvedOrganization.length > 0 && resolved && capabilityList({ ...resolved, items: resolvedOrganization }, { title: "", fold: ORGANIZATION_PREVIEW })}
         </section>
       )}

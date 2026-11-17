@@ -125,6 +125,9 @@ try {
     await kind(name);
     await view("installed");
     await shot(`02-yours-${name}`);
+    // one row height for every row of a section, whatever its second line holds
+    const heights = await page.evaluate(() => [...new Set([...document.querySelectorAll("[data-plugins-console-section] [data-item-row], [data-plugins-console-section] [data-person-product]")].map((row) => Math.round(row.getBoundingClientRect().height)))]);
+    console.log("row heights", name, JSON.stringify(heights));
   }
 
   // (a vendor is one bundle page now, not an unfolding row: see connect-apps-details.mjs)

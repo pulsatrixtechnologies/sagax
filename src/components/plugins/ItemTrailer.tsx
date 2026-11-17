@@ -40,6 +40,8 @@ export interface ItemMenuActions {
   /** more lines before Uninstall: Edit, Sign in, Manage on the account */
   links?: Array<{ id: string; label: string; icon: ReactNode; run: () => void }>;
   remove?: () => void;
+  /** what Uninstall says when it is the person's or a bot's own copy ("Remove for me") */
+  removeLabel?: string;
   /** a dot on the "..." when an update waits */
   updateWaiting?: boolean;
 }
@@ -147,7 +149,7 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
   if (actions.offEverywhere && !none) lines.push({ id: "off", label: t("connectApps.menu.offEverywhere"), icon: <PowerOff size={14} />, run: actions.offEverywhere });
   if (actions.detail) lines.push({ id: "detail", label: t("connectApps.menu.detail"), icon: <Eye size={14} />, run: actions.detail });
   for (const link of actions.links ?? []) lines.push(link);
-  if (actions.remove) lines.push({ id: "remove", label: t("connectApps.menu.uninstall"), icon: <Trash2 size={14} />, run: actions.remove, danger: true });
+  if (actions.remove) lines.push({ id: "remove", label: actions.removeLabel ?? t("connectApps.menu.uninstall"), icon: <Trash2 size={14} />, run: actions.remove, danger: true });
 
   return (
     <div ref={rootRef} className="relative flex shrink-0 items-center gap-2" data-item-trailer="">

@@ -640,13 +640,29 @@ describe("#4453: Yours and Discover of one kind", () => {
     expect(empty).toContain("data-plugins-go-discover");
   });
 
-  it("the organization's products fold past six rows behind Show all N", () => {
+  it("the organization's products fold past six rows behind one quiet last row that counts the hidden ones", () => {
     const products = Array.from({ length: 9 }, (_, index) => ({ key: `p${index}`, node: createElement("div", { "data-test-product": index }) }));
     const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", products })));
     expect(html).toMatch(/data-plugins-organization-group[\s\S]*?From your organization/);
     expect(html.match(/data-test-product=/g)).toHaveLength(6);
-    expect(html).toMatch(/data-plugins-organization-all[^>]*>Show all 9</);
+    // 6 shown + 3 hidden = the 9 of the heading; the row is the section's LAST, aligned with the rows' text
+    expect(html).toMatch(/data-plugins-organization-all[^>]*>Show 3 more</);
+    expect(html).not.toContain("Show all 9");
+    const section = html.slice(html.indexOf("data-plugins-console-section"));
+    expect(section.indexOf("data-plugins-organization-all")).toBeGreaterThan(section.lastIndexOf("data-test-product="));
+    expect(html).toMatch(/class="[^"]*ml-\[56px\][^"]*"[^>]*data-plugins-organization-all|data-plugins-organization-all[^>]*class="[^"]*ml-\[56px\]/);
     expect(renderToStaticMarkup(createElement(InstalledView, props({ kind: "skills", products })))).not.toContain("data-test-product");
+  });
+
+  it("the folded-rows line comes after the organization's own rows, before their hint, when those are drawn by a function", () => {
+    const products = Array.from({ length: 8 }, (_, index) => ({ key: `p${index}`, node: createElement("div", { "data-test-product": index }) }));
+    const html = renderToStaticMarkup(createElement(InstalledView, props({
+      kind: "connectors", products, consoleHasExtras: true, consoleCount: 1,
+      consoleExtras: (after: unknown) => createElement("div", null, createElement("div", { "data-test-extras": "" }, "EXTRAS"), after as never, createElement("p", { "data-test-hint": "" }, "HINT")),
+    })));
+    expect(html.indexOf("data-test-extras")).toBeLessThan(html.indexOf("data-plugins-organization-all"));
+    expect(html.indexOf("data-plugins-organization-all")).toBeLessThan(html.indexOf("data-test-hint"));
+    expect(html).toContain("Show 2 more");
   });
 
   it("Discover lists the chosen kind only; the engine accounts and the custom connector belong to Connectors", () => {
@@ -701,11 +717,11 @@ describe("#4453 (2026-11-16): the organization console's own section, apart, at 
     expect(html).toMatch(/>Yours</);
   });
 
-  it("folds past six rows behind Show all N", () => {
+  it("folds past six rows behind a last row that counts the hidden ones", () => {
     const rows = Array.from({ length: 9 }, (_, index) => ({ key: `vendor:${index}`, node: createElement("div", { "data-test-vendor": "" }, `V${index}`) }));
     const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", consoleTitle: "Console", products: rows })));
     expect(html.match(/data-test-vendor/g)).toHaveLength(6);
-    expect(html).toContain("Show all 9");
+    expect(html).toContain("Show 3 more");
   });
 
   it("at a bot, the organization's resolved rows sit in the section and the bot's own rows below it", () => {
@@ -793,6 +809,49 @@ describe("the control row is ONE line at every width (the owner: it should not b
     expect(layoutOf(host)).toBe("full");
     expect(host.querySelector("[data-plugins-search-toggle]")).toBeNull();
     expect(host.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("the collapsed search is keyboard sound: focus goes into the field, the covered controls are inert, aria-expanded says it, Escape folds it first and returns focus to its button", async () => {
+    const { host, root } = await mount("fr", true, 640);
+    const toggle = () => host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!;
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    await act(async () => { toggle().click(); });
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    const field = host.querySelector<HTMLInputElement>("[data-plugins-search-expanded] input")!;
+    expect(document.activeElement).toBe(field);
+    // nothing under the overlay can be reached with Tab
+    for (const covered of ["[data-plugins-kinds]", "[data-plugins-views]", "[data-plugins-actions]"]) expect(host.querySelector(covered)!.hasAttribute("inert")).toBe(true);
+    expect(host.querySelector("[data-plugins-search-expanded]")!.hasAttribute("inert")).toBe(false);
+    // Escape on the empty field folds the search; the window's own Escape never hears the first one
+    const heard = vi.fn();
+    document.addEventListener("keydown", heard);
+    await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    expect(heard).not.toHaveBeenCalled();
+    expect(host.querySelector("[data-plugins-search-expanded]")).toBeNull();
+    expect(document.activeElement).toBe(toggle());
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelector("[data-plugins-actions]")!.hasAttribute("inert")).toBe(false);
+    // the second Escape is the window's
+    await act(async () => { toggle().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    expect(heard).toHaveBeenCalledTimes(1);
+    document.removeEventListener("keydown", heard);
+    // the close button folds it too, with focus back on the toggle
+    await act(async () => { toggle().click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-close]")!.click(); });
+    expect(document.activeElement).toBe(toggle());
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("the compact \"+\" button has a tooltip", async () => {
+    const { AddMenu } = await import("./InstalledView");
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(createElement(AddMenu, { actions: [], filled: true })); });
+    expect(host.querySelector("[data-plugins-add]")?.getAttribute("title")).toBe(t("connectApps.add"));
     await act(async () => root.unmount());
     host.remove();
   });

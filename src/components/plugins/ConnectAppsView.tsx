@@ -238,6 +238,20 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   const headRef = useRef<HTMLDivElement | null>(null);
   const [layout, setLayout] = useState<RowLayout>("full");
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchToggle = useRef<HTMLButtonElement | null>(null);
+  const wasOpen = useRef(false);
+  // the opened field takes the keyboard (focus in it, the row under it unreachable); folded, its button gets focus back
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+    const overlay = head.querySelector<HTMLElement>("[data-plugins-search-expanded]");
+    for (const child of Array.from(head.children)) {
+      if (child !== overlay && overlay) child.setAttribute("inert", ""); else child.removeAttribute("inert");
+    }
+    if (overlay && !wasOpen.current) overlay.querySelector<HTMLElement>("input")?.focus();
+    else if (!overlay && wasOpen.current) searchToggle.current?.focus();
+    wasOpen.current = overlay !== null;
+  });
   const addLabel = useRef<{ locale: string; width: number } | null>(null);
   const controlsWidth = useRef(0);
   useLayoutEffect(() => {
@@ -352,7 +366,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               {field && !narrow && <div className="min-w-[140px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
               {narrow && layout !== "minimal" && controls}
               {search && narrow && (
-                <button type="button" onClick={() => setSearchOpen(true)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
+                <button ref={searchToggle} type="button" onClick={() => setSearchOpen(true)} aria-expanded={searchOpen} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
                   <Search size={15} aria-hidden="true" />
                 </button>
               )}
@@ -360,7 +374,14 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               {manageActions}
             </div>
             {search && narrow && searchOpen && (
-              <div className="absolute inset-0 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded="">
+              <div className="absolute inset-0 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded=""
+                onKeyDown={(event) => {
+                  // the field empties on its own Escape; empty, Escape folds the search, and only the next one is the window's
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSearchOpen(false);
+                }}>
                 <div className="min-w-0 flex-1">{field}</div>
                 <button type="button" onClick={() => setSearchOpen(false)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
                   <X size={15} aria-hidden="true" />

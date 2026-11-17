@@ -75,6 +75,8 @@ export interface PluginDetailProps {
   trail?: readonly Crumb[];
   busy: boolean;
   onUninstall?: () => void;
+  /** the menu line's words for it, when it is the person's or a bot's own copy */
+  uninstallLabel?: string;
   /** a marketplace plugin the marketplace has a newer version of */
   onUpdate?: () => void;
   updating?: boolean;
@@ -131,7 +133,7 @@ export interface PluginDetailProps {
 type DetailTab = "overview" | "contents" | "skills" | "connectors";
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files, update } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, uninstallLabel, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files, update } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
@@ -182,7 +184,7 @@ export function PluginDetailView(props: PluginDetailProps) {
                     ...(onEdit ? [{ id: "edit", icon: <Pencil size={14} />, label: t("connectApps.detail.edit"), run: onEdit }] : []),
                     ...(link ? [{ id: "copy-link", icon: <Link2 size={14} />, label: t("connectApps.detail.copyLink"), run: () => { void copyText(link).then((result) => setLinkCopied(result === "copied")); } }] : []),
                   ],
-                  ...(onUninstall ? { remove: onUninstall } : {}),
+                  ...(onUninstall ? { remove: onUninstall, ...(uninstallLabel ? { removeLabel: uninstallLabel } : {}) } : {}),
                 }}
               />
             </>

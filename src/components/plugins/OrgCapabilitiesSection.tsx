@@ -103,7 +103,7 @@ export function vendorSkillsOf(state: OrgCapabilitiesForMeState, vendorKey: stri
 /** Me scope: the organization's capabilities for the person, with their
  * own switch on an offered one. `bare`: the rows alone, for the console's
  * section of Connect Apps, which has the title. */
-export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen }: { forms?: readonly string[]; state?: OrgCapabilitiesForMeState; bare?: boolean; /** a plugin or skill that is on for the person opens its page (Contents) */ onOpen?: (item: MemberOrgCapability) => void } = {}) {
+export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen, after }: { forms?: readonly string[]; state?: OrgCapabilitiesForMeState; bare?: boolean; /** a last row of the same list (the section's "Show N more"), before the hint */ after?: React.ReactNode; /** a plugin or skill that is on for the person opens its page (Contents) */ onOpen?: (item: MemberOrgCapability) => void } = {}) {
   const own = useOrgCapabilitiesForMe(given === undefined);
   const { items, error, busy, toggle, retry } = given ?? own;
   // #2104: a failure says what did not load and offers to try again (a bare
@@ -162,6 +162,7 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen
     <section className={bare ? undefined : "mb-4"} data-org-capabilities="me">
       {!bare && <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>}
       {rows}
+      {after}
       <p className={cn("text-[12px] leading-4 text-ink-secondary", bare ? "mt-1.5 px-3" : "mt-1.5")}>{t("orgCapabilities.me.hint")}</p>
     </section>
   );

@@ -157,7 +157,7 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
   // how it got there, then what it does (a vendor's products sit under its own line)
   const sub = nested || hideOrigin ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
   return (
-    <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
+    <div className={cn("group flex min-h-16 items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}
       <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl">
         <button type="button" onClick={() => ctx.onOpen(product)} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"

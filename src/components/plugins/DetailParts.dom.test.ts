@@ -488,7 +488,7 @@ describe("said once (the owner's second review)", () => {
     await click(view.querySelector("[data-install-toggle='me']"));
     expect(onToggle).toHaveBeenCalledTimes(1);
     const plugin = { key: "kit@market", marketplace: "market", plugin: "kit", external: false, installed: { key: "kit@market", name: "kit", marketplace: "market", enabled: true, removed: [], declaredMcpServers: [] }, contents: { agents: ["a"], commands: [], skills: [] } };
-    const card = await render(createElement(BotPluginCard, { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), onUninstall: vi.fn(), statedAbove: true }));
+    const card = await render(createElement(BotPluginCard, { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), statedAbove: true }));
     expect(card.textContent).not.toContain("Installed for all your bots");
     expect(card.querySelector("[role='switch']")).toBeNull();
     expect(card.textContent).toContain("a");
@@ -497,10 +497,10 @@ describe("said once (the owner's second review)", () => {
   it("the card under a page that has the header's Update, and that lists its connectors, says neither again", async () => {
     const { BotPluginCard } = await import("./BotPluginCard");
     const plugin = { key: "kit@market", marketplace: "market", plugin: "kit", external: false, installed: { key: "kit@market", name: "kit", marketplace: "market", enabled: true, removed: [], declaredMcpServers: ["notes-reader"] }, contents: { agents: ["a"], commands: [], skills: [] } };
-    const props = { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), onUninstall: vi.fn(), statedAbove: true };
+    const props = { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), statedAbove: true };
     const again = await render(createElement(BotPluginCard, { ...props, updateInHeader: true }));
     expect(again.querySelector("[data-bot-plugin-install]")).toBeNull();
-    expect(again.querySelector("[data-bot-plugin-uninstall]")).not.toBeNull();
+    expect(again.querySelector("[data-bot-plugin-uninstall]")).toBeNull();
     expect(again.textContent).not.toContain("notes-reader");
     const alone = await render(createElement(BotPluginCard, props));
     expect(alone.querySelector("[data-bot-plugin-install]")).not.toBeNull();

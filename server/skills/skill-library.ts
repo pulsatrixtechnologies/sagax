@@ -571,6 +571,62 @@ export function updateLibrarySkill(
   return { skill: librarySkillListing(root, next), ...(renamed ? { renamedFrom: name } : {}) };
 }
 
+/** #4504: update a library skill (the person's own or the installation's)
+ * with its folder read again from its source. Its review state and the bots
+ * that reference it stay. The new folder is written beside the old one and
+ * swapped in; the index is the commit point, so a failure before it keeps
+ * the installed copy. */
+export function replaceLibrarySkill(
+  name: string,
+  input: {
+    instructions: string;
+    source: string;
+    warnings: string[];
+    files?: ReadonlyArray<{ path: string; content: string | Uint8Array; executable?: boolean }>;
+    skippedFiles?: string[];
+    github?: GitHubSkillOrigin;
+  },
+  root: string = skillsLibraryRoot(),
+): LibrarySkillListing | { error: string } {
+  if (!isSkillName(name)) return { error: "invalid skill name" };
+  if (Buffer.byteLength(input.instructions, "utf8") > SKILL_FILE_MAX_BYTES) return { error: `SKILL.md is larger than ${SKILL_FILE_MAX_BYTES / 1024}KB` };
+  const parsed = parseSkillMd(input.instructions);
+  if ("error" in parsed) return parsed;
+  if (parsed.name !== name) return { error: `the source now names the skill "${parsed.name}", not "${name}"` };
+  const indexRead = readSkillLibraryIndexState(root);
+  if ("error" in indexRead) return indexRead;
+  const entry = indexRead.index[name];
+  if (!entry) return { error: `no library skill named "${name}"` };
+  const next: SkillLibraryEntry = {
+    ...entry,
+    description: parsed.description,
+    source: input.source,
+    sha256: sha256Hex(input.instructions),
+    importedAt: new Date().toISOString(),
+    warnings: input.warnings,
+    skippedFiles: input.skippedFiles ?? [],
+    ...(input.github ? { github: input.github } : {}),
+  };
+  delete next.files;
+  delete next.filesSha256;
+  if (input.files?.length) {
+    const stored = storeLibraryFolder(root, name, input.instructions, input.files);
+    if ("error" in stored) return stored;
+    next.files = input.files.map((file) => file.path);
+    next.filesSha256 = stored.filesSha256;
+  } else {
+    try {
+      writeFileAtomic(join(librarySkillDirectory(root, name), "SKILL.md"), input.instructions, { mode: 0o600 });
+    } catch (error) {
+      return { error: `the skill could not be stored: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+  indexRead.index[name] = next;
+  writeSkillLibraryIndex(root, indexRead.index);
+  skillLibraryEvents.emit("invalidate", { kind: "update", name });
+  return librarySkillListing(root, next);
+}
+
 /** Delete a library skill (Plugins > Manage > a skill > Delete Skill). One
  * an organization package put there is refused; the caller refuses one a
  * marketplace plugin still brings and unassigns it from bots. */

@@ -98,9 +98,12 @@ describe("prompt size by engine and turn kind (#1997)", () => {
       // Raised again (routine 23900 to 24000, #4456): "How you work" now asks for a
       // first sentence before the first tool call (81 bytes); the routine prompt
       // measures 14400 bytes (files engines) and 14175 (others, 23500 to 23700, room 48300 to 48400); room 53700 to 53800 for the same line.
+      // Raised again (#4490, each by 500): the one-question-per-control rule adds
+      // 292 bytes to every prompt (routine 24000 to 24500 and 23700 to 24200,
+      // room 53800 to 54300 and 48400 to 48900).
       const before = engineWorksInFiles(engine)
-        ? { chat: 62102, routine: 24000, room: 53800, "sub-agent": 59893 }
-        : { chat: 56278, routine: 23700, room: 48400, "sub-agent": 54069 };
+        ? { chat: 62102, routine: 24500, room: 54300, "sub-agent": 59893 }
+        : { chat: 56278, routine: 24200, room: 48900, "sub-agent": 54069 };
       expect(bytes).toBeLessThanOrEqual(before[kind] * 0.6);
       const oldSkills = engineWorksInFiles(engine) ? 30306 : 25249;
       expect(skills.index.bytes).toBeLessThanOrEqual(oldSkills * 0.6);

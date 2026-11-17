@@ -1348,3 +1348,16 @@ describe("#3515: the organization's connector reads the server's lines in the pe
   });
 });
 
+
+// #4490 review: a form holds up to 12 rows; an AI client answering through
+// the MCP reads every one of them, each with its control
+describe("a form card read by an AI client (#4490)", () => {
+  it("lists all twelve rows with their kind", () => {
+    const questions = Array.from({ length: 12 }, (_, index) => ({ question: `Row ${index + 1}`, kind: index % 2 ? "duration" : "yes_no", options: index % 2 ? [] : [{ label: "Yes", id: "yes" }, { label: "No", id: "no" }], ...(index === 11 ? { optional: true } : {}) }));
+    const card = { requestId: "q-form", requestType: "question", title: "Time entries", subtitle: "Confirm each.", options: [], questionRequest: { version: 1, questions } };
+    const approval = describeMemberApproval("t1", { at: 1 }, card);
+    expect(approval.questions).toHaveLength(12);
+    expect(approval.questions![1]).toMatchObject({ question: "Row 2", kind: "duration" });
+    expect(approval.questions![11]).toMatchObject({ optional: true });
+  });
+});

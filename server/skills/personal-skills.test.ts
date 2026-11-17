@@ -25,9 +25,18 @@ async function boot() {
   roots.push(root);
   const capabilities = new PersonCapabilities(root, () => ({ kind: "key", key: Buffer.alloc(32, 17) }));
   const skills = new PersonalSkills(root, capabilities);
+  const fetched: string[] = [];
   const route = createPersonalSkillRoutes({ skills, enabled: () => true,
     person: (auth) => auth.kind === "session" ? auth.session.principalId ?? null : null,
     bots: () => [{ id: "first", name: "First" }, { id: "second", name: "Second" }],
+    // #4504: a GitHub source, read with the person's own access (a fake here)
+    fetchSource: async (person, source) => {
+      fetched.push(`${person} ${source}`);
+      if (source.includes("missing")) return { error: "GitHub answered 404" };
+      return { skills: [{ source, github: { owner: "acme", repo: "skills", ref: "main", path: "trip", commit: "a".repeat(40) },
+        files: [{ path: "SKILL.md", content: Buffer.from("---\nname: trip-plan\ndescription: Plan a trip\n---\nPlan it.\n"), executable: false }], skipped: [] }] };
+    },
+    updateFields: (skill) => ({ updateKey: `skill:me:me:${skill.name}`, ...(skill.github ? { installedVersion: skill.github.commit.slice(0, 7) } : {}) }),
   });
   const server = createServer(async (req, res) => {
     const person = req.headers["x-test-person"] as string | undefined;
@@ -45,8 +54,24 @@ async function boot() {
     });
     return { status: response.status, body: await response.json() as any };
   };
-  return { root, capabilities, skills, api };
+  return { root, capabilities, skills, api, fetched };
 }
+
+describe("#4504: a Me skill from GitHub reaches all of the person's bots", () => {
+  it("imports it with the person's own access and lists its update fields", async () => {
+    const { api, capabilities, fetched } = await boot();
+    const added = await api("alice", "POST", "", { source: "acme/skills/trip" });
+    expect(added).toMatchObject({ status: 201, body: { installed: [{ name: "trip-plan" }] } });
+    expect(fetched).toEqual(["alice acme/skills/trip"]);
+    expect(capabilities.assignedSkills("alice")).toEqual(["trip-plan"]);
+    expect(capabilities.assignedSkills("bob")).toEqual([]);
+    const listing = await api("alice", "GET");
+    expect(listing.body.skills[0]).toMatchObject({ name: "trip-plan", enabled: true, updateKey: "skill:me:me:trip-plan", installedVersion: "aaaaaaa" });
+    expect(await api("alice", "POST", "", { source: "acme/missing" })).toMatchObject({ status: 422, body: { error: "GitHub answered 404" } });
+    expect((await api("alice", "DELETE", "/trip-plan")).status).toBe(200);
+    expect(capabilities.assignedSkills("alice")).toEqual([]);
+  });
+});
 
 describe("Me skills, one source referenced by all of the person's bots", () => {
   it("lets a member create and update their skill, never another person's", async () => {

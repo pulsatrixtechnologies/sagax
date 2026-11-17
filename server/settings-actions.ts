@@ -70,7 +70,10 @@ export type SettingsActionDeps = {
   vaultValue?: (person: string, itemId: string, field: string) => string;
   /** A record's name for a card (never its id), or undefined. */
   targetName?: (kind: string, id: string, botId?: string) => string | undefined;
+  /** #4504: the bots this person owns (target "all" on a bot setting). */
+  ownBots?: (person: string) => string[];
 };
+
 
 export type SettingsActionInput = {
   args: Record<string, unknown>;
@@ -826,10 +829,19 @@ export function createSettingsActions(deps: SettingsActionDeps) {
    * bot key. Each bot is its own call, in turn: the same rights, policy,
    * card, quote and journal as one at a time; one answer line per bot. */
   async function handleMany(input: SettingsActionInput): Promise<BotActResult> {
-    const ids = input.args.action === "set" ? splitBulkTargets(input.args.target) : null;
+    let ids = input.args.action === "set" ? splitBulkTargets(input.args.target) : null;
+    // #4504: target "all": every bot of the person speaking, never another person's
+    if (input.args.action === "set" && input.args.target === "all" && settingSpec(input.args.key)?.target === "bot") {
+      const actor = actorForTurn(deps.facts(input.threadId, input.generation));
+      const speaker = actor.kind === "person" ? actor.personKey : actor.kind === "operator" ? deps.operatorId() : null;
+      const own = speaker && deps.ownBots ? deps.ownBots(speaker) : [];
+      if (!own.length) return text(400, "This person has no bots to change (target all).");
+      if (own.length === 1) return handle({ ...input, args: { ...input.args, target: own[0] } });
+      ids = own;
+    }
     const spec = ids ? settingSpec(input.args.key) : undefined;
     if (!ids || !spec || spec.target !== "bot") return handle(input);
-    if (ids.length > BULK_TARGETS_MAX) return text(400, `At most ${BULK_TARGETS_MAX} bots in one call.`);
+    if (input.args.target !== "all" && ids.length > BULK_TARGETS_MAX) return text(400, `At most ${BULK_TARGETS_MAX} bots in one call.`);
     const lines: string[] = [];
     let failed = 0;
     for (const id of ids) {

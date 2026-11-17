@@ -6,6 +6,64 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Updates of skills, plugins and connectors; a bot manages them (#4504)
+
+One service knows, for each installed skill, plugin and connector of a
+person, whether its source has a newer version, and updates one item or all
+of them (`server/capabilities/capability-updates.ts`, the three kinds in
+`capability-update-providers.ts`, wired in `server/index.ts`).
+
+- Sources: a plugin follows its marketplace (the existing background pull,
+  `MarketplaceBackgroundRefresh.runNow`, and `pluginUpdateAvailable`; notes
+  from the plugin's `CHANGELOG.md` section); a skill imported from GitHub
+  follows the commits on its folder (`latestFolderCommits`, with the
+  person's GitHub access); a command connector pinned to a package version
+  (`npx pkg@1.2.3`, `uvx pkg==1.2.3`) follows npm or PyPI. A remote
+  connector, an unpinned package and a hand-written skill have nothing to
+  update. A source out of reach changes nothing and shows no error.
+- Checks: past five minutes after start, then every six hours, and a read
+  of the list starts one when the last is older than 30 minutes (plugins
+  and skills: six hours); never during a turn, never awaited by a read.
+  GitHub: the check reads through the server's wrapper
+  (`githubSkillFetch`, without its bare retry), and keeps one budget per
+  credential really used (`githubBudgetKey`; no token is one budget for the
+  whole server). A rate limit (thrown `rate_limited`, a 429, or a 403 with
+  retry-after) pauses that budget until its reset, and a budget stops at 20
+  requests left in the hour, kept for the person's own imports. A source read with one person's access is known to
+  that person only. A source never reached is `updateUnknown` (no mark; an
+  update answers unknown).
+- Routes: `GET /api/me/capability-updates` (items and count) and `POST`
+  `{keys}` or `{all: true}` (one result per item: updated, current, or
+  failed with the reason; a failure keeps the installed version). The
+  session's person only, no admin; `apps.ownIntegrations` as for every own
+  change. The installed items of the lists the page reads carry
+  `updateKey`, `installedVersion`, `availableVersion`, `updateAvailable` and
+  `updateNotes` (and `updateUnknown`). A live frame `capability.updates`
+  (the count of the person's own GET) goes to that person only
+  (`capabilityUpdatesFrameAllowed` in `sseFrameFor`), and only when their
+  list changed.
+- What the organization declares (imposed or offered, a pinned version) is
+  listed with `organization` and `canUpdate: false`: its console decides.
+  A person's own item is always theirs to remove or turn off, whatever its
+  name (an offered or preset skill an organization package put on a bot
+  too). The organization's own item is switched by `PUT
+  /api/me/org-capabilities/:id`, whose one verdict is `orgCapabilityLock`
+  (imposed stays on); a bot replays that route
+  (`capabilities.organization`) and gets its answer.
+- A bot's hand: `capabilities.updates` (get lists, set updates),
+  `capabilities.organization` ({id or key, enabled}),
+  `bot.plugin` (`me: true` for the person's own plugin), `bot.skill`
+  (`remove: true`, `me: true`), `bot.skillImport` (`me: true`),
+  `connections.mcpServer` and `connections.mcpServerRemove`, and target
+  `all` on any bot key for every bot of the person speaking (never another
+  person's). The same routes as the page; no card of their own.
+- Tests: `server/capabilities/capability-updates.test.ts`,
+  `server/routes/capability-updates.test.ts`,
+  `server/settings-actions.capabilities.test.ts`,
+  `server/skills/skill-update.test.ts`, and the update fields in
+  `server/bots/bot-plugins.test.ts`, `server/skills/personal-skills.test.ts`,
+  `server/routes/bots-content.test.ts`.
+
 ## MCP after a cold cloud start (2026-11-04)
 
 Turn setup can preopen Perspicax before the person's cloud environment is

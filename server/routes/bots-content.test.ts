@@ -184,3 +184,24 @@ describe("bots-content happy paths", () => {
     expect(json).toHaveBeenCalledWith(expect.anything(), 400, expect.objectContaining({ error: expect.any(String) }));
   });
 });
+
+describe("#4504: update fields and what the organization requires", () => {
+  it("lists each bot skill with its update fields", async () => {
+    const handler = createBotsContentRoutes(baseDeps({
+      skillsLibraryEnabled: () => false,
+      skillUpdateFields: (place, skill) => ({ updateKey: `skill:${place.scope}:${place.target}:${skill.name}` }),
+    }));
+    const { ctx, json } = context("/api/bots/b1/skills", "GET");
+    await handler(ctx);
+    expect(json).toHaveBeenCalledWith(expect.anything(), 200, expect.objectContaining({
+      skills: [expect.objectContaining({ name: "private-one", updateKey: "skill:bot:b1:private-one" })],
+    }));
+  });
+
+  it("a skill an organization package put on the bot (offered, preset) stays removable", async () => {
+    const handler = createBotsContentRoutes(baseDeps());
+    const { ctx, json } = context("/api/bots/b1/skills/house-rules", "DELETE");
+    await handler(ctx);
+    expect(json).not.toHaveBeenCalledWith(expect.anything(), 409, expect.anything());
+  });
+});

@@ -701,6 +701,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a plugin's configuration values (server/plugins/plugin-config.ts)
   { methods: ["PUT"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/config$/, feature: "orgDirectory" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/me\/skills-library(?:\/[a-z0-9-]+)?$/, feature: "orgDirectory" },
+  // #4504: the person's own updates (server/routes/capability-updates.ts):
+  // the session's person only, no admin
+  { methods: ["GET", "POST"], path: /^\/api\/me\/capability-updates$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/review$/, feature: "orgDirectory" },
   { methods: ["GET"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/files$/, feature: "orgDirectory" },
   // Slice 5: the Perspicax MCP profiles a bot mounts. server/bots/bot-perspicax.ts

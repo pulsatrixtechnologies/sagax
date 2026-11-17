@@ -6,6 +6,39 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Cards a bot writes: one question per control (#4490, 2026-11-16)
+
+- `shared/card-rules.ts` reads every card a bot asks: ask_choice (`shared/options-card.ts`
+  `askChoiceRefusal`, applied to the bot's own call only in `server/routes/internal-memory.ts`
+  through `server/approvals/card-refusal-turns.ts`; a card the server writes itself is never
+  refused) and every engine's own question tool (`nativeChoiceMismatch` in
+  `server/runtime-events/request-opened-present.ts`). A card that breaks a rule is refused,
+  nothing is drawn, and the bot reads `Card refused (rule ...)` with how to ask again and an
+  example call; it asks again in the same turn. An engine's own question is answered with that
+  text (a set: its first question), never answered for the person under Full access. One
+  refusal per turn: the next bad card of the same turn, or one that cannot be sent back to its
+  engine, is shown as asked. An optional row left empty answers `(left empty)`.
+- Exact checks: the lengths in `CARD_LIMITS` (a single question 1500 characters, a form's
+  context 500, a row 240) and the shape of a form or a checklist (kinds, 2-8 options for a
+  choice, none for the other kinds, 2-20 items, 1-3 actions). Heuristics: question marks that
+  end a sentence outside quoted text (3 in one text, 2 in a row, or 2 listed lines ending with
+  one that are not the card's own choices), "for each ... say" over 3 items or more, 3 listed
+  lines with words that ask the person to pick (an imperative, "all checked", "which ones",
+  "Post selected"; never "I checked" or "the selected backup"), a quoted answer to give or two
+  short "X Y sends ..." actions of two words or more that are not controls on the card.
+  `shared/card-rules.fixtures.ts` holds the probed good and bad inputs.
+- ask_choice takes `questions` (a form: a row per thing to decide, `kind` choice, multi, yes_no,
+  duration, time, date, number, text or long_text) or `items` with `actions` (a checklist). Both
+  are always raised as a real question card (`raiseHarnessQuestion`, `askTitle` as its title)
+  and are a decision, never answered for the person. The answer comes back per row
+  (`Q: row` / `A: answer`; a duration as `N min`, yes / no as `yes` / `no`), a checklist adds
+  `Q: Action` / `A: <button>`.
+- `src/components/QuestionForm.tsx` draws them (from `QuestionCard` when `isFormCard`): title,
+  one line of context, the rows with their controls, then Submit or the checklist's buttons; a
+  long list scrolls inside the card; the settled card shows each row's answer and the button
+  pressed. Gallery `src/gallery/question-forms.html`, captures `scripts/capture/question-forms.mjs`.
+- The two cards the owner was shown are rebuilt in `shared/card-rules.fixtures.ts` (invented words).
+
 ## Background threads stay out of thread mode (#2015, 2026-11-05)
 
 `shared/background-threads.ts` (vectors in `background-threads.vectors.json`,

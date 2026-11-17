@@ -707,6 +707,7 @@ import {
   resolveBotSkills,
   scanSkillText,
   listSkills,
+  replaceImportedSkill,
   listStagedSkillWrites,
   readSkillFile,
   rejectStagedSkillWrite,
@@ -860,9 +861,9 @@ import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.
 import { openTriggerSeenStore } from "./triggers/trigger-seen-store.ts";
 import type { WebhookTrigger } from "../shared/webhooks.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
-import { installLibrarySkill, removeLibrarySkillFrom, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills } from "./skills/skill-library.ts";
+import { installLibrarySkill, removeLibrarySkillFrom, replaceLibrarySkill, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills } from "./skills/skill-library.ts";
 import { InstallationPlugins } from "./plugins/installation-plugins.ts";
-import { PersonalSkills, createPersonalSkillRoutes } from "./skills/personal-skills.ts";
+import { PersonalSkills, createPersonalSkillRoutes, libraryInputFromFetched } from "./skills/personal-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
 import { runSkillsLibraryBootSweep } from "./skills/skills-library-migration.ts";
 import { installedPlaybookInstructions } from "./installed-playbooks.ts";
@@ -1148,7 +1149,14 @@ import { GithubConnect,
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { resolveGithubClientId } from "./github/builtin-client.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
-import { OrgCapabilities, type OrgCapabilityMount } from "./org/org-capabilities.ts";
+import { OrgCapabilities, type OrgCapabilityMount, type OrgCapabilityView } from "./org/org-capabilities.ts";
+import { CAPABILITY_UPDATES_FRAME, CHECK_INTERVAL_MS, CapabilityUpdates, type UpdatePerson } from "./capabilities/capability-updates.ts";
+import { connectorUpdateProvider, pluginUpdateProvider, skillUpdateProvider, type InstalledConnectorRecord, type InstalledPluginRecord, type InstalledSkillRecord } from "./capabilities/capability-update-providers.ts";
+import { createCapabilityUpdatesRoutes } from "./routes/capability-updates.ts";
+import { readableName } from "../shared/readable-name.ts";
+import { notePluginFolderChanged } from "./sandbox/sandbox-plugin-digests.ts";
+import { fetchSkillFromSource, githubSkillLink } from "./skills/skill-fetch.ts";
+import { githubSkillFetch } from "./github/github-access.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github/github-credentials.ts";
@@ -2856,6 +2864,9 @@ bindLeafHost({
   get channelActorId() { return channelActorId; },
   get creatingBotOwnerId() { return creatingBotOwnerId; },
   get effectiveBotOwner() { return effectiveBotOwner; },
+  get updateOwnBots() { return updateOwnBots; },
+  // read by the MCP listing, which may run before the update service exists
+  get connectorUpdates() { try { return connectorUpdates; } catch { return undefined; } },
   get botOwnerOrgRole() { return botOwnerOrgRole; },
   get memberOwnedInOrg() { return memberOwnedInOrg; },
   get principalIsOrgAdmin() { return principalIsOrgAdmin; },
@@ -12649,6 +12660,7 @@ const botPlugins = new BotPlugins({
 const personalPlugins = new BotPlugins({
   dataDir: DATA_DIR,
   marketplaces: pluginMarketplaces,
+  updateScope: "me",
   storage: personalPluginStorage(DATA_DIR, personConnections),
   gitEnvironment: (actor) => githubGitEnvironment(usablePersonGithub(actor)?.token),
   credentials: ({ actor, source }) => githubCredentialsFor(actor, source.github?.owner),
@@ -12679,6 +12691,7 @@ function pullMarketplaceAs(name: string, scope: MarketplacePullScope): Promise<u
   return personalPlugins.pullMarketplace(scope.id, name, scope.owner);
 }
 let marketplaceBackgroundRefresh: MarketplaceBackgroundRefresh | null = null;
+let capabilityUpdateChecks: { stop(): void } | null = null;
 // The linked installation downloads its signed Flow pack independently of
 // member sign-ins and engine availability. Every engine reads the same copy.
 const orgFlowPlugins = new OrgFlowPlugins({
@@ -13088,6 +13101,28 @@ ROUTES.push(createGithubCredentialRoutes({
     after: { op: row.op, count: row.count, ...(row.id ? { id: row.id } : {}), ...(row.label ? { label: row.label } : {}) }, actor: orgAuditActor(auth)
   })
 }));
+/** A person's own MCP server replaced by an Edit (the add body; a token or
+ * env left out is kept). #4504: an update of its package goes through here too. */
+async function updatePersonalMcpServer(principalId: string, name: string, body: unknown): Promise<void> {
+  const previous = personConnections.servers(principalId)[name];
+  if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
+  const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
+  if (typeof next.name !== "string" || !next.name) next.name = name;
+  if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
+  if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
+  if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
+  const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
+  personConnections.remove(principalId, name);
+  try {
+    await addPersonalMcpServer(principalId, next, keepSignIn);
+  } catch (error) {
+    personConnections.add(principalId, name, previous);
+    throw error;
+  }
+  stdioRelay.closePerson(principalId, name);
+  if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
+  if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
+}
 ROUTES.push(createPersonConnectionRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   ownIntegrationsRefusal,
@@ -13109,32 +13144,17 @@ ROUTES.push(createPersonConnectionRoutes({
     }
   },
   servers: {
-    list: personalServerListing,
+    // #4504: each server with its update fields (a command pinned to a package version)
+    list: async (principalId) => (await personalServerListing(principalId)).map((server) => ({
+      ...server,
+      ...connectorUpdates.fields({ scope: "me", target: "me", name: server.name, ...(server.kind === "stdio" ? { command: server.command, args: server.args } : {}) }),
+    })),
     add: (principalId, body) => addPersonalMcpServer(principalId, body),
     // Edit from Plugins > Me: the add body replaces the server (renamed when
     // the body names another one). A token or env left out is kept, so the
     // screen never has to show a secret; an unchanged OAuth address keeps
     // its sign-in. Any refusal puts the previous server back as it was.
-    update: async (principalId, name, body) => {
-      const previous = personConnections.servers(principalId)[name];
-      if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
-      const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
-      if (typeof next.name !== "string" || !next.name) next.name = name;
-      if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
-      if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
-      if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
-      const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
-      personConnections.remove(principalId, name);
-      try {
-        await addPersonalMcpServer(principalId, next, keepSignIn);
-      } catch (error) {
-        personConnections.add(principalId, name, previous);
-        throw error;
-      }
-      stdioRelay.closePerson(principalId, name);
-      if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
-      if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
-    },
+    update: (principalId, name, body) => updatePersonalMcpServer(principalId, name, body),
     setEnabled: async (principalId, name, enabled) => {
       personConnections.setEnabled(principalId, name, enabled);
       if (!enabled) stdioRelay.closePerson(principalId, name);
@@ -13289,6 +13309,9 @@ ROUTES.push(createBotWizardRoutes({
 ROUTES.push(createPersonalSkillRoutes({
   skills: personalSkills,
   enabled: () => skillsLibraryEnabled(cfg),
+  // #4504: a skill of the person's own from GitHub, read with their own access
+  fetchSource: (person, source) => fetchSkillFromSource(source, githubSkillFetch(githubCredentialsFor(person))),
+  updateFields: (skill) => skillUpdates.fields({ scope: "me", target: "me", name: skill.name, importedAt: skill.importedAt, ...(skill.github ? { github: skill.github } : {}) }),
   person: (auth) => IDENTITY.kind === "perspicax" ? sessionPrincipal(auth) : localPrincipalId(),
   bots: (person) => store.bots.filter((bot) => IDENTITY.kind !== "perspicax" || samePerson(effectiveBotOwner(bot), person)).map((bot) => ({
     id: bot.id,
@@ -16649,6 +16672,8 @@ type HarnessChoice = {
   /** #4238: raised without ringing (the start-up back-fill rings its one
    * grouped line instead). */
   quiet?: true;
+  /** #4490: a form's or a checklist's rows, each with its control. */
+  questions?: import("../shared/ask-question.ts").AskQuestion[];
 };
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
@@ -24148,7 +24173,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const cardThread = runRoom ?? personThread ?? threadId;
       const cardRoom = store.groupByThread(cardThread);
       const room = cardRoom && !cardRoom.dm && !cardRoom.peopleDm ? { people: roomPeopleOf(cardRoom), name: cardRoom.name, ...(runRoom ? { fromRun: true } : {}) } : undefined;
-      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread) || Boolean(reception);
+      // #4490: a form or a checklist is always a real question card: its rows
+      // are answered on it, which a passive card cannot carry
+      const formAsk = Boolean(ask && (ask.questions !== undefined || ask.items !== undefined));
+      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread) || Boolean(reception) || formAsk;
       const posted = createAgentCard({
         store,
         bot,
@@ -26745,6 +26773,206 @@ ROUTES.push(createMarketplaceRoutes({
     for (const skill of record.skills) removeLibrarySkillFrom(skill, marketplace);
     return { status: 200, body: { removed: record, servers: mcpServerResponse().servers } };
   }
+}));
+// ── #4504: updates of what a person has installed, one action away ─────
+// One service (server/capabilities/capability-updates.ts) for the page and
+// the bots. Each kind reads the stores above: a person's own bots, their
+// own place (Me) and, for this installation's managers, its own items;
+// what the organization declares is listed and follows its console.
+function updatePersonOf(auth: RequestAuth): UpdatePerson | null {
+  const id = IDENTITY.kind === "perspicax" ? sessionPrincipal(auth) : localPrincipalId();
+  return id ? { id, manager: mayManageMarketplaces(auth), context: auth } : null;
+}
+function updateOwnBots(person: string): BotRecord[] {
+  return store.bots.filter((bot) => !(bot as { hidden?: boolean }).hidden
+    && (IDENTITY.kind !== "perspicax" || samePerson(effectiveBotOwner(bot), person)));
+}
+/** The organization's declarations this person has (imposed, or offered
+ * and turned on). None on a solo server. */
+function orgUpdateDeclarations(person: string): OrgCapabilityView[] {
+  if (IDENTITY.kind !== "perspicax") return [];
+  return orgCapabilities.views().filter((view) => view.mode === "imposed" || orgCapabilities.activeFor(view, person));
+}
+function orgUpdatePlace(view: OrgCapabilityView) {
+  return {
+    scope: "organization" as const, target: "organization",
+    organization: view.mode === "imposed" ? "required" as const : "offered" as const,
+    ...(view.source.kind === "marketplace" && view.source.version ? { pinned: view.source.version } : {}),
+  };
+}
+async function pluginUpdateRecords(person: UpdatePerson): Promise<InstalledPluginRecord[]> {
+  const viewer: MarketplaceViewer = person.context ? marketplaceViewer(person.context as RequestAuth) : IDENTITY.kind === "perspicax" ? { principal: person.id } : { seesAll: true };
+  const records: InstalledPluginRecord[] = [];
+  const from = (markets: Awaited<ReturnType<BotPlugins["listMarketplaces"]>>, place: { scope: "bot" | "me"; target: string; bot?: { id: string; name: string } }) => {
+    for (const market of markets) for (const plugin of market.plugins) {
+      if (!plugin.installed) continue;
+      records.push({
+        ...place, id: `${plugin.name}@${market.name}`, name: readableName(plugin.name),
+        ...(plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
+        ...(plugin.version ? { version: plugin.version } : {}),
+        updateAvailable: plugin.updateAvailable === true,
+        ...(plugin.updateNotes ? { notes: plugin.updateNotes } : {}),
+        ...(plugin.availableVersion ? { offeredRevision: plugin.availableVersion } : {}),
+      });
+    }
+  };
+  for (const bot of updateOwnBots(person.id)) {
+    if (!botPlugins.listPlugins(bot.id).length) continue;
+    from(await botPlugins.listMarketplaces(bot.id, viewer), { scope: "bot", target: bot.id, bot: { id: bot.id, name: bot.name } });
+  }
+  if (personalPlugins.listPlugins(person.id).length) from(await personalPlugins.listMarketplaces(person.id, viewer), { scope: "me", target: "me" });
+  if (person.manager) {
+    for (const market of await pluginMarketplaces.list(viewer)) for (const plugin of market.plugins) {
+      if (!plugin.installed) continue;
+      records.push({
+        scope: "installation", target: "installation", id: `${plugin.name}@${market.name}`, name: readableName(plugin.name),
+        ...(plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
+        ...(plugin.version ? { version: plugin.version } : {}),
+        updateAvailable: plugin.updateAvailable === true,
+        ...(plugin.updateNotes ? { notes: plugin.updateNotes } : {}),
+        ...(plugin.availableVersion ? { offeredRevision: plugin.availableVersion } : {}),
+      });
+    }
+  }
+  for (const view of orgUpdateDeclarations(person.id)) {
+    if (view.form !== "plugin") continue;
+    records.push({ ...orgUpdatePlace(view), id: view.id, name: readableName(view.name), ...(view.version ? { installedVersion: view.version } : {}), updateAvailable: false });
+  }
+  return records;
+}
+function skillUpdateRecordsOf(person: string, manager: boolean): InstalledSkillRecord[] {
+  const records: InstalledSkillRecord[] = [];
+  for (const bot of updateOwnBots(person)) {
+    for (const skill of listSkills(bot.id)) {
+      records.push({
+        scope: "bot", target: bot.id, bot: { id: bot.id, name: bot.name }, name: skill.name, importedAt: skill.importedAt, owner: person,
+        ...(skill.github ? { github: skill.github } : {}),
+      });
+    }
+  }
+  if (skillsLibraryEnabled(cfg)) {
+    for (const skill of personalSkills.list(person)) {
+      records.push({ scope: "me", target: "me", name: skill.name, importedAt: skill.importedAt, owner: person, ...(skill.github ? { github: skill.github } : {}) });
+    }
+  }
+  if (manager) records.push(...installationSkillRecords());
+  for (const view of orgUpdateDeclarations(person)) {
+    if (view.form === "skill") records.push({ ...orgUpdatePlace(view), id: view.id, name: view.name, importedAt: "" });
+  }
+  return records;
+}
+/** The installation's library (its managers' Everyone scope). */
+function installationSkillRecords(): InstalledSkillRecord[] {
+  if (!skillsLibraryEnabled(cfg)) return [];
+  const index = readSkillLibraryIndex();
+  return listLibrarySkills().filter((skill) => !index[skill.name]?.package).map((skill) => ({
+    scope: "installation" as const, target: "installation", name: skill.name, importedAt: skill.importedAt,
+    ...(skill.github ? { github: skill.github } : {}),
+  }));
+}
+/** Every person with something installed: the bots' owners, and this
+ * computer's operator on a solo server. */
+function updatePeople(): string[] {
+  if (IDENTITY.kind !== "perspicax") return [localPrincipalId()];
+  return [...new Set(store.bots.map((bot) => effectiveBotOwner(bot)).filter((owner): owner is string => Boolean(owner)))];
+}
+function connectorUpdateRecordsOf(person: string, manager: boolean): InstalledConnectorRecord[] {
+  const records: InstalledConnectorRecord[] = [];
+  for (const [name, server] of Object.entries(personConnections.servers(person))) {
+    records.push({ scope: "me", target: "me", name, ...(server.kind === "stdio" ? { command: server.command, args: server.args } : {}) });
+  }
+  if (manager) records.push(...installationConnectorRecords());
+  for (const view of orgUpdateDeclarations(person)) {
+    if (view.form === "mcp") records.push({ ...orgUpdatePlace(view), id: view.id, name: view.mount || view.name });
+  }
+  return records;
+}
+/** This installation's own MCP servers (its managers'). */
+function installationConnectorRecords(): InstalledConnectorRecord[] {
+  return Object.entries(cfg.mcpServers ?? {}).map(([name, raw]) => {
+    const entry = raw as { command?: unknown; args?: unknown };
+    return {
+      scope: "installation" as const, target: "installation", name,
+      ...(typeof entry.command === "string" ? { command: entry.command, args: Array.isArray(entry.args) ? entry.args.filter((arg): arg is string => typeof arg === "string") : [] } : {}),
+    };
+  });
+}
+const skillUpdates = skillUpdateProvider({
+  records: (person) => skillUpdateRecordsOf(person.id, person.manager),
+  allRecords: () => [...updatePeople().flatMap((person) => skillUpdateRecordsOf(person, false)), ...installationSkillRecords()],
+  credentialsFor: (owner) => githubCredentialsFor(owner ?? null),
+  reimport: async (person, record) => {
+    const source = githubSkillLink(record.github!);
+    const fetched = await fetchSkillFromSource(source, githubSkillFetch(githubCredentialsFor(person.id)));
+    if ("error" in fetched) throw new Error(fetched.error);
+    const skill = fetched.skills.find((candidate) => candidate.files.some((file) => file.path === "SKILL.md")) ?? fetched.skills[0];
+    if (!skill) throw new Error("The source no longer has this skill.");
+    if (record.scope === "bot") {
+      const done = replaceImportedSkill(record.target, record.name, skill.source, skill.files, skill.github);
+      if ("error" in done) throw new Error(done.error);
+      return skill.github ? { commit: skill.github.commit } : {};
+    }
+    const input = libraryInputFromFetched(skill);
+    if ("error" in input) throw new Error(input.error);
+    const root = record.scope === "me" ? personalSkills.root(person.id) : undefined;
+    const { name: _name, ...rest } = input;
+    const done = replaceLibrarySkill(record.name, rest, root);
+    if ("error" in done) throw new Error(done.error);
+    if (root) notePluginFolderChanged(root);
+    return skill.github ? { commit: skill.github.commit } : {};
+  },
+});
+const connectorUpdates = connectorUpdateProvider({
+  records: (person) => connectorUpdateRecordsOf(person.id, person.manager),
+  allRecords: () => [...updatePeople().flatMap((person) => connectorUpdateRecordsOf(person, false)), ...installationConnectorRecords()],
+  setArgs: async (person, record, args) => {
+    // the person's own server: through its existing Edit (the same checks)
+    if (record.scope === "me") return updatePersonalMcpServer(person.id, record.name, { name: record.name, command: record.command, args });
+    if (mcpConfigBusy) throw new Error("MCP servers are already being updated: try again in a moment.");
+    mcpConfigBusy = true;
+    try {
+      const current = { ...cfg.mcpServers };
+      const entry = current[record.name];
+      if (!entry || typeof entry !== "object") throw new Error("This server is no longer configured.");
+      current[record.name] = { ...(entry as Record<string, unknown>), args };
+      persistMcpServers(current);
+    } finally {
+      mcpConfigBusy = false;
+    }
+  },
+});
+const capabilityUpdates = new CapabilityUpdates({
+  providers: [
+    pluginUpdateProvider({
+      records: pluginUpdateRecords,
+      // the existing background pull of the marketplaces (#3612)
+      pull: async () => { await marketplaceBackgroundRefresh?.runNow(); return true; },
+      install: async (person, record) => {
+        const [plugin, marketplace] = record.id.split("@") as [string, string];
+        if (record.scope === "bot") return { version: (await botPlugins.install(record.target, { marketplace, plugin }, person.id)).version };
+        if (record.scope === "me") return { version: (await personalPlugins.install(person.id, { marketplace, plugin }, person.id)).version };
+        if (record.scope !== "installation" || !person.context) throw new Error("This plugin cannot be updated here.");
+        const done = await updateInstallationPlugin(marketplace, plugin, { auth: person.context as RequestAuth });
+        if (done.status >= 400) throw new Error(String((done.body as { error?: unknown }).error ?? "The update failed."));
+        return {};
+      },
+      checkEvery: CHECK_INTERVAL_MS,
+    }),
+    skillUpdates,
+    connectorUpdates,
+  ],
+  // the bots' owners, as their own GET sees them (an admin manages this
+  // installation's items); the people who read their list are known too
+  people: () => updatePeople().map((person) => ({ id: person, manager: IDENTITY.kind !== "perspicax" || principalIsOrgAdmin(person) })),
+  notify: (person, view) => broadcast({ kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt }),
+});
+ROUTES.push(createCapabilityUpdatesRoutes({
+  updates: capabilityUpdates,
+  person: updatePersonOf,
+  changeRefusal: (auth) => {
+    const refusal = ownIntegrationsRefusal(auth);
+    return refusal ? { status: 403, body: refusal } : null;
+  },
 }));
 ROUTES.push(createPluginRoutes({
   registry: pluginRegistry,
@@ -35440,6 +35668,8 @@ ROUTES.push(createBotsContentRoutes({
     const plugin = pluginMarketplaces.installed().find((entry) => entry.skills.includes(name) && readSkillLibraryIndex()[name]?.source === entry.marketplace);
     return plugin ? { name: plugin.name, marketplace: plugin.marketplace } : null;
   },
+  // #4504: the update fields of the lists
+  skillUpdateFields: (place, skill) => skillUpdates.fields({ ...place, name: skill.name, importedAt: skill.importedAt, ...(skill.github ? { github: skill.github } : {}) }),
 }));
 ROUTES.push(createBrowserEngineRoutes({
   isShuttingDown,
@@ -37209,6 +37439,9 @@ const onListening = async () => {
       singlePerson: IDENTITY.kind !== "perspicax",
     });
   }
+  // #4504: the sources of every installed skill, plugin and connector,
+  // checked on their own (past five minutes, then every six hours)
+  if (!companyShutdown && !capabilityUpdateChecks) capabilityUpdateChecks = capabilityUpdates.start();
 };
 // connector gateway on this machine forwards public traffic to this IPC path.
 // Nothing changes about the loopback bind above. Requests arriving here have
@@ -37300,6 +37533,7 @@ const gracefulShutdown = createGracefulShutdown({
       calendarCalls?.stop();
       memoryUpkeep.stop();
       marketplaceBackgroundRefresh?.stop();
+      capabilityUpdateChecks?.stop();
       skillReview.stop();
       limitReset.stop();
       cacheKeepWarm.dispose();

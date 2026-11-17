@@ -2,7 +2,9 @@
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
-import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
+import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, FORM_HEADER_MAX, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
+import { ANSWER_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS } from "../../../shared/ask-question.ts";
+import { CARD_LIMITS } from "../../../shared/card-rules.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 import { githubConnectText } from "./shared.ts";
@@ -32,12 +34,12 @@ export const DEF_CREATE_OPTIONS_CARD = {
 export const ASK_CHOICE_DEF = {
     name: ASK_CHOICE_TOOL,
     description:
-      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. Several items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
+      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions, e.g. [{\"question\":\"Standup\",\"kind\":\"choice\",\"options\":[\"Done\",\"Move\"]},{\"question\":\"Review length\",\"kind\":\"duration\"}]); a list to pick from is a checklist (items, actions [\"Post selected\",\"Skip tonight\"]); question is then one line of context. Several questions in one text, a list in prose or answers named only in the text: refused, with how to ask again. Separate items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, what happened and why you wait: enough to answer from a notification at a glance." },
+        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, what happened and why you wait: enough to answer from a notification at a glance. With questions or items: one line of context." },
         title: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.title, description: "Optional short heading." },
         options: {
           type: "array",
@@ -45,7 +47,7 @@ export const ASK_CHOICE_DEF = {
           maxItems: OPTIONS_CARD_LIMITS.maxOptions,
           uniqueItems: true,
           items: { type: "string", minLength: 1, maxLength: OPTIONS_CARD_LIMITS.option },
-          description: "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No.",
+          description: "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No. Not with questions or items.",
         },
         details: {
           type: "array",
@@ -53,6 +55,41 @@ export const ASK_CHOICE_DEF = {
           items: { type: "string", maxLength: ASK_CHOICE_DETAIL_MAX },
           description: "Optional, same order: what each answer does.",
         },
+        questions: {
+          type: "array",
+          minItems: 1,
+          maxItems: FORM_MAX_QUESTIONS,
+          description: "A form: a row per thing to decide.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              question: { type: "string", maxLength: CARD_LIMITS.row },
+              header: { type: "string", maxLength: FORM_HEADER_MAX },
+              kind: { type: "string", enum: [...ANSWER_KINDS], description: "text only when the answer is truly free." },
+              options: { type: "array", maxItems: FORM_MAX_OPTIONS, items: { type: "string", maxLength: OPTIONS_CARD_LIMITS.option }, description: `choice and multi: 2-${FORM_MAX_OPTIONS}.` },
+              optional: { type: "boolean" },
+            },
+            required: ["question"],
+          },
+        },
+        items: {
+          type: "array",
+          minItems: 2,
+          maxItems: MAX_ITEMS,
+          description: "A checklist: a row per item to pick; needs actions.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              label: { type: "string", maxLength: OPTIONS_CARD_LIMITS.option },
+              detail: { type: "string", maxLength: MAX_DESCRIPTION },
+              checked: { type: "boolean", description: "Default true." },
+            },
+            required: ["label"],
+          },
+        },
+        actions: { type: "array", maxItems: MAX_ACTIONS, items: { type: "string", maxLength: MAX_ACTION_LABEL }, description: "With items: the buttons, main first." },
         key: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.key, description: "Optional stable key (an item id such as ticket-1234): the same key here replaces its pending card; the answer brings it verbatim with the chosen option. A keyed card is a decision: never answered for the person." },
         wait: { type: "boolean", description: "Default true: holds your turn and a routine run; on some engines the turn then ends with this call. Default false in a background run of a routine that runs several times a day. false: the card stays pending and holds nothing; go on (ask the next item) and end normally; each answer comes later as its own turn." },
         decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any level." },
@@ -60,7 +97,7 @@ export const ASK_CHOICE_DEF = {
         to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed." },
         tell: { type: "boolean", description: "A fact to know, no answer; options []." },
       },
-      required: ["question", "options"],
+      required: ["question"],
     },
   };
 

@@ -235,6 +235,8 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"exact","route":"/api/me/blocks","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/me/capabilities","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/me/capabilities","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
+  {"method":"GET","kind":"exact","route":"/api/me/capability-updates","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/me/capability-updates","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/me/connections","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/me/connections","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/me/credentials","tier":"admin","readOnly":false,"scope":"me:admin","defaultEnabled":false},

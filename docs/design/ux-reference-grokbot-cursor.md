@@ -2714,14 +2714,17 @@ classes and variables. Same CSP and sandbox. Tests:
 `ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
 `scripts/capture/bot-content-theme.ts`, docs/screenshots/bot-content-theme.
 
-#### 1:1 bubble color (iOS)
+#### Accent on bot bubbles (desktop and iOS)
 
-Settings > Appearance > "Color 1:1 messages with the bot color"
-(`sagax.botBubble.v1`, off by default, `ios/Sources/CompanionCore/BotBubble.swift`).
-On a 1:1 bot chat the assistant bubble and its question cards use that
-bot's colour, held to contrast. The person's own bubbles stay the skin's.
-A room does not set an open bot colour, so it is unchanged. Notification
-sounds stay the existing choice in `NotificationSounds.swift`.
+Settings > Appearance > "Accent on bot bubbles" (`sagax.botBubble.v1`, off
+by default, one synced key; desktop `src/lib/bot-reply-bubbles.ts`, iOS
+`ios/Sources/CompanionCore/BotBubble.swift`). On, only a bot's own reply
+bubble, in a 1:1 chat and in a room, takes 14 % of the skin's accent mixed
+into the skin's bubble grey, the page's own ink on it. The person's bubbles,
+another person's message and the cards stay as they are. "Show bot replies in
+bubbles" (`sagax.botReplyBubbles.v1`, on by default) draws a bot's replies as
+plain text when off, on both. Notification sounds stay the existing choice in
+`NotificationSounds.swift`.
 
 #### App icon: the Pulsatrix logo (2026-10-14)
 

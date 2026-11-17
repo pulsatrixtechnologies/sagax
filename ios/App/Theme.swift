@@ -133,7 +133,7 @@ enum Theme {
     /// In a bot's panel (a bot chat on screen and what it opens) the on
     /// track is the bot's colour, with the setting off as well as on.
     private static var switches: SwitchColors {
-        // read while SwiftUI draws, on the main actor (as BotBubblePaint)
+        // read while SwiftUI draws, on the main actor (as BubbleColor.botReply)
         let name = MainActor.assumeIsolated { ThemeStore.shared.openBotColor }
         let bot = name.flatMap { MausColors.hex(for: $0) }.flatMap { SkinColor(css: $0) }
         return palette.switchColors(bot: bot)

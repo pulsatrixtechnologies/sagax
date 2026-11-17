@@ -20,12 +20,6 @@ struct QuestionSheetColors {
 
     init(desktop: DesktopTheme?) {
         self.desktop = desktop
-        if let paint = BotBubblePaint.current {
-            fill = paint.fill
-            ink = paint.ink
-            inkSecondary = paint.ink.opacity(0.62)
-            return
-        }
         fill = desktop?.card ?? BubbleColor.theirs
         ink = desktop?.ink ?? BubbleColor.theirsText
         inkSecondary = desktop?.inkSecondary ?? BubbleColor.theirsText.opacity(0.62)

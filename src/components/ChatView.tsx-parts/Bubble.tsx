@@ -1,3 +1,4 @@
+import { useBotReplyBubbleClass } from "@/lib/bot-reply-bubbles";
 import { recordTextOf } from "../../../shared/record-cards";
 import { memo, use, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -149,6 +150,7 @@ export const Bubble = memo(function Bubble({
   onReply: (message: Message) => void;
 }) {
   "use memo";
+  const botReplyClass = useBotReplyBubbleClass();
   const bubbleWidths = useChatBubbleWidthClasses();
   const { botId, threadId, botName, viewerName, voiceId, tts, localVoice, bots, mentionPeers, focus, dispatch, onBranch, reactionSelf, bubbleStyle } = useChatRows();
   // Emoji reactions (src/components/Reactions.tsx): the smiley of the hover
@@ -318,7 +320,7 @@ export const Bubble = memo(function Bubble({
                     // the person's own message: a bubble in the accent (--color-bubble-user)
                     ? cn("bg-bubble-user px-3 py-[7px] whitespace-pre-wrap text-ink", bubbleStyle && "user-bubble-colored")
                     // a bot's reply: a quiet grey bubble; its tables, code and cards keep their own look
-                    : "bg-bubble-bot px-3 py-[7px] text-ink",
+                    : cn(botReplyClass, "text-ink"),
           )}
           style={user && !webhookView && !attachmentsOnly ? bubbleStyle : undefined}
           title={new Date(message.at).toLocaleString(activeLocale())}

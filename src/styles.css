@@ -4119,6 +4119,13 @@ html[data-animations-paused] *::after {
 .bg-bubble-bot {
   color: var(--color-ink);
 }
+/* "Accent on bot bubbles" (Settings > Appearance > Conversation, off by
+   default): only a bot's own reply bubble asks for this class; the grey stays
+   the skin's everywhere else. The ink is the page's, held at 4.5:1 by
+   src/lib/bubble-colors.test.ts. */
+.bg-bubble-bot.bot-reply-accent {
+  background-color: color-mix(in srgb, var(--color-accent) 14%, var(--color-bubble-bot));
+}
 
 /* Disabled buttons.
    Upstream fades them with `disabled:opacity-40`. On a dark ground that holds:

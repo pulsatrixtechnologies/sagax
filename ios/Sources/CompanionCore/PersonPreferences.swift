@@ -16,7 +16,7 @@ public enum PersonPrefKey {
     public static let skinDepth = DesktopAppearanceKeys.skinDepth
     /// "1": the open bot's colour is the accent (src/lib/bot-accent.ts).
     public static let botAccent = BotAccent.key
-    /// "1": 1:1 assistant bubbles wear the bot's colour (BotBubble.swift).
+    /// "1": a bot's reply bubble takes a tint of the accent (BotBubble.swift).
     public static let botBubble = BotBubble.key
     /// "on" | "off"; absent is on (src/lib/hd-mascots-preference.ts).
     public static let hdMascots = HdMascots.preferenceKey
@@ -31,8 +31,11 @@ public enum PersonPrefKey {
     /// "on" | "off"; absent is on: a reply grows as it is written
     /// (src/lib/stream-replies-preference.ts).
     public static let streamReplies = "sagax.streamReplies.v1"
+    /// "on" | "off"; absent is on: a bot's reply is drawn in a bubble
+    /// (src/lib/bot-reply-bubbles.ts).
+    public static let botReplyBubbles = "sagax.botReplyBubbles.v1"
 
-    public static let all = [language, skinTint, skinDepth, botAccent, botBubble, hdMascots, showSuggestions, readReceipts, notificationSound, routineScope, streamReplies]
+    public static let all = [language, skinTint, skinDepth, botAccent, botBubble, hdMascots, showSuggestions, readReceipts, notificationSound, routineScope, streamReplies, botReplyBubbles]
 }
 
 public extension SidebarPrefKey {
@@ -61,7 +64,7 @@ public extension SidebarPrefs {
         values[PersonPrefKey.botAccent] = on ? "1" : nil
     }
 
-    /// On only when "1". Absent leaves bubbles in the skin's colour.
+    /// On only when "1". Absent leaves a bot's bubble the skin's grey.
     var botBubble: Bool { values[PersonPrefKey.botBubble] == "1" }
 
     mutating func setBotBubble(_ on: Bool) {
@@ -79,6 +82,13 @@ public extension SidebarPrefs {
 
     mutating func setStreamReplies(_ on: Bool) {
         values[PersonPrefKey.streamReplies] = on ? "on" : "off"
+    }
+
+    /// A bot's reply in a bubble: on unless "off".
+    var botReplyBubbles: Bool { values[PersonPrefKey.botReplyBubbles] != "off" }
+
+    mutating func setBotReplyBubbles(_ on: Bool) {
+        values[PersonPrefKey.botReplyBubbles] = on ? "on" : "off"
     }
 
     /// The Suggestions card: shown unless "0".

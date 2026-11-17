@@ -58,11 +58,11 @@ struct StreamingBubble: View {
                         // a growing answer wraps: on the iPad desktop shell
                         // it takes the bubble's cap, as a settled one that wraps
                         .frame(maxWidth: desktop != nil ? .infinity : nil, alignment: .leading)
-                        .padding(.horizontal, desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH)
+                        .padding(.horizontal, !bubblePrefs.botReplyBubbles ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH))
                         .padding(.vertical, desktop != nil ? DesktopChatMetrics.bubblePadding.top : Theme.Chat.bubblePaddingV)
                         .background(
                             RoundedRectangle(cornerRadius: desktop != nil ? DesktopChatMetrics.bubbleRadius : Theme.Metric.bubbleRadius, style: .continuous)
-                                .fill(BubbleColor.theirs(desktop: desktop))
+                                .fill(BubbleColor.botReply(desktop: desktop))
                         )
                         .frame(maxWidth: desktop != nil ? (bubbleCap ?? .infinity) : nil, alignment: .leading)
                     Spacer(minLength: desktop == nil ? Theme.Chat.bubbleTrailingGap : 0)

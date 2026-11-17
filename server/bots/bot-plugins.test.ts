@@ -309,6 +309,24 @@ describe("BotPlugins", () => {
     write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
     await plugins.updateMarketplace("bot-1", "acme-tools", "pr_alice");
     expect(await reviewer("bot-1")).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
+    // #4504: the fields the page reads for its update mark and Update
+    expect(await reviewer("bot-1")).toMatchObject({ updateKey: "plugin:bot:bot-1:reviewer@acme-tools", availableVersion: "1.3.0" });
+    expect((await reviewer("bot-2")).updateKey).toBeUndefined();
+  });
+
+  it("#4504: an update's notes come from the plugin's CHANGELOG, and a personal store names its keys me", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const plugins = botPluginsWithMarketplaces({ dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    const manifest = JSON.parse(readFileSync(join(repo, ".claude-plugin/marketplace.json"), "utf8")) as { plugins: Array<Record<string, unknown>> };
+    manifest.plugins[0]!.version = "1.3.0";
+    write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
+    write(repo, "plugins/reviewer/CHANGELOG.md", "# Changes\n\n## 1.3.0\n\n- Reviews tests too\n\n## 1.2.0\n\n- First\n");
+    await plugins.updateMarketplace("bot-1", "acme-tools", "pr_alice");
+    const reviewer = (await plugins.listMarketplaces("bot-1"))[0]!.plugins.find((plugin) => plugin.name === "reviewer")!;
+    expect(reviewer).toMatchObject({ updateAvailable: true, availableVersion: "1.3.0", updateNotes: "- Reviews tests too" });
   });
 
   it("#3612: Install of an installed plugin pulls its marketplace first, so a copy many versions behind comes up to date", async () => {

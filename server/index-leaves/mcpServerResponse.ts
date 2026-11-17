@@ -41,7 +41,10 @@ function mcpServerResponse(viewer?: string | null) {
     // Shared config rows stay installation; a name that only exists in a
     // person store never appears here. scope lets the panel skip personal lookups.
     const withScope = host.mcpServersHost.listing({ ...listed, ...githubState(server.name), scope: skipPersonalInSharedProbe(server.name, personalNames) ? "person" as const : "installation" as const });
-    return host.managedPolicy.mcpAllowed(server.name, "url" in server ? server.url : undefined) ? withScope : { ...withScope, managedBy: policy!.organizationName };
+    // #4504: an installed server's update fields (a command pinned to a package version)
+    const updates = host.connectorUpdates?.fields({ scope: "installation", target: "installation", name: server.name, ...("command" in server ? { command: server.command, args: server.args } : {}) }) ?? {};
+    const withUpdates = { ...withScope, ...updates };
+    return host.managedPolicy.mcpAllowed(server.name, "url" in server ? server.url : undefined) ? withUpdates : { ...withUpdates, managedBy: policy!.organizationName };
   });
   // a server saved under a name Sagax now reserves is never mounted: listed
   // apart so the settings say so and offer a rename (#695 follow-up)

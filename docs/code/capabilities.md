@@ -6,6 +6,50 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Updates of skills, plugins and connectors; a bot manages them (#4504)
+
+One service knows, for each installed skill, plugin and connector of a
+person, whether its source has a newer version, and updates one item or all
+of them (`server/capabilities/capability-updates.ts`, the three kinds in
+`capability-update-providers.ts`, wired in `server/index.ts`).
+
+- Sources: a plugin follows its marketplace (the existing background pull,
+  `MarketplaceBackgroundRefresh.runNow`, and `pluginUpdateAvailable`; notes
+  from the plugin's `CHANGELOG.md` section); a skill imported from GitHub
+  follows the commits on its folder (`latestFolderCommits`, with the
+  person's GitHub access); a command connector pinned to a package version
+  (`npx pkg@1.2.3`, `uvx pkg==1.2.3`) follows npm or PyPI. A remote
+  connector, an unpinned package and a hand-written skill have nothing to
+  update. A source out of reach changes nothing and shows no error.
+- Checks: past five minutes after start, then every six hours, and a read
+  of the list starts one when the last is older than 30 minutes (plugins:
+  six hours, a git pull); never during a turn, never awaited by a read.
+- Routes: `GET /api/me/capability-updates` (items and count) and `POST`
+  `{keys}` or `{all: true}` (one result per item: updated, current, or
+  failed with the reason; a failure keeps the installed version). The
+  session's person only, no admin; `apps.ownIntegrations` as for every own
+  change. The installed items of the lists the page reads carry
+  `updateKey`, `installedVersion`, `availableVersion`, `updateAvailable` and
+  `updateNotes`. A live frame `capability.updates` (the person's count)
+  follows a check that changed something and every update.
+- What the organization declares (imposed or offered, a pinned version) is
+  listed with `organization` and `canUpdate: false`: its console decides.
+  `sagax_settings` refuses to remove or turn off what the organization
+  requires (`removalOf`, `orgRequired`), and a bot skill an organization
+  package installed is never deleted by its route (409 `org_required`).
+- A bot's hand: `capabilities.updates` (get lists, set updates),
+  `bot.plugin` (`me: true` for the person's own plugin), `bot.skill`
+  (`remove: true`, `me: true`), `bot.skillImport` (`me: true`),
+  `connections.mcpServer` and `connections.mcpServerRemove`, and target
+  `all` on any bot key for every bot of the person speaking (never another
+  person's). The same routes as the page; no card of their own.
+- Tests: `server/capabilities/capability-updates.test.ts`,
+  `server/routes/capability-updates.test.ts`,
+  `server/settings-actions.capabilities.test.ts`,
+  `server/skills/skill-update.test.ts`, and the update fields in
+  `server/bots/bot-plugins.test.ts`, `server/skills/personal-skills.test.ts`,
+  `server/routes/bots-content.test.ts`.
+
 ## MCP after a cold cloud start (2026-11-04)
 
 Turn setup can preopen Perspicax before the person's cloud environment is

@@ -55,6 +55,7 @@ import type { BotRecord } from "../store.ts";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
 import { permissionRefusal, type PermissionKey } from "../../shared/permissions.ts";
 import type { SkillsLibrarySkillWire } from "../../shared/wire.ts";
+import type { GitHubSkillOrigin } from "../../shared/skill-import.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotsContentStore {
@@ -97,6 +98,10 @@ export interface BotsContentRouteDeps {
   callerCan: (auth: RequestAuth, key: PermissionKey) => boolean;
   /** Plugin that owns a library skill name, or null when the skill is private. */
   pluginSkillSource: (name: string) => { name: string; marketplace: string } | null;
+  /** #4504: an installed skill's update fields (updateKey, versions, notes). */
+  skillUpdateFields?: (place: { scope: "bot" | "me" | "installation"; target: string }, skill: { name: string; importedAt: string; github?: GitHubSkillOrigin }) => Record<string, unknown>;
+  /** #4504: whether the organization requires this bot skill (it is never removed here). */
+  orgRequiredSkill?: (botId: string, name: string) => boolean;
 }
 
 export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandler {
@@ -199,8 +204,12 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
             : store.bots.filter((entry) => entry.assignedSkills?.includes(name)).map((entry) => ({ id: entry.id, name: entry.name })),
           natives,
         );
+        const fields = deps.skillUpdateFields;
         return json(res, 200, {
-          skills,
+          skills: fields ? skills.map((skill) => skill.origin === "native" ? skill : {
+            ...skill,
+            ...fields(skill.origin === "me" ? { scope: "me", target: "me" } : skill.origin === "library" ? { scope: "installation", target: "installation" } : { scope: "bot", target: bot.id }, skill),
+          }) : skills,
           library,
           assignedSkills: bot.assignedSkills,
           staged: listStaged(m[1]).map(stagedSkillListing),
@@ -209,7 +218,7 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       const own = listBotSkills(bot);
       const names = new Set(own.map((skill) => skill.name));
       return json(res, 200, {
-        skills: [...own, ...natives.filter((skill) => !names.has(skill.name))],
+        skills: [...own.map((skill) => deps.skillUpdateFields ? { ...skill, ...deps.skillUpdateFields({ scope: "bot", target: bot.id }, skill) } : skill), ...natives.filter((skill) => !names.has(skill.name))],
         staged: listStaged(m[1]).map(stagedSkillListing),
       });
     }
@@ -305,6 +314,8 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       return json(res, 200, { skill: result });
     }
     if (m && method === "DELETE") {
+      // #4504: what the organization requires is never removed here
+      if (deps.orgRequiredSkill?.(m[1]!, m[2]!)) return json(res, 409, { error: "Your organization requires this skill: it cannot be removed here.", code: "org_required" });
       const result = removeSkill(m[1]!, m[2]!);
       if ("error" in result) return json(res, 404, { error: result.error });
       afterBotSkillRemoved(m[1]!, m[2]!);
@@ -331,6 +342,7 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
           assignedBots: store.bots
             .filter((entry) => entry.assignedSkills?.includes(listing.name))
             .map((entry) => ({ id: entry.id, name: entry.name })),
+          ...deps.skillUpdateFields?.({ scope: "installation", target: "installation" }, listing),
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return json(res, 200, { skills });

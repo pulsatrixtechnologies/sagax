@@ -58,6 +58,7 @@ import { officialCatalogFor } from "../../shared/skill-catalogs.ts";
 import { catalogNameFor, DEFAULT_SKILL_DIRS, synthesizeSkillsCatalog } from "./skills-catalog.ts";
 import { hasCursorMarketplace, synthesizeCursorCatalog } from "./cursor-catalog.ts";
 import { withoutMacMetadata } from "../mac-metadata.ts";
+import { changelogNotes, pluginListedFields } from "../capabilities/capability-update-providers.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_MARKETPLACES = 40;
@@ -187,6 +188,10 @@ export interface MarketplaceView {
     installedVersion?: string;
     /** the marketplace offers a newer version than the one installed */
     updateAvailable?: boolean;
+    /** #4504: an installed plugin's update key, what an update brings, its notes */
+    updateKey?: string;
+    availableVersion?: string;
+    updateNotes?: string;
     servers: string[];
     skills: string[];
   }>;
@@ -571,9 +576,17 @@ export class PluginMarketplaces {
         bots: this.options.inUse?.(name).length ?? 0,
         plugins: await Promise.all(entries.map(async (entry) => {
           const installed = state.installed[`${entry.name}@${name}`];
-          const update = installed
-            ? pluginUpdateAvailable(installed, { version: entry.version, revision: await pluginRevision(this.repoDir(name), entry, market.manifestUrl) })
-            : false;
+          const offered = installed ? await pluginRevision(this.repoDir(name), entry, market.manifestUrl) : undefined;
+          const update = installed ? pluginUpdateAvailable(installed, { version: entry.version, revision: offered }) : false;
+          let notes: string | undefined;
+          if (update && entry.source.kind === "path" && !market.manifestUrl) {
+            try { notes = changelogNotes(insideRoot(this.repoDir(name), entry.source.path), entry.version); } catch { notes = undefined; }
+          }
+          const listed = installed ? pluginListedFields({
+            scope: "installation", target: "installation", id: `${entry.name}@${name}`, name: entry.name,
+            ...(installed.version ? { installedVersion: installed.version } : {}), ...(entry.version ? { version: entry.version } : {}),
+            ...(offered ? { offeredRevision: offered } : {}), updateAvailable: update, ...(notes ? { notes } : {}),
+          }) : {};
           return {
             name: entry.name,
             ...(entry.description ? { description: entry.description } : {}),
@@ -586,6 +599,7 @@ export class PluginMarketplaces {
             installed: Boolean(installed),
             ...(installed?.version && installed.version !== entry.version ? { installedVersion: installed.version } : {}),
             ...(update ? { updateAvailable: true } : {}),
+            ...listed,
             servers: installed?.servers ?? [],
             skills: installed?.skills ?? [],
           };
@@ -986,6 +1000,9 @@ export interface MarketplaceBackgroundRefreshOptions {
 
 export interface MarketplaceBackgroundRefresh {
   stop(): void;
+  /** #4504: one pass now (the update service's check); joins a pass that
+   * is already running rather than starting a second. */
+  runNow(): Promise<void>;
 }
 
 /** Pull, in the background, the marketplaces with an installed plugin:
@@ -1048,16 +1065,22 @@ export function startMarketplaceBackgroundRefresh(options: MarketplaceBackground
     }
   };
 
+  let running: Promise<void> | null = null;
+  const once = (): Promise<void> => {
+    running ??= run().catch((error) => { log(`[plugins] background pull stopped: ${reason(error)}`); }).finally(() => { running = null; });
+    return running;
+  };
   const loop = async (delay: number): Promise<void> => {
     await wait(delay);
     if (stopped) return;
-    try { await run(); } catch (error) { log(`[plugins] background pull stopped: ${reason(error)}`); }
+    await once();
     if (stopped) return;
     void loop(MARKETPLACE_REFRESH_INTERVAL_MS + spread());
   };
   void loop(MARKETPLACE_REFRESH_FIRST_DELAY_MS + spread());
 
   return {
+    runNow: () => (stopped ? Promise.resolve() : once()),
     stop() {
       stopped = true;
       if (timer) clearTimeout(timer);

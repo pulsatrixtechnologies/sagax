@@ -337,24 +337,32 @@ add({
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/memory/journal`, query: { limit: "30" }, field: "entries" }),
   write: (ids, v) => typeof v === "string" && /^[\w-]+$/.test(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/memory/journal/${enc(v)}/revert`, body: {} } : "value is a change's id (get bot.memoryUndo).",
 });
+// #4504: remove: true removes it; me: true is the person's own skill (all
+// their bots, Capabilities > Me) instead of this bot's
 add({
-  key: "bot.skill", family: "bot", target: "bot", value: "object", label: "A skill on or off ({name, enabled})", where: "Bot editor > Skills",
+  key: "bot.skill", family: "bot", target: "bot", value: "object", label: "A skill on or off ({name, enabled}), or removed ({name, remove: true}); me: true for the person's own skill on all their bots", where: "Bot editor > Skills",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/skills` }),
   write: (ids, v) => {
-    const skill = v as { name?: unknown; enabled?: unknown } | null;
-    if (!skill || typeof skill.name !== "string" || typeof skill.enabled !== "boolean") return "value is {name, enabled}.";
-    return { method: "PATCH", path: `/api/bots/${enc(ids.target!)}/skills/${enc(skill.name)}`, body: { enabled: skill.enabled } };
+    const skill = v as { name?: unknown; enabled?: unknown; remove?: unknown; me?: unknown } | null;
+    if (!skill || typeof skill.name !== "string" || !/^[a-z0-9-]{1,64}$/.test(skill.name)) return "value is {name, enabled} or {name, remove: true}.";
+    const path = skill.me === true ? `/api/me/skills-library/${skill.name}` : `/api/bots/${enc(ids.target!)}/skills/${skill.name}`;
+    if (skill.remove === true) return { method: "DELETE", path };
+    if (typeof skill.enabled !== "boolean") return "value is {name, enabled} or {name, remove: true}.";
+    return { method: "PATCH", path, body: { enabled: skill.enabled } };
   },
+  classes: (v) => (v as { remove?: unknown } | null)?.remove === true ? ["delete"] : ["own"],
 });
 // 2026-10-29: import a skill from GitHub, as Persona > Skills does: the
 // person's own GitHub connection reads a private repository (#1558)
 add({
   key: "bot.skillImport", family: "bot", target: "bot", value: "any",
-  label: "Import a skill from GitHub onto a bot ({repo: owner/repo, path?: its folder, ref?: a branch or tag}, or a GitHub, SKILL.md or skills.sh link; then bot.skill {name, enabled} turns it on or off)", where: "Bot editor > Persona > Skills > Import",
+  label: "Import a skill from GitHub onto a bot ({repo: owner/repo, path?: its folder, ref?: a branch or tag}, or a GitHub, SKILL.md or skills.sh link; me: true for the person's own skill on all their bots; then bot.skill {name, enabled} turns it on or off)", where: "Bot editor > Persona > Skills > Import",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/skills` }),
   write: (ids, v) => {
     const source = skillSourceOf(v);
-    return source ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/skills`, body: { source } } : "value is {repo: owner/repo, path?, ref?} or a GitHub link.";
+    if (!source) return "value is {repo: owner/repo, path?, ref?} or a GitHub link.";
+    const me = Boolean(v && typeof v === "object" && (v as { me?: unknown }).me === true);
+    return { method: "POST", path: me ? "/api/me/skills-library" : `/api/bots/${enc(ids.target!)}/skills`, body: { source } };
   },
 });
 // 2026-10-30 (Capabilities, lot 1a): the one resolved list of what a bot
@@ -387,10 +395,10 @@ add({
 // them: For <bot> (/api/bots/:id/plugins) or Everyone (/api/marketplaces)
 const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLUGIN_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-type PluginValue = { marketplace?: unknown; plugin?: unknown; key?: unknown; everyone?: unknown; enabled?: unknown; update?: unknown; uninstall?: unknown };
+type PluginValue = { marketplace?: unknown; plugin?: unknown; key?: unknown; everyone?: unknown; me?: unknown; enabled?: unknown; update?: unknown; uninstall?: unknown };
 add({
   key: "bot.plugin", family: "bot", target: "bot", value: "object",
-  label: "A plugin of a configured marketplace ({marketplace, plugin} installs or updates it for this bot; everyone: true for every bot; {marketplace, plugin, everyone: true, update: true}; uninstall: true removes; {key: plugin@marketplace, enabled} turns this bot's on or off); get lists the marketplaces and this bot's plugins", where: "Capabilities, scope For <bot> or Everyone",
+  label: "A plugin of a configured marketplace ({marketplace, plugin} installs or updates it for this bot; me: true for the person's own plugin on all their bots; everyone: true for every bot of the server; {marketplace, plugin, everyone: true, update: true}; uninstall: true removes; {key: plugin@marketplace, enabled} turns this bot's on or off); get lists the marketplaces and this bot's plugins", where: "Capabilities, scope For <bot>, Me or Everyone",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/plugins`, shape: (v) => {
     const r = (v ?? {}) as { marketplaces?: Array<Record<string, unknown>>; plugins?: Array<Record<string, unknown>> };
     return {
@@ -400,7 +408,7 @@ add({
   } }),
   write: (ids, v) => {
     const r = (v ?? {}) as PluginValue;
-    const bot = `/api/bots/${enc(ids.target!)}/plugins`;
+    const bot = r.me === true ? "/api/me/plugins" : `/api/bots/${enc(ids.target!)}/plugins`;
     if (typeof r.key === "string") {
       if (!PLUGIN_KEY_RE.test(r.key)) return "key is plugin@marketplace (get bot.plugin lists them).";
       if (r.uninstall === true) return { method: "DELETE", path: `${bot}/${r.key}` };
@@ -1120,6 +1128,32 @@ add({
   key: "connections.mcpServerRemove", family: "connections", target: "none", value: "string", label: "Remove your MCP server (its name)", where: "Capabilities > Providers",
   write: (_ids, v) => typeof v === "string" && v ? { method: "DELETE", path: `/api/me/mcp/servers/${enc(v)}` } : "value is the server's name.",
   classes: always("delete"),
+});
+// #4504: what the person has installed (skills, plugins, connectors) and
+// which has an update; set updates the keys it lists, or all of them. The
+// same routes the Capabilities page calls.
+add({
+  key: "capabilities.updates", family: "connections", target: "none", value: "object",
+  label: "What you have installed (skills, plugins, connectors) and which has an update; set {all: true} updates every one, {keys: [key, ...]} the ones listed", where: "Capabilities > Installed > Update",
+  read: () => ({ path: "/api/me/capability-updates", shape: (v) => {
+    const r = (v ?? {}) as { count?: unknown; items?: Array<Record<string, unknown>> };
+    return {
+      count: r.count,
+      items: (r.items ?? []).map((item) => ({
+        key: item.key, kind: item.kind, name: item.name, scope: item.scope,
+        ...(item.bot && typeof item.bot === "object" ? { bot: (item.bot as { name?: unknown }).name } : {}),
+        ...(item.installedVersion ? { installed: item.installedVersion } : {}),
+        ...(item.updateAvailable ? { update: item.availableVersion ?? true } : {}),
+        ...(item.organization ? { organization: item.organization } : {}),
+      })),
+    };
+  } }),
+  write: (_ids, v) => {
+    const r = (v ?? {}) as { all?: unknown; keys?: unknown; key?: unknown };
+    if (r.all === true) return { method: "POST", path: "/api/me/capability-updates", body: { all: true } };
+    const keys = typeof r.key === "string" ? [r.key] : Array.isArray(r.keys) ? r.keys.filter((key): key is string => typeof key === "string" && key.length > 0) : [];
+    return keys.length ? { method: "POST", path: "/api/me/capability-updates", body: { keys } } : "value is {all: true} or {keys: [key, ...]} (get capabilities.updates lists them).";
+  },
 });
 add({
   key: "connections.githubDisconnect", family: "connections", target: "none", value: "boolean", label: "Disconnect GitHub (true)", where: "Capabilities > Sources > GitHub",

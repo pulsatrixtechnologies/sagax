@@ -870,6 +870,55 @@ function removeReviewedRevisionsNamed(botId: string, name: string): void {
   }
 }
 
+/** #4504: update a skill imported from GitHub with the folder read again
+ * from its source. Its switch stays; the installed copy is set aside first
+ * and put back, with its manifest entry, when the new one cannot be stored. */
+export function replaceImportedSkill(
+  botId: string,
+  name: string,
+  source: string,
+  files: readonly SkillFolderFile[],
+  github: GitHubSkillOrigin | undefined,
+): SkillListing | { error: string } {
+  if (!isSkillName(name)) return { error: "invalid skill name" };
+  const manifest = readManifest(botId);
+  const entry = manifest[name];
+  if (!entry) return { error: `no imported skill named "${name}"` };
+  if (entry.package) return { error: "your organization requires this skill: its version follows the organization console" };
+  if (entry.storageRevision || entry.appliedStageId) return { error: "this skill was written by the bot, not imported: it has no source to update from" };
+  const folder = prepareSkillFolder(files);
+  if ("error" in folder) return folder;
+  if (folder.parsed.name !== name) return { error: `the source now names the skill "${folder.parsed.name}", not "${name}"` };
+  const root = skillsDir(botId);
+  if (directoryEntryState(root) !== "directory") return { error: "the workspace skills path must be a real directory" };
+  const target = join(root, name);
+  const aside = join(root, `.update-${name}-${randomUUID()}`);
+  const hadFolder = directoryEntryState(target) === "directory";
+  if (hadFolder) renameSync(target, aside);
+  delete manifest[name];
+  writeManifest(botId, manifest);
+  const prepared = {
+    files: [{ path: "SKILL.md", content: folder.skillMd }],
+    parsed: folder.parsed,
+    warnings: folder.warnings,
+    skippedFiles: folder.skipped.map((file) => file.path),
+    folder: folder.files,
+  };
+  const installed = installPreparedSkill(botId, source, prepared, { enabled: entry.enabled, ...(github ? { github } : {}) });
+  if ("error" in installed) {
+    if (entryExistsWithoutFollowing(target)) rmSync(target, { recursive: true, force: true });
+    if (hadFolder) renameSync(aside, target);
+    const back = readManifest(botId);
+    back[name] = entry;
+    writeManifest(botId, back);
+    syncSkillLinks(botId);
+    return installed;
+  }
+  if (hadFolder) rmSync(aside, { recursive: true, force: true });
+  syncSkillLinks(botId);
+  return installed;
+}
+
 export function removeSkill(botId: string, name: string): { removed: true } | { error: string } {
   if (!isSkillName(name)) return { error: "invalid skill name" };
   const manifest = readManifest(botId);

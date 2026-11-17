@@ -77,6 +77,14 @@ describe("listening in a bot's chat (#4100)", () => {
     expect(currentListening()).toMatchObject({ phase: "listening", computerDenied: true, sources: { microphone: true, computer: false } });
   });
 
+  it("says in plain words what to do when the microphone is refused, and leaves nothing running", async () => {
+    const f = fakes();
+    f.deps.openMicrophone = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
+    await expect(startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps))
+      .rejects.toThrow("The microphone is blocked. Allow it for Sagax in your system settings, then try again.");
+    expect(currentListening()).toBeNull();
+  });
+
   it("hears the computer's sound as its own channel and drops the microphone's echo of it", async () => {
     const f = fakes();
     let computerFrame: ((frame: Float32Array) => void) | null = null;

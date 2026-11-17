@@ -1705,6 +1705,7 @@
   "listening.back": "Back to listening",
   "listening.couldNotStart": "Listening could not start: {error}",
   "listening.computerDenied": "The computer's sound needs the system's screen and system audio recording permission.",
+  "listening.microphoneDenied": "The microphone is blocked. Allow it for Sagax in your system settings, then try again.",
   "listening.openSettings": "Open settings",
   "call.live.readTyped": "Read replies to typed messages",
   "call.live.readTypedHint": "When this is off, messages you type during a call and the bot's answers to them are not sent to OpenAI.",

@@ -7704,6 +7704,7 @@
   "listening.back": "Retour à l'écoute",
   "listening.couldNotStart": "L'écoute n'a pas pu commencer : {error}",
   "listening.computerDenied": "Le son de l'ordinateur demande la permission d'enregistrement de l'écran et de l'audio du système.",
+  "listening.microphoneDenied": "Le micro est bloqué. Autorise-le pour Sagax dans les réglages du système, puis réessaie.",
   "listening.openSettings": "Ouvrir les réglages",
   "call.live.proExplain": "Tout forfait MausBot Cloud actif les déverrouille : Personnel, Pro ou Max. Les appels utilisent aussi ta propre clé d'API OpenAI.",
   "call.live.proTitle": "Les appels en direct exigent un forfait Pro",

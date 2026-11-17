@@ -381,7 +381,9 @@ export async function startListening(input: { botId: string; threadId: string; p
   try {
     await session.start();
   } catch (error) {
-    const message = readableError(error);
+    // the system or the person refused the microphone: say what to do, not the browser's two words
+    const refused = ["NotAllowedError", "SecurityError", "PermissionDeniedError"].includes((error as { name?: string } | null)?.name ?? "");
+    const message = refused ? t("listening.microphoneDenied") : readableError(error);
     await session.stop().catch(() => undefined);
     if (running === session) running = null;
     publish(null);

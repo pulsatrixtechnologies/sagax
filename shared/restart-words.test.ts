@@ -4,6 +4,7 @@ import {
   ANSWER_NOT_DELIVERED,
   CUT_TWICE,
   outwardSentence,
+  outwardUnknownSentence,
   PARALLEL_NOT_STARTED,
   RESTART_TURN_NOTE,
   TURN_CUT_BY_RESTART,
@@ -46,6 +47,14 @@ describe("restart words", () => {
     const line = outwardSentence([{ kind: "message", label: "SLACK_SEND_MESSAGE" }], 0);
     expect(restartSentenceIn("fr-CA", line)).toBe(
       "interrompu par un redémarrage de Sagax après avoir déjà envoyé un message (SLACK_SEND_MESSAGE) ; pas repris, pour que rien ne soit fait deux fois.");
+    expect(restartSentenceIn("en", line)).toBe(line);
+  });
+
+  it("says a step that could not be confirmed, in English and in French, and does not run it again", () => {
+    const line = outwardUnknownSentence(["GMAIL_SEND_EMAIL"]);
+    expect(line).toBe("Could not confirm this step after the restart, so it was not run again: GMAIL_SEND_EMAIL");
+    expect(restartSentenceKey(line)).toEqual({ key: "restart.outwardUnknown", detail: "GMAIL_SEND_EMAIL" });
+    expect(restartSentenceIn("fr-CA", line)).toBe("Impossible de confirmer cette étape après le redémarrage, alors elle n'a pas été refaite : GMAIL_SEND_EMAIL");
     expect(restartSentenceIn("en", line)).toBe(line);
   });
 });

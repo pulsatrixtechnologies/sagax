@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../contracts.ts";
 import type { Message } from "../store.ts";
-import { TurnStops, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
+import { TurnStops, lookupOutward, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
 
 const event = (fields: Record<string, unknown>): RuntimeEvent =>
   ({ eventId: "e", provider: "fake", threadId: "t1", createdAt: "", ...fields }) as unknown as RuntimeEvent;
@@ -139,6 +139,18 @@ describe("outwardActions", () => {
     const said = { id: "s", role: "bot", kind: "text", at: 1, text: "I ran GMAIL_SEND_EMAIL" } as Message;
     expect(outwardActions([call("GMAIL_SEND_EMAIL", false), call("Bash", false, { input: "git push" }), user, said])).toEqual([]);
     expect(outwardActions([])).toEqual([]);
+  });
+
+  it("splits a looked-up send from one whose result cannot be confirmed", () => {
+    const confirmed = call("GMAIL_SEND_EMAIL", true);
+    const unconfirmed = row({ name: "SLACK_SEND_MESSAGE", ok: true });
+    const unsettled = row({ name: "GMAIL_SEND_EMAIL", itemId: "i-open" });
+    expect(lookupOutward([confirmed, unconfirmed])).toEqual({ done: ["GMAIL_SEND_EMAIL"], unknown: ["SLACK_SEND_MESSAGE"] });
+    expect(lookupOutward([unconfirmed, call("SLACK_SEND_MESSAGE", true)])).toEqual({ done: ["SLACK_SEND_MESSAGE"], unknown: [] });
+    expect(lookupOutward([unsettled])).toEqual({ done: [], unknown: ["GMAIL_SEND_EMAIL"] });
+    expect(lookupOutward([row({ name: "Bash", ok: true, input: "git push origin release" })])).toEqual({ done: [], unknown: ["git push"] });
+    expect(lookupOutward([call("GMAIL_SEND_EMAIL", false)])).toEqual({ done: [], unknown: [] });
+    expect(outwardActions([unconfirmed])).toEqual(["SLACK_SEND_MESSAGE"]);
   });
 });
 

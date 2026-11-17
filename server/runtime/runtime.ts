@@ -177,20 +177,33 @@ export class Runtime {
         // is on the table: a turn that handed out work never runs again.
         const handedOut = childrenSince(this.store, n).length > 0;
         const outward = handedOut ? [] : this.outwardOf(n);
+        // The host's follow-up signal (server/index.ts): a newer message
+        // already owns the thread. Rerunning would hand those words to a
+        // model again, so that turn still ends here.
+        const followUpHold = outward.some((label) => label === "queued follow-up waiting" || label === "queued follow-up dispatched");
         if (handedOut) {
           // It handed out work: nothing of it runs again; its resume says so.
           n.status = "waiting"; n.restart = "cut"; n.lastActivityAt = now;
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: "waiting: cut after handing out work" });
           this.touch(n);
-        } else if (outward.length > 0) {
-          // It already sent, posted, pushed or paid: a rerun could do that
-          // twice, so it ends here with what it did, and is reported.
+        } else if (followUpHold) {
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: "failed: outward action done" });
           this.settle(n, "failed", "interrupted", outwardDetail(outward));
         } else if (n.restart === "rerun") {
-          this.store.update(n, { kind: "restart_reconciled", at: now, detail: "failed: cut twice" });
-          this.settle(n, "failed", "interrupted", CUT_TWICE);
+          // A second cut is not resumed. What the rerun itself did outward
+          // is named; otherwise the cut-twice line.
+          if (outward.length > 0) {
+            this.store.update(n, { kind: "restart_reconciled", at: now, detail: "failed: outward action done" });
+            this.settle(n, "failed", "interrupted", outwardDetail(outward));
+          } else {
+            this.store.update(n, { kind: "restart_reconciled", at: now, detail: "failed: cut twice" });
+            this.settle(n, "failed", "interrupted", CUT_TWICE);
+          }
         } else {
+          // First cut: one rerun, even when something outward already
+          // happened. The labels are looked up and named so they are not
+          // run again.
+          if (outward.length > 0) n.evidence = { ...(n.evidence ?? {}), outward: [...outward] };
           n.restart = "rerun"; n.restarts += 1; n.lastActivityAt = now;
           n.status = this.store.children(n.id).length ? "resume" : "queued";
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: `${n.status}: rerun ${n.restarts}` });

@@ -146,6 +146,18 @@ export function ownsConversation(n: Assignment, owner: Owner): boolean {
   return false;
 }
 
+const LOOKED_UP_MAX = 8;
+
+/** The clause a first rerun adds when outward steps were already looked up.
+ * Empty when there are none, so a turn with nothing outward keeps the
+ * sentence the restart tests already lock. */
+function lookedUpSuffix(labels: readonly string[] | undefined): string {
+  if (!labels?.length) return "";
+  const shown = labels.slice(0, LOOKED_UP_MAX);
+  const more = labels.length - shown.length;
+  return ` Outward steps already looked up, do not run them again: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`;
+}
+
 /** What a restart did to this node's turn and to the work it waits on, for
  * the first line of the turn after it ("" when nothing): a cut turn runs
  * again in its own conversation, so it checks before it repeats, and a
@@ -153,12 +165,12 @@ export function ownsConversation(n: Assignment, owner: Owner): boolean {
 export function restartNote(n: Assignment, children: readonly Assignment[], nameOf: (child: Assignment) => string): string {
   if (!n.restart) return "";
   const own = n.restart === "rerun"
-    ? "Sagax restarted while your previous turn here was running and cut it off; this turn continues it. First check what that turn already did (files, commits, messages, anything sent or started) and verify anything uncertain, so nothing is done twice; then finish and report as usual. A restart alone is not a blocker."
+    ? `Sagax restarted while your previous turn here was running and cut it off; this turn continues it. First check what that turn already did (files, commits, messages, anything sent or started) and verify anything uncertain, so nothing is done twice; then finish and report as usual. A restart alone is not a blocker.${lookedUpSuffix(n.evidence?.outward)}`
     : n.restart === "cut" ? "Sagax restarted before your previous turn here finished, after it sent work to teammates. Check what that turn already did before repeating any of it." : "";
   // Only a rerun that completed is known to have finished; any other end
   // (never started, start refused, stopped or expired mid-run) may leave
-  // part of it done, and its result says how it ended. A turn that had
-  // acted outward was not resumed at all: its result names what it did.
+  // part of it done, and its result says how it ended. A second cut that
+  // had acted outward was not resumed again: its result names what it did.
   const cut = children.filter(child => child.restarts > 0 || outwardInterrupted(child)).map(child => `${nameOf(child)} (${
     outwardInterrupted(child) ? "cut after an outward action, not resumed: see its result"
       : child.outcome === "interrupted" ? "cut again while resuming, so not resumed a second time: it may be partly done"

@@ -24,10 +24,20 @@ export const ANSWER_NOT_DELIVERED = "Couldn't deliver that answer — the reques
 /** A turn a restart cut runs again once; cut again, it ends with this. */
 export const CUT_TWICE = "Interrupted by another Sagax restart after resuming once; not resumed again. Some of its steps may already have taken effect.";
 
-/** A cut turn that already acted outward is not run again: its outcome
- * detail opens with this, then names what it did (outwardSentence). */
+/** A second cut, after one resume, that acted outward during the rerun:
+ * its outcome detail opens with this, then names what it did
+ * (outwardSentence). The first cut resumes and names the steps instead. */
 export const INTERRUPTED_OUTWARD = "Interrupted by a Sagax restart after it already";
 const OUTWARD_CLOSE = "; not resumed, so nothing is done twice.";
+
+/** A step whose result could not be looked up after a restart. The stored
+ * line opens with this, then names the step. It is not run again. */
+export const OUTWARD_UNCONFIRMED_PREFIX = "Could not confirm this step after the restart, so it was not run again: ";
+
+/** The stored English line for outward steps that could not be confirmed. */
+export function outwardUnknownSentence(labels: readonly string[]): string {
+  return `${OUTWARD_UNCONFIRMED_PREFIX}${labels.join(", ")}`;
+}
 
 /** What an outward action did, as the person reads it. */
 export type OutwardKind = "pushed" | "committed" | "payment" | "email" | "message" | "posted" | "other";
@@ -97,6 +107,7 @@ export function outwardDetailIn(
 export type RestartSentence =
   | { key: "restart.cut" }
   | { key: "restart.outward"; actions: OutwardAction[]; more: number }
+  | { key: "restart.outwardUnknown"; detail: string }
   | { key: "restart.cutTwice" }
   | { key: "restart.resumeFailed"; detail: string }
   | { key: "restart.notResumed" }
@@ -113,6 +124,10 @@ export function restartSentenceKey(text: string): RestartSentence | null {
   if (words === CUT_TWICE) return { key: "restart.cutTwice" };
   const outward = parseOutward(words);
   if (outward) return { key: "restart.outward", ...outward };
+  if (words.startsWith(OUTWARD_UNCONFIRMED_PREFIX)) {
+    const detail = words.slice(OUTWARD_UNCONFIRMED_PREFIX.length).trim();
+    if (detail) return { key: "restart.outwardUnknown", detail };
+  }
   if (words.startsWith(TURN_RESUME_FAILED_PREFIX)) return { key: "restart.resumeFailed", detail: words.slice(TURN_RESUME_FAILED_PREFIX.length).trim() };
   if (words === TURN_NOT_RESUMED) return { key: "restart.notResumed" };
   if (words === TURN_NOT_RESUMED_NEWER) return { key: "restart.notResumedNewer" };
@@ -130,6 +145,7 @@ const FRENCH: Record<RestartSentence["key"], string> = {
   "restart.cut": "tour interrompu : Sagax a redémarré",
   "restart.resumeFailed": "tour interrompu : Sagax a redémarré et la reprise a échoué",
   "restart.outward": "interrompu par un redémarrage de Sagax après avoir déjà {detail} ; pas repris, pour que rien ne soit fait deux fois.",
+  "restart.outwardUnknown": "Impossible de confirmer cette étape après le redémarrage, alors elle n'a pas été refaite : {detail}",
   "restart.cutTwice": "interrompu par un autre redémarrage de Sagax après une première reprise ; pas repris de nouveau. Certaines de ses étapes ont peut-être déjà pris effet.",
   "restart.notResumed": "tour interrompu : Sagax a redémarré et ce tour n'a pas repris. Renvoie ta demande",
   "restart.notResumedNewer": "tour interrompu : Sagax a redémarré et une demande plus récente a pris la conversation, alors le tour coupé n'a pas repris. Renvoie-le s'il faut encore",
@@ -162,5 +178,6 @@ export function restartSentenceIn(language: string | undefined, text: string): s
   if (known.key === "restart.outward") {
     return FRENCH[known.key].replace("{detail}", outwardDetailIn(known, (key, vars) => fill(FRENCH_OUTWARD[key] ?? key, vars)));
   }
+  if (known.key === "restart.outwardUnknown") return fill(FRENCH[known.key], { detail: known.detail });
   return known.key === "restart.resumeFailed" && known.detail ? `${FRENCH[known.key]} : ${known.detail}` : FRENCH[known.key];
 }

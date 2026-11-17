@@ -765,14 +765,13 @@ it("T10 parks a teammate's turn on its credential card, tells the Chief at once,
   expect(await f.chips(job, "needs your input")).toHaveLength(1);
 }), hostTimeout(90_000));
 
-// T11. A restart that finds the cut turn already acted outward (here a
-// shell push) does not run it again (contract §5): the root ends
-// failed(interrupted) with what it did, the conversation gets the one
-// failed-turn line (the last row, so Retry re-sends the request), and no
-// "resuming" or "turn interrupted" line. Without an outward action the turn
-// reruns once: T5.
-it("T11 does not rerun a cut turn that already pushed: the root ends with what it did, said once", async () => {
+// T11. A restart that finds the cut turn already pushed resumes it once
+// (contract §5). The restart note names the push so it is not run again,
+// the person's request stays, and the root completes. A turn with nothing
+// outward reruns the same way: T5.
+it("T11 resumes a cut turn that already pushed, names the push, and keeps the request", async () => {
   const home = mkdtempSync(join(tmpdir(), "omb-runtime-roots-outward-"));
+  const gate = join(home, "finish");
   try {
     await scenario(async (f) => {
       const job = f.clive.activeTaskId;
@@ -783,28 +782,24 @@ it("T11 does not rerun a cut turn that already pushed: the root ends with what i
       await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("running");
       const cut = f.roots()[0];
       await f.restart("SIGTERM");
-      await expect.poll(() => f.roots()[0]?.status, { timeout: 30_000 }).toBe("failed");
+      writeFileSync(gate, "go");
+      await expect.poll(() => f.roots()[0]?.status, { timeout: 45_000 }).toBe("completed");
       const root = f.roots()[0];
-      expect(root).toMatchObject({ id: cut.id, status: "failed", outcome: "interrupted", executions: 1, restarts: 0 });
-      expect(root.outcomeDetail.startsWith(INTERRUPTED_OUTWARD), root.outcomeDetail).toBe(true);
-      expect(root.outcomeDetail).toContain("git push");
-      expect(f.db().events.find((event: any) => event.assignmentId === root.id && event.kind === "restart_reconciled")?.detail).toBe("failed: outward action done");
-      await expect.poll(async () => (await f.chips(job, INTERRUPTED_OUTWARD)).length, { timeout: 15_000 }).toBe(1);
-      const line = (await f.chips(job, INTERRUPTED_OUTWARD))[0];
-      expect(line.tool.name.startsWith("error: ")).toBe(true);
-      expect(line.tool.name).toContain("git push");
-      expect(await f.chips(job, RERUN_CHIP)).toHaveLength(0);
-      expect(await f.chips(job, "turn interrupted — Sagax restarted")).toHaveLength(0);
-      await f.settle(1_500);
+      expect(root).toMatchObject({ id: cut.id, status: "completed", outcome: "done", restarts: 1, executions: 2 });
+      expect(f.db().events.find((event: any) => event.assignmentId === root.id && event.kind === "restart_reconciled")?.detail).toBe("queued: rerun 1");
+      const said = (await f.messages(job)).map((message: any) => chipText(message)).join("\n");
+      expect(said).toContain("T11-JOB");
+      expect(said).toContain("do not run them again");
+      expect(said).toContain("git push");
+      expect(await f.chips(job, RERUN_CHIP)).toHaveLength(1);
+      expect(await f.chips(job, INTERRUPTED_OUTWARD)).toHaveLength(0);
+      await f.settle(500);
       expect(f.roots()).toHaveLength(1);
-      expect(f.roots()[0]).toMatchObject({ status: "failed", executions: 1 });
+      expect(f.roots()[0]).toMatchObject({ status: "completed", restarts: 1 });
       expect(await f.task(f.clive.id, job)).toMatchObject({ busy: false });
-      // The line is the last row of the conversation: the one Retry attaches to.
-      const rows = (await f.messages(job)).filter((message: any) => !["digest", "compaction", "call"].includes(message.kind));
-      expect(rows.at(-1).id).toBe(line.id);
     }, { scripted: false, fake: {
       FAKE_CLAUDE_MODE: "slow",
-      FAKE_CLAUDE_SLOW_FINISH_GATE: join(home, "finish"),
+      FAKE_CLAUDE_SLOW_FINISH_GATE: gate,
       FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "git push origin release" }, ok: true, output: [{ type: "text", text: "pushed" }] }]),
     } });
   } finally {

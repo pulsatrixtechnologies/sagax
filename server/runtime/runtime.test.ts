@@ -1640,7 +1640,7 @@ describe("Runtime: a root's later executions (every turn a root)", () => {
 });
 
 describe("Runtime: a cut turn that already acted outward (contract §5)", () => {
-  it("open() asks the host once per cut node, ends one that acted outward failed(interrupted) with what it did, and the requester's note names it", async () => {
+  it("open() asks the host once per cut node, resumes one that acted outward once with those steps named, and the requester hears both resumes", async () => {
     const store = openRuntimeStore(":memory:");
     const first = world(() => "hold", {}, store);
     const root = first.runtime.begin(beginReq());
@@ -1654,38 +1654,57 @@ describe("Runtime: a cut turn that already acted outward (contract §5)", () => 
     const asked: string[] = [];
     const second = world(undefined, {}, store, { outward: a => { asked.push(a.assignee.botId); return a.assignee.botId === "sender" ? ["GMAIL_SEND_EMAIL"] : []; } });
     expect(asked.sort()).toEqual(["quiet", "sender"]);
-    expect(store.get(sender.id)).toMatchObject({ status: "failed", outcome: "interrupted", restarts: 0, executions: 1,
-      outcomeDetail: `${INTERRUPTED_OUTWARD} sent an email (GMAIL_SEND_EMAIL); not resumed, so nothing is done twice.` });
-    expect(store.get(sender.id)?.restart).toBeUndefined();
-    expect(store.events(sender.id).map(e => e.kind)).toEqual(["enqueued", "admitted", "started", "restart_reconciled", "settled", "reported", "woken"]);
-    expect(store.events(sender.id).find(e => e.kind === "restart_reconciled")?.detail).toBe("failed: outward action done");
+    expect(store.get(sender.id)).toMatchObject({ status: "queued", restart: "rerun", restarts: 1, executions: 1, evidence: { outward: ["GMAIL_SEND_EMAIL"] } });
+    expect(store.get(sender.id)?.outcome).toBeUndefined();
+    expect(store.events(sender.id).find(e => e.kind === "restart_reconciled")?.detail).toBe("queued: rerun 1");
     expect(store.get(quiet.id)).toMatchObject({ status: "queued", restart: "rerun", restarts: 1 });
-    expect(second.runner.reports.map(r => [r.a.id, r.parent?.id])).toEqual([[sender.id, root.id]]);
+    expect(second.runner.reports).toEqual([]);
     expect(store.get(root.id)).toMatchObject({ status: "waiting", restart: "teammates" });
     invariants(second);
 
     second.runtime.tick(); await flush();
+    expect(store.get(sender.id)).toMatchObject({ status: "completed", restarts: 1 });
     expect(store.get(quiet.id)).toMatchObject({ status: "completed", restarts: 1 });
+    const senderRun = second.runner.runs.find(r => r.a.id === sender.id)!;
+    expect(senderRun.input.restartNote).toContain("GMAIL_SEND_EMAIL");
+    expect(senderRun.input.restartNote).toContain("do not run them again");
     second.runtime.tick();
     const resume = second.runner.runs.find(r => r.a.id === root.id)!;
     expect(resume.input.turn).toBe("resume");
-    expect(resume.input.settled?.map(s => [s.id, s.outcome])).toEqual([[sender.id, "interrupted"], [quiet.id, "done"]]);
-    expect(resume.input.restartNote).toBe("A restart cut these teammates' turns: sender (cut after an outward action, not resumed: see its result); quiet (resumed once in place and told to check what it had already done). Check their results as usual.\n");
+    expect(resume.input.settled?.map(s => [s.id, s.outcome])).toEqual([[sender.id, "done"], [quiet.id, "done"]]);
+    expect(resume.input.restartNote).toBe("A restart cut these teammates' turns: sender (resumed once in place and told to check what it had already done); quiet (resumed once in place and told to check what it had already done). Check their results as usual.\n");
     await flush();
     expect(store.get(root.id)?.status).toBe("completed");
     invariants(second);
     store.close();
   });
 
-  it("a root cut during its own turn that acted outward ends alone, reported into its own conversation, and is never run", async () => {
+  it("a root cut during its own turn that acted outward resumes once, naming the push, and is run", async () => {
     const store = openRuntimeStore(":memory:");
     const first = world(undefined, {}, store);
     const root = first.runtime.begin(beginReq());
     first.runtime.close();
     const second = world(undefined, {}, store, { outward: () => ["git push"] });
-    expect(store.get(root.id)).toMatchObject({ status: "failed", outcome: "interrupted", restarts: 0, executions: 1, result: `${INTERRUPTED_OUTWARD} pushed (git push); not resumed, so nothing is done twice.` });
-    expect(second.runner.reports).toEqual([{ a: expect.objectContaining({ id: root.id, outcome: "interrupted" }) }]);
-    expect(store.inbox({ threadId: "chief-chat" })).toEqual([]);
+    expect(store.get(root.id)).toMatchObject({ status: "queued", restart: "rerun", restarts: 1, executions: 1, evidence: { outward: ["git push"] } });
+    expect(store.get(root.id)?.outcome).toBeUndefined();
+    second.runtime.tick(); await flush();
+    expect(second.runner.runs).toHaveLength(1);
+    expect(second.runner.runs[0]!.input.restartNote).toContain("git push");
+    expect(second.runner.runs[0]!.input.restartNote).toContain("do not run them again");
+    expect(store.get(root.id)).toMatchObject({ status: "completed", restarts: 1, executions: 2 });
+    invariants(second);
+    store.close();
+  });
+
+  it("a follow-up the host names still ends the cut turn, so the newer message is not handed to a model again", async () => {
+    const store = openRuntimeStore(":memory:");
+    const first = world(undefined, {}, store);
+    const root = first.runtime.begin(beginReq());
+    first.runtime.close();
+    const second = world(undefined, {}, store, { outward: () => ["queued follow-up waiting"] });
+    expect(store.get(root.id)).toMatchObject({ status: "failed", outcome: "interrupted", restarts: 0, executions: 1 });
+    expect(store.get(root.id)?.outcomeDetail).toContain("queued follow-up waiting");
+    expect(store.events(root.id).find(e => e.kind === "restart_reconciled")?.detail).toBe("failed: outward action done");
     second.runtime.tick(); await flush();
     expect(second.runner.runs).toEqual([]);
     invariants(second);

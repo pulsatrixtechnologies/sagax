@@ -8,7 +8,7 @@ import {
   NO_ENGINE_PERSON,
 } from "../../shared/bot-engine-error";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../../shared/model-access-disabled";
-import { CUT_TWICE, PARALLEL_NOT_STARTED, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX, outwardSentence } from "../../shared/restart-words";
+import { CUT_TWICE, PARALLEL_NOT_STARTED, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX, outwardSentence, outwardUnknownSentence } from "../../shared/restart-words";
 import { engineErrorMessage, localizedEngineCause, restartSentence } from "./engine-error-text";
 
 afterEach(() => setLocale("en"));
@@ -73,6 +73,7 @@ describe("#3217 a cut turn that already acted outward, in the app's language", (
     setLocale("en");
     expect(restartSentence(line)).toBe(line);
     expect(restartSentence(CUT_TWICE)).toBe(CUT_TWICE);
+    expect(restartSentence(outwardUnknownSentence(["GMAIL_SEND_EMAIL"]))).toBe(outwardUnknownSentence(["GMAIL_SEND_EMAIL"]));
   });
 
   it("says the line and what it did in French", () => {
@@ -80,5 +81,7 @@ describe("#3217 a cut turn that already acted outward, in the app's language", (
     expect(restartSentence(line)).toBe(
       "Interrompu par un redémarrage de Sagax après avoir déjà envoyé un courriel (GMAIL_SEND_EMAIL), fait un paiement (STRIPE_CREATE_REFUND) et 1 de plus ; pas repris, pour que rien ne soit fait deux fois.");
     expect(restartSentence(CUT_TWICE)).toContain("Interrompu par un autre redémarrage de Sagax");
+    expect(restartSentence(outwardUnknownSentence(["GMAIL_SEND_EMAIL"]))).toBe(
+      "Impossible de confirmer cette étape après le redémarrage, alors elle n'a pas été refaite : GMAIL_SEND_EMAIL");
   });
 });

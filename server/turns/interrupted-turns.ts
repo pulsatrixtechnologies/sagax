@@ -12,7 +12,7 @@ import { failedTurnCause } from "../../shared/failed-turn.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { storedTurnSpeaker } from "./thread-speakers.ts";
-import { outwardActions } from "./turn-outcome.ts";
+import { lookupOutward, outwardActions } from "./turn-outcome.ts";
 
 export interface InterruptedTurn {
   botId: string;
@@ -86,6 +86,10 @@ export interface CutTurnContext {
   steps: string[];
   /** Outward actions it completed (sends, posts, pushes, payments). */
   outward: string[];
+  /** Outward steps whose result was looked up (ok and an item id). */
+  doneOutward: string[];
+  /** Outward steps that could not be confirmed, so they are not run again. */
+  unknownOutward: string[];
 }
 
 /** #3217: what a cut chat turn was asked and already did, read from its
@@ -108,21 +112,41 @@ export function cutTurnContext(messages: readonly CutRow[], cutAt: number): CutT
     const label = row.tool.name.replace(/\s+/g, " ").trim();
     steps.push(label.length > RESUME_STEP_CHARS ? `${label.slice(0, RESUME_STEP_CHARS - 1)}…` : label);
   }
+  const looked = lookupOutward(rows as never);
   return {
     ...(head ? { request: head.length > RESUME_REQUEST_CHARS ? `${head.slice(0, RESUME_REQUEST_CHARS)}\n[...]` : head } : {}),
     steps: steps.slice(-RESUME_STEPS_MAX),
     outward: outwardActions(rows as never),
+    doneOutward: looked.done,
+    unknownOutward: looked.unknown,
   };
+}
+
+/** Whether an outward step in these rows was already looked up. `done` was
+ * confirmed and must not run again. `unknown` could not be confirmed, so it
+ * is told to the person and must not run again either. `fresh` was not seen. */
+export function repeatedOutward(rows: readonly CutRow[], toolName: string): "done" | "unknown" | "fresh" {
+  const looked = lookupOutward(rows as never);
+  if (looked.done.includes(toolName)) return "done";
+  if (looked.unknown.includes(toolName)) return "unknown";
+  return "fresh";
 }
 
 /** #3217: the resume prompt of a cut chat turn, on any engine: the request
  * it answers (an engine whose session did not survive the restart has no
- * other copy of it) and the steps already done, so none runs twice. */
+ * other copy of it), the steps already done, and the outward steps that
+ * were looked up, so none runs twice. */
 export function cutTurnResumePrompt(context: CutTurnContext, base = TURN_RESUME_PROMPT): string {
   const parts = [base];
   if (context.request) parts.push(`The person's request that turn was answering:\n${context.request}`);
   if (context.steps.length) {
     parts.push(`Steps that turn already completed (their results are in this conversation; do not run again a step that changed something): ${context.steps.join("; ")}`);
+  }
+  if (context.doneOutward.length) {
+    parts.push(`Outward steps looked up as already done. Do not run them again: ${context.doneOutward.join(", ")}`);
+  }
+  if (context.unknownOutward.length) {
+    parts.push(`Outward steps that could not be confirmed. Do not run them again: ${context.unknownOutward.join(", ")}`);
   }
   return parts.join("\n\n");
 }

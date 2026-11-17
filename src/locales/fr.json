@@ -15009,6 +15009,7 @@
   "chat.restart.outward.posted": "publié ({label})",
   "chat.restart.outward.other": "fait une action vers l'extérieur ({label})",
   "chat.restart.outward.more": "et {count} de plus",
+  "chat.restart.outwardUnknown": "Impossible de confirmer cette étape après le redémarrage, alors elle n'a pas été refaite : {detail}",
   "chat.restart.cutTwice": "Interrompu par un autre redémarrage de Sagax après une première reprise ; pas repris de nouveau. Certaines de ses étapes ont peut-être déjà pris effet.",
   "chat.restart.notResumed": "Tour interrompu : Sagax a redémarré et ce tour n'a pas repris. Renvoie ta demande",
   "chat.restart.notResumedNewer": "Tour interrompu : Sagax a redémarré et une demande plus récente a pris la conversation, alors le tour coupé n'a pas repris. Renvoie-le s'il le faut encore",

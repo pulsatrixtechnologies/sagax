@@ -143,6 +143,8 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
+import { GithubAccessError } from "../github/github-access.ts";
+
 // ── connectors: a command server pinned to a package version ──────────
 
 /** A command MCP server that runs one package at one version: `npx -y
@@ -270,7 +272,9 @@ export async function latestFolderCommits(
         : [];
     });
     return { commits, ...(remaining !== undefined ? { remaining } : {}), ...(resetAt !== undefined ? { resetAt } : {}) };
-  } catch {
+  } catch (error) {
+    // the server's GitHub wrapper (githubSkillFetch) throws its rate limit
+    if (error instanceof GithubAccessError && error.failure.code === "rate_limited") return { limitedUntil: error.failure.resetAt ?? now() + 60 * 60_000 };
     return null;
   }
 }

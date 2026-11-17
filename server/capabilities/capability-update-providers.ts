@@ -2,10 +2,12 @@
 // over the stores that already exist. server/index.ts passes the stores; the
 // rules (what is a newer version, what the notes are, what the
 // organization holds) live here so they are tested without a server.
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { GitHubSkillOrigin } from "../../shared/skill-import.ts";
+import { githubSkillFetch, type GithubCredential } from "../github/github-access.ts";
 import {
   CHECK_INTERVAL_MS,
   compareVersions,
@@ -144,7 +146,11 @@ export interface SkillProviderDeps {
   records(person: UpdatePerson): InstalledSkillRecord[];
   /** Every skill imported from GitHub on this server, for the check. */
   allRecords(): InstalledSkillRecord[];
-  fetcherFor(owner: string | undefined): typeof fetch;
+  /** The GitHub credentials that read a source for this person (none: the
+   * unauthenticated budget the whole server shares). */
+  credentialsFor(owner: string | undefined): readonly GithubCredential[];
+  /** The transport under the server's GitHub wrapper (tests: a fake). */
+  transport?: typeof fetch;
   /** Import the same folder again over the installed copy; throws, and the
    * installed copy stays, when it cannot. */
   reimport(person: UpdatePerson, record: InstalledSkillRecord): Promise<{ commit?: string } | void>;
@@ -156,6 +162,14 @@ export interface SkillProviderDeps {
 export const GITHUB_RESERVE = 20;
 
 export const originKey = (origin: GitHubSkillOrigin): string => `${origin.owner}/${origin.repo}@${origin.ref}:${origin.path}`.toLowerCase();
+/** The budget a credential draws on: its own for a token (an organization
+ * token two people share is one budget), "" for no token (one for the whole
+ * server). Never the token itself. */
+export function githubBudgetKey(credential: GithubCredential | null | undefined): string {
+  if (!credential) return "";
+  return credential.id ? `id:${credential.id}` : `${credential.via}:${createHash("sha256").update(credential.token).digest("hex").slice(0, 16)}`;
+}
+
 /** A source read with one person's access is known to that person only (a
  * private repository's commit subjects never reach another person). */
 const readKey = (origin: GitHubSkillOrigin, owner: string | undefined): string => `${originKey(origin)}|${owner ?? ""}`;
@@ -184,8 +198,8 @@ function listed(item: UpdateItem): ListedUpdateFields {
 export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & { fields(record: InstalledSkillRecord): ListedUpdateFields } {
   const commits = new Map<string, FolderCommit[]>();
   const now = deps.now ?? Date.now;
-  /** Per credential (the person whose access reads; "" without one): GitHub's
-   * budget is each token's own, and the unauthenticated one is shared. */
+  /** Per budget (githubBudgetKey: the credential really used, "" without
+   * one): each token has its own, the unauthenticated one is shared. */
   const blockedUntil = new Map<string, number>();
   /** Where the next round starts: the first source the last one did not reach. */
   let cursor = 0;
@@ -222,13 +236,17 @@ export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & {
       let changed = false;
       let firstSkipped: number | undefined;
       for (const [index, [key, record]] of order.entries()) {
-        const credential = record.owner ?? "";
-        // that credential's rate limit: nothing on it until its reset
-        if (now() < (blockedUntil.get(credential) ?? 0)) {
+        const credentials = deps.credentialsFor(record.owner);
+        const planned = githubBudgetKey(credentials[0]);
+        // that budget's rate limit: nothing on it until its reset
+        if (now() < (blockedUntil.get(planned) ?? 0)) {
           firstSkipped ??= (start + index) % sources.length;
           continue;
         }
-        const answer = await latestFolderCommits(record.github!, deps.fetcherFor(record.owner), 8_000, now);
+        // no bare retry without a token: the shared budget is not this person's to spend
+        const fetcher = githubSkillFetch(credentials, deps.transport ?? fetch, process.env, { bareRetry: false, now });
+        const answer = await latestFolderCommits(record.github!, fetcher, 8_000, now);
+        const credential = fetcher.used() ? githubBudgetKey(fetcher.used()) : planned;
         // unreachable: what was known stays
         if (!answer) continue;
         if ("limitedUntil" in answer) {

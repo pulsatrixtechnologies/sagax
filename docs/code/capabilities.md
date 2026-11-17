@@ -24,9 +24,12 @@ of them (`server/capabilities/capability-updates.ts`, the three kinds in
 - Checks: past five minutes after start, then every six hours, and a read
   of the list starts one when the last is older than 30 minutes (plugins
   and skills: six hours); never during a turn, never awaited by a read.
-  GitHub: a 403 or 429 for its rate limit stops the round until its reset,
-  and a round stops when 20 requests are left in the hour, kept for the
-  person's own imports. A source read with one person's access is known to
+  GitHub: the check reads through the server's wrapper
+  (`githubSkillFetch`, without its bare retry), and keeps one budget per
+  credential really used (`githubBudgetKey`; no token is one budget for the
+  whole server). A rate limit (thrown `rate_limited`, a 429, or a 403 with
+  retry-after) pauses that budget until its reset, and a budget stops at 20
+  requests left in the hour, kept for the person's own imports. A source read with one person's access is known to
   that person only. A source never reached is `updateUnknown` (no mark; an
   update answers unknown).
 - Routes: `GET /api/me/capability-updates` (items and count) and `POST`

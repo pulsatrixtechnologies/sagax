@@ -221,7 +221,7 @@ describe("the three kinds", () => {
       return new Response(JSON.stringify([{ sha: "b".repeat(40), commit: { message: "Clearer steps", committer: { date: "2026-11-10T00:00:00Z" } } }]), { status: 200 });
     }) as unknown as typeof fetch;
     const reimport = vi.fn(async () => ({ commit: "b".repeat(40) }));
-    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor: () => fetcher, reimport });
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, credentialsFor: () => [], transport: fetcher, reimport });
     expect((await provider.items(ADA)).every((row) => !row.updateAvailable)).toBe(true);
     expect(await provider.check()).toBe(true);
     expect(calls).toHaveLength(1);
@@ -240,7 +240,7 @@ describe("the three kinds", () => {
     const github = { owner: "acme", repo: "skills", ref: "HEAD", path: "", commit: "a".repeat(40) };
     const records: InstalledSkillRecord[] = [{ scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github }];
     const fetcher = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
-    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor: () => fetcher, reimport: async () => undefined });
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, credentialsFor: () => [], transport: fetcher, reimport: async () => undefined });
     expect(await provider.check()).toBe(false);
     expect((await provider.items(ADA))[0]!.updateAvailable).toBe(false);
   });
@@ -300,7 +300,7 @@ describe("review of #4504", () => {
 
   it("a source never reached is unknown, never current, and shows no update mark", async () => {
     const github = { owner: "acme", repo: "skills", ref: "main", path: "", commit: "a".repeat(40) };
-    const skills = skillUpdateProvider({ records: () => [{ scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github }], allRecords: () => [], fetcherFor: () => fetch, reimport: async () => undefined });
+    const skills = skillUpdateProvider({ records: () => [{ scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github }], allRecords: () => [], credentialsFor: () => [], reimport: async () => undefined });
     const connectors = connectorUpdateProvider({ records: () => [{ scope: "me", target: "me", name: "nimbus", command: "npx", args: ["nimbus-mcp@1.0.0"] }], allRecords: () => [], setArgs: () => undefined });
     expect((await skills.items(ADA))[0]).toMatchObject({ updateAvailable: false, updateUnknown: true });
     expect((await connectors.items(ADA))[0]).toMatchObject({ updateAvailable: false, updateUnknown: true });
@@ -315,10 +315,11 @@ describe("review of #4504", () => {
       { scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github, owner: "pr_ada" },
       { scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github, owner: "pr_bob" },
     ];
-    const fetcherFor = (owner: string | undefined) => (async () => owner === "pr_ada"
+    const transport = (async (_url: string, init?: RequestInit) => new Headers(init?.headers).get("authorization") === "Bearer t-ada"
       ? new Response(JSON.stringify([{ sha: "b".repeat(40), commit: { message: "Secret subject", committer: { date: "2026-11-10T00:00:00Z" } } }]), { status: 200 })
       : new Response("{}", { status: 404 })) as unknown as typeof fetch;
-    const provider = skillUpdateProvider({ records: (person) => records.filter((row) => row.owner === person.id), allRecords: () => records, fetcherFor, reimport: async () => undefined });
+    const credentialsFor = (owner: string | undefined) => owner === "pr_ada" ? [{ token: "t-ada", via: "person" as const }] : [];
+    const provider = skillUpdateProvider({ records: (person) => records.filter((row) => row.owner === person.id), allRecords: () => records, credentialsFor, transport, reimport: async () => undefined });
     await provider.check();
     expect((await provider.items(ADA))[0]).toMatchObject({ updateAvailable: true, updateNotes: "Secret subject" });
     const bob = (await provider.items(BOB))[0]!;
@@ -337,7 +338,7 @@ describe("review of #4504", () => {
       return new Response(JSON.stringify([]), { status: 200, headers: { "x-ratelimit-remaining": answer === "low" ? "5" : "50", "x-ratelimit-reset": String(Math.floor(now / 1000) + 3600) } });
     }) as unknown as typeof fetch;
     const records: InstalledSkillRecord[] = ["one", "two", "three"].map((path) => ({ scope: "me", target: "me", name: path, importedAt: "2026-11-01T00:00:00Z", github: { owner: "acme", repo: "skills", ref: "main", path, commit: "a".repeat(40) } }));
-    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor: () => fetcher, reimport: async () => undefined, now: () => now });
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, credentialsFor: () => [], transport: fetcher, reimport: async () => undefined, now: () => now });
     expect(provider.checkEvery).toBe(6 * 60 * 60_000);
     await provider.check();
     expect(asked).toHaveLength(1);
@@ -413,7 +414,7 @@ describe("second review of #4504", () => {
   });
 
   it("an organization skill or connector is keyed by its declaration id, which the item carries", async () => {
-    const skills = skillUpdateProvider({ records: () => [{ scope: "organization", target: "organization", id: "d9", name: "house-rules", importedAt: "", organization: "offered" }], allRecords: () => [], fetcherFor: () => fetch, reimport: async () => undefined });
+    const skills = skillUpdateProvider({ records: () => [{ scope: "organization", target: "organization", id: "d9", name: "house-rules", importedAt: "", organization: "offered" }], allRecords: () => [], credentialsFor: () => [], reimport: async () => undefined });
     const connectors = connectorUpdateProvider({ records: () => [{ scope: "organization", target: "organization", id: "d8", name: "audit-log", organization: "offered" }], allRecords: () => [], setArgs: () => undefined });
     expect((await skills.items(ADA))[0]).toMatchObject({ key: "skill:organization:organization:d9", name: "house-rules", organizationId: "d9" });
     expect((await connectors.items(ADA))[0]).toMatchObject({ key: "connector:organization:organization:d8", name: "audit-log", organizationId: "d8" });
@@ -423,11 +424,13 @@ describe("second review of #4504", () => {
     let now = Date.parse("2026-11-16T12:00:00Z");
     const asked: string[] = [];
     const answers: Record<string, () => Response> = {};
-    const fetcherFor = (owner: string | undefined) => (async (url: string) => {
+    const transport = (async (url: string, init?: RequestInit) => {
       const path = new URL(String(url)).searchParams.get("path")!;
+      const owner = new Headers(init?.headers).get("authorization") === "Bearer t-ada" ? "pr_ada" : "pr_bob";
       asked.push(`${owner}:${path}`);
       return (answers[`${owner}:${path}`] ?? (() => new Response("[]", { status: 200, headers: { "x-ratelimit-remaining": "50" } })))();
     }) as unknown as typeof fetch;
+    const credentialsFor = (owner: string | undefined) => [{ token: owner === "pr_ada" ? "t-ada" : "t-bob", via: "person" as const }];
     const github = (path: string) => ({ owner: "acme", repo: "skills", ref: "main", path, commit: "a".repeat(40) });
     const records: InstalledSkillRecord[] = [
       { scope: "me", target: "me", name: "a1", importedAt: "2026-11-01T00:00:00Z", github: github("a1"), owner: "pr_ada" },
@@ -435,7 +438,7 @@ describe("second review of #4504", () => {
     ];
     // a secondary limit with requests left: retry-after pauses that credential only
     answers["pr_ada:a1"] = () => new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "40", "retry-after": "120" } });
-    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor, reimport: async () => undefined, now: () => now });
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, credentialsFor, transport, reimport: async () => undefined, now: () => now });
     await provider.check();
     expect(asked).toEqual(["pr_ada:a1", "pr_bob:b1"]);
     await provider.check();
@@ -453,7 +456,7 @@ describe("second review of #4504", () => {
       return new Response("[]", { status: 200, headers: { "x-ratelimit-remaining": low ? "5" : "50" } });
     }) as unknown as typeof fetch;
     const three: InstalledSkillRecord[] = ["s1", "s2", "s3"].map((path) => ({ scope: "me", target: "me", name: path, importedAt: "2026-11-01T00:00:00Z", github: github(path) }));
-    const cursor = skillUpdateProvider({ records: () => three, allRecords: () => three, fetcherFor: () => shared, reimport: async () => undefined, now: () => now });
+    const cursor = skillUpdateProvider({ records: () => three, allRecords: () => three, credentialsFor: () => [], transport: shared, reimport: async () => undefined, now: () => now });
     await cursor.check();
     low = false;
     now += 2 * 60 * 60_000;

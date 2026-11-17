@@ -26900,7 +26900,7 @@ function installationConnectorRecords(): InstalledConnectorRecord[] {
 const skillUpdates = skillUpdateProvider({
   records: (person) => skillUpdateRecordsOf(person.id, person.manager),
   allRecords: () => [...updatePeople().flatMap((person) => skillUpdateRecordsOf(person, false)), ...installationSkillRecords()],
-  fetcherFor: (owner) => githubSkillFetch(githubCredentialsFor(owner ?? null)),
+  credentialsFor: (owner) => githubCredentialsFor(owner ?? null),
   reimport: async (person, record) => {
     const source = githubSkillLink(record.github!);
     const fetched = await fetchSkillFromSource(source, githubSkillFetch(githubCredentialsFor(person.id)));

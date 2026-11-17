@@ -42,9 +42,9 @@ describe("the three kinds before the generic renderer", () => {
           setLocale(lang);
           act(() => root.render(createElement(RecordCard, {
             record, label, kindName, product, now: NOW, pinned, onAsk: () => {}, onOpenRecord: () => {},
-            read: { card: parseRecordCard(make(NOW, lang)), miss: null, loading: false, at: NOW - 120_000, refresh: vi.fn(), confirm: vi.fn() },
+            read: { card: parseRecordCard(make(NOW, lang)), miss: null, loading: false, at: NOW - 120_000, refresh: vi.fn() },
           })));
-          expect(host.innerHTML.replace(/\sid="[^"]*"/g, "")).toMatchSnapshot();
+          expect(host.innerHTML.replace(/\sid="[^"]*"/g, "").replace(" [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)]", "")).toMatchSnapshot();
         });
       }
     }

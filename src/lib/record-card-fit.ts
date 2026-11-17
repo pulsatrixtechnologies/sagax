@@ -35,9 +35,12 @@ export function bottomsOf(heights: readonly number[], gap = 0, start = 0): numbe
   return out;
 }
 
-/** What the rows left out are: key fields when all of them are, else rows. */
-export type MoreKind = "field" | "row";
+/** What the rows left out are: key fields when all of them are, lines of the
+ * list when all of them are, else rows. */
+export type MoreKind = "field" | "line" | "row";
 
 export function moreKind(hiddenKeys: readonly string[]): MoreKind {
-  return hiddenKeys.length > 0 && hiddenKeys.every((key) => key.startsWith("f-field-")) ? "field" : "row";
+  if (hiddenKeys.length > 0 && hiddenKeys.every((key) => key.startsWith("f-field-"))) return "field";
+  if (hiddenKeys.length > 0 && hiddenKeys.every((key) => /^l-\d/.test(key))) return "line";
+  return "row";
 }

@@ -15299,7 +15299,6 @@
   "recordCard.copied": "Copié",
   "recordCard.refresh": "Actualiser",
   "recordCard.upToDate": "À jour à {time}",
-  "recordCard.readRecord": "Lire la fiche",
   "recordCard.retry": "Réessayer",
   "recordCard.connect": "Connecter",
   "recordCard.signIn": "Te reconnecter",
@@ -15310,7 +15309,6 @@
   "recordCard.state.down": "{product} ne répond pas en ce moment.",
   "recordCard.state.busy": "{product} est occupé. Nouvel essai dans un instant.",
   "recordCard.state.orgRefused": "Ton organisation bloque cette lecture.",
-  "recordCard.state.orgAsk": "Ton organisation te demande de confirmer avant de lire.",
   "recordCard.state.unavailable": "Les fiches ne sont pas offertes ici.",
   "recordCard.back": "Retour",
   "recordCard.notes.title": "Notes ({count})",
@@ -15384,5 +15382,12 @@
   "settings.sub.about.summary": "Licence, code source et visite de l'app",
   "settings.sub.advanced.summary": "Mode avancé, diagnostics, journaux, fonctions expérimentales",
   "settings.permissions.beforeActing": "Avant d'agir",
-  "settings.consoleLink": "Plus dans Perspicax"
+  "settings.consoleLink": "Plus dans Perspicax",
+  "recordCard.more.lineOne": "1 ligne de plus",
+  "recordCard.more.lineMany": "{count} lignes de plus",
+  "recordCard.chip": "Étiquette",
+  "recordCard.lines.forbidden": "Ton accès n'inclut pas les lignes.",
+  "recordCard.lines.unavailable": "Les lignes n'ont pas pu être lues pour le moment.",
+  "recordCard.lines.otherOne": "1 autre ligne",
+  "recordCard.lines.other": "{count} autres lignes"
 }

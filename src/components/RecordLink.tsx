@@ -107,9 +107,11 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
   );
 }
 
-/** The card, reading while it is on screen. A company the card names opens
+/** The card, reading while it is on screen. A record the card names (a
+ * company, an invoice's agreement, a ticket, a parent agreement: any kind) opens
  * in this card's place (a card from a card: never two stacked), with a back
- * arrow in the head that returns to the one it replaced. */
+ * arrow in the head that returns to the one it replaced. A record of a product
+ * the person does not hold stays plain words. */
 function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect, onSignIn }: {
   record: RecordRef;
   label: string;
@@ -133,6 +135,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
       read={read}
+      canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).product)}
       pinned={pinned}
       onClose={onClose}
       onAsk={onAsk ? () => onAsk(current.ref, current.label) : undefined}

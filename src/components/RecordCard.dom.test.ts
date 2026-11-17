@@ -3,7 +3,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { companyCard, guidCard, GUID_REF, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF } from "@/lib/record-card-fixtures";
+import { agreementCard, companyCard, guidCard, GUID_REF, invoiceCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF, INVOICE_REF, AGREEMENT_REF } from "@/lib/record-card-fixtures";
 import { parseRecordCard, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
 import { RecordCard, type RecordCardProps } from "./RecordCard";
 
@@ -14,14 +14,13 @@ const product = { name: "Nimbus Desk", iconUrl: "https://desk.example/mark.svg" 
 let host: HTMLDivElement;
 let root: Root;
 const refresh = vi.fn();
-const confirm = vi.fn();
 
 function show(over: Partial<RecordCardProps> & { raw?: Record<string, unknown>; miss?: RecordCardMiss; loading?: boolean; record?: RecordRef }) {
   const { raw, miss, loading, record, ...rest } = over;
   const card = raw ? parseRecordCard(raw) : null;
   act(() => root.render(createElement(RecordCard, {
     record: record ?? TICKET_REF, label: "#481516", kindName: "Billet", product, now: NOW,
-    read: { card, miss: miss ?? null, loading: Boolean(loading), at: NOW - 120_000, refresh, confirm },
+    read: { card, miss: miss ?? null, loading: Boolean(loading), at: NOW - 120_000, refresh },
     ...rest,
   })));
   return host.firstElementChild as HTMLElement;
@@ -31,7 +30,6 @@ const text = () => host.textContent ?? "";
 beforeEach(() => {
   setLocale("fr");
   refresh.mockClear();
-  confirm.mockClear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -119,7 +117,6 @@ describe("RecordCard", () => {
     ["busy", "Nimbus Desk est occupé. Nouvel essai dans un instant.", null],
     ["down", "Nimbus Desk ne répond pas en ce moment.", "Réessayer"],
     ["org_refused", "Ton organisation bloque cette lecture.", null],
-    ["org_ask", "Ton organisation te demande de confirmer avant de lire.", "Lire la fiche"],
   ] as const)("says %s in one sentence with its action", (state, sentence, action) => {
     show({ miss: { state }, onConnect: () => {}, onSignIn: () => {} });
     expect(host.querySelector("[role=status]")!.textContent).toBe(sentence);
@@ -129,10 +126,11 @@ describe("RecordCard", () => {
     expect(host.querySelectorAll("[data-record-head] .animate-pulse")).toHaveLength(0);
   });
 
-  it("reads the record on 'Lire la fiche' and retries on 'Réessayer'", () => {
-    show({ miss: { state: "org_ask" } });
-    act(() => { [...host.querySelectorAll("button")].find((button) => button.textContent === "Lire la fiche")!.click(); });
-    expect(confirm).toHaveBeenCalledTimes(1);
+  it("retries on 'Réessayer' and has no 'Lire la fiche' button in any state (#4566)", () => {
+    for (const state of ["no_access", "unknown", "not_connected", "busy", "down", "org_refused", "sign_in", "unavailable"] as const) {
+      show({ miss: { state }, onConnect: () => {}, onSignIn: () => {} });
+      expect([...host.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Lire la fiche");
+    }
     show({ miss: { state: "down" } });
     act(() => { [...host.querySelectorAll("button")].find((button) => button.textContent === "Réessayer")!.click(); });
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -190,7 +188,7 @@ describe("RecordCard", () => {
   });
 
   it("says nothing twice in a state card: one sentence, one action row, no skeleton", () => {
-    for (const state of ["no_access", "unknown", "not_connected", "busy", "down", "org_ask"] as const) {
+    for (const state of ["no_access", "unknown", "not_connected", "busy", "down"] as const) {
       show({ miss: { state }, onConnect: () => {} });
       const sentences = [...host.querySelectorAll("p")].map((p) => p.textContent);
       expect(sentences).toHaveLength(1);
@@ -420,5 +418,114 @@ describe("RecordCard without a layout engine's help", () => {
     expect(node ?? text).not.toBeNull();
     await act(async () => { (node ?? text)!.data = `${(node ?? text)!.data} (a longer text)`; await Promise.resolve(); });
     expect(reads).toBeGreaterThan(before);
+  });
+});
+
+// A kind the product declares (#4572): the same renderer, drawn by field type.
+describe("RecordCard draws any kind by field type", () => {
+  const invoice = (over: Partial<RecordCardProps> = {}) => show({ raw: invoiceCard(NOW, "fr"), record: INVOICE_REF, label: "INV-1042", kindName: "Facture", onOpenRecord: () => {}, ...over });
+
+  it("lays an invoice out as the two-pane landscape card, its chip beside its state, its kind from the data", () => {
+    const card = invoice();
+    expect(card.dataset.layout).toBe("split");
+    const head = host.querySelector("[data-record-head]")!.textContent!;
+    expect(head).toContain("Facture");
+    expect(head).toContain("INV-1042");
+    expect(head).toContain("Envoyée");
+    expect(head).toContain("Entente");
+  });
+
+  it("shows money exactly as sent, right-aligned, never computed", () => {
+    invoice();
+    const money = [...host.querySelectorAll("[data-record-money]")];
+    expect(money.map((node) => node.textContent)).toEqual(["1 234,50 $", "1 234,50 $", "160,49 $"]);
+    expect(money.every((node) => node.className.includes("text-end"))).toBe(true);
+    // no total, difference or tax of its own
+    expect(text()).not.toContain("1 074");
+  });
+
+  it("writes a calendar day as that day and reads the due day as late only once it is over", () => {
+    invoice();
+    const flat = text().replace(/\s/g, " ");
+    expect(flat).toContain("mar. 6 oct.");
+    // due 2026-11-05, today 2026-11-17: twelve days late
+    expect(flat).toContain("5 nov.");
+    expect(flat).toMatch(/en retard de 12\s+jours/);
+  });
+
+  it("opens a ref in place for a product the person holds, and says plain words for one they do not", () => {
+    const open = vi.fn();
+    invoice({ onOpenRecord: open, canOpenRecord: (ref) => ref.product === "nimbus_desk" });
+    const chips = [...host.querySelectorAll<HTMLElement>("[data-record-ref-link]")];
+    expect(chips.map((chip) => chip.textContent)).toEqual(["Example Org", "Managed services", "Imprimante de l'accueil hors ligne"]);
+    act(() => { chips[1]!.click(); });
+    expect(open).toHaveBeenCalledWith(AGREEMENT_REF, "Managed services");
+    invoice({ onOpenRecord: open, canOpenRecord: () => false });
+    expect(host.querySelectorAll("[data-record-ref-link]")).toHaveLength(0);
+    expect(text()).toContain("Managed services");
+  });
+
+  it("draws an agreement's company slot, contact, dates and amount with the same renderer", () => {
+    show({ raw: agreementCard(NOW, "fr"), record: AGREEMENT_REF, label: "Managed services", kindName: "Entente", onOpenRecord: () => {} });
+    expect(host.querySelector("[data-record-company-link]")).not.toBeNull();
+    expect(host.querySelector("[data-record-person=contact]")).not.toBeNull();
+    expect(text().replace(/\s/g, " ")).toContain("jeu. 31 déc.");
+    expect(host.querySelector("[data-record-money]")!.textContent).toBe("1 050,00 $");
+  });
+
+  it("is the narrower single-pane card when the kind has no text, list or activity", () => {
+    const raw = invoiceCard(NOW, "fr");
+    delete raw.description;
+    const card = show({ raw, record: INVOICE_REF, label: "INV-1042" });
+    expect(card.dataset.layout).toBe("compact");
+    expect(card.className).toContain("w-[min(22rem,calc(100vw-1rem))]");
+  });
+
+  it("is two panes when the kind has only a list, and shows the list's whole rows", () => {
+    const raw = invoiceCard(NOW, "fr");
+    delete raw.description;
+    raw.lines = { state: "ok", title: "Lignes", items: [{ label: "Poste géré", detail: "42", value: "1 050,00 $" }, { label: "Sauvegarde", detail: "3", value: "184,50 $" }], total: 3, more: true };
+    const card = show({ raw, record: INVOICE_REF, label: "INV-1042" });
+    expect(card.dataset.layout).toBe("split");
+    expect(host.querySelectorAll("[data-record-line]")).toHaveLength(2);
+    expect(text()).toContain("1 autre ligne");
+  });
+
+  it("draws a percent from its share, a duration, a person, a state and an ago by their type", () => {
+    const raw = invoiceCard(NOW, "fr");
+    raw.fields = [
+      { label: "Marge", type: "percent", share: 40, value: "40 %" },
+      { label: "Durée", type: "duration", value: "3,5 h" },
+      { label: "Responsable", type: "person", role: "owner", value: "Noor Haddad" },
+      { label: "Statut", type: "state", tone: "alert", value: "En retard" },
+      { label: "Vu", type: "ago", at: new Date(NOW - 3_600_000).toISOString(), value: "x" },
+      { label: "Inconnu", type: "hologram", value: "tel quel" },
+    ];
+    show({ raw, record: INVOICE_REF, label: "INV-1042" });
+    expect(host.querySelector("[role=progressbar]")!.getAttribute("aria-valuenow")).toBe("40");
+    expect(text()).toContain("3,5 h");
+    expect(host.querySelector("[data-record-person=owner]")!.textContent).toContain("Noor Haddad");
+    expect(text()).toContain("En retard");
+    expect(text().replace(/\s/g, " ")).toMatch(/il y a 1 h/);
+    expect(text()).toContain("tel quel");
+  });
+
+  it("gives a second chip way in a narrow head and says its words in the body", () => {
+    const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return (this as HTMLElement).className.includes("@container") ? 352 : 0; } });
+    const raw = agreementCard(NOW, "fr");
+    raw.chips = [{ label: "Managed IT", tone: "open" }, { label: "Renouvelable", tone: "waiting" }];
+    show({ raw, record: AGREEMENT_REF, label: "Managed services" });
+    expect(host.querySelector("[data-record-head]")!.textContent).toContain("Managed IT");
+    expect(host.querySelector("[data-record-head]")!.textContent).not.toContain("Renouvelable");
+    expect(host.querySelector("[data-record-facts]")!.textContent).toContain("Renouvelable");
+    if (before) Object.defineProperty(HTMLElement.prototype, "clientWidth", before); else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+  });
+
+  it("never puts a GUID on screen for a kind it does not know", () => {
+    const raw = invoiceCard(NOW, "fr");
+    raw.number = GUID_REF.id;
+    show({ raw, record: INVOICE_REF, label: GUID_REF.id });
+    expect(text()).not.toContain(GUID_REF.id);
   });
 });

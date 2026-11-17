@@ -7,7 +7,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
+import { agreementCard, answer, companyCard, invoiceCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
 import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
 import * as drafts from "@/lib/drafts";
@@ -238,6 +238,64 @@ describe("the card", () => {
     await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
     await advance(50);
     expect(card()!.textContent).toContain("Imprimante de l'accueil");
+  });
+
+  it("draws the chip of any kind the product declares with the product's mark, and reads its card at once, no button", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/api/me/records/")) reads.push(url);
+      return json(answer(invoiceCard(Date.now(), "fr")));
+    }));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    const [chip] = chips();
+    expect(chip!.dataset.recordLink).toBe("invoice");
+    expect(chip!.getAttribute("aria-label")).toBe("Facture INV-1042, Nimbus Desk, appuie sur Entrée pour les détails");
+    expect(chip!.querySelector("img, div")).not.toBeNull();
+    await act(async () => { chip!.click(); });
+    await advance(50);
+    expect(reads).toHaveLength(1);
+    expect(reads[0]).not.toContain("confirm");
+    expect(card()!.textContent).toContain("Facture");
+    expect([...card()!.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Lire la fiche");
+  });
+
+  it("opens an invoice's agreement in the same card, then its company, and Back returns one step at a time", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/api/me/records/")) reads.push(url);
+      if (url.includes("/agreement/")) return json(answer(agreementCard(Date.now(), "fr")));
+      if (url.includes("/company/")) return json(answer(companyCard(Date.now(), "fr")));
+      return json(answer(invoiceCard(Date.now(), "fr")));
+    }));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    const refs = [...card()!.querySelectorAll<HTMLElement>("[data-record-ref-link]")];
+    await act(async () => { refs.find((node) => node.textContent === "Managed services")!.click(); });
+    await advance(50);
+    expect(document.querySelectorAll("[data-record-card]")).toHaveLength(1);
+    expect(card()!.textContent).toContain("Entente");
+    await act(async () => { card()!.querySelector<HTMLElement>("[data-record-company-link]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Entreprise");
+    await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Entente");
+    await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Facture");
+    expect(card()!.querySelector("[aria-label=Retour]")).toBeNull();
+  });
+
+  it("leaves a ref to a product the person does not hold as plain words", async () => {
+    const raw = invoiceCard(Date.now(), "fr");
+    for (const field of raw.fields as Array<{ ref?: { product: string } }>) if (field.ref) field.ref.product = "ledger_other";
+    vi.stubGlobal("fetch", vi.fn(async () => json(answer(raw))));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    expect(card()!.querySelectorAll("[data-record-ref-link]")).toHaveLength(0);
+    expect(card()!.textContent).toContain("Managed services");
   });
 
   it("moves focus to the first action when a card pinned while loading arrives, not onto Close", async () => {

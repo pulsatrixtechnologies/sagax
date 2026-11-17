@@ -19080,7 +19080,6 @@
       "recordCard.copied": "8d525e5f158b9afe05f3122af363ac67763bdc4e1395b46597b320c289766ce3",
       "recordCard.refresh": "0e91610117029a62a478b7fa7df0b8598bebe3ab1e192d4b1882e310719c9671",
       "recordCard.upToDate": "434dcc4cba5f3a405b6ec9033036fbcc352ee159771c256b0fd7ce2f255026f6",
-      "recordCard.readRecord": "c71f2af328b7a2502216468dffe67576f535172730cdcb7922669d93bac3f526",
       "recordCard.retry": "942087cc2d41e01304b7195558d093d10c72af8e838c7556d6a02d471ee71852",
       "recordCard.connect": "1a2303ede07493acc7caaa7c737f3c52bcc9cf04372be19ed1b0af6b9f2c791e",
       "recordCard.signIn": "51fbe1dc8a7319b7974fb540f157a3ea3edaa985b8f1d970cec9406a20122dc2",
@@ -19091,7 +19090,6 @@
       "recordCard.state.down": "2c7779c5fa636640492b3406cf796ae8f8708c44b2dc2b312c0630c7fe9b8dee",
       "recordCard.state.busy": "521b095b6934951b2e36440670b6e3231422a5bdd1817d16c8d0ad1cad10d4ae",
       "recordCard.state.orgRefused": "7527f7bf551657029f9d54442031f49e1548f3b87625df62b053068676ef604c",
-      "recordCard.state.orgAsk": "74d73020fcb8a7061572565190d11d6fd514912e0ed203406dba3c2ef6febe57",
       "recordCard.state.unavailable": "d0513631fa47c9ea6b9398eaf9edaffb8374ed157ad99375fd2759e7cfd67c61",
       "recordCard.back": "76900f1bfd16c8d4dd3d25e6f46638d7165aee23883ccea6bfe071c514421769",
       "recordCard.notes.title": "b3ed2cb8932d0121c44a7f4bb65b35817ea0ed6ca1967b5e604eb7f6518891ae",
@@ -19209,7 +19207,14 @@
       "botAccess.tools.alwaysListed": "43e9757b043e5606f211e185dec5c7f5e2e9f87248b806ac68095429d5b8160f",
       "botAccess.tools.keepAria": "3d72597f8d48a708a6815676f6b83f2afb61d46c252b29d76059bf14e780aaae",
       "botAccess.tools.bringAllBack": "f3c79725d9c3a4b29c88413975ac80c746e68ed6fe99d8439fff0310f563b59a",
-      "botAccess.tools.keepHint": "344cebec70195158f133b89636017ef6bb3cc305136b065ee3bf7b8f91351c60"
+      "botAccess.tools.keepHint": "344cebec70195158f133b89636017ef6bb3cc305136b065ee3bf7b8f91351c60",
+      "recordCard.more.lineOne": "4c2026c808845256be6157cb94c9556cdf0553ca3625d22ee926c0f80ac2e86c",
+      "recordCard.more.lineMany": "fc34f62cbb6786e7868c33e45e32084bd93caa7c70569732818822b5e6d1adbc",
+      "recordCard.chip": "0e66373f45dcf3dd656151e519f7ee5e3d558d9c22cb87df339bbdd2b6c6a3c1",
+      "recordCard.lines.forbidden": "aff2972b36eaea0cc1f0dfb7676c4e729f152af136a9cc937ba8f141e3c1fd1d",
+      "recordCard.lines.unavailable": "b3892531b9415ca8f720f7b84606ddbd0f7b11f006559095704be082a5de50b3",
+      "recordCard.lines.otherOne": "4c9441c1a56d4875e37b5280589fa8b383bb9cc50677d3efc36a729c53160127",
+      "recordCard.lines.other": "16e5fdccf7874b752bf114a03094997fa6f9945957fb600eaacdcf5c2ac2492f"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

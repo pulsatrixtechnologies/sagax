@@ -403,6 +403,25 @@ describe("createInternalMemoryRoutes", () => {
     expect(sent[0]).toEqual({ status: 403, body: { error: "unknown sender" } });
   });
 
+  // #4439 review: with no card left, the entry is written by the token's own
+  // bot and thread only; ids of another bot or thread are refused, nothing saved
+  it("POST /api/internal/team-memory refuses ids that are not the token's own bot and thread (403), saving nothing", async () => {
+    const other: InternalMemoryBot = { ...bot, id: "bot-2", name: "Other" };
+    const saveTeamMemory = vi.fn(() => ({ entry: { id: "e1", kind: "term", name: "VPN", detail: "corp", aliases: [] as string[] } }));
+    const route = createInternalMemoryRoutes(deps({
+      saveTeamMemory,
+      bot: (id) => (id === bot.id ? bot : id === other.id ? other : null),
+      // the other bot's thread is its own: only the token decides
+      ownsThread: (botId, threadId) => (botId === bot.id && threadId === "t-1") || (botId === other.id && threadId === "t-2"),
+    } as Partial<InternalMemoryDeps>));
+    for (const ids of [{ fromBotId: "bot-2", fromThreadId: "t-2" }, { fromBotId: "bot-2", fromThreadId: "t-1" }, { fromBotId: "bot-1", fromThreadId: "t-2" }]) {
+      const { sent, run } = call(route, { path: "/api/internal/team-memory", body: { ...ids, kind: "term", name: "VPN", detail: "corp" } });
+      await run();
+      expect(sent[0]?.status, JSON.stringify(ids)).toBe(403);
+    }
+    expect(saveTeamMemory).not.toHaveBeenCalled();
+  });
+
   // #4439: the bot saves it itself, at once: no card, no notification, no wait
   it("POST /api/internal/team-memory saves the entry at once, with the bot that saved it and when, and raises no card", async () => {
     const appendMessage = vi.fn(() => ({ id: "card-9" }));

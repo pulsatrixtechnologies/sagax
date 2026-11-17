@@ -191,6 +191,26 @@ describe("save", () => {
   });
 });
 
+// #4439 review: an old card answered after a bot saved a newer entry of the
+// same kind and name keeps the newer one; the old proposal is dropped and the
+// card closes
+describe("resolve after a newer save", () => {
+  it("keeps the newer saved entry and settles the old proposal", () => {
+    const waiting = memory.propose("", { kind: "term", name: "VPN", detail: "old card" }, source);
+    const newer = memory.save("", { kind: "term", name: "vpn", detail: "saved later" }, { ...source, at: source.at + 10 });
+    expect(memory.resolve("", waiting.entry.id, "accept")).toEqual({ claimed: true, state: "already_settled" });
+    expect(memory.list("").map((entry) => [entry.id, entry.status, entry.detail])).toEqual([[newer.entry.id, "accepted", "saved later"]]);
+  });
+
+  it("still replaces an accepted entry older than the proposal", () => {
+    const older = memory.save("", { kind: "term", name: "VPN", detail: "older" }, source);
+    const waiting = memory.propose("", { kind: "term", name: "VPN", detail: "old card" }, { ...source, at: source.at + 10 });
+    expect(memory.resolve("", waiting.entry.id, "accept")).toEqual({ claimed: true, state: "accepted" });
+    expect(memory.list("").map((entry) => entry.id)).toEqual([waiting.entry.id]);
+    expect(older.entry.id).not.toBe(waiting.entry.id);
+  });
+});
+
 describe("resolve, update, remove", () => {
   it("rejects edits that collide with another accepted fact", () => {
     const a = memory.propose("", { kind: "term", name: "Alex", detail: "term" }, source);

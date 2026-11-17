@@ -243,6 +243,14 @@ export class TeamMemory {
     if (index === -1) return { claimed: false };
     if (entries[index].status === "accepted") return { claimed: true, state: "already_settled" };
     if (answer === "accept") {
+      // #4439: a bot saved a newer entry of this kind and name since the
+      // card was raised: the newer one stays and the old proposal is settled
+      const waiting = entries[index];
+      if (entries.some((entry) => entry.status === "accepted" && entry.kind === waiting.kind && sameName(entry.name, waiting.name) && entry.source.at > waiting.source.at)) {
+        entries.splice(index, 1);
+        this.persist();
+        return { claimed: true, state: "already_settled" };
+      }
       entries[index].status = "accepted";
       entries[index].updatedAt = Date.now();
       // Keep the old accepted fact until a person approves its replacement.

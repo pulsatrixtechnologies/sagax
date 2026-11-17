@@ -9801,7 +9801,7 @@
   "teamMemory.also": "also {names}",
   "teamMemory.from": "from {name}",
   "teamMemory.you": "you",
-  "teamMemory.empty": "Nothing shared yet. Review what bots propose as they learn who is who and where things live, or add one yourself below.",
+  "teamMemory.empty": "Nothing shared yet. Bots save who is who and where things live as they learn it, or add one yourself below.",
   "teamMemory.shared": "Shared",
   "teamMemory.kind.person": "People",
   "teamMemory.kind.place": "Places",

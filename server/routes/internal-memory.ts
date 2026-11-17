@@ -510,6 +510,12 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       const body = parsed.data;
       const from = deps.bot(body.fromBotId);
       if (!from) return json(res, 403, { error: "unknown sender" });
+      // #4439: no card stands behind the entry any more, so it is written
+      // only by the token's own bot from the token's own conversation: ids
+      // of another bot or thread never reach that person's memory
+      if (from.id !== sender.id || body.fromThreadId !== capability.threadId) {
+        return json(res, 403, { error: "a bot saves team memory only from its own conversation" });
+      }
       const ownerThread = deps.ownsThread(from.id, body.fromThreadId);
       if (!ownerThread) return json(res, 403, { error: "source conversation does not belong to sender" });
       const ownerGroup = deps.groupByThread(body.fromThreadId);

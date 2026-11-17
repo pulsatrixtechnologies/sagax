@@ -9770,7 +9770,7 @@
   "teamMemory.also": "aussi {names}",
   "teamMemory.from": "de {name}",
   "teamMemory.you": "toi",
-  "teamMemory.empty": "Rien de partagé pour l'instant. Révise ce que les bots proposent à mesure qu'ils apprennent qui est qui et où se trouvent les choses, ou ajoute une entrée toi-même.",
+  "teamMemory.empty": "Rien de partagé pour l'instant. Les bots enregistrent qui est qui et où se trouvent les choses à mesure qu'ils l'apprennent, ou ajoute une entrée toi-même.",
   "teamMemory.shared": "Partagé",
   "teamMemory.kind.person": "Personnes",
   "teamMemory.kind.place": "Lieux",

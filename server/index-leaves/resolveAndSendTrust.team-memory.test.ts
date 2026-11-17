@@ -73,6 +73,16 @@ describe("a team memory card left from before #4439", () => {
     expect(sent[1]).toMatchObject({ status: 409, body: { outcome: "allowed-once" } });
   });
 
+  it("Remember after a bot saved a newer entry of that name keeps the newer one and closes the card", () => {
+    const { bot, entryId } = oldCard("NAS");
+    const newer = memory.save(personMemoryKey("owner-1"), { kind: "term", name: "NAS", detail: "saved later" }, { botId: bot.id, botName: "Scout", threadId: bot.threadId, at: 50 });
+    const { sent, run } = answer();
+    run(bot.threadId, entryId, "allow");
+    expect(sent[0]?.status).toBe(409);
+    expect(memory.list(personMemoryKey("owner-1")).map((entry) => entry.id)).toEqual([newer.entry.id]);
+    expect(store.messagesFor(bot.threadId).find((message) => message.card?.requestId === entryId)?.card).toMatchObject({ dismissed: true });
+  });
+
   it("Skip drops it, as the person chose", () => {
     const { bot, entryId } = oldCard("OKR");
     const { sent, run } = answer();

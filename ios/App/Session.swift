@@ -706,6 +706,19 @@ final class Session: ObservableObject {
                 state.bots[index].activeLeafId = rows[end].id
                 state.activeLeafIds[state.bots[index].threadId] = rows[end].id
             }
+            // #4490 checks: a bot message arrives while a person is typing in a form
+            if let at = arguments.firstIndex(of: "-form-cards-incoming"), arguments.indices.contains(at + 1),
+               let seconds = Double(arguments[at + 1]),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }) {
+                let thread = state.bots[index].threadId
+                let json = #"{"role":"bot","kind":"text","text":"A new message while you fill the form in.","id":"f-incoming","at":1787030000000,"parentId":"f-user"}"#
+                DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                    guard let self, let message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
+                    self.state.messages[thread, default: []].append(message)
+                    self.state.bots[index].activeLeafId = message.id
+                    self.state.activeLeafIds[thread] = message.id
+                }
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"

@@ -49,6 +49,26 @@ struct QuestionSheet<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            QuestionSheetHeader(colors: colors, title: title, meta: meta, onDismiss: onDismiss, dismissLabel: dismissLabel, dismissId: dismissId)
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: colors.desktop == nil ? .infinity : 560, alignment: .leading)
+    }
+}
+
+/// The card's title line: the title, an optional progress, the skip ×.
+struct QuestionSheetHeader: View {
+    let colors: QuestionSheetColors
+    let title: String
+    var meta: String? = nil
+    var onDismiss: (() -> Void)? = nil
+    var dismissLabel: String? = nil
+    var dismissId: String? = nil
+
+    var body: some View {
             HStack(alignment: .top, spacing: 8) {
                 Text(title)
                     .font(colors.font(14, .semibold))
@@ -80,12 +100,6 @@ struct QuestionSheet<Content: View>: View {
                     .accessibilityIdentifier(dismissId ?? "question-dismiss")
                 }
             }
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .frame(maxWidth: colors.desktop == nil ? .infinity : 560, alignment: .leading)
     }
 }
 

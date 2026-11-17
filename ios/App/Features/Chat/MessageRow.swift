@@ -19,6 +19,8 @@ struct MessageRow: View {
     /// L02). The row no longer observes the session: every frame used to
     /// re-run the body of every row on screen.
     var rowContext: RowContext = .none
+    /// #4490: the transcript draws a pending form as several rows; this one is its head.
+    var splitForms = false
     private var session: Session { SessionHub.session }
     @State private var editingText = ""
     @State private var showingEdit = false
@@ -315,7 +317,8 @@ struct MessageRow: View {
             openRun: routineRunOpener,
             folded: rowContext.foldedResults.contains(message.id),
             select: { selecting = SelectableText(text: $0) },
-            openDigest: { digest = $0 }
+            openDigest: { digest = $0 },
+            splitForms: splitForms
         )
     }
 
@@ -376,6 +379,7 @@ extension MessageRow: Equatable {
         lhs.message == rhs.message
             && Self.sameChat(lhs.chat, rhs.chat)
             && lhs.endsRun == rhs.endsRun
+            && lhs.splitForms == rhs.splitForms
             && (lhs.openThread == nil) == (rhs.openThread == nil)
             && lhs.rowContext.same(as: rhs.rowContext, for: lhs.message)
     }
@@ -471,6 +475,7 @@ private struct MessageKindContent: View {
     let select: (String) -> Void
     /// The digest sheet with this summary.
     let openDigest: (DigestSummary) -> Void
+    var splitForms = false
     private var session: Session { SessionHub.session }
 
     var body: some View {
@@ -478,7 +483,7 @@ private struct MessageKindContent: View {
         case .text:
             TextKindRow(message: message, chat: chat, endsRun: endsRun, showingSource: showingSource, openLink: openLink, askCw: askCw)
         case .options:
-            OptionsKindRow(message: message, chat: chat)
+            OptionsKindRow(message: message, chat: chat, splitForms: splitForms)
         case .secret:
             SecretKindRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
         case .activity:
@@ -578,6 +583,7 @@ private struct TextKindRow: View {
 struct OptionsKindRow: View {
     let message: Message
     let chat: Chat
+    var splitForms = false
 
     var body: some View {
         if let via = message.relayVia {
@@ -594,7 +600,7 @@ struct OptionsKindRow: View {
                 accent: Theme.readable(MausPalette.color(chat.color))
             )
         } else if message.card?.questions.isEmpty == false {
-            QuestionCardView(chat: chat, message: message)
+            QuestionCardView(chat: chat, message: message, splitHead: splitForms)
         } else if let card = message.card, ProactiveChoiceCardView.draws(card) {
             // #3465: a watch domain's choice card, in the compact look (#3457)
             ProactiveChoiceCardView(chat: chat, message: message)

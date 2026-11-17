@@ -64,64 +64,12 @@ final class BottomFollow: ObservableObject {
         observations.append(view.observe(\.contentSize, options: [.new]) { [weak self] scroll, _ in
             MainActor.assumeIsolated {
                 self?.pinToBottomIfFollowing(scroll)
-                self?.restoreAfterSizeChange(scroll)
                 // drawn rows shorter than their estimates can leave the
                 // offset past the content without the offset moving
                 Self.rescueBlank(scroll)
-                self?.nudgeWhenSettled(scroll)
             }
         })
-        watchTextSize(view)
         pinToBottomIfFollowing(view)
-    }
-
-    private var settleTask: Task<Void, Never>?
-
-    /// Where the reader was (a fraction of the content) when the text size
-    /// changed while not following the end, and until when to restore it.
-    private var sizeChange: (fraction: CGFloat, until: Date)?
-    private var sizeObserver: NSObjectProtocol?
-
-    /// A live text size change rebuilds the transcript (`TranscriptStack`);
-    /// a reader away from the end keeps their place by the same share of
-    /// the new content, a reader at the end is pinned to it as before.
-    private func watchTextSize(_ scroll: UIScrollView) {
-        if let sizeObserver { NotificationCenter.default.removeObserver(sizeObserver) }
-        sizeObserver = NotificationCenter.default.addObserver(
-            forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main
-        ) { [weak self, weak scroll] _ in
-            MainActor.assumeIsolated {
-                guard let self, let scroll, !self.following, scroll.contentSize.height > 0 else { return }
-                let top = scroll.contentOffset.y + scroll.adjustedContentInset.top
-                self.sizeChange = (max(0, top) / scroll.contentSize.height, Date().addingTimeInterval(1.5))
-            }
-        }
-    }
-
-    private func restoreAfterSizeChange(_ scroll: UIScrollView) {
-        guard let change = sizeChange else { return }
-        guard Date() < change.until else { sizeChange = nil; return }
-        let inset = scroll.adjustedContentInset
-        let end = max(-inset.top, scroll.contentSize.height - scroll.bounds.height + inset.bottom)
-        let y = min(max(change.fraction * scroll.contentSize.height - inset.top, -inset.top), end)
-        if abs(scroll.contentOffset.y - y) > 1 { scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false) }
-    }
-
-    /// A very tall row that changes height after its first layout can leave
-    /// the lazy stack with the right geometry and nothing drawn. Once the
-    /// content size has stopped changing, move the offset by a point and back
-    /// so the stack realizes and draws the rows in view.
-    private func nudgeWhenSettled(_ scroll: UIScrollView) {
-        settleTask?.cancel()
-        let height = scroll.contentSize.height
-        settleTask = Task { @MainActor [weak scroll] in
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard !Task.isCancelled, let scroll, scroll.contentSize.height == height,
-                  !Self.userScrolling(scroll), scroll.contentSize.height > scroll.bounds.height else { return }
-            let y = scroll.contentOffset.y
-            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y - 1), animated: false)
-            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
-        }
     }
 
     private func distance(_ scroll: UIScrollView) -> CGFloat {
@@ -137,7 +85,7 @@ final class BottomFollow: ObservableObject {
     /// A short transcript is pinned too: SwiftUI bottom aligns it with a top
     /// inset, and its resting offset is `-inset.top` (#3992).
     private func pinToBottomIfFollowing(_ scroll: UIScrollView) {
-        guard following else { return }
+        guard following, !FormCardStore.shared.isEditing else { return }
         if let y = TranscriptScrollPin.followOffset(Self.geometry(scroll), userScrolling: Self.userScrolling(scroll)) {
             scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
         }

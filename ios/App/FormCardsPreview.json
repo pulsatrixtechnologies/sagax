@@ -526,6 +526,136 @@
      "id": "f-long-text",
      "at": 1787028800000,
      "parentId": "f-user"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Twenty posts to publish",
+      "subtitle": "Six drafts are ready. Uncheck any you do not want posted.",
+      "options": [],
+      "requestId": "form-list20",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Six drafts are ready. Uncheck any you do not want posted.",
+         "kind": "multi",
+         "multiSelect": true,
+         "options": [
+          {
+           "label": "Item 1: Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Item 2: Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          },
+          {
+           "label": "Item 3: Reply about offline mode",
+           "description": "Yes: offline mode keeps your last 30 days and syncs when you are back online."
+          },
+          {
+           "label": "Item 4: Clip of the new sidebar",
+           "description": "Fifteen seconds of the new sidebar: drag to reorder, pin what matters."
+          },
+          {
+           "label": "Item 5: Thank-you post for beta testers",
+           "description": "Two hundred of you tested 2.4 before anyone else. Thank you, it shows."
+          },
+          {
+           "label": "Item 6: Maintenance reminder",
+           "description": "Friday 22:00 to 23:00, sync pauses for an upgrade. Nothing to do on your side."
+          },
+          {
+           "label": "Item 7: Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Item 8: Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          },
+          {
+           "label": "Item 9: Reply about offline mode",
+           "description": "Yes: offline mode keeps your last 30 days and syncs when you are back online."
+          },
+          {
+           "label": "Item 10: Clip of the new sidebar",
+           "description": "Fifteen seconds of the new sidebar: drag to reorder, pin what matters."
+          },
+          {
+           "label": "Item 11: Thank-you post for beta testers",
+           "description": "Two hundred of you tested 2.4 before anyone else. Thank you, it shows."
+          },
+          {
+           "label": "Item 12: Maintenance reminder",
+           "description": "Friday 22:00 to 23:00, sync pauses for an upgrade. Nothing to do on your side."
+          },
+          {
+           "label": "Item 13: Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Item 14: Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          },
+          {
+           "label": "Item 15: Reply about offline mode",
+           "description": "Yes: offline mode keeps your last 30 days and syncs when you are back online."
+          },
+          {
+           "label": "Item 16: Clip of the new sidebar",
+           "description": "Fifteen seconds of the new sidebar: drag to reorder, pin what matters."
+          },
+          {
+           "label": "Item 17: Thank-you post for beta testers",
+           "description": "Two hundred of you tested 2.4 before anyone else. Thank you, it shows."
+          },
+          {
+           "label": "Item 18: Maintenance reminder",
+           "description": "Friday 22:00 to 23:00, sync pauses for an upgrade. Nothing to do on your side."
+          },
+          {
+           "label": "Item 19: Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Item 20: Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          }
+         ],
+         "checked": [
+          "Item 1: Release notes for Nimbus 2.4",
+          "Item 2: Thread about the acme meetup",
+          "Item 3: Reply about offline mode",
+          "Item 5: Thank-you post for beta testers",
+          "Item 6: Maintenance reminder",
+          "Item 7: Release notes for Nimbus 2.4",
+          "Item 8: Thread about the acme meetup",
+          "Item 9: Reply about offline mode",
+          "Item 10: Clip of the new sidebar",
+          "Item 11: Thank-you post for beta testers",
+          "Item 12: Maintenance reminder",
+          "Item 13: Release notes for Nimbus 2.4",
+          "Item 14: Thread about the acme meetup",
+          "Item 15: Reply about offline mode",
+          "Item 16: Clip of the new sidebar",
+          "Item 17: Thank-you post for beta testers",
+          "Item 18: Maintenance reminder",
+          "Item 19: Release notes for Nimbus 2.4",
+          "Item 20: Thread about the acme meetup"
+         ],
+         "actions": [
+          "Post selected",
+          "Skip tonight"
+         ]
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-list20",
+     "at": 1787028603000,
+     "parentId": "f-user"
     }
    ],
    "pinned": true

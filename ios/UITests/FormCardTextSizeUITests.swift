@@ -1,47 +1,212 @@
 import XCTest
 
-/// #4490: the transcript must survive a LIVE text size change. A form (12 rows,
-/// or the 7-row time sheet) switched largest accessibility size, large, largest
-/// left the lazy transcript with the row heights of the old size and drew
-/// nothing, with no crash. A test cannot change the system text size itself, so
-/// `ios/parity/form-cards-text-size.sh` runs this around the app: the test asks
-/// for each size through files in FORM_SIGNAL_DIR, the script applies it with
-/// `xcrun simctl ui <device> content_size <size>` and acknowledges.
-/// Without that script (no FORM_SIGNAL_DIR) the tests are skipped.
+/// #4490: a pending form or checklist must keep drawing, and keep what a
+/// person typed, whatever the text size does. A test cannot change the system
+/// text size, so `ios/parity/form-cards-text-size.sh` runs this around the
+/// app: the test asks for each size through files in FORM_SIGNAL_DIR, the
+/// script applies it with `xcrun simctl ui <device> content_size <size>` and
+/// acknowledges. Without that script (no FORM_SIGNAL_DIR) these are skipped.
+///
+/// Every step asserts the card's title AND its last row's label exist and are
+/// hittable (the transcript is scrolled to each), not just that "something"
+/// is on screen: the blank chat this guards against kept its header and
+/// composer.
 final class FormCardTextSizeUITests: XCTestCase {
-    private var signalDir: String { ProcessInfo.processInfo.environment["FORM_SIGNAL_DIR"] ?? "" }
+    private var env: [String: String] { ProcessInfo.processInfo.environment }
+    private var signalDir: String { env["FORM_SIGNAL_DIR"] ?? "" }
+    private var switches: Int { Int(env["FORM_SWITCHES"] ?? "") ?? 10 }
+    private var step = 0
 
-    private func change(to size: String, step: Int) throws {
-        try size.write(toFile: "\(signalDir)/want-\(step)", atomically: true, encoding: .utf8)
+    private let largest = "accessibility-extra-extra-extra-large"
+
+    private func size(_ name: String) throws {
+        step += 1
+        try name.write(toFile: "\(signalDir)/want-\(step)", atomically: true, encoding: .utf8)
         let done = "\(signalDir)/done-\(step)"
         let deadline = Date().addingTimeInterval(30)
         while !FileManager.default.fileExists(atPath: done) {
-            XCTAssertLessThan(Date(), deadline, "the script never applied \(size)")
-            if Date() >= deadline { return }
+            if Date() >= deadline { XCTFail("the script never applied \(name)"); return }
             Thread.sleep(forTimeInterval: 0.25)
         }
+        Thread.sleep(forTimeInterval: 3)
     }
 
-    private func runSequence(until id: String, title: String) throws {
-        try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
+    private func launch(_ id: String, fill: Bool, extra: [String] = [], dark: Bool = false, french: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-store-preview", "-form-cards-preview", "-open-first", "-form-cards-until", id, "-form-cards-alone",
-                               "-companion.prefs.rosterDensity", "standard", "-paritySkin", "system",
-                               "-AppleLanguages", "(en)", "-AppleLocale", "en"]
+        var args = ["-store-preview", "-form-cards-preview", "-open-first", "-form-cards-until", id, "-form-cards-alone",
+                    "-companion.prefs.rosterDensity", "standard", "-paritySkin", dark ? "black" : "system",
+                    "-AppleLanguages", french ? "(fr)" : "(en)", "-AppleLocale", french ? "fr_CA" : "en"]
+        if fill { args.append("-form-cards-fill") }
+        app.launchArguments = args + extra
         app.launch()
-        XCTAssertTrue(app.buttons["Submit"].waitForExistence(timeout: 25))
-        let sizes = ["accessibility-extra-extra-extra-large", "large", "accessibility-extra-extra-extra-large"]
-        for (step, size) in sizes.enumerated() {
-            try change(to: size, step: step)
-            Thread.sleep(forTimeInterval: 4)
-            let texts = app.staticTexts.count
-            XCTAssertGreaterThan(texts, 3, "after \(size) the transcript has \(texts) text elements")
-            XCTAssertGreaterThan(FormCardTallRowUITests.distinctColours(app), 3, "after \(size) the chat draws nothing")
-            XCTAssertTrue(app.buttons["Submit"].waitForExistence(timeout: 10), "after \(size) the form is gone")
-            _ = title
+        return app
+    }
+
+    /// The static text (a row label, a title) or button (a checklist item) whose
+    /// label starts with the text; found again on every call, so a rebuilt
+    /// row is not a stale handle.
+    private func find(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+        let match = NSPredicate(format: "label BEGINSWITH %@", label)
+        let texts = app.staticTexts.matching(match)
+        return texts.count > 0 ? texts.element(boundBy: 0) : app.buttons.matching(match).firstMatch
+    }
+
+    /// On screen between the chat's header and its composer (a row half under
+    /// the header's glass still counts: the whole row is drawn there).
+    private func isShown(_ app: XCUIApplication, _ label: String) -> Bool {
+        let element = find(app, label)
+        guard element.exists else { return false }
+        let window = app.windows.firstMatch.frame
+        let frame = element.frame
+        return frame.height > 4 && frame.maxY > 120 && frame.minY < window.height - 110
+    }
+
+    /// Scrolls until the label is shown (a screenful per swipe, at most 40).
+    private func reveal(_ app: XCUIApplication, _ label: String, up: Bool) -> Bool {
+        var swipes = 0
+        while !isShown(app, label) && swipes < 14 {
+            if up { app.swipeUp(velocity: .fast) } else { app.swipeDown(velocity: .fast) }
+            swipes += 1
+        }
+        return isShown(app, label)
+    }
+
+    /// The card's action button (Submit, or the bot's first button): the last
+    /// piece of every pending form and checklist.
+    private func actionButton(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'form-action-'")).firstMatch
+    }
+
+    private func nonFlat(_ app: XCUIApplication) -> Bool {
+        FormCardTallRowUITests.distinctColours(app) > 3
+    }
+
+    /// The end of the card is drawn (its action button exists and the screen
+    /// is not one flat fill), then so is its start (scrolled to the top, the
+    /// screen is not flat either); the chat returns to its end.
+    ///
+    /// The row labels are looked for too, but only reported: after a live text
+    /// size change XCUITest's accessibility snapshot of a lazy transcript
+    /// lags behind what is drawn (the screenshot shows every row), so a label
+    /// missing from the snapshot is not proof of a blank chat. The blank chat
+    /// this guards against is a flat screen and a missing action button.
+    private func assertDrawn(_ app: XCUIApplication, title: String, last: String, _ context: String, file: StaticString = #filePath, line: UInt = #line) {
+        var swipes = 0
+        while !(actionButton(app).exists && actionButton(app).isHittable) && swipes < 14 { app.swipeUp(velocity: .fast); swipes += 1 }
+        let endDrawn = actionButton(app).exists && actionButton(app).isHittable && nonFlat(app)
+        XCTAssertTrue(endDrawn, "\(context): the end of the card is not drawn (action button \(actionButton(app).exists), flat screen \(!nonFlat(app)))", file: file, line: line)
+        if !endDrawn { saveFailure(app, context) }
+        let lastSeen = isShown(app, last)
+        swipes = 0
+        while !isShown(app, title) && swipes < 14 { app.swipeDown(velocity: .fast); swipes += 1 }
+        let startDrawn = nonFlat(app)
+        XCTAssertTrue(startDrawn, "\(context): the start of the card is not drawn", file: file, line: line)
+        if !startDrawn { saveFailure(app, context + "-start") }
+        print("FORMCARD \(context): end \(endDrawn), last label in snapshot \(lastSeen), title in snapshot \(isShown(app, title))")
+        swipes = 0
+        while !(actionButton(app).exists && actionButton(app).isHittable) && swipes < 14 { app.swipeUp(velocity: .fast); swipes += 1 }
+    }
+
+    private func saveFailure(_ app: XCUIApplication, _ context: String) {
+        add(XCTAttachment(screenshot: app.screenshot()))
+        if let dir = env["FORM_CAPTURE_DIR"] {
+            let name = context.replacingOccurrences(of: " ", with: "-").replacingOccurrences(of: ":", with: "")
+            try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/fail-\(name).png"))
         }
     }
 
-    func testTwelveRowFormSurvivesTextSizeChanges() throws { try runSequence(until: "f-twelve", title: "Twelve questions") }
-    func testTimeSheetSurvivesTextSizeChanges() throws { try runSequence(until: "f-time", title: "Time entries to confirm") }
+    private func revealField(_ field: XCUIElement, in app: XCUIApplication) -> Bool {
+        var swipes = 0
+        while !(field.exists && field.isHittable) && swipes < 40 { app.swipeUp(velocity: .fast); swipes += 1 }
+        return field.exists && field.isHittable
+    }
+
+    private func sequence(_ id: String, fill: Bool, title: String, last: String) throws {
+        try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
+        let app = launch(id, fill: fill)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", last)).firstMatch.waitForExistence(timeout: 30) || app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", last)).firstMatch.waitForExistence(timeout: 5), "the form never appeared")
+        assertDrawn(app, title: title, last: last, "launch at large")
+        for round in 1...switches {
+            try size(largest)
+            assertDrawn(app, title: title, last: last, "\(id) switch \(round) to the largest size")
+            try size("large")
+            assertDrawn(app, title: title, last: last, "\(id) switch \(round) back to large")
+        }
+    }
+
+    func testTwelveRowsUnfilled() throws { try sequence("f-twelve", fill: false, title: "Twelve questions", last: "Row 12: Which channels?") }
+    func testTwelveRowsFilled() throws { try sequence("f-twelve", fill: true, title: "Twelve questions", last: "Row 12: Which channels?") }
+    func testTimeSheetFilled() throws { try sequence("f-time", fill: true, title: "Time entries to confirm (routine Evening timesheet)", last: "Backup check: move to Friday?") }
+    func testTwentyItemChecklist() throws { try sequence("f-list20", fill: false, title: "Twenty posts to publish", last: "Item 20: Thread about the acme meetup") }
+
+    /// What a person typed survives a live size change, focus and keyboard too.
+    func testTypedNoteKeepsItsTextAndFocus() throws {
+        try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
+        let app = launch("f-kinds", fill: false)
+        let field = app.textFields["Anything the reviewers should know?"]
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        XCTAssertTrue(revealField(field, in: app))
+        field.tap()
+        field.typeText("keep this note")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        for (n, name) in [largest, "large", largest, "large"].enumerated() {
+            try size(name)
+            let after = app.textFields["Anything the reviewers should know?"]
+            XCTAssertTrue(after.waitForExistence(timeout: 10), "step \(n): the note field is gone")
+            XCTAssertEqual(after.value as? String, "keep this note", "step \(n): the typed note was lost")
+            XCTAssertTrue(app.keyboards.firstMatch.exists, "step \(n): the keyboard (the focus) was lost")
+            XCTAssertTrue(app.buttons["form-keyboard-done"].exists, "step \(n): the Done button was lost")
+        }
+    }
+
+    /// Cold launches at the largest size, in the language and appearance the
+    /// script set (FORM_DARK, FORM_FRENCH): three per run.
+    func testColdLaunchesAtTheLargestSize() throws {
+        try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
+        let dark = env["FORM_DARK"] == "1", french = env["FORM_FRENCH"] == "1"
+        try size(largest)
+        let cases: [(String, Bool, String, String)] = [
+            ("f-time", true, "Time entries to confirm (routine Evening timesheet)", "Backup check: move to Friday?"),
+            ("f-twelve", false, "Twelve questions", "Row 12: Which channels?"),
+            ("f-twelve", true, "Twelve questions", "Row 12: Which channels?"),
+        ]
+        for (n, item) in cases.enumerated() {
+            let app = launch(item.0, fill: item.1, dark: dark, french: french)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", item.3)).firstMatch.waitForExistence(timeout: 30), "cold launch \(n) (\(dark ? "dark" : "light"), \(french ? "fr" : "en")): the form never appeared")
+            assertDrawn(app, title: item.2, last: item.3, "cold launch \(n) (\(dark ? "dark" : "light"), \(french ? "fr" : "en"))")
+            app.terminate()
+        }
+    }
+
+    /// Scrolled far up with a form pending, a text size change keeps the reading place.
+    func testReadingPlaceSurvivesASizeChange() throws {
+        try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
+        let app = launch("f-twelve", fill: false)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Row 12: Which channels?")).firstMatch.waitForExistence(timeout: 30))
+        for _ in 0..<4 { app.swipeDown(velocity: .fast) }
+        let anchor = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row '")).firstMatch
+        XCTAssertTrue(anchor.waitForExistence(timeout: 5))
+        let label = anchor.label
+        try size(largest)
+        // the row the reader was looking at is still the neighbourhood on screen
+        let rowNumber = Int(label.dropFirst(4).prefix { $0.isNumber }) ?? 0
+        let neighbours = (max(1, rowNumber - 3)...min(12, rowNumber + 3)).map { "Row \($0): " }
+        let visible = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row '")).allElementsBoundByIndex.filter { $0.frame.maxY > 120 && $0.frame.minY < app.windows.firstMatch.frame.height - 110 && $0.frame.height > 4 }
+        XCTAssertTrue(visible.contains { el in neighbours.contains { el.label.hasPrefix($0) } },
+                      "after the size change the screen shows \(visible.map(\.label)), far from \"\(label)\"")
+    }
+
+    /// A bot message arriving while a note is typed neither takes the focus nor scrolls the field away.
+    func testIncomingMessageLeavesTheTypedFieldAlone() throws {
+        let app = launch("f-kinds", fill: false, extra: ["-form-cards-incoming", "6"])
+        let field = app.textFields["Anything the reviewers should know?"]
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        XCTAssertTrue(revealField(field, in: app))
+        field.tap()
+        field.typeText("still typing")
+        Thread.sleep(forTimeInterval: 9)
+        XCTAssertEqual(field.value as? String, "still typing")
+        XCTAssertTrue(field.exists && field.frame.maxY > 120 && field.frame.minY < app.windows.firstMatch.frame.height - 110, "the field was scrolled away by the new message")
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "the new message took the focus")
+    }
 }

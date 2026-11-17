@@ -89,6 +89,8 @@ struct ChatView: View {
     @State var callPanel: CallBarPanel?
     /// Dynamic Type's factor for the call bar's row (CallBarMetrics.scale).
     @ScaledMetric(relativeTo: .body) var callBarScale: CGFloat = 1
+    /// Bumped when a form card is answered: its pieces give way to the settled card.
+    @ObservedObject private var formStore = FormCardStore.shared
     @Environment(\.isPresented) var isPresented
     @Environment(\.openURL) var openURL
     /// WP11: the Room info sheet (RM6), opened by a room's header.
@@ -757,6 +759,8 @@ struct ChatView: View {
         let transcript = rows
         let rowContext = session.rowContext(forThread: threadId)
         let streamOn = !threadPrefs.showThreads && current.isBot && currentTopicIsSegment
+        let _ = formStore.sentRevision
+        let formSplitIds = FormCardPieces.splitIds(transcript: rows, chat: current)
         let readBack = session.state.hasMore[threadId] == false
         let topicsAbove = streamOn && readBack ? Array(earlierTopics.prefix(earlierTopicsShown).reversed()) : []
         let nextTopic = streamOn && readBack && earlierTopicsShown < earlierTopics.count ? earlierTopics[earlierTopicsShown] : nil
@@ -845,90 +849,9 @@ struct ChatView: View {
                         }
 
                         ForEach(Array(transcript.enumerated()), id: \.element.id) { index, row in
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(conversationAnchors.before[index] ?? []) { conversationLine($0) }
-                                // a gap in time is worth marking; a timestamp
-                                // on every message is just noise
-                                if let desktop = desktopChatText {
-                                    // ChatView.tsx DaySeparator: a new calendar
-                                    // day, 13 pt ink-secondary, 12 above and below
-                                    if desktopStartsANewDay(at: index, in: transcript) {
-                                        Text(verbatim: DesktopChatMetrics.dayLabel(row.head.date))
-                                            .font(desktop.font(13))
-                                            .frame(minHeight: 19.5)
-                                            .foregroundStyle(desktop.inkSecondary)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 12)
-                                            .padding(.top, index == 0 ? 0 : DesktopChatMetrics.rowGap)
-                                            .padding(.bottom, DesktopChatMetrics.rowGap)
-                                    } else if index > 0 {
-                                        Color.clear.frame(height: DesktopChatMetrics.rowGap)
-                                    }
-                                } else if startsANewStretch(at: index, in: transcript) {
-                                    // 11 pt #555557, centred: about 22.6 pt
-                                    // under the previous bubble and 17.6 pt
-                                    // above the next one (reference 02).
-                                    Text(RelativeStamp.separator(row.head.date))
-                                        .font(Theme.Font.timestamp)
-                                        .foregroundStyle(Theme.chatTimestamp)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.top, index == 0 ? 8 : 22.6)
-                                        .padding(.bottom, 17.6)
-                                } else if index > 0 {
-                                    Color.clear.frame(height: Self.rowGap)
-                                }
-                                if row.id == newDividerBefore {
-                                    if desktopChatText != nil {
-                                        // NewMessagesDivider.tsx, a row of its own
-                                        // (the rows around it reserve the message
-                                        // bar's height, which made up the rest)
-                                        DesktopNewMessagesDivider()
-                                            .padding(.bottom, DesktopChatMetrics.rowGap)
-                                    } else {
-                                        NewMessagesLine()
-                                    }
-                                }
-                                // WP15 (RM21): another person's name over their run
-                                if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
-                                    RoomPersonLabel(name: name, initials: initials, personId: personId, roomId: { if case let .room(room) = current { return room.id } else { return nil } }())
-                                }
-                                switch row {
-                                case let .message(message):
-                                    MessageRow(
-                                        chat: current,
-                                        message: message,
-                                        endsRun: endsRun(at: index, in: transcript),
-                                        openLink: openLink,
-                                        openThread: openThread,
-                                        rowContext: rowContext
-                                    )
-                                    // Skips the row when only the screen
-                                    // around it changed (a keystroke, the
-                                    // follow state); what the row reads from
-                                    // the session still updates it.
-                                    .equatable()
-                                case let .activityRun(run):
-                                    StepRunRow(
-                                        run: run, chat: current, openLink: openLink, openThread: openThread,
-                                        revealedMessageId: revealedMessageId,
-                                        scrollToMessage: { proxy.scrollTo($0, anchor: .center) },
-                                        rowContext: rowContext
-                                    )
-                                case let .voiceCall(card):
-                                    VoiceCallCard(
-                                        chat: current,
-                                        card: card,
-                                        forceOpen: card.messages.contains { $0.id == revealedMessageId },
-                                        live: session.streamingStore
-                                    )
-                                case let .incoming(line):
-                                    IncomingLineView(line: line)
-                                }
-                            }
-                            .id(row.id)
-#if DEBUG
-                            .background { desktopParityRowProbe(row) }
-#endif
+                            transcriptRow(index, row, in: transcript, anchors: conversationAnchors, rowContext: rowContext,
+                                          formSplitIds: formSplitIds, current: current, proxy: proxy)
+                            FormCardPieces.rest(after: row, chat: current)
                         }
 
                         ForEach(conversationAnchors.after) { conversationLine($0) }
@@ -1110,7 +1033,7 @@ struct ChatView: View {
                     // Reading scrollback is not interrupted (MS14); your own
                     // send takes you back to the end.
                     if last.role == .user { follow.resume() }
-                    guard follow.following else { return }
+                    guard follow.following, !FormCardStore.shared.isEditing else { return }
                     withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
                 }
                 // Long markdown replies finish laying out after the first
@@ -1122,7 +1045,7 @@ struct ChatView: View {
                     for delay in [50, 150, 450, 900] {
                         try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
                         guard !Task.isCancelled, session.focusedMessageId == nil, revealedMessageId == nil else { return }
-                        guard follow.following else { return }
+                        guard follow.following, !FormCardStore.shared.isEditing else { return }
                         proxy.scrollTo(Self.bottomId, anchor: .bottom)
                     }
                 }
@@ -1269,6 +1192,103 @@ struct ChatView: View {
 
     /// `startsNewStretch` (src/lib/bot-exchange.ts): a new calendar day, or
     /// more than 30 minutes since the previous row's last message.
+    /// One transcript row: its separators, the row itself, `.id` and probe.
+    /// Out of the ForEach closure so the type checker can keep up (#4490).
+    @ViewBuilder
+    func transcriptRow(
+        _ index: Int, _ row: TranscriptRow, in transcript: [TranscriptRow],
+        anchors: (before: [Int: [BotConversation]], after: [BotConversation]),
+        rowContext: RowContext, formSplitIds: Set<String>, current: Chat, proxy: ScrollViewProxy
+    ) -> some View {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(anchors.before[index] ?? []) { conversationLine($0) }
+                    // a gap in time is worth marking; a timestamp
+                    // on every message is just noise
+                    if let desktop = desktopChatText {
+                        // ChatView.tsx DaySeparator: a new calendar
+                        // day, 13 pt ink-secondary, 12 above and below
+                        if desktopStartsANewDay(at: index, in: transcript) {
+                            Text(verbatim: DesktopChatMetrics.dayLabel(row.head.date))
+                                .font(desktop.font(13))
+                                .frame(minHeight: 19.5)
+                                .foregroundStyle(desktop.inkSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .padding(.top, index == 0 ? 0 : DesktopChatMetrics.rowGap)
+                                .padding(.bottom, DesktopChatMetrics.rowGap)
+                        } else if index > 0 {
+                            Color.clear.frame(height: DesktopChatMetrics.rowGap)
+                        }
+                    } else if startsANewStretch(at: index, in: transcript) {
+                        // 11 pt #555557, centred: about 22.6 pt
+                        // under the previous bubble and 17.6 pt
+                        // above the next one (reference 02).
+                        Text(RelativeStamp.separator(row.head.date))
+                            .font(Theme.Font.timestamp)
+                            .foregroundStyle(Theme.chatTimestamp)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, index == 0 ? 8 : 22.6)
+                            .padding(.bottom, 17.6)
+                    } else if index > 0 {
+                        Color.clear.frame(height: Self.rowGap)
+                    }
+                    if row.id == newDividerBefore {
+                        if desktopChatText != nil {
+                            // NewMessagesDivider.tsx, a row of its own
+                            // (the rows around it reserve the message
+                            // bar's height, which made up the rest)
+                            DesktopNewMessagesDivider()
+                                .padding(.bottom, DesktopChatMetrics.rowGap)
+                        } else {
+                            NewMessagesLine()
+                        }
+                    }
+                    // WP15 (RM21): another person's name over their run
+                    if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
+                        RoomPersonLabel(name: name, initials: initials, personId: personId, roomId: { if case let .room(room) = current { return room.id } else { return nil } }())
+                    }
+                    switch row {
+                    case let .message(message):
+                        MessageRow(
+                            chat: current,
+                            message: message,
+                            endsRun: endsRun(at: index, in: transcript),
+                            openLink: openLink,
+                            openThread: openThread,
+                            rowContext: rowContext,
+                            // #4490: a pending form is several rows of
+                            // this stack; the row is then only its head
+                            splitForms: formSplitIds.contains(message.id)
+                        )
+                        // Skips the row when only the screen
+                        // around it changed (a keystroke, the
+                        // follow state); what the row reads from
+                        // the session still updates it.
+                        .equatable()
+                    case let .activityRun(run):
+                        StepRunRow(
+                            run: run, chat: current, openLink: openLink, openThread: openThread,
+                            revealedMessageId: revealedMessageId,
+                            scrollToMessage: { proxy.scrollTo($0, anchor: .center) },
+                            rowContext: rowContext
+                        )
+                    case let .voiceCall(card):
+                        VoiceCallCard(
+                            chat: current,
+                            card: card,
+                            forceOpen: card.messages.contains { $0.id == revealedMessageId },
+                            live: session.streamingStore
+                        )
+                    case let .incoming(line):
+                        IncomingLineView(line: line)
+                    }
+                }
+                .id(row.id)
+#if DEBUG
+                .background { desktopParityRowProbe(row) }
+#endif
+    }
+
     func desktopStartsANewDay(at index: Int, in rows: [TranscriptRow]) -> Bool {
         Self.desktopStartsANewStretch(at: index, in: rows)
     }

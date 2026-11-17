@@ -32,9 +32,13 @@ const port = Number(arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
-const widths = [1280, 600, 544, 390];
+const widths = arg("--busy") ? [] : [1280, 600, 544, 390];
 const variantScenes = ["longtitle", "fields12", "nonotes", "longnames"];
-const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
+const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgrefused", "neighbour"];
+// the card over a busy chat (#4572): hovered and pinned, in the app's own
+// skins (dark: pulsatrix, graphite; light: daylight, linen), 1280 and 390 only
+const busySkins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }, { id: "graphite", label: "graphite" }, { id: "linen", label: "linen" }];
+const busyLang = (skin) => (skin === "pulsatrix" ? "fr" : "en");
 const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }, { name: "chat-nested", action: "nested" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -124,6 +128,26 @@ try {
       }
     }
     await page.close();
+  }
+  if (arg("--busy")) {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+      await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
+      for (const { id, label } of busySkins) {
+        const lang = busyLang(id);
+        for (const action of ["hover", "pinned"]) {
+          await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "busy" })}`);
+          await page.waitForSelector("[data-gallery-chat]", { timeout: 120_000 });
+          const chip = page.locator('[data-record-link="ticket"]').first();
+          await chip.scrollIntoViewIfNeeded();
+          if (action === "hover") await chip.hover(); else await chip.click();
+          await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
+          await page.waitForTimeout(700);
+          await page.screenshot({ path: join(outDir, `busy-${action}-${lang}-${label}-${width}.png`) });
+        }
+      }
+      await page.close();
+    }
   }
   console.log(`captures in ${outDir}`);
 } finally {

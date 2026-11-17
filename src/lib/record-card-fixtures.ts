@@ -13,6 +13,8 @@ export const NIMBUS_MARK = "https://desk.example/mark.svg";
 export const TICKET_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "ticket", id: "481516" };
 export const COMPANY_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "company", id: "7310" };
 export const PROJECT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "project", id: "7788" };
+export const INVOICE_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "invoice", id: "5150" };
+export const AGREEMENT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "agreement", id: "412" };
 export const GUID_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "ticket", id: "6f1c2a52-3b7e-4f0a-9d51-0c7a8e1b2d34" };
 
 /** The person's product list entry as the console sends it (the kinds it describes). */
@@ -26,6 +28,8 @@ export function nimbusProductRaw(): Record<string, unknown> {
       { kind: "ticket", name: { en: "Ticket", fr: "Billet" }, plural: { en: "Tickets", fr: "Billets" } },
       { kind: "company", name: { en: "Company", fr: "Entreprise" }, plural: { en: "Companies", fr: "Entreprises" } },
       { kind: "project", name: { en: "Project", fr: "Projet" }, plural: { en: "Projects", fr: "Projets" } },
+      { kind: "invoice", name: { en: "Invoice", fr: "Facture" }, plural: { en: "Invoices", fr: "Factures" } },
+      { kind: "agreement", name: { en: "Agreement", fr: "Entente" }, plural: { en: "Agreements", fr: "Ententes" } },
     ],
   };
 }
@@ -38,6 +42,8 @@ export type Lang = "fr" | "en";
 const T = (lang: Lang, fr: string, en: string) => (lang === "fr" ? fr : en);
 const ago = (now: number, ms: number) => new Date(now - ms).toISOString();
 const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
+/** The gallery's held time (2026-11-17 14:34 in Toronto), for the cards that carry no relative date. */
+const NOW_FIXTURE = Date.parse("2026-11-17T14:34:00-05:00");
 const product = { id: NIMBUS_PRODUCT, name: "Nimbus Desk" };
 
 /** A ticket: description, two notes of seven, a due date, key fields. */
@@ -109,6 +115,61 @@ export function projectCard(now: number, lang: Lang): Record<string, unknown> {
     description: { text: T(lang, "Remplacement du serveur de fichiers par un stockage partagé, en trois phases.", "Replacing the file server with shared storage, in three phases."), more: false },
     notes: { state: "ok", total: 1, items: [{ author: "Noor Haddad", at: ago(now, DAY + 2 * HOUR), text: T(lang, "Phase 1 terminée, copie validée avec Ada.", "Phase 1 done, copy checked with Ada."), more: false }] },
     open_url: "https://desk.example/records/projects/7788", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
+  };
+}
+
+const NIMBUS_COMPANY = { product: NIMBUS_PRODUCT, kind: "company", id: "7310" };
+
+/** An invoice as a console sends a kind it declares (#4572): typed fields (money
+ * with its currency, calendar days, references to records), a state, one chip,
+ * a due DAY, a comment on the right. Invented values, an invented product. */
+export function invoiceCard(_now: number, lang: Lang): Record<string, unknown> {
+  const money = (amount: string, fr: string, en: string) => ({ type: "money", amount, currency: "CAD", value: T(lang, fr, en) });
+  return {
+    product, kind: { id: "invoice", name: T(lang, "Facture", "Invoice") }, id: INVOICE_REF.id, number: "INV-1042",
+    title: "Example Org",
+    state: { label: T(lang, "Envoyée", "Sent"), tone: "open" },
+    chips: [{ label: T(lang, "Entente", "Agreement"), tone: "open" }],
+    dates: { due: "2026-11-05" },
+    fields: [
+      { label: T(lang, "Facturé à", "Billed to"), type: "ref", value: "Example Org", ref: NIMBUS_COMPANY },
+      { label: "Total", ...money("1234.5", "1 234,50 $", "$1,234.50") },
+      { label: T(lang, "Solde", "Balance"), ...money("1234.5", "1 234,50 $", "$1,234.50") },
+      { label: "Date", type: "date", at: "2026-10-06", day: true, value: "2026-10-06" },
+      { label: T(lang, "Taxes", "Tax"), ...money("160.49", "160,49 $", "$160.49") },
+      { label: T(lang, "Modalités", "Terms"), value: "Net 30" },
+      { label: T(lang, "Bon de commande du client", "Customer PO"), value: "PO-7781" },
+      { label: T(lang, "Entente", "Agreement"), type: "ref", value: "Managed services", ref: AGREEMENT_REF },
+      { label: T(lang, "Billet", "Ticket"), type: "ref", value: T(lang, "Imprimante de l'accueil hors ligne", "Printer offline at the front desk"), ref: TICKET_REF },
+    ],
+    description: { text: T(lang, "Merci de votre confiance.", "Thank you for your business."), more: false },
+    notes: { state: "none", items: [], more: false },
+    open_url: "https://desk.example/records/invoices/5150", tz: "America/Toronto", as_of: new Date(NOW_FIXTURE - 2 * MIN).toISOString(), cached: false,
+  };
+}
+
+/** An agreement: calendar days, an amount, a contact, a parent agreement. */
+export function agreementCard(_now: number, lang: Lang): Record<string, unknown> {
+  return {
+    product, kind: { id: "agreement", name: T(lang, "Entente", "Agreement") }, id: AGREEMENT_REF.id, number: "Managed services",
+    title: "Managed services",
+    state: { label: T(lang, "Active", "Active"), tone: "open" },
+    chips: [{ label: "Managed IT", tone: "open" }],
+    company: { name: "Example Org", ref: NIMBUS_COMPANY },
+    people: [{ role: "contact", label: "Contact", name: "Sam Example" }],
+    fields: [
+      { label: T(lang, "Début", "Start"), type: "date", at: "2026-01-01", day: true, value: "2026-01-01" },
+      { label: T(lang, "Fin", "End"), type: "date", at: "2026-12-31", day: true, value: "2026-12-31" },
+      { label: T(lang, "Montant", "Amount"), type: "money", amount: "1050", currency: "CAD", value: T(lang, "1 050,00 $", "$1,050.00") },
+      { label: T(lang, "Cycle de facturation", "Billing cycle"), value: T(lang, "Mensuel", "Monthly") },
+      { label: T(lang, "Prochaine facture", "Next invoice"), type: "date", at: "2026-12-01", day: true, value: "2026-12-01" },
+      { label: T(lang, "Couverture", "Covered"), value: T(lang, "Heures", "Hours") },
+      { label: T(lang, "Limite", "Limit"), value: "40 / CalendarMonth" },
+      { label: "SLA", value: "Standard" },
+    ],
+    description: { text: T(lang, "Couvre les postes gérés du bureau principal.", "Covers the managed workstations of the main office."), more: false },
+    notes: { state: "none", items: [], more: false },
+    open_url: "https://desk.example/records/agreements/412", tz: "America/Toronto", as_of: new Date(NOW_FIXTURE - 2 * MIN).toISOString(), cached: false,
   };
 }
 

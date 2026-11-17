@@ -28,7 +28,8 @@ describe("MacAppsInstalledSection", () => {
     expect(PLUGINS.rowSub).toContain("line-clamp-2");
     // each row keeps its chevron and fills its card
     expect(host.querySelector("[data-mac-app] svg.lucide-chevron-right, [data-mac-app] svg:last-child")).toBeTruthy();
-    expect(host.querySelector("[data-mac-app]")?.className).toContain("w-[calc(100%+24px)]");
+    expect(host.querySelector("[data-mac-app]")?.className).toContain("w-full");
+    expect(host.querySelector("[data-mac-app]")?.className).toContain("rounded-2xl");
     expect(host.querySelectorAll("[data-mac-app]").length).toBe(6);
     await act(async () => root.unmount());
     host.remove();

@@ -41,6 +41,9 @@ export interface UploadsRouteDeps {
   uploadOwner(auth: RequestAuth): string;
   /** Content-at-rest encryption owner; null on solo / non-session. */
   encryptionOwner(auth: RequestAuth): string | null;
+  /** Records the person who uploaded a stored file (its name), so a file no
+   * conversation uses yet is theirs only (attachment-uploaders.ts). */
+  recordUploader?(name: string, auth: RequestAuth): void;
   /** Solo unpacks archives next to the upload; organization servers do not. */
   extractArchivesHere(): boolean;
   /** Overridable for characterization tests. Defaults are the leaf helpers. */
@@ -84,6 +87,14 @@ export function createUploadsRoutes(deps: UploadsRouteDeps): RouteHandler {
   const removeArchive = deps.removeArchive ?? removeArchiveUpload;
   const recoverArchive = deps.recoverArchive ?? recoverArchiveUpload;
 
+  const uploaded = <T>(result: T, auth: RequestAuth): T => {
+    // a file POST answers the stored file; a resumable commit carries it in `saved`
+    const answer = result as { path?: unknown; saved?: { path?: unknown } } | null;
+    const stored = answer?.path ?? answer?.saved?.path;
+    if (typeof stored === "string" && stored) deps.recordUploader?.(stored.split(/[\\/]/).at(-1)!, auth);
+    return result;
+  };
+
   return async ({ req, res, url, path, method, auth, json }) => {
     // The same upload routes and personal write scopes support resumable
     // bodies. Every request fits through a proxy with a 100 MB body limit.
@@ -111,7 +122,7 @@ export function createUploadsRoutes(deps: UploadsRouteDeps): RouteHandler {
           recover: recoverArchive,
         });
         req.resume();
-        return json(res, 200, result);
+        return json(res, 200, uploaded(result, auth));
       } catch (error) {
         req.resume();
         throw error;
@@ -154,7 +165,7 @@ export function createUploadsRoutes(deps: UploadsRouteDeps): RouteHandler {
         req.resume();
         throw error;
       }
-      return json(res, 201, saved);
+      return json(res, 201, uploaded(saved, auth));
     }
 
     // Shared documents over the same authenticated connection as messages.
@@ -190,7 +201,7 @@ export function createUploadsRoutes(deps: UploadsRouteDeps): RouteHandler {
           expectedBytes: declaredLength,
           owner: deps.encryptionOwner(auth),
         });
-        return json(res, 201, await finalizeArchive(deps, saved));
+        return json(res, 201, uploaded(await finalizeArchive(deps, saved), auth));
       } catch (error) {
         req.resume();
         throw error;

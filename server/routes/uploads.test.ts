@@ -215,4 +215,19 @@ describe("encryptionOwnerForUpload", () => {
     expect(encryptionOwnerForUpload({ kind: "session", session: { principalId: "pr_1" } }, false)).toBeNull();
     expect(encryptionOwnerForUpload({ kind: "loopback" }, true)).toBeNull();
   });
+
+  it("records the uploader of every stored upload (file, image, resumable commit), never of a status or cancel", async () => {
+    const recordUploader = vi.fn();
+    const session = { kind: "session", scopes: ["client"], via: "cookie", session: { principalId: "pr_owner" } } as unknown as RequestAuth;
+    const resumableUpload = vi.fn(async (input: { phase: string }) => (input.phase === "commit"
+      ? { offset: 4, total: 4, saved: { path: "/data/attachments/c.zip", mime: "application/zip", bytes: 4, name: "c.zip" } }
+      : { offset: 0, total: 4 }));
+    const deps = baseDeps({ recordUploader, resumableUpload: resumableUpload as unknown as UploadsRouteDeps["resumableUpload"] });
+    await call(deps, { method: "POST", path: "/api/files", query: "name=notes.txt", headers: { "content-type": "text/plain" }, bodyChunks: [Buffer.from("x")], auth: session });
+    await call(deps, { method: "POST", path: "/api/attachments", headers: { "content-type": "image/png" }, bodyChunks: [Buffer.from("x")], auth: session });
+    const resumable = (phase: string) => call(deps, { method: "POST", path: "/api/files", query: `phase=${phase}&uploadId=11111111-1111-4111-8111-111111111111&total=4&name=c.zip`, headers: { "content-type": "application/zip" }, auth: session });
+    await resumable("status");
+    await resumable("commit");
+    expect(recordUploader.mock.calls.map(([name, auth]) => [name, auth === session])).toEqual([["a.txt", true], ["a.png", true], ["c.zip", true]]);
+  });
 });

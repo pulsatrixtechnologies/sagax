@@ -185,6 +185,7 @@ import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOu
 import { appendDecision, bindConfidentialDecisions, bindSurfaceDecisions, personsOwnDecision, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
+import { AttachmentUploaders } from "./attachments/attachment-uploaders.ts";
 import { ATTACHMENTS_DIR, attachmentExists, cleanupStaleAttachmentPartials, cleanupResumableUploads, deleteAttachment, isArchiveAttachment, readAttachment, setAttachmentStillShown, saveAudio, saveFile } from "./attachments/attachments.ts";
 import { messageAttachmentTags, statMessageFile } from "./messages/message-file.ts";
 import { createThreadFilePins } from "./threads/thread-file-pins.ts";
@@ -6090,6 +6091,7 @@ bindLeafHost({
   get threadOwner() { return threadOwner; },
   get visibleTo() { return visibleTo; },
   get attachmentThreads() { return attachmentThreads; },
+  get attachmentUploaders() { return attachmentUploaders; },
   get threadsUsingAttachment() { return threadsUsingAttachment; },
   get subjectVisible() { return subjectVisible; },
   get NEEDS_RUN() { return NEEDS_RUN; },
@@ -9803,8 +9805,14 @@ function forgetVisibility(): void {
 }
 
 /** Which threads mention an attachment, for a member's file request while a
- * bot is restricted: a scan of the message store, so kept a minute. */
+ * bot is restricted: a scan of the message store, so kept a minute (only a
+ * file some thread uses: "none yet" is read again each time). */
 const attachmentThreads = new Map<string, { at: number; threads: readonly string[] }>();
+/** Who uploaded each stored file: a file no thread uses is theirs only. */
+const attachmentUploaders = new AttachmentUploaders(join(DATA_DIR, "attachment-uploaders"));
+// a message written or changed may start (or stop) using a file: the next
+// file request reads which threads use it again, never a list from before
+onMessageChange(() => attachmentThreads.clear());
 
 /** The one check every request naming a bot, thread, room, routine, run or
  * attachment passes through for a member. An id nobody knows goes on to its
@@ -35670,6 +35678,10 @@ ROUTES.push(createThreadsHttpRoutes({
 }));
 ROUTES.push(createUploadsRoutes({
   uploadOwner: (auth) => channelViewerId(auth) ?? localPrincipalId() ?? "workspace",
+  recordUploader: (name, auth) => {
+    const who = channelViewerId(auth) ?? (auth.kind === "loopback" && auth.trust !== "service" ? localPrincipalId() : undefined);
+    if (who) attachmentUploaders.record(name, who);
+  },
   encryptionOwner: (auth) => encryptionOwnerForUpload(auth, IDENTITY.kind === "perspicax"),
   extractArchivesHere: () => IDENTITY.kind !== "perspicax"
 }));

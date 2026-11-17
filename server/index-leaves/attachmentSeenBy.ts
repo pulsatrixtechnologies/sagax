@@ -8,20 +8,21 @@ function attachmentSeenBy(name: string, viewerId: string) {
 
   const url = `/api/attachments/${name}`;
   if (host.store.bots.some((bot) => bot.avatarUrl === url)) return true;
-  let referenced = false;
+  // the person who uploaded the bytes always reads them
+  if (host.attachmentUploaders.uploadedBy(name, viewerId)) return true;
   for (const threadId of host.threadsUsingAttachment(name)) {
     const group = host.store.groupByThread(threadId);
     if (group) {
       if (host.groupVisible(group, viewerId)) return true;
-      referenced = true;
       continue;
     }
     const bot = host.store.botByThread(threadId);
     if (!bot) continue;
     if (host.listedBotVisible(bot, viewerId) && host.botThreadReadable(bot, threadId, viewerId, "thread.attachments")) return true;
-    referenced = true;
   }
-  return !referenced;
+  // a file no conversation of theirs uses, one no conversation uses yet
+  // included, is never open: only its uploader reads it (above)
+  return false;
 
 }
   return attachmentSeenBy;

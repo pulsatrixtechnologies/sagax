@@ -9,6 +9,12 @@ function threadsUsingAttachment(name: string) {
   const cached = host.attachmentThreads.get(name);
   if (cached && Date.now() - cached.at < 60_000) return cached.threads;
   const threads = host.threadsReferencing(name);
+  // "no thread yet" is never kept: the message that uses the file may be
+  // sent the next second, and a stale "none" would decide who reads it
+  if (!threads.length) {
+    host.attachmentThreads.delete(name);
+    return threads;
+  }
   if (host.attachmentThreads.size >= 2_000) host.attachmentThreads.clear();
   host.attachmentThreads.set(name, { at: Date.now(), threads });
   return threads;

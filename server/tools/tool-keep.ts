@@ -238,6 +238,21 @@ export function namedIn(id: string, named: NamedTokens): boolean {
   return named.code.has(tool) || (compoundName(tool) && named.words.has(tool));
 }
 
+/** The system prompt's section that carries a routine's instruction: it
+ * sits in the volatile half, yet names the tools the routine runs. */
+const ROUTINE_SECTION = "routine-execution";
+
+/** The texts a turn's tool names are read from (ToolKeepContext.namedText):
+ * the stable system prompt, the routine's instruction, the turn's own text
+ * and the rules. Never the rest of the volatile half (a memory, the date,
+ * recent work): its words change from turn to turn, and a memory that names
+ * a tool would bring it back mid-conversation and break the cached prefix
+ * more often than intended (the tool stays one search away). */
+export function toolKeepNamedText(prompt: { stable: string; sections?: readonly { id: string; text: string }[] }, text: unknown, rules: readonly string[]): string[] {
+  const routine = (prompt.sections ?? []).filter((section) => section.id === ROUTINE_SECTION).map((section) => section.text);
+  return [prompt.stable, ...routine, typeof text === "string" ? text : "", ...rules];
+}
+
 /** The rules' words that may name a tool for one bot and person: the
  * organization's Refuse / Ask first rules and the person's own rules
  * (server/rules/custom-rules-store.ts). */

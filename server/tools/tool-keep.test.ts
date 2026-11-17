@@ -409,3 +409,25 @@ describe("lots C and E: the session's list, what it was offered, the person's ch
     expect(readToolKeep("bot-1", "bob@example.test").leftOut).toEqual(["crm/stale"]);
   });
 });
+
+// #4527 review: a turn's tool names come from what stays put in a conversation
+describe("toolKeepNamedText", () => {
+  it("reads the stable prompt, the routine's instruction, the turn's text and the rules, never a memory", async () => {
+    const { toolKeepNamedText } = await import("./tool-keep.ts");
+    const texts = toolKeepNamedText({
+      stable: "Identity. Use `list_bots`.",
+      sections: [
+        { id: "memory", text: "Last week the person ran `run_routine` twice." },
+        { id: "routine-execution", text: "Run the routine with `export_report`." },
+      ],
+    }, "please list_rooms", ["refuse agents__delete_bot"]);
+    const all = texts.join("\n");
+    expect(all).toContain("list_bots");
+    expect(all).toContain("export_report");
+    expect(all).toContain("list_rooms");
+    expect(all).toContain("agents__delete_bot");
+    expect(all).not.toContain("run_routine");
+    // so a memory naming a left out tool does not bring it back mid-conversation
+    expect(sessionLeftOut(["agents/run_routine", "agents/export_report"], { namedText: texts })).toEqual(["agents/run_routine"]);
+  });
+});

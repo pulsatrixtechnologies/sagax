@@ -8,7 +8,7 @@ import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { compactBotLast } from "../context/compact-prompt.ts";
 import { memoryExcerptBytes } from "../workspace/workspace.ts";
-import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
+import { namedByToolScope, ruleTextsFor, toolKeepNamedText } from "../tools/tool-keep.ts";
 import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
@@ -279,7 +279,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       context: {
         voiceCall: Boolean(state.onCall),
         named: namedByToolScope(state.toolScope),
-        namedText: [`${state.prompt.stable}${state.prompt.volatile}`, typeof state.text === "string" ? state.text : "", ...ruleTextsFor(state.bot.id, state.toolKeepPerson)],
+        namedText: toolKeepNamedText(state.prompt, state.text, ruleTextsFor(state.bot.id, state.toolKeepPerson)),
       },
     });
     state.compactPrompt = wantsCompact ? compactForBot : undefined;

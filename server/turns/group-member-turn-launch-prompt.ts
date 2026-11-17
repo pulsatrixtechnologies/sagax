@@ -5,7 +5,7 @@ import { IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
-import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
+import { namedByToolScope, ruleTextsFor, toolKeepNamedText } from "../tools/tool-keep.ts";
 import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
@@ -326,7 +326,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     compaction: roomCompaction,
     routine: Boolean(roomRoutineSpeaker(threadId)),
     prompt: true,
-    context: { named: namedByToolScope(roomToolScope), namedText: [`${roomSystem.stable}${roomSystem.volatile}`, typeof text === "string" ? text : "", ...ruleTextsFor(readyBot.id, roomToolKeepPerson)] },
+    context: { named: namedByToolScope(roomToolScope), namedText: toolKeepNamedText(roomSystem, text, ruleTextsFor(readyBot.id, roomToolKeepPerson)) },
   });
   const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
   const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;

@@ -361,7 +361,7 @@ if (params.get("empty") === "plugins") {
 // #4504: what has an update waiting (invented items): two plugins (one will fail when run),
 // a skill, and one the organization console pins (no mark: the console decides its version)
 let galleryUpdates = [
-  { key: "plugin:me:me:code-review@claude-plugins-official", kind: "plugin", name: "Code Review", scope: "me", installedVersion: "1.2.0", availableVersion: "1.3.0", updateAvailable: true, updateNotes: "Reviews now run on the whole branch, and the summary names the files it skipped.", canUpdate: true },
+  { key: "plugin:me:me:code-review@claude-plugins-official", kind: "plugin", name: "Code Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, updateNotes: "Reviews now run on the whole branch, and the summary names the files it skipped.", canUpdate: true },
   { key: "plugin:me:me:cursor-team-kit@cursor-plugins", kind: "plugin", name: "Cursor Team Kit", scope: "me", installedVersion: "0.9.1", availableVersion: "0.10.0", updateAvailable: true, canUpdate: true },
   { key: "skill:me:me:weekly-summary", kind: "skill", name: "weekly-summary", scope: "me", installedVersion: "a1b2c3d", availableVersion: "e4f5a6b", updateAvailable: true, canUpdate: true },
   { key: "plugin:organization:organization:compliance-pack", kind: "plugin", name: "Compliance Pack", scope: "organization", organization: "required", pinned: "0.9.4", installedVersion: "0.9.4", availableVersion: "0.9.5", updateAvailable: true, canUpdate: false },

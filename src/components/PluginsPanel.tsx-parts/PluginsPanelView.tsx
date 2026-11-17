@@ -219,7 +219,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       s={s}
       a={a}
       products={products}
-      updateInfo={(kind, name, key) => updateOf(updates.data, kind, name, key)}
+      updateInfo={(kind, name, key, organizationId) => updateOf(updates.data, kind, name, key, organizationId)}
       itemUpdate={(kind, name, key) => {
         const info = updateOf(updates.data, kind, name, key);
         if (!info) return undefined;

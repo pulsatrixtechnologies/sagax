@@ -717,52 +717,115 @@ describe("#4453 (2026-11-16): the organization console's own section, apart, at 
   });
 });
 
-describe("#4453 (2026-11-16): the title line never wraps; the search gives way", () => {
-  let observed: ((entries: Array<{ contentRect: { width: number } }>) => void) | null = null;
+describe("the control row is ONE line at every width (the owner: it should not be jumping line)", () => {
+  // the real widths of the row's parts, measured in the headless gallery (scripts/capture/connect-apps-header-row.mjs)
+  const PARTS = {
+    fr: { kinds: 244, views: 168, controls: 63, add: 108, update: 47 },
+    en: { kinds: 237, views: 142, controls: 63, add: 87, update: 47 },
+  } as const;
+  let widths: { row: number; kinds: number; views: number; controls: number; add: number; update: number };
+  let watched: (() => void) | null = null;
   beforeEach(() => {
-    observed = null;
-    vi.stubGlobal("ResizeObserver", class { constructor(callback: typeof observed) { observed = callback; } observe() {} disconnect() {} });
+    vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { watched = callback; } observe() {} disconnect() {} });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.hasAttribute("data-plugins-kind-row") ? widths.row
+        : this.hasAttribute("data-plugins-kinds") ? widths.kinds
+          : this.hasAttribute("data-plugins-views") ? widths.views
+            : this.hasAttribute("data-plugins-search-controls") ? widths.controls
+              : this.hasAttribute("data-plugins-add") ? widths.add
+                : this.hasAttribute("data-plugins-update-all") ? widths.update : 0;
+      return { width: w, height: 32, top: 0, left: 0, right: w, bottom: 32, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  const mount = async () => {
+  const mount = async (language: "fr" | "en", pill: boolean, row: number) => {
+    widths = { row, kinds: PARTS[language].kinds, views: PARTS[language].views, controls: PARTS[language].controls, add: PARTS[language].add, update: pill ? PARTS[language].update : 0 };
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
     await act(async () => {
       root.render(createElement(ConnectAppsView, {
-        tab: "installed", onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
-        search: createElement("input", { "data-plugins-search": "" }), manageActions: createElement("button", { "data-test-add": "" }), installed: "I",
+        tab: "discover", onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
+        search: createElement("input", { "data-plugins-search": "" }),
+        manageActions: createElement("button", { "data-plugins-add": "", "data-test-add": "" }),
+        filterControl: createElement("button", { "data-test-filter": "" }), sortControl: createElement("button", { "data-test-sort": "" }),
+        ...(pill ? { updateControl: createElement("button", { "data-plugins-update-all": "" }) } : {}),
+        installed: "I", discover: "D",
       }));
     });
     return { host, root };
   };
-  const width = async (value: number) => { await act(async () => { observed?.([{ contentRect: { width: value } }]); }); };
+  const resize = async (row: number) => { widths.row = row; await act(async () => { watched?.(); }); };
+  const layoutOf = (host: HTMLElement) => host.querySelector("[data-plugins-kind-row]")!.getAttribute("data-plugins-layout");
 
-  it("is a field on a wide line and an icon button that opens it on a narrow one, in one row", async () => {
-    const { host, root } = await mount();
-    await width(900);
-    expect(host.querySelector("[data-plugins-kind-row] [data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
+  it("never wraps: no flex-wrap, one fixed line height, the parts keep their size", async () => {
+    const { host, root } = await mount("fr", true, 834);
+    const row = host.querySelector("[data-plugins-kind-row]")!;
+    expect(row.className).toContain("flex-nowrap");
+    expect(row.className).not.toMatch(/(?:^|\s)flex-wrap(?:\s|$)/);
+    expect(row.className).toMatch(/\bh-8\b/);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("shrinks in the owner's order as the row narrows: the field, then the icon, then \"+ Add\" as an icon, then the filter and sort inside the field", async () => {
+    const { host, root } = await mount("fr", true, 834);
+    expect(layoutOf(host)).toBe("full");
+    expect(host.querySelector("[data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
+    await resize(740);
+    // 244 + 9 + 168 + 30 + (63 + 32 + 47 + 108 + 30) = 731 <= 740: the search is an icon, the filter and sort beside it
+    expect(layoutOf(host)).toBe("icon");
+    await resize(700);
+    // 731 > 700: "+ Add" is a "+" button too
+    expect(layoutOf(host)).toBe("compact");
+    expect(host.querySelector("[data-plugins-search]")).toBeNull();
+    expect(host.querySelector("[data-plugins-search-toggle]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-actions] [data-test-filter]")).not.toBeNull();
+    await resize(640);
+    expect(layoutOf(host)).toBe("minimal");
+    // the narrowest window: the filter and sort leave the row and are inside the opened field
+    expect(host.querySelector("[data-plugins-actions] [data-test-filter]")).toBeNull();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!.click(); });
+    expect(host.querySelector("[data-plugins-search-expanded] [data-test-filter]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-search-expanded] [data-test-sort]")).not.toBeNull();
+    await resize(900);
+    expect(layoutOf(host)).toBe("full");
     expect(host.querySelector("[data-plugins-search-toggle]")).toBeNull();
-    // the row wraps only when its controls cannot fit at all; the search gives way long before
-    await width(500);
-    expect(host.querySelector("[data-plugins-search]")).toBeNull();
-    const toggle = host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!;
-    expect(toggle).not.toBeNull();
-    // Add stays on the row, and "..." on the title line
-    expect(host.querySelector("[data-plugins-kind-row] [data-test-add]")).not.toBeNull();
-    expect(host.querySelector("[data-plugins-head] [data-plugins-more-button]")).not.toBeNull();
-    await act(async () => { toggle.click(); });
-    expect(host.querySelector("[data-plugins-search-expanded] [data-plugins-search]")).not.toBeNull();
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-close]")!.click(); });
-    expect(host.querySelector("[data-plugins-search]")).toBeNull();
-    // back to a wide line: the field again, one search in the page
-    await width(900);
     expect(host.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
     await act(async () => root.unmount());
     host.remove();
   });
 
+  it("from the narrowest window (656) to 1400, in French and English, with and without the update pill, the chosen layout fits its row", async () => {
+    const { rowNeeds, rowLayout } = await import("./connect-apps-row");
+    const failures: string[] = [];
+    for (const language of ["fr", "en"] as const) {
+      for (const pill of [true, false]) {
+        const parts = { kinds: PARTS[language].kinds, views: PARTS[language].views, controls: PARTS[language].controls, addFull: PARTS[language].add, update: pill ? PARTS[language].update : 0 };
+        const needs = rowNeeds(parts);
+        // even the narrowest layout fits the narrowest window the app allows (760 px: a 720 px frame less 64 px of gutters)
+        if (needs.minimal > 656) failures.push(`${language} ${pill ? "pill" : "no pill"}: minimal needs ${needs.minimal}`);
+        for (let width = 656; width <= 1400; width += 2) {
+          const layout = rowLayout(width, parts);
+          if (layout !== "minimal" && needs[layout] > width) failures.push(`${language} ${pill} ${width}: ${layout} needs ${needs[layout]}`);
+          // it only gives up what it must: the layout before it did not fit
+          const order = ["full", "icon", "compact", "minimal"] as const;
+          for (const earlier of order.slice(0, order.indexOf(layout))) if (needs[earlier] <= width) failures.push(`${language} ${pill} ${width}: ${earlier} fitted but ${layout} was used`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("is the field at 834 px in French with the pill (the owner's window, about 950 px wide)", async () => {
+    const { rowLayout } = await import("./connect-apps-row");
+    // 244 + 9 + 168 + 30 + (140 + 47 + 108 + 20) = 766 <= 834
+    expect(rowLayout(834, { kinds: 244, views: 168, controls: 63, addFull: 108, update: 47 })).toBe("full");
+  });
+});
+
+describe("Connect Apps' menu", () => {
   it("Refresh is the first line of the \"...\" menu and runs the refresh", async () => {
     const onRefresh = vi.fn();
     const host = document.createElement("div");

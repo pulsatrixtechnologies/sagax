@@ -208,6 +208,12 @@ describe("what an installed plugin holds, read only", () => {
     expect((await call("pr_alice", "POST", "/api/me/plugins/reviewer%40acme-tools/files", {})).status).toBe(404);
   });
 
+  it("a stray % in the address is a 400, never a 500", async () => {
+    const { call } = await boot();
+    expect((await call("pr_alice", "GET", "/api/me/plugins/%zz/files")).status).toBe(400);
+    expect((await call("pr_alice", "GET", "/api/bots/alice-bot/plugins/%zz/files")).status).toBe(400);
+  });
+
   it("reads a bot's plugin for who may use the bot, and hides a bot from who may not", async () => {
     const { call } = await boot();
     await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/marketplaces", { source: "acme/tools" });
@@ -255,7 +261,6 @@ describe("no files route lists or reads what can hold a secret", () => {
       ["pr_alice", "/api/me/plugins/reviewer%40acme-tools/files"],
       ["pr_alice", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files"],
       [ADMIN, "/api/marketplaces/acme-tools/plugins/reviewer/files"],
-      ["pr_alice", "/api/me/installation-plugins/reviewer%40acme-tools/files"],
     ] as const;
     for (const [who, base] of bases) {
       const listed = await call(who, "GET", base);
@@ -270,37 +275,6 @@ describe("no files route lists or reads what can hold a secret", () => {
       expect(paths, base).toContain("docs/logo.png");
       expect((await call(who, "GET", `${base}?path=docs%2Flogo.png`)).status, base).toBe(415);
     }
-  });
-});
-
-describe("a member reads the files of a plugin the installation installed, if they may use it", () => {
-  it("reads it when its marketplace is organization-wide, never when it is another person's private one, never without signing in", async () => {
-    const { call, shared } = await boot();
-    await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools", visibility: "org" });
-    await shared.prepare("acme-tools", "reviewer", ADMIN, { principal: ADMIN, seesAll: true });
-    await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
-    const url = "/api/me/installation-plugins/reviewer%40acme-tools/files";
-    const read = await call("pr_alice", "GET", url);
-    expect(read.status).toBe(200);
-    expect((read.body.files as Array<{ path: string }>).map((file) => file.path)).toEqual(expect.arrayContaining(["agents/critic.md"]));
-    expect(await call("pr_bob", "GET", `${url}?path=commands%2Freview.md`)).toMatchObject({ status: 200, body: { text: "Review the diff" } });
-    expect((await call("pr_alice", "GET", `${url}?path=..%2F..%2Fx`)).status).toBe(400);
-    // not installed: nothing
-    expect((await call("pr_alice", "GET", "/api/me/installation-plugins/other%40acme-tools/files")).status).toBe(404);
-    // no person signed in
-    expect((await call("", "GET", url)).status).toBe(403);
-    // read only
-    expect((await call("pr_alice", "POST", url, {})).status).toBe(404);
-  });
-
-  it("does not exist for someone who cannot see its marketplace (a private one of another person)", async () => {
-    const { call, shared } = await boot();
-    await shared.add({ source: "acme/tools" }, "pr_carol", { viewer: { principal: "pr_carol" } });
-    await shared.prepare("acme-tools", "reviewer", "pr_carol", { principal: "pr_carol" });
-    await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
-    const url = "/api/me/installation-plugins/reviewer%40acme-tools/files";
-    expect((await call("pr_alice", "GET", url)).status).toBe(404);
-    expect((await call("pr_carol", "GET", url)).status).toBe(200);
   });
 });
 

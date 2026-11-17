@@ -426,10 +426,67 @@ describe("a member reads an organization plugin's files (the console's section)"
     const { OrgItemPage } = await import("./OrgItemPage");
     const view = await render(createElement(OrgItemPage, { item, consoleName: "Perspicax · Example Org", onBack: vi.fn() }));
     expect(view.querySelectorAll("[data-plugins-detail-name]")).toHaveLength(1);
-    expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("from Perspicax · Example Org · 0.9.4 · Required by your organization");
+    expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("from Perspicax · Example Org · Required by your organization");
     await click(view.querySelector('[data-org-item-tab="contents"]'));
     expect(api).toHaveBeenCalledWith("/api/me/org-capabilities/oc-2/files");
     expect(view.querySelector("[data-file-rendered]")?.textContent).toContain("Compliance");
     expect(view.querySelector('[data-file-row="skills"]')).not.toBeNull();
+    // each fact once: the version is a row of Details, not the grey line; the mode is the grey line, not Details
+    expect(view.querySelector("[data-plugin-details-block]")).toBeNull();
+  });
+
+  it("a page whose folder the server does not serve has no Contents tab: an item that is off, a connector, one that is still installing", async () => {
+    const { OrgItemPage } = await import("./OrgItemPage");
+    for (const over of [{ on: false }, { form: "mcp" as const }, { state: "pending" as const }]) {
+      const view = await render(createElement(OrgItemPage, { item: { ...item, ...over }, onBack: vi.fn() }));
+      expect(view.querySelector('[data-org-item-tab="contents"]'), JSON.stringify(over)).toBeNull();
+      expect(view.querySelector('[role="alert"]')).toBeNull();
+    }
+    const on = await render(createElement(OrgItemPage, { item, onBack: vi.fn() }));
+    expect(on.querySelector('[data-org-item-tab="contents"]')).not.toBeNull();
+  });
+
+  it("its Contents pill says the real state: current, or update available when the organization has a newer version", async () => {
+    api.mockImplementation(async () => ({ files: [{ path: "README.md", kind: "text" }] }));
+    const { OrgItemPage } = await import("./OrgItemPage");
+    const read = async (outdated: boolean) => {
+      const view = await render(createElement(OrgItemPage, { item, onBack: vi.fn(), outdated }));
+      await click(view.querySelector('[data-org-item-tab="contents"]'));
+      return view.querySelector("[data-contents-pill]")?.textContent;
+    };
+    expect(await read(false)).toContain("current");
+    expect(await read(true)).toContain("update available");
+  });
+});
+
+describe("said once (the owner's second review)", () => {
+  it("a bundle's Connectors tab does not start every row with where it comes from; a row outside a bundle still does", async () => {
+    const { ProductRow } = await import("./ProductRows");
+    const { parsePersonProduct } = await import("../../../shared/person-products");
+    const product = parsePersonProduct({ id: "desk", name: "Service Desk", state: "connected", description: "Tickets and time" })!;
+    const ctx = { bots: [{ id: "bot-a", name: "Rocket" }], setProducts: vi.fn(), onOpen: vi.fn() };
+    const inside = await render(createElement(ProductRow, { product, ctx, hideOrigin: true }));
+    expect(inside.querySelector("[data-person-product-line]")?.textContent).toBe("Service DeskTickets and time");
+    const outside = await render(createElement(ProductRow, { product, ctx }));
+    expect(outside.querySelector("[data-person-product-line]")?.textContent).toContain("Provided by your organization");
+  });
+
+  it("where a plugin is installed is one chip per scope with its switch beside it, and the card under it does not say it again", async () => {
+    const { PluginDetailView } = await import("./PluginDetailView");
+    const { BotPluginCard } = await import("./BotPluginCard");
+    const onToggle = vi.fn();
+    const item = { key: "plugin:kit@market", kind: "plugin" as const, id: "kit@market", name: "kit", description: "", category: "other" as const, installed: true, status: "connected" as const, action: null, source: "market" };
+    const view = await render(createElement(PluginDetailView, {
+      item, subtitle: "", busy: false, onBack: vi.fn(), details: [],
+      installState: [{ id: "me", label: "Installed for all your bots.", on: true, toggle: { on: true, busy: false, label: "Turn kit off", onToggle } }],
+    }));
+    expect(view.querySelectorAll("[data-install-state]")).toHaveLength(1);
+    await click(view.querySelector("[data-install-toggle='me']"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    const plugin = { key: "kit@market", marketplace: "market", plugin: "kit", external: false, installed: { key: "kit@market", name: "kit", marketplace: "market", enabled: true, removed: [], declaredMcpServers: [] }, contents: { agents: ["a"], commands: [], skills: [] } };
+    const card = await render(createElement(BotPluginCard, { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), onUninstall: vi.fn(), statedAbove: true }));
+    expect(card.textContent).not.toContain("Installed for all your bots");
+    expect(card.querySelector("[role='switch']")).toBeNull();
+    expect(card.textContent).toContain("a");
   });
 });

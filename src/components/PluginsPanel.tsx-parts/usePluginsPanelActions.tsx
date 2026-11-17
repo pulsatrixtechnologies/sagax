@@ -223,6 +223,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       <BotPluginCard
         key={`${scope}:${item.key}`}
         installInHeader={scope !== "workspace"}
+        statedAbove={scope !== "workspace"}
         personal={scope === "me"}
         botName={scopedPluginName}
         view={scopedPluginView}
@@ -251,9 +252,18 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       ? item.installed
       : marketplaces?.find((market) => market.name === marketplace)?.plugins.find((entry) => entry.name === plugin)?.installed ?? null;
     const onBot = scopedPluginTarget && scopedPluginView ? botPluginState(scopedPluginView, item.id) : null;
+    // one chip per scope, said once; the one that differs from the bot's or the person's own is the only reason to show "everyone"
+    const scoped = onBot ? Boolean(onBot.installed) : null;
+    const showEveryone = everyone !== null && (scoped === null || everyone !== scoped);
     const installState: DetailInstallState[] = [
-      ...(everyone === null ? [] : [{ id: "everyone" as const, on: everyone, label: t(everyone ? "connectApps.detail.state.everyoneOn" : "connectApps.detail.state.everyoneOff") }]),
-      ...(onBot ? [{ id: scope === "me" ? "me" as const : "bot" as const, on: Boolean(onBot.installed), label: scope === "me" ? t(onBot.installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : t(onBot.installed ? "connectApps.detail.state.botOn" : "connectApps.detail.state.botOff", { name: scopedPluginName }) }] : []),
+      ...(showEveryone ? [{ id: "everyone" as const, on: Boolean(everyone), label: t(everyone ? "connectApps.detail.state.everyoneOn" : "connectApps.detail.state.everyoneOff") }] : []),
+      ...(onBot ? [{
+        id: scope === "me" ? "me" as const : "bot" as const,
+        on: Boolean(onBot.installed),
+        label: scope === "me" ? t(onBot.installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : t(onBot.installed ? "connectApps.detail.state.botOn" : "connectApps.detail.state.botOff", { name: scopedPluginName }),
+        // its switch beside it (the owner of the bot, or who manages it, may change it)
+        ...(onBot.installed && scopedPluginView?.canChange ? { toggle: { on: onBot.installed.enabled, busy: botBusy !== null, label: t("plugins.enabled", { name: onBot.plugin }), onToggle: () => toggleForBot(item.id, !onBot.installed!.enabled) } } : {}),
+      }] : []),
     ];
     let primaryAction: ReactNode = null;
     if (scope !== "workspace" && onBot && !onBot.installed && scopedPluginView?.canChange) {

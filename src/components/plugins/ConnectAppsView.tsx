@@ -5,11 +5,12 @@
 // Sources under the title bar's "...". A page opened from a view (a plugin, a
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
-import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
+import { ADD_FALLBACK, rowLayout, type RowLayout } from "./connect-apps-row";
 import type { LocaleKey } from "@/locales";
 import {
   CATEGORY_ORDER,
@@ -142,10 +143,6 @@ export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
 }
 
-/** Below this width of the control row the search is an icon that opens. */
-export const SEARCH_ICON_BELOW = 560;
-/** The narrowest the search field is allowed to be before it becomes an icon. */
-export const SEARCH_MIN = 150;
 
 /** The filter and sort buttons live inside the search field at its right end:
  * quiet icon buttons with no round background of their own. */
@@ -236,31 +233,40 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl, sortControl, updateControl } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
-  // the title line's width decides the search: a field, or an icon that opens it
+  // the row's width decides what shrinks, never a second line (connect-apps-row.ts): the search field,
+  // then the search as an icon, then "+ Add" as an icon, then the filter and sort inside the opened field
   const headRef = useRef<HTMLDivElement | null>(null);
-  const [narrow, setNarrow] = useState(false);
+  const [layout, setLayout] = useState<RowLayout>("full");
   const [searchOpen, setSearchOpen] = useState(false);
-  useEffect(() => {
+  const addLabel = useRef<{ locale: string; width: number } | null>(null);
+  const controlsWidth = useRef(0);
+  useLayoutEffect(() => {
     const head = headRef.current;
     if (!head || typeof ResizeObserver === "undefined") return;
-    const watch = new ResizeObserver(([entry]) => {
-      const width = entry?.contentRect.width ?? 0;
+    const measure = () => {
+      const width = head.getBoundingClientRect().width;
       if (width <= 0) return;
-      // the search shrinks first; under SEARCH_MIN it is an icon that opens. The room it has is the
-      // row's width less the kinds, the switch, the other buttons and the gaps (never its own state)
-      const px = (selector: string) => Array.from(head.querySelectorAll<HTMLElement>(selector));
-      const others = px("[data-plugins-actions] > :not([data-plugins-search-slot]):not([data-plugins-search-toggle]):not([data-plugins-search-controls])");
-      const fixed = px("[data-plugins-kinds], [data-plugins-views]").reduce((sum, node) => sum + node.offsetWidth, 0)
-        + others.reduce((sum, node) => sum + node.offsetWidth, 0);
-      // no layout to measure (a test renderer): the width alone decides
-      if (fixed === 0) return setNarrow(width < SEARCH_ICON_BELOW);
-      // three gaps of the row, the separator and its margins, a gap before each button and one before the search
-      const gaps = 12 * 3 + 9 + 12 * (others.length + 1);
-      setNarrow(width < SEARCH_ICON_BELOW || width - fixed - gaps < SEARCH_MIN);
-    });
+      const of = (selector: string) => head.querySelector<HTMLElement>(selector)?.getBoundingClientRect().width ?? 0;
+      // no layout to measure (a test renderer): nothing to decide
+      const kinds = of("[data-plugins-kinds]");
+      if (kinds === 0) return;
+      // "+ Add" with its label is measured while the label shows, and kept for the layouts that hide it
+      const locale = activeLocale();
+      const addNow = of("[data-plugins-add]");
+      if (addNow > 0 && head.getAttribute("data-plugins-layout") !== "compact" && head.getAttribute("data-plugins-layout") !== "minimal") addLabel.current = { locale, width: addNow };
+      const addFull = addNow > 0 ? (addLabel.current?.locale === locale ? addLabel.current.width : ADD_FALLBACK) : 0;
+      // the filter and the sort leave the row in the narrowest layout: their width is kept from when they showed
+      const controlsNow = of("[data-plugins-search-controls]");
+      if (controlsNow > 0) controlsWidth.current = controlsNow;
+      const controls = controlsNow > 0 || head.querySelector("[data-plugins-search-slot], [data-plugins-search-toggle]") !== null ? controlsWidth.current : 0;
+      setLayout(rowLayout(width, { kinds, views: of("[data-plugins-views]"), update: of("[data-plugins-update-all]"), controls, addFull, search: head.querySelector("[data-plugins-search-slot], [data-plugins-search-toggle]") !== null }));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
     watch.observe(head);
     return () => watch.disconnect();
   });
+  const narrow = layout !== "full";
   useEffect(() => { if (!narrow) setSearchOpen(false); }, [narrow]);
   // each view opens at its top: the hairline of a scrolled list goes with it
   useEffect(() => setStuck(false), [shown, kind]);
@@ -311,7 +317,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               icon only) and "+ Add". Every element is 32px high on one
               baseline; narrow, the search shrinks, then is an icon button
               that opens over the row; it never wraps. */}
-          <div ref={headRef} className="@container relative mt-3 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2" data-plugins-kind-row="">
+          <div ref={headRef} className="relative mt-3 flex h-8 flex-nowrap items-center gap-x-2.5" data-plugins-kind-row="" data-plugins-layout={layout}>
             <PillTabs
               tabs={CONNECT_APPS_KINDS}
               tab={kind}
@@ -342,9 +348,9 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 </button>
               ))}
             </div>
-            <div className="ml-auto flex min-w-fit flex-1 items-center justify-end gap-3" data-plugins-actions="">
-              {field && !narrow && <div className="min-w-[150px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
-              {narrow && controls}
+            <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2.5" data-plugins-actions="">
+              {field && !narrow && <div className="min-w-[140px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
+              {narrow && layout !== "minimal" && controls}
               {search && narrow && (
                 <button type="button" onClick={() => setSearchOpen(true)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
                   <Search size={15} aria-hidden="true" />

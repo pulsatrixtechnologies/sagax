@@ -152,10 +152,10 @@ function worstState(products: readonly PersonProduct[]): PersonProduct {
 
 /** One product's row: the mark, the name, one grey line (its endpoints on
  * one line), the state, then its own trailer. The name opens its page. */
-export function ProductRow({ product, ctx, nested = false, partOf }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean; /** the bundle it belongs to: a small chip after the name, opening it */ partOf?: { name: string; onOpen: () => void } }) {
+export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = false }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean; /** the page already says where it comes from (inside a bundle): the line starts with what it does */ hideOrigin?: boolean; /** the bundle it belongs to: a small chip after the name, opening it */ partOf?: { name: string; onOpen: () => void } }) {
   const what = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
   // how it got there, then what it does (a vendor's products sit under its own line)
-  const sub = nested ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
+  const sub = nested || hideOrigin ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
   return (
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}

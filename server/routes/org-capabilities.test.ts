@@ -151,6 +151,24 @@ describe("the files of an organization plugin", () => {
     return { sent: sent[0], answered };
   }
 
+  it("a stray % in the id is a 400, never a 500 (the files read and the PUT beside it)", async () => {
+    const answer = async (method: "GET" | "PUT", rest: string) => {
+      const route = createOrgCapabilityRoutes({
+        owner: () => "perspicax", person: () => ({ principalId: "pr_ada" }), subjectToken: async () => null,
+        call: async () => ({ ok: false, status: 500 }) as never, refreshed: () => undefined, views: () => [],
+        isMember: () => true, activeFor: () => true, setChoice: () => undefined, folderOf: () => null,
+        policy: () => undefined, historical: () => undefined, dataDir: mkdtempSync(join(tmpdir(), "sagax-org-cap-")),
+      } as OrgCapabilityRouteDeps);
+      const sent: Array<{ status: number }> = [];
+      const url = new URL(`http://x/api/me/org-capabilities/${rest}`);
+      await route({ req: {} as never, res: { setHeader: () => undefined } as never, url, path: `/api/me/org-capabilities/${rest}`, method, auth: {} as never,
+        json: ((_: unknown, status: number) => { sent.push({ status }); }) as never, readBody: (async () => ({ enabled: true })) as never });
+      return sent[0]?.status;
+    };
+    expect(await answer("GET", "%zz/files")).toBe(400);
+    expect(await answer("PUT", "%zz")).toBe(400);
+  });
+
   it("lists and reads what the person's own turns mount, never a secret, never what is not theirs", async () => {
     const folders = { "pr_ada:oc-1": dir };
     const list = await get("", "pr_ada", folders);

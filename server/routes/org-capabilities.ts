@@ -185,6 +185,11 @@ function memberRow(view: OrgCapabilityView, on: boolean, member: boolean) {
   };
 }
 
+/** A percent-encoded id read, or null when it is not valid (a stray % is a 400, never a 500). */
+function decoded(value: string): string | null {
+  try { return decodeURIComponent(value); } catch { return null; }
+}
+
 /** GET /api/me/org-capabilities/:id/files[?path=] */
 const ME_ORG_FILES = /^\/api\/me\/org-capabilities\/([^/]{1,200})\/files$/;
 
@@ -208,12 +213,15 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
       const own = ME_ORG_FILES.exec(path);
       if (own && method === "GET") {
         if (!person) return fail(401, "session_required");
-        const folder = deps.folderOf?.(person.principalId, decodeURIComponent(own[1]!)) ?? null;
+        const wanted = decoded(own[1]!);
+        if (wanted === null) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
+        const folder = deps.folderOf?.(person.principalId, wanted) ?? null;
         if (!folder) return fail(404, "org_capability_unknown");
         sendPluginFiles(res, json, folder, url.searchParams.get("path"));
         return;
       }
-      const id = decodeURIComponent(path.slice(ME_ORG_CAPABILITIES_ROUTE.length + 1));
+      const id = decoded(path.slice(ME_ORG_CAPABILITIES_ROUTE.length + 1));
+      if (id === null) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
       if (method !== "PUT" || !id || id.includes("/")) return PASS;
       if (!person) return fail(401, "session_required");
       const body = await readBody(req).catch(() => null) as { enabled?: unknown } | null;
@@ -271,7 +279,9 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
       const migrated = await migrateMarketplaces(deps, token);
       if (!migrated.ok) return fail(migrated.refusal.status, migrated.refusal.code, migrated.refusal.message);
     }
-    const target = `${PX_CAPABILITIES_PATH}${rest.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/")}`;
+    const parts = rest.split("/").map((part) => decoded(part));
+    if (parts.includes(null)) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
+    const target = `${PX_CAPABILITIES_PATH}${parts.map((part) => encodeURIComponent(part!)).join("/")}`;
     const writable = (method === "POST" && (rest === "" || rest === "/marketplaces"))
       || ((method === "PUT" || method === "DELETE") && /^\/(?:marketplaces\/)?[^/]+$/.test(rest) && rest !== "/migrate")
       || (method === "PUT" && rest === "/marketplace-policy");

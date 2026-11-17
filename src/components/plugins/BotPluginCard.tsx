@@ -27,6 +27,8 @@ export interface BotPluginCardProps {
   onSaveConfig?: (values: Record<string, string | number | boolean>) => Promise<void>;
   /** the page's header already offers "Install for <bot>" (not installed yet) */
   installInHeader?: boolean;
+  /** the page above already says where it is installed, with its switch beside that chip: the card does not say it again */
+  statedAbove?: boolean;
 }
 
 function Names({ label, names }: { label: string; names: string[] }) {
@@ -39,7 +41,7 @@ function Names({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig, installInHeader = false }: BotPluginCardProps) {
+export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig, installInHeader = false, statedAbove = false }: BotPluginCardProps) {
   const installed = plugin.installed;
   const change = view.canChange;
   const contents = plugin.contents;
@@ -47,14 +49,14 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
   return (
     <div data-bot-plugin={plugin.key} data-bot-plugin-installed={installed ? "yes" : "no"}>
       <PluginCard
-        title={personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
-        action={installed && change ? (
+        title={statedAbove ? undefined : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
+        action={!statedAbove && installed && change ? (
           <Switch checked={installed.enabled} disabled={busy !== null} aria-label={t("plugins.enabled", { name: plugin.plugin })} onClick={() => onToggle(!installed.enabled)} />
         ) : undefined}
       >
-        <p className="text-[13px] leading-relaxed text-ink-secondary">
+        {!statedAbove && <p className="text-[13px] leading-relaxed text-ink-secondary">
           {personal ? t(installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : installed ? t("connectApps.botPlugin.installed", { name: botName }) : t("connectApps.botPlugin.notInstalled", { name: botName })}
-        </p>
+        </p>}
         {!view.engine.loadsPlugins && <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("plugins.claudeOnly")}</p>}
         {contents ? (
           empty ? <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.nothing")}</p> : (

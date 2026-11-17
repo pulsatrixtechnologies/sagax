@@ -18,8 +18,6 @@
 //   GET    /api/bots/:id/plugins/:key/files          { files: [{ path, bytes, kind }] }, the folder's files
 //   GET    /api/bots/:id/plugins/:key/files?path=x   { path, kind, text, bytes } for text, the bytes for an image or PDF
 //          (read only; "Me" reads its own plugins only: /api/me/plugins/:key/files)
-//   GET    /api/me/installation-plugins/:key/files[?path=]   the same for a plugin the installation installed, for a
-//          person who may use it (its marketplace is one they can see); never a file that can hold a secret
 //
 // Reads need use on the bot; every change needs its owner or manage (an
 // organization admin too). A refusal from the git host answers its real
@@ -59,8 +57,6 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
 
 /** GET .../plugins/:key/files[?path=]: what one installed plugin holds, read only (the bot's use is enough). */
 const FILES_ROUTE = /^\/api\/bots\/([\w-]+)\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
-/** GET /api/me/installation-plugins/:key/files[?path=]: what a plugin the installation installed holds, for a person who may use it. */
-const INSTALLATION_FILES = /^\/api\/me\/installation-plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 /** GET /api/me/plugins/:key/files[?path=]: what the person's own install of a plugin holds. */
 const ME_FILES = /^\/api\/me\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|credential))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\/config)?)?$/;
@@ -75,13 +71,20 @@ function isPluginError(error: unknown): error is BotPluginError {
   return error instanceof Error && typeof (error as { status?: unknown }).status === "number" && typeof (error as { code?: unknown }).code === "string";
 }
 
+/** A percent-encoded path read, or null when it is not valid (a stray % is a 400, never a 500). */
+function decoded(value: string): string | null {
+  try { return decodeURIComponent(value); } catch { return null; }
+}
+
 /** GET .../plugins/:key/files: the folder of one installed plugin, read only. Answers (a promise) only when it is that route. */
 function filesMatch<B extends { id: string }>(
   deps: BotPluginRouteDeps<B>,
   { req, res, url, path, auth, json }: Pick<Parameters<RouteHandler>[0], "req" | "res" | "url" | "path" | "auth" | "json">,
 ): Promise<void> | null {
   const method = req.method;
-  const match = FILES_ROUTE.exec(decodeURIComponent(path));
+  const decodedPath = decoded(path);
+  if (decodedPath === null) return Promise.resolve(json(res, 400, { error: "that address is not valid", code: "bad_request" }));
+  const match = FILES_ROUTE.exec(decodedPath);
   if (!match || method !== "GET") return null;
   const owner = deps.bot(match[1]!);
   if (!owner || !deps.mayRead(auth, owner)) return Promise.resolve(json(res, 404, { error: "no such bot" }));
@@ -97,7 +100,9 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
     if (!path.startsWith("/api/bots/") || !path.includes("/plugins")) return PASS;
     const files = filesMatch(deps, { req, res, url, path, auth, json });
     if (files) return files;
-    const match = ROUTE.exec(decodeURIComponent(path));
+    const decodedPath = decoded(path);
+    if (decodedPath === null) return json(res, 400, { error: "that address is not valid", code: "bad_request" });
+    const match = ROUTE.exec(decodedPath);
     if (!match) return PASS;
     const [, botId, section, name, update, key, config] = match;
     const bot = deps.bot(botId!);
@@ -215,22 +220,14 @@ export function createPersonalPluginRoutes(deps: Omit<BotPluginRouteDeps<{ id: s
   person: (auth: RequestAuth) => string | null;
 }): RouteHandler {
   return async (context) => {
-    const installed = INSTALLATION_FILES.exec(decodeURIComponent(context.path));
-    const own = ME_FILES.exec(decodeURIComponent(context.path));
+    const ownPath = decoded(context.path);
+    if (ownPath === null && /^\/api\/me\/plugins(?:\/|$)/.test(context.path)) return context.json(context.res, 400, { error: "that address is not valid", code: "bad_request" });
+    const own = ownPath === null ? null : ME_FILES.exec(ownPath);
     const method = context.req.method;
     if (own && method === "GET") {
       const person = deps.person(context.auth);
       if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });
       const folder = deps.plugins.installedPluginDir(person, own[1]!);
-      if (!folder) return context.json(context.res, 404, { error: "No plugin with that name.", code: "not_found" });
-      context.res.setHeader("cache-control", "private, no-store");
-      sendPluginFiles(context.res, context.json, folder, context.url.searchParams.get("path"));
-      return;
-    }
-    if (installed && method === "GET") {
-      const person = deps.person(context.auth);
-      if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });
-      const folder = deps.plugins.installationPluginDir(installed[1]!, deps.viewer?.(context.auth) ?? { seesAll: true });
       if (!folder) return context.json(context.res, 404, { error: "No plugin with that name.", code: "not_found" });
       context.res.setHeader("cache-control", "private, no-store");
       sendPluginFiles(context.res, context.json, folder, context.url.searchParams.get("path"));

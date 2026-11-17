@@ -60,7 +60,7 @@ export function PluginsPanelSubpage({
   /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
   productCtx?: ProductRowsContext;
   /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
-  updateInfo?: (kind: UpdateKind, name: string, updateKey?: string) => CapabilityUpdateItem | undefined;
+  updateInfo?: (kind: UpdateKind, name: string, updateKey?: string, organizationId?: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
   products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
   s: PluginsPanelState;
@@ -159,7 +159,7 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "orgItem") {
     const item = orgItems?.find((entry) => entry.id === page.id);
-    if (item) return <OrgItemPage key={item.id} item={item} consoleName={consoleName} onBack={back} trail={trail} />;
+    if (item) return <OrgItemPage key={item.id} item={item} consoleName={consoleName} onBack={back} trail={trail} outdated={Boolean(updateInfo?.(item.form === "skill" ? "skill" : "plugin", item.name, undefined, item.id))} />;
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);

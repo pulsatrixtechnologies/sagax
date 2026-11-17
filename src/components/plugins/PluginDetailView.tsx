@@ -54,6 +54,8 @@ export interface DetailInstallState {
   id: "everyone" | "me" | "bot";
   label: string;
   on: boolean;
+  /** the switch of this install, beside its chip (who may change it) */
+  toggle?: { on: boolean; busy: boolean; label: string; onToggle: () => void };
 }
 
 export interface PluginDetailProps {
@@ -309,19 +311,21 @@ export function PluginDetailView(props: PluginDetailProps) {
         {installState && installState.length > 0 && (
           <section data-plugin-install-section="">
             <DetailLabel>{t("connectApps.detail.installedWhere")}</DetailLabel>
-            <ul className="flex flex-wrap gap-1.5" data-plugins-install-state>
+            <ul className="flex flex-wrap items-center gap-x-4 gap-y-2" data-plugins-install-state>
               {installState.map((state) => (
-                <li
-                  key={state.id}
-                  data-install-state={state.id}
-                  data-install-on={state.on ? "yes" : "no"}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
-                    state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
-                  )}
-                >
-                  <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
-                  {state.label}
+                <li key={state.id} className="flex items-center gap-2">
+                  <span
+                    data-install-state={state.id}
+                    data-install-on={state.on ? "yes" : "no"}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
+                      state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
+                    )}
+                  >
+                    <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
+                    {state.label}
+                  </span>
+                  {state.toggle && <Switch checked={state.toggle.on} disabled={state.toggle.busy} aria-label={state.toggle.label} data-install-toggle={state.id} onClick={state.toggle.onToggle} />}
                 </li>
               ))}
             </ul>

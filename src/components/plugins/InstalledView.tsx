@@ -235,9 +235,9 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add aria-label={t("connectApps.add")}
-        className={cn(filled ? cn(PLUGINS.primaryPill, "gap-1.5 pl-3.5 pr-3") : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
-        <Plus size={14} /> <span className={cn(filled && "@max-[700px]:hidden")}>{t("connectApps.add")}</span>
-        {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70" />}
+        className={cn(filled ? cn(PLUGINS.primaryPill, "gap-1.5 pl-3.5 pr-3 [[data-plugins-layout=compact]_&]:size-8 [[data-plugins-layout=compact]_&]:justify-center [[data-plugins-layout=compact]_&]:p-0 [[data-plugins-layout=minimal]_&]:size-8 [[data-plugins-layout=minimal]_&]:justify-center [[data-plugins-layout=minimal]_&]:p-0") : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
+        <Plus size={14} /> <span className={cn(filled && "[[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden")}>{t("connectApps.add")}</span>
+        {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70 [[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden" />}
       </button>
       {open && (
         <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>

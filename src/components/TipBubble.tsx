@@ -25,8 +25,8 @@ export function TipBubble({ id, children, open, variant = "dark", wide = false, 
 } & Record<`data-${string}`, string | undefined>) {
   return (
     <span
-      {...rest}
       id={id}
+      {...rest}
       role="tooltip"
       className={cn(
         "pointer-events-none absolute right-0 bottom-[calc(100%+4px)] z-30 text-[12px] shadow-md",

@@ -698,7 +698,6 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PUT"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/marketplaces\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/credential$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/install$/, feature: "orgDirectory" },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, feature: "orgDirectory" },
-  { methods: ["GET"], path: /^\/api\/me\/installation-plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/files$/, feature: "orgDirectory" },
   // what an installed plugin holds, read only (the Contents tab of its page)
   { methods: ["GET"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/files$/, feature: "orgDirectory" },
   // a plugin's configuration values (server/plugins/plugin-config.ts)

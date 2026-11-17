@@ -73,7 +73,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
             <p className={cn(PLUGINS.rowSub, "mb-2")}>{t("connectApps.detail.connectorsLine")}</p>
             <ul className="flex flex-col divide-y divide-hairline-weak">
               {vendor.products.map((product) => (
-                <li key={product.id}><ProductRow product={product} ctx={ctx} /></li>
+                <li key={product.id}><ProductRow product={product} ctx={ctx} hideOrigin /></li>
               ))}
             </ul>
           </div>

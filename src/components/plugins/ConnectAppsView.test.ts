@@ -1017,6 +1017,10 @@ describe("#4453: filter and sort live inside the search field; the kinds and the
     const { host, root, onTab } = await mountView({ tab: "installed" });
     const group = host.querySelector("[data-plugins-views]")!;
     expect(group.className).toContain("rounded-full border");
+    // one selected look in the header row: a filled neutral pill, never the skin's accent
+    const chosen = group.querySelector('[aria-checked="true"]')!;
+    expect(chosen.className).toContain("bg-ink/[0.12]");
+    expect(chosen.className).not.toContain("bg-accent");
     expect([...group.querySelectorAll("[role=radio]")].map((node) => node.getAttribute("tabindex"))).toEqual(["0", "-1"]);
     await act(async () => { group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
     expect(onTab).toHaveBeenCalledWith("discover");
@@ -1048,15 +1052,17 @@ describe("#4504: the updates pill and \"Updates first\"", () => {
     const onUpdateAll = vi.fn();
     await act(async () => { root.render(createElement(UpdateAllPill, { count: 3, running: false, onUpdateAll })); });
     const pill = host.querySelector<HTMLButtonElement>("[data-plugins-update-all]")!;
-    expect(pill.textContent).toContain("3 updates");
+    // compact: the icon and the count; the words are the tooltip and the accessible name
+    expect(pill.textContent).toBe("3");
     expect(pill.getAttribute("aria-label")).toBe("Update all: 3 updates");
+    expect(pill.getAttribute("title")).toBe("Update all: 3 updates");
     await act(async () => { pill.click(); });
     expect(onUpdateAll).toHaveBeenCalledTimes(1);
     await act(async () => { root.render(createElement(UpdateAllPill, { count: 1, running: false, onUpdateAll })); });
-    expect(host.textContent).toContain("1 update");
+    expect(host.querySelector("[data-plugins-update-all]")?.getAttribute("aria-label")).toBe("Update all: 1 update");
     await act(async () => { root.render(createElement(UpdateAllPill, { count: 3, running: true, onUpdateAll })); });
     expect(host.querySelector<HTMLButtonElement>("[data-plugins-update-all]")?.disabled).toBe(true);
-    expect(host.textContent).toContain("Updating");
+    expect(host.querySelector("svg.animate-spin")).not.toBeNull();
     await act(async () => { root.render(createElement(UpdateAllPill, { count: 0, running: false, onUpdateAll })); });
     expect(host.querySelector("[data-plugins-update-all]")).toBeNull();
     await act(async () => root.unmount());

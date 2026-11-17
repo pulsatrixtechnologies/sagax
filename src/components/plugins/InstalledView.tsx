@@ -143,7 +143,7 @@ export interface InstalledViewProps {
   /** the sort chosen in the control row: by name, or what is on first */
   sort?: ConnectAppsSort;
   /** whether an item has an update waiting (kind and readable name): "Updates first" */
-  hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string) => boolean;
+  hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string, updateKey?: string) => boolean;
 }
 
 export { ScopePill, RowSwitch } from "./ItemTrailer";
@@ -267,8 +267,8 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   const [allOrganization, setAllOrganization] = useState(false);
   // #4453: one kind at a time; without one, every kind in one list
   const has = (wanted: ConnectAppsKind) => kind === undefined || kind === wanted;
-  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name)));
-  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off", (skill) => Boolean(hasUpdate?.("skill", skill.name))) : [];
+  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name, entry.primary.updateKey)));
+  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off", (skill) => Boolean(hasUpdate?.("skill", skill.name, skill.updateKey))) : [];
   const shownPersonal = has("connectors") ? (sort === "name" ? [...personal].sort((a, b) => a.key.localeCompare(b.key)) : personal) : [];
   const shownProducts = has("connectors") ? products : [];
   const shownOrganization = kind === undefined ? organization : organization.filter((item) => kindOf(item) === kind);

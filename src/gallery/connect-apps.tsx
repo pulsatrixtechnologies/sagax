@@ -160,7 +160,7 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "dispatch", description: "", source: "example-ops", enabled: true },
     { name: "time-review", description: "", source: "example-ops", enabled: true },
     { name: "tenant-rules", description: "", source: "example-ops", enabled: true },
-    { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true },
+    { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true, updateKey: "skill:me:me:weekly-summary" },
     { name: "meeting-notes", description: "Turns a call transcript into notes and actions", source: "local-import", enabled: true },
     { name: "release-checklist", description: "Steps before a version ships", source: "local-import", enabled: true },
     { name: "browser-check", description: "", source: "claude-plugins-official", enabled: true },
@@ -220,9 +220,9 @@ const MANAGE_API: Record<string, unknown> = {
   "/api/bots/bot-a/plugins": {
     marketplaces: [{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
       { name: "github", description: "GitHub's MCP server", installed: false, external: false, category: "development", contents: { agents: [], commands: [], skills: [] } },
-      { name: "code-review", description: "Reviews a pull request", installed: true, external: false, category: "development", contents: { agents: ["reviewer"], commands: ["review"], skills: ["code-review"] } },
+      { name: "code-review", description: "Reviews a pull request", installed: true, external: false, category: "development", updateKey: "plugin:me:me:code-review@claude-plugins-official", contents: { agents: ["reviewer"], commands: ["review"], skills: ["code-review"] } },
     ] }, { name: "cursor-plugins", source: "cursor/plugins", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
-      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, external: false, category: "developer-tools", contents: { agents: ["ci-watcher"], commands: [], skills: ["rule-no-inline-imports", "ship-it"] }, convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
+      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, external: false, category: "developer-tools", updateKey: "plugin:me:me:cursor-team-kit@cursor-plugins", contents: { agents: ["ci-watcher"], commands: [], skills: ["rule-no-inline-imports", "ship-it"] }, convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
     ] }],
     plugins: [
       { key: "code-review@claude-plugins-official", name: "code-review", marketplace: "claude-plugins-official", enabled: true, removed: [], declaredMcpServers: [] },

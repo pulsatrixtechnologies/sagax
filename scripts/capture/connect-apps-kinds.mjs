@@ -97,6 +97,24 @@ try {
 
     const clickIf = async (selector) => { if (await page.locator(selector).count()) await page.click(selector); };
 
+  // --only header: the three header captures (01, 21, 22), nothing else
+  if (arg("--only", "") === "header") {
+    await open("view=manage&role=member&products=many&updates=1");
+    await kind("connectors");
+    await view("installed");
+    await shot("01-header-connectors-yours");
+    await view("discover");
+    await clickIf("[data-plugins-filter-button]");
+    await clickIf('[data-plugins-chip="communication"]');
+    await clickIf("[data-plugins-sort-button]");
+    await clickIf('[data-plugins-sort-option="name"]');
+    await shot("21-header-discover-filter-active");
+    await view("installed");
+    await shot("22-header-yours-sort-active");
+    process.exitCode = 0;
+    throw Object.assign(new Error("header only"), { headerOnly: true });
+  }
+
   // Me: the person's own (an organization member with products). One row of
   // controls, no scope control; the scope is chosen on the item.
   await open("view=manage&role=member&products=many");
@@ -247,9 +265,11 @@ try {
   await page.waitForTimeout(800);
   await shot("14-neighbour-settings-subpage");
 } catch (error) {
-  console.error(error);
-  console.error(viteLog.slice(-2000));
-  process.exitCode = 1;
+  if (!error?.headerOnly) {
+    console.error(error);
+    console.error(viteLog.slice(-2000));
+    process.exitCode = 1;
+  }
 } finally {
   await browser?.close();
   vite.kill("SIGTERM");

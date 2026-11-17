@@ -61,12 +61,15 @@ export const updateKindOf = (kind: "plugin" | "skill" | "app" | "mcp" | "feature
 
 const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-/** The update an item has, by its kind and readable name (the lists the page
- * reads carry the server's `updateKey` for the calls; the join to a row is the
- * name, as the rows are named). Only an item with an update that can be run. */
-export function updateOf(data: CapabilityUpdates | null | undefined, kind: UpdateKind, name: string): CapabilityUpdateItem | undefined {
+/** The update an item has: by the id the server gave the installed item
+ * (`updateKey`, carried by the item), so two items with the same name are never
+ * confused; an item the server gave no key (older lists) is joined by its kind
+ * and readable name. Only an item with an update waiting. */
+export function updateOf(data: CapabilityUpdates | null | undefined, kind: UpdateKind, name: string, updateKey?: string): CapabilityUpdateItem | undefined {
+  if (!data) return undefined;
+  if (updateKey) return data.items.find((item) => item.updateAvailable && item.key === updateKey);
   const wanted = norm(name);
-  return data?.items.find((item) => item.kind === kind && item.updateAvailable && norm(item.name) === wanted);
+  return data.items.find((item) => item.kind === kind && item.updateAvailable && norm(item.name) === wanted);
 }
 
 /** One failed update, named: the item and why; the old version stays. */

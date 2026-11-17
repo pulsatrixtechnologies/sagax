@@ -125,13 +125,16 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false }: { fo
               <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
             </span>
             {!bare && <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>}
-            {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
-            {item.canToggle ? (
-              busy === item.id
-                ? <LoaderCircle size={14} className="mx-3 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" />
-                : <Switch checked={item.on} onClick={() => void toggle(item)} aria-label={t(item.on ? "orgCapabilities.me.offAria" : "orgCapabilities.me.onAria", { name: item.name })} />
-            ) : bare ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
-            {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
+            {/* the same columns as every row's right side (state, switch, "..."), so the switches line up */}
+            <span className={cn("flex shrink-0 items-center", bare && "gap-2")}>
+              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
+              {item.canToggle ? (
+                busy === item.id
+                  ? <LoaderCircle size={14} className="mx-3 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" />
+                  : <Switch checked={item.on} onClick={() => void toggle(item)} aria-label={t(item.on ? "orgCapabilities.me.offAria" : "orgCapabilities.me.onAria", { name: item.name })} />
+              ) : bare ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
+              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
+            </span>
           </li>
         );
       })}

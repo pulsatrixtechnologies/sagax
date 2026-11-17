@@ -39,7 +39,7 @@ export function PluginsPanelSubpage({
   updateInfo,
 }: {
   /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
-  updateInfo?: (kind: UpdateKind, name: string) => CapabilityUpdateItem | undefined;
+  updateInfo?: (kind: UpdateKind, name: string, updateKey?: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
   products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
   s: PluginsPanelState;
@@ -163,7 +163,7 @@ export function PluginsPanelSubpage({
     });
     const engines = engineInfo(detailItem);
     // the versions (from, to) and the notes when the source gives them
-    const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name);
+    const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     const updateRows = upd ? [
       { label: t("connectApps.updates.versions"), value: [upd.installedVersion, upd.availableVersion].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles") },
       ...(upd.updateNotes ? [{ label: t("connectApps.updates.notes"), value: upd.updateNotes }] : []),

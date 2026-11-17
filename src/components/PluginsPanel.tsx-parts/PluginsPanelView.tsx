@@ -86,8 +86,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const [sort, setSort] = useState<ConnectAppsSort>("default");
   // #4504: the count, the items with an update, update one and update all
   const updates = useCapabilityUpdates();
-  const rowUpdate = (kind: UpdateKind, name: string, fallback?: () => void) => {
-    const item = updateOf(updates.data, kind, name);
+  const rowUpdate = (kind: UpdateKind, name: string, fallback?: () => void, key?: string) => {
+    const item = updateOf(updates.data, kind, name, key);
     if (item?.canUpdate) return { running: updates.updatingAll || updates.running.has(item.key), onUpdate: () => void updates.update([item.key]) };
     return fallback ? { running: false, onUpdate: fallback } : null;
   };
@@ -146,7 +146,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       );
     }
     // an installed item with an update waiting: the card's button is Update
-    const waiting = item.installed ? rowUpdate(updateKindOf(item.kind), item.name) : null;
+    const waiting = item.installed ? rowUpdate(updateKindOf(item.kind), item.name, undefined, item.updateKey) : null;
     if (waiting) {
       return (
         <button type="button" data-card-update={waiting.running ? "running" : ""} disabled={waiting.running} onClick={waiting.onUpdate}
@@ -214,7 +214,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       s={s}
       a={a}
       products={products}
-      updateInfo={(kind, name) => updateOf(updates.data, kind, name)}
+      updateInfo={(kind, name, key) => updateOf(updates.data, kind, name, key)}
       trail={trail}
       entries={entries}
       botsForEntry={botsForEntry}
@@ -302,8 +302,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     const own = { ...entryActions(entry) };
     const state = statusState(entry.status, () => openItem(entry.primary));
     const kindOfEntry = updateKindOf(entry.primary.kind);
-    const update = rowUpdate(kindOfEntry, entry.name, own.update);
-    const found = updateOf(updates.data, kindOfEntry, entry.name);
+    const update = rowUpdate(kindOfEntry, entry.name, own.update, entry.primary.updateKey);
+    const found = updateOf(updates.data, kindOfEntry, entry.name, entry.primary.updateKey);
     if (found?.canUpdate) own.update = () => void updates.update([found.key]);
     const base: ItemMenuActions = {
       detail: () => openItem(entry.primary),
@@ -360,9 +360,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         .finally(() => setSkillBusy(null));
     };
     const where = scope === "bot" ? "bot" as const : skill.enabled ? everyone : noBot;
-    const skillUpdate = updateOf(updates.data, "skill", item.name);
+    const skillUpdate = updateOf(updates.data, "skill", item.name, item.updateKey);
     return (
-      <ItemTrailer update={rowUpdate("skill", item.name)} name={item.name} where={where} whereKind={typeof where === "string" ? undefined : where.kind} on={skill.enabled} busy={skillBusy !== null} onToggle={reason ? undefined : flip} lockedReason={reason}
+      <ItemTrailer update={rowUpdate("skill", item.name, undefined, item.updateKey)} name={item.name} where={where} whereKind={typeof where === "string" ? undefined : where.kind} on={skill.enabled} busy={skillBusy !== null} onToggle={reason ? undefined : flip} lockedReason={reason}
         actions={{ ...detail, ...(skillUpdate?.canUpdate ? { update: () => void updates.update([skillUpdate.key]) } : {}), ...(reason || scope === "bot" ? {} : { allBots: () => flip(true), offEverywhere: () => flip(false) }) }} />
     );
   };
@@ -464,7 +464,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           installed={(
             <InstalledView
               sort={sort}
-              hasUpdate={(kind, name) => Boolean(updateOf(updates.data, kind, name))}
+              hasUpdate={(kind, name, key) => Boolean(updateOf(updates.data, kind, name, key))}
               loading={mcp.servers === null}
               kind={kind}
               entries={entries}

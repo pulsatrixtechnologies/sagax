@@ -29,6 +29,19 @@ describe("joining an update to a row", () => {
     expect(updateOf(data, "skill", "Code Review")).toBeUndefined();
     expect(updateOf(null, "plugin", "Code Review")).toBeUndefined();
   });
+  it("joins by the server's updateKey, so two items with the same name are never confused", () => {
+    const data = answer([
+      item({ key: "plugin:me:me:review@a", name: "Review", installedVersion: "1.0.0", availableVersion: "1.1.0" }),
+      item({ key: "plugin:bot:bot-1:review@b", name: "Review", installedVersion: "2.0.0", availableVersion: "2.1.0", scope: "bot" }),
+    ]);
+    expect(updateOf(data, "plugin", "Review", "plugin:bot:bot-1:review@b")?.availableVersion).toBe("2.1.0");
+    expect(updateOf(data, "plugin", "Review", "plugin:me:me:review@a")?.availableVersion).toBe("1.1.0");
+    // a key with no update waiting finds nothing, even when another item has the same name
+    expect(updateOf(data, "plugin", "Review", "plugin:me:me:other@a")).toBeUndefined();
+    // an item the server gave no key is joined by kind and name (older lists)
+    expect(updateOf(data, "plugin", "Review")?.key).toBe("plugin:me:me:review@a");
+  });
+
   it("names a row's kind in the updates' kinds", () => {
     expect([updateKindOf("plugin"), updateKindOf("skill"), updateKindOf("mcp"), updateKindOf("featured"), updateKindOf("app")]).toEqual(["plugin", "skill", "connector", "connector", "connector"]);
   });

@@ -337,7 +337,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               }}>
               {(["installed", "discover"] as const).map((id) => (
                 <button key={id} type="button" role="radio" aria-checked={shown === id} tabIndex={shown === id ? 0 : -1} data-plugins-view={id}
-                  onClick={() => onTab(id)} className={segmentOptionClass(shown === id)}>
+                  onClick={() => onTab(id)} className={segmentOptionClass(shown === id, false, true)}>
                   {t(id === "installed" ? "connectApps.view.yours" : "connectApps.manage.tab.discover")}
                 </button>
               ))}
@@ -482,13 +482,13 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
 export function UpdateAllPill({ count, running, onUpdateAll }: { count: number; running: boolean; onUpdateAll: () => void }) {
   if (count <= 0 && !running) return null;
   const label = count === 1 ? t("connectApps.updates.one") : t("connectApps.updates.many", { count });
+  // compact: the refresh icon and the count; the words are the tooltip and the accessible name
   return (
     <button type="button" data-plugins-update-all={running ? "running" : ""} disabled={running} onClick={onUpdateAll}
-      aria-label={`${t("connectApps.updates.all")}: ${label}`} title={t("connectApps.updates.all")}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent/15 px-3 text-[13px] leading-[18px] text-accent-text transition-colors hover:bg-accent/25 disabled:opacity-70 motion-reduce:transition-none">
+      aria-label={`${t("connectApps.updates.all")}: ${label}`} title={`${t("connectApps.updates.all")}: ${label}`}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent/15 px-2.5 text-[13px] leading-[18px] tabular-nums text-accent-text transition-colors hover:bg-accent/25 disabled:opacity-70 motion-reduce:transition-none">
       <RefreshCw size={13} className={cn(running && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
-      <span className="@max-[760px]:hidden">{running ? t("connectApps.updates.updating") : label}</span>
-      {running ? null : <span className="hidden tabular-nums @max-[760px]:inline">{count}</span>}
+      {running ? null : <span data-update-count="">{count}</span>}
     </button>
   );
 }

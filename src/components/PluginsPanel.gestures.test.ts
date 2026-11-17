@@ -61,7 +61,7 @@ const API: Record<string, unknown> = {
 };
 
 API["/api/me/plugins"] = { marketplaces: [{ name: "my-tools", source: "example/my-tools", addedAt: 1, updatedAt: 1,
-  plugins: [{ name: "personal-review", description: "Reviews my work", installed: true, external: false, contents: { agents: [], commands: [], skills: [] } }],
+  plugins: [{ name: "personal-review", description: "Reviews my work", installed: true, external: false, updateKey: "plugin:me:me:personal-review@my-tools", contents: { agents: [], commands: [], skills: [] } }],
 }], plugins: [{ key: "personal-review@my-tools", name: "personal-review", marketplace: "my-tools", enabled: true, removed: [], declaredMcpServers: [] }],
   policy: { mode: "any" }, engine: { loadsPlugins: true }, canChange: true };
 API["/api/me/skills-library"] = { skills: [{ name: "my-writing", description: "Write my notes", source: "local-import", enabled: true, tags: [], warnings: [], assignedBots: [] }] };
@@ -236,7 +236,7 @@ describe("Plugins, driven like the owner does", () => {
     await open(true);
     await go("installed");
     await kind("plugins");
-    expect($("[data-plugins-update-all]")?.textContent).toContain("1 update");
+    expect($("[data-plugins-update-all]")?.getAttribute("aria-label")).toBe("Update all: 1 update");
     const row = $('[data-installed-entry="plugin:personal-review@my-tools"]')!;
     const mark = row.querySelector<HTMLButtonElement>("[data-row-update]")!;
     expect(mark.textContent).toBe("Update");

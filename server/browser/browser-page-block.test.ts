@@ -102,7 +102,9 @@ describe("pageBlock on real pages (#4394)", () => {
     } catch {
       browser = null;
     }
-  }, 30_000);
+    // A real Chrome launch under load: the same limit as the repo's other
+    // real-browser tests (server/login-fill.e2e.test.ts).
+  }, 120_000);
 
   afterAll(async () => {
     await browser?.close();

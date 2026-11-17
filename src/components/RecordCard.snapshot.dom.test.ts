@@ -1,0 +1,52 @@
+// @vitest-environment happy-dom
+// The three kinds the card drew before it learned to draw any kind (a ticket,
+// a company, a project): their DOM is pinned here, taken on the code of
+// #4532 before the generic renderer (#4572), so the generic renderer is proved
+// to draw them exactly as they were.
+import { createElement, act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "@/lib/i18n";
+import { companyCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF } from "@/lib/record-card-fixtures";
+import { parseRecordCard, type RecordRef } from "../../shared/record-cards";
+import { RecordCard } from "./RecordCard";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const NOW = Date.parse("2026-11-17T14:34:00-05:00");
+const product = { name: "Nimbus Desk", iconUrl: "https://desk.example/mark.svg" };
+let host: HTMLDivElement;
+let root: Root;
+
+const CASES: Array<[string, (now: number, lang: "fr" | "en") => Record<string, unknown>, RecordRef, string, string]> = [
+  ["ticket", ticketCard, TICKET_REF, "#481516", "Billet"],
+  ["company", companyCard, COMPANY_REF, "Acme Fabrication", "Entreprise"],
+  ["project", projectCard, PROJECT_REF, "Migration du serveur", "Projet"],
+];
+
+beforeEach(() => {
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+});
+afterEach(() => {
+  act(() => root.unmount());
+  host.remove();
+});
+
+describe("the three kinds before the generic renderer", () => {
+  for (const lang of ["fr", "en"] as const) {
+    for (const pinned of [false, true]) {
+      for (const [name, make, record, label, kindName] of CASES) {
+        it(`${name} ${lang} ${pinned ? "pinned" : "hovered"} keeps its DOM`, () => {
+          setLocale(lang);
+          act(() => root.render(createElement(RecordCard, {
+            record, label, kindName, product, now: NOW, pinned, onAsk: () => {}, onOpenRecord: () => {},
+            read: { card: parseRecordCard(make(NOW, lang)), miss: null, loading: false, at: NOW - 120_000, refresh: vi.fn(), confirm: vi.fn() },
+          })));
+          expect(host.innerHTML.replace(/\sid="[^"]*"/g, "")).toMatchSnapshot();
+        });
+      }
+    }
+  }
+});

@@ -468,11 +468,16 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
             {botSection}
             {groups.map((group) => {
               const rows = group.rows.filter((row) => row !== false && row !== null && row !== undefined && row !== "");
-              if (rows.length === 0) return null;
-              return <section key={group.id} data-routine-settings-group={group.id} className="min-w-0 scroll-mt-14 space-y-1">
-                <h3 className={PANEL_LABEL}>{group.label}</h3>
-                <PanelRows>{rows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</PanelRows>
-              </section>;
+              // #4558: the person's "always" answers sit before More, whose note closes the tab
+              const always = group.id === "more" && page?.alwaysChoices;
+              if (rows.length === 0) return always ? <Fragment key={group.id}>{always}</Fragment> : null;
+              return <Fragment key={group.id}>
+                {always}
+                <section data-routine-settings-group={group.id} className="min-w-0 scroll-mt-14 space-y-1">
+                  <h3 className={PANEL_LABEL}>{group.label}</h3>
+                  <PanelRows>{rows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</PanelRows>
+                </section>
+              </Fragment>;
             })}
           </div>}
         </div>

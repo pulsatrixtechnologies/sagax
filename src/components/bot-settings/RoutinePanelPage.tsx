@@ -2,7 +2,7 @@
 // when it fails), then three tabs (#4357, the owner's design C, 2026-11-14):
 // Overview (the instruction folded, When with every trigger, Next run, Last
 // run), Runs (every run, grouped by day) and Settings (every option, under
-// short headings). No Active toggle, Pause is in the bar; no This week
+// short headings, and the person's "always" answers on its cards, #4558). No Active toggle, Pause is in the bar; no This week
 // (2026-11-06). A change shows Cancel and Save in the bar; otherwise the bar
 // is the routine's own: Run now, Check, Pause, Delete. Shared by the bot
 // panel and the group panel.
@@ -16,6 +16,7 @@ import { canRunRoutineNow, RunNowButton } from "../routines/RunNowButton";
 import { clearRoutineRuns, type RoutinePatch, routineHistory, RoutineLastRun, RoutineRunAsRow, RoutineRunsByDay, RoutineStateBadge, RoutineStatusRows } from "../routines/RoutineDetail";
 import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/RoutineReadiness";
 import { useConfirm } from "../ConfirmProvider";
+import { RoutineAlwaysChoices } from "../routines/RoutineAlwaysChoices";
 
 export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaultRunOn, focusInstruction = false, onOpenRun, onBack, onDismiss, onDeleted, onDuplicate }: {
   routine: Routine;
@@ -77,6 +78,7 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
         week={false}
       />,
       runAs: <RoutineRunAsRow routine={routine} editable={editable} onPatch={patch} />,
+      alwaysChoices: <RoutineAlwaysChoices routineId={routine.id} refreshKey={`${routine.updatedAt}:${runs.length}`} />,
       badge: <RoutineStateBadge routine={routine} runs={runs} />,
       lastRun: <RoutineLastRun routine={routine} runs={runs} onOpenRun={openRun} />,
       runCount: routineHistory(routine, runs).length,

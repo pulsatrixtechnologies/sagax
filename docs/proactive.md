@@ -435,15 +435,112 @@ From those answers:
 - a keyed card of that routine shows the usual answer first among its
   options;
 - after three identical answers in a row, the card also offers
-  "<answer> (always for this routine)". Only the person's click on it writes
-  one line into the routine's instructions (`Always for "<question>" (key
-  <kind>): <answer>`), through the routine's own update, so the routine's
-  history says it. The offer is not made again once the line is there.
+  "<answer> (always for this routine)". Only the person's click on it keeps
+  the answer as the person's preference for that routine and card kind
+  (#4558).
 
-Never an automatic answer: every card stays the person's to answer.
+## "Always" answers (#4558)
+
+An "always" answer is the person's, never the routine's text:
+
+- It lives in the same signal ledger as the answers: one entry of kind
+  `card-always` per person, routine and choice (key `always:<routine>:<id>`,
+  the id a hash of the card kind, the question's shape and the card's
+  options without the learned "always" option; the answer in `answer`, the
+  kind in `label`, the card's question and options in `card`, when it was
+  chosen in `answeredAt`). A new click on the same question replaces it. It
+  is never written into the routine's instructions, which stay the author's
+  text (a person's, or a plugin's that keeps its routine up to date).
+- It covers the SAME question asked of another item of the kind, with the
+  same options, never another question. The question's shape
+  (`questionShape`, case and spacing ignored) sets aside only what names one
+  item, and leans to "the number counts":
+  - a number or id right after an explicit id mark (#1013, № 1013, n° 1013),
+    in one block (no other digits joined by a space or a separator), never
+    the end of a word ("casino. 2" counts);
+  - right after an item word, a whole number in one block (billet 1013), or
+    an id that starts with a letter and holds at least three digits (ticket
+    INC0012; "billet P1" counts), followed by the end of the question, an
+    end punctuation (? ! . ; , :) or a linking word of a short closed list
+    per language (and, or, of, for, to, et, ou, du, de, pour, au, und, für,
+    y, para, e, do, і, та, और, の, を, 的, …). Any other word after the number
+    (a unit, a currency, "fois", a month, anything unknown) makes it count.
+    Item words, nouns only, in every language of the app: ticket, invoice,
+    incident, case, billet, facture, dossier, Rechnung, Vorfall, factura,
+    incidente, caso, expediente, chamado, fatura, тікет, заявка, інцидент,
+    справа, टिकट, चालान, घटना, チケット, 請求書, インシデント, 案件, 工单, 工單, 发票, 發票, 事件, 案例
+    (a word that is also a verb or another common word, "order", "commande",
+    "fall", is left out).
+
+  Every other number is part of the question: an amount, a level or a size
+  (Tier2, D4s_v5), a quantity, a time or a duration (1:30), a version
+  (10.4.12), a date in digits or in words (a month or a day written in words
+  is part of the text compared: "Reporter au 3 décembre ?" never covers
+  "Reporter au 30 juin ?"). "always Oui" on "Fermer le billet 1013 ?" covers "Fermer le
+  billet 1014 ?", never "Facturer le billet 1014 au client ?";
+  "Rembourser 50 $ ?" never covers "Rembourser 5000 $ ?", "Payer la facture
+  500 $ ?" never "50000 $", "facture 1 500 $" never "9 500 $", "fatura 500
+  reais" never "50000 reais", "billet 3 fois" never "300 fois", "niveau 1"
+  never "niveau 3", "2 licences" never "40 licences", "1:30 logged" never
+  "9:45 logged". In doubt the number
+  counts: the card goes back to the person.
+- The server decides what is covered, not the bot: a routine's run raises
+  every card as usual, and a card the person chose "always" for is answered
+  at once with their choice (`autoApplied`, ask_choice's result says
+  `answered.standing`); any other card is the person's to answer. The
+  answered card stays in the conversation (a chat question, settled, its
+  answer marked, no sound) and says "Your “always” answer for this routine:
+  Oui." with a link to the routine's settings; a card Full access answered
+  says so too ("Answered for you under Full access"). The run's result says
+  what was answered. A choice
+  that kept no options (moved from an older line) covers the same question
+  when its answer is one of the card's options.
+- A run's prompt names each choice with the question it was chosen on, its
+  kind and its options (`kind "ticket", the question "Fermer le billet 1013 ?"
+  offering "Oui" / "Non": always "Oui"`; a card keyed by its words,
+  `ask-<hash>`, is named by its question alone), says that only that same
+  question for another item is covered and that any other question raises
+  its card, even with the same options. A choice never widens what the
+  routine may do.
+- The offer is made only when the repeated answer is one of the card's
+  options, not again for a question that has a choice, and never on a card
+  that offers its own "always" choice: an option label holding "always" in
+  one of the app's languages ("Always allow", "Toujours permettre", "Immer
+  erlauben", "Permitir siempre", "Sempre permitir", "Завжди дозволяти",
+  "हमेशा अनुमति दें", "常に許可", "始终允许", "一律允許"), never "Not always" nor
+  "Always-on" (`cardOffersAlways`). An ask_choice card carries no other sign
+  of it, whatever raised it.
+- The routine's page lists them in its Settings tab, under "Always answers",
+  before More: the question, what it covers ("This question for any item of
+  this kind, with Oui · Non"), when it was chosen, the answer and Remove;
+  never a key. Its help says it in one sentence: only the item's own number
+  (right after # or right after its word, at the end or before a linking
+  word) may change; any other number, a date included, asks again. Nothing shows when there is none.
+  `GET /api/routines/:id/always-choices` lists them and
+  `DELETE /api/routines/:id/always-choices/:id` removes one for good, for the
+  routine's person only (another person, an admin included, gets 404).
+- Once at start, the lines an older version wrote into instructions, in
+  their full words only (`Always for "<question>" (key <kind>): <answer>.
+  The person chose this on a card: do it without asking.` and its French
+  words), move to the ledger and leave the instructions with the blank line
+  before them; every other line stays as it was, a line the author wrote in
+  their own words included. Instructions made only of such lines keep
+  neutral words in the lines' language ("Follow the person's standing
+  choices for this routine's cards." or "Suis les choix permanents de la
+  personne pour les cartes de cette routine."). Two lines of one kind: the
+  later, newest one wins. Each line moved is marked in the ledger (kind
+  `card-always-moved`), so a removed choice never comes back from a line a
+  failed write left.
+
+A card is the person's to answer: a run never answers one for them, and the
+server answers only a card the person chose "always" for.
 
 Tests: `server/proactive/answer-learning.test.ts` (prompt section, the
-card's order and offer, the click that writes the line, a restart).
+card's order and offer, the click that keeps the choice, the same question
+for another item against another question with the same options, a card
+keyed by its words, a card with its own "always", the move of the old lines,
+Remove for good, a restart) and `server/routes/routine-always-choices.test.ts`
+(list, remove, another person).
 
 ## Usefulness metrics (`server/proactive/proactive-metrics.ts`, #4250 S9)
 

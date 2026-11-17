@@ -1585,9 +1585,14 @@ export interface OptionCardData extends WaitCardField {
   /** #4250 (S7): a keyed card a routine raised: the routine and the card's
    * kind (its key without the item id), whose answer the person's signal
    * ledger keeps, and the "Always do this for this routine" option the card
-   * offers after three identical answers, with the one line a click on it
-   * writes into the routine's instructions (server/proactive/answer-learning.ts). */
-  answerLearning?: { routineId: string; kind: string; always?: { option: string; answer: string; line: string } };
+   * offers after three identical answers; a click on it keeps the answer as
+   * the person's preference for the routine and kind, never in the routine's
+   * instructions (#4558, server/proactive/answer-learning.ts). */
+  answerLearning?: { routineId: string; kind: string; always?: { option: string; answer: string } };
+  /** #4558: the card was answered by the server with the person's "always"
+   * answer for this routine's question: the card says so and leads to the
+   * routine's settings, where the person removes the choice. */
+  standingAnswer?: { routineId: string };
   /** #2048: publish-target choice (Sagax page / artifact / Claude / …).
    * Same question card family; enables "Always use this choice". */
   pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;

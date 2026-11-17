@@ -202,6 +202,13 @@ function Preview() {
             <OptionCard botId="preview-bot" threadId="t" message={chatAsk("ca2", FR ? "Quelle taille ?" : "Which size?", FR ? ["Petite", "Grande"] : ["Small", "Large"])} />
           </div>
         </Row>
+        <Row id="answered-for-person" label="Répondue sans la personne (#4558) : sa réponse « toujours » d'une routine, puis Accès complet ; à côté de la carte répondue par la personne">
+          <div className="flex w-full flex-col gap-3">
+            <OptionCard botId="preview-bot" threadId="t" message={chatAsk("ca1", FR ? "Quelle couleur ?" : "Which color?", FR ? ["Rouge", "Bleu"] : ["Red", "Blue"], { answered: FR ? "Rouge" : "Red" })} />
+            <OptionCard botId="preview-bot" threadId="t" message={chatAsk("sa1", FR ? "Fermer le billet 1014 ?" : "Close ticket 1014?", FR ? ["Oui", "Non"] : ["Yes", "No"], { answered: "answer", answeredText: FR ? "Oui" : "Yes", autoApplied: true, standingAnswer: { routineId: "r1" } })} />
+            <OptionCard botId="preview-bot" threadId="t" message={chatAsk("fa1", FR ? "Quelle taille ?" : "Which size?", FR ? ["Petite", "Grande"] : ["Small", "Large"], { answered: "answer", answeredText: FR ? "Petite" : "Small", autoApplied: true })} />
+          </div>
+        </Row>
         <Row id="legacy-question" label="Carte d'avant 0.8.78 (#3515) : titre et Oui / Non dans la langue de l'app">
           <OptionCard botId="preview-bot" threadId="t" message={{ id: "lq", role: "bot", kind: "options", at: 1, card: { title: "Your bot has a question", subtitle: FR ? "Je continue avec la facture de mars ?" : "Do I go on with the March invoice?", options: ["Yes", "No"], requestId: "req-lq", requestType: "question" } } as Message} />
         </Row>

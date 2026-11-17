@@ -17,7 +17,7 @@ import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, OPTIONS_CARD_LIMITS, parseAskChoiceInput } from "../../shared/options-card.ts";
-import { alwaysOffer, cardKindOf, learnedOptions, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
+import { alwaysOffer, answerIsOption, cardKindOf, learnedOptions, type AlwaysChoice, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
 import { questionCardTitle } from "../approvals/approval-words.ts";
@@ -213,8 +213,10 @@ export function createAgentCard(args: {
     routineId: string;
     /** The person's answers on the kind of `key` in this routine, or null. */
     answers(key: string): KindAnswers | null;
-    /** The routine's instructions now. */
-    instructions(): string;
+    /** #4558: the person's "always" choice that covers a card of this kind
+     * asking this question (its variable parts aside) with these options in
+     * this routine (kept in their signal ledger), or null. */
+    always(kind: string, question: string, options: readonly string[]): AlwaysChoice | null;
     language: LearningLanguage;
   };
   /** #2048: availability and remembered default for choose_page_target. */
@@ -365,7 +367,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
   // #4250 (S7): the person's usual answer first, and "Always do this for
   // this routine" after three identical answers
-  const learned = askKey && !inRoom && !form && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
+  const { standing, ...learned } = askKey && !inRoom && !form && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
   const addressed = askTo ? { addressedTo: askTo.name } : {};
   // #4219: in a room the bot reads whom it can address
   const roomPeopleResult = {
@@ -404,11 +406,26 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const shownCard = input.title === undefined
     ? { ...cardValue, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || cardValue.title }
     : cardValue;
+  // #4558: the same question the person chose "always" for, asked of another
+  // item of the kind with the same options: the server answers it with their
+  // choice, whatever the bot judged; any other question is the person's
+  if (standing) {
+    const settled = args.store.appendMessage(args.threadId, {
+      // a question of the chat, settled: it stays in the conversation with the
+      // answer marked and says it is the person's "always" answer (#4558)
+      role: "bot", kind: "options", card: { ...shownCard, ...learned, requestType: "question", answered: "answer", answeredText: standing.answer, autoApplied: true, standingAnswer: { routineId: learned.answerLearning!.routineId } },
+      ...from,
+    });
+    args.authored?.(settled.id);
+    return { ok: true, messageId: settled.id, answered: { choice: standing.answer, question: value.subtitle, standing: true as const } };
+  }
   const answered = decision ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: value.title, question: value.subtitle, options: value.options });
   if (answered) {
     // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {
-      role: "bot", kind: "options", card: { ...shownCard, answered: "answer", answeredText: answered.choice, autoApplied: true },
+      // #4558: a question of the chat, settled, so it stays visible (an
+      // untyped card read as the first-run quiz and hid once answered)
+      role: "bot", kind: "options", card: { ...shownCard, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
       ...from,
     });
     args.authored?.(settled.id);
@@ -454,19 +471,22 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
 /** #4250 (S7): a routine's keyed card learns from the person's answers on
  * its kind: their usual answer moves first among the options, and after
  * three identical answers in a row the card offers "Always do this for
- * this routine" (written into the instructions only on their click).
+ * this routine" (kept as their preference only on their click, #4558).
  * Reorders `value` in place; the card's `answerLearning` field. */
 function learnCard(
   learning: NonNullable<Parameters<typeof createAgentCard>[0]["answerLearning"]>,
   askKey: string,
   value: { subtitle: string; options: string[]; details?: (string | undefined)[] },
-): { answerLearning?: CardAnswerLearning } {
+): { answerLearning?: CardAnswerLearning; standing?: AlwaysChoice } {
   const answers = learning.answers(askKey);
-  const always = alwaysOffer(answers, { question: value.subtitle, instructions: learning.instructions(), language: learning.language });
+  const chosen = learning.always(cardKindOf(askKey), value.subtitle, value.options);
+  // the choice's answer must still be one of this card's options
+  const standing = chosen && answerIsOption(chosen.answer, value.options) ? chosen : null;
+  const always = alwaysOffer(answers, { options: value.options, chosen, language: learning.language });
   const next = learnedOptions(value.options, value.details, answers?.usual, always, OPTIONS_CARD_LIMITS.maxOptions);
   value.options = next.options;
   if (next.details) value.details = next.details;
-  return { answerLearning: { routineId: learning.routineId, kind: cardKindOf(askKey), ...(next.always && always ? { always } : {}) } };
+  return { answerLearning: { routineId: learning.routineId, kind: cardKindOf(askKey), ...(next.always && always ? { always } : {}) }, ...(standing ? { standing } : {}) };
 }
 
 /** #2048: choose which surface hosts a new page or artifact. One available

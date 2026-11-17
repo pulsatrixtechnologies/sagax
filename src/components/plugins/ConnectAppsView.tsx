@@ -637,7 +637,7 @@ export function DiscoverCard({ item, onOpen, action, from, sub, openable = false
   const chip = !item.installed && item.action === "add" && (item.kind === "featured" || item.kind === "mcp" || item.kind === "app") ? t("connectApps.card.noSignIn") : null;
   return (
     <div data-plugin-row={item.key} data-discover-card="" className={CARD_BOX}>
-      <button type="button" disabled={!opens} onClick={() => onOpen(item)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left disabled:cursor-default"
+      <button type="button" disabled={!opens} onClick={() => onOpen(item)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left disabled:cursor-default"
         aria-label={opens ? t("connectApps.openAria", { name: item.name }) : undefined}>
         <PluginIcon item={item} className={CARD_ICON} />
         <span className="min-w-0 flex-1">

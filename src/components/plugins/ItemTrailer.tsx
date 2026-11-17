@@ -83,7 +83,7 @@ export function RowSwitch({ name, on, onChange, lockedReason, busy = false }: { 
 
 /** What sits at a card's right: Discover's "+" or Installed mark, Yours' state, switch and "..." (on the icon's line). */
 export function CardTrail({ children }: { children: ReactNode }) {
-  return <div className="flex h-12 shrink-0 items-center gap-2" data-card-action="">{children}</div>;
+  return <div className="flex shrink-0 items-center gap-2" data-card-action="">{children}</div>;
 }
 
 /** The row an item sits in: a right click on it opens the item's menu. */

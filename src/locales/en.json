@@ -7014,6 +7014,8 @@
   "settings.sidebarLogo.title": "Sidebar logo",
   "settings.sidebarPeopleApart.show": "Keep people in their own sidebar section, apart from bots in Unassigned",
   "settings.sidebarPeopleApart.title": "Keep people apart",
+  "settings.accountMenuAbove.show": "Keep the account menu open above my name in the sidebar",
+  "settings.accountMenuAbove.title": "Show the account menu above my name",
   "settings.allHistory.show": "Show the All history row in the bot panel",
   "settings.allHistory.title": "Show All history",
   "settings.showSuggestions.show": "Show the Suggestions card in the bot panel",

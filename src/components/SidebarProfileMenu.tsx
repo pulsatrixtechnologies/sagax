@@ -84,6 +84,7 @@ import { t } from "@/lib/i18n";
 import { useAchievements } from "@/lib/achievements";
 import { isRoutineProblemRun } from "@/lib/routines";
 import { useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
+import { useAccountMenuAbove } from "@/lib/account-menu-above";
 import { activeRoutineCount } from "@/lib/active-routines";
 import { viewerActorId } from "@/lib/viewer";
 import { achievementTitleName } from "./achievements/MemberCard";
@@ -598,9 +599,15 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({ config: current.config, activeView: current.activeView, memoryManagerOpen: current.memoryManagerOpen }), shallowEqual);
   const update = useUpdateItem();
+  // Settings > Appearance "Show the account menu above my name": the wide
+  // foot keeps the menu open above the name (SidebarPopoverMenu `docked`)
+  const menuAbove = useAccountMenuAbove();
   // the menu's figures (plan, cost, saved servers) are read the first time
-  // it opens, not with every sidebar
-  const [menuOpened, setMenuOpened] = useState(false);
+  // it opens, not with every sidebar; a menu kept open above the name reads them with the row
+  const [menuOpened, setMenuOpened] = useState(withName && menuAbove);
+  useEffect(() => {
+    if (withName && menuAbove) setMenuOpened(true);
+  }, [withName, menuAbove]);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
@@ -794,6 +801,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
       ariaLabel={name}
       banner={updateWaits ? (close) => <AccountMenuUpdateBanner onInstall={() => { close(); openUpdatePrompt(); }} /> : undefined}
       menuClassName={avatarOnly ? "left-0" : undefined}
+      docked={avatarOnly && withName && menuAbove}
       renderTrigger={({ open }) => avatarOnly && withName ? (
         // The foot's profile (reference design): the avatar and the full
         // name, 14/20 medium as the reference's (#4093), no background pill;

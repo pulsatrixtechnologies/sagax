@@ -9,8 +9,9 @@ import type { AppState } from "@/state/store";
 import type { AchievementSnapshot } from "../../shared/achievements";
 import { resetAchievementsForTests } from "@/lib/achievements";
 
-const fixture = vi.hoisted(() => ({ state: {} as Partial<AppState>, badge: true }));
+const fixture = vi.hoisted(() => ({ state: {} as Partial<AppState>, badge: true, above: false }));
 vi.mock("@/lib/routines-badge-preferences", () => ({ useShowRoutinesBadge: () => fixture.badge }));
+vi.mock("@/lib/account-menu-above", () => ({ useAccountMenuAbove: () => fixture.above, accountMenuAbove: {} }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({ state: { ...original.initialState, ...fixture.state }, dispatch: vi.fn() }) };
@@ -38,6 +39,7 @@ const points = (): AchievementSnapshot => ({
 
 beforeEach(() => {
   fixture.badge = true;
+  fixture.above = false;
   fixture.state = { config: { profile: { name: "Jean-Baptiste Exemplar", email: "owner@example.com" } } as AppState["config"] };
   resetAchievementsForTests();
   vi.stubGlobal("window", {});
@@ -221,6 +223,45 @@ describe("sidebar footer row", () => {
 });
 
 describe("the foot's profile (the reference design's row)", () => {
+  // Settings > Appearance "Show the account menu above my name" (#4541), off by default
+  it("keeps the account menu behind the name by default: the reference look", () => {
+    const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
+    expect(html).not.toContain('role="menu"');
+    const trigger = /<button[^>]*>(?=<span[^>]*data-sidebar-account-pill)/.exec(html)?.[0] ?? "";
+    expect(trigger).toContain('aria-haspopup="menu"');
+    expect(trigger).toContain('aria-expanded="false"');
+  });
+
+  it("shows the account menu above the name when the switch is on: the popover's own rows, docked in the page's flow", () => {
+    fixture.above = true;
+    const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
+    const menu = html.indexOf('role="menu"');
+    const name = html.indexOf("data-account-pill-name");
+    expect(menu).toBeGreaterThan(-1);
+    expect(name).toBeGreaterThan(menu);
+    // the popover's own markup (menuitem rows), not a second implementation
+    const keys = [...html.matchAll(/data-menu-key="([^"]+)"/g)].map((match) => match[1]);
+    for (const key of ["usage", "help", "settings", "tools"]) expect(keys).toContain(key);
+    expect(keys.indexOf("usage")).toBeLessThan(keys.indexOf("help"));
+    expect(html).toContain('role="menuitem"');
+    expect(html).toContain(">Usage</span>");
+    expect(html).toContain(">Settings</span>");
+    // docked: in flow, never floating over the name
+    const tag = /<div[^>]*role="menu"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(tag).toContain("relative");
+    expect(tag).not.toContain("absolute");
+    // the name is still the trigger; it shows or hides the menu
+    const trigger = /<button[^>]*>(?=<span[^>]*data-sidebar-account-pill)/.exec(html)?.[0] ?? "";
+    expect(trigger).not.toContain("aria-haspopup");
+    expect(trigger).toContain('aria-expanded="true"');
+  });
+
+  it("never docks the rail's avatar or the narrow row, whatever the switch says", () => {
+    fixture.above = true;
+    expect(renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true }))).not.toContain('role="menu"');
+    expect(renderToStaticMarkup(createElement(SidebarProfileMenu, {}))).not.toContain('role="menu"');
+  });
+
   it("draws the avatar and the name, no background pill, that opens the account menu", () => {
     const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
     const pill = /<span[^>]*data-sidebar-account-pill=""[^>]*>/.exec(html)?.[0] ?? "";

@@ -5,6 +5,7 @@ import { botBubbleAccent, botReplyBubbles } from "@/lib/bot-reply-bubbles";
 // short grey line where it avoids a mistake. The skin is chosen here only:
 // its family, variant and Light, Dark or Auto (2026-10-19; General's Theme
 // menu of #573 is gone, one option in one place).
+import { accountMenuAbove, useAccountMenuAbove } from "@/lib/account-menu-above";
 import { useState, useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import { FLOATING_LIVELINESS, floatingBotPrefs, HOTKEY_CHOICES, hotkeyLabel, setFloatingBarkSound, setFloatingFlyAway, setFloatingHotkey, setFloatingLiveliness, subscribeFloatingBots, type FloatingLiveliness, type HotkeyChoice } from "@/lib/floating-bots";
@@ -515,6 +516,7 @@ export function AppearanceSettings() {
   // #1098: on an organization server Show tool calls is each person's own.
   const personalSettings = state.config?.personalSettings === true;
   const logo = useShowSidebarLogo();
+  const menuAbove = useAccountMenuAbove();
   const routinesBadge = useShowRoutinesBadge();
   const suggestions = useShowSuggestions();
   const allHistory = useShowAllHistory();
@@ -542,6 +544,7 @@ export function AppearanceSettings() {
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />
+        <SwitchLine label={t("settings.accountMenuAbove.title")} ariaLabel={t("settings.accountMenuAbove.show")} checked={menuAbove} onChange={(on) => accountMenuAbove.set(on ? "on" : "off")} rowId="accountMenuAbove" />
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />

@@ -19134,7 +19134,9 @@
       "connectApps.mac.perm.remindersTitle": "7971dd7526694c6ae3f2db570e44bfaa79cf30a63067a47f161b6e62c5426ef8",
       "connectApps.mac.perm.remindersBody": "c61bc896b8ec1fb8e661b50cba5f05ebda38989fed38bf5bd96513ac7c2d0c61",
       "connectApps.mac.perm.contactsTitle": "b450645debe2cf0a590edd7f78d36eccd465027d389652dc30d6350542587c04",
-      "connectApps.mac.perm.contactsBody": "403ebc29b4925b998600886c1b61374aa8a38c4383b6e60f748791bddfd7c775"
+      "connectApps.mac.perm.contactsBody": "403ebc29b4925b998600886c1b61374aa8a38c4383b6e60f748791bddfd7c775",
+      "settings.accountMenuAbove.show": "2fd2d34533ead3875a44d84ac0ee96921e8db3ef9afd6a2c3ce7cb5ad12700ff",
+      "settings.accountMenuAbove.title": "2791b8235c2e6678440d7cafc05484a27e1a8d39b8bb0a111413b42810b30956"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

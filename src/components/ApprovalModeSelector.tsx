@@ -408,11 +408,12 @@ export function ApprovalModeSelector({
             if (event.key === "ArrowLeft" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); }
           }}
           className={cn(
-            "flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none aria-expanded:bg-hover",
+            menuRow(),
+            "focus-visible:outline-none aria-expanded:bg-menu-active",
             triggerDisabled && "cursor-not-allowed opacity-45 hover:bg-transparent",
           )}
         >
-          <CurrentIcon size={16} className="shrink-0" aria-hidden="true" />
+          <MenuGlyph><CurrentIcon size={16} aria-hidden="true" /></MenuGlyph>
           <span className="min-w-0 flex-1 truncate">{t("composer.plus.approval")}</span>
           <span className="max-w-[110px] shrink-0 truncate text-ink-tertiary">{current.chip}</span>
           <ChevronRight size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />

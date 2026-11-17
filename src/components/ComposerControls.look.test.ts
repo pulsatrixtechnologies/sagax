@@ -62,6 +62,6 @@ describe("the message bar's look (#4152)", () => {
   });
 
   it("keeps one line of the bar at the reference's 44 px: 32 px band, 5 px above and below", () => {
-    expect(editor).toMatch(/min-h-11 rounded-\[22px\] border-\[0\.5px\][^"]*\bpx-2 py-\[5px\]/);
+    expect(editor).toMatch(/min-h-11 rounded-\[22px\] menu-edge[^"]*\bpx-2 py-\[5px\]/);
   });
 });

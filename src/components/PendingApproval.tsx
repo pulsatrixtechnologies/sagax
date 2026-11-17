@@ -823,7 +823,7 @@ export function PendingApprovalBox({
   const go = (to: number) => setRequestId(approvals[to]?.requestId);
   return (
     // #3414: the compact surface every ask of the chat shares (AskCard)
-    <div className="mb-2 overflow-hidden rounded-3xl bg-composer ring-1 ring-composer-ring">
+    <div className="mb-2 overflow-hidden rounded-3xl menu-edge bg-composer">
       {/* locale: the panel is memoized and its other props do not
           change with the language (see MessagesList in ChatView) */}
       <PendingApprovalPanel

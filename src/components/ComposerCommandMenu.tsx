@@ -9,6 +9,7 @@ import { Activity, BookOpen, MessageSquareWarning, Pause, Play, Plug, Puzzle, Re
 import { cn } from "@/lib/cn";
 import { composerMenuSection, type ComposerMenuItem } from "@/lib/composer-commands";
 import { t } from "@/lib/i18n";
+import { MENU_BOX } from "./menu-look";
 
 export interface ComposerCommandMenuProps {
   items: ComposerMenuItem[];
@@ -51,10 +52,10 @@ export function ComposerCommandMenu({ items, highlight, loading, onPick, onHighl
       ref={listRef}
       role="listbox"
       aria-label={t("composer.commands.aria")}
-      className={cn("absolute bottom-full left-2 z-20 mb-2 max-h-80 w-[26rem] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-hairline/40 bg-raised shadow-lg", className)}
+      className={cn("absolute bottom-full left-2 z-20 mb-2 max-h-80 w-[26rem] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto overscroll-contain", MENU_BOX, className)}
       {...exitProps}
     >
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-hairline/20 bg-raised px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b-[0.5px] border-[var(--menu-hairline)] bg-[var(--menu-fill)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">
         <span className="flex-1">{t("composer.commands.title")}</span>
         {loading && <span className="normal-case tracking-normal">{t("composer.commands.loading")}</span>}
         {onRefresh && (
@@ -118,7 +119,7 @@ export function ComposerCommandMenu({ items, highlight, loading, onPick, onHighl
           </div>
         );
       })}
-      <div className="sticky bottom-0 border-t border-hairline/20 bg-raised px-3 py-1.5 text-[11px] text-ink-tertiary">
+      <div className="sticky bottom-0 border-t-[0.5px] border-[var(--menu-hairline)] bg-[var(--menu-fill)] px-3 py-1.5 text-[11px] text-ink-tertiary">
         {t("composer.commands.escHint")}
       </div>
     </div>

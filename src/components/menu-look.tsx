@@ -16,6 +16,12 @@ import { cn } from "@/lib/cn";
 /** The menu's box: worn with its own placement (fixed, absolute, width). */
 export const MENU_SURFACE = "flex flex-col gap-0.5 rounded-2xl popover-surface menu-surface p-1.5 text-[14px] leading-5";
 
+/** The menu family's box alone (surface fill, hairline, shadow, 16px
+ * corners), for a popover that lays out its own inside: the composer's "/"
+ * and "@" lists, the model menus, the memes picker. A menu with rows takes
+ * MENU_SURFACE, which adds the rows' padding and gap on top of it. */
+export const MENU_BOX = "rounded-2xl popover-surface menu-surface";
+
 /** The menu's width: its content's, as the account menu sizes itself, up
  * to 400px and never past the window's 8px gutters (useMenuInWindow), so no
  * label is cut in any language. A row menu adds its 228px floor. */

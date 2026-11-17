@@ -568,6 +568,9 @@
   --menu-row-hover: color-mix(in srgb, var(--color-ink) 6%, transparent);
   --menu-row-active: color-mix(in srgb, var(--color-ink) 8%, transparent);
   --menu-shadow: none;
+  /* The composer's edge while it holds focus: a step above the hairline,
+     still soft, 3:1 against the field so a keyboard user sees it. */
+  --composer-focus-edge: color-mix(in srgb, var(--color-ink) 45%, transparent);
 }
 
 /* The reference's light appearance: a 12% hairline, glyphs at 66%, and its
@@ -613,6 +616,16 @@
   }
   .menu-divider {
     background-color: var(--menu-hairline);
+  }
+  /* The menu family's edge on a surface that is not a menu: the composer's
+     field and the cards pinned above it (#4183 follow-up). The same 0.5px
+     hairline and shadow as `.menu-surface`, from the same two tokens, so
+     the composer, its popovers and the account menu read as one family.
+     The fill stays the surface's own (`bg-composer`, raised in every skin
+     but Daylight). */
+  .menu-edge {
+    border: 0.5px solid var(--menu-hairline);
+    box-shadow: var(--menu-shadow);
   }
   /* A card's rows that scroll under a pinned foot (Usage ›, #4157): the
      scrollbar is invisible at rest, so the fold cuts through a row (its top
@@ -5039,6 +5052,9 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --color-ink-tertiary: var(--color-ink);
   --color-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
   --color-hairline-weak: color-mix(in srgb, var(--color-ink) 30%, transparent);
+  /* the menu family's edge (menus, composer, pinned cards) follows */
+  --menu-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
+  --composer-focus-edge: var(--color-ink);
 }
 :root[data-contrast="high"] :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
 /* The composer pill draws focus on its own border. A send puts the caret

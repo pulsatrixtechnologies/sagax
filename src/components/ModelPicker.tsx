@@ -13,6 +13,7 @@ import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
 import { needsCli } from "./EngineSetup";
 import type { ModelMenuRow } from "./ModelMenu";
 import { cn } from "@/lib/cn";
+import { MENU_BOX } from "./menu-look";
 import { useMenuMotion } from "./MenuMotion";
 import { EngineLimitIndicator } from "./LimitResetContinue";
 import { useAdvancedMode } from "@/lib/interface-mode";
@@ -613,7 +614,8 @@ function ModelPickerShell({
           aria-label={t("model.menu")}
           {...menuMotion.exitProps}
           className={cn(
-            "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+            "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden py-1 text-popover-ink",
+            MENU_BOX,
             menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
             menuMotion.className,
           )}

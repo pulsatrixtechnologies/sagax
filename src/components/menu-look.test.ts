@@ -190,6 +190,61 @@ describe("the rows' and cards' three dots menus", () => {
   });
 });
 
+describe("the composer and its popovers share the menu family's edge", () => {
+  // The + menu, the mode and model menus, the "/" and "@" lists and the
+  // memes picker wear the shared box; the composer's field and the cards
+  // pinned above it draw `menu-edge` (the same hairline and shadow tokens).
+  const POPOVERS = [
+    "src/components/ComposerControls.tsx",
+    "src/components/ApprovalModeSelector.tsx",
+    "src/components/ModelMenu.tsx",
+    "src/components/ModelPicker.tsx",
+    "src/components/ModelPicker.tsx-parts/ModelPickerMenu.tsx",
+    "src/components/ComposerCommandMenu.tsx",
+    "src/components/Composer.tsx-parts/ComposerMentionMenu.tsx",
+    "src/components/MemePicker.tsx",
+  ];
+  it.each(POPOVERS)("%s draws its popover on the shared look", (file) => {
+    const text = readFileSync(file, "utf8");
+    expect(text).toMatch(/from "(\.\/|\.\.\/)menu-look"/);
+    expect(text).toMatch(/\bMENU_(SURFACE|BOX)\b/);
+    // no outline or heavy shadow of its own on the popover's box
+    expect(text).not.toMatch(/border(-\[0\.5px\])? border-(popover-hairline|border|hairline\/40)[^"]*(popover-surface|bg-popover|bg-raised|bg-elevated)/);
+    expect(text).not.toMatch(/shadow-2xl shadow-black\/50/);
+    expect(text).not.toMatch(/rounded-xl border border-hairline\/40 bg-raised shadow-lg/);
+  });
+  it("the + menu's rows are the menu rows", () => {
+    const text = readFileSync("src/components/ComposerControls.tsx", "utf8");
+    expect(text).not.toContain("h-[30px]");
+    expect(text).not.toContain('role="separator" className="mx-2 my-1');
+  });
+  it.each([
+    "src/components/Composer.tsx-parts/ComposerEditor.tsx",
+    "src/components/task/TaskComposer.tsx",
+    "src/components/coding/CodingChat.tsx",
+    "src/components/Composer.tsx-parts/PinnedWaitingCard.tsx",
+    "src/components/PendingApproval.tsx",
+  ])("%s draws the menu edge, not its own outline", (file) => {
+    const text = readFileSync(file, "utf8");
+    expect(text).toContain("menu-edge");
+    expect(text).not.toMatch(/bg-composer[^"]*(?:ring-composer-ring|shadow-\[0_2px_8px)/);
+    expect(text).not.toMatch(/border-\[0\.5px\] border-border bg-composer/);
+  });
+  it("menu-edge and menu-surface read the same two tokens", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const rule = (name: string) => css.slice(css.indexOf(`  .${name} {`), css.indexOf("}", css.indexOf(`  .${name} {`)));
+    for (const name of ["menu-surface", "menu-edge"]) {
+      expect(rule(name)).toContain("border: 0.5px solid var(--menu-hairline)");
+      expect(rule(name)).toContain("box-shadow: var(--menu-shadow)");
+    }
+  });
+  it("high contrast strengthens the shared edge", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const start = css.indexOf(':root[data-contrast="high"]:not(#a11y)');
+    expect(css.slice(start, css.indexOf("}", start))).toContain("--menu-hairline: color-mix(in srgb, var(--color-ink) 55%");
+  });
+});
+
 describe("a menu sized to its content stays in the window", () => {
   // The menus size to their labels (MENU_FIT_ROW, 228px up to 400px). Placed
   // with a guessed 228 to 260px width, a menu opened near the right edge (the

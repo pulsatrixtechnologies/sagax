@@ -1966,6 +1966,16 @@ Rules that hold at every width:
   quiet circles. The bot chat, the group chat, the coding chat and the page
   chat use the one `Composer`, so they follow. Test:
   `src/components/ComposerControls.look.test.ts`.
+- Composer and menu edge (owner's request, 2026-11-17): the composer's field,
+  the cards pinned above it and every popover opened from it (the + menu, the
+  mode and model menus, the "/" and "@" lists, the memes picker) draw the
+  account menu's edge: `.menu-edge` / `.menu-surface`, a 0.5px hairline at 10%
+  of the ink (12% in light) and `--menu-shadow` (none in dark, three soft
+  layers in light), through `MENU_BOX` / `MENU_SURFACE` in
+  `src/components/menu-look.tsx`. The composer's focus steps to
+  `--composer-focus-edge` (45% of the ink); high contrast sets
+  `--menu-hairline` to 55% so menus, composer and pinned cards strengthen
+  together. Test: `src/components/menu-look.test.ts`.
 - Account menu (owner's configuration, re-measured 2026-11-13, #4157):
   opens above the avatar, aligned on its start edge, at least 228px wide;
   16px corners, 6px padding, 32px rows 2px apart with 8px inside each side,

@@ -8,6 +8,7 @@ import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { compactBotLast } from "../context/compact-prompt.ts";
 import { memoryExcerptBytes } from "../workspace/workspace.ts";
+import { namedByToolScope } from "../tools/tool-keep.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -147,11 +148,17 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // #2037: Claude with localPrompt full still needs the bot's agents use
     // so native tool search can defer everything outside the core and pins.
     const needsAgentsUse = wantsCompact || state.instance.driverKind === "claudeAgent";
-    const compactForBot = needsAgentsUse
-      ? compactPromptFor(state.liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot))
-      : undefined;
+    // #4527: every engine's turn is counted in its conversation's session
+    // (server/tools/tool-keep.ts); the verdict is the session's, frozen
+    const compactForBot = compactPromptFor(state.liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot), {
+      threadId: state.threadId,
+      compaction: state.record?.id ?? null,
+      routine: state.opts?.automationSource !== undefined,
+      prompt: !state.warmOnly,
+      context: { voiceCall: Boolean(state.onCall), named: namedByToolScope(state.toolScope) },
+    });
     state.compactPrompt = wantsCompact ? compactForBot : undefined;
-    state.agentsKnownUse = !state.compactPrompt && compactForBot?.agents.core === "used" ? compactForBot.agents : undefined;
+    state.agentsKnownUse = !state.compactPrompt && needsAgentsUse && compactForBot.agents.core === "used" ? compactForBot.agents : undefined;
     const promptApprovalLevel = approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId);
     // Cold / automation turns (routines, webhooks, proactive): tighter
     // per-section budgets, lazy skill index, short rich-output (V1/R3).

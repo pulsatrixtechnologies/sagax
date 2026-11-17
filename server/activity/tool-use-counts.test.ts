@@ -1,25 +1,25 @@
-// #3679: the compact prompt's tool use is counted as the tool runs are
-// written, never read from the conversation logs on a turn's path.
+// #3679: tool use is counted as the tool runs are written, never read from
+// the conversation logs on a turn's path. #4527: under one id per tool,
+// `<server>/<tool>`, whatever name the engine gave the call.
 //
 // Fixture: 25 bots of one person, 40 conversations each (and two more past
 // the window), plus one bot of another person. Logs are generated here
 // (never a real one): every other conversation sealed at rest through the
 // log writer's own sealing (sealLogLines), the rest plain lines. Each
 // conversation calls a few MCP tools of three servers, chosen by its index,
-// with a tool start and end per call. The oracle is the log reader the pins
-// used before (readToolRuns), on the same logs.
+// with a tool start and end per call. The oracle is the log reader
+// (readToolRuns), on the same logs.
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { EVENTS_DIR, DATA_DIR } from "../config.ts";
+import { EVENTS_DIR } from "../config.ts";
 import { configureContentEncryption } from "../messages/message-db.ts";
 import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { resetAtRestState, sealLogLines } from "../encryption/content-at-rest.ts";
 import { looksSealed } from "../encryption/content-file-crypto.ts";
-import { compactPins, toolUsage, KNOWN_USE_CALLS, type ToolUse } from "../context/compact-prompt.ts";
-import { createCompactPromptFor } from "../index-leaves/compactPromptFor.ts";
-import { createRecentToolUses } from "../index-leaves/recentToolUses.ts";
+import { stepToolId } from "../../shared/searched-tool-call.ts";
+import { forgetToolKeepInMemory, toolKeepDir, toolKeepTurn, readToolKeep } from "../tools/tool-keep.ts";
 import { sweepThreadEventLogs } from "../threads/thread-retention.ts";
 import { capThreadLog } from "../threads/thread-log-rotation.ts";
 import { readToolRuns } from "./activity.ts";
@@ -51,7 +51,7 @@ function conversation(threadId: string, seed: number, calls: number, from = 0, p
     events.push(event(threadId, n++, { type: "content.delta", turnId, delta: `working${pad}` }));
     events.push(event(threadId, n++, { type: "item.completed", itemType: "tool", turnId, itemId, ok: true }));
   }
-  // a built-in tool and a gate's own search, which the pins never read
+  // a built-in tool and a gate's own search, never counted
   events.push(event(threadId, n++, { type: "item.started", itemType: "tool", turnId: `turn-x${from}`, itemId: "bash", title: "Bash" }));
   events.push(event(threadId, n++, { type: "item.started", itemType: "tool", turnId: `turn-x${from}`, itemId: "gate", title: "mcp__crm__search_tools" }));
   return events;
@@ -77,46 +77,18 @@ function append(threadId: string, events: Event[], sealed: boolean) {
 
 let bots: Bot[] = [];
 const tasks = new Map<string, Task[]>();
-const compactPinsByBot = new Map<string, unknown>();
-const host = {
-  DATA_DIR,
-  EVENTS_DIR,
-  COMPACT_USAGE_THREADS: THREADS,
-  compactPinsByBot,
-  store: { get bots() { return bots; }, tasks: (botId: string) => tasks.get(botId) ?? [] },
-  effectiveBotOwner: (bot: Bot) => bot.owner,
-  get recentToolUses() { return recentToolUses; },
-};
-const recentToolUses = createRecentToolUses(() => host);
-const compactPromptFor = createCompactPromptFor(() => host);
-
-/** What the log reader counts in one conversation: the oracle. */
+/** What the log reader counts in one conversation, by tool id: the oracle. */
 const oracleCounts = (threadId: string) => {
   const counts: Record<string, number> = {};
-  for (const run of readToolRuns(EVENTS_DIR, threadId)) if (run.tool.startsWith("mcp__")) counts[run.tool] = (counts[run.tool] ?? 0) + 1;
+  for (const run of readToolRuns(EVENTS_DIR, threadId)) {
+    const id = stepToolId({ title: run.tool });
+    if (id) counts[id] = (counts[id] ?? 0) + 1;
+  }
   return counts;
 };
 
-/** The pins as they were computed before #3679, from the logs: the oracle. */
-function oraclePins(bot: Bot) {
-  const read = (botId: string): ToolUse[] => [...(tasks.get(botId) ?? [])]
-    .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, THREADS)
-    .flatMap((task) => readToolRuns(EVENTS_DIR, task.threadId).map((run) => ({ name: run.tool })));
-  const own = read(bot.id);
-  const siblings = bots.filter((other) => other.id !== bot.id && other.owner === bot.owner).flatMap((other) => read(other.id));
-  const ownUsage = toolUsage(own);
-  const all = toolUsage([...own, ...siblings]);
-  const ownAgentsCalls = [...(ownUsage.get("agents")?.values() ?? [])].reduce((sum, count) => sum + count, 0);
-  return {
-    agents: compactPins(ownAgentsCalls >= KNOWN_USE_CALLS ? ownUsage : all, []).agents,
-    pinned: compactPins(all, [...all.keys()].filter((server) => server !== "agents")).pinned,
-  };
-}
-
-const pinsOf = (bot: Bot) => {
-  const { agents, pinned } = compactPromptFor(bot, bot.owner);
-  return { agents, pinned };
-};
+/** A bot's conversations, the newest first. */
+const threadsOf = (bot: Bot) => [...(tasks.get(bot.id) ?? [])].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, THREADS).map((task) => task.threadId);
 
 function buildFixture() {
   rmSync(EVENTS_DIR, { recursive: true, force: true });
@@ -124,8 +96,9 @@ function buildFixture() {
   mkdirSync(EVENTS_DIR, { recursive: true });
   bots = [];
   tasks.clear();
-  compactPinsByBot.clear();
   forgetToolUsesInMemory();
+  forgetToolKeepInMemory();
+  rmSync(toolKeepDir(), { recursive: true, force: true });
   let seed = 0;
   for (let b = 0; b < BOTS; b++) {
     const bot = { id: `bot-a${b}`, owner: "person-a" };
@@ -144,11 +117,10 @@ function buildFixture() {
   tasks.set(other.id, [{ threadId: "b0-t0", updatedAt: 1 }]);
 }
 
-/** Every count of the person's bots known (loaded in the background). */
+/** Every count of the bots known (loaded in the background). */
 async function countAll() {
-  for (const bot of bots) compactPromptFor(bot, bot.owner);
+  for (const bot of bots) for (const threadId of threadsOf(bot)) toolUsesOf(threadId);
   await toolUsesSettled();
-  compactPinsByBot.clear();
 }
 
 beforeAll(async () => {
@@ -168,19 +140,17 @@ beforeEach(async () => {
   buildFixture();
 });
 
-describe("compact prompt tool use (#3679)", () => {
-  it("a first turn after a start reads zero bytes of conversation logs and holds the loop under 50 ms", async () => {
+describe("tool use counts (#3679)", () => {
+  it("a first read after a start reads zero bytes of conversation logs and holds the loop under 50 ms", async () => {
     const before = toolUsesLogBytesRead();
     let longest = 0;
     for (const bot of bots) {
       const started = performance.now();
-      compactPromptFor(bot, bot.owner);
+      for (const threadId of threadsOf(bot)) expect(toolUsesOf(threadId)).toBeUndefined();
       longest = Math.max(longest, performance.now() - started);
     }
     expect(toolUsesLogBytesRead()).toBe(before);
     expect(longest).toBeLessThan(50);
-    // nothing known yet: the day's value is not kept
-    expect(compactPinsByBot.size).toBe(0);
     await toolUsesSettled();
     expect(toolUsesLogBytesRead()).toBeGreaterThan(before);
   });
@@ -199,22 +169,21 @@ describe("compact prompt tool use (#3679)", () => {
     seen.forEach((count, index) => expect(count - (seen[index - 1] ?? 0)).toBeLessThanOrEqual(1));
   });
 
-  it("pins what the logs pinned, for every bot of the person", async () => {
+  it("counts what the log reader reads, for every conversation", async () => {
     await countAll();
     const before = toolUsesLogBytesRead();
-    for (const bot of bots.filter((each) => each.owner === "person-a")) expect(pinsOf(bot)).toEqual(oraclePins(bot));
+    for (const bot of bots) for (const threadId of threadsOf(bot)) expect(toolUsesOf(threadId)).toEqual(oracleCounts(threadId));
     expect(toolUsesLogBytesRead()).toBe(before);
-    expect(compactPinsByBot.has(bots[0]!.id)).toBe(true);
   });
 
   it("a tool run moves the count, a start written twice counts once, as the log reader counts", async () => {
     await countAll();
     const before = toolUsesLogBytesRead();
     for (const [threadId, sealed] of [["a0-t39", false], ["a0-t38", true]] as const) {
-      const count = toolUsesOf(threadId)!["mcp__crm__list"] ?? 0;
+      const count = toolUsesOf(threadId)!["crm/list"] ?? 0;
       const start = event(threadId, 900, { type: "item.started", itemType: "tool", turnId: "turn-late", itemId: "late", title: "mcp__crm__list" });
       append(threadId, [start, { ...start, eventId: `${threadId}-again` }], sealed);
-      expect(toolUsesOf(threadId)!["mcp__crm__list"]).toBe(count + 1);
+      expect(toolUsesOf(threadId)!["crm/list"]).toBe(count + 1);
       expect(toolUsesOf(threadId)).toEqual(oracleCounts(threadId));
     }
     // a new conversation started by the writer is counted from its first line
@@ -238,8 +207,6 @@ describe("compact prompt tool use (#3679)", () => {
       expect(Object.values(oracle).reduce((sum, n) => sum + n, 0)).toBeLessThan(1_000);
       expect(toolUsesOf(threadId)).toEqual(oracle);
     }
-    const bot = bots[1]!;
-    expect(pinsOf(bot)).toEqual(oraclePins(bot));
     // and stays so as newer runs push older ones out
     append(live, conversation(live, 7, 200, 90_000), true);
     expect(toolUsesOf(live)).toEqual(oracleCounts(live));
@@ -277,14 +244,14 @@ describe("compact prompt tool use (#3679)", () => {
     saveToolUses();
     const stored = readFileSync(join(toolUsesDir(), "a0-t2.json"));
     expect(looksSealed(stored)).toBe(true);
-    expect(stored.includes("mcp__")).toBe(false);
+    expect(stored.includes("crm/")).toBe(false);
     expect(statSync(join(toolUsesDir(), "a0-t2.json")).mode & 0o777).toBe(0o600);
     forgetToolUsesInMemory();
     const before = toolUsesLogBytesRead();
     await countAll();
     // loaded from the kept counts: no log read again
     expect(toolUsesLogBytesRead()).toBe(before);
-    for (const bot of [bots[3]!, bots[20]!]) expect(pinsOf(bot)).toEqual(oraclePins(bot));
+    for (const bot of [bots[3]!, bots[20]!]) for (const threadId of threadsOf(bot)) expect(toolUsesOf(threadId)).toEqual(oracleCounts(threadId));
   });
 
   it("a deleted or swept conversation's count goes with its log", async () => {
@@ -301,10 +268,45 @@ describe("compact prompt tool use (#3679)", () => {
     expect(existsSync(deleted) || existsSync(swept)).toBe(false);
   });
 
-  it("never adds one person's use to another person's bot", async () => {
+  it("counts each engine's spelling of a call under the one id of the tool", () => {
+    const threadId = "engines-t0";
+    const step = (n: number, extra: Event) => event(threadId, n, { type: "item.started", itemType: "tool", turnId: "t", itemId: `i${n}`, ...extra });
+    append(threadId, [
+      // Claude Code
+      step(1, { title: "mcp__agents__ask_bot" }),
+      // Codex: the tool alone, the id on the step (red before #4527: not counted)
+      step(2, { title: "ask_bot", tool: "agents/ask_bot" }),
+      // an ACP engine
+      step(3, { title: "agents__ask_bot" }),
+      // a chat-completions engine, the agents tool by its own name
+      step(4, { title: "agents_ask_bot" }),
+      // a chat-completions engine, a connector's tool with its id on the step
+      step(5, { title: "crm_get_ticket", tool: "crm/get_ticket" }),
+      // Pi's gateway and Grok's use_tool
+      step(6, { title: "mcp__crm__get_ticket" }),
+      step(7, { title: "crm__get_ticket" }),
+      // a renamed Sagax tool counts as its current name
+      step(8, { title: "agents__propose_team_memory" }),
+      // never counted: a built-in tool, a command, finding tools
+      step(9, { title: "Bash" }),
+      step(10, { title: "bin/test" }),
+      step(11, { title: "agents_call_tool" }),
+      step(12, { title: "tool_search" }),
+      step(13, { title: "search", tool: "crm/search_tools" }),
+    ], false);
+    expect(toolUsesOf(threadId)).toEqual({ "agents/ask_bot": 4, "crm/get_ticket": 3, "agents/save_team_memory": 1 });
+  });
+
+  it("hands a live call to the conversation's open session, never a recount from the log", async () => {
+    const threadId = "a5-t41";
     await countAll();
-    const other = bots.find((bot) => bot.owner === "person-b")!;
-    expect(Object.keys(pinsOf(other).pinned)).toEqual(["ledger"]);
-    for (const bot of bots.filter((each) => each.owner === "person-a")) expect(pinsOf(bot).pinned.ledger).toBeUndefined();
+    toolKeepTurn({ botId: "bot-a5", person: "person-a", threadId, prompt: true });
+    append(threadId, [event(threadId, 950, { type: "item.started", itemType: "tool", turnId: "late", itemId: "late", title: "ask_bot", tool: "agents/ask_bot" })], true);
+    // the log is counted again from scratch: nothing reaches the session twice
+    forgetToolUsesInMemory();
+    toolUsesOf(threadId);
+    await toolUsesSettled();
+    const open = Object.values(readToolKeep("bot-a5", "person-a").open);
+    expect(open.map((session) => session.used)).toEqual([["agents/ask_bot"]]);
   });
 });

@@ -1,5 +1,16 @@
 // How often each conversation called each MCP tool, kept as the calls
-// happen (#3679), for the compact prompt's pins (server/context/compact-prompt.ts).
+// happen (#3679).
+//
+// #4527: a call is counted under the one id of the tool it runs,
+// `<server>/<tool>` (shared/searched-tool-call.ts stepToolId), on every
+// engine: Claude Code's `mcp__<server>__<tool>`, Codex's step id, the ACP
+// engines' `<server>__<tool>`, the chat engines' step id or `agents_<tool>`,
+// Pi's gateway call. A built-in tool and a finding tool (search_tools,
+// call_tool, use_tool, tool_search) are not counted; a call made through
+// one is counted as the tool it runs. Each live call also reaches the
+// conversation's open session in the bot's tool keep
+// (server/tools/tool-keep.ts), which decides what the next conversations
+// list.
 //
 // The pins used to be counted from the conversations' event logs on the
 // turn's path, for every bot of the same owner: up to 40 x N logs, sealed
@@ -32,6 +43,8 @@ import { BLOCK_PREFIX, sealBuffer } from "../encryption/content-file-crypto.ts";
 import { yieldToEventLoop } from "../harness/http.ts";
 import { isRuntimeEvent, MAX_TAIL_BYTES, readRecentLines } from "../threads/thread-events.ts";
 import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
+import { stepToolId } from "../../shared/searched-tool-call.ts";
+import { toolKeepCall } from "../tools/tool-keep.ts";
 import { EVENTS_PER_THREAD, toolLinesOnly, toolRunKey } from "./activity.ts";
 
 const DIR_NAME = "tool-uses";
@@ -40,6 +53,8 @@ const THREAD_FILE = /^[\w.-]{1,200}\.json$/;
 /** Conversations kept in memory; one that falls out is loaded again from its file. */
 const KEPT = 8192;
 const SAVE_MS = 5_000;
+/** 2: counted by tool id (#4527); a file of names (1) is counted again from its log. */
+const STORED_VERSION = 2;
 const LOAD_TRIES = 5;
 
 export type ToolCounts = Readonly<Record<string, number>>;
@@ -58,7 +73,6 @@ interface Entry {
 export const toolUsesDir = (): string => join(DATA_DIR, DIR_NAME);
 const fileOf = (threadId: string) => join(toolUsesDir(), `${threadId}.json`);
 const logOf = (threadId: string) => join(EVENTS_DIR, `${threadId}.ndjson`);
-const counted = (name: string) => name.startsWith("mcp__");
 
 function listThreadIds(): string[] {
   try {
@@ -99,23 +113,25 @@ function prune(entry: Entry): void {
 }
 
 /** One valid event of the log, as readToolRuns reads it: a tool start
- * written again for the same run replaces the first one. */
-function addEvent(entry: Entry, event: Record<string, unknown>, at: number): void {
+ * written again for the same run replaces the first one. The id of the
+ * tool it ran, or null when it is not counted. */
+function addEvent(entry: Entry, event: Record<string, unknown>, at: number): string | null {
   entry.n++;
-  if (event.type !== "item.started" || event.itemType !== "tool") return;
+  if (event.type !== "item.started" || event.itemType !== "tool") return null;
   const key = toolRunKey(event as { turnId?: string; itemId?: string; eventId: string });
-  const name = typeof event.title === "string" ? event.title : "unknown";
+  const name = stepToolId(event);
   const before = entry.byKey.get(key);
   if (before) {
     entry.uses.splice(entry.uses.indexOf(before), 1);
     entry.byKey.delete(key);
     entry.counts = null;
   }
-  if (!counted(name)) return;
+  if (!name) return null;
   const use = { i: entry.n, at, name, key };
   entry.uses.push(use);
   entry.byKey.set(key, use);
   entry.counts = null;
+  return name;
 }
 
 function keep(threadId: string, entry: Entry, changed: boolean): void {
@@ -142,7 +158,7 @@ function saveOne(threadId: string): void {
   if (!entry || entry.size < 0 || threadLogsForgotten(threadId)) return;
   const path = fileOf(threadId);
   try {
-    const plain = Buffer.from(JSON.stringify({ v: 1, n: entry.n, size: entry.size, uses: entry.uses.map((use) => [use.i, use.at, use.name, use.key]) }), "utf8");
+    const plain = Buffer.from(JSON.stringify({ v: STORED_VERSION, n: entry.n, size: entry.size, uses: entry.uses.map((use) => [use.i, use.at, use.name, use.key]) }), "utf8");
     const scope: ContentScope = { thread: threadId };
     const key = sealingKey(scope);
     mkdirSync(toolUsesDir(), { recursive: true, mode: 0o700 });
@@ -169,7 +185,7 @@ function readStored(threadId: string): Entry | null {
     return null;
   }
   const value = stored as { v?: unknown; n?: unknown; size?: unknown; uses?: unknown } | null;
-  if (!value || value.v !== 1 || typeof value.n !== "number" || typeof value.size !== "number" || !Array.isArray(value.uses)) return null;
+  if (!value || value.v !== STORED_VERSION || typeof value.n !== "number" || typeof value.size !== "number" || !Array.isArray(value.uses)) return null;
   const entry = emptyEntry(value.size);
   entry.n = value.n;
   for (const row of value.uses) {
@@ -275,7 +291,11 @@ function moveForward(threadId: string, records: readonly Record<string, unknown>
     const line = lines[index]!;
     // a sealed line not opened by the reader counts by its clear fields
     const projected = line.startsWith(BLOCK_PREFIX) && toolLinesOnly({ type: record.type, itemType: record.itemType });
-    if (projected || isRuntimeEvent(record)) addEvent(entry!, record, at);
+    if (projected || isRuntimeEvent(record)) {
+      const tool = addEvent(entry!, record, at);
+      // a live call reaches the conversation's open session (never a recount)
+      if (tool) toolKeepCall(threadId, tool);
+    }
     at += lengths[index]!;
   });
   entry.size = size;
@@ -283,7 +303,8 @@ function moveForward(threadId: string, records: readonly Record<string, unknown>
   keep(threadId, entry, true);
 }
 
-/** The MCP tool calls counted in a conversation's window, or undefined while
+/** The MCP tool calls counted in a conversation's window, by tool id
+ * (`<server>/<tool>`), or undefined while
  * its count is not known yet (then loaded or counted in the background).
  * Memory only: never a disk read. */
 export function toolUsesOf(threadId: string): ToolCounts | undefined {

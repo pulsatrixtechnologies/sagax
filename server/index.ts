@@ -506,7 +506,6 @@ import {
   type ModelSelection,
   type RuntimeEvent,
   type SendTurnInput,
-  type CompactPromptInput,
   newId,
   type ProviderInstance,
   type TextGenerationOptions,
@@ -2022,7 +2021,6 @@ import { createRoutineAudit } from "./index-leaves/routineAudit.ts";
 import { createRequestedTaskBot } from "./index-leaves/requestedTaskBot.ts";
 import { createRegisteredDeviceFor } from "./index-leaves/registeredDeviceFor.ts";
 import { createRecentWorkFor } from "./index-leaves/recentWorkFor.ts";
-import { createRecentToolUses } from "./index-leaves/recentToolUses.ts";
 import { createReachMeAudit } from "./index-leaves/reachMeAudit.ts";
 import { createPrincipalPermissions } from "./index-leaves/principalPermissions.ts";
 import { createPersonalStdioIntegration } from "./index-leaves/personalStdioIntegration.ts";
@@ -7211,9 +7209,6 @@ bindLeafHost({
   get continuationThreadScope() { return continuationThreadScope; },
   get performBotActRouteOutsideConfidential() { return performBotActRouteOutsideConfidential; },
   get actorPrincipalId() { return actorPrincipalId; },
-  get COMPACT_USAGE_THREADS() { return COMPACT_USAGE_THREADS; },
-  get compactPinsByBot() { return compactPinsByBot; },
-  get recentToolUses() { return recentToolUses; },
   get compactPromptFor() { return compactPromptFor; },
   get ownerSettingsForbidden() { return ownerSettingsForbidden; },
   get ownEnvironmentRequest() { return ownEnvironmentRequest; },
@@ -8240,7 +8235,6 @@ const takeOwnerContinuation = createTakeOwnerContinuation(getLeafHost);
 const performBotActRoute = createPerformBotActRoute(getLeafHost);
 const performBotActRouteOutsideConfidential = createPerformBotActRouteOutsideConfidential(getLeafHost);
 const actorPrincipalId = createActorPrincipalId(getLeafHost);
-const recentToolUses = createRecentToolUses(getLeafHost);
 const compactPromptFor = createCompactPromptFor(getLeafHost);
 const ownerSettingsForbidden = createOwnerSettingsForbidden(getLeafHost);
 const ownEnvironmentRequest = createOwnEnvironmentRequest(getLeafHost);
@@ -28386,12 +28380,6 @@ function creatingBotOwnerId(auth: RequestAuth): string {
   return actorPrincipalId(auth);
 }
 
-/** #1276: how many of a bot's most recent conversations its tool use is read from. */
-const COMPACT_USAGE_THREADS = 40;
-/** What a compact turn lists whole, read once a day per bot: the list rides
- * the prompt, so it stays byte-identical across that day's conversations and
- * a local model's prefix cache serves every new one. */
-const compactPinsByBot = new Map<string, { day: string; value: Pick<CompactPromptInput, "agents" | "pinned"> }>();
 
 
 /** #1276: the compact prompt of one turn. The agents core follows the bot's

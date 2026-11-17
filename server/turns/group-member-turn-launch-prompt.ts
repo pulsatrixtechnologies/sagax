@@ -247,11 +247,11 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   const roomWantsCompact = usesCompactPrompt({ ...roomPromptMode, driverKind: instance.driverKind, model: roomModel });
   // #2037: Claude with localPrompt full still needs agents use for deferral.
   const roomNeedsAgentsUse = roomWantsCompact || instance.driverKind === "claudeAgent";
-  const roomCompactForBot = roomNeedsAgentsUse
-    ? compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot))
-    : undefined;
+  // #4527: every engine's room turn is counted in the room conversation's
+  // session (server/tools/tool-keep.ts); the verdict is that session's
+  const roomCompactForBot = compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot), { threadId, prompt: true });
   const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
-  const roomAgentsKnownUse = !roomCompactPrompt && roomCompactForBot?.agents.core === "used" ? roomCompactForBot.agents : undefined;
+  const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
   // 2026-11-02 (production): no server path for an engine without file
   // tools on the Sagax server (server/server-path-prompt.ts)

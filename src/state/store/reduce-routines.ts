@@ -19,6 +19,10 @@ export function reduceRoutines(state: AppState, action: Action, _reduce: ReduceF
       return { ...state, routinesLoadState: "error" };
     case "routineRunsLoaded":
       return { ...state, routineRuns: withOlderRoutineRuns(state.routineRuns ?? [], Array.isArray(action.runs) ? action.runs : []), routineRunsSince: olderRunsSince(state.routineRunsSince, action) };
+    case "routineTrendRunsLoaded": {
+      const held = new Set((state.routineTrendRuns ?? []).map((run) => run.id));
+      return { ...state, routineTrendRuns: [...(state.routineTrendRuns ?? []), ...(Array.isArray(action.runs) ? action.runs : []).filter((run) => !held.has(run.id))] };
+    }
     case "routinePatched": {
       const exists = state.routines.some((routine) => routine.id === action.routine.id);
       return {

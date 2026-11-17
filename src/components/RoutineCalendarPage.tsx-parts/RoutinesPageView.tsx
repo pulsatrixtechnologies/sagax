@@ -221,13 +221,13 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs key={state.routinesFocus.nonce} initialPeriod={state.routinesFocus.period} onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })} runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
       ) : scheduleView === "list" ? (
         <div className={PAGE_SCROLL}><div className={cn(PAGE_COLUMN, "max-w-6xl")}>
-          <RoutinesOverview routines={filteredRoutines} runs={botFilter === "all" ? scopedRuns : scopedRuns.filter((run) => run.botId === botFilter)} bots={state.bots} viewerPrincipalId={viewerId}
+          <RoutinesOverview trendRuns={state.routineTrendRuns} routines={filteredRoutines} runs={botFilter === "all" ? scopedRuns : scopedRuns.filter((run) => run.botId === botFilter)} bots={state.bots} viewerPrincipalId={viewerId}
             loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error}
             filtersMenu={filtersMenu} newMenu={newMenu(true)}
             onOpen={openRoutine} onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)}
             onFailedRuns={(period) => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems", period })}
-            groupBy={groupBy} onGroupBy={setGroupBy} allRoutines={scopedRoutines} onCreate={createInGroup} onDuplicate={duplicateRoutine} onViewRuns={viewRuns} openRoomOf={openRoomOf}
+            groupBy={groupBy} onGroupBy={setGroupBy} allRoutines={state.routines} onCreate={createInGroup} onDuplicate={duplicateRoutine} onViewRuns={viewRuns} openRoomOf={openRoomOf}
             onOpenRun={openRun} onRenameStart={(routine) => setRenamingId(routine.id)} />
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({

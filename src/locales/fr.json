@@ -15350,6 +15350,5 @@
   "routines.menu.viewRuns": "Voir les exécutions",
   "routines.menu.openRoom": "Ouvrir la salle d'équipe",
   "limits.moved": "Déplacé après la réinitialisation",
-  "routines.group.newFolderBot": "Bot du nouveau dossier",
-  "routineFolders.made": "Le dossier « {name} » est prêt. Classe-y une routine depuis le menu de la routine."
+  "routines.group.newFolderBot": "Bot du nouveau dossier"
 }

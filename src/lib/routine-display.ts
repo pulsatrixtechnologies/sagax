@@ -21,9 +21,8 @@ export function routineRunBrief(run: Pick<RoutineRunCardData, "brief" | "summary
   return run.brief?.trim() || reportBrief(run.summary, "end");
 }
 
-export function routineRunTime(run: RoutineRun): number {
-  return run.createdAt || run.startedAt || run.scheduledFor;
-}
+export { routineRunTime } from "../../shared/routines";
+import { routineRunTime } from "../../shared/routines";
 
 export function latestRoutineRun(routineId: string, runs: readonly RoutineRun[]): RoutineRun | undefined {
   return runs.filter((run) => run.routineId === routineId)

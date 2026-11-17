@@ -15350,6 +15350,5 @@
   "routines.menu.viewRuns": "View runs",
   "routines.menu.openRoom": "Open team room",
   "limits.moved": "Moved to after the reset",
-  "routines.group.newFolderBot": "Bot for the new folder",
-  "routineFolders.made": "Folder “{name}” is ready. File a routine into it from the routine's menu."
+  "routines.group.newFolderBot": "Bot for the new folder"
 }

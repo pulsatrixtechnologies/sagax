@@ -22,7 +22,7 @@ export function useRoutineRunsFrom(start: number): void {
 /** A trend needs each routine's last few runs, not every run of the weeks they span: this asks the range
  * `start` to the app's window for just the newest `perRoutine` of each routine (an older server ignores that and
  * answers the whole range, which still draws the same bars). The answer carries no range, so the app's window
- * (`routineRunsSince`) stays where it is: a view that needs every run of a range still loads it.
+ * (`routineRunsSince`) stays where it is, and they land in `routineTrendRuns`, not among the app's runs: a view that needs every run of a range still loads it.
  * Asked once per `start` (the caller rounds it to the day); a failure is not retried until `start` changes.
  * Returns "loading" until the answer lands. */
 export function useRoutineTrendRuns(start: number, perRoutine: number): "loading" | "ready" | "failed" {
@@ -38,10 +38,11 @@ export function useRoutineTrendRuns(start: number, perRoutine: number): "loading
       .then(({ runs }) => {
         if (!live) return;
         done.current = { key, result: "ready" };
-        // Dispatched even when empty: it is what redraws the caller with "ready".
-        dispatch({ type: "routineRunsLoaded", runs: Array.isArray(runs) ? runs : [] });
+        // Kept apart from the app's runs (the run log and the figures never see them); dispatched even when empty: it
+        // is what redraws the caller with "ready".
+        dispatch({ type: "routineTrendRunsLoaded", runs: Array.isArray(runs) ? runs : [] });
       })
-      .catch(() => { if (live) { done.current = { key, result: "failed" }; dispatch({ type: "routineRunsLoaded", runs: [] }); } });
+      .catch(() => { if (live) { done.current = { key, result: "failed" }; dispatch({ type: "routineTrendRunsLoaded", runs: [] }); } });
     return () => { live = false; };
   }, [key, start, since, perRoutine, dispatch]);
   return settled ?? "loading";

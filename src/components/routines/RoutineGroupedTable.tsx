@@ -11,7 +11,7 @@
 // folder the person owns, not only the rows a search or a filter leaves on screen,
 // and never another person's bot (a wider scope shows them, but they are not the
 // person's to change). A delete says so with its Undo, like the bot panel's.
-import { Bot as BotIcon, ChevronLeft, ChevronRight, Folder, FolderInput, FolderPlus, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Bot as BotIcon, ChevronLeft, ChevronRight, Folder, FolderInput, FolderPlus, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -81,8 +81,23 @@ export function RoutineGroupedTable({ groupBy, rows, allRoutines, runs, bots, ..
   const byFolder = useMemo(() => groupBy === "folder" ? groupRoutinesAcrossFolders(routines, bots, folderOrders, shared.viewerPrincipalId) : [], [groupBy, routines, bots, folderOrders, shared.viewerPrincipalId]);
   const columns: ColumnsMode = groupBy === "bot" ? "folder" : "bot";
   const rowOf = (routine: Routine) => byId.get(routine.id)!;
-  // "No folder" is always the last block.
-  const folderBlocks = [...byFolder.filter((group) => group.folder !== null), ...byFolder.filter((group) => group.folder === null)];
+  // A folder of the person's own bots that holds no routine at all is an empty block (nothing invisible), whatever a
+  // search or filter hides; "No folder" is always the last block.
+  const emptyFolders = useMemo(() => {
+    if (groupBy !== "folder") return [];
+    const shown = new Set(byFolder.flatMap((group) => group.folder === null ? [] : [routineFolderKey(group.folder)]));
+    const out: string[] = [];
+    for (const bot of bots) {
+      for (const name of folderOrders?.[bot.id] ?? []) {
+        const key = routineFolderKey(name);
+        if (shown.has(key) || allRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === key)) continue;
+        shown.add(key);
+        out.push(name);
+      }
+    }
+    return out;
+  }, [groupBy, byFolder, bots, folderOrders, allRoutines]);
+  const folderBlocks = [...byFolder.filter((group) => group.folder !== null), ...emptyFolders.map((folder) => ({ folder, routines: [] as Routine[] })), ...byFolder.filter((group) => group.folder === null)];
   // The person's own bots only: a routine of another person's bot, shown in a wider scope, is never theirs to change.
   const own = useCallback((routine: Routine) => routine.canEdit !== false && bots.some((bot) => bot.id === routine.botId)
     && !(routine.owner?.id && shared.viewerPrincipalId && routine.owner.id.toLowerCase() !== shared.viewerPrincipalId.toLowerCase()), [bots, shared.viewerPrincipalId]);
@@ -110,12 +125,11 @@ export function RoutineGroupedTable({ groupBy, rows, allRoutines, runs, bots, ..
 }
 
 /** "New folder" while grouped by folder: a name, and which bot keeps it when the person has several (a folder
- * belongs to one bot; the table shows it once a routine is filed in). */
+ * belongs to one bot). It shows at once as an empty block. */
 function NewFolderRow({ bots }: { bots: readonly Bot[] }) {
   const dispatch = useStoreDispatch();
   const [open, setOpen] = useState(false);
   const [botId, setBotId] = useState(bots[0]?.id ?? "");
-  const [made, setMade] = useState<string | null>(null);
   if (bots.length === 0) return null;
   return <div data-routine-new-folder-row="" className="mt-6">
     {open
@@ -123,11 +137,9 @@ function NewFolderRow({ bots }: { bots: readonly Bot[] }) {
         {bots.length > 1 && <select aria-label={t("routines.group.newFolderBot")} value={botId} onChange={(event) => setBotId(event.target.value)} className="h-7 min-w-0 max-w-[200px] truncate rounded-md border border-hairline/60 bg-panel px-2 text-[12px] text-ink">
           {bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select>}
         <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => setOpen(false)}
-          onSave={async (name) => { const result = await postFolderAction(dispatch, { action: "create", botId: botId || bots[0]!.id, name }); if (result.ok) { setMade(name); setOpen(false); } }} />
+          onSave={async (name) => { const result = await postFolderAction(dispatch, { action: "create", botId: botId || bots[0]!.id, name }); if (result.ok) setOpen(false); }} />
       </div>
-      : <button type="button" data-routine-new-folder="" onClick={() => { setMade(null); setOpen(true); }} className="flex h-8 items-center gap-2 rounded-lg px-2 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}</button>}
-    {made && <p role="status" data-routine-folder-made="" className="mt-1 flex items-center gap-2 px-2 text-[12px] leading-4 text-ink-secondary">{t("routineFolders.made", { name: made })}
-      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setMade(null)} className="flex size-6 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink"><X size={13} aria-hidden="true" /></button></p>}
+      : <button type="button" data-routine-new-folder="" onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-lg px-2 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}</button>}
   </div>;
 }
 
@@ -257,8 +269,12 @@ function FolderBlock({ first, folder, rows, allRoutines, runs, bots, folderOrder
   const name = folder ?? t("routines.group.noFolder");
   // Every routine of this folder the person owns: not only the rows shown.
   const scope = useMemo(() => folder === null ? [] : [...new Map([...allRoutines, ...routines].filter((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(folder) && own(routine)).map((routine) => [routine.id, routine])).values()], [folder, allRoutines, routines, own]);
-  const botIds = useMemo(() => [...new Set(scope.map((routine) => routine.botId))], [scope]);
-  const editable = folder !== null && scope.length > 0;
+  // The person's bots that have this folder: those with a routine in it, and those whose folder list names it (an empty one).
+  const botIds = useMemo(() => folder === null ? [] : [...new Set([
+    ...scope.map((routine) => routine.botId),
+    ...bots.filter((bot) => (folderOrders?.[bot.id] ?? []).some((name) => routineFolderKey(name) === routineFolderKey(folder))).map((bot) => bot.id),
+  ])], [folder, scope, bots, folderOrders]);
+  const editable = folder !== null && botIds.length > 0;
   const anyOn = scope.some((routine) => routine.enabled);
   const pending = useMemo(() => new Set<string>(), []);
   const everyBot = async (action: (botId: string) => Promise<unknown>) => { for (const botId of botIds) await action(botId); };
@@ -281,6 +297,7 @@ function FolderBlock({ first, folder, rows, allRoutines, runs, bots, folderOrder
         menuLabel={editable ? t("routineFolders.folderMenu", { name }) : undefined} onMenu={editable ? (at, trigger) => setMenu({ kind: "band", x: at.x, y: at.y, trigger }) : undefined} />}
     {(collapsed ? [] : sorted).map((row) => <RoutineTableRowView key={row.routine.id} row={row} {...rowProps(shared, onRowMenu, "bot")}
       renaming={shared.renamingId === row.routine.id} onRenameStart={shared.onRenameStart} onRenameSave={shared.onRenameSave} onRenameCancel={shared.onRenameCancel} />)}
+    {!collapsed && folder !== null && rows.length === 0 && <div role="row"><div role="cell" data-routine-folder-empty="" className="py-2.5 text-[12px] leading-4 text-ink-tertiary">{t("routineFolders.empty")}</div></div>}
     {portal((_menu) => folder === null ? null : <>
       <button type="button" role="menuitem" autoFocus data-routine-folder-action="rename" className={menuRow("idle")} onClick={() => { close(false); setRenaming(true); }}><Pencil size={14} aria-hidden="true" />{t("routineFolders.rename")}</button>
       <button type="button" role="menuitem" data-routine-folder-action={anyOn ? "pause" : "resume"} className={menuRow("idle")}

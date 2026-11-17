@@ -1,4 +1,4 @@
-import { isRoutineProblemRun } from "../../shared/routines.ts";
+import { isRoutineProblemRun, routineRunTime } from "../../shared/routines.ts";
 import type { RoutineRun } from "./routines.ts";
 
 /** However old they are, each automation keeps at least this many of its newest runs in the app's window. */
@@ -43,7 +43,7 @@ export function routineRunsFor(listRuns: (from?: number, to?: number) => Routine
  * or cancelled run is none), whatever the range holds, so seven bars never cost eight weeks of runs. */
 export function newestPerRoutine(runs: readonly RoutineRun[], count: number): RoutineRun[] {
   const taken = new Map<string, number>();
-  return [...runs].sort((a, b) => b.scheduledFor - a.scheduledFor).filter((run) => {
+  return [...runs].sort((a, b) => routineRunTime(b) - routineRunTime(a)).filter((run) => {
     if (run.status === "queued" || run.status === "cancelled") return false;
     const own = taken.get(run.routineId) ?? 0;
     taken.set(run.routineId, own + 1);

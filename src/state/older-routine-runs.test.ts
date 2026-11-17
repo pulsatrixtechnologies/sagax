@@ -43,8 +43,8 @@ describe("older routine runs on demand", () => {
     flushSync(() => root.render(createElement(Probe)));
     await settle();
     expect(fixture.api.mock.calls).toEqual([["/api/routines?from=400&to=1000&perRoutine=7"]]);
-    // no range in the answer: the calendar's "everything from here is held" stays true
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "routineRunsLoaded", runs: [run] });
+    // kept apart from the app's runs, and with no range: the calendar's "everything from here is held" stays true
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "routineTrendRunsLoaded", runs: [run] });
     root.render(createElement(Probe));
     await settle();
     expect(fixture.api).toHaveBeenCalledTimes(1);

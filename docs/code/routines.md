@@ -51,7 +51,7 @@ The trend read: the app holds two weeks, a weekly routine needs about seven.
 `useRoutineTrendRuns` asks `GET /api/routines?from&to&perRoutine=7` once per
 day-rounded start: each routine's 7 newest runs in the range (the server's
 `newestPerRoutine`), not every run of eight weeks; the answer carries no range,
-so the app's window stays put. The page's clock moves on every minute, not on
+so the app's window stays put, and they land in `routineTrendRuns`, apart from the app's runs: the Run log and the figures never show a partial older set. The server orders them with the same `routineRunTime` the app uses. The page's clock moves on every minute, not on
 every render.
 
 Grouping (`RoutineGroupedTable.tsx`) is one level at a time, in the same table:
@@ -63,10 +63,10 @@ bot's folders with its own Rename, Move up, Move down, Pause or Resume, Delete,
 then New folder and Sort by prefix; rows drag onto a folder and Alt+Up or
 Alt+Down step); Group by Folder hides Folder and shows Bot (the folder band's
 menu renames, pauses or deletes that folder; a last block holds the routines
-with no folder; New folder at the end asks which bot when there are several). A
+with no folder; New folder at the end asks which bot when there are several and shows at once as an empty block). A
 folder action from a band reaches every routine of the folder that belongs to
 the person's own bots, whatever a search or filter hides, never another
-person's; a delete shows the same Undo as the bot panel (one snapshot per bot).
+person's; a delete shows the same Undo as the bot panel (one snapshot per bot). The scope is the person's routines before any scope, status filter or search (`state.routines`), so a Paused filter hides nothing from an action. A folder of the person's bots with no routine is an empty block with its band, its menu and one muted line.
 
 Layout: the table has its columns from 44rem of page (the trend with its text
 from 64rem); under that a row is the name, the bars and the menu on one line

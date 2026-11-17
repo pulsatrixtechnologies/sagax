@@ -103,7 +103,7 @@ function NextRun({ routine }: { routine: Routine }) {
   return <span data-routine-next className="text-[12px] leading-4 text-ink-secondary">{routineNextText(routine)}</span>;
 }
 
-export const RoutineTableRowView = memo(function RoutineTableRowView({ columns = "both", row, now, viewerPrincipalId, onOpen, onOpenRun, onRowMenu, onDragStart, onStep, dropSection, renaming, onRenameStart, onRenameSave, onRenameCancel }: {
+interface RowProps {
   /** Which of the Bot and Folder columns this table shows. */
   columns?: ColumnsMode;
   row: RoutineTableRow; now: number; viewerPrincipalId?: string | null; onOpen: (routine: Routine) => void; onOpenRun: (run: RoutineRun) => void; onRowMenu?: RowMenu;
@@ -114,7 +114,9 @@ export const RoutineTableRowView = memo(function RoutineTableRowView({ columns =
   /** Dragging is on in this block: the row is a drop place for its own folder, lit while a row is over it. */
   dropSection?: { active: boolean };
   renaming: boolean; onRenameStart?: (routine: Routine) => void; onRenameSave?: (routine: Routine, name: string) => void; onRenameCancel?: () => void;
-}) {
+}
+
+export const RoutineTableRowView = memo(function RoutineTableRowView({ columns = "both", row, now, viewerPrincipalId, onOpen, onOpenRun, onRowMenu, onDragStart, onStep, dropSection, renaming, onRenameStart, onRenameSave, onRenameCancel }: RowProps) {
   const { routine } = row;
   const readOnly = routine.canEdit === false;
   const otherOwner = routine.owner?.id && routine.owner.id.toLowerCase() !== viewerPrincipalId?.toLowerCase() ? routine.owner : null;
@@ -158,7 +160,23 @@ export const RoutineTableRowView = memo(function RoutineTableRowView({ columns =
         className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><MoreHorizontal size={16} aria-hidden="true" /></button>}
     </div>
   </div>;
-});
+}, sameRowProps);
+
+/** The trend's runs and results: what a bar draws, nothing else. */
+const trendKey = (row: RoutineTableRow) => row.trend.marks.map((mark) => `${mark.run?.id ?? "-"}:${mark.kind}:${mark.run?.finishedAt ?? ""}`).join("|");
+
+/** A row redraws only when what it shows changed: its routine, its bot's name, its schedule words, paused, its
+ * trend's runs and results, or any other prop. The row object is rebuilt on every run event, so a plain shallow
+ * compare never skipped one. */
+function sameRowProps(a: RowProps, b: RowProps): boolean {
+  if (a.row !== b.row && (a.row.routine !== b.row.routine || a.row.botName !== b.row.botName || a.row.when !== b.row.when || a.row.paused !== b.row.paused || trendKey(a.row) !== trendKey(b.row))) return false;
+  for (const key of Object.keys({ ...a, ...b }) as Array<keyof RowProps>) {
+    if (key === "row") continue;
+    if (key === "dropSection") { if (a.dropSection?.active !== b.dropSection?.active || Boolean(a.dropSection) !== Boolean(b.dropSection)) return false; continue; }
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
 
 /** The table's column titles, once at the top, whatever the grouping. */
 export function RoutineTableHead({ columns = "both" }: { columns?: ColumnsMode }) {

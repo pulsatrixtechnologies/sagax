@@ -10,6 +10,12 @@ import type { Routine, RoutineRun } from "@/lib/routines";
 
 // The reads are recorded: the trend asks once for its range, and the month's figures wait for theirs.
 const reads = vi.hoisted(() => ({ trend: [] as Array<[number, number]>, from: [] as number[], covered: true }));
+// A row's render is counted through the one helper it calls for its next-run text.
+const drawn = vi.hoisted(() => ({ ids: [] as string[] }));
+vi.mock("@/lib/routine-display", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/routine-display")>();
+  return { ...original, routineNextText: (routine: { id: string }) => { drawn.ids.push(routine.id); return original.routineNextText(routine as never); } };
+});
 vi.mock("@/state/older-routine-runs", () => ({
   useRoutineRunsFrom: (start: number) => { reads.from.push(start); },
   useRoutineTrendRuns: (start: number, per: number) => { reads.trend.push([start, per]); return "ready"; },
@@ -224,5 +230,18 @@ describe("RoutinesOverview", () => {
     expect(document.activeElement).toBe(items[1]);
     act(() => { items[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     expect(details.hasAttribute("open")).toBe(false);
+  });
+
+  it("redraws only the row a run event changes, not the whole table", async () => {
+    const three = [routine("r1", "Digest"), routine("r3", "Report"), routine("r4", "Sweep")];
+    await mount(three, runs);
+    expect(new Set(drawn.ids)).toEqual(new Set(["r1", "r3", "r4"]));
+    drawn.ids.length = 0;
+    // one new run for r1: the runs array and every row object are rebuilt, one row has anything new to draw
+    await mount(three, [...runs, run("n", "r1", "completed", 1)]);
+    expect(new Set(drawn.ids)).toEqual(new Set(["r1"]));
+    drawn.ids.length = 0;
+    await mount(three, [...runs, run("n", "r1", "completed", 1)]);
+    expect(drawn.ids).toEqual([]);
   });
 });

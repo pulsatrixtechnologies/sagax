@@ -124,6 +124,12 @@ export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "prov
  * logs filter and the bulk-seen sweep cannot drift apart. */
 export const ROUTINE_PROBLEM_STATUSES: readonly RoutineRunStatus[] = ["failed", "blocked", "missed"];
 
+/** When a run counts as having happened, for ordering: the app's trend, its logs and the server's bounded read all
+ * sort by this, so the three agree on which runs are the newest. */
+export function routineRunTime(run: Pick<RoutineRun, "createdAt" | "startedAt" | "scheduledFor">): number {
+  return run.createdAt || run.startedAt || run.scheduledFor;
+}
+
 export function isRoutineProblemRun(run: { status: RoutineRunStatus; problems?: string }): boolean {
   // 2026-11-01: a run that completed with problems counts as a problem too.
   return ROUTINE_PROBLEM_STATUSES.includes(run.status) || (run.status === "completed" && Boolean(run.problems));

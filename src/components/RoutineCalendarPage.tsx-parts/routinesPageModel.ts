@@ -9,6 +9,7 @@ export function selectRoutinesPage(state: AppState) {
   return {
     routines: state.routines,
     routineRuns: state.routineRuns,
+    routineTrendRuns: state.routineTrendRuns,
     bots: state.bots,
     groups: state.groups,
     config: state.config,

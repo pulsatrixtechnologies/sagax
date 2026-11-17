@@ -25,6 +25,7 @@ const { BotEditorStore, initialState } = await import("@/state/store");
 const { reducer } = await import("@/state/store/reducer");
 const { setLocale } = await import("@/lib/i18n");
 const { resetServerFeatures } = await import("@/lib/server-features");
+const { writeRoutineScopePrefs } = await import("@/lib/routine-scope-prefs");
 const { ROUTINE_GROUP_BY_KEY } = await import("@/lib/routine-grouping");
 type AppState = import("@/state/store").AppState;
 type Bot = import("@/state/store").Bot;
@@ -48,7 +49,7 @@ let extraRoutines: Routine[] = [];
 let extraRuns: unknown[] = [];
 let viewer: string | null = null;
 const start = (): AppState => ({
-  ...reducer({ ...initialState, bots: [atlas, scout], ...(viewer ? { config: { viewer: { principalId: viewer } } } : {}), routinesFocus: { section: "schedule", view: "list", nonce: 1 } } as AppState, { type: "routinesHydrated", routines: [...routines, ...extraRoutines], runs: extraRuns as never }),
+  ...reducer({ ...initialState, bots: [atlas, scout], ...(viewer ? { config: { viewer: { principalId: viewer, profileManagedBy: "perspicax", role: "admin" } } } : {}), routinesFocus: { section: "schedule", view: "list", nonce: 1 } } as AppState, { type: "routinesHydrated", routines: [...routines, ...extraRoutines], runs: extraRuns as never }),
   routineFolders: { atlas: ["Clients"], scout: ["Reports", "Empty"] },
 });
 
@@ -82,6 +83,8 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   resetServerFeatures();
   localStorage.clear();
+  sessionStorage.clear();
+  writeRoutineScopePrefs("me", { scope: "mine" });
   fixture.api.mockReset();
   fixture.api.mockImplementation(async () => ({ calls: [] }));
   container = document.createElement("div");
@@ -132,10 +135,13 @@ describe("Routines table: the three groupings", () => {
     setGroupBy("folder");
     await mount();
     const blocks = [...container.querySelectorAll("[data-routine-group-folder]")];
-    expect(blocks.map((block) => block.getAttribute("data-routine-group-folder"))).toEqual(["Reports", "Clients", ""]);
-    expect(blocks.map((block) => block.querySelector("[data-group-toggle]")?.textContent)).toEqual([expect.stringContaining("Reports"), expect.stringContaining("Clients"), expect.stringContaining("No folder")]);
+    expect(blocks.map((block) => block.getAttribute("data-routine-group-folder"))).toEqual(["Reports", "Clients", "Empty", ""]);
+    expect(blocks.map((block) => block.querySelector("[data-group-toggle]")?.textContent)).toEqual([expect.stringContaining("Reports"), expect.stringContaining("Clients"), expect.stringContaining("Empty"), expect.stringContaining("No folder")]);
     expect(rowIds(blocks[0] as Element)).toEqual(["s2"]);
-    expect(rowIds(blocks[2] as Element)).toEqual(["s1", "a1"]);
+    expect(rowIds(blocks[3] as Element)).toEqual(["s1", "a1"]);
+    // an empty folder of the person's bots is a block of its own, with its band, its menu and one muted line
+    expect(blocks[2]!.querySelector("[data-routine-folder-empty]")?.textContent).toBe("No routine in this folder yet.");
+    expect(blocks[2]!.querySelector("[data-group-menu]")).not.toBeNull();
     expect(container.querySelectorAll("[data-routine-bot]").length).toBe(4);
     expect(container.querySelectorAll("[data-routine-folder]")).toHaveLength(0);
     expect(visibleHeaders()).toEqual(["Routine", "Bot", "Schedule", "Last 7 runs", "Next run", "Actions"]);
@@ -263,6 +269,79 @@ describe("Routines table: folder actions from a band reach the whole folder", ()
     expect(restore.undo.routines.map((entry: { id: string }) => entry.id).sort()).toEqual(["a2", "a3"]);
     expect(restore.undo.folders).toContain("Clients");
     expect(container.querySelector("[data-routine-folder-notice]")).toBeNull();
+  });
+
+  // The Overview's Filters menu narrows the list by status; a band's action still works on the whole folder.
+  const filterStatus = async (value: string) => {
+    act(() => container.querySelector<HTMLElement>("[data-automations-filters] > summary")!.click());
+    const select = container.querySelector<HTMLSelectElement>('[data-routine-filter="status"]')!;
+    await act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  };
+  const fillPaused = () => {
+    fill();
+    // a3 is the only paused routine of Clients; a2 (active) and scout's routine in a second bot's Clients are hidden by "Paused"
+    extraRoutines = [
+      { ...routine("a3", "atlas", "Backup run", 12, "Clients"), enabled: false } as Routine,
+      routine("s3", "scout", "Scout clients check", 14, "Clients"),
+    ];
+  };
+
+  it("under a Paused filter, Delete still snapshots every routine and reaches every bot, and Undo puts them all back", async () => {
+    fillPaused();
+    setGroupBy("folder");
+    answer();
+    await mount();
+    await filterStatus("paused");
+    expect(rowIds()).toEqual(["a3", "s2"].filter((id) => rowIds().includes(id)));
+    expect(rowIds()).not.toContain("a2");
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Clients"] [data-group-menu]')!.click());
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-routine-folder-action="delete"]')!.click(); });
+    await flush();
+    expect(folderCalls().filter((body) => body.action === "delete").map((body) => body.botId).sort()).toEqual(["atlas", "scout"]);
+    await act(async () => { container.querySelector<HTMLButtonElement>("[data-routine-folder-undo]")!.click(); });
+    await flush();
+    const restores = folderCalls().filter((body) => body.action === "restore");
+    expect(restores.map((body) => body.botId).sort()).toEqual(["atlas", "scout"]);
+    expect(restores.find((body) => body.botId === "atlas")!.undo.routines.map((entry: { id: string }) => entry.id).sort()).toEqual(["a2", "a3"]);
+    expect(restores.find((body) => body.botId === "scout")!.undo.routines.map((entry: { id: string }) => entry.id)).toEqual(["s3"]);
+  });
+
+  it("under a Paused filter, Rename reaches every bot and Pause all every active routine", async () => {
+    fillPaused();
+    setGroupBy("folder");
+    answer();
+    await mount();
+    await filterStatus("paused");
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Clients"] [data-group-menu]')!.click());
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-routine-folder-action="pause"]')!.click(); });
+    await flush();
+    const paused = fixture.api.mock.calls.filter((args) => /\/api\/routines\/[^/]+$/.test(String(args[0])) && String((args[1] as RequestInit | undefined)?.method) === "PATCH").map((args) => String(args[0]).split("/").pop());
+    expect(paused.sort()).toEqual(["a2", "s3"]);
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Clients"] [data-group-menu]')!.click());
+    act(() => document.querySelector<HTMLButtonElement>('[data-routine-folder-action="rename"]')!.click());
+    const input = container.querySelector<HTMLInputElement>('[data-routine-group-folder="Clients"] input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Customers");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await flush();
+    expect(folderCalls().filter((body) => body.action === "rename").map((body) => body.botId).sort()).toEqual(["atlas", "scout"]);
+  });
+
+  it("deletes an empty folder from its band, and Undo brings it back", async () => {
+    setGroupBy("folder");
+    answer();
+    await mount();
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Empty"] [data-group-menu]')!.click());
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-routine-folder-action="delete"]')!.click(); });
+    await flush();
+    expect(folderCalls()).toEqual([{ action: "delete", botId: "scout", name: "Empty" }]);
+    await act(async () => { container.querySelector<HTMLButtonElement>("[data-routine-folder-undo]")!.click(); });
+    await flush();
+    const restore = folderCalls().find((body) => body.action === "restore")!;
+    expect(restore.botId).toBe("scout");
+    expect(restore.undo.folders).toContain("Empty");
   });
 
   it("Rename and Pause all reach the same routines", async () => {

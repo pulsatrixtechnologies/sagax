@@ -95,7 +95,7 @@ function RunsSection({ runs, now, period, onPeriod, loadingFigures, onFailedRuns
   </section>;
 }
 
-export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, loading, error, filtersMenu, newMenu, groupBy = "none", onGroupBy, allRoutines, onCreate, onDuplicate, onViewRuns, openRoomOf, now: nowGiven, onOpen, onOpenRun, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel, onFailedRuns }: {
+export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, loading, error, filtersMenu, newMenu, groupBy = "none", onGroupBy, allRoutines, onCreate, onDuplicate, onViewRuns, openRoomOf, trendRuns, now: nowGiven, onOpen, onOpenRun, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel, onFailedRuns }: {
   /** The routines in the page's scope and bot filter. */
   routines: readonly Routine[];
   /** The runs in the same scope: the figures read them. */
@@ -111,10 +111,12 @@ export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, load
   groupBy?: RoutineGroupBy;
   /** Changes the grouping (None, Bot, Folder): one control on the Routines heading row. */
   onGroupBy?: (groupBy: RoutineGroupBy) => void;
-  /** Every routine in scope, unfiltered: a folder action reaches all of a bot's routines. */
+  /** Every routine of the person, before any scope, status filter or search: a folder action reaches all of a bot's routines. */
   allRoutines?: readonly Routine[];
   onCreate?: (botId: string, folder?: string) => void;
   onDuplicate?: (routine: Routine) => void;
+  /** Older runs only the trend asked for (each routine's newest few): they draw the bars, never the figures. */
+  trendRuns?: readonly RoutineRun[];
   /** Row menu "View runs": the run log filtered to that routine. */
   onViewRuns?: (routine: Routine) => void;
   /** Row menu "Open team room": the way to open a team goal's room, when the routine has one. */
@@ -144,10 +146,16 @@ export function RoutinesOverview({ routines, runs, bots, viewerPrincipalId, load
   useRoutineRunsFrom(period === "month" ? monthStart : Infinity);
   const covered = useRoutineRunsCover(period === "month" ? monthStart : Infinity);
   const loadingFigures = period === "month" && !covered;
-  const rows = useMemo(() => routineTableRows(routines, runs, {
+  // The bars read the runs the app holds and the older ones the trend asked for; the figures read only the former.
+  const barRuns = useMemo(() => {
+    if (!trendRuns?.length) return runs;
+    const held = new Set(runs.map((run) => run.id));
+    return [...runs, ...trendRuns.filter((run) => !held.has(run.id))];
+  }, [runs, trendRuns]);
+  const rows = useMemo(() => routineTableRows(routines, barRuns, {
     botName: (routine) => bots.find((bot) => bot.id === routine.botId)?.name ?? routine.bot?.name ?? t("routines.unavailableBot"),
     query,
-  }), [routines, runs, bots, query]);
+  }), [routines, barRuns, bots, query]);
   // Row handlers that keep their identity, so a run event redraws only the rows whose data changed.
   const latest = useRef({ onOpen, onOpenRun, onRowMenu, onRenameStart, onRenameSave, onRenameCancel });
   latest.current = { onOpen, onOpenRun, onRowMenu, onRenameStart, onRenameSave, onRenameCancel };

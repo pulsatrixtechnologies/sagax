@@ -20,7 +20,7 @@ export interface AdminActivityRouteDeps {
   /** Whether this server records admin activity at all. */
   adminActivityRecording: () => boolean;
   /** Lot S1: a row this log never shows (a person's surface bot). */
-  hidden?: (row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }) => boolean;
+  hidden?: (row: { surface?: true; after?: Record<string, unknown> }) => boolean;
 }
 
 export function createAdminActivityRoutes(deps: AdminActivityRouteDeps): RouteHandler {

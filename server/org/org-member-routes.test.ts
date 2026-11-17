@@ -10,7 +10,7 @@ import type { ModelSelection } from "../../shared/model-selection.ts";
 import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { routeRefusal } from "../agent-api.ts";
-import { createOrgMemberRoutes, describeMemberApproval, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
+import { createOrgMemberRoutes, describeMemberApproval, queuedSendWillStart, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
 const ORIGIN = "https://sagax.example";
@@ -1476,6 +1476,30 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect(performed.filter((p) => p.person.principalId === "pr_ann").map((p) => p.request.path)).toEqual(["/api/bots/sb/messages"]);
   });
 
+  it("a new hidden conversation: its id with the answer (body, and a header before the stream's first event), and a retry of the same sendId lands in it", async () => {
+    serveSends();
+    const first = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
+    expect(first.body.threadId).toBe("ac_1");
+    const again = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
+    expect(again.body.threadId).toBe("ac_1");
+    expect(opened).toHaveLength(1);
+    expect(performed.filter((p) => p.request.path === "/api/bots/sb/messages").map((p) => (p.request.body as { threadId: string; sendId: string }))).toEqual([
+      expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" }), expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" }),
+    ]);
+    // another sendId opens another; another person's same sendId never reaches it
+    expect((await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0002" })).body.threadId).toBe("ac_2");
+    expect((await call("POST", "bots/b1/messages", token("ann", "admin", "console"), { text: "hi", hidden: true, newThread: true, sendId: "send-0001" })).body.threadId).toBe("ac_3");
+    // streamed: the header carries it before any event
+    const res = await fetch(`${base}/api/org/member/bots/sb/messages`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token("bob", "employee", "console")}`, "content-type": "application/json" },
+      body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-0003", stream: true }),
+    });
+    expect(res.headers.get("x-sagax-thread-id")).toBe("ac_4");
+    const lines = (await res.text()).trim().split("\n").map((line) => JSON.parse(line) as { event: string; threadId?: string });
+    expect(lines[0]).toMatchObject({ event: "started", threadId: "ac_4" });
+  });
+
   it("two sends at once in one conversation on two models: queued, the second switches once the first is done", async () => {
     let state: ThreadStatus = "idle";
     status = () => state;
@@ -1501,7 +1525,7 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
       const second = { instanceId: "codex", model: "large" };
       const [a, b] = await Promise.all([
         call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "one", threadId: "th_q", modelSelection: first }),
-        call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "two", threadId: "th_q", modelSelection: second }),
+        call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "two", threadId: "th_q", modelSelection: second, wait: 30 }),
       ]);
       expect([a.status, b.status], JSON.stringify(b.body)).toEqual([200, 200]);
       // the first switch and send, then the second switch only once the first turn was done
@@ -1517,6 +1541,17 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
       performed = [];
       const carded = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "three", threadId: "th_q", modelSelection: first });
       expect(carded.body.code).toBe("card_waiting");
+      // busy on another model: the wait is the send's own; none given, said at once
+      state = "working";
+      doneAfter = 1_000;
+      const startedAt = clock;
+      const busy = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "four", threadId: "th_q", modelSelection: first });
+      expect(busy.body.code).toBe("conversation_busy");
+      expect(clock - startedAt).toBeLessThan(1_000);
+      const bounded = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "five", threadId: "th_q", modelSelection: first, wait: 2 });
+      expect(bounded.body.code).toBe("conversation_busy");
+      expect(clock - startedAt).toBeLessThan(3_000);
+      expect(performed.some((p) => p.request.method === "PATCH" || p.request.path.endsWith("/messages"))).toBe(false);
       expect(performed.some((p) => p.request.method === "PATCH" || p.request.path.endsWith("/messages"))).toBe(false);
     } finally {
       deps.sleep = async (ms) => { clock += ms; };
@@ -1601,5 +1636,13 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     } finally {
       deps.botOfThread = (threadId) => (threadId === "t1" ? "b1" : null);
     }
+  });
+});
+
+describe("lot S1: a queued send keeps its conversation busy only while it will still start", () => {
+  it("counts pending and dispatching sends, never one left interrupted", () => {
+    expect(queuedSendWillStart([{ threadId: "t", status: "pending" }], "t")).toBe(true);
+    expect(queuedSendWillStart([{ threadId: "t", status: "dispatching" }], "t")).toBe(true);
+    expect(queuedSendWillStart([{ threadId: "t", status: "interrupted" }, { threadId: "u", status: "pending" }], "t")).toBe(false);
   });
 });

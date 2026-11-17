@@ -182,7 +182,7 @@ import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type Open
 import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
 import { serverCardKind } from "../shared/fix-card-keys.ts";
 import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
-import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
+import { appendDecision, bindConfidentialDecisions, bindSurfaceDecisions, personsOwnDecision, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
 import { ATTACHMENTS_DIR, attachmentExists, cleanupStaleAttachmentPartials, cleanupResumableUploads, deleteAttachment, isArchiveAttachment, readAttachment, setAttachmentStillShown, saveAudio, saveFile } from "./attachments/attachments.ts";
@@ -396,7 +396,7 @@ import {
   type UsageRow,
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
-import { foldSurfaceUsage } from "./usage/surface-usage.ts";
+import { foldedSurfaceThreads, foldSurfaceUsage } from "./usage/surface-usage.ts";
 import { surfaceTargetRefused as surfaceAccessRefused } from "./bots/surface-bot-access.ts";
 import { newPlanUsageAlerts,
   orgPlanAccounts,
@@ -1021,6 +1021,7 @@ import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "
 import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
   appendAdminAction,
+  bindSurfaceAdminActions,
   botAuditSnapshot,
   flushAdminActivity,
   pruneAdminActivity,
@@ -1366,7 +1367,7 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, type MemberPerson } from "./org/org-member-routes.ts";
+import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
@@ -2390,6 +2391,7 @@ bindLeafHost({
   get reportBackgroundError() { return reportBackgroundError; },
   get agentSpans() { return agentSpans; },
   get scrubThreadDecisions() { return scrubThreadDecisions; },
+  get scrubSurfaceThreadDecisions() { return scrubSurfaceThreadDecisions; },
   get appendProblem() { return appendProblem; },
   get peerApprovalFailure() { return peerApprovalFailure; },
   get CONFIDENTIAL_INCIDENT_TEXT() { return CONFIDENTIAL_INCIDENT_TEXT; },
@@ -9226,6 +9228,9 @@ bindDecisionRetention(() => decisionRetentionDays(cfg.decisions?.retentionDays))
 // settling after the delete) is written metadata only too.
 const deletedConfidentialThreads = new Set<string>();
 bindConfidentialDecisions((threadId) => deletedConfidentialThreads.has(threadId) || store.isConfidentialThread(threadId));
+// lot S1: a surface bot's rows are marked when written (surfaceRowNow)
+bindSurfaceDecisions((row) => surfaceRowNow(row));
+bindSurfaceAdminActions((row) => surfaceRowNow(row));
 // The decision model (server/decider): reads cfg per call, so a Settings
 // save applies to the next decision. It never throws into a turn.
 const decider = createDecider({ config: () => cfg, dataDir: DATA_DIR });
@@ -10407,9 +10412,10 @@ function revokeInternalCapabilityForProviderEvent(event: RuntimeEvent): void {
 const MAX_COMMS_DEPTH = 1;
 /** 2026-10-28: a teammate's turn one hop away that is not a coordinated
  * node (coordinate_bots, a room handoff): its agents tools are mounted
- * without the peer tools (SAGAX_PEER_HOP). */
-function peerHopTurn(depth: number, coordinated: boolean): boolean {
-  return depth >= MAX_COMMS_DEPTH && !coordinated;
+ * without the peer tools (SAGAX_PEER_HOP). Lot S1: every turn of a surface
+ * bot too, which reaches no bot (its host product invites bots itself). */
+function peerHopTurn(depth: number, coordinated: boolean, bot?: { temporary?: { surface?: unknown } } | null): boolean {
+  return isSurfaceBot(bot) || (depth >= MAX_COMMS_DEPTH && !coordinated);
 }
 const MAX_WORKSPACE_BOTS = 100;
 
@@ -25808,6 +25814,13 @@ ROUTES.push(createUsageRoutes({
   dataDir: DATA_DIR,
   // lot S1: another person's surface bot as one total per person
   ledgerFor: (rows, auth) => foldSurfaceUsage(rows, sessionPrincipal(auth) ?? null),
+  // its tool calls too: from the rows, and from its live conversations (a turn not booked yet)
+  hiddenThreads: (rows, auth) => {
+    const viewer = sessionPrincipal(auth)?.trim().toLowerCase() ?? null;
+    const hidden = foldedSurfaceThreads(rows, viewer);
+    for (const bot of store.bots) if (isSurfaceBot(bot) && bot.temporary!.ownerPrincipalId !== viewer) for (const task of store.tasks(bot.id)) hidden.add(task.threadId);
+    return hidden;
+  },
   prices: operatorPrices,
   budget: () => spendState(cfg, DATA_DIR),
   currency: () => cfg.billing?.currency ?? "USD",
@@ -33622,15 +33635,25 @@ function surfaceRoutineHolders(from: BotRecord): Array<{ id: string; name: strin
   return store.bots.filter((bot) => !bot.hidden && !bot.temporary && recordedBotOwner(bot) === owner)
     .map((bot) => ({ id: bot.id, name: bot.name }));
 }
-/** Lot S1: a log row about a person's surface bot (marked `surface` when
- * the member API wrote it, or naming the bot or one of its conversations):
- * an administrator's logs and decision history never show one. */
-function surfaceRecord(row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }): boolean {
-  if (row.after?.surface === true) return true;
+/** Lot S1: whether a log row being written is about a person's surface bot
+ * (it names the bot or one of its conversations): the row is marked
+ * `surface` then (decision-log.ts, admin-activity.ts), so the mark outlives
+ * the bot. */
+function surfaceRowNow(row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }): boolean {
   const botIds = [row.botId, row.target?.kind === "bot" ? row.target.id : undefined, typeof row.after?.botId === "string" ? row.after.botId : undefined];
   if (botIds.some((id) => typeof id === "string" && isSurfaceBot(store.bot(id)))) return true;
   const threadIds = [row.threadId, row.target?.kind === "thread" ? row.target.id : undefined, typeof row.after?.threadId === "string" ? row.after.threadId : undefined];
   return threadIds.some((id) => typeof id === "string" && id !== "" && isSurfaceBot(store.botByThread(id)));
+}
+/** Lot S1: a row an administrator's logs never show: marked when written. */
+function surfaceRecord(row: { surface?: true; after?: Record<string, unknown> }): boolean {
+  return row.surface === true || row.after?.surface === true;
+}
+/** Lot S1: what the decision log keeps of a surface conversation that goes
+ * (deleted, or its person erased) is cut to its metadata, for that person's
+ * own rows only: an administrator's answer to a server command card stays whole. */
+function scrubSurfaceThreadDecisions(threadId: string, principalId: string): Promise<number> {
+  return scrubThreadDecisions(DATA_DIR, threadId, personsOwnDecision(principalId));
 }
 /** Lot S1: a bot an admin route may name: never a surface bot. */
 function adminBotOf(botId: string): BotRecord | undefined {
@@ -34730,9 +34753,10 @@ const orgMember = createOrgMemberRoutes({
   // lot S1: the person's surface bot and their hidden conversations
   ensureSurfaceBot: (person, input) => ensureSurfaceBot(person, input.name),
   surfaceBot: (botId) => isSurfaceBot(store.bot(botId)),
-  threadQueued: (threadId) => chatFollowups("bot").some((row) => row.threadId === threadId && (row.status === "pending" || row.status === "dispatching" || row.status === "interrupted")),
+  // a send that will still start (an interrupted one left behind never keeps it busy)
+  threadQueued: (threadId) => queuedSendWillStart(chatFollowups("bot"), threadId),
   // what the decision log kept of a deleted hidden conversation goes down to its metadata
-  forgetThread: (threadId) => { void scrubThreadDecisions(DATA_DIR, threadId).catch(reportBackgroundError); },
+  forgetThread: (threadId, principalId) => { void scrubSurfaceThreadDecisions(threadId, principalId).catch(reportBackgroundError); },
   hiddenConversationOf,
   threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   expireDueApprovals: expireDueApprovalsInThread,

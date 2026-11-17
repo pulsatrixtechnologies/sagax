@@ -105,7 +105,7 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   // it; a teammate one hop away gets it without the peer tools (peerHop).
   // The person-facing parts (setup, skill authoring, the computer choice,
   // the team roster) stay with the turns that may reach a peer.
-  state.peerHop = peerHopTurn(state.commsDepth, state.coordinated);
+  state.peerHop = peerHopTurn(state.commsDepth, state.coordinated, state.bot);
   state.agentsMounted = state.instance.adapter.capabilities.agentsMcp === true;
   state.peerToolsMounted = state.agentsMounted && !state.peerHop;
 

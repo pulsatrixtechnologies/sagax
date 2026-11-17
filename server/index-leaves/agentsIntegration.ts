@@ -54,7 +54,7 @@ function agentsIntegration(
       SAGAX_TURN_DEPTH: String(depth),
       SAGAX_ROOM_TURN: roomCoordination ? "1" : "0",
       // 2026-10-28: a teammate one hop away keeps its tools, not the peer ones
-      SAGAX_PEER_HOP: host.peerHopTurn(depth, roomCoordination) ? "1" : "0",
+      SAGAX_PEER_HOP: host.peerHopTurn(depth, roomCoordination, host.store.bot(botId)) ? "1" : "0",
       // A real room (group conversation). A person's direct chat also sets
       // SAGAX_ROOM_TURN (bounded coordination), so a tool absent from rooms
       // only (propose_page) reads this, never SAGAX_ROOM_TURN.

@@ -18,7 +18,8 @@
 //       is unknown
 //   S5  usage and logs: the person reads every row of it; an administrator
 //       one total per person, no conversation or bot id, no log row of it
-//   S6  erasing the person erases the bot, its conversations and its usage
+//   S6  erasing the person erases the bot and its conversations; its usage
+//       rows stay (no text), and nothing of it reappears for an administrator
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -167,8 +168,8 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
-        second: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP_LOG: join(home, "turns.jsonl") }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
+        second: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP_LOG: join(home, "turns.jsonl") }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
       },
     }));
     await start();
@@ -238,6 +239,12 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     });
     expect(tasks.one?.modelSelection?.instanceId ?? "claude").toBe("claude");
     expect(tasks.two.modelSelection).toMatchObject({ instanceId: "second", model: "fake-model" });
+
+    // its turns get the agents tools without the ones that reach another bot (the peerHop profile)
+    const turns = readFileSync(join(home, "turns.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { mcpConfig?: { mcpServers?: Record<string, { env?: Record<string, string> }> } });
+    const agentsEnvs = turns.flatMap((turn) => Object.values(turn.mcpConfig?.mcpServers ?? {}).map((server) => server.env ?? {})).filter((env) => env.SAGAX_BOT_ID === surface);
+    expect(agentsEnvs.length).toBeGreaterThan(0);
+    for (const env of agentsEnvs) expect(env.SAGAX_PEER_HOP).toBe("1");
 
     await sleep(500);
     events.close();
@@ -337,9 +344,17 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     const console = await admin("GET", `usage?${range}`);
     expect(console.status, console.text).toBe(200);
     for (const id of ids) expect(console.text).not.toContain(id);
-    // one total per person: the folded row is there, its spend counted
+    // one total per person and model, dated the 1st of the month: no day of activity
     const byBot = await api("GET", `/api/usage?${range}&groupBy=bot`, alice);
     expect((byBot.body.groups as Array<any>).filter((group) => group.label === "Chat")).toHaveLength(1);
+    const byDay = await api("GET", `/api/usage?from=${day.slice(0, 8)}01&to=${day}&groupBy=day`, alice);
+    expect((byDay.body.groups as Array<any>).map((group) => group.key)).toEqual([`day:${day.slice(0, 8)}01`]);
+    // its tool calls: the person's stats count them, an administrator's never
+    const ownStats = await api("GET", `/api/me/usage/stats?${range}`, bob);
+    const adminStats = await api("GET", `/api/usage/stats?${range}`, alice);
+    expect(ownStats.status, ownStats.text).toBe(200);
+    expect(adminStats.status, adminStats.text).toBe(200);
+    expect(JSON.stringify(adminStats.body)).not.toContain("Bash");
     // the administrator's logs: no creation, send, stop or delete of it
     for (const read of [await admin("GET", "audit?category=client&limit=500"), await api("GET", `/api/admin-activity?${range}&limit=5000`, alice)]) {
       expect(read.status, read.text.slice(0, 300)).toBe(200);
@@ -348,7 +363,7 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     }
   }, 60_000);
 
-  it("S6: erasing the person erases the surface bot, its conversations and its usage", async () => {
+  it("S6: erasing the person erases the surface bot and its conversations; nothing of it reappears for an administrator", async () => {
     const bobId = ids.bob!;
     const LOGOUT = "http://schemas.openid.net/event/backchannel-logout";
     const PURGED = "https://schemas.openid.net/secevent/risc/event-type/account-purged";
@@ -363,11 +378,24 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
       expect(registry).not.toContain(thread);
       expect(existsSync(join(home, ".sagax", `messages-${thread}.json`))).toBe(false);
     }
-    // its usage, for everyone
+    // its usage rows stay, as every bot's (no text; the month's spend does not drop), marked
     const day = new Date().toISOString().slice(0, 10);
-    const ledger = readFileSync(join(home, ".sagax", "usage", `${day.slice(0, 7)}.jsonl`), "utf8");
-    expect(ledger).not.toContain(surface);
-    for (const thread of chats) expect(ledger).not.toContain(thread);
+    const ledger = readFileSync(join(home, ".sagax", "usage", `${day.slice(0, 7)}.jsonl`), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { botId: string; surface?: true });
+    expect(ledger.filter((row) => row.botId === surface).length).toBeGreaterThan(0);
+    expect(ledger.filter((row) => row.botId === surface).every((row) => row.surface === true)).toBe(true);
+    // and with the bot gone, an administrator still reads nothing of it
+    const named = [surface, ...chats];
+    for (const read of [
+      await api("GET", `/api/usage/traces?from=${day}&to=${day}`, alice),
+      await api("GET", `/api/usage.csv?from=${day}&to=${day}`, alice),
+      await admin("GET", "audit?category=client&limit=500"),
+      await admin("GET", "audit?limit=500"),
+      await api("GET", `/api/admin-activity?from=${day}&to=${day}&limit=5000`, alice),
+    ]) {
+      expect(read.status, read.text.slice(0, 300)).toBe(200);
+      for (const id of named) expect(read.text).not.toContain(id);
+      expect(read.text).not.toContain("Desk");
+    }
     expect(bobId).toBeTruthy();
   }, 60_000);
 });

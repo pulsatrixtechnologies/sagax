@@ -1,9 +1,10 @@
 // Lot S1 (2026-11-17): the usage of a person's surface bot (server/temporary-
 // agents.ts) as anyone but that person reads it. The person reads every row
 // of it in their own usage (GET /api/me/usage...). Anyone else (an
-// organization admin's ledger, the console, traces, the CSV) reads one row
-// per person, day, engine and model: no conversation id, no bot, no time
-// within the day, no list of sends. Nothing is capped.
+// organization admin's ledger, the console, traces, stats, the CSV) reads
+// one row per person, calendar month (dated the 1st, as the ledger's files
+// and the spend cap), engine and model: no conversation id, no bot, no day
+// or time, no list of sends, and none of its tool calls. Nothing is capped.
 import type { UsageRow } from "./usage-ledger.ts";
 
 /** The bot label a folded row carries. */
@@ -21,12 +22,12 @@ export function foldSurfaceUsage(rows: readonly UsageRow[], viewerPrincipalId: s
       out.push(row);
       continue;
     }
-    const day = row.at.slice(0, 10);
-    const key = [day, owner, row.instanceId, row.model, row.access ?? "", row.payerPrincipalId ?? ""].join("|");
+    const month = row.at.slice(0, 7);
+    const key = [month, owner, row.instanceId, row.model, row.access ?? "", row.payerPrincipalId ?? ""].join("|");
     const into = folded.get(key);
     if (!into) {
       const first: UsageRow = {
-        at: `${day}T00:00:00.000Z`, botId: "", botName: SURFACE_USAGE_LABEL, threadId: "",
+        at: `${month}-01T00:00:00.000Z`, botId: "", botName: SURFACE_USAGE_LABEL, threadId: "",
         instanceId: row.instanceId, driverKind: row.driverKind, model: row.model,
         input: row.input, output: row.output, ...(row.cachedInput !== undefined ? { cachedInput: row.cachedInput } : {}),
         costUsd: row.costUsd, ...(row.costSource ? { costSource: row.costSource } : {}),
@@ -48,6 +49,17 @@ export function foldSurfaceUsage(rows: readonly UsageRow[], viewerPrincipalId: s
       if (row.costSource === "estimated") into.costSource = "estimated";
       else into.costSource ??= "reported";
     }
+  }
+  return out;
+}
+
+/** The conversations whose rows `foldSurfaceUsage` folds for this viewer:
+ * their tool calls stay out of that viewer's stats. */
+export function foldedSurfaceThreads(rows: readonly UsageRow[], viewerPrincipalId: string | null): Set<string> {
+  const viewer = viewerPrincipalId?.trim().toLowerCase() || null;
+  const out = new Set<string>();
+  for (const row of rows) {
+    if (row.surface === true && row.threadId && !(viewer !== null && (row.ownerPrincipalId?.trim().toLowerCase() ?? "") === viewer)) out.add(row.threadId);
   }
   return out;
 }

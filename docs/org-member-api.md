@@ -132,7 +132,13 @@ any other shape, so the plan's `clients.bots.read` is written
 - `wait`: 0 to 120 seconds (default 0). The request stays open until the bot
   has answered, a card waits, or the time is up.
 - `sendId`: 8 to 80 of `[A-Za-z0-9_-]`; a retry with the same id is the same
-  message.
+  message. With `newThread: true`, a retry with the same `sendId` (for 24 h,
+  memory only, the person and bot alike) lands in the conversation the
+  first send opened, never in another new one (lot S1).
+- The conversation is opened before anything is sent, and its id comes
+  with the answer: `threadId` in the JSON body, and for `stream: true` the
+  `X-Sagax-Thread-Id` header with the status line, before the `started`
+  event (lot S1).
 - `stream`: `true` answers NDJSON instead (see "The streamed turn").
 - `hidden`: `true` makes the console's send land in a hidden conversation,
   as an AI client's does (lot S1: a host product's chat answered by Sagax).
@@ -145,13 +151,16 @@ any other shape, so the plan's `clients.bots.read` is written
   conversation already runs on it. Each conversation keeps its own model, so
   two sends on two conversations never mix. With no conversation named, the
   person's chat with the bot (or a new conversation) is used.
-- The sends of one conversation go one at a time, in arrival order. A send
-  that changes the conversation's model first waits for the turns before it
-  (running or queued) to finish on their own model, at most 10 minutes:
-  two models never cross in one conversation. A card waiting in it answers
-  `409 card_waiting` (answer the card, then send again); still busy after
-  10 minutes answers `409 conversation_busy`. Nothing is switched or sent
-  then.
+- Every send of this API to one conversation, on any bot, goes one at a
+  time, in arrival order. A send that changes the conversation's model
+  first waits, within its own `wait`, for the turns before it (running or
+  queued) to finish on their own model: two models never cross in one
+  conversation. Still busy at the end of its `wait` (at once with `wait` 0)
+  answers `409 conversation_busy`; a card waiting in it answers `409
+  card_waiting` (answer the card, then send again). Nothing is switched or
+  sent then. A send that changes nothing waits only behind the sends before
+  it, so at most their own `wait` (120 s each). A queued send left
+  interrupted never counts as busy.
 
 ```json
 {
@@ -202,9 +211,12 @@ answer in their name through one service bot of theirs, the **surface bot**:
   the organization admin's bots and files, admin approvals (but the server
   command card above), the decision history of the console, Today (but the
   waiting line above), a team manager's list, or search.
-- It reaches no other bot and no bot reaches it (peers, both ways); it joins
-  no room (`POST /api/groups` and adding members answer `403`). The bots a
-  host chat invites are the host product's to orchestrate.
+- It reaches no other bot and no bot reaches it (peers, both ways): its
+  turns get the agents tools without the ones that reach another bot (the
+  existing `peerHop` profile, `PEER_HOP_ABSENT_TOOLS`), and the routes refuse
+  them anyway. It joins no room (`POST /api/groups` and adding members
+  answer `403`). The bots a host chat invites are the host product's to
+  orchestrate.
 - It never holds a routine or an automation: the routine store and the
   triggers treat it as no bot. Asked for a routine in a chat, it proposes one
   for one of the person's bots (`for_bot_id`, the bot they named, or it asks
@@ -214,14 +226,20 @@ answer in their name through one service bot of theirs, the **surface bot**:
   act on (an approval, a question) is notified.
 - Usage: the person reads every row in their own usage (`/api/me/usage...`).
   Anyone else (the ledger, its CSV, traces, stats, the console's usage) reads
-  one row per person, day, engine and model, labelled `Chat`, with no
-  conversation or bot id (`server/usage/surface-usage.ts`). No cap.
-- Logs: the rows the member API writes about it (`client.surface_bot`,
-  `client.message`, `client.stop`, `client.thread_delete`, each marked
-  `surface`) and the decisions of its turns stay out of an administrator's
-  logs (`GET audit`, `/api/admin-activity`, the console's decision history).
-- Erasing the person erases it with their other bots, its conversations, its
-  usage rows, and the content its decisions kept (down to their metadata).
+  one row per person, calendar month (dated the 1st, as the ledger and the
+  spend cap), engine and model, labelled `Chat`, with no conversation or bot
+  id and no day; the stats leave out its tool calls
+  (`server/usage/surface-usage.ts`). No cap.
+- Logs: every admin activity row and every decision about it is marked
+  `surface` when written (whoever writes it: the member API, the agent API,
+  an approval), so the mark outlives the bot; an administrator's logs
+  (`GET audit`, `/api/admin-activity`, the console's decision history) never
+  show one, before or after the person is erased.
+- Erasing the person erases it with their other bots and its conversations;
+  what the decision log kept of its conversations goes down to its
+  metadata for the person's own rows (an administrator's answer to a server
+  command card stays whole). Its usage rows stay, as every bot's (they hold
+  no text, and the month's spend does not drop); others read them folded.
 
 ### `POST threads/{id}/stop`, `DELETE threads/{id}`
 
@@ -232,7 +250,8 @@ app's own stop, as them): `{stopped: true, threadId, status}`.
 any of their surface bot's) with its messages, after stopping a running
 turn: `{deleted: true, threadId}`. Another person's conversation, a visible
 one and a confidential one are `404`. A deleted conversation reads `404`
-after, and what the decision log kept of it goes down to its metadata.
+after, and what the decision log kept of the person's own rows of it goes
+down to its metadata (an administrator's answer stays whole).
 
 ### `GET threads/{id}`
 

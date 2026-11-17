@@ -249,3 +249,35 @@ describe("the call a rule test replays (2026-10-26, Journal)", () => {
     expect(metadataOnly({ threadId: "t", summary: "s", ruleId: "cr-1", call: { input: "{}" } })).toEqual({ threadId: "t" });
   });
 });
+
+describe("lot S1: a surface bot's decisions", () => {
+  it("are marked when written, and the mark outlives the bot", async () => {
+    const { bindSurfaceDecisions } = await import("./decision-log.ts");
+    let live = true;
+    bindSurfaceDecisions((candidate) => live && candidate.botId === "sb");
+    try {
+      appendDecision(dir, row({ botId: "sb", threadId: "ts" }));
+      appendDecision(dir, row({ botId: "b1", threadId: "t1" }));
+      await flushDecisionLog(dir);
+      live = false; // the bot is gone
+      const rows = readDecisions(dir, 10);
+      expect(rows.find((one) => one.botId === "sb")?.surface).toBe(true);
+      expect(rows.find((one) => one.botId === "b1")?.surface).toBeUndefined();
+    } finally {
+      bindSurfaceDecisions(() => false);
+    }
+  });
+
+  it("a deleted conversation keeps an administrator's answer whole and cuts the person's rows to their metadata", async () => {
+    const { personsOwnDecision, scrubThreadDecisions } = await import("./decision-log.ts");
+    appendDecision(dir, row({ threadId: "ts", requestId: "r-person", summary: "ls ~/notes", source: "user", actor: { kind: "session", sessionId: "s1", label: "Bob", userId: "pr_bob" } }));
+    appendDecision(dir, row({ threadId: "ts", requestId: "r-rule", summary: "cat plan.md", source: "full-access" }));
+    appendDecision(dir, row({ threadId: "ts", requestId: "r-admin", summary: "systemctl restart web", source: "user", actor: { kind: "session", sessionId: "s2", label: "Ann", userId: "pr_ann" } }));
+    await flushDecisionLog(dir);
+    await scrubThreadDecisions(dir, "ts", personsOwnDecision("PR_BOB"));
+    const rows = readDecisions(dir, 10);
+    expect(rows.find((one) => one.requestId === "r-person")?.summary).toBeUndefined();
+    expect(rows.find((one) => one.requestId === "r-rule")?.summary).toBeUndefined();
+    expect(rows.find((one) => one.requestId === "r-admin")?.summary).toBe("systemctl restart web");
+  });
+});

@@ -49,13 +49,14 @@ describe("GET /api/me/usage", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  async function serve(organization = true) {
+  async function serve(organization = true, extra: Partial<Parameters<typeof createUsageRoutes>[0]> = {}) {
     const routes = [createUsageRoutes({
       dataDir,
       prices: () => null,
       budget: () => ({ capUsd: 500, spentUsd: 150.5 }) as never,
       currency: () => "USD",
       organization: () => organization,
+      ...extra,
     })];
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -165,6 +166,18 @@ describe("GET /api/me/usage", () => {
     expect(JSON.stringify(mine.body)).not.toContain("Bash");
     expect((await api(`/api/me/usage/stats?${RANGE}`, undefined)).status).toBe(403);
     expect((await api("/api/usage/stats?from=bad&to=2026-10-15", ADA, true)).status).toBe(400);
+  });
+
+  it("lot S1: the whole ledger's stats leave out the tool calls of the conversations it folds (another person's surface bot)", async () => {
+    await appendFile(join(dataDir, "usage", "spans-2026-10.jsonl"), [
+      { t: "a", s: "1", n: "execute_tool Bash", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14), st: 1, at: { "sagax.tool.kind": "builtin", "gen_ai.tool.name": "Bash", "sagax.thread.id": "t-bob-bot" } },
+      { t: "b", s: "2", n: "execute_tool Read", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14), st: 1, at: { "sagax.tool.kind": "builtin", "gen_ai.tool.name": "Read", "sagax.thread.id": "t-ada-bot" } },
+    ].map((line) => JSON.stringify(line)).join("\n") + "\n");
+    const api = await serve(true, { hiddenThreads: () => new Set(["t-bob-bot"]) });
+    const all = await api(`/api/usage/stats?${RANGE}`, ADA, true);
+    expect(all.body.totals).toMatchObject({ toolCalls: 1 });
+    expect(JSON.stringify(all.body)).not.toContain("Bash");
+    expect(JSON.stringify(all.body)).toContain("Read");
   });
 });
 

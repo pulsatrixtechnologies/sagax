@@ -111,9 +111,10 @@ export const SURFACE_BOT_NAME_MAX = 80;
 export const SURFACE_BOT_NAME_DEFAULT = "Assistant";
 /** Lot S1: how long a delete waits for a stopped turn to settle. */
 export const MEMBER_STOP_SETTLE_MS = 5_000;
-/** Lot S1: how long a send that changes its conversation's model waits for
- * the turns before it (running or queued) to finish on their own model. */
-export const MEMBER_MODEL_WAIT_MS = 10 * 60_000;
+/** Lot S1: how long a `sendId` keeps the conversation its `newThread` send
+ * opened, so a retry lands in it (memory only). */
+export const MEMBER_NEW_THREAD_SEND_TTL_MS = 24 * 3_600_000;
+const MEMBER_NEW_THREAD_SENDS_MAX = 10_000;
 
 /** The acting person, once the assertion verified. */
 export interface MemberPerson {
@@ -213,7 +214,7 @@ export interface OrgMemberRouteDeps {
   threadQueued?(threadId: string): boolean;
   /** Lot S1: a hidden conversation was deleted: what the logs kept of it
    * goes down to its metadata. */
-  forgetThread?(threadId: string): void;
+  forgetThread?(threadId: string, principalId: string): void;
   /** Lot S1: the bot of a hidden conversation this person owns (an outside
    * agent's conversation, or any conversation of their surface bot), never a
    * confidential one; else null. */
@@ -282,6 +283,8 @@ export type StreamEvent = Record<string, unknown> & { event: string };
 /** A streamed answer: `run` writes events and returns the final body. */
 interface StreamAnswer {
   stream: (emit: (event: StreamEvent) => void, closed: () => boolean) => Promise<Record<string, unknown>>;
+  /** Headers sent with the status line, before any event. */
+  headers?: Record<string, string>;
 }
 
 interface MemberContext {
@@ -1081,6 +1084,13 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
   };
 }
 
+/** Lot S1: whether a conversation still has a queued send that will start
+ * (a row left `interrupted` never will, so it never keeps it busy). */
+export function queuedSendWillStart(rows: Iterable<{ threadId?: unknown; status?: unknown }>, threadId: string): boolean {
+  for (const row of rows) if (row.threadId === threadId && (row.status === "pending" || row.status === "dispatching")) return true;
+  return false;
+}
+
 /** Lot S1: a send's `modelSelection`, read like `update_agent_model` reads
  * one (the route then judges it); a sentence when it is malformed. */
 export function memberModelSelection(raw: unknown): ModelSelection | string {
@@ -1117,6 +1127,7 @@ async function streamAnswer(res: ServerResponse, answer: StreamAnswer): Promise<
   // body was read.
   res.on("close", onClose);
   res.writeHead(200, {
+    ...answer.headers,
     "content-type": "application/x-ndjson; charset=utf-8",
     "x-sagax-member-api": "1",
     "cache-control": "no-store",
@@ -1634,6 +1645,22 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
   // read at each call, like the rest of deps
   const now = () => (deps.now ?? Date.now)();
   const sleep = (ms: number) => (deps.sleep ? deps.sleep(ms) : new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  // Lot S1: the conversation a `newThread` send opened, by its `sendId`:
+  // a retry of that send (the client never read the answer) lands in it,
+  // never in another new one.
+  const openedBySend = new Map<string, { threadId: string; at: number }>();
+  const openedFor = (key: string): string | undefined => {
+    const found = openedBySend.get(key);
+    if (found && now() - found.at < MEMBER_NEW_THREAD_SEND_TTL_MS) return found.threadId;
+    if (found) openedBySend.delete(key);
+    return undefined;
+  };
+  const rememberOpened = (key: string, threadId: string) => {
+    if (openedBySend.size >= MEMBER_NEW_THREAD_SENDS_MAX) {
+      for (const [old, entry] of openedBySend) if (now() - entry.at >= MEMBER_NEW_THREAD_SEND_TTL_MS || openedBySend.size >= MEMBER_NEW_THREAD_SENDS_MAX) openedBySend.delete(old);
+    }
+    openedBySend.set(key, { threadId, at: now() });
+  };
   // Lot S1: the sends of one conversation, one at a time, in arrival order.
   const sending = new Map<string, Promise<unknown>>();
   const inOrder = <T>(threadId: string | undefined, work: () => Promise<T>): Promise<T> => {
@@ -1730,6 +1757,9 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // `hidden: true` (a host product's chat), and a surface bot only
         // ever works in hidden ones.
         const hidden = person.actor !== "console" || input.hidden === true || surface;
+        const sendKey = input.newThread === true && input.sendId ? `${person.principalId}|${botId}|${input.sendId as string}` : null;
+        if (sendKey && !threadId) threadId = openedFor(sendKey);
+        const opening = !threadId;
         if (!threadId && hidden && deps.agentConversation) {
           threadId = deps.agentConversation(botId, person, input.newThread === true) ?? undefined;
           if (!threadId) return fail(502, "not_started", "A conversation with this bot could not be opened.");
@@ -1738,26 +1768,29 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // Lot S1: a model for this send needs its conversation first (the
         // model is the conversation's own, so two conversations never mix)
         if (model && !threadId && input.newThread !== true) threadId = deps.hiddenThreadOf?.(botId, person.principalId) ?? undefined;
-        if ((input.newThread === true && !(hidden && deps.agentConversation)) || (hidden && !threadId) || (model && !threadId)) {
+        if ((opening && input.newThread === true && !(hidden && deps.agentConversation)) || (hidden && !threadId) || (model && !threadId)) {
           const created = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(botId)}/tasks`, body: { confidential: false } });
           if (!okStatus(created)) return passThrough(created, "A new conversation could not be started.");
           threadId = str(objectOf(objectOf(created.body)?.task)?.threadId) ?? undefined;
           if (!threadId) return fail(502, "server_error", "The new conversation has no id.");
         }
-        // Lot S1: one send at a time per conversation, in order. A send that
-        // changes the conversation's model (set the way the app's model
-        // picker sets it, same checks as update_agent_model; left alone when
-        // unchanged, so the engine keeps its session) first waits for the
-        // turns before it, running or queued, to finish on their own model:
-        // two models never cross in one conversation.
+        // Lot S1: opened before anything is sent; a retry with this sendId finds it
+        if (sendKey && opening && threadId) rememberOpened(sendKey, threadId);
+        // Lot S1: the member API's sends of one conversation go one at a
+        // time, in order (any bot). A send that changes the conversation's
+        // model (set the way the app's model picker sets it, same checks as
+        // update_agent_model; left alone when unchanged, so the engine keeps
+        // its session) first waits, within its own `wait`, for the turns
+        // before it, running or queued, to finish on their own model: two
+        // models never cross in one conversation.
         const posted = await inOrder(threadId, async (): Promise<{ refused: Answer } | { sent: MemberReply }> => {
           if (model && threadId && !sameMemberModel(model, deps.threadModel?.(botId, threadId) ?? null)) {
-            const until = now() + MEMBER_MODEL_WAIT_MS;
+            const until = now() + wait * 1000;
             for (;;) {
               const state = deps.threadStatus(threadId);
               if (state === "waiting") return { refused: fail(409, "card_waiting", "A card waits in this conversation: answer it, then send this again.") };
               if (state !== "working" && !deps.threadQueued?.(threadId)) break;
-              if (now() >= until) return { refused: fail(409, "conversation_busy", "This conversation is still working on another model. Send this again once it is done.") };
+              if (now() >= until) return { refused: fail(409, "conversation_busy", "This conversation is still working on another model. Send this again once it is done, or with a longer wait.") };
               await sleep(MEMBER_WAIT_POLL_MS);
             }
             const switched = await deps.perform(person, { method: "PATCH", path: `/api/bots/${encodeURIComponent(botId)}/tasks/${encodeURIComponent(threadId)}`, body: { modelSelection: model } });
@@ -1784,6 +1817,8 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         if (!finalThread) return answer({ botId, threadId: null, messageId, status: "working", pending: true, reply: null, approvals: [], cursor: null, summary: null });
         if (input.stream === true) {
           return {
+            // Lot S1: the conversation id with the status line, before any event
+            headers: { "x-sagax-thread-id": finalThread },
             stream: async (emit, closed) => {
               emit({ event: "started", botId, threadId: finalThread, messageId });
               return watchTurn({ person, botId, threadId: finalThread, anchor: messageId, queueId, wait, emit, closed });
@@ -2229,7 +2264,7 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         }
         const removed = await deps.perform(person, { method: "DELETE", path });
         if (!okStatus(removed)) return passThrough(removed, "This conversation could not be deleted.");
-        deps.forgetThread?.(threadId);
+        deps.forgetThread?.(threadId, person.principalId);
         deps.record(person, { action: "client.thread_delete", target: { kind: "thread", id: threadId }, after: { botId: owned.botId, ...(deps.surfaceBot?.(owned.botId) ? { surface: true } : {}) } });
         return answer({ deleted: true, threadId });
       },

@@ -9,6 +9,7 @@ import {
   adminActivityFileFor,
   appendAdminAction,
   auditValues,
+  bindSurfaceAdminActions,
   botAuditSnapshot,
   botChangeRows,
   changedPaths,
@@ -258,5 +259,25 @@ describe("organization audit page (slice 7)", () => {
     for (const what of ["rights", "section", "org", "approval"]) expect(parseActivityWhat(what)).toBe(what);
     const rows: AdminActionRow[] = [{ at: "2026-09-01T00:00:00.000Z", category: "rights", action: "grant.set", actor: { kind: "person", principalId: "p1", via: "console" } }];
     expect(activityEntries([], rows, { what: "all" }, (id) => (id === "p1" ? "Alice" : undefined))[0]).toMatchObject({ who: "Alice (console)", what: "rights" });
+  });
+});
+
+describe("lot S1: a surface bot's rows", () => {
+  it("are marked when written, and stay out of an administrator's page after the bot is gone", async () => {
+    const dir = tempDir();
+    let live = true;
+    bindSurfaceAdminActions((row) => live && row.target?.id === "sb");
+    try {
+      const actor = { kind: "person" as const, principalId: "pr_00000000-0000-4000-8000-000000000002", via: "perspicax-mcp" as const };
+      appendAdminAction(dir, { at: "2026-11-17T10:00:00.000Z", category: "client", action: "agents.send_prompt", target: { kind: "bot", id: "sb", name: "Desk" }, actor });
+      appendAdminAction(dir, { at: "2026-11-17T10:01:00.000Z", category: "client", action: "client.message", target: { kind: "bot", id: "b1" }, actor });
+      await flushAdminActivity(dir);
+      live = false; // the person was erased with the bot
+      const page = readOrgAuditPage(dir, { limit: 10, categories: ["client"], hidden: (row) => row.surface === true });
+      expect(page.rows.map((row) => row.action)).toEqual(["client.message"]);
+      expect(JSON.stringify(page.rows)).not.toContain("Desk");
+    } finally {
+      bindSurfaceAdminActions(() => false);
+    }
   });
 });

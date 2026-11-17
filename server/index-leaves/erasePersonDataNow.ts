@@ -1,7 +1,6 @@
 // @ts-nocheck
 /** erasePersonDataNow (#1388). Pure move from server/index.ts. */
 import { isSurfaceBot } from "../temporary-agents.ts";
-import { eraseUsageOfBots } from "../usage/usage-ledger.ts";
 export type Host = Record<string, any>;
 
 export function createErasePersonDataNow(getHost: () => Host): any {
@@ -14,12 +13,11 @@ async function erasePersonDataNow(principalId: string): Promise<{ bots: number; 
   const confidentialThreads: Array<{ botId: string; threadId: string }> = [];
   const confidentialEngines: Array<{ threadId: string; keys: string[] }> = [];
   const ordinaryThreads: Array<{ botId: string; threadId: string; attachments: string[] }> = [];
-  // lot S1: the usage of their surface bot goes with it (its conversations
-  // with the bot, below); the ledger keeps every other bot's turns
-  const surfaceBots = new Set<string>(host.store.bots.filter((bot) => isSurfaceBot(bot) && host.recordedBotOwner(bot) === person).map((bot) => bot.id));
-  await eraseUsageOfBots(host.DATA_DIR, surfaceBots);
-  // and what the decision log kept of its conversations, down to its metadata
-  for (const botId of surfaceBots) for (const task of host.store.tasks(botId)) await host.scrubThreadDecisions(host.DATA_DIR, task.threadId);
+  // lot S1: what the decision log kept of their surface bot's conversations
+  // goes down to its metadata, their own rows only (an administrator's answer
+  // stays whole); its usage rows stay, as every bot's (they hold no text)
+  const surfaceBots = host.store.bots.filter((bot) => isSurfaceBot(bot) && host.recordedBotOwner(bot) === person);
+  for (const bot of surfaceBots) for (const task of host.store.tasks(bot.id)) await host.scrubSurfaceThreadDecisions(task.threadId, person);
   for (const bot of host.store.bots.slice()) { // a copy: deleting changes the list
     if (host.recordedBotOwner(bot) === person) {
       if ((await host.deleteBotWithLifecycle(bot.id)).status === 200) bots++;

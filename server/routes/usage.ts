@@ -38,6 +38,9 @@ export interface UsageRouteDeps {
   /** Lot S1: the whole ledger as this caller reads it (another person's
    * surface bot folded, server/usage/surface-usage.ts); as is without it. */
   ledgerFor?(rows: UsageRow[], auth: RequestAuth): UsageRow[];
+  /** Lot S1: conversations whose tool calls this caller's stats leave out
+   * (another person's surface bot), from the raw rows. */
+  hiddenThreads?(rows: UsageRow[], auth: RequestAuth): ReadonlySet<string>;
   /** The operator's price list, when the server may read it (`billing`). */
   prices(): PriceList | null;
   /** The cap and where the month stands; null when there is no enforceable cap. */
@@ -150,6 +153,9 @@ export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
       if (viewer) {
         const threads = new Set(rows.map((row) => row.threadId));
         spans = spans.filter((span) => span.threadId !== undefined && threads.has(span.threadId));
+      } else if (deps.hiddenThreads) {
+        const hidden = deps.hiddenThreads(all, auth);
+        spans = spans.filter((span) => span.threadId === undefined || !hidden.has(span.threadId));
       }
       res.setHeader("cache-control", "no-store");
       return json(res, 200, { from: range.from.toISOString(), to: range.to.toISOString(), ...buildUsageStats(rows, spans) });

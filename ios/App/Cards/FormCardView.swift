@@ -120,6 +120,16 @@ struct FormCardView: View {
     /// `-form-cards-fill`: the capture of a form half filled in (every row but
     /// the last answered), so a screenshot shows each control with a value.
     private func seedPreviewDrafts() {
+        // `-form-cards-open-picker <row>`: the picker sheet of a date or time row, for a capture
+        let args = ProcessInfo.processInfo.arguments
+        if let at = args.firstIndex(of: "-form-cards-open-picker"), args.indices.contains(at + 1),
+           let row = Int(args[at + 1]), questions.indices.contains(row), pickerTarget == nil {
+            let date = questions[row].kind == .date
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                pickerTarget = PickerTarget(row: row, component: date ? .date : .hourAndMinute,
+                                            format: date ? "yyyy-MM-dd" : "HH:mm", initial: Date())
+            }
+        }
         guard ProcessInfo.processInfo.arguments.contains("-form-cards-fill"), drafts.isEmpty, !checklist else { return }
         for (index, question) in questions.enumerated().dropLast() {
             switch question.kind ?? .text {
@@ -139,16 +149,11 @@ struct FormCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(question.question)
-                            .font(colors.font(13.5, .medium))
-                            .foregroundStyle(colors.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if question.isOptional {
-                            Text("Optional")
-                                .font(colors.font(11.5))
-                                .foregroundStyle(colors.inkSecondary)
-                        }
+                    // the "Optional" tag sits beside the question when both fit on a
+                    // line, under it otherwise; a word is never cut to make room
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) { questionLabel(question); optionalTag(question) }
+                        VStack(alignment: .leading, spacing: 2) { questionLabel(question); optionalTag(question) }
                     }
                     control(index, question)
                 }
@@ -165,6 +170,23 @@ struct FormCardView: View {
                 onPress: { _ in submitForm() }
             )
             .padding(.top, 4)
+        }
+    }
+
+    private func questionLabel(_ question: AskQuestion) -> some View {
+        Text(question.question)
+            .font(colors.font(13.5, .medium))
+            .foregroundStyle(colors.ink)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func optionalTag(_ question: AskQuestion) -> some View {
+        if question.isOptional {
+            Text("Optional")
+                .font(colors.font(11.5))
+                .foregroundStyle(colors.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -223,14 +245,25 @@ struct FormCardView: View {
             numberField(index, \.value, sub: 0, width: 128, label: question.question, keyboard: .decimalPad, decimal: true, grows: true)
         case .text, .longText:
             FormFieldBox(colors: colors, focused: focus == index * 10, onTap: { focus = index * 10 }, onDone: { dismissKeyboard() }) {
-                TextField("Type your answer", text: binding(index, \.value), axis: .vertical)
-                    .font(colors.font(13.5))
-                    .foregroundStyle(colors.ink)
-                    .lineLimit(1...(question.kind == .longText ? 8 : 4))
-                    .textFieldStyle(.plain)
-                    .focused($focus, equals: index * 10)
-                    .disabled(answering)
-                    .accessibilityLabel(question.question)
+                // the placeholder is in the layout, so a long one wraps and the box grows
+                ZStack(alignment: .topLeading) {
+                    if draft(index).value.isEmpty {
+                        Text("Type your answer")
+                            .font(colors.font(13.5))
+                            .foregroundStyle(ink2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                    TextField("", text: binding(index, \.value), axis: .vertical)
+                        .font(colors.font(13.5))
+                        .foregroundStyle(colors.ink)
+                        .lineLimit(1...(question.kind == .longText ? 8 : 4))
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: index * 10)
+                        .disabled(answering)
+                        .accessibilityLabel(question.question)
+                }
             }
         }
     }

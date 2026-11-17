@@ -315,9 +315,8 @@ struct QuestionSheetButtons: View {
                 ForEach(Array(ordered.enumerated()), id: \.offset) { position, action in button(action, position) }
             }
             VStack(alignment: .trailing, spacing: 6) {
-                ForEach(Array(ordered.reversed().enumerated()), id: \.offset) { position, action in
-                    button(action, ordered.count - 1 - position)
-                }
+                // stacked, the main action stays last (bottom) and filled
+                ForEach(Array(ordered.enumerated()), id: \.offset) { position, action in button(action, position) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }

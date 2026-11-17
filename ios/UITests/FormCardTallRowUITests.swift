@@ -21,7 +21,7 @@ final class FormCardTallRowUITests: XCTestCase {
     /// How many different colours a grid of pixels between the header and the
     /// composer holds: a blank chat is one flat fill (a drawn card has text,
     /// pills and fields), which the accessibility tree cannot tell.
-    private func distinctColours(_ app: XCUIApplication) -> Int {
+    static func distinctColours(_ app: XCUIApplication) -> Int {
         guard let image = app.screenshot().image.cgImage,
               let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
         let bytesPerPixel = image.bitsPerPixel / 8
@@ -43,7 +43,7 @@ final class FormCardTallRowUITests: XCTestCase {
         XCTAssertTrue(submit.waitForExistence(timeout: 25), "the form drew nothing: \(app.debugDescription.suffix(1500))", file: file, line: line)
         XCTAssertTrue(submit.isHittable, "the last control is not on screen", file: file, line: line)
         sleep(2)
-        XCTAssertGreaterThan(distinctColours(app), 3, "the chat is blank: one flat colour where the card should be", file: file, line: line)
+        XCTAssertGreaterThan(FormCardTallRowUITests.distinctColours(app), 3, "the chat is blank: one flat colour where the card should be", file: file, line: line)
         let heading = app.staticTexts[title]
         var swipes = 0
         while !heading.isHittable && swipes < 40 {

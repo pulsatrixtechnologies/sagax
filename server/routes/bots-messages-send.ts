@@ -17,6 +17,7 @@ import { approvalModeFor } from "../../shared/approval-mode.ts";
 import { promptWithDataContext } from "../../shared/data-context.ts";
 import { isBusySendRequest } from "../../shared/parallel-tasks.ts";
 import { isStopIntent } from "../../shared/stop-intent.ts";
+import { PERSON_STOP_TOOL_OUTPUT } from "../threads/subagent-cleanup.ts";
 import {
   masterySendFacts,
   modelFamily,
@@ -676,7 +677,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
         await routines!.cancelRun(run.id);
         free();
       } else await stopDirectThreadByPerson(bot.id, threadId);
-      closeCutToolRows(threadId);
+      closeCutToolRows(threadId, PERSON_STOP_TOOL_OUTPUT);
       confirmStop(threadId, stoppedTurnId);
       return json(res, 200, { ok: true, threadId, stopped: true, message });
     }

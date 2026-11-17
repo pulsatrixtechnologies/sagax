@@ -17,8 +17,10 @@
 import type { WireMessage as Message } from "../../shared/wire.ts";
 import { yieldToEventLoop } from "../harness/http.ts";
 
-/** A call cut short by a person's Stop. */
-export const CUT_TOOL_OUTPUT = "You stopped the turn before this finished.";
+/** A call cut short without saying by whom (a safe point, a sub-agent stop). */
+export const CUT_TOOL_OUTPUT = "Stopped before it finished.";
+/** A call cut short by the person's own Stop. */
+export const PERSON_STOP_TOOL_OUTPUT = "You stopped the turn before this finished.";
 /** A call its turn left open when it ended, on success or failure. */
 export const ENDED_TOOL_OUTPUT = "Its turn ended before this finished.";
 /** A call left open by a server stop. */
@@ -43,7 +45,8 @@ export function openToolRows<T extends ToolRow>(messages: readonly T[]): T[] {
 
 /** What a settled turn's open rows say. */
 export function endedToolOutput(outcome: { stopped: boolean; clientStopped?: boolean; stopReason?: string | null }): string {
-  if (outcome.clientStopped || (outcome.clientStopped === undefined && outcome.stopped)) return CUT_TOOL_OUTPUT;
+  if (outcome.clientStopped) return PERSON_STOP_TOOL_OUTPUT;
+  if (outcome.clientStopped === undefined && outcome.stopped) return CUT_TOOL_OUTPUT;
   switch (outcome.stopReason) {
     case "interrupted": return "The engine interrupted the turn before this finished.";
     case "cancelled": return "The engine cancelled the turn before this finished.";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WireMessage as Message } from "../../shared/wire.ts";
 import {
-  closedTool, closeRowsLeftByRestart, CUT_TOOL_OUTPUT, ENDED_TOOL_OUTPUT, endedToolOutput, openedThreadRefs,
+  closedTool, closeRowsLeftByRestart, CUT_TOOL_OUTPUT, ENDED_TOOL_OUTPUT, endedToolOutput, PERSON_STOP_TOOL_OUTPUT, openedThreadRefs,
   openToolRows, ownSubagentThreads, RESTART_TOOL_OUTPUT, type RowSweepStore,
 } from "./subagent-cleanup.ts";
 
@@ -18,10 +18,17 @@ describe("rows a turn leaves open", () => {
     expect(closed).toEqual({ name: "Agent", input: "{}", ok: false, output: ENDED_TOOL_OUTPUT, durationMs: 3_000 });
   });
 
+  it("keeps a neutral wording for a stop nobody pressed, and says you only for the person's own Stop", () => {
+    expect(CUT_TOOL_OUTPUT).toBe("Stopped before it finished.");
+    expect(PERSON_STOP_TOOL_OUTPUT).toBe("You stopped the turn before this finished.");
+    expect(endedToolOutput({ stopped: true })).toBe("Stopped before it finished.");
+    expect(endedToolOutput({ stopped: true, clientStopped: true })).toBe("You stopped the turn before this finished.");
+  });
+
   it("says Stop when a person stopped the turn, and that the turn ended otherwise (an error, a limit)", () => {
     expect(endedToolOutput({ stopped: true })).toBe(CUT_TOOL_OUTPUT);
     expect(endedToolOutput({ stopped: false })).toBe(ENDED_TOOL_OUTPUT);
-    expect(endedToolOutput({ stopped: true, clientStopped: true, stopReason: "cancelled" })).toBe(CUT_TOOL_OUTPUT);
+    expect(endedToolOutput({ stopped: true, clientStopped: true, stopReason: "cancelled" })).toBe(PERSON_STOP_TOOL_OUTPUT);
     expect(endedToolOutput({ stopped: true, clientStopped: false, stopReason: "cancelled" })).toContain("engine cancelled");
     expect(endedToolOutput({ stopped: true, clientStopped: false, stopReason: "interrupted" })).toContain("engine interrupted");
     expect(endedToolOutput({ stopped: false, clientStopped: false, stopReason: "superseded" })).toContain("newer turn");

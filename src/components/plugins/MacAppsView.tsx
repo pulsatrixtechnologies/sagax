@@ -66,7 +66,7 @@ export function MacAppsInstalledSection({
                     {enabled ? t("connectApps.mac.messages.rowOn") : t("connectApps.mac.messages.rowOff")}
                   </span>
                 </span>
-                <span className="flex h-12 shrink-0 items-center"><ChevronRight size={15} className="text-ink-secondary" aria-hidden="true" /></span>
+                <ChevronRight size={15} className="shrink-0 text-ink-secondary" aria-hidden="true" />
               </button>
             </li>
           );

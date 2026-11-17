@@ -159,7 +159,7 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
   return (
     <div className={nested ? "group flex min-h-16 items-center gap-3 py-3 pl-[52px]" : cn("group", CARD_BOX)} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}
-      <div className="relative flex min-w-0 flex-1 items-start gap-3 rounded-xl">
+      <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl">
         <button type="button" onClick={() => ctx.onOpen(product)} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
           aria-label={t("connectApps.openAria", { name: product.name })} />
         <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : CARD_ICON)} />
@@ -192,7 +192,7 @@ export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor
   const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
   return (
     <div className={cn("group", CARD_BOX)} data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         aria-label={t("connectApps.openAria", { name: vendor.name })}>
         <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">

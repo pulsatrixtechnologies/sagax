@@ -435,7 +435,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
             {shownSkills.map((skill) => {
               return (
                 <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className={cn("group flex-wrap", CARD_BOX)}>
-                  <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left">
+                  <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
                     <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><FileText size={20} aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -473,7 +473,7 @@ export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = fal
   const icon = entryIcon(entry);
   return (
     <div className={cn("group", CARD_BOX)} data-installed-entry={entry.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
         <PluginIcon item={icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
@@ -515,10 +515,10 @@ export function AccountInstalledRow({ row, onOpen, scoped = false }: { row: Acco
   };
   return (
     <div className={cn("group", CARD_BOX)} data-installed-entry={`account:${row.key}`} data-harness-connector={row.key} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <span className="flex min-w-0 flex-1 items-start gap-3">
+      <span className="flex min-w-0 flex-1 items-center gap-3">
         {onOpen ? (
-          <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
-        ) : <span className="flex min-w-0 flex-1 items-start gap-3">{body}</span>}
+          <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
+        ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
         {/* connected is the state icon at the right (scoped); the pills that ask for a sign-in stay */}
         <AccountConnectorStatus row={row} installedMark={scoped ? null : <PluginStatusLabel status="connected" className="text-[12px] font-normal" />} />
       </span>

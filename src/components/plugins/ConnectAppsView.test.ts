@@ -1075,7 +1075,7 @@ describe("#4453 (2026-11-16, the owner's references): Discover's cards, banner a
     // one card and one grid for Yours and Discover (the owner: "le layout de discover doit etre le meme")
     expect(html).toContain("grid-cols-2");
     expect(html).toMatch(/data-installed-entry="[^"]*"/);
-    expect(html).toMatch(/class="group flex items-start gap-3 p-3 rounded-2xl border-\[0\.5px\][^"]*"[^>]*data-installed-entry/);
+    expect(html).toMatch(/class="group flex items-center gap-3 p-3 rounded-2xl border-\[0\.5px\][^"]*"[^>]*data-installed-entry/);
     expect(html).not.toContain("divide-y");
     expect(html).toMatch(/Reviewer<\/span><span[^>]*data-row-category[^>]*>Code<\/span>/);
     expect(html).toContain("Added by you · Reviews a pull request");

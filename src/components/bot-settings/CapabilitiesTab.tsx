@@ -239,9 +239,9 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
     return (
       <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} {...{ [ITEM_ROW_ATTR]: "" }}
         className={CARD_FRAME}>
-        <div className={cn("flex min-w-0 items-start gap-3 p-3", item.supersededBy && "flex-wrap")}>
+        <div className={cn("flex min-w-0 items-center gap-3 p-3", item.supersededBy && "flex-wrap")}>
           <button type="button" aria-expanded={expanded} onClick={onExpand} aria-label={t("capabilities.row.openAria", { name })}
-            className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
             <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><Glyph size={20} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
               <span className="block break-words text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>

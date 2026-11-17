@@ -83,7 +83,9 @@ export function pluginActionClass(variant: "fill" | "outline" = "fill"): string 
 
 /** The one card of Connect Apps (Discover's, and Yours' with its controls at the right). */
 export const CARD_FRAME = "rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] transition-colors hover:bg-ink/[0.04] motion-reduce:transition-none";
-export const CARD_BOX = `flex items-start gap-3 p-3 ${CARD_FRAME}`;
+export const CARD_BOX = `flex items-center gap-3 p-3 ${CARD_FRAME}`;
 export const CARD_ICON = "size-12 rounded-xl";
-/** Two columns of cards (one under 560px), the same grid in Yours and Discover. */
-export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[560px]:col-span-full";
+/** Two columns of cards (one under 760px), the same grid in Yours and Discover. */
+// One column while a card would be narrower than ~380px (the width a typical name, its state, switch and "..." need on one line);
+// the cards of a row stretch to one height (a list item that only wraps a card is `display: contents`, so the card is the grid item).
+export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[760px]:col-span-full [&>li:not([data-item-row])]:contents [&>li:not([data-item-row])>*]:min-w-0 [&>li:not([data-item-row])>*]:@max-[760px]:col-span-full";

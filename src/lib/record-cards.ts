@@ -73,13 +73,35 @@ function publish(key: string, entry: RecordCardEntry): void {
   for (const listener of listeners.get(key) ?? []) listener();
 }
 
-/** Answers worth keeping for the TTL: a card, and the states that will not
- * change by themselves in a minute. A busy, down, unavailable or sign-in
- * answer is asked again the next time. */
-const KEPT_STATES = new Set<string>(["no_access", "unknown", "org_refused", "org_ask"]);
+/** The states that say "not now": a re-read that ends in one of these leaves
+ * the card the person already has. */
+const TRANSIENT_STATES = new Set<string>(["busy", "down", "unavailable", "sign_in"]);
 
+/** Every answer is kept as the entry's state for the TTL, a failure too: a
+ * down or signed-out product is read again only on an explicit retry (the
+ * card's Retry, its refresh), after the TTL when the card is reopened, or,
+ * for `busy`, once the product's back-off is over (the hook's timer). Nothing
+ * that ends a read starts the next one. */
 function kept(answer: RecordCardAnswer): boolean {
-  return "card" in answer || KEPT_STATES.has(answer.state);
+  return "card" in answer || answer.state !== "busy";
+}
+
+/** At most this many reads run at once; the rest wait their turn in order. */
+export const RECORD_READS_AT_ONCE = 4;
+let running = 0;
+const waiting: Array<() => void> = [];
+function slot<T>(run: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const start = () => {
+      running += 1;
+      run().then(resolve, reject).finally(() => {
+        running -= 1;
+        waiting.shift()?.();
+      });
+    };
+    if (running < RECORD_READS_AT_ONCE) start();
+    else waiting.push(start);
+  });
 }
 
 function fresh(entry: RecordCardEntry | undefined, now = Date.now()): boolean {
@@ -134,13 +156,13 @@ export function readRecordCard(ref: RecordRef, options: ReadOptions = {}): Promi
   }
   publish(key, { answer: known?.answer, at: known?.at ?? 0, loading: true });
   const path = recordCardPath(ref, { lang, fresh: options.fresh, confirm: options.confirm || confirmed.has(recordKey(ref)) });
-  const read = api<unknown>(path).then(parseRecordCardAnswer, missFromError).then((answer) => {
+  const read = slot(() => api<unknown>(path)).then(parseRecordCardAnswer, missFromError).then((answer) => {
     inFlight.delete(key);
     if (!("card" in answer) && answer.state === "busy") {
       backoff.set(ref.product, Date.now() + (answer.retryAfter ?? RECORD_BUSY_BACKOFF_MS / 1000) * 1000);
     }
     // a refused or failed re-read leaves the card the person already has
-    const keep = known?.answer && "card" in known.answer && !("card" in answer) && !kept(answer);
+    const keep = known?.answer && "card" in known.answer && !("card" in answer) && TRANSIENT_STATES.has(answer.state);
     publish(key, { answer: keep ? known!.answer : answer, at: keep ? known!.at : Date.now(), loading: false });
     return answer;
   });
@@ -168,6 +190,8 @@ export function confirmRecordCard(ref: RecordRef): Promise<RecordCardAnswer> {
 export function resetRecordCards(): void {
   entries.clear();
   inFlight.clear();
+  waiting.length = 0;
+  running = 0;
   backoff.clear();
   confirmed.clear();
   for (const set of listeners.values()) for (const listener of set) listener();

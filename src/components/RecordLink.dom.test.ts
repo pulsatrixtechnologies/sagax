@@ -231,4 +231,22 @@ describe("the card", () => {
     await advance(50);
     expect(card()!.textContent).toContain("Imprimante de l'accueil");
   });
+
+  it("moves focus to the first action when a card pinned while loading arrives, not onto Close", async () => {
+    let release: (() => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      if (String(input).includes("/api/me/records/")) await new Promise<void>((done) => { release = done; });
+      return json(answer(ticketCard(Date.now(), "fr")));
+    }));
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    chip.focus();
+    await act(async () => { chip.click(); });
+    await advance(50);
+    expect(card()!.getAttribute("aria-busy") ?? card()!.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("true");
+    expect(document.activeElement?.getAttribute("aria-label")).not.toBe("Fermer");
+    await act(async () => { release?.(); await Promise.resolve(); });
+    await advance(50);
+    expect(document.activeElement?.hasAttribute("data-hover-card-first")).toBe(true);
+  });
 });

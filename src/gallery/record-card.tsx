@@ -62,7 +62,25 @@ const ticket = <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={t
 const company = <Card record={COMPANY_REF} label="Acme Fabrication" answerOf={companyCard(NOW, lang)} />;
 const project = <Card record={PROJECT_REF} label={lang === "fr" ? "Migration du serveur" : "Server migration"} answerOf={projectCard(NOW, lang)} />;
 const guid = <Card record={GUID_REF} label={GUID_REF.id} answerOf={guidCard(NOW, lang)} />;
+const asPinned = params.get("pinned") === "1";
 const pinned = <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={ticketCard(NOW, lang)} pinned />;
+// the stress variants of the UX gate: a two-line title, many fields, no notes, long names
+const variant = (change: (card: Record<string, unknown>) => void) => { const card = ticketCard(NOW, lang); change(card); return card; };
+const longTitle = variant((card) => { card.title = lang === "fr" ? "Imprimante de l'accueil hors ligne depuis lundi matin, redémarrée deux fois sans succès, pilote à réinstaller sur tous les postes" : "Front desk printer offline since Monday morning, restarted twice without success, driver to reinstall on every workstation"; });
+const manyFields = variant((card) => { card.fields = Array.from({ length: 12 }, (_, index) => ({ label: `${lang === "fr" ? "Champ" : "Field"} ${index + 1}`, value: `${lang === "fr" ? "Valeur" : "Value"} ${index + 1}` })); });
+const noNotes = variant((card) => { card.notes = { state: "none", items: [] }; });
+const longNames = variant((card) => {
+  card.company = { name: "Acme Fabrication et Distribution Internationale de Pièces Usinées de Précision", ref: { product: "nimbus_desk", kind: "company", id: "7310" } };
+  card.people = [{ role: "contact", label: "Contact", name: "Ada Lindqvist-Haddad de la Fontaine-Beaumont", detail: "418 555-0142 poste 1234" }, { role: "owner", label: lang === "fr" ? "Responsable" : "Owner", name: "Noor Haddad-Lindqvist de Saint-Exupéry" }];
+  card.priority = { label: lang === "fr" ? "Priorité 1 - Critique, intervention immédiate" : "Priority 1 - Critical, immediate response", level: "urgent" };
+  card.state = { label: lang === "fr" ? "En attente de la pièce du fournisseur" : "Waiting for the supplier's part", tone: "waiting" };
+});
+const variants: Record<string, ReactElement> = {
+  longtitle: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={longTitle} pinned={asPinned} />,
+  fields12: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={manyFields} pinned={asPinned} />,
+  nonotes: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={noNotes} pinned={asPinned} />,
+  longnames: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={longNames} pinned={asPinned} />,
+};
 const miss = (state: RecordCardMiss["state"], extra: Partial<RecordCardMiss> = {}) => (
   <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} miss={{ state, ...extra }} />
 );
@@ -143,7 +161,7 @@ function Page() {
       </Frame>
     );
   }
-  const single: Record<string, ReactElement> = { ticket, company, project, guid, pinned, ...states };
+  const single: Record<string, ReactElement> = { ticket, company, project, guid, pinned, ...variants, ...states };
   if (single[scene]) return <Frame>{single[scene]}</Frame>;
   return (
     <Frame>

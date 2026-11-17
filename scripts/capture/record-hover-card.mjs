@@ -9,17 +9,31 @@
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
+import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "record-hover-card"));
-const port = Number(arg("--port") ?? 5203);
+// the first free port of the gallery range (5176 to 5206; other work may hold some)
+async function freePort() {
+  for (let candidate = 5176; candidate <= 5206; candidate += 1) {
+    if (candidate === 5173) continue;
+    const free = await new Promise((done) => {
+      const probe = createServer().once("error", () => done(false)).once("listening", () => probe.close(() => done(true)));
+      probe.listen(candidate, "127.0.0.1");
+    });
+    if (free) return candidate;
+  }
+  throw new Error("no free port between 5176 and 5206");
+}
+const port = Number(arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
 const widths = [1280, 390];
+const variantScenes = ["longtitle", "fields12", "nonotes", "longnames"];
 const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
 const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }, { name: "chat-nested", action: "nested" }];
 
@@ -69,6 +83,15 @@ try {
           if (width < 600 && !["overview", "ticket", "company", "pinned", "noaccess"].includes(scene)) continue;
           await open(scene);
           await page.screenshot({ path: join(outDir, `${scene}-${lang}-${label}-${width}.png`), fullPage: true });
+        }
+        // the gate's stress variants, hovered and pinned (a pinned card scrolls inside)
+        for (const scene of variantScenes) {
+          for (const pin of [false, true]) {
+            await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene, ...(pin ? { pinned: "1" } : {}) })}`);
+            await page.waitForSelector("[data-gallery-card]", { timeout: 120_000 });
+            await page.waitForTimeout(250);
+            await page.screenshot({ path: join(outDir, `g-var-${scene}-${pin ? "pinned" : "hover"}-${lang}-${label}-${width}.png`), fullPage: true });
+          }
         }
         for (const { name, action } of chatScenes) {
           await open("chat");

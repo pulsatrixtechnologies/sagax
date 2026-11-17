@@ -210,16 +210,33 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     return () => { if (pinnedHolder === holder) pinnedHolder = null; };
   }, [pinned, closeNow]);
 
-  // pinning by keyboard or click moves focus into the card's first action
+  // pinning moves focus into the card's first action; a card still loading
+  // has none yet, so focus waits for it to arrive (and falls back to the
+  // card's first control only if nothing took focus within four seconds)
   useEffect(() => {
     if (!pinned) return;
+    let observer: MutationObserver | undefined;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    const focusFirst = () => {
+      const first = cardRef.current?.querySelector<HTMLElement>("[data-hover-card-first]");
+      first?.focus({ preventScroll: true });
+      return Boolean(first);
+    };
     const frame = requestAnimationFrame(() => {
       const box = cardRef.current;
-      if (!box) return;
-      const first = box.querySelector<HTMLElement>("[data-hover-card-first]") ?? box.querySelector<HTMLElement>(FOCUSABLE);
-      first?.focus({ preventScroll: true });
+      if (!box || focusFirst()) return;
+      observer = new MutationObserver(() => { if (focusFirst()) { observer?.disconnect(); if (giveUp) clearTimeout(giveUp); } });
+      observer.observe(box, { childList: true, subtree: true });
+      giveUp = setTimeout(() => {
+        observer?.disconnect();
+        if (!box.contains(document.activeElement)) box.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+      }, 4_000);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      if (giveUp) clearTimeout(giveUp);
+    };
   }, [pinned]);
 
   useLayoutEffect(() => {

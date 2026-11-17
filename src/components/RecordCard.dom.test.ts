@@ -197,4 +197,101 @@ describe("RecordCard", () => {
       expect(host.querySelectorAll(".animate-pulse")).toHaveLength(0);
     }
   });
+
+  it("holds no control in the tab order until pinned", () => {
+    show({ raw: ticketCard(NOW, "fr"), onAsk: () => {}, onOpenRecord: () => {} });
+    const order = (box: ParentNode) => [...box.querySelectorAll<HTMLElement>("button")].filter((button) => button.tabIndex >= 0);
+    expect(order(host)).toHaveLength(0);
+    show({ raw: ticketCard(NOW, "fr"), onAsk: () => {}, onOpenRecord: () => {}, pinned: true, onClose: () => {} });
+    expect(order(host).length).toBeGreaterThan(3);
+  });
+
+  it("wears the accent on the primary action and the ink on the others", () => {
+    show({ raw: ticketCard(NOW, "fr"), onAsk: () => {} });
+    const open = host.querySelector("[data-record-open]")!.className;
+    const ask = host.querySelector("[data-record-ask]")!.className;
+    expect(open).toContain("text-popover-accent");
+    expect(open).not.toContain("text-popover-ink");
+    expect(ask).toContain("text-popover-ink");
+    expect(ask).not.toContain("text-popover-accent");
+  });
+
+  it("asks the space the card has (a container query), not the window", () => {
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    expect(card.className).toContain("@container");
+    expect(card.innerHTML).toContain("@max-[34rem]");
+    expect(card.innerHTML).not.toContain("max-[35rem]");
+    expect(card.innerHTML).not.toContain("min-[35rem]");
+  });
+
+  it("keeps the head and the title out of the squeeze", () => {
+    show({ raw: ticketCard(NOW, "fr") });
+    expect(host.querySelector("[data-record-head]")!.className).toContain("shrink-0");
+    expect(host.querySelector("p[title]")!.className).toContain("shrink-0");
+    expect(host.querySelector("[data-record-actions]")!.className).toContain("shrink-0");
+  });
+
+  it("paints a chip's words in the popover ink, the tone only as a dot or a glyph", () => {
+    show({ raw: ticketCard(NOW, "fr") });
+    const chips = [...host.querySelectorAll<HTMLElement>("[data-record-head] .rounded-full[title]")];
+    expect(chips.length).toBeGreaterThanOrEqual(2);
+    for (const chip of chips) expect(chip.className).toContain("text-popover-ink");
+    expect(host.querySelectorAll("span[class*='text-warning'], span[class*='text-danger'], span[class*='text-success']")).toHaveLength(0);
+  });
+});
+
+describe("RecordCard without a layout engine's help", () => {
+  const rect = (top: number, bottom: number) => ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top, x: 0, y: top, toJSON() { return {}; } }) as DOMRect;
+  let restore: Array<() => void> = [];
+  const define = (proto: object, name: string, value: PropertyDescriptor) => {
+    const before = Object.getOwnPropertyDescriptor(proto, name);
+    Object.defineProperty(proto, name, { configurable: true, ...value });
+    restore.push(() => (before ? Object.defineProperty(proto, name, before) : delete (proto as Record<string, unknown>)[name]));
+  };
+  afterEach(() => { restore.forEach((undo) => undo()); restore = []; });
+
+  it("drops the rows that do not fit, whole, and says how many with a quiet +N", () => {
+    // a pane 110px tall; rows 30px apart, 28px tall: the third row would end at 88 > 110 - 20
+    define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? 110 : 0; } });
+    define(Element.prototype, "getBoundingClientRect", {
+      value(this: HTMLElement) {
+        const key = this.dataset?.fitRow;
+        if (this.dataset?.recordPane === "left") return rect(0, 110);
+        if (!key) return rect(0, 0);
+        const keys = [...new Set([...document.querySelectorAll<HTMLElement>("[data-record-pane=left] [data-fit-row]")].map((node) => node.dataset.fitRow))];
+        const at = keys.indexOf(key);
+        return rect(at * 30, at * 30 + 28);
+      },
+    });
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    const left = card.querySelector("[data-record-pane=left]")!;
+    const keys = [...new Set([...left.querySelectorAll<HTMLElement>("[data-fit-row]")].map((node) => node.dataset.fitRow))];
+    const hidden = [...left.querySelectorAll<HTMLElement>("[data-fit-hidden]")].map((node) => node.dataset.fitRow);
+    // rows 0..2 end at 28, 58, 88; the limit 110 - 20 = 90 keeps the first three whole
+    expect(keys.length).toBeGreaterThan(4);
+    expect(new Set(hidden).size).toBe(keys.length - 3);
+    expect(hidden).not.toContain(keys[0]);
+    expect(hidden).not.toContain(keys[2]);
+    expect(left.querySelector("[data-fit-more]")!.textContent).toContain(`+${keys.length - 3}`);
+    // pinned: nothing dropped, the pane scrolls
+    const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
+    expect(pinned.querySelector("[data-fit-hidden]")).toBeNull();
+    expect(pinned.querySelector("[data-fit-more]")).toBeNull();
+  });
+
+  it("keeps its notes behind one 'Notes (7)' row when it is not wider than tall, and opens them in place when pinned", () => {
+    define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    expect(card.querySelectorAll("[data-record-note]")).toHaveLength(0);
+    expect(card.textContent).toContain("Notes (7)");
+    expect(card.querySelector("[data-record-notes] button")).toBeNull();
+    const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
+    const row = pinned.querySelector<HTMLButtonElement>("[data-record-notes] button")!;
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    act(() => { row.click(); });
+    expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(2);
+    // the identity rows and the description come first
+    expect(pinned.textContent!.indexOf("Acme Fabrication")).toBeLessThan(pinned.textContent!.indexOf("L'imprimante du comptoir"));
+    expect(pinned.textContent!.indexOf("L'imprimante du comptoir")).toBeLessThan(pinned.textContent!.indexOf("Notes (7)"));
+  });
 });

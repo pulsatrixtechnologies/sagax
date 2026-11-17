@@ -15189,5 +15189,7 @@
   "recordCard.state.orgRefused": "Ton organisation bloque cette lecture.",
   "recordCard.state.orgAsk": "Ton organisation te demande de confirmer avant de lire.",
   "recordCard.state.unavailable": "Les fiches ne sont pas offertes ici.",
-  "recordCard.back": "Retour"
+  "recordCard.back": "Retour",
+  "recordCard.notes.title": "Notes ({count})",
+  "recordCard.moreRows": "{count} de plus"
 }

@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
+import { createElement, act } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { answer, ticketCard, TICKET_REF } from "./record-card-fixtures";
 import {
   confirmRecordCard, peekRecordCard, prefetchRecordCard, readRecordCard, recordBackoffLeft, recordCardPath, refreshRecordCard, resetRecordCards,
-  RECORD_BUSY_BACKOFF_MS, RECORD_CARD_TTL_MS,
+  RECORD_BUSY_BACKOFF_MS, RECORD_CARD_TTL_MS, RECORD_READS_AT_ONCE, useRecordCard,
 } from "./record-cards";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -95,5 +97,75 @@ describe("record card client", () => {
     resetRecordCards();
     reply = () => { throw new TypeError("network"); };
     expect(await readRecordCard(TICKET_REF)).toEqual({ state: "down" });
+  });
+});
+
+describe("a failed read is not read again by itself", () => {
+  function mount(ref = TICKET_REF) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    let latest: ReturnType<typeof useRecordCard> | null = null;
+    const Probe = () => { latest = useRecordCard(ref, { enabled: true }); return null; };
+    act(() => root.render(createElement(Probe)));
+    return { get read() { return latest!; }, stop: () => { act(() => root.unmount()); host.remove(); } };
+  }
+  const settle = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+
+  it.each([
+    ["down", () => json({ state: "down" })],
+    ["sign_in", () => json({ state: "sign_in" })],
+    ["unavailable", () => json({ state: "unavailable" })],
+    ["a network failure", () => { throw new TypeError("network"); }],
+  ] as const)("makes one read for %s while the card stays open", async (_name, make) => {
+    reply = make as () => Response;
+    const view = mount();
+    await settle(6_000);
+    expect(calls).toHaveLength(1);
+    expect(view.read.loading).toBe(false);
+    expect(view.read.miss).not.toBeNull();
+    view.stop();
+  });
+
+  it("reads once more on Réessayer (refresh), and again after the cache time when reopened", async () => {
+    reply = () => json({ state: "down" });
+    const view = mount();
+    await settle(2_000);
+    expect(calls).toHaveLength(1);
+    act(() => view.read.refresh());
+    await settle(2_000);
+    expect(calls).toHaveLength(2);
+    view.stop();
+    vi.setSystemTime(Date.now() + RECORD_CARD_TTL_MS + 1);
+    const again = mount();
+    await settle(1_000);
+    expect(calls).toHaveLength(3);
+    again.stop();
+  });
+
+  it("keeps a card it already has when a re-read fails", async () => {
+    await readRecordCard(TICKET_REF);
+    reply = () => json({ state: "down" });
+    await refreshRecordCard(TICKET_REF);
+    expect(peekRecordCard(TICKET_REF).answer).toHaveProperty("card");
+  });
+
+  it("reads twenty chips of one message at most once each and never more than the limit at once", async () => {
+    let running = 0, peak = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      calls.push(String(input));
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((done) => setTimeout(done, 50));
+      running -= 1;
+      return json(answer(ticketCard(Date.now(), "fr")));
+    }));
+    const refs = Array.from({ length: 20 }, (_, index) => ({ ...TICKET_REF, id: String(481000 + index) }));
+    const reads = refs.flatMap((ref) => [readRecordCard(ref), readRecordCard(ref)]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await Promise.all(reads);
+    expect(calls).toHaveLength(20);
+    expect(new Set(calls).size).toBe(20);
+    expect(peak).toBeLessThanOrEqual(RECORD_READS_AT_ONCE);
   });
 });

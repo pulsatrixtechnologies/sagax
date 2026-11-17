@@ -18,8 +18,8 @@
 // Parts of the skeleton pulse and the notes rail are adapted from Arc,
 // Copyright (c) 2026 Elia Kuratli, used under the MIT License
 // (third_party/arc-library/LICENSE).
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowUpRight, Building2, Check, CircleAlert, Copy, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
@@ -73,40 +73,98 @@ export function RecordProductMark({ product, iconUrl, className = MARK }: { prod
   return <ServiceIcon key={logo ?? ""} card={{ logo, domain: null, label: product?.name || "?" }} className={cn(className, "text-[10px] leading-none")} />;
 }
 
-const BUTTON = "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] leading-5 text-popover-ink hover:bg-popover-hover focus-visible:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
-const BUTTON_PRIMARY = cn(BUTTON, "text-popover-accent");
+const BUTTON_BASE = "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] leading-5 hover:bg-popover-hover focus-visible:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
+const BUTTON = cn(BUTTON_BASE, "text-popover-ink");
+// the primary action wears the popover's accent, in both themes
+const BUTTON_PRIMARY = cn(BUTTON_BASE, "text-popover-accent");
 const ICON_BUTTON = "inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-popover-ink-secondary hover:bg-popover-hover hover:text-popover-ink focus-visible:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
+/** Hovered, the card is a tooltip: it holds no control in the tab order until
+ * it is pinned (a dialog). Every button reads this. */
+const TabContext = createContext<number | undefined>(undefined);
+
+// A chip's words are in the popover ink over the tone's own tint (4.5:1 in
+// every skin, scripts/check-skin-contrast.mjs); the tone is a dot or a glyph.
 const TONE_CLASS: Record<RecordTone, string> = {
-  open: "bg-popover-field text-popover-ink",
-  waiting: "bg-warning/15 text-warning",
-  done: "bg-success/15 text-success",
-  alert: "bg-danger/15 text-danger",
+  open: "bg-popover-field",
+  waiting: "bg-warning/15",
+  done: "bg-success/15",
+  alert: "bg-danger/15",
+};
+const TONE_DOT: Record<RecordTone, string> = {
+  open: "bg-popover-ink-secondary",
+  waiting: "bg-warning",
+  done: "bg-success",
+  alert: "bg-danger",
 };
 const LEVEL_CLASS: Record<RecordLevel, string> = {
-  urgent: "bg-danger/15 text-danger",
-  high: "bg-warning/15 text-warning",
-  normal: "bg-popover-field text-popover-ink-secondary",
-  low: "bg-popover-field text-popover-ink-secondary",
+  urgent: "bg-danger/15",
+  high: "bg-warning/15",
+  normal: "bg-popover-field",
+  low: "bg-popover-field",
+};
+const LEVEL_GLYPH: Record<RecordLevel, string> = {
+  urgent: "text-danger",
+  high: "text-warning",
+  normal: "",
+  low: "",
 };
 
 function Chip({ className, children, title }: { className: string; children: ReactNode; title?: string }) {
-  return <span title={title} className={cn("inline-flex h-5 max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-[12px] leading-4", className)}>{children}</span>;
+  return <span title={title} className={cn("inline-flex h-5 max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
 }
 
 function Bar({ className }: { className: string }) {
   return <span aria-hidden="true" className={cn("block animate-pulse rounded-md bg-popover-ink/10 motion-reduce:animate-none", className)} />;
 }
 
-/** A pane: clipped with a fade where more waits below when the card is only
- * hovered, scrolling inside when it is pinned. */
-function Pane({ pinned, stack = false, className, children, ...data }: { pinned: boolean; stack?: boolean; className?: string; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
+/** The room a "+N" takes at the foot of a pane that drops rows. */
+const MORE_ROOM = 20;
+
+/**
+ * A pane. Pinned, it scrolls inside (a quiet fade at its foot while more
+ * waits). Only hovered (`fit`), it shows WHOLE rows: the rows that do not fit
+ * (`data-fit-row`, a row being one or two elements sharing a key) are dropped
+ * and a quiet "+N" says how many; nothing is ever clipped through a row.
+ */
+function Pane({ pinned, fit = false, className, moreClass = "pt-1", children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
+  const [hidden, setHidden] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+    const measure = () => {
+      setMore(pinned && el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+      const groups = new Map<string, HTMLElement[]>();
+      for (const node of el.querySelectorAll<HTMLElement>("[data-fit-row]")) {
+        node.removeAttribute("data-fit-hidden");
+        const key = node.dataset.fitRow ?? "";
+        groups.set(key, [...(groups.get(key) ?? []), node]);
+      }
+      if (!fit || pinned || !groups.size) {
+        setHidden(0);
+        return;
+      }
+      const top = el.getBoundingClientRect().top - el.scrollTop;
+      const limit = el.clientHeight - (parseFloat(getComputedStyle(el).paddingBottom) || 0);
+      const bottom = (nodes: HTMLElement[]) => Math.max(...nodes.map((node) => node.getBoundingClientRect().bottom - top));
+      const rows = [...groups.values()];
+      if (!rows.some((nodes) => bottom(nodes) > limit + 0.5)) {
+        setHidden(0);
+        return;
+      }
+      let dropped = 0;
+      let cut = false;
+      for (const nodes of rows) {
+        if (cut || bottom(nodes) > limit - MORE_ROOM) {
+          cut = true;
+          dropped += 1;
+          for (const node of nodes) node.setAttribute("data-fit-hidden", "");
+        }
+      }
+      setHidden(dropped);
+    };
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(el);
@@ -122,24 +180,42 @@ function Pane({ pinned, stack = false, className, children, ...data }: { pinned:
       {...data}
       data-more={more ? "below" : undefined}
       tabIndex={pinned && more ? 0 : undefined}
-      className={cn(
-        "menu-scroll min-h-0 min-w-0",
-        // side by side each pane scrolls on its own; stacked, the whole body does
-        stack
-          ? cn("min-[35rem]:overflow-hidden", pinned ? "max-[35rem]:overflow-y-auto" : "max-[35rem]:overflow-hidden")
-          : cn(pinned ? "min-[35rem]:overflow-y-auto" : "min-[35rem]:overflow-hidden", "max-[35rem]:shrink-0 max-[35rem]:overflow-visible"),
-        className,
-      )}
+      className={cn("menu-scroll min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
+      {hidden > 0 && (
+        <p data-fit-more className={cn("text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>
+          <span aria-hidden="true">+{hidden}</span>
+          <span className="sr-only">{t("recordCard.moreRows", { count: hidden })}</span>
+        </p>
+      )}
     </div>
   );
 }
 
-function PersonRow({ person }: { person: NonNullable<Card["people"]>[number] }) {
+/** The width of the space the card has, as the stacked layout reads it. */
+function useStacked(ref: RefObject<HTMLElement | null>): boolean {
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      // no layout (a test renderer) reads as wide
+      setStacked(el.clientWidth > 0 && el.clientWidth < RECORD_CARD_STACK_REM * rem);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [ref]);
+  return stacked;
+}
+
+function PersonRow({ person, fitKey }: { person: NonNullable<Card["people"]>[number]; fitKey: string }) {
   const Icon = person.role === "owner" ? UserCheck : UserRound;
   return (
-    <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={person.role}>
+    <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={person.role} data-fit-row={fitKey}>
       <Icon size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
       <span className="min-w-0 flex-1 truncate" title={person.label ? `${person.label}: ${person.name}` : person.name}>
         {person.label && <span className="sr-only">{person.label}: </span>}
@@ -156,9 +232,11 @@ function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: R
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = undefined; };
   useEffect(() => clear, []);
+  const tab = useContext(TabContext);
   return (
     <button
       type="button"
+      tabIndex={tab}
       dir="auto"
       title={name}
       data-record-company-link
@@ -180,14 +258,14 @@ function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: R
 function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
   return (
     <Chip className={LEVEL_CLASS[priority.level]} title={priority.label}>
-      {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className="shrink-0" />}
+      {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
       <span className="max-w-[11rem] truncate">{priority.label}</span>
     </Chip>
   );
 }
 
 /** The dates and key fields as one description list. */
-function Facts({ card, now, lang }: { card: Card; now: number; lang: string }) {
+function Facts({ card, now, lang, part = "all" }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields" }) {
   const tz = card.tz;
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
@@ -202,7 +280,7 @@ function Facts({ card, now, lang }: { card: Card; now: number; lang: string }) {
       key: "due",
       label: t("recordCard.date.due"),
       value: late ? (
-        <span className="text-danger">{time(dates.due, "absolute")}<span className="ms-1.5">{t("recordCard.late", { duration: late })}</span></span>
+        <span>{time(dates.due, "absolute")}<span className="ms-1.5 inline-flex items-center gap-1 font-medium"><CircleAlert size={12} aria-hidden="true" className="text-danger" />{t("recordCard.late", { duration: late })}</span></span>
       ) : time(dates.due, "absolute"),
     });
   }
@@ -224,14 +302,15 @@ function Facts({ card, now, lang }: { card: Card; now: number; lang: string }) {
       gap: dateCount > 0 && index === 0,
     });
   });
-  if (!rows.length) return null;
+  const shown = part === "all" ? rows : part === "dates" ? rows.slice(0, dateCount) : rows.slice(dateCount).map((row) => ({ ...row, gap: false }));
+  if (!shown.length) return null;
   return (
     <>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 text-[13px] leading-[18px]" data-record-facts>
-        {rows.map((row) => (
+        {shown.map((row) => (
           <div key={row.key} className="contents">
-            <dt className={cn("max-w-[9rem] truncate whitespace-nowrap text-[12px] leading-4 text-popover-ink-secondary", row.gap && "mt-1")} title={row.label}>{row.label}</dt>
-            <dd className={cn("min-w-0 break-words", row.gap && "mt-1")}>{row.value}</dd>
+            <dt data-fit-row={`f-${row.key}`} className={cn("max-w-[9rem] truncate whitespace-nowrap text-[12px] leading-4 text-popover-ink-secondary", row.gap && "mt-1")} title={row.label}>{row.label}</dt>
+            <dd data-fit-row={`f-${row.key}`} className={cn("min-w-0 break-words", row.gap && "mt-1")}>{row.value}</dd>
           </div>
         ))}
       </dl>
@@ -239,52 +318,74 @@ function Facts({ card, now, lang }: { card: Card; now: number; lang: string }) {
   );
 }
 
-function Notes({ card, now, lang, description, pinned }: { card: Card; now: number; lang: string; description?: string; pinned: boolean }) {
+function Notes({ card, now, lang, description, pinned, stacked }: { card: Card; now: number; lang: string; description?: string; pinned: boolean; stacked: boolean }) {
   const { notes } = card;
-  if (notes.state === "forbidden") return <p className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.forbidden")}</p>;
-  if (notes.state === "unavailable") return <p className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.unavailable")}</p>;
+  const [open, setOpen] = useState(false);
+  const tab = useContext(TabContext);
+  if (notes.state === "forbidden") return <p data-fit-row="n-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.forbidden")}</p>;
+  if (notes.state === "unavailable") return <p data-fit-row="n-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.unavailable")}</p>;
   // a note that is the description's own text is shown once
   const items = notes.items.filter((item) => !description || !sameText(item.text, description));
   const others = notes.total !== undefined ? Math.max(0, notes.total - notes.items.length) : 0;
   if (!items.length && !others) return null;
+  const count = notes.total ?? items.length;
+  // a card that is not wider than tall keeps its notes behind one row
+  const folded = stacked && !open;
+  const title = t("recordCard.notes.title", { count });
   return (
     <div className="flex flex-col" data-record-notes>
-      <ol className="flex flex-col">
-        {items.map((item, index) => (
-          <li key={index} className="relative flex gap-2.5 pb-2.5 last:pb-0" data-record-note>
-            <span aria-hidden="true" className="relative flex w-1.5 shrink-0 justify-center">
-              <span className="mt-[7px] size-1.5 rounded-full bg-popover-ink-secondary" />
-              {(index < items.length - 1 || others > 0) && <span className="absolute inset-y-[15px] start-1/2 w-px -translate-x-1/2 bg-popover-hairline" />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-5 text-popover-ink-secondary">
-                {item.author && <span dir="auto" className="min-w-0 truncate font-medium text-popover-ink">{item.author}</span>}
-                {item.at && <time dateTime={item.at} title={formatFull(item.at, lang, card.tz)}>{formatAbsolute(item.at, now, lang, card.tz)}</time>}
-                {item.internal === true && <span className="inline-flex items-center gap-1"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
-              </div>
-              <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-5", !pinned && "line-clamp-2")}>{item.text}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      {others > 0 && (
-        <p className="ps-4 pt-1 text-[12px] leading-4 text-popover-ink-secondary">
-          {others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })}
+      {stacked && (pinned ? (
+        <button type="button" tabIndex={tab} aria-expanded={open} data-fit-row="n-title" className={cn(BUTTON, "-mx-2 w-[calc(100%+1rem)] justify-start text-popover-ink-secondary", description && "border-t border-popover-hairline")} onClick={() => setOpen((value) => !value)}>
+          <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 transition-transform rtl:-scale-x-100", open && "rotate-90 rtl:-rotate-90")} />
+          <span>{title}</span>
+        </button>
+      ) : (
+        <p data-fit-row="n-title" className={cn("flex items-center gap-1.5 text-[12px] leading-4 text-popover-ink-secondary", description && "border-t border-popover-hairline pt-2")}>
+          <ChevronRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+          <span>{title}</span>
         </p>
+      ))}
+      {!folded && (
+        <>
+          <ol className="flex flex-col">
+            {items.map((item, index) => (
+              <li key={index} className={cn("relative flex gap-2.5 pb-2.5 last:pb-0", index === 0 && description && !stacked && "border-t border-popover-hairline pt-2")} data-record-note data-fit-row={`n-${index}`}>
+                <span aria-hidden="true" className="relative flex w-1.5 shrink-0 justify-center">
+                  <span className="mt-[7px] size-1.5 rounded-full bg-popover-ink-secondary" />
+                  {(index < items.length - 1 || others > 0) && <span className="absolute inset-y-[15px] start-1/2 w-px -translate-x-1/2 bg-popover-hairline" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-5 text-popover-ink-secondary">
+                    {item.author && <span dir="auto" className="min-w-0 truncate font-medium text-popover-ink">{item.author}</span>}
+                    {item.at && <time dateTime={item.at} title={formatFull(item.at, lang, card.tz)}>{formatAbsolute(item.at, now, lang, card.tz)}</time>}
+                    {item.internal === true && <span className="inline-flex items-center gap-1"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
+                  </div>
+                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-5", !pinned && "line-clamp-2")}>{item.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {others > 0 && (
+            <p data-fit-row="n-others" className="ps-4 pt-1 text-[12px] leading-4 text-popover-ink-secondary">
+              {others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean }) {
+  const tab = useContext(TabContext);
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
   // a number that is the title, or begins it (a company's or a project's name), is said once; a GUID never
   const hidden = isGuid(shown) || (card ? card.title.trim().toLowerCase().startsWith(shown.trim().toLowerCase()) : false);
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3 pt-2.5" data-record-head>
+    <div className="flex min-w-0 shrink-0 items-center gap-2 px-3 pt-2.5" data-record-head>
       {onBack && (
-        <button type="button" className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
+        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
           <ArrowLeft size={14} aria-hidden="true" className="rtl:-scale-x-100" />
         </button>
       )}
@@ -292,11 +393,11 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
       {!hidden && <span dir="ltr" className="min-w-12 truncate font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex shrink-0 items-center gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
         {card?.priority && <PriorityChip priority={card.priority} />}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (
-          <button type="button" className={cn(ICON_BUTTON, "-me-1.5")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
+          <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-me-1.5")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
             <X size={14} aria-hidden="true" />
           </button>
         )}
@@ -317,8 +418,9 @@ const MISS: Record<RecordCardMiss["state"], { icon: typeof Lock; sentence: strin
   org_ask: { icon: ShieldAlert, sentence: "recordCard.state.orgAsk" },
 };
 
-function CopyNumber({ text, className = BUTTON, label }: { text: string; className?: string; label?: boolean }) {
+function CopyNumber({ text, className = BUTTON, label, first }: { text: string; className?: string; label?: boolean; first?: boolean }) {
   const [done, setDone] = useState(false);
+  const tab = useContext(TabContext);
   const run = () => {
     void copyText(text).then((result) => {
       if (result !== "copied") return;
@@ -328,7 +430,7 @@ function CopyNumber({ text, className = BUTTON, label }: { text: string; classNa
   };
   const name = done ? t("recordCard.copied") : t("recordCard.copy");
   return (
-    <button type="button" className={className} aria-label={label ? undefined : name} title={name} onClick={run} data-record-copy>
+    <button type="button" tabIndex={tab} className={className} aria-label={label ? undefined : name} title={name} onClick={run} data-record-copy {...(first ? { "data-hover-card-first": "" } : {})}>
       {done ? <Check size={14} aria-hidden="true" className="text-success" /> : <Copy size={14} aria-hidden="true" />}
       {label && <span>{name}</span>}
     </button>
@@ -346,7 +448,19 @@ export function missSentence(miss: RecordCardMiss, product: RecordCardProduct | 
   return t(MISS[miss.state].sentence as Parameters<typeof t>[0], { product: product?.name ?? t("recordCard.productFallback") });
 }
 
+/** The card's outer box: it is the container the stacked layout asks (the
+ * space the card has, not the window's), and carries the width. */
+function Shell({ wrap, width, frameClass, data, busy, children }: { wrap: RefObject<HTMLDivElement | null>; width: string; frameClass: string; data: Record<string, string>; busy?: boolean; children: ReactNode }) {
+  return (
+    <div ref={wrap} className={cn("@container", width)} {...data} aria-busy={busy ? "true" : undefined}>
+      <div className={frameClass}>{children}</div>
+    </div>
+  );
+}
+
 export function RecordCard({ record, label, kindName, product, read, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, onBack, now: clock }: RecordCardProps) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const stacked = useStacked(wrap);
   const lang = activeLocale();
   const now = clock ?? Date.now();
   const { card, miss, loading } = read;
@@ -356,124 +470,138 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const hasNotes = Boolean(card && (card.notes.items.length > 0 || (card.notes.total ?? 0) > card.notes.items.length || card.notes.state === "forbidden" || card.notes.state === "unavailable"));
   const right = Boolean(card && (description || hasNotes));
   const split = !card || right;
-  const frame = cn(
-    "flex max-h-[min(20rem,calc(100vh-1rem))] flex-col overflow-hidden rounded-xl popover-surface menu-surface text-[13px] leading-5 text-popover-ink max-[35rem]:max-h-[min(32rem,calc(100vh-1rem))]",
-    split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]",
-  );
+  // wider than tall, never taller than wide: stacked (a narrow space), the
+  // card is no taller than it is wide
+  const frame = "flex w-full max-h-[min(20rem,calc(100vh-1rem))] @max-[34rem]:max-h-[min(100cqw,calc(100vh-1rem))] flex-col overflow-hidden rounded-xl popover-surface menu-surface text-[13px] leading-5 text-popover-ink";
+  const width = split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]";
   const data = { "data-record-card-body": "", "data-layout": split ? "split" : "compact", "data-record-state": card ? "card" : miss ? miss.state : "loading" };
+  const tab = pinned ? undefined : -1;
 
   // no card: the head, then one icon, one sentence and its one action
   if (!card && miss) {
     const { icon: Icon } = MISS[miss.state];
+    const first = { "data-hover-card-first": "" };
     const action = (() => {
-      if (miss.state === "org_ask") return <button type="button" className={BUTTON_PRIMARY} onClick={read.confirm} data-hover-card-first="">{t("recordCard.readRecord")}</button>;
-      if (miss.state === "down") return <button type="button" className={BUTTON_PRIMARY} onClick={read.refresh} data-hover-card-first="">{t("recordCard.retry")}</button>;
-      if (miss.state === "not_connected" && onConnect) return <button type="button" className={BUTTON_PRIMARY} onClick={onConnect} data-hover-card-first="">{t("recordCard.connect")}</button>;
-      if (miss.state === "sign_in" && onSignIn) return <button type="button" className={BUTTON_PRIMARY} onClick={onSignIn} data-hover-card-first="">{t("recordCard.signIn")}</button>;
+      if (miss.state === "org_ask") return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={read.confirm} {...first}>{t("recordCard.readRecord")}</button>;
+      if (miss.state === "down") return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={read.refresh} {...first}>{t("recordCard.retry")}</button>;
+      if (miss.state === "not_connected" && onConnect) return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={onConnect} {...first}>{t("recordCard.connect")}</button>;
+      if (miss.state === "sign_in" && onSignIn) return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={onSignIn} {...first}>{t("recordCard.signIn")}</button>;
       return null;
     })();
     return (
-      <div className={frame} {...data}>
-        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
-        <div role="status" className="flex flex-col items-center gap-1 px-6 pb-1 pt-4 text-center" title={miss.rule?.text}>
-          <Icon size={16} aria-hidden="true" className="text-popover-ink-secondary" />
-          <p className="max-w-[28rem] text-[13px] leading-5">{missSentence(miss, product)}</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-1 px-2 pb-2.5 pt-1">
-          {action}
-          <CopyNumber text={copy} label className={action ? BUTTON : cn(BUTTON, "text-popover-accent")} />
-        </div>
-      </div>
+      <TabContext.Provider value={tab}>
+        <Shell wrap={wrap} width={width} frameClass={frame} data={data}>
+          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
+          <div role="status" className="flex shrink-0 flex-col items-center gap-1 px-6 pb-1 pt-4 text-center" title={miss.rule?.text}>
+            <Icon size={16} aria-hidden="true" className="text-popover-ink-secondary" />
+            <p className="max-w-[28rem] text-[13px] leading-5">{missSentence(miss, product)}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-1 px-2 pb-2.5 pt-1">
+            {action}
+            <CopyNumber text={copy} label first={!action} className={action ? BUTTON : BUTTON_PRIMARY} />
+          </div>
+        </Shell>
+      </TabContext.Provider>
     );
   }
 
   // loading: the head at once, a skeleton in each pane
   if (!card) {
     return (
-      <div className={frame} {...data} aria-busy="true">
-        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} skeleton />
-        <div className="px-3 pb-2.5 pt-1.5"><Bar className="h-5 w-3/5" /></div>
-        <div className="flex min-h-0 flex-1 border-t border-popover-hairline max-[35rem]:flex-col">
-          <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 min-[35rem]:flex-[2_1_0%] min-[35rem]:border-e min-[35rem]:border-popover-hairline">
-            <Bar className="h-4 w-4/5" />
-            <Bar className="h-4 w-3/5" />
-            <Bar className="h-4 w-2/5" />
+      <TabContext.Provider value={tab}>
+        <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy>
+          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} skeleton />
+          <div className="shrink-0 px-3 pb-2.5 pt-1.5"><Bar className="h-5 w-3/5" /></div>
+          <div className="flex min-h-0 flex-1 border-t border-popover-hairline @max-[34rem]:flex-col">
+            <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 @min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline">
+              <Bar className="h-4 w-4/5" />
+              <Bar className="h-4 w-3/5" />
+              <Bar className="h-4 w-2/5" />
+            </div>
+            <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:border-t @max-[34rem]:border-popover-hairline">
+              <Bar className="h-4 w-full" />
+              <Bar className="h-4 w-11/12" />
+              <Bar className="h-4 w-2/3" />
+            </div>
           </div>
-          <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 min-[35rem]:flex-[3_1_0%] max-[35rem]:border-t max-[35rem]:border-popover-hairline">
-            <Bar className="h-4 w-full" />
-            <Bar className="h-4 w-11/12" />
-            <Bar className="h-4 w-2/3" />
-          </div>
-        </div>
-        <span role="status" className="sr-only">{t("recordCard.loading")}</span>
-      </div>
+          <span role="status" className="sr-only">{t("recordCard.loading")}</span>
+        </Shell>
+      </TabContext.Provider>
     );
   }
 
   const people = card.people ?? [];
   const owner = people.find((person) => person.role === "owner");
   const others = people.filter((person) => person !== owner);
-  // the priority rides the last row of people; with no one, the company's
   const showPeopleBlock = Boolean(card.company || people.length);
   const openUrl = card.openUrl;
   const clockText = (card.asOf ?? (read.at ? new Date(read.at).toISOString() : undefined));
   const productLabel = productName ?? product?.name;
   const upToDate = clockText ? t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) }) : "";
+  const first = { "data-hover-card-first": "" };
 
   return (
-    <div className={frame} {...data} aria-busy={loading ? "true" : undefined}>
-      <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
-      <p dir="auto" className="line-clamp-2 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
-      <Pane pinned={pinned} stack className="flex flex-1 border-t border-popover-hairline max-[35rem]:flex-col" data-record-panes="">
-        <Pane pinned={pinned} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "min-[35rem]:flex-[2_1_0%] min-[35rem]:border-e min-[35rem]:border-popover-hairline max-[35rem]:border-b max-[35rem]:border-popover-hairline" : "flex-1")}>
-          {showPeopleBlock && (
-            <div className="flex flex-col gap-1">
-              {card.company && (
-                <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-company>
-                  <Building2 size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-                  {card.company.ref && onOpenRecord ? (
-                    <CompanyChip name={card.company.name} companyRef={card.company.ref} onOpen={onOpenRecord} />
-                  ) : (
-                    <span dir="auto" className="min-w-0 flex-1 truncate" title={card.company.name}>{card.company.name}</span>
-                  )}
-                </div>
-              )}
-              {others.map((person, index) => <PersonRow key={`${person.role}-${index}`} person={person} />)}
-              {owner && <PersonRow person={owner} />}
-            </div>
-          )}
-          <Facts card={card} now={now} lang={lang} />
-        </Pane>
-        {right && (
-          <Pane pinned={pinned} data-record-pane="right" className="flex flex-col gap-2 px-3 py-2 min-[35rem]:flex-[3_1_0%]">
-            {description && <p dir="auto" className={cn("whitespace-pre-line break-words", pinned ? "" : "line-clamp-4")} data-record-description>{description}</p>}
-            {description && hasNotes && <hr className="border-0 border-t border-popover-hairline" />}
-            {hasNotes && <Notes card={card} now={now} lang={lang} description={description} pinned={pinned} />}
+    <TabContext.Provider value={tab}>
+      <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy={loading}>
+        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
+        <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
+        {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
+        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-1" className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
+          <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline" : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+            {showPeopleBlock && (
+              <div className="flex flex-col gap-1">
+                {card.company && (
+                  <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-company data-fit-row="p-company">
+                    <Building2 size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
+                    {card.company.ref && onOpenRecord ? (
+                      <CompanyChip name={card.company.name} companyRef={card.company.ref} onOpen={onOpenRecord} />
+                    ) : (
+                      <span dir="auto" className="min-w-0 flex-1 truncate" title={card.company.name}>{card.company.name}</span>
+                    )}
+                  </div>
+                )}
+                {others.map((person, index) => <PersonRow key={`${person.role}-${index}`} person={person} fitKey={`p-${index}`} />)}
+                {owner && <PersonRow person={owner} fitKey="p-owner" />}
+              </div>
+            )}
+            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} />
           </Pane>
-        )}
-      </Pane>
-      <div className="flex flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
-        {openUrl && (
-          <button type="button" className={cn(BUTTON_PRIMARY, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} data-hover-card-first="" data-record-open>
-            <span className="truncate">{productLabel ? t("recordCard.openIn", { product: productLabel }) : t("recordCard.open")}</span>
-            <ArrowUpRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
-          </button>
-        )}
-        {onAsk && (
-          // the label stays for the wide two-pane card; narrow or left-pane-only, an icon with its tooltip
-          <button type="button" className={cn(BUTTON, "px-1.5")} onClick={onAsk} aria-label={t("recordCard.ask")} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : { "data-hover-card-first": "" })}>
-            <MessageSquareText size={14} aria-hidden="true" className="shrink-0" />
-            <span className={split ? "max-[35rem]:hidden" : "hidden"}>{t("recordCard.ask")}</span>
-          </button>
-        )}
-        <CopyNumber text={copy} className={ICON_BUTTON} />
-        <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1 text-[12px] leading-4 text-popover-ink-secondary">
-          {clockText && <time dateTime={clockText} className={cn("whitespace-nowrap", split ? "max-[35rem]:hidden" : "hidden")}>{upToDate}</time>}
-          <button type="button" className={ICON_BUTTON} aria-label={upToDate ? `${t("recordCard.refresh")}. ${upToDate}` : t("recordCard.refresh")} title={upToDate ? `${upToDate} (${t("recordCard.refresh")})` : t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
-            <RotateCw size={14} aria-hidden="true" className={cn(loading && "animate-spin motion-reduce:animate-none")} />
-          </button>
-        </span>
-      </div>
-    </div>
+          {right && (
+            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+              {description && <p dir="auto" className={cn("whitespace-pre-line break-words", pinned ? "" : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
+              {hasNotes && <Notes card={card} now={now} lang={lang} description={description} pinned={pinned} stacked={stacked} />}
+            </Pane>
+          )}
+          {/* a card not wider than tall says who and what it says first; the key fields come last (and are the first dropped) */}
+          {stacked && right && card.fields?.length ? (
+            <div className="flex shrink-0 flex-col gap-2 border-t border-popover-hairline px-3 py-2 [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden">
+              <Facts card={card} now={now} lang={lang} part="fields" />
+            </div>
+          ) : null}
+        </Pane>
+        <div className="flex shrink-0 flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
+          {openUrl && (
+            <button type="button" tabIndex={tab} className={cn(BUTTON_PRIMARY, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} {...first} data-record-open>
+              <span className="truncate">{productLabel ? t("recordCard.openIn", { product: productLabel }) : t("recordCard.open")}</span>
+              <ArrowUpRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+            </button>
+          )}
+          {onAsk && (
+            // the label stays for the wide two-pane card; narrow or left-pane-only, an icon with its tooltip
+            <button type="button" tabIndex={tab} className={cn(BUTTON, "px-1.5")} onClick={onAsk} aria-label={t("recordCard.ask")} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : first)}>
+              <MessageSquareText size={14} aria-hidden="true" className="shrink-0" />
+              <span className={split ? "@max-[34rem]:hidden" : "hidden"}>{t("recordCard.ask")}</span>
+            </button>
+          )}
+          <CopyNumber text={copy} className={ICON_BUTTON} first={!openUrl && !onAsk} />
+          <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1 text-[12px] leading-4 text-popover-ink-secondary">
+            {clockText && <time dateTime={clockText} className={cn("whitespace-nowrap", split ? "@max-[34rem]:hidden" : "hidden")}>{upToDate}</time>}
+            <button type="button" tabIndex={tab} className={ICON_BUTTON} aria-label={upToDate ? `${t("recordCard.refresh")}. ${upToDate}` : t("recordCard.refresh")} title={upToDate ? `${upToDate} (${t("recordCard.refresh")})` : t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
+              <RotateCw size={14} aria-hidden="true" className={cn(loading && "animate-spin motion-reduce:animate-none")} />
+            </button>
+          </span>
+        </div>
+      </Shell>
+    </TabContext.Provider>
   );
 }

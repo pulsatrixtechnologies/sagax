@@ -101,7 +101,9 @@ describe("trust controls in the real renderer", () => {
       body: JSON.stringify({ fallback: [{ instanceId: bot.modelSelection.instanceId, model: bot.modelSelection.model }] }),
     });
     expect(seeded.ok).toBe(true);
-    await evaluate("document.querySelector('[data-bot-profile-back]').click(); true");
+    // A sub-page opens in its own window over the profile: close it, then open Model from General.
+    await evaluate("document.querySelector('[data-bot-page-modal] > [data-dialog-close]').click(); true");
+    await expect.poll(() => evaluate("!document.querySelector('[data-bot-page-modal]') && Boolean(document.querySelector('[data-bot-profile-subpage-open=model]'))")).toBe(true);
     await evaluate("document.querySelector('[data-bot-profile-subpage-open=model]').click(); true");
     expect(await snapshot()).toContain("when the provider proves the request never started");
     await expect.poll(() => evaluate("Boolean(document.querySelector('button[aria-label$=\"from the fallback list\"]'))"), { timeout: 10_000 }).toBe(true);

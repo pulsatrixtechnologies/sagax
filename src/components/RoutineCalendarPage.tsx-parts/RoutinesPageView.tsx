@@ -2,15 +2,11 @@ import type { ComponentType } from "react";
 import {
   CalendarClock,
   CalendarDays,
-  CheckCheck,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
   Clock3,
-  FileText,
-  List,
   Loader2,
-  Pause,
   Plus,
   Video,
   Webhook,
@@ -19,8 +15,6 @@ import {
 import { DetailPanel } from "@/components/DetailPanel";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
 import { RightRailStrip } from "@/components/RightRail";
-import { RoutineList } from "@/components/routines/RoutineList";
-import { RoutineGroupedList } from "@/components/routines/RoutineGroupedList";
 import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems } from "@/components/routines/RoutineRowMenu";
 import {
   PAGE_COLUMN,
@@ -28,19 +22,15 @@ import {
   PAGE_FILTER_RESET,
   PAGE_ACTION_BUTTON,
   PAGE_INDICATOR,
-  PAGE_MENU_COUNT,
   PAGE_POPOVER,
   PAGE_SCROLL,
   PageFilters,
   PageHeader,
-  PageHeading,
-  PageMenu,
-  PageMenuItem,
-  PageMenuSeparator,
-  PageSegment,
+  PageTabs,
   PageTopStrip,
 } from "@/components/content-page";
 import { RoutineLogs } from "@/components/routines/RoutineLogs";
+import { RoutinesOverview } from "@/components/routines/RoutinesOverview";
 import { RoutineScopeBar } from "@/components/routines/RoutineScopeBar";
 import { RoutineAwayBanner } from "@/components/routines/RoutineAwayBanner";
 import { TriggersPanel } from "@/components/TriggersPanel";
@@ -49,11 +39,10 @@ import { addDays, atLocalTime, calendarRangeLabel } from "@/lib/routine-calendar
 import { scheduleLabel } from "@/lib/schedule-label";
 import { PillSelect } from "../SettingsPrimitives";
 import { t } from "@/lib/i18n";
-import { LimitWarnings } from "@/components/automations/LimitWarnings";
-import type { RoutineGroupBy } from "@/lib/routine-grouping";
+import { folderMoveTargets, moveRoutinesToFolder } from "@/lib/routine-folder-actions";
+import { LimitMoveMenu } from "@/components/automations/LimitMoveMenu";
 import type { Routine } from "@/lib/routines";
 import type { EventSeed } from "./types";
-import { nextHour } from "./helpers";
 import type { RoutinesPageModel } from "./useRoutinesPage";
 
 /** Sibling calendar chrome still declared in the parent module; passed in so
@@ -63,7 +52,6 @@ export type RoutinesPageChrome = {
   QuickComposer: ComponentType<any>;
   EventEditor: ComponentType<any>;
   EventDetails: ComponentType<any>;
-  PausedList: ComponentType<any>;
   RoutineWakeBar: ComponentType<any>;
 };
 
@@ -73,7 +61,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
     QuickComposer,
     EventEditor,
     EventDetails,
-    PausedList,
     RoutineWakeBar,
   } = chrome;
   const {
@@ -83,25 +70,25 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
     section, setSection, scheduleView, setScheduleView, scoped, viewDays,
     anchor, setAnchor, botFilter, setBotFilter, routineFilter, setRoutineFilter,
     statusFilter, setStatusFilter, calls, setCalls, quick, setQuick, editor, setEditor,
-    setSelected, pausedOpen, setPausedOpen, botsOpen, setBotsOpen,
+    setSelected, botsOpen, setBotsOpen,
     webhookCreateRequest, setWebhookCreateRequest, error, setError, visibleBots,
     rangeStart, markers, scopedRoutines, scopedRuns, botChoices,
-    loadCalls, items, liveSelected, paused, running, unseenFailures,
+    loadCalls, items, liveSelected, running, unseenFailures,
     filteredRoutines, upcoming, inFlightRuns, filteredRuns, routineOwnerOf, clearLogs,
     rowMenu, setRowMenu, renamingId, setRenamingId, viewerId, groupBy, setGroupBy,
     createInGroup, closeRowMenu, duplicateRoutine, renameRoutine, openRoutine,
-    openLogs, openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
+    openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
     handleWebhookCreateHandled, openCreate, upsertCall,
-    scopeShown, calendarGrid, hideStatus, activeFilters, clearFilters, closeNavMenu,
-    sectionName, openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
-    openSidebarRoutine, collapseSidebar, pendingSlot,
+    scopeShown, calendarGrid, hideStatus, activeFilters, clearFilters,
+    openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
+    openSidebarRoutine, collapseSidebar, pendingSlot, overviewShown,
   } = m;
 
   const filtersMenu = section !== "webhooks" && (
-    <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters}>
+    <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters} labelled={overviewShown}>
         {scopeShown && <div>
           <span className={PAGE_FIELD_LABEL}>{t("routines.scope.label")}</span>
-          <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
+          <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced || overviewShown} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
         </div>}
         <div className="block">
           <span className={PAGE_FIELD_LABEL}>{t("routineCalendar.filterBot")}</span>
@@ -112,19 +99,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
             options={[{ value: "all", label: t("usage.allBots") }, ...botChoices.map((bot) => ({ value: bot.id, label: bot.name }))]}
           />
         </div>
-        {section === "calendar" && scheduleView === "list" && <div className="block" data-routine-group-by="">
-          <span className={PAGE_FIELD_LABEL}>{t("routines.group.label")}</span>
-          <PillSelect
-            ariaLabel={t("routines.group.label")}
-            value={groupBy}
-            onChange={(next) => setGroupBy(next as RoutineGroupBy)}
-            options={[
-              { value: "bot", label: t("routines.group.bot") },
-              { value: "folder", label: t("routines.group.folder") },
-              { value: "none", label: t("routines.group.none") },
-            ]}
-          />
-        </div>}
         {calendarGrid && <div className="block">
           <span className={PAGE_FIELD_LABEL}>{t("routineCalendar.scheduleRange")}</span>
           <PillSelect
@@ -141,19 +115,10 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         {activeFilters > 0 && <button type="button" data-routine-filter-reset onClick={clearFilters} className={PAGE_FILTER_RESET}>{t("routines.scope.reset")}</button>}
     </PageFilters>
   );
-  const automationActions = (
-    <>
-          <PageMenu name="automations" menuRef={navMenuRef} label={t("routineCalendar.automationMenu")} title={paused.length > 0 ? `${t("routineCalendar.automationMenu")} (${t("routineCalendar.pausedMenu")} ${paused.length})` : t("routineCalendar.automationMenu")} badge={paused.length}>
-              <PageMenuItem icon={CalendarDays} current={section === "calendar"} onClick={() => { closeNavMenu(); setSection("calendar"); }}>{routinesOnly ? t("routineCalendar.scheduledRoutines") : t("routines.drawer.schedule")}</PageMenuItem>
-              <PageMenuItem icon={FileText} current={section === "logs"} trailing={unseenFailures > 0 ? <span className="ml-auto rounded-full bg-danger/10 px-1.5 text-[11px] text-danger">{unseenFailures}</span> : undefined} onClick={() => { closeNavMenu(); setSection("logs"); setRoutineFilter(undefined); }}>{t("routines.logs")}</PageMenuItem>
-              {!routinesOnly && <PageMenuItem icon={Webhook} current={section === "webhooks"} trailing={state.webhooks.length > 0 ? <span className={PAGE_MENU_COUNT}>{state.webhooks.length}</span> : undefined} onClick={() => { closeNavMenu(); setSection("webhooks"); }}>{t("routines.webhooks")}</PageMenuItem>}
-              <PageMenuSeparator />
-              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setQuick(null); setEditor(null); setSelected(null); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
-              <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
-          </PageMenu>
+  const newMenu = (compact: boolean) => (
           <details ref={newMenuRef} className="group relative">
-            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={PAGE_ACTION_BUTTON}>
-              <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("sidebar.new")}</span>
+            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={cn(PAGE_ACTION_BUTTON, compact && "@max-[40rem]/routines:size-9 @max-[40rem]/routines:justify-center @max-[40rem]/routines:gap-0 @max-[40rem]/routines:px-0")}>
+              <Plus size={15} aria-hidden="true" /><span className={compact ? "@max-[40rem]/routines:sr-only" : "@max-[30rem]/page-header:sr-only"}>{compact ? t("routinesOverview.new") : t("sidebar.new")}</span>
             </summary>
             <div role="group" aria-label={t("routineCalendar.newAutomation")} className={cn(PAGE_POPOVER, "w-[280px] min-w-[200px] gap-0.5 p-1.5")}>
               <button type="button" aria-label={t("routineCalendar.createTaskAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "routine" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
@@ -170,8 +135,31 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               </button>}
             </div>
           </details>
+  );
+  const automationActions = (
+    <>
+
+
+          <LimitMoveMenu botFilter={botFilter} menuRef={navMenuRef} />
+          {!overviewShown && newMenu(false)}
     </>
   );
+  // The tabs under the title: the Overview (list view), the Calendar, the Run
+  // log and the Webhooks (2026-11-17); they replace the List and Calendar
+  // switch and the ☰ menu's section entries.
+  // Row menu: "View runs" opens the run log on that routine; a team goal's room opens from its row too.
+  const viewRuns = (routine: Routine) => { setStatusFilter("all"); setRoutineFilter(routine.id); setSection("logs"); };
+  const openRoomOf = (routine: Routine) => {
+    const room = routine.target === "room-goal" ? state.groups.find((group) => group.id === routine.groupId) : undefined;
+    return room ? () => onOpenRoom(room.id) : undefined;
+  };
+  const tab = section === "logs" ? "logs" : section === "webhooks" ? "webhooks" : scheduleView === "calendar" ? "calendar" : "overview";
+  const selectTab = (next: "overview" | "calendar" | "logs" | "webhooks") => {
+    if (next === "logs") { setRoutineFilter(undefined); setSection("logs"); return; }
+    if (next === "webhooks") { setSection("webhooks"); return; }
+    setSection("calendar");
+    setScheduleView(next === "calendar" ? "calendar" : "list");
+  };
   return (
     <main className={cn("flex h-full min-w-0 flex-col bg-app", fill ? "flex-1" : embedded ? "w-[min(820px,48vw)] min-w-[420px] shrink-0 border-l border-hairline/40" : "flex-1 animate-workspace-in")}>
       {fill && <PageTopStrip />}
@@ -179,22 +167,23 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         name="automations"
         icon={CalendarDays}
         title={t("sidebar.nav.automations")}
-        section={sectionName}
-        onRoot={() => setSection("calendar")}
         count={scopedRoutines.length === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count: scopedRoutines.length })}
         subtitle={t("routineCalendar.subtitle")}
         titleProps={{ "data-tour": "automations-page" }}
         {...(fill ? dragProps : {})}
         topbar={fill}
+        aligned
         inset={!embedded && !fill && macInset}
         style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
         primaryStyle={noDragStyle ?? windowNoDragStyle}
         actionsStyle={{ ...(noDragStyle ?? windowNoDragStyle), ...controlsShiftStyle }}
-        primary={(section === "calendar" || filtersMenu) && <>
-            {section === "calendar" && <PageSegment label={t("routines.view.label")} value={scheduleView} onChange={setScheduleView} options={[
-              { value: "list", label: t("routines.view.list"), icon: List },
-              { value: "calendar", label: t("connectApps.capabilities.calendar"), icon: CalendarDays },
-            ]} />}
+        primary={<>
+            <PageTabs label={t("routines.view.label")} value={tab} onChange={selectTab} data-routines-tabs="" options={[
+              { value: "overview", label: t("routinesOverview.tab.overview") },
+              { value: "calendar", label: t("connectApps.capabilities.calendar") },
+              { value: "logs", label: t("routines.logs"), badge: unseenFailures, badgeLabel: t("routineCalendar.openProblemLogs"), onBadge: () => setStatusFilter("problems") },
+              ...(routinesOnly ? [] : [{ value: "webhooks" as const, label: t("routines.webhooks"), badge: undefined }]),
+            ]} />
             {section === "calendar" && scheduleView === "calendar" && <>
               <div className="flex shrink-0 items-center">
                 <button type="button" onClick={() => setAnchor((current) => addDays(current, -viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.previous")} title={t("routines.previous")}><ChevronLeft size={16} /></button>
@@ -203,11 +192,10 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               </div>
               <div data-automations-range className="min-w-0 truncate text-[14px] font-medium text-ink">{calendarRangeLabel(rangeStart, viewDays)}</div>
             </>}
-            {filtersMenu && <div className="ml-auto">{filtersMenu}</div>}
+            {filtersMenu && !overviewShown && <div className="ml-auto">{filtersMenu}</div>}
           </>}
         actions={<>
             {section !== "webhooks" && running > 0 && <span role="status" data-automations-running title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className={cn(PAGE_INDICATOR, "text-accent")}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{running}</span>}
-            {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
             {automationActions}
           </>}
         below={<>
@@ -230,24 +218,26 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
       <RoutineWakeBar />
 
       {section === "webhooks" ? <TriggersPanel bots={visibleBots} createRequest={webhookCreateRequest} onCreateHandled={handleWebhookCreateHandled} /> : section === "logs" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs key={state.routinesFocus.nonce} initialPeriod={state.routinesFocus.period} onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })} runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
       ) : scheduleView === "list" ? (
-        <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
-          <PageHeading title={t("routines.title")} subtitle={t("routineCalendar.allSchedules")} />
-          <LimitWarnings botFilter={botFilter} />
-          {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
-            onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-            renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
-            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
-              onCreate={createInGroup} onDuplicate={duplicateRoutine}
-              onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-              renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}
+        <div className={PAGE_SCROLL}><div className={cn(PAGE_COLUMN, "max-w-6xl")}>
+          <RoutinesOverview trendRuns={state.routineTrendRuns} routines={filteredRoutines} runs={botFilter === "all" ? scopedRuns : scopedRuns.filter((run) => run.botId === botFilter)} bots={state.bots} viewerPrincipalId={viewerId}
+            loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error}
+            filtersMenu={filtersMenu} newMenu={newMenu(true)}
+            onOpen={openRoutine} onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
+            renamingId={renamingId} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)}
+            onFailedRuns={(period) => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems", period })}
+            groupBy={groupBy} onGroupBy={setGroupBy} allRoutines={state.routines} onCreate={createInGroup} onDuplicate={duplicateRoutine} onViewRuns={viewRuns} openRoomOf={openRoomOf}
+            onOpenRun={openRun} onRenameStart={(routine) => setRenamingId(routine.id)} />
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
               routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state: { config: state.config, routineRuns: state.routineRuns }, dispatch, close: closeRowMenu,
               onOpen: () => openRoutine(rowMenu.routine),
               onDuplicate: () => duplicateRoutine(rowMenu.routine),
               onRename: () => setRenamingId(rowMenu.routine.id),
+              onViewRuns: () => viewRuns(rowMenu.routine),
+              onOpenRoom: openRoomOf(rowMenu.routine),
+              moveTo: folderMoveTargets(rowMenu.routine, state.routineFolders?.[rowMenu.routine.botId] ?? [], (folder) => void moveRoutinesToFolder(dispatch, rowMenu.routine.botId, [rowMenu.routine], folder)),
             })} />
           </RoutineMenuPortal>}
           {!routinesOnly && calls.some((call) => botFilter === "all" || call.botIds.includes(botFilter)) && <section className="space-y-2" aria-label={t("routineCalendar.scheduledCalls")}><h2 className="text-[15px] font-semibold text-ink">{t("routineCalendar.scheduledCalls")}</h2>{calls.filter((call) => botFilter === "all" || call.botIds.includes(botFilter)).map((call) => <button key={call.id} type="button" onClick={() => setSelected({ kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : atLocalTime(Date.now(), call.schedule.time), durationMinutes: call.durationMinutes, call })} className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card p-4 text-left hover:bg-raised"><Video size={17} className="text-accent" /><span><span className="block text-[13px] font-medium text-ink">{call.name}</span><span className="mt-1 block text-[12px] text-ink-secondary">{scheduleLabel(call.schedule)}</span></span></button>)}</section>}
@@ -264,9 +254,9 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
       )}
       </div>
 
-      {quick && <QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed: EventSeed) => { setQuick(null); setSelected(null); setPausedOpen(false); setEditor(seed); }} onSavedRoutine={(routine: Routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} />}
-      {/* 2026-11-01 (no modals): the editor, an event's details and the paused
-          list share the one right detail panel (DetailPanel.tsx); the editor
+      {quick && <QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed: EventSeed) => { setQuick(null); setSelected(null); setEditor(seed); }} onSavedRoutine={(routine: Routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} />}
+      {/* 2026-11-01 (no modals): the editor and an event's details share
+          the one right detail panel (DetailPanel.tsx); the editor
           opened from the details goes back to them when it closes. */}
       {editor && (
         <DetailPanel bare label={editor.routine || editor.call ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")} onClose={() => setEditor(null)} data-calendar-editor-panel="">
@@ -274,7 +264,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         </DetailPanel>
       )}
       {!editor && liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={(mode: "edit" | "view" = "edit") => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined, mode }; setEditor(seed); }} onCallChanged={(id?: string) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
-      {!editor && !liveSelected && pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine: Routine) => { const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine, mode: "edit" }); }} onOpenRoom={onOpenRoom} />}
       </div>
     </main>
   );

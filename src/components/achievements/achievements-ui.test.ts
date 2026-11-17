@@ -460,13 +460,22 @@ describe("Automations and Achievements share their pieces", () => {
     const automationsHook = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/useRoutinesPage.ts"), "utf8");
     const achievements = readFileSync(join(process.cwd(), "src/components/achievements/AchievementsScreen.tsx"), "utf8");
     const body = readFileSync(join(process.cwd(), "src/components/achievements/AchievementsPage.tsx"), "utf8");
-    for (const piece of ["<PageHeader", "<PageFilters", "<PageMenu ", "<PageMenuItem", "<PageSegment"]) {
+    const limitMenu = readFileSync(join(process.cwd(), "src/components/automations/LimitMoveMenu.tsx"), "utf8");
+    for (const piece of ["<PageHeader", "<PageFilters"]) {
       expect(automations, piece).toContain(piece);
       expect(achievements, piece).toContain(piece);
     }
+    // the Routines menu (one row, only while a provider is near its limit) is the same menu pieces
+    for (const piece of ["<PageMenu ", "<PageMenuItem"]) {
+      expect(limitMenu, piece).toContain(piece);
+      expect(achievements, piece).toContain(piece);
+    }
+    // 2026-11-17: Automations has tabs under its title (PageTabs) where Achievements keeps its segment
+    expect(automations).toContain("<PageTabs");
+    expect(achievements).toContain("<PageSegment");
     expect(automationsHook).toContain("useDismissMenus(");
     expect(achievements).toContain("useDismissMenus(");
-    expect(automations).toContain("<PageHeading");
+    expect(readFileSync(join(process.cwd(), "src/components/routines/RoutinesOverview.tsx"), "utf8")).toContain("<PageHeading");
     expect(body).toContain("<PageHeading");
     expect(achievements).toContain("<PageBody");
     // no header styles of their own: the shared constants only

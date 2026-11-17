@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutineRun } from "@/lib/routines";
-import { useRoutineRunsFrom, useThreadRoutineRun } from "./older-routine-runs";
+import { useRoutineRunsFrom, useRoutineTrendRuns, useThreadRoutineRun } from "./older-routine-runs";
 
 const fixture = vi.hoisted(() => ({
   api: vi.fn(),
@@ -35,6 +35,31 @@ describe("older routine runs on demand", () => {
     await settle();
     expect(fixture.api.mock.calls).toEqual([["/api/routines?from=400&to=1000"]]);
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "routineRunsLoaded", runs: [run], from: 400, to: 1_000 });
+  });
+
+  it("a trend asks for each routine's newest runs only, once, and leaves the app's window where it is", async () => {
+    const Probe = () => { useRoutineTrendRuns(400, 7); return null; };
+    const root = createRoot(document.createElement("div"));
+    flushSync(() => root.render(createElement(Probe)));
+    await settle();
+    expect(fixture.api.mock.calls).toEqual([["/api/routines?from=400&to=1000&perRoutine=7"]]);
+    // kept apart from the app's runs, and with no range: the calendar's "everything from here is held" stays true
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "routineTrendRunsLoaded", runs: [run] });
+    root.render(createElement(Probe));
+    await settle();
+    expect(fixture.api).toHaveBeenCalledTimes(1);
+  });
+
+  it("a trend whose read failed is not asked again on every render", async () => {
+    fixture.api.mockReset().mockRejectedValue(new Error("down"));
+    const Probe = () => { useRoutineTrendRuns(400, 7); return null; };
+    const root = mount(() => {});
+    root.render(createElement(Probe));
+    await settle();
+    root.render(createElement(Probe));
+    root.render(createElement(Probe));
+    await settle();
+    expect(fixture.api).toHaveBeenCalledTimes(1);
   });
 
   it.each([["inside the window", 1_000, 2_000], ["when every run is loaded", null, 400]])("a view asks for nothing %s", async (_name, since, start) => {

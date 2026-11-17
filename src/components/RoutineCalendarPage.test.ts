@@ -86,27 +86,34 @@ beforeEach(() => {
 afterAll(() => vi.unstubAllGlobals());
 
 describe("routine failure indicators", () => {
-  it("shows the errors pill and mark-all control only while failures are unread", () => {
-    const buttons = page();
-    expect(textOf(buttons.get("Open problem run logs")!.children)).toBe("2");
-    expect(buttons.has("Mark all as read")).toBe(true);
+  it("counts unread failures on the Run logs tab and offers mark-all only while some are unread", () => {
+    expect(markupOf()).toMatch(/data-page-tab="logs"[^>]*>Run logs<span[^>]*>2<\/span>/);
+    fixture.state = { ...fixture.state!, routinesFocus: { section: "logs", nonce: 6 } };
+    expect(markupOf()).toContain("data-logs-mark-all");
 
     fixture.state = { ...initialState, bots: [bot], routineRuns: [
       { ...failed, seenAt: 1 }, { ...missed, seenAt: 1 }, completed,
     ] };
     const read = markupOf();
-    expect(read).not.toContain('aria-label="Open problem run logs"');
-    expect(read).not.toContain('aria-label="Mark all as read"');
+    expect(read).not.toMatch(/data-page-tab="logs"[^>]*>Run logs<span/);
+    expect(read).not.toContain("data-logs-mark-all");
   });
 
-  it("clears every failure indicator in one action from the header", () => {
-    page().get("Mark all as read")!.onClick!();
-    expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "markAllRoutineRunsSeen" });
+  it("clears every failure indicator in one action from the Run logs", () => {
+    const view = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
+    expect(view).toContain('onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })}');
   });
 
-  it("opens the logs on the shared problems set from the errors pill", () => {
-    page().get("Open problem run logs")!.onClick!();
-    expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "showRoutines", section: "logs", runStatus: "problems" });
+  it("offers View failed runs on the Overview, which opens the logs on the shared problems set", () => {
+    // the figures read the last 7 days: a failure of 1970 is not in them
+    expect(markupOf()).not.toContain("data-routines-failed-runs");
+    const now = Date.now();
+    fixture.state = { ...initialState, bots: [bot], routineRuns: [failed, missed, completed].map((run) => ({ ...run, createdAt: now - 3_600_000, scheduledFor: now - 3_600_000 })) };
+    const html = markupOf();
+    expect(html).toContain("data-routines-failed-runs");
+    const view = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
+    // and the logs open on the period the cards show
+    expect(view).toContain('dispatch({ type: "showRoutines", section: "logs", runStatus: "problems", period })');
   });
 
   it("lands the focused problems filter on the logs instead of every status", () => {
@@ -208,13 +215,22 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
     return html.slice(html.indexOf("<header"), html.indexOf("</header>"));
   }
 
+  it("puts New on the Routines heading of the Overview, and in the header on the other tabs", () => {
+    const overview = markupOf();
+    expect(overview.slice(overview.indexOf("<header"), overview.indexOf("</header>"))).not.toContain("data-automations-create");
+    expect(overview.slice(overview.indexOf("data-routines-table"))).toContain("data-automations-create");
+    fixture.state = { ...fixture.state!, routinesFocus: { section: "logs", nonce: 5 } };
+    expect(header()).toContain("data-automations-create");
+  });
+
   it("has no Team map button: it lives under the avatar menu's Tools", () => {
     const buttons = page();
     expect([...buttons.keys()].some((label) => label === "Team map" || label === "Carte de l'équipe")).toBe(false);
     expect(markupOf()).not.toContain("data-routines-team-map");
   });
 
-  it("keeps the view, the dates and New visible, and folds scope, bot and range into Filters", () => {
+  it("keeps the tabs, the dates and New visible on the calendar, and folds scope, bot and range into Filters", () => {
+    fixture.state = { ...fixture.state!, routinesFocus: { section: "schedule", view: "calendar", nonce: 3 } };
     const html = header();
     expect(html).toContain('aria-label="Schedule view"');
     expect(html).toContain('aria-label="Previous dates"');
@@ -230,27 +246,31 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
   });
 
   it("counts the active filters on the Filters button and clears them in one action", () => {
-    expect(header()).toContain('aria-label="Filters"');
+    expect(markupOf()).toContain('aria-label="Filters"');
     fixture.state = { ...fixture.state!, routinesFocus: { section: "schedule", botId: bot.id, nonce: 2 } };
-    const html = header();
+    const html = markupOf();
     expect(html).toContain('aria-label="Filters, 1 active"');
     expect(html).toContain("data-automations-filter-count");
     expect(html).toContain("data-routine-filter-reset");
   });
 
-  it("puts Paused routines in the menu with its count, and keeps the run indicators", () => {
+  it("keeps the running indicator, lists a paused routine as a row with a Paused chip and has no usage banner", () => {
     const paused = { id: "p1", name: "Paused digest", prompt: "", target: "bot", botId: bot.id, runOn: "maus", enabled: false,
       schedule: { type: "daily", time: "06:00", weekdays: [1] }, durationMinutes: 30, createdAt: 1, updatedAt: 1 } as unknown as import("@/lib/routines").Routine;
     fixture.state = { ...fixture.state!, routines: [paused], routineRuns: [failed, { ...completed, id: "busy", status: "running" }] };
-    const buttons = page();
-    expect(buttons.has("View paused routines")).toBe(true);
-    expect(textOf(buttons.get("Open problem run logs")!.children)).toBe("1");
     const html = header();
     expect(html).toContain("data-automations-running");
     expect(html).toContain('title="1 active"');
+    const body = markupOf();
+    expect(body).toContain("Paused digest");
+    expect(body).toContain("data-routine-state");
+    // the old usage banner, its orange card and its blue button are gone; the menu has no paused entry
+    expect(body).not.toContain("data-limit-warning");
+    expect(body).not.toContain("View paused routines");
   });
 
   it("labels every icon-only control and clears the Windows caption buttons", () => {
+    fixture.state = { ...fixture.state!, routinesFocus: { section: "schedule", view: "calendar", nonce: 4 } };
     const html = header();
     for (const label of ["Previous dates", "Next dates", "Create an automation", "Filters"]) expect(html).toContain(`title="${label}"`);
     expect(html).toContain("@container/page-header");

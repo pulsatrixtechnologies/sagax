@@ -1274,9 +1274,11 @@ export interface AppState {
   routinesLoadState: "loading" | "ready" | "error";
   /** Where the app's loaded routine runs begin (`GET /api/routines?since=`); null until hydrated or when every run is loaded. */
   routineRunsSince: number | null;
+  /** Older runs only the Routines table's trend asked for (each routine's newest few): kept apart from `routineRuns`, so the run log and the figures never show a partial older set. */
+  routineTrendRuns: RoutineRun[];
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
-  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
+  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; /** The run log's period (the Overview's "View failed runs" keeps its cards'). */ period?: "day" | "week" | "month"; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
   /** The Code section (src/components/code/CodePage.tsx): the run it opens,
    * or the list when none. */
   codeFocus: { runId?: string; nonce: number };
@@ -1586,7 +1588,7 @@ export type Action =
   | { type: "sidebarHidden"; keys: ReadonlySet<string> }
   | { type: "sections"; sections: string[] }
   | { type: "sectionDeleted"; section: string; sections: string[] }
-  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; editRoutineId?: string }
+  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; period?: "day" | "week" | "month"; runId?: string; editRoutineId?: string }
   | { type: "showTeamMap" }
   /** The Code section: the list, or one run when `runId` is set. */
   | { type: "showCode"; runId?: string }
@@ -1605,6 +1607,7 @@ export type Action =
   | { type: "routineFoldersPatched"; botId: string; folders: string[] }
   | { type: "routinesLoadFailed" }
   | { type: "routineRunsLoaded"; runs: RoutineRun[]; from?: number; to?: number }
+  | { type: "routineTrendRunsLoaded"; runs: RoutineRun[] }
   | { type: "routinePatched"; routine: Routine }
   | { type: "routineDeleted"; routineId: string }
   | { type: "routineRunPatched"; run: RoutineRun }
@@ -2559,6 +2562,7 @@ export const initialState: AppState = {
   routineRuns: [],
   routinesLoadState: "loading",
   routineRunsSince: null,
+  routineTrendRuns: [],
   routineFolders: {},
   routinesFocus: { nonce: 0 },
   codeFocus: { nonce: 0 },

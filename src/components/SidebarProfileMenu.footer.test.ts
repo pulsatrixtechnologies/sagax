@@ -120,7 +120,7 @@ describe("sidebar footer row", () => {
     expect(html).toContain(">Jean-Baptiste Exemplar</span>");
   });
 
-  it("puts the routines badge at the right of the row, beside the name, opening Automations", () => {
+  it("puts the routines badge at the right of the row, beside the name, opening Routines", () => {
     fixture.state = {
       config: { profile: { name: "Jean-Baptiste Exemplar", email: "owner@example.com" } } as AppState["config"],
       bots: [{ id: "b1" }] as AppState["bots"],
@@ -192,7 +192,7 @@ describe("sidebar footer row", () => {
     expect(failed).toContain("data-attention");
     expect(failed).not.toContain("routines-attention-dot");
     expect(failed).not.toContain("text-danger");
-    expect(failed).toContain('aria-label="1 active routine. A run failed: open Automations"');
+    expect(failed).toContain('aria-label="1 active routine. A run failed: open Routines"');
     fixture.state = {
       ...fixture.state,
       routineRuns: [{ status: "failed", seenAt: 1 }] as AppState["routineRuns"],

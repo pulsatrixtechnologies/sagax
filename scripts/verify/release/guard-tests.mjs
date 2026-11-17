@@ -119,6 +119,10 @@ export const SOURCE_TEXT_TESTS = [
   "src/components/RightRail.dom.test.ts",
   "src/components/RoutineCalendarPage.test.ts",
   "src/components/routines/UpcomingPanel.test.ts",
+  // the Routines table: its columns by class (RoutineTable.layout.test) and on the rendered DOM of the Overview, plain
+  // and grouped (RoutineTable.layout.dom.test, which a change to RoutinesOverview.tsx or RoutineGroupedTable.tsx alone runs)
+  "src/components/routines/RoutineTable.layout.test.ts",
+  "src/components/routines/RoutineTable.layout.dom.test.ts",
   "src/components/RoutineScheduleNote.test.ts",
   "src/components/settings/toggle-consumers.test.ts",
   "src/components/shape-avatar.test.ts",
@@ -168,6 +172,8 @@ export const SOURCE_TEXT_TESTS = [
   "src/lib/skins.test.ts",
   "src/lib/status-tones.test.ts",
   "src/lib/topbar-parity.test.ts",
+  // the trend bars' result colours, in every skin of the stylesheet
+  "src/lib/trend-colors.test.ts",
   "src/lib/user-bubble-tone.test.ts",
   "src/lib/voice-mode/call-mark.test.ts",
   "src/lib/voice-mode/progress.test.ts",

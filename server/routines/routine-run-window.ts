@@ -1,4 +1,4 @@
-import { isRoutineProblemRun } from "../../shared/routines.ts";
+import { isRoutineProblemRun, routineRunTime } from "../../shared/routines.ts";
 import type { RoutineRun } from "./routines.ts";
 
 /** However old they are, each automation keeps at least this many of its newest runs in the app's window. */
@@ -31,8 +31,22 @@ export function routineRunsFor(listRuns: (from?: number, to?: number) => Routine
     const value = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(value) ? value : undefined;
   };
-  const since = time("since"), thread = query.get("thread"), runId = query.get("run");
+  const since = time("since"), perRoutine = time("perRoutine"), thread = query.get("thread"), runId = query.get("run");
   if (runId) return listRuns().filter((run) => run.id === runId);
   if (thread) return listRuns().filter((run) => run.threadId === thread);
-  return since === undefined ? listRuns(time("from"), time("to")) : appRunWindow(listRuns(), since);
+  if (since !== undefined) return appRunWindow(listRuns(), since);
+  const ranged = listRuns(time("from"), time("to"));
+  return perRoutine !== undefined && perRoutine > 0 ? newestPerRoutine(ranged, Math.floor(perRoutine)) : ranged;
+}
+
+/** `perRoutine=N` bounds a range read to what a trend draws: each routine's N newest runs that reached a mark (a queued
+ * or cancelled run is none), whatever the range holds, so seven bars never cost eight weeks of runs. */
+export function newestPerRoutine(runs: readonly RoutineRun[], count: number): RoutineRun[] {
+  const taken = new Map<string, number>();
+  return [...runs].sort((a, b) => routineRunTime(b) - routineRunTime(a)).filter((run) => {
+    if (run.status === "queued" || run.status === "cancelled") return false;
+    const own = taken.get(run.routineId) ?? 0;
+    taken.set(run.routineId, own + 1);
+    return own < count;
+  });
 }

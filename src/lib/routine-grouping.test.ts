@@ -57,10 +57,12 @@ describe("routine grouping", () => {
   });
 
   it("keeps the choice and the folded sections per person", () => {
+    expect(routineGroupBy("me")).toBe("none");
+    saveRoutineGroupBy("me", "bot");
     expect(routineGroupBy("me")).toBe("bot");
     saveRoutineGroupBy("me", "none");
     expect(routineGroupBy("me")).toBe("none");
-    expect(routineGroupBy("you")).toBe("bot");
+    expect(routineGroupBy("you")).toBe("none");
     saveCollapsedRoutineGroups("me", new Set(["bot:a"]));
     expect([...collapsedRoutineGroups("me")]).toEqual(["bot:a"]);
     expect(collapsedRoutineGroups("you").size).toBe(0);

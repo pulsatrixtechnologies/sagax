@@ -8,7 +8,7 @@
 // it, sections with a 16px heading, rows that light on hover and a dashed
 // empty state. Under 60rem of header the labels of the segment and Filters
 // fold to their icons (a tooltip keeps the name).
-import { useEffect, useRef, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from "react";
 import { Check, ChevronRight, Menu, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -88,7 +88,7 @@ export function PageTopStrip() {
  * sets the data attributes the page's tests and tours find it by
  * (`data-<name>-header`, `-primary`, `-actions`, `-section`).
  */
-export function PageHeader({ name, icon: Icon, title, count, subtitle, section, onRoot, primary, actions, below, topbar = false, inset = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
+export function PageHeader({ name, icon: Icon, title, count, subtitle, section, onRoot, primary, actions, below, topbar = false, inset = false, aligned = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
   name: string;
   icon: LucideIcon;
   title: string;
@@ -110,6 +110,10 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
   topbar?: boolean;
   /** A standalone window on macOS: clear the traffic lights. */
   inset?: boolean;
+  /** The header sits on the body's own column (the Routines page, 2026-11-17): the same left and right edges as
+   * the content under it at every width (a centred 1104 px column, a 16 px gutter on a phone). On a phone the
+   * title row sits under the drawer button, and the indicators and the menu take the button's row. */
+  aligned?: boolean;
   primaryStyle?: CSSProperties;
   actionsStyle?: CSSProperties;
   titleProps?: HTMLAttributes<HTMLDivElement> & DataAttributes;
@@ -120,24 +124,26 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
       {...rest}
       {...{ [`data-${name}-header`]: "" }}
       data-page-header=""
-      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : "pl-6 max-sm:pl-12", rest.className)}
+      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : aligned ? "relative px-6 max-sm:px-4 max-sm:pb-3 max-sm:pt-12" : "pl-6 max-sm:pl-12", rest.className)}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div {...titleProps} data-page-title="" className="min-w-0">
+      <div className={aligned ? "mx-auto w-full max-w-[69rem]" : undefined}>
+      <div className="flex items-start justify-between gap-3">
+        <div {...titleProps} data-page-title="" className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2.5">
             <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />
             {crumb
               ? <h1 className="min-w-0 text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink"><button type="button" data-page-crumb="" {...{ [`data-${name}-crumb`]: "" }} onClick={onRoot} className="rounded-md text-ink-secondary hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{title}</button></h1>
               : <h1 className="min-w-0 truncate text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink">{title}</h1>}
             {section && <span {...{ [`data-${name}-section`]: "" }} aria-current="page" className="flex min-w-0 items-center gap-1 text-[17px] font-semibold leading-6 text-ink"><ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" /><span className="truncate">{section}</span></span>}
-            {count != null && count !== false && <span data-page-count="" className="ml-1 shrink-0 text-[11px] tabular-nums text-ink-secondary">{count}</span>}
+            {count != null && count !== false && <span data-page-count="" className={cn("ml-1 shrink-0 text-[11px] tabular-nums text-ink-secondary", aligned && "max-[24rem]:hidden")}>{count}</span>}
           </div>
           {subtitle && <p data-page-subtitle="" className="mt-1 text-[12px] text-ink-secondary">{subtitle}</p>}
         </div>
-        <div {...{ [`data-${name}-actions`]: "" }} data-page-actions="" className="ml-auto flex shrink-0 items-center gap-2" style={actionsStyle}>{actions}</div>
+        <div {...{ [`data-${name}-actions`]: "" }} data-page-actions="" className={cn("ml-auto flex shrink-0 items-center gap-2", aligned && "max-sm:absolute max-sm:right-4 max-sm:top-2")} style={actionsStyle}>{actions}</div>
       </div>
       {primary && <div {...{ [`data-${name}-primary`]: "" }} data-page-toolbar="" className="mt-3 flex min-w-0 flex-wrap items-center gap-2" style={primaryStyle}>{primary}</div>}
       {below}
+      </div>
     </header>
   );
 }
@@ -188,6 +194,52 @@ export function PageSegment<T extends string | number>({ label, value, options, 
   );
 }
 
+/** The page's tabs under its title (the reference's Cloud Agents page, 2026-11-17):
+ * text pills, the chosen one filled; an optional small count after a label. */
+export function PageTabs<T extends string>({ label, value, options, onChange, ...rest }: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; badge?: number; /** Pressing the count itself (the tab opens too): the Run log's opens on its problems. */ onBadge?: () => void; badgeLabel?: string }>;
+  onChange: (next: T) => void;
+} & DataAttributes) {
+  // One line, scrolling sideways when the pills do not fit; the chosen one is brought into view.
+  const listRef = useRef<HTMLDivElement>(null);
+  // A fade at the right edge says the row scrolls on.
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const check = () => setMore(list.scrollLeft + list.clientWidth < list.scrollWidth - 1);
+    check();
+    list.addEventListener("scroll", check, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(check);
+    observer?.observe(list);
+    return () => { list.removeEventListener("scroll", check); observer?.disconnect(); };
+  }, [options.length]);
+  useEffect(() => {
+    const list = listRef.current;
+    const chosen = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!list || !chosen) return;
+    // Scrolled only when the chosen pill is off screen: the first pill is never clipped on load.
+    if (chosen.offsetLeft < list.scrollLeft) list.scrollTo?.({ left: Math.max(0, chosen.offsetLeft - 8), behavior: "auto" });
+    else if (chosen.offsetLeft + chosen.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollTo?.({ left: chosen.offsetLeft + chosen.offsetWidth - list.clientWidth + 8, behavior: "auto" });
+  }, [value]);
+  return (
+    <div {...rest} ref={listRef} role="tablist" aria-label={label} className={cn("relative flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto", more && "[mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]")}>
+      {options.map((option) => {
+        const on = value === option.value;
+        return (
+          <button key={option.value} type="button" role="tab" aria-selected={on} data-page-tab={option.value} onClick={() => onChange(option.value)}
+            className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none", on ? "bg-ink/[0.08] font-medium text-ink" : "text-ink-secondary hover:text-ink")}>
+            {option.label}
+            {option.badge ? <span data-page-tab-badge="" title={option.badgeLabel} onClick={option.onBadge} className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** A search field of the header row, as tall as its buttons. */
 export function PageSearch({ value, onChange, placeholder, label, compact = false, ...rest }: {
   value: string;
@@ -209,8 +261,10 @@ export function PageSearch({ value, onChange, placeholder, label, compact = fals
 }
 
 /** Filters: one button with the count of what narrows the page, its fields in a popover. */
-export function PageFilters({ name, menuRef, activeCount, children }: {
+export function PageFilters({ name, menuRef, activeCount, labelled = false, children }: {
   name: string;
+  /** Always show the word beside the icon (a button on a section row, outside the header). */
+  labelled?: boolean;
   menuRef?: RefObject<HTMLDetailsElement | null>;
   activeCount: number;
   children: ReactNode;
@@ -219,9 +273,9 @@ export function PageFilters({ name, menuRef, activeCount, children }: {
   return (
     <details ref={menuRef} {...{ [`data-${name}-filters`]: "" }} className="relative">
       <summary role="button" aria-label={label} title={label}
-        className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
+        className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", labelled && "w-auto gap-1.5 px-3 @max-[40rem]/routines:w-9 @max-[40rem]/routines:gap-0 @max-[40rem]/routines:px-0", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
         <SlidersHorizontal size={15} aria-hidden="true" />
-        <span className="@max-[60rem]/page-header:sr-only">{t("routineCalendar.filters")}</span>
+        <span className={labelled ? "@max-[40rem]/routines:sr-only" : "@max-[60rem]/page-header:sr-only"}>{t("routineCalendar.filters")}</span>
         {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">{activeCount}</span>}
       </summary>
       <div role="group" aria-label={t("routineCalendar.filters")} className={cn(PAGE_POPOVER, "w-[280px] gap-3 p-3")}>

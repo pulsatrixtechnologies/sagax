@@ -47,3 +47,20 @@ describe("the app's run window", () => {
     expect(ids(routineRunsFor(listRuns, new URLSearchParams({ since: String(NOW - 7 * DAY) })))).toEqual(["a", "b"]);
   });
 });
+
+describe("the bounded range read", () => {
+  it("returns each routine's newest runs in the range, not the range", () => {
+    const runs = [
+      ...Array.from({ length: 200 }, (_, i) => run(`h-${i}`, "hourly", 20 + i / 10, "completed")),
+      run("q", "hourly", 19, "queued"),
+      run("w-1", "weekly", 30, "failed"),
+      run("w-2", "weekly", 37, "completed"),
+    ];
+    const bounded = routineRunsFor(() => runs, new URLSearchParams({ from: String(NOW - 56 * DAY), to: String(NOW - 14 * DAY), perRoutine: "7" }));
+    expect(bounded.filter((r) => r.routineId === "hourly")).toHaveLength(7);
+    expect(ids(bounded)).toEqual(expect.arrayContaining(["w-1", "w-2"]));
+    expect(ids(bounded)).not.toContain("q");
+    expect(bounded).toHaveLength(9);
+  });
+});
+

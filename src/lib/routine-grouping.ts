@@ -34,12 +34,13 @@ const person = (viewerId: string | null | undefined) => viewerId?.toLowerCase() 
 
 export function routineGroupBy(viewerId: string | null | undefined): RoutineGroupBy {
   const saved = read(ROUTINE_GROUP_BY_KEY)[person(viewerId)];
-  return saved === "folder" || saved === "none" ? saved : "bot";
+  // 2026-11-17: the Routines table (no grouping) is the default.
+  return saved === "folder" || saved === "bot" ? saved : "none";
 }
 
 export function saveRoutineGroupBy(viewerId: string | null | undefined, value: RoutineGroupBy): void {
   const all = read(ROUTINE_GROUP_BY_KEY);
-  if (value === "bot") delete all[person(viewerId)];
+  if (value === "none") delete all[person(viewerId)];
   else all[person(viewerId)] = value;
   write(ROUTINE_GROUP_BY_KEY, all);
 }

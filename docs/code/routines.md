@@ -6,6 +6,87 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## The Routines page, Overview tab (2026-11-17)
+
+The page is "Routines" everywhere (title, sidebar entry; the locale key ids keep
+their old `automations` names). It has pill tabs under its title (`PageTabs`
+in `content-page.tsx`, one line, scrolling sideways when needed): Overview,
+Calendar, Run logs (with the unread problems count) and Webhooks. The
+Overview (`components/routines/RoutinesOverview.tsx`) follows the reference
+dashboard's Cloud Agents page (the reference app itself has no routines page,
+only a card on a bot's page).
+
+Runs: a period (24 hours, 7 days, 30 days) and three figure cards computed from
+the runs the app holds by one rule (`src/lib/routine-figures.ts`): settled runs
+only; a run with nothing to report is a success; a completed run with problems,
+a block and a miss are failures; no run gives a dash. "View failed runs" opens
+the Run logs on the problems filter and on the same period (`showRoutines` with
+`period`). No server route serves a figure. The app holds two weeks: choosing 30
+days loads the older runs of those days (`useRoutineRunsFrom`, only while it is
+chosen) and the figures say Loading until they are here, never the 14 days
+already held. The period lengths are `RUNS_PERIOD_MS`, which the Run log reads too.
+
+Routines: search, Filters, Group by (None, Bot, Folder: one control, an icon
+menu on a narrow page that closes on Escape and moves with the arrows) and New
+on the section's heading row, then ONE table (`RoutineTable.tsx`, rows from
+`src/lib/routine-table.ts`, memoized, handlers of stable identity): Routine,
+Bot, Folder, Schedule, the trend of the last 7 runs, Next run (the reason as
+text for a paused, suspended or auto-paused routine), and the row menu (Run now
+or Stop, Pause or Resume, Rename, Open, View runs, Open team room for a team
+goal, Move to folder, Duplicate, Delete). View runs opens the Run log filtered
+to that routine. The trend (`src/lib/routine-trend.ts`) is seven bars of ONE
+size (owner's decision: same height, colour alone), oldest at the left: the
+skin's success, warning and danger colours (`--color-trend-*`, a stronger step
+of the skin's own tokens where a skin keeps two too close for a colour-blind
+eye; `src/lib/trend-colors.test.ts` measures every skin under protan, deutan
+and tritan simulation), the OUTLINE of the same bar for a blocked or missed run
+(and a run waiting on the person), an accent pulse for running, a faint track
+for an empty slot. The tooltip says when, the result, how long and the first
+words the run reported; the cell says the counts in words ("3 succeeded, 1
+failed"). The strip is ONE tab stop per row: arrow keys (Home, End) move between
+bars, Enter or Space opens the run. A bar is a `span` with a link role, never a
+button, because the retro skin paints buttons.
+
+The trend read: the app holds two weeks, a weekly routine needs about seven.
+`useRoutineTrendRuns` asks `GET /api/routines?from&to&perRoutine=7` once per
+day-rounded start: each routine's 7 newest runs in the range (the server's
+`newestPerRoutine`), not every run of eight weeks; the answer carries no range,
+so the app's window stays put, and they land in `routineTrendRuns`, apart from the app's runs: the Run log and the figures never show a partial older set. The server orders them with the same `routineRunTime` the app uses. The page's clock moves on every minute, not on
+every render.
+
+Grouping (`RoutineGroupedTable.tsx`) is one level at a time, in the same table:
+each group is a block with a header row (one header cell spanning the columns:
+click to fold, open by default, remembered per person; count, running count and
+a problem figure) and its rows. Group by Bot hides the Bot column and shows
+Folder (rows by folder then name; the bot band's menu: New routine, each of the
+bot's folders with its own Rename, Move up, Move down, Pause or Resume, Delete,
+then New folder and Sort by prefix; rows drag onto a folder and Alt+Up or
+Alt+Down step); Group by Folder hides Folder and shows Bot (the folder band's
+menu renames, pauses or deletes that folder; a last block holds the routines
+with no folder; New folder at the end asks which bot when there are several and shows at once as an empty block). A
+folder action from a band reaches every routine of the folder that belongs to
+the person's own bots, whatever a search or filter hides, never another
+person's; a delete shows the same Undo as the bot panel (one snapshot per bot). The scope is the person's routines before any scope, status filter or search (`state.routines`), so a Paused filter hides nothing from an action. A folder of the person's bots with no routine is an empty block with its band, its menu and one muted line.
+
+Layout: the table has its columns from 44rem of page (the trend with its text
+from 64rem); under that a row is the name, the bars and the menu on one line
+and one muted line (bot, folder, schedule, next run) under it. The header and
+the body share the 16 px gutter on a phone; only the title row keeps clear of
+the drawer button. The container query classes are literal (a template string
+once made the wide table fall back to the phone row). The usage notice is gone:
+its one action, move to after the reset, is one row of the header menu while a
+provider is near its limit (`LimitMoveMenu`: a failure on the store's error
+line, a success confirmed beside the menu). The Run log tab's count opens the
+log on the problems filter. Tests: `routine-figures`, `routine-table`,
+`routine-trend`, `trend-colors`, `RoutinesOverview.dom`, `RoutineTable.layout`
+and `RoutineTable.layout.dom` (the rendered table at wide and narrow container
+widths; both in the push gate's source-text list), `RoutineCalendarPage`,
+`RoutineCalendarPage.group-by.dom`, `LimitMoveMenu.dom`, `older-routine-runs`.
+`node scripts/capture/routines-page.mjs` takes the captures at nine widths and
+fails on a missing column header, a row taller than one line (from 1024 wide),
+a phone row over two lines, a left edge off the gutter, controls on several
+rows or sideways scrolling.
+
 ## Outcomes (#4098, 2026-11-13)
 
 An outcome is a named result that one or more routines of a bot keep true.

@@ -181,6 +181,8 @@
   --color-maus-line: #d4b1a8;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #fdba74 20%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c084fc 14%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="midnight"][data-skin-tint="sunset"] {
@@ -222,6 +224,8 @@
   --color-maus-line: #d4b1a8;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #fdba74 20%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c084fc 14%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="foundry"][data-skin-tint="sunset"] {
@@ -263,6 +267,8 @@
   --color-maus-line: #d4b1a8;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #fdba74 20%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c084fc 14%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="sunset"] {
@@ -427,6 +433,8 @@
   --color-maus-line: #a8b7c5;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7dd3fc 12%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #6ee7b7 10%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="midnight"][data-skin-tint="nordic"] {
@@ -468,6 +476,8 @@
   --color-maus-line: #a8b7c5;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7dd3fc 12%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #6ee7b7 10%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="foundry"][data-skin-tint="nordic"] {
@@ -509,6 +519,8 @@
   --color-maus-line: #a8b7c5;
   --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7dd3fc 12%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #6ee7b7 10%, transparent), transparent 68%);
   --color-danger: #ff7b84;
+  /* trend bars: a darker step of this mood's danger so it stays apart from success for a green-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 66%, var(--color-app));
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="nordic"] {

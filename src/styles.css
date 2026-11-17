@@ -467,6 +467,12 @@
      sits; `bg-hover` and `bg-selected` compile to the generic grey. */
   --color-menu-hover: var(--menu-row-hover);
   --color-menu-active: var(--menu-row-active);
+  /* The Routines table's trend bars (2026-11-17): one height for every result, so the colour alone says it. Each
+     is the state's own token unless the skin sets --trend-* to a stronger step of it, where success, warning and
+     danger sit too close for a colour-blind eye (measured in src/lib/trend-colors.test.ts). */
+  --color-trend-success: var(--trend-success, var(--color-success));
+  --color-trend-problems: var(--trend-problems, var(--color-warning));
+  --color-trend-failed: var(--trend-failed, var(--color-danger));
 }
 
 /* The text color that reads on the accent fill. It lives on :root (each skin
@@ -874,6 +880,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #7d4d09;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 85%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 70%, var(--color-ink));
   --color-scrollbar: #a9b7cf;
   --color-maus-line: #545e6e;       /* = ink-secondary: unchanged */
   --app-glow:
@@ -1146,6 +1155,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #7a5f31;       /* darkened → 4.98:1 */
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 85%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 60%, var(--color-ink));
   --color-scrollbar: #c9c0ae;
   --color-maus-line: #6b6559;
   --app-glow: none;
@@ -1426,6 +1438,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #7a5a2a;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 95%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 60%, var(--color-ink));
   --color-scrollbar: #a6b8b6;
   --color-maus-line: #4d5c5b;
   --app-glow: none;
@@ -1549,6 +1564,8 @@
   --color-danger-ink: #1e0b0e;
   --color-success-ink: #101a14;
   --color-warning: #d3a150;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-failed: color-mix(in srgb, var(--color-danger) 50%, var(--color-ink));
   --color-scrollbar: #464b54;
   --color-maus-line: #b3b8c2;
   --app-glow: none;
@@ -1673,6 +1690,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #765b2b;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 85%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 70%, var(--color-ink));
   --color-scrollbar: #aeb6c0;
   --color-maus-line: #59616c;
   --app-glow: none;
@@ -1795,6 +1815,9 @@
   --color-danger-ink: #210c10;
   --color-success-ink: #101812;
   --color-warning: #d0a35d;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 60%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 90%, var(--color-ink));
   --color-scrollbar: #4a414f;
   --color-maus-line: #b9afbd;
   --app-glow: none;
@@ -1936,6 +1959,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #825400;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 90%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 95%, var(--color-ink));
   --color-scrollbar: #c4c4c4;
   --color-maus-line: #5f5f5f;
   --app-glow: none;
@@ -2064,6 +2090,9 @@
   --color-danger-ink: #ffffff;
   --color-success-ink: #ffffff;
   --color-warning: #543c00;
+  /* trend bars: a stronger step so success, warning and danger stay apart for a colour-blind eye */
+  --trend-success: color-mix(in srgb, var(--color-success) 70%, var(--color-card));
+  --trend-failed: color-mix(in srgb, var(--color-danger) 60%, var(--color-ink));
   --color-scrollbar: #808080;
   --color-maus-line: #3c3c3c;
   --app-glow: none;

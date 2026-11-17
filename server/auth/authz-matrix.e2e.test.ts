@@ -181,7 +181,10 @@ async function furnish(auth: Auth, principal: string, label: string, marker: str
   if (memory.status >= 300) missing.push(`memory: ${memory.status} ${memory.text.slice(0, 160)}`);
   const room = await api("POST", "/api/groups", auth, { name: `${label} ${NAME} room`, memberIds: [bot.id], humanIds: [principal], setup: { bulletin: marker, defaultResponder: { kind: "member", botId: bot.id } } });
   take("group", room.body.group?.id, room);
-  const routine = await api("POST", "/api/routines", auth, { name: `${label} ${NAME} routine`, botId: bot.id, prompt: `Report ${marker}.`, enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
+  // #4558: an "always" line an older version wrote into the instructions;
+  // the next start moves it to the person's preferences (restartForChoices)
+  const alwaysLine = `Always for "Close ticket 12 about ${marker}?" (key ticket): Close. The person chose this on a card: do it without asking.`;
+  const routine = await api("POST", "/api/routines", auth, { name: `${label} ${NAME} routine`, botId: bot.id, prompt: `Report ${marker}.\n\n${alwaysLine}`, enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
   take("routine", routine.body.routine?.id, routine);
   const credential = await api("POST", "/api/me/credentials", auth, { kind: "login", name: `${label} ${NAME} portal`, username: `${label.toLowerCase()}@example.com`, password: `pw-${marker}`, domains: ["portal.example.com"] });
   take("credential", credential.body.item?.id ?? credential.body.credential?.id, credential);
@@ -198,6 +201,26 @@ async function furnish(auth: Auth, principal: string, label: string, marker: str
   const search = await api("PUT", "/api/me/web-search", auth, { provider: "brave", key: `brave-${marker}` });
   if (search.status >= 300) missing.push(`web search key: ${search.status} ${search.text.slice(0, 160)}`);
   return { things, missing };
+}
+
+/** #4558: a routine's "always" answers are only written by the person's own
+ * card or, at start, from an older version's line in the instructions. The
+ * server restarts once so each fixture routine's line becomes a real choice,
+ * then each person reads their own choice's id. */
+async function restartForChoices(people: Array<{ auth: Auth; things: Things; missing: string[] }>): Promise<void> {
+  child?.kill("SIGTERM");
+  if (child) await waitForExit(child);
+  await start();
+  for (const person of people) {
+    // the move runs once the server is up, before the routines start
+    let listed: Answer | undefined;
+    const id = await waitFor(async () => {
+      listed = await api("GET", `/api/routines/${person.things.routine}/always-choices`, person.auth);
+      return (listed.body.choices as Array<{ id: string }> | undefined)?.[0]?.id;
+    }, 15_000).catch(() => undefined);
+    if (id) person.things.alwaysChoice = id;
+    else person.missing.push(`alwaysChoice: ${listed?.status} ${listed?.text.slice(0, 160)}`);
+  }
 }
 
 /** A body a probe sends, aimed at the target's things where one matters.
@@ -437,6 +460,7 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
     const authB = await signIn(PERSON_B);
     const furnishedB = await furnish(authB, id("bea"), "Bea", PRIVATE_MARK);
     const furnishedA = await furnish(authA, id("ari"), "Ari", "zqowna0000");
+    await restartForChoices([{ auth: authA, ...furnishedA }, { auth: authB, ...furnishedB }]);
     a = { auth: authA, things: furnishedA.things };
     b = { auth: authB, things: furnishedB.things };
     missingA = furnishedA.missing;
@@ -589,6 +613,23 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
     }
     expect(failures).toEqual([]);
   }, 600_000);
+
+  it("#4558: a routine's \"always\" answers are its person's: another member and an admin get 404", async () => {
+    const list = `/api/routines/${b.things.routine}/always-choices`;
+    const one = `${list}/${b.things.alwaysChoice}`;
+    const own = await api("GET", list, b.auth);
+    expect(own.status, own.text).toBe(200);
+    expect((own.body.choices as Array<{ id: string; answer: string }>).map((c) => [c.id, c.answer])).toEqual([[b.things.alwaysChoice, "Close"]]);
+    for (const who of [a.auth, admin]) {
+      const read = await api("GET", list, who);
+      expect(read.status, read.text).toBe(404);
+      expect(read.text).not.toContain(PRIVATE_MARK);
+      expect((await api("DELETE", one, who)).status).toBe(404);
+    }
+    expect((await api("GET", list, b.auth)).body.choices).toHaveLength(1);
+    expect(await api("DELETE", one, b.auth)).toMatchObject({ status: 200, body: { ok: true } });
+    expect((await api("GET", list, b.auth)).body.choices).toEqual([]);
+  }, 60_000);
 
   it("own: A does everything on her own things without an admin", async () => {
     const failures: string[] = [];

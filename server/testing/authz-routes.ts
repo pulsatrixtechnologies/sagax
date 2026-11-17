@@ -24,7 +24,7 @@ export type SlotKind =
   | "cardScan" | "purchase" | "phoneCall" | "invite" | "blocked" | "journalEntry" | "credentialGrant"
   | "draft" | "codeRun" | "cloudAgent" | "allowlistEntry" | "workflow" | "workflowRun" | "taskListItem" | "briefItem"
   | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost" | "teamMemoryEntry" | "callerOwnId"
-  | "listeningSession" | "fake";
+  | "listeningSession" | "alwaysChoice" | "fake";
 
 /** Kinds a person owns: the matrix aims A at B's. The rest only ride along. */
 export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
@@ -32,7 +32,7 @@ export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   "page", "customRule", "approvalRule", "ruleSet", "skill", "project", "artifact", "toolGrant",
   "worker", "terminalSession", "wizard", "mcpServer", "securityKey", "desktopBridge", "codeRun",
   "cloudAgent", "attachment", "threadFile", "draft", "importStaging", "section", "calendarCall",
-  "listeningSession",
+  "listeningSession", "alwaysChoice",
 ]);
 
 /**
@@ -142,6 +142,8 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "instances/": "engine",
   // a listening session (#4100): the person who started it only
   "listening/ls_": "listeningSession",
+  // #4558: an "always" answer of a routine, kept for the routine's person only
+  "always-choices/": "alwaysChoice",
   // a fact upkeep learned about the caller: their own About me only
   // #4471: ids that only ride along a request aimed at the person's own bot,
   // thread or account (a remote session, a host, a recipe, a terminal card,

@@ -306,7 +306,14 @@ export type RuntimeEvent = RuntimeEventBase &
       limit?: "engine" }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
-    | { type: "runtime.notice"; message: string }
+    | {
+        type: "runtime.notice";
+        message: string;
+        /** #4527: the engine went on in a fresh session within the turn
+         * (server/context/context-renewal.ts): the conversation's next turn
+         * starts a new session of the bot's tool keep. */
+        contextRenewed?: true;
+      }
   );
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void;

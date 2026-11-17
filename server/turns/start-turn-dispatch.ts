@@ -15,6 +15,7 @@ import { stablePromptSections } from "../system-prompt.ts";
 import { clockAtHandoff } from "./turn-clock.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { turnQueuedAt } from "./turn-trace.ts";
+import { toolKeepBindTurn } from "../tools/tool-keep.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
   const {
@@ -251,6 +252,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     });
     // Adapter accepted the turn (process reused or spawned).
     if (!state.warmOnly) turnTrace(state.threadId, "dispatched");
+    // #4527: this turn's calls count for its bot and person, never by the thread alone
+    if (!state.warmOnly && typeof state.dispatch?.value?.turnId === "string" && state.toolKeepPerson) toolKeepBindTurn(state.threadId, state.dispatch.value.turnId, state.bot.id, state.toolKeepPerson);
     // Dev panel Connectors card: after dispatched so the fsync'd bots save
     // stays off accept→send and off send→dispatched (#1950 leftover on #1971).
     if (!state.warmOnly) {

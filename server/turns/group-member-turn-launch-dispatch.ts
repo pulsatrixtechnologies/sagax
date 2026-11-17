@@ -9,6 +9,7 @@ import { roomSubagentModel } from "./group-member-turn-room-model.ts";
 import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { stablePromptSections } from "../system-prompt.ts";
+import { toolKeepBindTurn } from "../tools/tool-keep.ts";
 
 export function createGuardRoomMemberDispatch(host: GroupMemberTurnHost) {
   const {
@@ -338,6 +339,8 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
       })
       .then((dispatch) => {
         ctx.providerTurnId = dispatch.value.turnId;
+        // #4527: this member's calls count for its bot and person, never by the room's thread
+        if (ctx.roomToolKeepPerson) toolKeepBindTurn(threadId, dispatch.value.turnId, readyBot.id, ctx.roomToolKeepPerson);
         bindInternalCapabilityToProviderTurn(threadId, internalGeneration, dispatch.value.turnId);
         orchestration?.onTurnStarted?.(dispatch.value.turnId);
         if (abandoned) {

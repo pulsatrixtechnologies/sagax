@@ -27,7 +27,6 @@ import { sameStoredSpeaker, storedTurnSpeaker } from "./turns/thread-speakers.ts
 import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./encryption/content-at-rest.ts";
-import { forgetToolUses } from "./activity/tool-use-counts.ts";
 import { forgetToolKeep } from "./tools/tool-keep.ts";
 import { forgetWorkspaceUsage } from "./workspace/workspace-usage.ts";
 import { nextContext } from "./context/context-reading.ts";
@@ -1911,8 +1910,6 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     mdb.deleteThread(threadId, beforeCommit);
     this.threads.delete(threadId);
     discardNativeLog(threadId);
-    // the compact prompt's tool use counted from its log goes with the log
-    forgetToolUses(threadId);
     for (const file of [
       messagesFile(threadId),
       `${messagesFile(threadId)}.imported`,

@@ -17,8 +17,16 @@
 // context is folded (a compaction gives it a new session): the id of the
 // conversation and of the compaction record in force. A prompt is one turn
 // started in it by a person, a routine or a teammate (a warm start is not).
-// A call is counted by the journal (server/activity/tool-use-counts.ts) and
-// handed here for the conversation's open session (toolKeepCall).
+// Each bot and person has its own session of a conversation: the members of
+// a room each keep theirs. A context renewal inside a turn (the engine went
+// on in a fresh session) ends the session at that turn.
+//
+// Calls. The bus hands every tool call it writes (toolKeepSteps), read as
+// one tool id on every engine (shared/searched-tool-call.ts stepToolId). A
+// call belongs to the engine turn that made it: the dispatch binds that turn
+// to its bot and person (toolKeepBindTurn), so in a room a member's calls
+// never reach another member or another person. What a turn did before its
+// binding waits for it.
 //
 // The fold. When a session is replaced (a new compaction in the same
 // conversation) or another session of the bot starts, its evidence is
@@ -32,8 +40,11 @@
 // Frozen per session. The verdict a session starts with is kept for every
 // later turn of that session (toolKeepTurn returns it), even across a
 // restart: a kept set that changed mid-conversation would break the
-// engine's prompt cache. A change shows at the next conversation or after a
-// compaction.
+// engine's prompt cache. A change shows at the next conversation, after a
+// compaction or after a context renewal. A new session is written at once.
+// A tool the session's prompt, the tool selection or a rule names is never
+// left out (ToolKeepContext); a later turn that names one more is read with
+// sessionLeftOut.
 //
 // The store: one small file per bot and person,
 // `<data>/tool-keep/<sha256(botId)[0:40]>/<sha256(person)[0:40]>.json`, mode
@@ -44,8 +55,8 @@
 //
 // For lot C (filtering every engine's catalog): toolKeepTurn gives the
 // session's frozen verdict (`leftOut`, `evidence`, the compact `pins`),
-// computed at the session's first turn; toolKeepOffered
-// records what a session really listed, and toolKeepVerdict computes a
+// computed at the session's first turn, and sessionLeftOut for each later
+// turn; toolKeepOffered records what a session really listed, and toolKeepVerdict computes a
 // verdict from a state. For lot E (the tool selection card): readToolKeep
 // reads the state, bringAllToolsBack empties the streaks.
 import { createHash } from "node:crypto";
@@ -60,6 +71,7 @@ import type { CompactPromptInput } from "../contracts.ts";
 import { COMPACT_CORE_AGENT_TOOL_NAMES } from "../drivers/agents-catalog.ts";
 import { PHONE_TOOL_NAMES } from "../drivers/agents-tools/phone.ts";
 import { PERSPICAX_BRIDGE_PINS } from "../mcp/mcp-gate-search.ts";
+import { registeredCustomRuleStore } from "../rules/custom-rules-store.ts";
 
 /** Unused over this many prompts... */
 export const LEFT_OUT_PROMPTS = 10;
@@ -81,7 +93,6 @@ const OPEN_MAX = 32;
 const SESSION_TOOLS_MAX = 1_000;
 const SAVE_MS = 5_000;
 const KEPT_IN_MEMORY = 4_096;
-const THREADS_IN_MEMORY = 8_192;
 const ID_KEY = /^[A-Za-z0-9][\w./:-]{0,264}$/;
 
 /** How long a tool has gone unused: sessions and prompts since its last use. */
@@ -144,9 +155,12 @@ export interface ToolKeepState {
 export interface ToolKeepContext {
   /** a live call: its call tools are never one search away */
   voiceCall?: boolean;
-  /** tools named by the person's tool selection, the turn's prompt, an
-   * organization rule: any spelling, read as tool ids */
+  /** tools named by the person's tool selection: any spelling, read as ids */
   named?: Iterable<string>;
+  /** texts that may name a tool by its own name (the turn's system prompt,
+   * the organization's and the person's rules): a known tool whose name is
+   * a word of one of them is never left out */
+  namedText?: Iterable<string>;
 }
 
 export const emptyToolKeep = (): ToolKeepState => ({ v: VERSION, sessions: 0, tools: {}, routineTools: [], leftOut: [], restoredAt: null, open: {} });
@@ -188,12 +202,33 @@ export function namedByToolScope(scope: { allow?: readonly string[] } | undefine
   return named;
 }
 
+/** The words of some texts, as a tool's own name is written. */
+function wordsOf(texts: Iterable<string> | undefined): Set<string> {
+  const words = new Set<string>();
+  for (const text of texts ?? []) for (const word of text.match(/[A-Za-z0-9][\w.-]*[A-Za-z0-9]|[A-Za-z0-9]/g) ?? []) words.add(word);
+  return words;
+}
+
+/** The rules' words that may name a tool for one bot and person: the
+ * organization's Refuse / Ask first rules and the person's own rules
+ * (server/rules/custom-rules-store.ts). */
+export function ruleTextsFor(botId: string, person: string): string[] {
+  const store = registeredCustomRuleStore();
+  if (!store) return [];
+  try {
+    return [...store.orgRules(), ...store.rulesOf(person, botId)].map((rule) => rule.when).filter((when): when is string => typeof when === "string");
+  } catch {
+    return [];
+  }
+}
+
 /** Whether a tool is never left out, whatever its streak. */
-export function neverPruned(id: string, routineTools: ReadonlySet<string>, named: ReadonlySet<string>, context: ToolKeepContext = {}): boolean {
+export function neverPruned(id: string, routineTools: ReadonlySet<string>, named: ReadonlySet<string>, context: ToolKeepContext = {}, words: ReadonlySet<string> = new Set()): boolean {
   const parts = toolIdParts(id);
   if (!parts) return true;
   if (routineTools.has(id) || named.has(id)) return true;
   const { server, tool } = parts;
+  if (words.has(tool)) return true;
   if (tool.startsWith("memory_")) return true;
   if (server === "agents") return NEVER_PRUNED_AGENT_TOOLS.has(tool) || (context.voiceCall === true && LIVE_CALL_TOOLS.has(tool));
   // a connector's own finding tools, and the Perspicax bridge's core
@@ -212,10 +247,11 @@ export function toolKeepVerdict(state: ToolKeepState, context: ToolKeepContext =
   const evidence = state.sessions >= EVIDENCE_SESSIONS;
   const routine = new Set(state.routineTools);
   const named = idsOf(context.named);
+  const words = wordsOf(context.namedText);
   const leftOut: string[] = [];
   const kept: Array<[string, ToolStreak]> = [];
   for (const [id, streak] of Object.entries(state.tools)) {
-    if (evidence && meetsLeftOutRule(streak) && !neverPruned(id, routine, named, context)) leftOut.push(id);
+    if (evidence && meetsLeftOutRule(streak) && !neverPruned(id, routine, named, context, words)) leftOut.push(id);
     else kept.push([id, streak]);
   }
   kept.sort(([a, x], [b, y]) => x.sessions - y.sessions || x.prompts - y.prompts || y.uses - x.uses || byName(a, b));
@@ -244,6 +280,15 @@ export function foldToolSession(state: ToolKeepState, session: { prompts: number
   const routineTools = session.routine ? [...new Set([...state.routineTools, ...used])].sort(byName).slice(0, TOOLS_MAX) : state.routineTools;
   const next: ToolKeepState = { ...state, sessions: Math.min(state.sessions + newSession, 1_000_000), tools, routineTools };
   return { ...next, leftOut: toolKeepVerdict({ ...next, sessions: Math.max(next.sessions, EVIDENCE_SESSIONS) }).leftOut };
+}
+
+/** Lot C: a frozen `leftOut` read again for one turn, without the tools
+ * this turn names (its prompt, a rule): only ever fewer tools, so a prompt
+ * never points at a tool its turn does not list. */
+export function sessionLeftOut(leftOut: readonly string[], context: ToolKeepContext = {}): string[] {
+  const named = idsOf(context.named);
+  const words = wordsOf(context.namedText);
+  return leftOut.filter((id) => !named.has(id) && !words.has(toolIdParts(id)?.tool ?? ""));
 }
 
 /** "Bring all back": every streak emptied, nothing left out (pure). */
@@ -280,7 +325,6 @@ const fileOf = (botId: string, person: string) => join(botDir(botId), `${hashOf(
 const memoryKey = (botId: string, person: string) => `${botId}\u0000${personKey(person)}`;
 
 const states = new Map<string, { botId: string; person: string; state: ToolKeepState }>();
-const threads = new Map<string, { botId: string; person: string }>();
 const unsaved = new Set<string>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -414,16 +458,19 @@ export interface ToolTurn {
   context?: ToolKeepContext;
 }
 
-/** A turn starts: its prompt is counted in the conversation's session, a
- * new session folds the others, and the session's frozen verdict comes
- * back (the same for every turn of the session). */
+/** A turn starts: its prompt is counted in the conversation's session (this
+ * bot's and this person's: a room's members each have their own), a new
+ * session folds the others, and the session's frozen verdict comes back
+ * (the same for every turn of the session). A new session is written at
+ * once, so a crash right after it never changes the session's list. */
 export function toolKeepTurn(turn: ToolTurn): ToolSessionVerdict {
   let state = load(turn.botId, turn.person);
   if (turn.hasRoutines === false && state.routineTools.length) state = { ...state, routineTools: [] };
   const hash = hashOf(turn.threadId);
   const key = hashOf(`${turn.threadId}\u0000${turn.compaction ?? ""}`);
   let open = state.open[hash];
-  if (!open || open.key !== key) {
+  const opened = !open || open.key !== key;
+  if (opened) {
     // the conversation's earlier session ends here; every other one is
     // folded so far, and goes on as a continuation
     state = foldOthers(state, "");
@@ -433,38 +480,99 @@ export function toolKeepTurn(turn: ToolTurn): ToolSessionVerdict {
     state = { ...state, open: { ...Object.fromEntries(others), [hash]: open } };
   }
   if (turn.prompt) {
-    open = { ...open, prompts: open.prompts + 1, at: Date.now(), ...(turn.routine ? { routine: 1 as const } : {}) };
+    open = { ...open!, prompts: open!.prompts + 1, at: Date.now(), ...(turn.routine ? { routine: 1 as const } : {}) };
     state = { ...state, open: { ...state.open, [hash]: open } };
   }
   store(turn.botId, turn.person, state);
-  threads.delete(turn.threadId);
-  threads.set(turn.threadId, { botId: turn.botId, person: turn.person });
-  while (threads.size > THREADS_IN_MEMORY) threads.delete(threads.keys().next().value!);
-  return structuredClone(open.frozen);
+  if (opened) saveOne(memoryKey(turn.botId, turn.person));
+  return structuredClone(open!.frozen);
 }
 
-function updateOpen(threadId: string, change: (session: OpenToolSession) => OpenToolSession | null): void {
-  const owner = threads.get(threadId);
-  if (!owner) return;
+// ---- calls, tied to the turn that made them ----
+
+interface TurnOwner { botId: string; person: string; threadId: string }
+/** Engine turns bound to their bot and person, `<threadId>\0<turnId>`. */
+const turns = new Map<string, TurnOwner>();
+/** What an engine turn did before it was bound (an adapter may emit its
+ * whole turn before sendTurn resolves): applied at the binding. */
+const pending = new Map<string, { used: Set<string>; renewed: boolean }>();
+const TURNS_IN_MEMORY = 4_096;
+const PENDING_TURNS = 1_024;
+const turnKey = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`;
+
+function applyToOpen(owner: TurnOwner, change: (session: OpenToolSession) => OpenToolSession | null): void {
   const state = load(owner.botId, owner.person);
-  const hash = hashOf(threadId);
+  const hash = hashOf(owner.threadId);
   const open = state.open[hash];
   if (!open) return;
   const next = change(open);
   if (next) store(owner.botId, owner.person, { ...state, open: { ...state.open, [hash]: next } });
 }
 
-/** A live call in a conversation: a use in its open session. */
-export function toolKeepCall(threadId: string, toolId: string): void {
-  if (!ID_KEY.test(toolId)) return;
-  updateOpen(threadId, (open) => open.used.includes(toolId) || open.used.length >= SESSION_TOOLS_MAX ? null : { ...open, used: [...open.used, toolId] });
+const withUse = (toolId: string) => (open: OpenToolSession) =>
+  open.used.includes(toolId) || open.used.length >= SESSION_TOOLS_MAX ? null : { ...open, used: [...open.used, toolId] };
+/** A context renewal: the conversation's next turn starts a new session. */
+const renewed = (open: OpenToolSession): OpenToolSession => ({ ...open, key: `renewed-${open.key}` });
+
+/** The engine turn a dispatch started belongs to this bot and person: its
+ * calls (and a context renewal) go to their open session of the
+ * conversation, never to another member of the same room. */
+export function toolKeepBindTurn(threadId: string, turnId: string, botId: string, person: string): void {
+  const key = turnKey(threadId, turnId);
+  const owner = { botId, person, threadId };
+  turns.delete(key);
+  turns.set(key, owner);
+  while (turns.size > TURNS_IN_MEMORY) turns.delete(turns.keys().next().value!);
+  const before = pending.get(key);
+  if (!before) return;
+  pending.delete(key);
+  for (const toolId of before.used) applyToOpen(owner, withUse(toolId));
+  if (before.renewed) applyToOpen(owner, renewed);
+}
+
+function noteForTurn(threadId: string, turnId: string, toolId: string | null, renewal: boolean): void {
+  const key = turnKey(threadId, turnId);
+  const owner = turns.get(key);
+  if (owner) {
+    if (toolId) applyToOpen(owner, withUse(toolId));
+    if (renewal) applyToOpen(owner, renewed);
+    return;
+  }
+  const entry = pending.get(key) ?? { used: new Set<string>(), renewed: false };
+  if (toolId && entry.used.size < SESSION_TOOLS_MAX) entry.used.add(toolId);
+  if (renewal) entry.renewed = true;
+  pending.delete(key);
+  pending.set(key, entry);
+  while (pending.size > PENDING_TURNS) pending.delete(pending.keys().next().value!);
+}
+
+let journalRemoved = false;
+/** The bus wrote events of a conversation (server/harness/bus.ts): each
+ * tool call (an item.started of a tool, read as its tool id) and each
+ * context renewal reaches the open session of the turn that made it. */
+export function toolKeepSteps(threadId: string, records: readonly Record<string, unknown>[]): void {
+  if (!journalRemoved) {
+    journalRemoved = true;
+    // the per-conversation counts kept before #4527 lot B have no reader
+    try { rmSync(join(DATA_DIR, "tool-uses"), { recursive: true, force: true }); } catch { /* removed at the next start */ }
+  }
+  for (const record of records) {
+    const turnId = record.turnId;
+    if (typeof turnId !== "string" || !turnId) continue;
+    if (record.type === "item.started" && record.itemType === "tool") {
+      const toolId = stepToolId(record);
+      if (toolId && ID_KEY.test(toolId)) noteForTurn(threadId, turnId, toolId, false);
+    } else if (record.type === "runtime.notice" && record.contextRenewed === true) {
+      noteForTurn(threadId, turnId, null, true);
+    }
+  }
 }
 
 /** Lot C: the tools a session really listed (ids), so the fold counts a
  * tool never called in it as unused. */
-export function toolKeepOffered(threadId: string, offered: Iterable<string>): void {
+export function toolKeepOffered(botId: string, person: string, threadId: string, offered: Iterable<string>): void {
   const list = [...idsOf(offered)].sort(byName).slice(0, TOOLS_MAX);
-  updateOpen(threadId, (open) => ({ ...open, offered: list }));
+  applyToOpen({ botId, person, threadId }, (open) => ({ ...open, offered: list }));
 }
 
 /** Lot E: the person's state for one bot (read only). */
@@ -475,6 +583,7 @@ export function readToolKeep(botId: string, person: string): ToolKeepState {
 /** Lot E: "Bring all back" for one bot and person. */
 export function bringAllToolsBack(botId: string, person: string): void {
   store(botId, person, restoreAllTools(load(botId, person), Date.now()));
+  saveOne(memoryKey(botId, person));
 }
 
 /** A deleted bot: its files and memory go with it. */
@@ -484,7 +593,7 @@ export function forgetToolKeep(botId: string): void {
     states.delete(key);
     unsaved.delete(key);
   }
-  for (const [threadId, owner] of threads) if (owner.botId === botId) threads.delete(threadId);
+  for (const [key, owner] of turns) if (owner.botId === botId) turns.delete(key);
   try { rmSync(botDir(botId), { recursive: true, force: true }); } catch { /* left for the next delete */ }
 }
 
@@ -494,5 +603,7 @@ export function forgetToolKeepInMemory(): void {
   saveTimer = null;
   unsaved.clear();
   states.clear();
-  threads.clear();
+  turns.clear();
+  pending.clear();
+  journalRemoved = false;
 }

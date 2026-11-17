@@ -23,7 +23,8 @@ export function createCompactPromptFor(getHost: () => Host): any {
 function compactPromptFor(bot: BotRecord, person: string, turn: CompactTurn) {
   const host = getHost();
   const { DATA_DIR } = host;
-  const routines = host.routines?.listRoutines?.();
+  // a cheap lookup by bot: this runs on every turn of every engine
+  const hasRoutines = host.routines?.hasRoutineForBot?.(bot.id);
   const verdict = toolKeepTurn({
     botId: bot.id,
     person,
@@ -31,7 +32,7 @@ function compactPromptFor(bot: BotRecord, person: string, turn: CompactTurn) {
     compaction: turn.compaction ?? null,
     routine: turn.routine === true,
     prompt: turn.prompt,
-    ...(Array.isArray(routines) ? { hasRoutines: routines.some((routine) => routine.botId === bot.id) } : {}),
+    ...(typeof hasRoutines === "boolean" ? { hasRoutines } : {}),
     ...(turn.context ? { context: turn.context } : {}),
   });
   return { ...verdict.pins, memoryDir: compactMemoryDir(DATA_DIR, bot.id, person) };

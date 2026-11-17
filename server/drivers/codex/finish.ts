@@ -328,7 +328,7 @@ try {
     );
   }
   s.emit({ ...s.base(s.threadId, s.turnId), type: "session.started", sessionId: s.codexThreadId, model: startedModel ?? turn.model ?? null, ...(rebuiltFromReplay ? { rebuilt: true } : {}) });
-  if (renewingNow || renewFull) s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.notice", message: contextRenewedNotice("Codex") });
+  if (renewingNow || renewFull) s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.notice", message: contextRenewedNotice("Codex"), contextRenewed: true });
   else if (rebuiltFromReplay) s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.notice", message: rebuiltSessionNotice("Codex") });
   const turnInput = [
     ...(skill?.path ? [{ type: "skill" as const, name: skill.name, path: skill.path }] : []),

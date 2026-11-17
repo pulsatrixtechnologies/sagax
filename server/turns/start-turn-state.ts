@@ -172,6 +172,8 @@ export type TurnState = {
   compactPrompt: any;
   /** #2037: agents pins for native tool-search deferral when not compact. */
   agentsKnownUse: any;
+  /** #4527: the person whose tool keep counts this turn (server/tools/tool-keep.ts) */
+  toolKeepPerson: any;
   recalled: any;
   transcript: any;
   wants: any;
@@ -340,6 +342,7 @@ export function createTurnState(init: {
     integrations: undefined,
     compactPrompt: undefined,
     agentsKnownUse: undefined,
+    toolKeepPerson: undefined,
     recalled: undefined,
     transcript: undefined,
     wants: undefined,

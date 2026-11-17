@@ -5,6 +5,7 @@ import { IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
+import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
@@ -247,11 +248,6 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   const roomWantsCompact = usesCompactPrompt({ ...roomPromptMode, driverKind: instance.driverKind, model: roomModel });
   // #2037: Claude with localPrompt full still needs agents use for deferral.
   const roomNeedsAgentsUse = roomWantsCompact || instance.driverKind === "claudeAgent";
-  // #4527: every engine's room turn is counted in the room conversation's
-  // session (server/tools/tool-keep.ts); the verdict is that session's
-  const roomCompactForBot = compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot), { threadId, prompt: true });
-  const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
-  const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
   // 2026-11-02 (production): no server path for an engine without file
   // tools on the Sagax server (server/server-path-prompt.ts)
@@ -316,10 +312,24 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     ])
     : undefined);
   const roomSystem = roomStable ? compactVolatileOrder(roomBuilt) : roomBuilt;
+  // #4527: every engine's room turn is counted in this bot's session of the
+  // room conversation, for the person it acts for (server/tools/tool-keep.ts);
+  // the verdict is that session's. A tool the prompt, the tool selection or
+  // a rule names is never left out.
+  const roomToolKeepPerson = roomSpeakerId || effectiveBotOwner(readyBot);
+  const roomCompactForBot = compactPromptFor(readyBot, roomToolKeepPerson, {
+    threadId,
+    routine: Boolean(roomRoutineSpeaker(threadId)),
+    prompt: true,
+    context: { named: namedByToolScope(roomToolScope), namedText: [`${roomSystem.stable}${roomSystem.volatile}`, ...ruleTextsFor(readyBot.id, roomToolKeepPerson)] },
+  });
+  const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
+  const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;
     ctx.text = text;
     ctx.cwd = cwd;
     ctx.roomCompactPrompt = roomCompactPrompt;
     ctx.roomAgentsKnownUse = roomAgentsKnownUse;
+    ctx.roomToolKeepPerson = roomToolKeepPerson;
     ctx.roomSystem = roomSystem;
   };
 }

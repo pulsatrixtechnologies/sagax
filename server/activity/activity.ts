@@ -76,8 +76,7 @@ export function describeTool(name: string): { app: string | null; label: string 
  * file is rotation-capped, so this is a ceiling on parse work, not a
  * window that quietly drops history. */
 const DECISION_SCAN = 20_000;
-/** Runtime events read per thread, newest first; the reader tail-walks.
- * The compact prompt's tool use keeps the same window (tool-use-counts.ts). */
+/** Runtime events read per thread, newest first; the reader tail-walks. */
 export const EVENTS_PER_THREAD = 2_000;
 /** An approval is folded into the tool run it unblocked when the run
  * started inside this window around the decision. A verdict is written

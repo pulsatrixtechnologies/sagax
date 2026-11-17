@@ -8,11 +8,29 @@ import { DATA_DIR } from "../config.ts";
 import { createCompactPromptFor } from "../index-leaves/compactPromptFor.ts";
 import {
   bringAllToolsBack, emptyToolKeep, EVIDENCE_SESSIONS, foldToolSession, forgetToolKeep, forgetToolKeepInMemory, LEFT_OUT_PROMPT_SESSIONS, LEFT_OUT_PROMPTS,
-  LEFT_OUT_SESSIONS, meetsLeftOutRule, namedByToolScope, neverPruned, readToolKeep, saveToolKeep, toolKeepCall, toolKeepDir, toolKeepTurn, toolKeepVerdict,
-  type ToolKeepState,
+  LEFT_OUT_SESSIONS, meetsLeftOutRule, namedByToolScope, neverPruned, readToolKeep, saveToolKeep, sessionLeftOut, toolKeepBindTurn, toolKeepDir, toolKeepSteps, toolKeepTurn, toolKeepVerdict,
+  type ToolKeepState, type ToolTurn,
 } from "./tool-keep.ts";
 
 const EMPTY = new Set<string>();
+
+/** The engine turn each conversation runs now, as a dispatch binds it. */
+const lastTurn = new Map<string, string>();
+let turnCount = 0;
+/** A turn starts and its dispatch binds the engine's turn id. */
+function startTurn(turn: ToolTurn) {
+  const verdict = toolKeepTurn(turn);
+  const turnId = `turn-${++turnCount}`;
+  lastTurn.set(turn.threadId, turnId);
+  toolKeepBindTurn(turn.threadId, turnId, turn.botId, turn.person);
+  return verdict;
+}
+/** One tool step written to the conversation's log, as the bus hands it. */
+const step = (threadId: string, turnId: string, toolId: string) => ({ type: "item.started", itemType: "tool", threadId, turnId, itemId: `i-${toolId}`, title: toolId.split("/")[1], tool: toolId });
+/** A call in the conversation's current turn. */
+function toolKeepCall(threadId: string, toolId: string) {
+  toolKeepSteps(threadId, [step(threadId, lastTurn.get(threadId)!, toolId)]);
+}
 
 /** `sessions` sessions of `prompts` prompts each, using only `used`. */
 function sessions(state: ToolKeepState, count: number, prompts: number, used: string[], offered: string[] = []): ToolKeepState {
@@ -28,6 +46,7 @@ function stale(prompts: number, count: number): ToolKeepState {
 
 beforeEach(() => {
   forgetToolKeepInMemory();
+  lastTurn.clear();
   rmSync(toolKeepDir(), { recursive: true, force: true });
 });
 
@@ -106,7 +125,7 @@ describe("the rule (10 prompts over 2 sessions, or 5 sessions)", () => {
 
   it("bring all back empties the streaks", () => {
     const turn = { botId: "bot-1", person: "alice", threadId: "t-1", prompt: true };
-    toolKeepTurn(turn);
+    startTurn(turn);
     bringAllToolsBack("bot-1", "alice");
     const state = readToolKeep("bot-1", "alice");
     expect(state.tools).toEqual({});
@@ -117,7 +136,7 @@ describe("the rule (10 prompts over 2 sessions, or 5 sessions)", () => {
 
 describe("sessions and the store", () => {
   const turn = (threadId: string, extra: Partial<Parameters<typeof toolKeepTurn>[0]> = {}) =>
-    toolKeepTurn({ botId: "bot-1", person: "alice@example.test", threadId, prompt: true, ...extra });
+    startTurn({ botId: "bot-1", person: "alice@example.test", threadId, prompt: true, ...extra });
 
   /** `count` conversations in a row, each calling `used`. */
   function conversations(count: number, used: string[], from = 0) {
@@ -174,7 +193,7 @@ describe("sessions and the store", () => {
   it("keeps one file per bot and person, ids and integers only, mode 0600, removed with the bot", () => {
     turn("t-1");
     toolKeepCall("t-1", "crm/get_ticket");
-    toolKeepTurn({ botId: "bot-1", person: "bob@example.test", threadId: "t-2", prompt: true });
+    startTurn({ botId: "bot-1", person: "bob@example.test", threadId: "t-2", prompt: true });
     saveToolKeep();
     const dirs = readdirSync(toolKeepDir());
     expect(dirs).toHaveLength(1);
@@ -200,36 +219,95 @@ describe("sessions and the store", () => {
 
   it("never reads one person's use for another person, on the same bot or another", () => {
     for (let n = 0; n < 6; n++) {
-      toolKeepTurn({ botId: "bot-1", person: "alice", threadId: `a-${n}`, prompt: true });
+      startTurn({ botId: "bot-1", person: "alice", threadId: `a-${n}`, prompt: true });
       toolKeepCall(`a-${n}`, "ledger/balance");
     }
     expect(readToolKeep("bot-1", "alice").sessions).toBe(5);
     expect(readToolKeep("bot-1", "bob")).toEqual(emptyToolKeep());
     expect(readToolKeep("bot-2", "alice")).toEqual(emptyToolKeep());
     // bob's call in his own conversation never reaches alice's session
-    toolKeepTurn({ botId: "bot-1", person: "bob", threadId: "b-0", prompt: true });
+    startTurn({ botId: "bot-1", person: "bob", threadId: "b-0", prompt: true });
     toolKeepCall("b-0", "crm/secret");
     expect(JSON.stringify(readToolKeep("bot-1", "alice"))).not.toContain("crm/secret");
   });
 });
 
+describe("calls belong to the turn that made them", () => {
+  it("two members of a room, two people, overlapping turns: each call reaches its own bot and person", () => {
+    const room = "room-1";
+    // bot A for alice and bot B for bob start in the same room conversation
+    toolKeepTurn({ botId: "bot-a", person: "alice", threadId: room, prompt: true });
+    toolKeepTurn({ botId: "bot-b", person: "bob", threadId: room, prompt: true });
+    toolKeepBindTurn(room, "turn-a", "bot-a", "alice");
+    toolKeepBindTurn(room, "turn-b", "bot-b", "bob");
+    // their calls interleave in the room's log
+    toolKeepSteps(room, [step(room, "turn-a", "crm/get_ticket"), step(room, "turn-b", "ledger/balance"), step(room, "turn-a", "crm/close_ticket")]);
+    const used = (botId: string, person: string) => Object.values(readToolKeep(botId, person).open).flatMap((open) => open.used);
+    expect(used("bot-a", "alice")).toEqual(["crm/get_ticket", "crm/close_ticket"]);
+    expect(used("bot-b", "bob")).toEqual(["ledger/balance"]);
+    expect(used("bot-a", "bob")).toEqual([]);
+    expect(used("bot-b", "alice")).toEqual([]);
+  });
+
+  it("a call written before its turn is bound waits for the binding; an unbound turn reaches nobody", () => {
+    toolKeepTurn({ botId: "bot-1", person: "alice", threadId: "t-early", prompt: true });
+    toolKeepSteps("t-early", [step("t-early", "fast", "crm/get_ticket"), step("t-early", "stranger", "crm/delete_all")]);
+    expect(Object.values(readToolKeep("bot-1", "alice").open)[0]!.used).toEqual([]);
+    toolKeepBindTurn("t-early", "fast", "bot-1", "alice");
+    expect(Object.values(readToolKeep("bot-1", "alice").open)[0]!.used).toEqual(["crm/get_ticket"]);
+  });
+
+  it("a context renewal inside a turn starts a new session at the conversation's next turn", () => {
+    for (let n = 0; n < 3; n++) startTurn({ botId: "bot-1", person: "alice", threadId: `w-${n}`, prompt: true });
+    const before = startTurn({ botId: "bot-1", person: "alice", threadId: "long", prompt: true });
+    expect(startTurn({ botId: "bot-1", person: "alice", threadId: "long", prompt: true })).toEqual(before);
+    const sessions = readToolKeep("bot-1", "alice").sessions;
+    toolKeepSteps("long", [{ type: "runtime.notice", threadId: "long", turnId: lastTurn.get("long")!, message: "renewed", contextRenewed: true }]);
+    startTurn({ botId: "bot-1", person: "alice", threadId: "long", prompt: true });
+    // the renewed session was folded: one more session of evidence
+    startTurn({ botId: "bot-1", person: "alice", threadId: "other", prompt: true });
+    expect(readToolKeep("bot-1", "alice").sessions).toBe(sessions + 2);
+  });
+
+  it("writes a new session at once: a crash right after keeps its list", () => {
+    const frozen = startTurn({ botId: "bot-1", person: "alice", threadId: "t-crash", prompt: true });
+    // no save timer, no exit hook: what is on disk is all a restart reads
+    forgetToolKeepInMemory();
+    expect(Object.keys(readToolKeep("bot-1", "alice").open)).toHaveLength(1);
+    expect(toolKeepTurn({ botId: "bot-1", person: "alice", threadId: "t-crash", prompt: true })).toEqual(frozen);
+  });
+
+  it("never leaves out a tool the session's prompt or a rule names by its own name", () => {
+    const state = stale(1, 5);
+    expect(toolKeepVerdict(state, { namedText: ["Use stale for the weekly report."] }).leftOut).toEqual([]);
+    expect(toolKeepVerdict(state, { namedText: ["A stalemate is not a tool name."] }).leftOut).toEqual(["crm/stale"]);
+    expect(sessionLeftOut(["crm/stale", "crm/old"], { namedText: ["call stale now"] })).toEqual(["crm/old"]);
+  });
+});
+
 describe("compactPromptFor (#4527)", () => {
-  const host = { DATA_DIR, routines: { listRoutines: () => [] } };
+  const host = { DATA_DIR, routines: { hasRoutineForBot: () => false } };
   const compactPromptFor = createCompactPromptFor(() => host);
   const bot = { id: "bot-9" };
 
   it("lists the default core until the bot has its own evidence, then its used tools", () => {
-    const first = compactPromptFor(bot, "alice", { threadId: "c-0", prompt: true });
+    const prompt = (threadId: string, person = "alice") => {
+      const pins = compactPromptFor(bot, person, { threadId, prompt: true });
+      lastTurn.set(threadId, `${threadId}-turn`);
+      toolKeepBindTurn(threadId, `${threadId}-turn`, bot.id, person);
+      return pins;
+    };
+    const first = prompt("c-0");
     expect(first.agents).toEqual({ core: "default", pinned: [] });
     toolKeepCall("c-0", "agents/propose_page");
     toolKeepCall("c-0", "crm/get_ticket");
-    compactPromptFor(bot, "alice", { threadId: "c-1", prompt: true });
+    prompt("c-1");
     toolKeepCall("c-1", "agents/propose_page");
-    const third = compactPromptFor(bot, "alice", { threadId: "c-2", prompt: true });
+    const third = prompt("c-2");
     expect(third.agents).toEqual({ core: "used", pinned: ["propose_page"] });
     expect(third.pinned).toEqual({ crm: ["get_ticket"] });
     expect(third.memoryDir).toContain("claude-auto-memory");
     // another person on the same bot starts from nothing
-    expect(compactPromptFor(bot, "bob", { threadId: "c-9", prompt: true }).agents).toEqual({ core: "default", pinned: [] });
+    expect(prompt("c-9", "bob").agents).toEqual({ core: "default", pinned: [] });
   });
 });

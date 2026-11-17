@@ -25,6 +25,7 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
 vi.mock("../DesktopWorkspaceSwitcher", () => ({ useDesktopWorkspace: () => ({ available: false, current: null, open: false, error: "", openMenu: () => {} }) }));
 
 const { AccountCard } = await import("./AccountCard");
+const { MyLabelField } = await import("./MyLabelField");
 
 const LOCKED = { active: true as const, id: "w1", name: "Pulsatrix", origin: "https://bot.example.test" };
 let host: HTMLDivElement;
@@ -68,8 +69,17 @@ describe("Settings > General account card", () => {
     const card = host.querySelector('[data-settings-card="general.account"]')!;
     expect(card).not.toBeNull();
     const text = card.textContent ?? "";
-    expect(text.indexOf("Alex Martin")).toBeLessThan(text.indexOf("Add a label"));
-    expect(text.indexOf("Add a label")).toBeLessThan(text.indexOf("owner@example.com"));
+    // the identity row is the reference's two lines: name, then email; the label moved to About me
+    const identity = card.querySelector('[data-testid="account-identity"]')!.textContent ?? "";
+    expect(identity.indexOf("Alex Martin")).toBeLessThan(identity.indexOf("owner@example.com"));
+    expect(identity).not.toContain("Add a label");
+    expect(identity).not.toContain("Connected to");
+    expect(identity).not.toContain("Edit in Perspicax");
+    expect(card.querySelector("[data-my-label]")).toBeNull();
+    // Team, then the server, in the same plain style, below the identity row
+    expect(card.querySelector("[data-account-team]")?.textContent).toBe("TeamPulsatrix");
+    expect(card.querySelector("[data-server-connected]")?.textContent).toBe("Serverbot.example.test");
+    expect(text.indexOf("Team")).toBeGreaterThan(text.indexOf("owner@example.com"));
     expect(text).toContain("Edit in Perspicax");
     expect(card.querySelector("[data-account-managed]")?.getAttribute("title")).toBe("Connected to bot.example.test · Organization: Pulsatrix");
     // Sign out at the right of the row, no help paragraph
@@ -78,8 +88,8 @@ describe("Settings > General account card", () => {
     expect(button("Copy email")).toBeDefined();
   });
 
-  it("edits the label in place and saves it", async () => {
-    await mount(LOCKED);
+  it("edits the label in place and saves it (the field of About me)", async () => {
+    await act(async () => { root.render(createElement(MyLabelField)); });
     await act(async () => { button("Edit label")!.click(); });
     const input = host.querySelector<HTMLInputElement>('input[aria-label="Edit label"]')!;
     expect(input).not.toBeNull();
@@ -103,13 +113,15 @@ describe("Settings > General account card", () => {
     delete (window as unknown as { ogb?: unknown }).ogb;
   });
 
-  it("personal server: editable profile and label, no Managed by your organization nor Edit in Perspicax", async () => {
+  it("personal server: editable profile, no Team nor Server row, no Managed by your organization nor Edit in Perspicax", async () => {
     fixture.org = null;
     fixture.viewer = { principalId: "pr_me", operator: true };
     await mount(null);
     const text = host.textContent ?? "";
     expect(host.querySelector<HTMLInputElement>('input[aria-label="Your name"]')?.value).toBe("Ada Local");
-    expect(text).toContain("Add a label");
+    expect(text).not.toContain("Add a label");
+    expect(host.querySelector("[data-account-team]")).toBeNull();
+    expect(host.querySelector("[data-server-connected]")).toBeNull();
     expect(text).not.toContain("Managed by your organization");
     expect(text).not.toContain("Edit in Perspicax");
   });
@@ -118,7 +130,8 @@ describe("Settings > General account card", () => {
     setLocale("fr");
     await mount(LOCKED);
     const text = host.textContent ?? "";
-    expect(text).toContain("Ajouter une étiquette");
+    expect(text).toContain("Équipe");
+    expect(text).toContain("Serveur");
     expect(text).toContain("Se déconnecter");
     expect(text).toContain("Géré par ton organisation");
     expect(text).toContain("Modifier dans Perspicax");

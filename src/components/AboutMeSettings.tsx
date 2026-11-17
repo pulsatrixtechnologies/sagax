@@ -8,6 +8,7 @@ import { api, useStore } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { createAboutMeDraft } from "./about-me-draft";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
+import { MyLabelField } from "./settings/MyLabelField";
 
 /** The server's limit (server/config.ts profile.aboutMe). */
 export const ABOUT_ME_MAX = 24_000;
@@ -88,6 +89,11 @@ export function AboutMeEditor() {
   return (
     <div data-about-me-editor className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
       <div className="flex min-h-[300px] min-w-0 flex-1 flex-col gap-2">
+        <div data-about-me-label className="flex flex-col gap-0.5">
+          <span className="text-[13px] leading-[18px] text-ink">{t("personLabel.mine")}</span>
+          <MyLabelField />
+          <span className="text-[12px] leading-4 text-ink-secondary">{t("personLabel.mineHint")}</span>
+        </div>
         <p className="text-[13px] leading-[18px] text-ink-secondary">{t("settings.profile.aboutMeHelp")}</p>
         <label id="profile-about-me-label" htmlFor="profile-about-me" className="sr-only">{t("settings.profile.aboutMe")}</label>
         <MarkdownEditor

@@ -9212,6 +9212,7 @@
   "settings.account.copyEmail": "Copy email",
   "settings.account.addAccount": "Add account",
   "settings.account.team": "Team",
+  "settings.account.server": "Server",
   "settings.account.emailCopied": "Email copied",
   "composer.plus.aria": "Composer actions",
   "composer.plus.attach": "Attach files",

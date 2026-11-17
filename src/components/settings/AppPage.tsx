@@ -28,6 +28,7 @@ import { localeChoices } from "@/locales";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
 import { PillSelect } from "../SettingsPrimitives";
 import { aboutMeFirstLine } from "../AboutMeSettings";
+import { usePersonLabel } from "@/lib/person-labels";
 import { useSettingsPage } from "../SettingsSubPage";
 import { NotificationQuickRows } from "../lazy-settings-sections";
 import { AccountCard, type LockedServer } from "./AccountCard";
@@ -74,6 +75,30 @@ export function GuidedToursRow() {
   );
 }
 
+/** About me, after the Team row of the account card: the person's label and the
+ * first line of their text as the muted value, one plain pill to edit both
+ * (the sub-page holds the label field and the text). 16px sides like the card. */
+function AboutMeRow() {
+  const { state } = useStore();
+  const scope = useSettingsPage();
+  const principalId = state.config?.viewer?.principalId?.trim() || null;
+  const label = usePersonLabel(principalId);
+  const about = aboutMeFirstLine(state.config?.profile?.aboutMe);
+  return (
+    <div data-settings-card="general.aboutMe" data-settings-subpage-row className="[&>div]:px-4">
+      <DescribedRow
+        label={t("settings.profile.aboutMe")}
+        description={label ? `${label} · ${about}` : about}
+        rowId="general.aboutMe"
+      >
+        <button type="button" onClick={() => scope.openSubPage("general.aboutMe")} className="ui-button">
+          {t("settings.aboutMe.edit")}
+        </button>
+      </DescribedRow>
+    </div>
+  );
+}
+
 function LanguageRow() {
   const { state } = useStore();
   // Follows the account: anyone can switch, including a chat-only teammate,
@@ -112,17 +137,7 @@ export function GeneralPage({ remoteActive = false, lockedServer = null }: { rem
         <SettingsGroup title={t("settings.section.account")} groupId="account">
           <AccountCard lockedServer={lockedServer} />
           {/* #3432: each person's own About me (#3424), for a member too; the reference card has no such row, so it follows Team with the same plain pill button */}
-          <div data-settings-card="general.aboutMe" data-settings-subpage-row>
-            <DescribedRow
-              label={t("settings.profile.aboutMe")}
-              description={aboutMeFirstLine(state.config?.profile?.aboutMe)}
-              rowId="general.aboutMe"
-            >
-              <button type="button" onClick={() => scope.openSubPage("general.aboutMe")} className="ui-button">
-                {t("settings.aboutMe.edit")}
-              </button>
-            </DescribedRow>
-          </div>
+          <AboutMeRow />
         </SettingsGroup>
       )}
 

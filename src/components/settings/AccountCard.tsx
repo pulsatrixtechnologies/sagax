@@ -8,7 +8,7 @@
 //   Team  <the organization signed in to; no row on a solo install>
 //
 // The reference's account card (#4457, the owner 2026-11-17): a 44px avatar,
-// 14px gap, the page's 14px side padding, the page's plain pill buttons (30px).
+// 14px gap, 16px side padding, the page's plain pill buttons (30px).
 //
 // On an organization server (Pulsatrix Perspicax) the name and email are
 // Perspicax's and read-only; the signed-in person changes their own photo
@@ -33,7 +33,6 @@ import { InitialsAvatar } from "../Avatar";
 import { useDesktopWorkspace } from "../DesktopWorkspaceSwitcher";
 import type { ServerModeState } from "../ServerModeSettings";
 import { profileInitials, profileLabel } from "../SidebarProfileMenu";
-import { MyLabelField } from "./MyLabelField";
 import { OwnAvatarField, OwnAvatarStatusLine, setOwnAvatarNotice, useOwnAvatarNotice } from "./OwnAvatarField";
 import { AnchoredPopover, useAnchoredDismissRoot } from "@/components/AnchoredPopover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
@@ -104,38 +103,44 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
                 onStatus={setOwnAvatarNotice}
               />
             ) : undefined}
-          >
-            {managed ? (
-              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 text-[12px] leading-4 text-ink-secondary">
-                <span title={details || undefined} data-account-managed="">{t("settings.serverMode.managedShort")}</span>
-                {managed.url && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <button
-                      type="button"
-                      onClick={() => void openExternalLink(managed.url!)}
-                      className="rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                    >
-                      {t("settings.profile.editInPerspicax")}
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : lockedServer && lockedServer.origin ? (
-              // the organization's name is the Team row's: the server's address only
-              <div className="mt-0.5 truncate text-[12px] leading-4 text-ink-secondary" data-server-connected="">{t("settings.serverMode.connectedTo", { server: host(lockedServer.origin) })}</div>
-            ) : null}
-          </ReadOnlyIdentity>
+          />
         )}
-      {organization && (
-        <div data-account-team="" className="flex min-w-0 items-baseline gap-2 px-3.5 pb-[15px] text-[13px] leading-[18px]">
-          <span className="shrink-0 text-ink-secondary">{t("settings.account.team")}</span>
-          <span className="min-w-0 truncate text-ink">{organization}</span>
+      {(organization || lockedServer?.origin || managed) && (
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 gap-y-2 px-4 pb-[15px] text-[13px] leading-[18px]">
+          {organization && <InfoRow data-account-team="" label={t("settings.account.team")}>{organization}</InfoRow>}
+          {lockedServer?.origin && <InfoRow data-server-connected="" label={t("settings.account.server")}>{host(lockedServer.origin)}</InfoRow>}
+          {managed && (
+            <div className="col-span-2 flex min-w-0 flex-wrap items-baseline gap-x-1 text-[12px] leading-4 text-ink-secondary">
+              <span title={details || undefined} data-account-managed="">{t("settings.serverMode.managedShort")}</span>
+              {managed.url && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    onClick={() => void openExternalLink(managed.url!)}
+                    className="rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                  >
+                    {t("settings.profile.editInPerspicax")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
-      <div className="px-3.5"><OwnAvatarStatusLine status={photoStatus} /></div>
-      {signOutFailed && <p role="alert" className="px-3.5 pb-3 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
-      {workspace.error && <p role="alert" className="px-3.5 pb-3 text-[12px] text-danger">{workspace.error}</p>}
+      <div className="px-4"><OwnAvatarStatusLine status={photoStatus} /></div>
+      {signOutFailed && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
+      {workspace.error && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{workspace.error}</p>}
+    </div>
+  );
+}
+
+/** One muted label then its value in the normal ink, on one line (Team, Server). */
+function InfoRow({ label, children, ...rest }: { label: string; children: React.ReactNode } & Record<`data-${string}`, string>) {
+  return (
+    <div {...rest} className="contents">
+      <span className="text-ink-secondary">{label}</span>
+      <span className="min-w-0 truncate text-ink">{children}</span>
     </div>
   );
 }
@@ -170,17 +175,16 @@ function CopyEmailButton({ state, copy }: ReturnType<typeof useCopyFeedback>) {
   );
 }
 
-function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, children }: {
+function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action }: {
   name: string;
   email: string;
   avatarUrl?: string;
   /** Replaces the picture (the person's own photo button). */
   avatar?: React.ReactNode;
   action: React.ReactNode;
-  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 px-3.5 py-5 text-left" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-4 py-5 text-left" data-testid="account-identity">
       {avatar ?? (avatarUrl ? (
         <img src={avatarUrl} alt="" width={44} height={44} className="size-11 shrink-0 rounded-full object-cover" />
       ) : (
@@ -188,9 +192,7 @@ function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, children }: 
       ))}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium leading-[18px] text-ink">{profileLabel({ name, email })}</div>
-        <MyLabelField />
         <EmailLine email={email} />
-        {children}
       </div>
       {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
     </div>
@@ -307,7 +309,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
 
   const initials = (name.trim() || email.trim() || "?").slice(0, 1).toUpperCase();
   return (
-    <div className="flex items-center gap-3.5 px-3.5 py-5" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-4 py-5" data-testid="account-identity">
       <div ref={avatarRootRef} className="relative shrink-0">
         <button
           ref={avatarButtonRef}
@@ -329,7 +331,6 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
       </div>
       <div className="min-w-0 flex-1">
         <input aria-label={t("settings.profile.name")} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.name")} className="w-full bg-transparent text-[13px] font-medium leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none" />
-        <MyLabelField />
         <div className="flex min-w-0 items-center gap-1">
           <input type="email" aria-label={t("phone.signIn.email")} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.emailPlaceholder")} className="min-w-[12ch] max-w-full bg-transparent text-[13px] leading-[18px] text-ink-secondary [field-sizing:content] placeholder:text-ink-secondary focus:outline-none" />
           {email.trim() && <OperatorCopyEmail email={email.trim()} />}

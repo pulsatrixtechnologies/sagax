@@ -74,8 +74,8 @@ describe("Settings in server mode", () => {
     const html = render();
     const card = html.slice(html.indexOf('data-settings-card="general.account"'));
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
-    // in order: name, label, email, managed · Edit in Perspicax, then Sign out
-    const order = [">Jean Tremblay<", "Add a label", ">jean@example.com<", "Managed by your organization", "Edit in Perspicax", "Sign out</button>"];
+    // the identity row is name then email; the pills sit at its right; Team and the managed note come below
+    const order = [">Jean Tremblay<", ">jean@example.com<", "Sign out</button>", "Managed by your organization", "Edit in Perspicax"];
     const positions = order.map((text) => card.indexOf(text));
     expect(positions.every((at) => at >= 0)).toBe(true);
     expect([...positions].sort((x, y) => x - y)).toEqual(positions);
@@ -103,7 +103,7 @@ describe("Settings in server mode", () => {
     const html = render();
     expect(html).toContain("Se déconnecter");
     expect(html).toContain("Équipe");
-    expect(html).toContain("Ajouter une étiquette");
+    expect(html).not.toContain("Ajouter une étiquette");
     expect(html).toContain("Géré par ton organisation");
     expect(html).toContain("Modifier dans Perspicax");
     expect(html).toContain('title="Connecté à bot.example.test · Organisation : Example"');
@@ -114,7 +114,7 @@ describe("Settings in server mode", () => {
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com" };
     const html = render();
     // the server's address here, the organization on the Team row (said once)
-    expect(html).toContain(">Connected to bot.example.test</div>");
+    expect(html).toMatch(/data-server-connected[^>]*><span[^>]*>Server<\/span><span[^>]*>bot\.example\.test<\/span>/);
     expect(html).toMatch(/data-account-team[^>]*>.*Team.*Example/);
     expect(html).not.toContain("Managed by your organization");
     expect(html).toContain("Sign out</button>");
@@ -141,7 +141,7 @@ describe("Settings in server mode", () => {
     const html = render();
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
     expect(html).toContain('aria-label="Your name"');
-    expect(html).toContain("Add a label");
+    expect(html).not.toContain("Add a label");
     expect(html).toMatch(/<button type="button" aria-haspopup="menu" aria-expanded="false" class="ui-button">Add account<\/button>/);
     expect(html).not.toContain("Switch server");
     expect(html).not.toContain("data-account-team");

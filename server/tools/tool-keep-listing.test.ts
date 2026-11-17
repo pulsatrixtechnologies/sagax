@@ -4,14 +4,12 @@
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { agentsSearchedCall, agentsSearchedFromEnv, prefixedToolId, searchedToolCall, stepToolId } from "../../shared/searched-tool-call.ts";
+import { agentsSearchedCall, agentsSearchedFromEnv, prefixedToolId, stepToolId } from "../../shared/searched-tool-call.ts";
 import { compactListed, compactToolsFromEnv } from "../drivers/agents-catalog.ts";
 import { turnStdioMcpServers } from "../drivers/turn-mcp.ts";
 import { buildMcpServers, piSearchedServers } from "../drivers/pi.ts";
 import { museToolStart } from "../drivers/muse-code.ts";
 import { piExtensionToolId } from "../drivers/pi-send-events.ts";
-import { reviewCustomRules } from "../rules/custom-rules-review.ts";
-import type { CustomRule } from "../../shared/custom-rules.ts";
 import { agentsOffered, withKeptAgentsListing } from "./tool-keep-listing.ts";
 import { forgetToolKeepInMemory, readToolKeep, toolKeepBindTurn, toolKeepDir, toolKeepSteps, toolKeepTurn } from "./tool-keep.ts";
 
@@ -93,20 +91,7 @@ describe("a left out tool reached through call_tool, per engine", () => {
     expect(agentsSearchedCall("agents__list_bots", {})).toBeNull();
   });
 
-  it("an organization Refuse or Ask first rule on a left out tool applies when it runs through call_tool", () => {
-    const rule = (behavior: CustomRule["behavior"]): CustomRule => ({
-      id: `r-${behavior}`, ownerId: "pr_admin", botId: null, when: "utiliser l'outil agents__run_routine", behavior, riskScope: [], enabled: true, org: true, createdAt: 1, updatedAt: 1,
-    } as CustomRule);
-    const searched = agentsSearchedCall("agents__call_tool", { name: "run_routine", arguments: { routine_id: "r-1" } })!;
-    for (const behavior of ["deny", "ask"] as const) {
-      const direct = reviewCustomRules([rule(behavior)], { tool: "agents__run_routine", input: JSON.stringify({ routine_id: "r-1" }) }, "bot-1", "/Users/example");
-      const throughSearch = reviewCustomRules([rule(behavior)], { tool: searched.mcpTool, input: JSON.stringify(searched.input) }, "bot-1", "/Users/example");
-      expect(direct.decision.kind).toBe(behavior);
-      expect(throughSearch.decision.kind).toBe(behavior);
-    }
-    // Claude's and the chat engines' reading of the same call
-    expect(searchedToolCall("mcp__agents__call_tool", { name: "run_routine", arguments: {} }, new Set(["agents"])).name).toBe("mcp__agents__run_routine");
-  });
+  // the rules, the card and the grants per engine: server/drivers/searched-call-approvals.test.ts
 
   it("Pi on a cloud model marks the agents mount searched", () => {
     const servers = buildMcpServers({ threadId: "t-pi", text: "", integrations: { agents: mount } } as never)!;

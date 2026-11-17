@@ -1359,18 +1359,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/agents-catalog-reachability.test.ts",
-      "test": "reachability guard: the turns a person really has > names, in each tool's description and schema, only tools the same turn is shown",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/vps-routing.test.ts",
       "test": "VPS turn routing e2e (fake ACP fleet + fake docker over SSH) > reuses the existing VPS with customized resources and operator resta… through status and turn routing",
       "platforms": [

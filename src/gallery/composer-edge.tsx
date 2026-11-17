@@ -83,7 +83,7 @@ function Gallery() {
       <div className="sm:w-[260px]"><Account /></div>
       <div className="relative mt-auto flex min-w-0 flex-1 flex-col justify-end sm:pt-[280px]">
         {which === "model" && (
-          <div data-model-box className={cn("absolute bottom-[56px] left-0 w-[min(360px,100%)] overflow-hidden py-1", MENU_BOX)}>
+          <div data-model-box className={cn("absolute bottom-[48px] left-0 w-[min(360px,100%)] overflow-hidden py-1", MENU_BOX)}>
             <ModelSearchList sections={sections} onPick={() => {}} variant="popover" label="Model" />
           </div>
         )}

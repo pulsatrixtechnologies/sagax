@@ -13,7 +13,7 @@ import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
 import { needsCli } from "./EngineSetup";
 import type { ModelMenuRow } from "./ModelMenu";
 import { cn } from "@/lib/cn";
-import { MENU_BOX } from "./menu-look";
+import { COMPOSER_POPOVER_RISE_CLASS, MENU_BOX } from "./menu-look";
 import { useMenuMotion } from "./MenuMotion";
 import { EngineLimitIndicator } from "./LimitResetContinue";
 import { useAdvancedMode } from "@/lib/interface-mode";
@@ -616,7 +616,7 @@ function ModelPickerShell({
           className={cn(
             "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden py-1 text-popover-ink",
             MENU_BOX,
-            menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
+            menuAt ? "fixed" : "absolute bottom-full right-0 " + COMPOSER_POPOVER_RISE_CLASS,
             menuMotion.className,
           )}
           style={menuAt ? { ...menuAt, width: BASE_MENU_WIDTH } : { width: BASE_MENU_WIDTH }}

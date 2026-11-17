@@ -15,11 +15,12 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "composer-edge"));
 const port = Number(arg("--port") ?? 5179);
 const prefix = arg("--prefix") ?? "after";
+const only = arg("--runs")?.split(",");
 const runs = [
   { skin: "pulsatrix", scheme: "dark", lang: "fr" }, { skin: "pulsatrix-light", scheme: "light", lang: "en" },
   { skin: "foundry", scheme: "dark2", lang: "en" }, { skin: "atelier", scheme: "light2", lang: "en" },
 ];
-const cases = ["idle", "focus", "plus", "model", "pinned"];
+const cases = (arg("--cases") ?? "idle,focus,plus,model,pinned").split(",");
 const widths = [1280, 390];
 
 async function waitForServer(url, ms = 120_000) {
@@ -42,10 +43,12 @@ try {
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ headless: true, channel: process.env.SAGAX_CAPTURE_CHANNEL ?? "chrome" });
-  for (const run of runs) for (const width of widths) for (const sample of cases) {
+  for (const run of runs.filter((r) => !only || only.includes(r.scheme))) for (const width of widths) for (const sample of cases) {
     const page = await browser.newPage({ viewport: { width, height: width > 600 ? 640 : 760 }, deviceScaleFactor: 2 });
     await page.goto(`${base}?skin=${run.skin}&lang=${run.lang}&case=${sample}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
+    const gap = await page.evaluate(() => { const m = document.querySelector('[data-composer-plus-menu], [data-model-box]'); const p = document.querySelector('[data-tour="composer"]'); return m && p ? Math.round((p.getBoundingClientRect().top - m.getBoundingClientRect().bottom) * 10) / 10 : null; });
+    if (gap !== null) console.log(`${prefix} ${sample} ${run.scheme} ${width}: gap above composer ${gap}px`);
     await page.screenshot({ path: join(outDir, `${prefix}-${sample}-${run.scheme}-${run.lang}-${width}.png`) });
     await page.close();
   }

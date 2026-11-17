@@ -9,7 +9,7 @@ import { Activity, BookOpen, MessageSquareWarning, Pause, Play, Plug, Puzzle, Re
 import { cn } from "@/lib/cn";
 import { composerMenuSection, type ComposerMenuItem } from "@/lib/composer-commands";
 import { t } from "@/lib/i18n";
-import { MENU_BOX } from "./menu-look";
+import { COMPOSER_LIST_RISE_CLASS, MENU_BOX } from "./menu-look";
 
 export interface ComposerCommandMenuProps {
   items: ComposerMenuItem[];
@@ -52,7 +52,7 @@ export function ComposerCommandMenu({ items, highlight, loading, onPick, onHighl
       ref={listRef}
       role="listbox"
       aria-label={t("composer.commands.aria")}
-      className={cn("absolute bottom-full left-2 z-20 mb-2 max-h-80 w-[26rem] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto overscroll-contain", MENU_BOX, className)}
+      className={cn("absolute bottom-full left-2 z-20 max-h-80 w-[26rem] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto overscroll-contain", COMPOSER_LIST_RISE_CLASS, MENU_BOX, className)}
       {...exitProps}
     >
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b-[0.5px] border-[var(--menu-hairline)] bg-[var(--menu-fill)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">

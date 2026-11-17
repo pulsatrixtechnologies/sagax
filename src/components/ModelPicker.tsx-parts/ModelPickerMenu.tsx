@@ -5,7 +5,7 @@ import { Check, ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import { ModelMenuItem, ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../ModelMenu";
 import { cn } from "@/lib/cn";
-import { MENU_BOX } from "../menu-look";
+import { COMPOSER_POPOVER_RISE_CLASS, MENU_BOX } from "../menu-look";
 import { t } from "@/lib/i18n";
 import { ModelMenuSettings, type ContextSizeChoice, type RunsWithChoice } from "../ModelMenuSettings";
 import { ModelNoEngineNotice } from "../ModelNoEngineNotice";
@@ -299,7 +299,7 @@ export function ModelPickerMenu({
       className={cn(
         "z-50 flex max-h-[min(520px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden py-1 text-popover-ink",
         MENU_BOX,
-        menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
+        menuAt ? "fixed" : "absolute bottom-full right-0 " + COMPOSER_POPOVER_RISE_CLASS,
         menuMotion.className,
       )}
     >

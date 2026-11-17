@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadMenu } from "./ThreadMenu";
-import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
+import { COMPOSER_ANCHOR_INSET, COMPOSER_POPOVER_GAP, COMPOSER_POPOVER_RISE, MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -212,6 +212,20 @@ describe("the composer and its popovers share the menu family's edge", () => {
     expect(text).not.toMatch(/border(-\[0\.5px\])? border-(popover-hairline|border|hairline\/40)[^"]*(popover-surface|bg-popover|bg-raised|bg-elevated)/);
     expect(text).not.toMatch(/shadow-2xl shadow-black\/50/);
     expect(text).not.toMatch(/rounded-xl border border-hairline\/40 bg-raised shadow-lg/);
+  });
+  it("every composer popover keeps the account menu's 4px gap above the capsule", () => {
+    expect(COMPOSER_POPOVER_GAP).toBe(4);
+    expect(COMPOSER_POPOVER_RISE).toBe(COMPOSER_POPOVER_GAP + COMPOSER_ANCHOR_INSET);
+    for (const file of ["src/components/ComposerControls.tsx", "src/components/ModelPicker.tsx", "src/components/ModelPicker.tsx-parts/ModelPickerMenu.tsx"]) {
+      const text = readFileSync(file, "utf8");
+      expect(text).toContain("COMPOSER_POPOVER_RISE_CLASS");
+      expect(text).not.toMatch(/bottom-full[^"]*\bmb-(?:1\.5|2)\b/);
+    }
+    for (const file of ["src/components/ComposerCommandMenu.tsx", "src/components/Composer.tsx-parts/ComposerMentionMenu.tsx"]) {
+      expect(readFileSync(file, "utf8")).toContain("COMPOSER_LIST_RISE_CLASS");
+    }
+    expect(readFileSync("src/components/ApprovalModeSelector.tsx", "utf8")).toContain("gap={COMPOSER_POPOVER_RISE}");
+    expect(readFileSync("src/components/MemePicker.tsx", "utf8")).toContain("gap: COMPOSER_POPOVER_RISE");
   });
   it("the + menu's rows are the menu rows", () => {
     const text = readFileSync("src/components/ComposerControls.tsx", "utf8");

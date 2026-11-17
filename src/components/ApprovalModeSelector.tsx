@@ -5,7 +5,7 @@ import { reportAchievement } from "@/lib/achievements";
 import { approvalModeFor, hasNativeAutoReview, supportsApprovalMode, type ApprovalMode } from "../../shared/approval-mode";
 import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
-import { MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow, SUBMENU_SIDE_OFFSET } from "./menu-look";
+import { COMPOSER_POPOVER_RISE, MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow, SUBMENU_SIDE_OFFSET } from "./menu-look";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
 import { useSettingsSurface } from "./SettingsPrimitives";
@@ -464,7 +464,7 @@ export function ApprovalModeSelector({
           popoverRef={menuRef}
           side={menuDirection === "up" ? "top" : "bottom"}
           align={align === "right" ? "end" : "start"}
-          gap={8}
+          gap={COMPOSER_POPOVER_RISE}
           {...menuProps}
           {...motion.exitProps}
           className={menuClass}

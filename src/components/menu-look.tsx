@@ -22,6 +22,18 @@ export const MENU_SURFACE = "flex flex-col gap-0.5 rounded-2xl popover-surface m
  * MENU_SURFACE, which adds the rows' padding and gap on top of it. */
 export const MENU_BOX = "rounded-2xl popover-surface menu-surface";
 
+/** What a popover opened from the composer keeps from the composer's top
+ * edge: 4px, the account menu's gap from its trigger (POPOVER_GAP). The
+ * anchors (+, model chip, mode chip) sit 10px inside the capsule, so an
+ * anchor-relative offset adds that inset. */
+export const COMPOSER_POPOVER_GAP = 4;
+export const COMPOSER_ANCHOR_INSET = 10;
+/** Offset from an anchor inside the capsule (px) and its class. */
+export const COMPOSER_POPOVER_RISE = COMPOSER_POPOVER_GAP + COMPOSER_ANCHOR_INSET;
+export const COMPOSER_POPOVER_RISE_CLASS = "mb-3.5";
+/** Offset from the capsule itself (the "/" and "@" lists). */
+export const COMPOSER_LIST_RISE_CLASS = "mb-1";
+
 /** The menu's width: its content's, as the account menu sizes itself, up
  * to 400px and never past the window's 8px gutters (useMenuInWindow), so no
  * label is cut in any language. A row menu adds its 228px floor. */

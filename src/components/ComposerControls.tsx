@@ -15,7 +15,7 @@ import { formatDictationTime } from "@/lib/composer-dictation";
 import { focusFirstMenuItem, moveMenuFocus } from "@/lib/menu-keys";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 import { useMenuMotion } from "./MenuMotion";
-import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
+import { COMPOSER_POPOVER_RISE_CLASS, MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
 import type { ComposerModelChip, ComposerModelMenuControl } from "./ModelPicker";
 import { composerModelLabel } from "./ModelPicker.tsx-parts/helpers";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -174,7 +174,8 @@ export function ComposerPlusMenu({
             if (moveMenuFocus(event.currentTarget, event.key, document.activeElement)) event.preventDefault();
           }}
           className={cn(
-            "absolute bottom-full left-0 z-40 mb-2",
+            "absolute bottom-full left-0 z-40",
+            COMPOSER_POPOVER_RISE_CLASS,
             MENU_SURFACE,
             MENU_FIT_ROW,
             motion.className,

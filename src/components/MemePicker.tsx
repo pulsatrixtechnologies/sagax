@@ -9,7 +9,7 @@ import { useAnchoredPopover } from "@/hooks/use-anchored-popover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { MENU_BOX } from "./menu-look";
+import { COMPOSER_POPOVER_RISE, MENU_BOX } from "./menu-look";
 import { materializeMeme, searchMemes, type MemeSearchHit } from "@/lib/memes";
 import { readableErrorMessage } from "@/lib/readable-error";
 
@@ -55,7 +55,7 @@ export function MemePicker({ open, onClose, anchorRef, onPick, onUploadLocal }: 
     },
   });
   usePopoverDismiss(open, inside, onClose);
-  useAnchoredPopover(open, anchorRef, rootRef, { prefer: "above", align: "start" });
+  useAnchoredPopover(open, anchorRef, rootRef, { prefer: "above", align: "start", gap: COMPOSER_POPOVER_RISE });
 
   const load = useCallback(async (q: string) => {
     const id = ++req.current;

@@ -995,14 +995,13 @@ the one class a bot's reply asks for in `Bubble`, `RoomTextMessage` and
   one synced key with the phone, which draws the same 14 % tint
   (`ios/Sources/CompanionCore/BotBubble.swift`, `BubbleColor.botReply`) in a
   chat and in a room, and reads Show bot replies in bubbles too.
-GitHub reference links in Markdown use the accent-text token like other links
-(`GITHUB_REF_CLASS`, `src/components/ChatMarkdown.tsx`).
+
 
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through
 `recordLinksInReply` (`server/index.ts`, `server/perspicax/record-links.ts`):
-a record link (`sagax://record/<product>/<kind>/<id>`) that does not parse
+a record link (`sagax://record/{product}/{kind}/{id}`) that does not parse
 becomes its text (one whose product or kind the person's list does not hold
 stays: its card says why); a plain number is linked only when the records
 the turn's own person read in that conversation (the person the turn was

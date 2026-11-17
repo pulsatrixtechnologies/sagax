@@ -1,4 +1,5 @@
 import { useBotReplyBubbleClass } from "@/lib/bot-reply-bubbles";
+import { recordTextOf } from "../../../shared/record-cards";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { useEffect, useRef, useState } from "react";
 import { t, activeLocale } from "@/lib/i18n";
@@ -124,6 +125,8 @@ export function RoomTextMessage({
   }, [focusedSearch, collapsible, focus?.nonce]);
   const speakerBot = members.find((member) => member.id === m.from?.botId);
   const botText = rawText;
+  // #4507: record chips draw from `recordText`; `text` stays the plain words
+  const markdownText = m.recordText ? recordTextOf({ text: rawText, recordText: m.recordText }) ?? botText : botText;
   const pin = roomPin(group, m, dispatch);
   const botMenu = useBotMessageMenu({
     text: botText,
@@ -314,8 +317,9 @@ export function RoomTextMessage({
               ) : botText ? (
                 <div data-citation-source={m.id} data-citation-owner-type="group" data-citation-owner={group.id} data-citation-thread={group.threadId}>
                   <ChatMarkdown
-                    text={botText}
+                    text={markdownText}
                     botId={m.from?.botId}
+                    draftId={`group:${group.id}:${group.threadId}`}
                     emailDrafts={speakerBot?.emailDrafts !== false}
                     mentionPeers={mentionPeers}
                     everyone={!group.dm}

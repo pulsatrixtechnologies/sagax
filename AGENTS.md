@@ -34,7 +34,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A red test after a merge is a regression to restore, never a test to rewrite.
 - Never verify a mutation against the person's live app or data: launch an isolated fixture (2026-11-04).
 - Locales: new keys in English, accept only your own keys; never accept every locale at once. Removed keys go through the drop script.
-- `server/self-knowledge/knowledge.generated.json` is generated (`pnpm gen:self-knowledge`): regenerate it when a tool, setting, menu, engine or guide changes, never edit it by hand.
+- `server/self-knowledge/knowledge.generated.json` is generated (`pnpm gen:self-knowledge`): dev, tests and builds generate it locally; never edit or commit it.
 - Never edit a generated output by hand (app icons, policy tables, knowledge base): change the source and regenerate (2026-10-14).
 
 ## Upstream sync and legacy names

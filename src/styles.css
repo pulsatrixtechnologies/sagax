@@ -3124,6 +3124,41 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   from { transform: none; opacity: 1; }
   to { transform: scale(0.98); opacity: 0; }
 }
+/* A pinned record card's scrolling pane (RecordCard.tsx Pane): a partial row
+   shows only under a real 16px fade at an edge, and only while there is more
+   in that direction; rows snap softly, so a rest lands on a row boundary. */
+.record-scroll {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  scroll-snap-type: y proximity;
+  scroll-padding-block: 8px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+}
+.record-scroll[data-more-above] { --fade-top: 16px; }
+.record-scroll[data-more-below] { --fade-bottom: 16px; }
+.record-scroll [data-fit-row] { scroll-snap-align: start; }
+/* A record card (HoverCard `motion`): it fades in over 160ms with a 4px rise
+   from the side of its chip and a scale from 0.98, and out over 120ms; a
+   card that opens right after another closed only fades (90ms); under
+   reduced motion, a 150ms fade and nothing moves. The side is set on the card
+   (`data-side`) when it is placed. */
+@keyframes hover-card-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes hover-card-in-below { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes hover-card-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hover-card-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.hover-card-in { animation: hover-card-in 160ms var(--ease-out-quint) both; }
+.hover-card-in[data-side="below"] { animation-name: hover-card-in-below; }
+.hover-card-warm { animation: hover-card-fade 90ms var(--ease-out-quint) both; }
+.hover-card-out { animation: hover-card-fade-out 120ms var(--ease-exit) forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hover-card-in, .hover-card-in[data-side="below"], .hover-card-warm { animation: hover-card-fade 150ms linear both; }
+  .hover-card-out { animation: hover-card-fade-out 150ms linear forwards; }
+}
+:root[data-reduced-motion="true"] .hover-card-in,
+:root[data-reduced-motion="true"] .hover-card-in[data-side="below"],
+:root[data-reduced-motion="true"] .hover-card-warm { animation: hover-card-fade 150ms linear both; }
+:root[data-reduced-motion="true"] .hover-card-out { animation: hover-card-fade-out 150ms linear forwards; }
 /* A panel revealed under the edge above it (MenuMotion.tsx useReveal): a
    one-row grid whose row grows from 0fr to 1fr while it fades in, and folds
    back quicker. The browser interpolates the track; no height is measured or

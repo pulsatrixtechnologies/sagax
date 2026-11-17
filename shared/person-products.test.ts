@@ -118,3 +118,11 @@ describe("person products contract", () => {
     expect(productKeyResumeText("Acme PSA", "declined")).toBe("Acme PSA: the person did not provide a key.");
   });
 });
+
+describe("a product's mark", () => {
+  it("reads the console's https icon address, and drops any other", () => {
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "https://console.example/icons/p.svg?v=3", domain: "p.example" } })?.icon).toEqual({ domain: "p.example", url: "https://console.example/icons/p.svg?v=3" });
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "http://console.example/p.svg" } })?.icon).toBeUndefined();
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "javascript:alert(1)", domain: "p.example" } })?.icon).toEqual({ domain: "p.example" });
+  });
+});

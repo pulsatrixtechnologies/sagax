@@ -3113,3 +3113,69 @@ line under the row naming the bots to move.
 Captures: `scripts/capture`-style headless Chrome of the gallery
 `src/gallery/settings-pages.html` (`&subPage=providers.provider:<id>`,
 `&empty=1`) beside `src/gallery/connect-apps.html`.
+
+### 8.11 Record card (#4507, S3)
+
+A record of a connected product, mentioned by its number in a bot's message,
+is a chip (the reference pill of GitHub references, with the product's mark)
+and opens a card on hover, focus or click.
+
+Measured on the installed reference app's bundle (2026-11-17, read only from
+`app.asar`, the app never started; its atomic classes resolved against its
+stylesheet). The reference has two hover surfaces, the link card
+(`sand-link-hover-card`) and the agent card (`sand-agent-hover-card`), both
+drawn by one `PreviewCard` layer:
+
+- Delays: `openDelay` 250 and `closeDelay` 100 by default; the link card
+  passes 350 and 200. The layer's `offset` is 8px, `dismissOnScroll` on, the
+  default `maxHeight` 300 (the link card 380), the default `width` 280 (the
+  link card 300).
+- Surface: fill `bg-elevated`, a 1px inset hairline in `stroke-secondary`
+  (12% of the base ink), radius 12px (`radius-xl`), shadow `box-shadow-popup`
+  (`0 3px 8px`, `0 2px 5px` and `0 1px 1px`, each in `shadow-secondary`),
+  `overflow: hidden`, the card's own padding 0 and the inset set by the layer:
+  10px on each side for a preview card, the link card's content 10px at the
+  top and bottom and 12px at the sides.
+- Type: the title `body2` medium, 13px on 18px; the description `body2` in the
+  secondary ink, 13px on 18px, clamped at 3 lines; the detail line `label`
+  level, 12px on 16px, secondary ink, 4px above the title. The agent card
+  keeps its header (mark, name) on one row, 4px between them.
+- The skeleton while a title loads: a 13px high bar, 4px radius, a 1.4s
+  `ease-in-out` sweep of a 100deg gradient between the secondary fill and
+  itself plus 8% of the primary ink.
+- Motion: a link card's background eases in `fast` (0.1s).
+
+What Sagax builds from it (one scale, tokens only): the card wears
+`popover-surface` and `menu-surface` (the menu family's fill, hairline and
+shadow, which are the reference's `box-shadow-popup` values) with `rounded-xl`
+(12px). 12px inset on the sides, 10px above the head, 8px under the title and
+inside the panes; 4px between a person's icon and rows; 8px between groups.
+Type: the title 15px on 20px semibold (the link card's neighbour,
+`LinkPreviewCard`, uses 15px semibold), body and values 13px on 18px (the
+reference's `body2`), labels, dates and notes' meta 12px on 16px in the
+secondary ink; numbers in the mono face. Delays stay Sagax's own, one
+mechanism for every hover card: open 300ms, close 150ms, a pointer rest of
+80ms before the prefetch, 80ms for a card that opens within 300ms of another
+closing. The reference's 250 and 350ms are not adopted: the shared constants
+belong to all three users of `HoverCard`.
+
+Shape (owner, 2026-11-16: "La carte plus sur le largeur que la hauteur", then
+"parfait" on the landscape sketch): `min(40rem, 100vw - 1rem)` wide, at most
+`min(20rem, 100vh - 1rem)` tall, never taller than wide. The head (mark, kind,
+number, then the priority and state chips) and the title across the top; two
+panes under a hairline, left about 40% (company, contact, owner, dates, key
+fields; a percent field is an inline bar), right about 60% (the description,
+then the latest notes on a rail); one row of actions across the bottom (open
+in the product, ask, copy the number, "up to date at", refresh). Below 34rem
+of available width the panes stack and the body scrolls; a record with no
+description and no notes keeps the left pane only, `min(22rem, 100vw - 1rem)`.
+A clipped pane fades at its foot while the card is hovered, and scrolls once
+it is pinned. A name that is also the title (a company) is said once, a GUID
+is never a label, a note that is the description's own text is shown once.
+States (loading, no access, unknown, not connected, sign in, busy, down,
+organization refused and ask) keep the landscape width: the head, one icon,
+one centred sentence, one action. The priority chip sits in the head, not
+beside the owner: next to a long name it cut the name.
+
+Captures: `scripts/capture/record-hover-card.mjs` (headless Chrome, DPR 2) of
+`src/gallery/record-card.html`, scene `neighbour` beside the link card.

@@ -26,6 +26,14 @@ server/drivers/claude-keepwarm.ts) ports the design of Cache Tax,
 https://github.com/karanb192/claude-code-mods, Copyright (c) 2026 Karan
 Bansal, used under the MIT License (third_party/cache-tax/LICENSE).
 
+Parts of the hover card behavior and motion (the warm switch between
+neighbouring triggers, the pointer-rest intent, Escape keeping a dismissed
+card closed while the pointer rests, the grow-from-the-trigger entrance, the
+skeleton pulse and the notes rail) are adapted from Arc, Copyright (c) 2026
+Elia Kuratli, used under the MIT License (third_party/arc-library/LICENSE).
+They are rewritten on Sagax's own tokens in src/components/LinkHoverCard.tsx
+and src/components/RecordCard.tsx.
+
 The Android companion app bundles a prebuilt WebRTC library for Live calls
 (io.github.webrtc-sdk:android), built from the WebRTC project, Copyright (c)
 2011, The WebRTC project authors, used under the BSD 3-Clause License. WebRTC

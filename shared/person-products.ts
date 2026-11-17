@@ -92,7 +92,9 @@ export interface ProductRole {
 export interface PersonProduct {
   id: string;
   name: string;
-  icon?: { domain: string };
+  /** the product's mark: `url` (https, the console's own) when it serves one,
+   * else the site `domain` whose favicon stands in */
+  icon?: { domain?: string; url?: string };
   state: ProductState;
   /** Perspicax's stable reason code (a tooltip only) */
   stateCode?: string;
@@ -202,6 +204,16 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const stateCode = text(product.reason_code, 128);
   const address = text(product.base_url);
   const domain = text(record(product.icon)?.domain, 253);
+  const iconUrlRaw = text(record(product.icon)?.url, 2048);
+  const iconUrl = (() => {
+    if (!iconUrlRaw || /\s/.test(iconUrlRaw)) return undefined;
+    try {
+      const url = new URL(iconUrlRaw);
+      return url.protocol === "https:" && !url.username && !url.password ? url.toString() : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
   const roles = Array.isArray(product.profiles)
     ? product.profiles.flatMap((entry): ProductRole[] => {
       const profile = record(entry);
@@ -220,7 +232,7 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const records = parseRecordKinds(product.records);
   return {
     id, name, state, roles, actions,
-    ...(domain ? { icon: { domain } } : {}),
+    ...(domain || iconUrl ? { icon: { ...(domain ? { domain } : {}), ...(iconUrl ? { url: iconUrl } : {}) } } : {}),
     ...(stateCode ? { stateCode } : {}),
     ...(address ? { address } : {}),
     ...(key ? { key } : {}),

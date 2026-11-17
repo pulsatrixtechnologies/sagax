@@ -247,7 +247,7 @@ struct DesktopTeamMemorySheet: View {
         let proposed = (entries ?? []).filter { $0.status == "proposed" }
         let shared = (entries ?? []).filter { $0.status != "proposed" }
         DesktopDetailPanel(title: Text("\(label) team memory"),
-                           hint: Text("People, places, decisions and terms every bot in this section shares. Every bot proposal waits for a member of this team, or an organization admin, before it is shared. Your own additions are shared immediately. Edit or remove anything."),
+                           hint: Text("People, places, decisions and terms every bot in this section shares. A bot saves what it learns at once, with its name and the time. Your own additions are shared immediately too. Edit or remove anything."),
                            close: close, closeLabel: Text("Close team memory")) {
             VStack(alignment: .leading, spacing: 16) {
                 if entries == nil && error.isEmpty { ProgressView().frame(maxWidth: .infinity, minHeight: 160).accessibilityLabel(Text("Loading team memory")) }
@@ -273,7 +273,7 @@ struct DesktopTeamMemorySheet: View {
                     }
                 }
                 if entries != nil, shared.isEmpty, proposed.isEmpty {
-                    Text("Nothing shared yet. Review what bots propose as they learn who is who and where things live, or add one yourself below.")
+                    Text("Nothing shared yet. Bots save who is who and where things live as they learn it, or add one yourself below.")
                         .font(theme.font(13)).foregroundStyle(theme.inkSecondary).multilineTextAlignment(.center)
                         .padding(.vertical, 24).frame(maxWidth: .infinity)
                         .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

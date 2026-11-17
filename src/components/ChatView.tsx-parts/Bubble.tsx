@@ -1,4 +1,5 @@
 import { useBotReplyBubbleClass } from "@/lib/bot-reply-bubbles";
+import { recordTextOf } from "../../../shared/record-cards";
 import { memo, use, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
@@ -182,6 +183,11 @@ export const Bubble = memo(function Bubble({
   const rawText = peer ? peer.body : message.connectorSetup && message.role !== "user" ? "" : (message.text ?? "");
   // a bot's leaked internal system lines never reach the reader
   const text = user ? rawText : stripLeakedSystemHarnessMessages(rawText);
+  // #4507: `text` never holds a record address; a bot's reply draws its
+  // record chips from `recordText`, everything else (copy, export, quote,
+  // search) keeps reading `text`
+  const linkedText = user || peer || !message.recordText ? undefined : recordTextOf({ text: message.text, recordText: message.recordText });
+  const markdownText = linkedText && linkedText !== message.text ? stripLeakedSystemHarnessMessages(linkedText) : text;
   const wideBubble = useMemo(() => !user && Boolean(text) && prefersWideBubble(text), [user, text]);
   const attached = useMemo(() => splitMessageAttachments(message.attachments), [message.attachments]);
   const generatedPaths = attached.images;
@@ -414,8 +420,9 @@ export const Bubble = memo(function Bubble({
               ) : text ? (
                 <div data-citation-source={message.id} data-citation-owner-type="bot" data-citation-owner={botId} data-citation-thread={threadId}>
                   <ChatMarkdown
-                    text={text}
+                    text={markdownText}
                     botId={botId}
+                    draftId={`bot:${botId}:${threadId}`}
                     emailDrafts={bots.find((candidate) => candidate.id === botId)?.emailDrafts !== false}
                     mentionPeers={mentionPeers}
                     message={{ threadId, messageId: message.id }}

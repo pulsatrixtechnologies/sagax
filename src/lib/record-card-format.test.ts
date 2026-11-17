@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAbsolute, formatClock, formatLateness, formatRelative, isGuid, percentValue, sameText } from "./record-card-format";
+import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isBareDay, isGuid, percentValue, sameText } from "./record-card-format";
 
 const NOW = Date.parse("2026-11-17T14:34:00-05:00");
 const flat = (value: string) => value.replace(/\s/g, " ");
@@ -28,6 +28,53 @@ describe("record card times", () => {
   it("measures lateness only for a past date", () => {
     expect(formatLateness("2026-11-15T14:34:00-05:00", NOW, "fr")).toMatch(/^2\s+jours$/);
     expect(formatLateness("2026-11-19T14:34:00-05:00", NOW, "fr")).toBeNull();
+  });
+});
+
+describe("a calendar day (a date with no time) is the same day in every zone", () => {
+  // 2026-11-05 as a bare day. Read as midnight UTC it is the evening of the 4th
+  // in Toronto (UTC-5), and the 5th in Auckland (UTC+13) already at 13:00.
+  const DAY = "2026-11-05";
+  const ZONES = ["America/Toronto", "America/Los_Angeles", "Pacific/Auckland", "Asia/Tokyo", "UTC"];
+  it("is told from an instant", () => {
+    expect(isBareDay(DAY)).toBe(true);
+    expect(isBareDay("2026-11-05T00:00:00Z")).toBe(false);
+  });
+  it.each(ZONES)("writes the 5th as the 5th in %s", (tz) => {
+    // a long time before, so it reads as a date and not as "yesterday"
+    const now = Date.parse("2026-03-01T12:00:00Z");
+    expect(formatAbsolute(DAY, now, "en", tz)).toMatch(/Nov 5/);
+    expect(formatAbsolute(DAY, now, "fr", tz)).toMatch(/5 nov/);
+    expect(formatFull(DAY, "en", tz)).toMatch(/November 5, 2026/);
+  });
+  it("does not turn late five hours early in a zone behind UTC", () => {
+    // 2026-11-05 22:00 in Toronto is 2026-11-06 03:00Z: the 5th is still going on in Toronto
+    const eveningOfThe5th = Date.parse("2026-11-06T03:00:00Z");
+    expect(formatLateness(DAY, eveningOfThe5th, "en", "America/Toronto")).toBeNull();
+    // the whole of the 6th later, it is one day late
+    const morningOfThe6th = Date.parse("2026-11-06T13:00:00Z");
+    expect(formatLateness(DAY, morningOfThe6th, "en", "America/Toronto")).toMatch(/^1\s+day$/);
+    // the old reading (midnight UTC) said "late" at 03:00Z already
+    expect(Date.parse(DAY)).toBeLessThan(eveningOfThe5th);
+  });
+  it("does not turn late early nor stay on time late in a zone ahead of UTC", () => {
+    // 2026-11-05 20:00 in Auckland (UTC+13) is 2026-11-05 07:00Z: still the 5th there
+    expect(formatLateness(DAY, Date.parse("2026-11-05T07:00:00Z"), "en", "Pacific/Auckland")).toBeNull();
+    // 2026-11-06 00:30 in Auckland is 2026-11-05 11:30Z: the 5th is over there, one day late
+    expect(formatLateness(DAY, Date.parse("2026-11-05T11:30:00Z"), "en", "Pacific/Auckland")).toMatch(/^1\s+day$/);
+    // while at the same instant it is still the 5th in Toronto
+    expect(formatLateness(DAY, Date.parse("2026-11-05T11:30:00Z"), "en", "America/Toronto")).toBeNull();
+  });
+  it("says today, tomorrow and yesterday by the zone's own calendar", () => {
+    const onThe5thInToronto = Date.parse("2026-11-05T21:00:00-05:00");
+    expect(formatAbsolute(DAY, onThe5thInToronto, "en", "America/Toronto")).toBe("today");
+    expect(formatAbsolute("2026-11-06", onThe5thInToronto, "en", "America/Toronto")).toBe("tomorrow");
+    expect(formatAbsolute("2026-11-04", onThe5thInToronto, "en", "America/Toronto")).toBe("yesterday");
+    // the same instant is already the 6th in Auckland
+    expect(formatAbsolute(DAY, onThe5thInToronto, "en", "Pacific/Auckland")).toBe("yesterday");
+  });
+  it("leaves an instant as it was", () => {
+    expect(formatLateness("2026-11-15T14:34:00-05:00", NOW, "fr", "America/Toronto")).toMatch(/^2\s+jours$/);
   });
 });
 

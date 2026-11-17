@@ -30,6 +30,28 @@ function dayNumber(date: Date, tz: string | undefined): number {
   return Math.floor(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)) / 86_400_000);
 }
 
+/** A bare calendar day ("2026-11-05"): a due date, an invoice date. It is a day
+ * on the calendar, not an instant: it has no time and no zone, so it is never
+ * read as midnight UTC (which is the evening before in a zone behind UTC). */
+const BARE_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function isBareDay(value: string): boolean {
+  return BARE_DAY.test(value.trim());
+}
+
+/** The calendar day of a bare day, as a day number (the same scale as dayNumber). */
+function bareDayNumber(value: string): number {
+  const match = BARE_DAY.exec(value.trim())!;
+  return Math.floor(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) / 86_400_000);
+}
+
+/** A bare day as a Date held at noon UTC, formatted with `timeZone: "UTC"`: the
+ * same day on every device, in every zone. */
+function bareDayDate(value: string): Date {
+  const match = BARE_DAY.exec(value.trim())!;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+}
+
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -63,6 +85,7 @@ function clock(date: Date, tag: string, tz: string | undefined): string {
 /** "aujourd'hui 14 h 03", "hier 16 h 20", "mer. 18 nov., 17 h": a note's time
  * and a due date. The year shows only when it is not this year's. */
 export function formatAbsolute(iso: string, now: number, lang: string, tz: string | undefined, { time = true }: { time?: boolean } = {}): string {
+  if (isBareDay(iso)) return formatDay(iso, now, lang, tz);
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const tag = tagOf(lang);
@@ -77,6 +100,18 @@ export function formatAbsolute(iso: string, now: number, lang: string, tz: strin
   return at ? `${day}, ${at}` : day;
 }
 
+/** A calendar day, as the person's locale writes a date: "demain", "mer. 5 nov.",
+ * with the year when it is not this year's. Today is read in the card's zone;
+ * the day itself is never shifted. */
+function formatDay(day: string, now: number, lang: string, tz: string | undefined): string {
+  const tag = tagOf(lang);
+  const gap = bareDayNumber(day) - dayNumber(new Date(now), tz);
+  if (Math.abs(gap) <= 1) return new Intl.RelativeTimeFormat(tag, { numeric: "auto" }).format(gap, "day");
+  const date = bareDayDate(day);
+  const sameYear = date.getUTCFullYear() === Number(parts(new Date(now), "en", tz, { year: "numeric" }).year);
+  return new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" }).format(date);
+}
+
 /** The hour of "à jour à 14 h 32": the clock time in the card's zone. */
 export function formatClock(iso: string, lang: string, tz: string | undefined): string {
   const date = new Date(iso);
@@ -85,13 +120,20 @@ export function formatClock(iso: string, lang: string, tz: string | undefined): 
 
 /** The full time with the zone's name: the tooltip of a relative time. */
 export function formatFull(iso: string, lang: string, tz: string | undefined): string {
+  if (isBareDay(iso)) return new Intl.DateTimeFormat(tagOf(lang), { dateStyle: "full", timeZone: "UTC" }).format(bareDayDate(iso));
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(tagOf(lang), { dateStyle: "full", timeStyle: "short", timeZone: safeZone(tz) }).format(date) + (tz && safeZone(tz) ? ` (${parts(date, tagOf(lang), tz, { timeZoneName: "short" }).timeZoneName ?? tz})` : "");
 }
 
-/** How late a past due date is, in the language: "2 jours", "3 h", "40 min". */
-export function formatLateness(iso: string, now: number, lang: string): string | null {
+/** How late a past due date is, in the language: "2 jours", "3 h", "40 min".
+ * A due DAY is late once that day is over in the card's zone (`tz`), and is
+ * counted in whole days: due the 5th, it is one day late on the 6th. */
+export function formatLateness(iso: string, now: number, lang: string, tz?: string): string | null {
+  if (isBareDay(iso)) {
+    const days = dayNumber(new Date(now), tz) - bareDayNumber(iso);
+    return days >= 1 ? new Intl.NumberFormat(tagOf(lang), { style: "unit", unit: "day", unitDisplay: "long" }).format(days) : null;
+  }
   const due = Date.parse(iso);
   if (Number.isNaN(due) || due >= now) return null;
   const late = now - due;

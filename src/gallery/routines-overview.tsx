@@ -76,7 +76,7 @@ const state: AppState = {
   bots,
   routines,
   routineRuns: runs,
-  routineFolders: { atlas: ["Clients", "Reports"], boreas: ["Reports"] },
+  routineFolders: { atlas: ["Clients", "Reports", "Archive"], boreas: ["Reports"] },
   routinesLoadState: "ready",
   routinesFocus: { section: params.get("tab") === "logs" ? "logs" : "schedule", view: params.get("tab") === "calendar" ? "calendar" : "list", nonce: 1 },
   config: {
@@ -97,7 +97,7 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/routines/folders")) return json({ folders: ["Reports"], routines: [] });
   if (url.includes("/api/routines")) {
     return json({
-      routines, runs, folders: { atlas: ["Clients", "Reports"], boreas: ["Reports"] }, scope: "mine", allowed: { mine: true, team: true, all: true },
+      routines, runs, folders: { atlas: ["Clients", "Reports", "Archive"], boreas: ["Reports"] }, scope: "mine", allowed: { mine: true, team: true, all: true },
       facets: { teams: [], owners: [], botChoices: bots.map((entry) => ({ id: entry.id, name: entry.name })) },
     });
   }

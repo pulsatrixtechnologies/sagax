@@ -378,6 +378,8 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 onKeyDown={(event) => {
                   // the field empties on its own Escape; empty, Escape folds the search, and only the next one is the window's
                   if (event.key !== "Escape") return;
+                  // a filter or sort menu open in the field closes first (its own Escape, heard at the window)
+                  if (event.currentTarget.querySelector('[role="menu"]')) return;
                   event.preventDefault();
                   event.stopPropagation();
                   setSearchOpen(false);

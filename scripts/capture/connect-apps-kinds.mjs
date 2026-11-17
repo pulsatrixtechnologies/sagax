@@ -260,6 +260,11 @@ try {
   await narrowPage.waitForTimeout(600);
   await narrowPage.screenshot({ path: join(outDir, `23-narrow-header-700x800-${scheme}-${lang}.png`) });
   console.log("shot narrow", scheme, lang);
+  // the icon opened over the row: focus is in the field, the row under it is out of reach
+  await narrowPage.click("[data-plugins-search-toggle]");
+  await narrowPage.waitForTimeout(300);
+  console.log("search focus", await narrowPage.evaluate(() => ({ field: document.activeElement?.matches("[data-plugins-search-expanded] input") ?? false, expanded: document.querySelector("[data-plugins-search-toggle]")?.getAttribute("aria-expanded") ?? null, inert: [...document.querySelectorAll("[data-plugins-kind-row] > [inert]")].length })));
+  await narrowPage.screenshot({ path: join(outDir, `24-narrow-search-open-700x800-${scheme}-${lang}.png`) });
   await narrowCtx.close();
 
   // the neighbour page that follows the reference, same window

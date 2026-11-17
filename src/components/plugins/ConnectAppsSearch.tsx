@@ -70,6 +70,8 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
       if (row) onOpen(row);
       return;
     }
+    // a filter or sort menu open in the field closes first (its own Escape, heard at the window)
+    if (event.key === "Escape" && event.currentTarget.closest("label")?.querySelector('[role="menu"]')) return;
     if (event.key === "Escape" && query !== "") {
       // empties the field; the window steps back or closes only when it is empty
       event.preventDefault();

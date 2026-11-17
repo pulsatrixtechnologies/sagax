@@ -845,6 +845,44 @@ describe("the control row is ONE line at every width (the owner: it should not b
     host.remove();
   });
 
+  it("Escape in the opened search closes an open filter or sort menu first, then empties the field, then folds it", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    widths = { row: 440, kinds: PARTS.fr.kinds, views: PARTS.fr.views, controls: PARTS.fr.controls, add: 0, update: 0 };
+    let query = "tick";
+    const render = async () => act(async () => {
+      root.render(createElement(ConnectAppsView, {
+        tab: "discover", onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
+        search: createElement(ConnectAppsSearchField, { query, onQuery: (next: string) => { query = next; void render(); }, groups: [], opened: new Set<never>(), active: -1, onActive: noop, onOpen: noop }),
+        filterControl: createElement(DiscoverFilter, { chips: ["all", "productivity"], filter: "all", onPick: noop, label: (chip: string) => chip }),
+        sortControl: createElement(SortControl, { sort: "default", onSort: noop, options: ["default", "name"] }),
+        installed: "I", discover: "D",
+      }));
+    });
+    await render();
+    await act(async () => { watched?.(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-expanded] [data-plugins-filter-button]")!.click(); });
+    expect(host.querySelector("[data-plugins-search-expanded] [role='menu']")).not.toBeNull();
+    const press = async (target: Element) => act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    const input = () => host.querySelector<HTMLInputElement>("[data-plugins-search-expanded] input")!;
+    // 1: the menu closes, the text and the opened search stay
+    await press(input());
+    expect(host.querySelector("[data-plugins-search-expanded] [role='menu']")).toBeNull();
+    expect(query).toBe("tick");
+    expect(host.querySelector("[data-plugins-search-expanded]")).not.toBeNull();
+    // 2: the field empties, the search stays opened
+    await press(input());
+    expect(query).toBe("");
+    expect(host.querySelector("[data-plugins-search-expanded]")).not.toBeNull();
+    // 3: the search folds
+    await press(input());
+    expect(host.querySelector("[data-plugins-search-expanded]")).toBeNull();
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
   it("the compact \"+\" button has a tooltip", async () => {
     const { AddMenu } = await import("./InstalledView");
     const host = document.createElement("div");

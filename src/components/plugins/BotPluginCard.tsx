@@ -10,6 +10,7 @@ import { t } from "@/lib/i18n";
 import type { BotPluginsView } from "@/lib/my-connections";
 import type { BotPluginState } from "@/lib/plugin-scope";
 import { Switch } from "../SettingsPrimitives";
+import { DetailLabel } from "./DetailParts";
 import { PluginCard } from "./PluginParts";
 import { PluginConfigForm } from "./PluginConfigForm";
 
@@ -49,8 +50,10 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
   const empty = contents && !contents.agents.length && !contents.commands.length && !contents.skills.length;
   return (
     <div data-bot-plugin={plugin.key} data-bot-plugin-installed={installed ? "yes" : "no"}>
+      {/* under a page that states where it is installed, the card is a section of that page: its label is the page's */}
+      {statedAbove && <DetailLabel>{t("connectApps.botPlugin.brings")}</DetailLabel>}
       <PluginCard
-        title={statedAbove ? t("connectApps.botPlugin.brings") : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
+        title={statedAbove ? undefined : personal ? t("connectApps.scope.me") : t("connectApps.botPlugin.title", { name: botName })}
         action={!statedAbove && installed && change ? (
           <Switch checked={installed.enabled} disabled={busy !== null} aria-label={t("plugins.enabled", { name: plugin.plugin })} onClick={() => onToggle(!installed.enabled)} />
         ) : undefined}

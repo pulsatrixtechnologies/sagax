@@ -36,7 +36,7 @@ describe("NudgeButton", () => {
     const tip = markup.match(/<span id="nudge-tip-pr_ada"[^>]*>[^<]*<\/span>/)?.[0] ?? "";
     expect(tip).toContain('role="tooltip"');
     expect(tip).toContain("opacity-0");
-    expect(tip).toContain("group-hover/nudge:opacity-100");
+    expect(tip).toContain("group-hover/tip:opacity-100");
     expect(tip).toContain(sentence);
     expect(markup).not.toContain('role="status"');
     expect(markup).not.toContain("Nudge sent");

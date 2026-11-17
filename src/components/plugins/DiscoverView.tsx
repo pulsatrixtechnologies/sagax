@@ -8,32 +8,24 @@
 // connectors in Installed (Providers). Recommended for you comes first, under
 // the pills (#4207): the curated picks a bot usually wants
 // (recommended-picks.ts) that this person can connect and does not have.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+// #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
+// left the home, it repeated Yours.
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowRight, ChevronLeft, ChevronRight, Loader2, Pause, Play } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { kindOf, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
 import { PICK_WHY, recommendedPicks } from "@/lib/recommended-picks";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { ConnectedMark, PluginRow, categoryPills, filterLabel, moreCategoryPills, sectionTitle } from "./ConnectAppsView";
-import { PluginIcon, PluginStatusLabel } from "./PluginParts";
-import { PLUGINS, pluginChipClass } from "./plugins-style";
+import { CARD_GRID, ConnectedMark, DiscoverCard, filterLabel, sectionTitle, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
+import { PluginIcon } from "./PluginParts";
+import { PLUGINS } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 
 const PAGE = 60;
-const FROM_SAGAX = 6;
-
-/** A row of "From Sagax": what is here, with what it brings. */
-export interface FromSagaxRow {
-  key: string;
-  /** the mark to show (the entry's real logo) */
-  item: Pick<PluginItem, "key" | "kind" | "name" | "logo" | "domain">;
-  name: string;
-  /** "1 connector, 27 skills" */
-  sub: string;
-  status: PluginItem["status"];
-}
+/** How many curated picks the featured set holds (a few, not all). */
+const FEATURED_PICKS = 3;
 
 export interface DiscoverViewProps {
   /** rows not installed yet (discoverItems) */
@@ -51,15 +43,13 @@ export interface DiscoverViewProps {
   /** apps a conversation needs (its Connect apps pill): shown first */
   focus?: readonly string[];
   onOpenItem: (item: PluginItem) => void;
-  renderAction: (item: PluginItem) => ReactNode;
+  /** a row's button; the banner asks for the labelled one */
+  renderAction: (item: PluginItem, variant?: "card" | "banner") => ReactNode;
   renderBelow?: (item: PluginItem) => ReactNode;
-  /** "From Sagax": what is installed, first, on All */
-  fromSagax?: readonly FromSagaxRow[];
-  onOpenFromSagax?: (row: FromSagaxRow) => void;
-  /** View all of From Sagax: Manage */
-  onViewInstalled?: () => void;
-  /** "From <provider>" (#2306): the engine accounts' connectors, after From
-   * Sagax, in its rows; Manage on <provider> is the section's link */
+  /** #4453: the one kind shown; absent: every kind */
+  kind?: ConnectAppsKind;
+  /** "From <provider>" (#2306): the engine accounts' connectors, in their
+   * rows (Connectors only); Manage on <provider> is the section's link */
   accounts?: ReadonlyArray<{ group: HarnessConnectorGroup; rows: AccountConnectorRow[] }>;
   /** an account row with a page of its own (a Grok connector); absent: none */
   onOpenAccount?: (row: AccountConnectorRow) => (() => void) | undefined;
@@ -77,9 +67,24 @@ export interface DiscoverViewProps {
   /** where Recommended for you picks from, when it is wider than `items`
    * (Me: the catalog's apps too); absent: `items` */
   recommendFrom?: readonly PluginItem[];
+  /** a bundle the console offers that the person has not turned on (Plugins): a card, not only a slide */
+  bundleCards?: ReadonlyArray<{ item: PluginItem; from: string; title: string; onOpen: () => void; action: ReactNode }>;
+  /** one slide per vendor the organization console offers the person (Connectors) */
+  vendorSlides?: ReadonlyArray<{ key: string; consoleName: string; name: string; line: string; art: ReactNode; onGo: () => void }>;
+  /** the sort chosen in the control row; "name" orders each section by name */
+  sort?: ConnectAppsSort;
 }
 
-export function DiscoverView({ items, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom, owned = [], canConnect, recommendFrom }: DiscoverViewProps) {
+export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [], bundleCards = [] }: DiscoverViewProps) {
+  // #4453: the kind tab says what is listed (the type filter's apps, MCP
+  // servers or skills); the engine accounts and the custom connector are
+  // connectors
+  const ofKind = (rows: readonly PluginItem[]) => (kind === undefined ? [...rows] : rows.filter((item) => kindOf(item) === kind));
+  const items = ofKind(allItems);
+  const recommendFrom = allRecommendFrom ? ofKind(allRecommendFrom) : undefined;
+  const connectors = kind === undefined || kind === "connectors";
+  const accounts = connectors ? allAccounts : [];
+  const onAddCustom = connectors ? addCustom : undefined;
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [filter, type]);
   const single = filter !== "all" || type !== "any";
@@ -94,78 +99,73 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
     ? recommendedPicks(recommendFrom ?? items, { names: [...owned, ...accountOwned.map((row) => row.name)], capabilities: accountOwned.flatMap((row) => row.capabilities) }, canConnect)
     : [];
   const recommended = listsPicks ? picks : picks.slice(0, SECTION_PREVIEW);
+  // the featured set: a few curated picks, and one slide per vendor the
+  // console offers; nothing to feature, no block; the shelf does not repeat a pick
+  const featuredPicks = !single && !listsPicks ? recommended.filter((row) => row.item.action !== null).slice(0, FEATURED_PICKS) : [];
+  const slides: FeaturedSlide[] = [
+    ...featuredPicks.map(({ item, pick }): FeaturedSlide => ({
+      key: item.key, itemKey: item.key, source: t("connectApps.featured.from", { source: sourceLabel(item.source) }), name: item.name, line: t(PICK_WHY[pick.kind]),
+      art: <PluginIcon item={item} faviconSize={256} className="size-20 rounded-2xl" />, action: renderAction(item, "banner"),
+    })),
+    ...(connectors && !single && !listsPicks ? vendorSlides : []).map((vendor): FeaturedSlide => ({
+      key: vendor.key, source: t("connectApps.featured.fromConsole", { console: vendor.consoleName }), name: vendor.name, line: vendor.line,
+      art: vendor.art, action: (
+        <button type="button" data-featured-vendor-go={vendor.key} onClick={vendor.onGo} className={cn(PLUGINS.fillPill, "h-8")}>{t("connectApps.featured.seeProducts")}</button>
+      ),
+    })),
+  ];
+  // a bundle not turned on: Plugins, on All (a category or a search narrows the list to catalog rows)
+  const bundles = (kind === undefined || kind === "plugins") && !single && !listsPicks ? bundleCards : [];
+  const featuredKeys = new Set(featuredPicks.map((row) => row.item.key));
+  const shelf = recommended.filter((row) => !featuredKeys.has(row.item.key));
   const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
-  // the account rows' categories have their pill too
-  const categorized = [...items, ...accounts.flatMap((section) => section.rows)];
-  const pills = categoryPills(categorized, filter);
-  const more = moreCategoryPills(categorized, filter);
-  const ours = !single ? fromSagax : [];
   // a category or a type keeps the account rows it matches; the notices
   // (no account, nothing read yet) show on All only
   const accountSections = accounts
     .map(({ group, rows }) => ({ group, rows: rows.filter((row) => accountRowMatches(row, filter, type)), notice: !single && group.notice ? group : null }))
     .filter((section) => section.rows.length > 0 || section.notice);
   return (
-    <div data-plugins-discover>
-      {(pills.length > 1 || more.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={t("connectApps.filtersAria")} data-plugins-chips>
-          {pills.map((chip) => (
-            <button key={chip} type="button" aria-pressed={filter === chip && type === "any"} data-plugins-chip={chip}
-              onClick={() => { onFilter(chip); onType("any"); }} className={pluginChipClass(filter === chip && type === "any")}>
-              {filterLabel(chip, sourceLabel)}
-            </button>
-          ))}
-          {more.length > 0 && (
-            <MoreChips chips={more} chosen={type === "any" && more.includes(filter) ? filter : null} label={(chip) => filterLabel(chip, sourceLabel)} onPick={(chip) => { onFilter(chip); onType("any"); }} />
-          )}
-          {type !== "any" && (
-            <button type="button" aria-pressed data-plugins-type={type} onClick={() => onType("any")} className={pluginChipClass(true)}>
-              {filterLabel(type, sourceLabel)} ×
-            </button>
-          )}
+    <div data-plugins-discover className="[&>section:first-child]:mt-4">
+      {type !== "any" && (
+        <div className="flex flex-wrap items-center gap-2" data-plugins-chips="">
+          <button type="button" aria-pressed data-plugins-type={type} onClick={() => onType("any")} className={cn(PLUGINS.fillPill, "h-7 px-3 text-[13px]")}>
+            {filterLabel(type, sourceLabel)} ×
+          </button>
         </div>
       )}
-      {recommended.length > 0 && (
-        <section data-plugins-section="recommended" className="mt-[30px]">
-          <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />
-          <div className={PLUGINS.grid}>
-            {recommended.map(({ item, pick }) => (
-              <PluginRow key={item.key} item={item} sub={t(PICK_WHY[pick.kind])} onOpen={onOpenItem} action={renderAction(item)} below={renderBelow?.(item)} />
+      {slides.length > 0 && <FeaturedCarousel slides={slides} />}
+      {bundles.length > 0 && (
+        <section data-plugins-section="bundles" className="mt-[30px] first:mt-4">
+          <SectionHead title={bundles[0]!.title} count={bundles.length} />
+          <div className={CARD_GRID}>
+            {bundles.map((bundle) => (
+              <DiscoverCard key={bundle.item.key} item={bundle.item} from={bundle.from} openable onOpen={bundle.onOpen} action={bundle.action} />
             ))}
           </div>
         </section>
       )}
-      {ours.length > 0 && (
-        <section data-plugins-section="from-sagax" className="mt-[30px]">
-          <SectionHead title={t("connectApps.section.fromSagax")} onViewAll={ours.length > FROM_SAGAX ? onViewInstalled : undefined} />
-          <div className={PLUGINS.grid}>
-            {ours.slice(0, FROM_SAGAX).map((row) => (
-              <div key={row.key} data-plugin-row={row.key} className="py-3">
-                <button type="button" onClick={() => onOpenFromSagax?.(row)} className="flex w-full min-w-0 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>
-                  <PluginIcon item={row.item} className="size-10 rounded-[10px]" />
-                  <span className="min-w-0 flex-1">
-                    <span className={PLUGINS.rowName}>{row.name}</span>
-                    <span className={PLUGINS.rowSub}>{row.sub}</span>
-                  </span>
-                  {row.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={row.status} className="text-[13px] font-normal" />}
-                </button>
-              </div>
+      {shelf.length > 0 && (
+        <section data-plugins-section="recommended" className="mt-[30px] first:mt-4">
+          <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" count={listsPicks ? shelf.length : picks.length - featuredPicks.length} onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />
+          <div className={CARD_GRID}>
+            {shelf.map(({ item, pick }) => (
+              <DiscoverCard key={item.key} item={item} sub={t(PICK_WHY[pick.kind])} from={sourceLabel(item.source)} onOpen={onOpenItem} action={renderAction(item)} />
             ))}
           </div>
         </section>
       )}
       {accountSections.map(({ group, rows, notice }) => (
         <section key={group.id} data-plugins-section={`from-${group.id}`} data-harness-group={group.id} className="mt-[30px]">
-          <SectionHead title={t("connectApps.section.fromProvider", { provider: group.source })}
+          <SectionHead title={t("connectApps.section.fromProvider", { provider: group.source })} count={rows.length}
             link={{ label: t("connectApps.providers.manage", { provider: group.name }), onClick: () => openAccountManage(group.manageUrl), manage: group.id }} />
           {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "pl-3")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
-          <div className={PLUGINS.grid}>
+          <div className={CARD_GRID}>
             {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} manageInHead />}
             {rows.map((row) => {
               const open = onOpenAccount?.(row);
               const body = <AccountConnectorBody row={row} />;
               return (
-                <div key={row.key} data-plugin-row={`account:${row.key}`} data-harness-connector={row.key} className="flex min-w-0 items-center gap-3 py-3">
+                <div key={row.key} data-plugin-row={`account:${row.key}`} data-harness-connector={row.key} data-discover-card="" className="flex min-w-0 items-center gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] p-3">
                   {open ? (
                     <button type="button" onClick={open} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
                   ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
@@ -196,15 +196,19 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
             <SectionHead
               title={sectionTitle(section, sourceLabel)}
               id={section.id}
+              count={section.total}
               onViewAll={!single && section.filter && section.total > section.items.length ? () => {
                 const target = section.filter!;
                 if ("filter" in target) onFilter(target.filter);
                 else onType(target.type);
               } : undefined}
             />
-            <div className={PLUGINS.grid}>
-              {shown.map((item) => (
-                <PluginRow key={item.key} item={item} onOpen={onOpenItem} action={renderAction(item)} below={renderBelow?.(item)} />
+            <div className={CARD_GRID}>
+              {sortRows(shown, sort, (item) => item.name, (item) => item.installed).map((item) => (
+                <div key={item.key} className="contents">
+                  <DiscoverCard item={item} from={sourceLabel(item.source)} onOpen={onOpenItem} action={renderAction(item)} />
+                  {renderBelow?.(item)}
+                </div>
               ))}
             </div>
             {single && section.items.length > shown.length && (
@@ -228,10 +232,103 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
   );
 }
 
-function SectionHead({ title, id, onViewAll, link }: { title: string; id?: string; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
+/** A slide of the featured set: a curated pick, or a vendor the organization
+ * console offers the person (its name, logo and line come from the console's
+ * data, never from this code). */
+export interface FeaturedSlide {
+  key: string;
+  /** the small line over the name ("From <source>") */
+  source: string;
+  name: string;
+  line: string;
+  /** the artwork at the right: an SVG or the largest image there is */
+  art: ReactNode;
+  action: ReactNode;
+  /** a curated pick's row key, so the shelf does not repeat it */
+  itemKey?: string;
+}
+
+const SLIDE_MS = 6000;
+
+/** The featured block of Discover (#4453): one wide rounded card that cycles
+ * through its slides by itself every few seconds, pauses on hover and on
+ * keyboard focus, never moves by itself under the system's reduced-motion
+ * setting, has dots to jump to a slide and previous/next buttons the keyboard
+ * reaches. One slide is visible at a time. */
+export function FeaturedCarousel({ slides }: { slides: readonly FeaturedSlide[] }) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = slides.length;
+  const current = slides[Math.min(index, Math.max(count - 1, 0))];
+  // the system's reduced-motion setting, read live: a change while the window is open stops (or lets) the cycling at once
+  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => setReduced(query.matches);
+    change();
+    query.addEventListener?.("change", change);
+    return () => query.removeEventListener?.("change", change);
+  }, []);
+  // a pause the person chose, kept until they resume (hover and focus pause it only while they last)
+  const [stopped, setStopped] = useState(false);
+  useEffect(() => { if (index >= count) setIndex(0); }, [count, index]);
+  useEffect(() => {
+    if (count < 2 || paused || stopped || reduced) return;
+    const timer = window.setTimeout(() => setIndex((value) => (value + 1) % count), SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [count, index, paused, stopped, reduced]);
+  if (!current) return null;
+  const go = (next: number) => setIndex((next + count) % count);
+  return (
+    <section data-plugins-section="featured" data-featured-banner="" data-plugin-row={current.itemKey ?? current.key}
+      aria-roledescription="carousel" aria-label={t("connectApps.featured.aria")}
+      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }}
+      className="relative mt-4 overflow-hidden rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.07] to-ink/[0.02] p-5 pb-9">
+      <div role="group" aria-roledescription="slide" aria-label={`${Math.min(index, count - 1) + 1} / ${count}`} aria-live={paused || count < 2 ? "polite" : "off"} data-featured-slide={current.key} className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] leading-4 text-ink-secondary" data-featured-source="">{current.source}</p>
+          <h3 className="mt-1 truncate text-[18px] font-normal leading-7 text-ink">{current.name}</h3>
+          <p className="mt-0.5 line-clamp-1 text-[13px] leading-[18px] text-ink-secondary" title={current.line}>{current.line}</p>
+          <div className="mt-3 flex items-center gap-2">{current.action}</div>
+        </div>
+        <div className="flex size-20 shrink-0 items-center justify-center max-sm:hidden" aria-hidden="true" data-featured-art="">{current.art}</div>
+      </div>
+      {count > 1 && (
+        <div className="absolute inset-x-5 bottom-2.5 flex items-center justify-between" data-featured-controls="">
+          <div className="flex items-center" role="group" aria-label={t("connectApps.featured.dots")}>
+            {/* a 24 px hit area around each 8 px dot */}
+            {slides.map((slide, position) => (
+              <button key={slide.key} type="button" data-featured-dot={position} aria-label={t("connectApps.featured.goTo", { name: slide.name })} aria-current={position === index ? "true" : undefined}
+                onClick={() => go(position)} className="group/dot flex size-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                <span className={cn("size-2 rounded-full transition-colors motion-reduce:transition-none", position === index ? "bg-ink" : "bg-ink/25 group-hover/dot:bg-ink/50")} />
+              </button>
+            ))}
+            {!reduced && (
+              <button type="button" data-featured-pause="" aria-pressed={stopped} aria-label={t(stopped ? "connectApps.featured.resume" : "connectApps.featured.pause")} title={t(stopped ? "connectApps.featured.resume" : "connectApps.featured.pause")}
+                onClick={() => setStopped((value) => !value)} className="ml-1 inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                {stopped ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" data-featured-prev="" aria-label={t("connectApps.featured.prev")} title={t("connectApps.featured.prev")} onClick={() => go(index - 1)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><ChevronLeft size={14} aria-hidden="true" /></button>
+            <button type="button" data-featured-next="" aria-label={t("connectApps.featured.next")} title={t("connectApps.featured.next")} onClick={() => go(index + 1)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><ChevronRight size={14} aria-hidden="true" /></button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SectionHead({ title, id, count, onViewAll, link }: { title: string; id?: string; /** the count in a small rounded badge next to the title */ count?: number; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <h3 className={PLUGINS.sectionTitle}>{title}</h3>
+      <div className="flex min-w-0 items-center gap-2">
+        <h3 className={PLUGINS.sectionTitle}>{title}</h3>
+        {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
+      </div>
       {link && (
         <button type="button" data-harness-manage={link.manage} className={PLUGINS.sectionLink} onClick={link.onClick}>
           {link.label}
@@ -239,33 +336,8 @@ function SectionHead({ title, id, onViewAll, link }: { title: string; id?: strin
       )}
       {!link && onViewAll && (
         <button type="button" data-plugins-view-all={id ?? ""} className={PLUGINS.sectionLink} onClick={onViewAll}>
-          {t("connectApps.viewAll")}
+          {t("connectApps.viewAll")}<ArrowRight size={12} aria-hidden="true" className="ml-1 inline" />
         </button>
-      )}
-    </div>
-  );
-}
-
-/** "More ▾": the categories past the main ones, in a small menu. */
-function MoreChips({ chips, chosen, label, onPick }: { chips: readonly PluginFilter[]; chosen: PluginFilter | null; label: (chip: PluginFilter) => string; onPick: (chip: PluginFilter) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
-  return (
-    <div ref={ref} className="relative" data-plugins-more-chips>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={pluginChipClass(chosen !== null)} data-plugins-chip={chosen ?? "more"}>
-        {chosen ? label(chosen) : t("connectApps.filter.more")}
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-xl border border-border bg-raised p-1 shadow-lg">
-          {chips.map((chip) => (
-            <button key={chip} type="button" role="menuitemradio" aria-checked={chosen === chip} onClick={() => { setOpen(false); onPick(chip); }}
-              className={cn("flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-hover", chosen === chip && "bg-hover")} data-plugins-chip={chip}>
-              {label(chip)}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   );

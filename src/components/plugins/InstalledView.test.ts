@@ -54,3 +54,20 @@ it("#4359: a product switch writes the bot's whole products map, as a built-in's
   expect(botSwitchPatch(bot, { builtin: "rea" }, true)).toEqual({ builtinPlugins: { rea: true } });
   expect(botSwitchPatch(bot, {}, true)).toBeNull();
 });
+
+it("#4504: a failed update is said under the row that failed (by its update key), not only at the top", () => {
+  const withKey = installedEntries(buildPluginItems({ servers: [
+    { name: "Notes", enabled: true, url: "https://example.test/notes", auth: "connected", updateKey: "connector:me:me:Notes" },
+    { name: "Search", enabled: true, url: "https://example.test/search", auth: "connected", updateKey: "connector:me:me:Search" },
+  ] }));
+  const html = render({
+    entries: withKey,
+    rowNotice: (keys) => keys.includes("connector:me:me:Search") ? createElement("p", { "data-test-notice": "" }, "failed") : null,
+  });
+  const notice = html.indexOf("data-test-notice");
+  expect(notice).toBeGreaterThan(html.indexOf("Search"));
+  expect(notice).toBeGreaterThan(html.indexOf('data-installed-entry="mcp:Search"'));
+  // and under the Search row only: Notes comes before Search and has none after it
+  expect(html.match(/data-test-notice/g)).toHaveLength(1);
+  expect(html.indexOf("data-test-notice")).toBeLessThan(html.length);
+});

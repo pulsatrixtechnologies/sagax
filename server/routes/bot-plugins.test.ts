@@ -3,7 +3,7 @@
 // (/api/bots/:id/plugins, the bot's owner or a person who manages it).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -41,6 +41,21 @@ function marketplaceRepo(): string {
   write(repo, "plugins/reviewer/.claude-plugin/plugin.json", JSON.stringify({ name: "reviewer", userConfig: { team: { type: "string", title: "Team" }, token: { type: "string", title: "Token", sensitive: true } } }));
   write(repo, "plugins/reviewer/agents/critic.md", "---\nname: critic\n---\nCritic");
   write(repo, "plugins/reviewer/commands/review.md", "Review the diff");
+  // what can hold a secret: no files route lists or reads these
+  write(repo, "plugins/reviewer/.env", "TOKEN=not-a-real-value");
+  write(repo, "plugins/reviewer/.env.local", "TOKEN=not-a-real-value");
+  write(repo, "plugins/reviewer/certs/server.pem", "not a real key");
+  write(repo, "plugins/reviewer/certs/signing.key", "not a real key");
+  write(repo, "plugins/reviewer/secrets.json", "{}");
+  // what the list leaves out, the read refuses too
+  write(repo, "plugins/reviewer/node_modules/pkg/index.js", "module.exports = 1;");
+  write(repo, "plugins/reviewer/.git/config", "[core]");
+  // too big to read here, and a binary that is never sent
+  write(repo, "plugins/reviewer/docs/big.md", "x".repeat(600 * 1024));
+  writeFileSync(join(repo, "plugins/reviewer/docs/logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]));
+  // a link out of the folder
+  writeFileSync(join(tmpdir(), "sagax-outside-secret.txt"), "outside");
+  symlinkSync(tmpdir(), join(repo, "plugins/reviewer/escape"));
   return repo;
 }
 
@@ -123,7 +138,7 @@ async function boot() {
     });
     return { status: response.status, body: await response.json() as Record<string, any> };
   };
-  return { call, plugins, shared };
+  return { call, plugins, shared, personal };
 }
 
 describe("org-wide sharing is admins only, on the bot route too", () => {
@@ -169,6 +184,97 @@ describe("personal plugins use the signed-in person's encrypted scope", () => {
     expect((await call("pr_blocked", "GET", "/api/me/plugins")).body.canChange).toBe(true);
     const denied = await call("pr_blocked", "POST", "/api/me/plugins/marketplaces", { source: "acme/tools" });
     expect(denied.status).toBe(201);
+  });
+});
+
+describe("what an installed plugin holds, read only", () => {
+  it("lists and reads a person's own plugin, never someone else's, never outside its folder", async () => {
+    const { call } = await boot();
+    await call("pr_alice", "POST", "/api/me/plugins/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/me/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    const listed = await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files");
+    expect(listed.status).toBe(200);
+    const paths = (listed.body.files as Array<{ path: string; kind: string }>).map((file) => file.path);
+    expect(paths).toEqual(expect.arrayContaining([".claude-plugin/plugin.json", "agents/critic.md", "commands/review.md"]));
+    expect(paths.some((path) => path.includes("sagax-originals") || path.startsWith(".git/"))).toBe(false);
+    const read = await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=commands%2Freview.md");
+    expect(read).toMatchObject({ status: 200, body: { kind: "text", text: "Review the diff" } });
+    // a path outside the folder is refused
+    expect((await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=..%2F..%2Fconfig.json")).status).toBe(400);
+    expect((await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=nope.md")).status).toBe(404);
+    // Bob has no such plugin: his own scope is empty
+    expect((await call("pr_bob", "GET", "/api/me/plugins/reviewer%40acme-tools/files")).status).toBe(404);
+    // read only
+    expect((await call("pr_alice", "POST", "/api/me/plugins/reviewer%40acme-tools/files", {})).status).toBe(404);
+  });
+
+  it("a stray % in the address is a 400, never a 500", async () => {
+    const { call } = await boot();
+    expect((await call("pr_alice", "GET", "/api/me/plugins/%zz/files")).status).toBe(400);
+    expect((await call("pr_alice", "GET", "/api/bots/alice-bot/plugins/%zz/files")).status).toBe(400);
+  });
+
+  it("reads a bot's plugin for who may use the bot, and hides a bot from who may not", async () => {
+    const { call } = await boot();
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    expect((await call("pr_bob", "GET", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files")).status).toBe(200);
+    expect((await call("pr_carol", "GET", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files")).status).toBe(404);
+  });
+});
+
+describe("what an installation's plugin holds, read only (managers)", () => {
+  it("lists and reads the installed plugin for a manager, refuses a path outside it and a plugin not installed", async () => {
+    const { call, shared } = await boot();
+    await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools" });
+    expect((await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files")).status).toBe(404);
+    await shared.prepare("acme-tools", "reviewer", ADMIN, { principal: ADMIN, seesAll: true });
+    await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
+    const listed = await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files");
+    expect(listed.status).toBe(200);
+    expect((listed.body.files as Array<{ path: string }>).map((file) => file.path)).toEqual(expect.arrayContaining(["agents/critic.md", "commands/review.md"]));
+    expect(await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files?path=agents%2Fcritic.md")).toMatchObject({ status: 200, body: { kind: "text" } });
+    expect((await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files?path=..%2Fx")).status).toBe(400);
+    // (who reaches /api/marketplaces at all is the request gate's: admin only, never in CLIENT_ALLOW)
+  });
+});
+
+const SECRETS = [".env", ".env.local", "certs/server.pem", "certs/signing.key", "secrets.json"];
+/** listed nowhere, so read nowhere */
+const UNLISTED = ["node_modules/pkg/index.js", ".git/config", ".claude-plugin/sagax-originals/commands/review.md", "escape/sagax-outside-secret.txt"];
+const leaks = (files: Array<{ path: string }>) => files.map((file) => file.path).filter((path) => SECRETS.includes(path) || /\.(?:pem|key)$|(?:^|\/)\.env/.test(path));
+
+describe("no files route lists or reads what can hold a secret", () => {
+  it("leaves .env*, *.pem, *.key and credential names out of the person's, the bot's and the installation's lists, and refuses to read them", async () => {
+    const { call, shared, plugins, personal } = await boot();
+    await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools", visibility: "org" });
+    await shared.prepare("acme-tools", "reviewer", ADMIN, { principal: ADMIN, seesAll: true });
+    await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
+    await call("pr_alice", "POST", "/api/me/plugins/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/me/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    // the folder Sagax keeps the texts from before a configuration in (made by the app, in every install)
+    for (const dir of [shared.pluginDir("acme-tools", "reviewer"), plugins.installedPluginDir("alice-bot", "reviewer@acme-tools"), personal.installedPluginDir("pr_alice", "reviewer@acme-tools")]) {
+      write(dir!, ".claude-plugin/sagax-originals/commands/review.md", "the text before configuration");
+    }
+    const bases = [
+      ["pr_alice", "/api/me/plugins/reviewer%40acme-tools/files"],
+      ["pr_alice", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files"],
+      [ADMIN, "/api/marketplaces/acme-tools/plugins/reviewer/files"],
+    ] as const;
+    for (const [who, base] of bases) {
+      const listed = await call(who, "GET", base);
+      expect(listed.status, base).toBe(200);
+      const paths = (listed.body.files as Array<{ path: string }>).map((file) => file.path);
+      expect(paths, base).toContain("agents/critic.md");
+      expect(leaks(listed.body.files), base).toEqual([]);
+      for (const hidden of [...SECRETS, ...UNLISTED]) expect((await call(who, "GET", `${base}?path=${encodeURIComponent(hidden)}`)).status, `${base} ${hidden}`).toBe(404);
+      expect(paths.some((path) => UNLISTED.includes(path) || path.startsWith("escape"))).toBe(false);
+      // a size cap, and no binary dump: listed, never sent
+      expect((await call(who, "GET", `${base}?path=docs%2Fbig.md`)).status, base).toBe(413);
+      expect(paths, base).toContain("docs/logo.png");
+      expect((await call(who, "GET", `${base}?path=docs%2Flogo.png`)).status, base).toBe(415);
+    }
   });
 });
 

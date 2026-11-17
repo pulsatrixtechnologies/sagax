@@ -119,6 +119,30 @@ describe("person products contract", () => {
   });
 });
 
+describe("the marks the console serves for a product and its vendor (#4503, Perspicax #2071)", () => {
+  const wire = { id: "desk", name: "Service Desk", state: "connected" };
+  it("reads an icon (its site and an image address) and a larger logo on the product and on its vendor", () => {
+    const product = parsePersonProduct({
+      ...wire, icon: { domain: "desk.example.com", url: "https://cdn.example.test/desk.svg" }, logo: "https://cdn.example.test/desk-large.svg",
+      group: { id: "harbor", name: "Harbor Suite", icon: { url: "https://cdn.example.test/harbor.svg" }, logo: "https://cdn.example.test/harbor-large.svg" },
+    });
+    expect(product?.icon).toEqual({ domain: "desk.example.com", url: "https://cdn.example.test/desk.svg" });
+    expect(product?.logo).toBe("https://cdn.example.test/desk-large.svg");
+    expect(product?.group).toEqual({ id: "harbor", name: "Harbor Suite", icon: { url: "https://cdn.example.test/harbor.svg" }, logo: "https://cdn.example.test/harbor-large.svg" });
+  });
+  it("accepts an inline image, never a script address or a plain http one", () => {
+    expect(parsePersonProduct({ ...wire, icon: { url: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E" } })?.icon?.url).toMatch(/^data:image\/svg\+xml/);
+    for (const url of ["javascript:alert(1)", "http://cdn.example.test/x.svg", "data:text/html,<script>", "file:///etc/passwd"]) {
+      expect(parsePersonProduct({ ...wire, icon: { url }, logo: url })).not.toHaveProperty("icon");
+      expect(parsePersonProduct({ ...wire, icon: { url }, logo: url })).not.toHaveProperty("logo");
+    }
+  });
+  it("keeps every field optional: a product the console sends none of is read as before", () => {
+    const plain = parsePersonProduct(wire);
+    for (const key of ["icon", "logo", "group"]) expect(plain).not.toHaveProperty(key);
+  });
+});
+
 describe("a product's mark", () => {
   it("reads the console's https icon address, and drops any other", () => {
     expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "https://console.example/icons/p.svg?v=3", domain: "p.example" } })?.icon).toEqual({ domain: "p.example", url: "https://console.example/icons/p.svg?v=3" });

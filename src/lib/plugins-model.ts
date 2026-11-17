@@ -43,6 +43,8 @@ export interface PluginItem {
   updateAvailable?: boolean;
   /** the version installed, when the marketplace offers another */
   installedVersion?: string;
+  /** the id the server gave this installed item for the update calls (#4504): the join to an update, never shown */
+  updateKey?: string;
   /** the rows of other sources folded into this one (same app) */
   merged?: string[];
   /** an MCP server that reads the person's GitHub account (the GitHub
@@ -99,6 +101,8 @@ interface McpListing {
   source?: string;
   /** reads the person's GitHub account (server/github/github-mcp-token.ts) */
   github?: "connected" | "missing" | "unreadable";
+  /** the server's id for this installed item in the update calls (#4504), never shown */
+  updateKey?: string;
 }
 interface FeaturedListing {
   id: string; name: string; description: string; url: string; domain: string; auth: string; installed?: boolean;
@@ -107,12 +111,14 @@ interface FeaturedListing {
   category?: string;
   iconUrl?: string;
 }
-interface SkillListing { name: string; description: string; source: string; enabled: boolean }
+interface SkillListing { name: string; description: string; source: string; enabled: boolean; /** the update calls' id for this skill (#4504) */ updateKey?: string }
 interface MarketplaceListing {
   name: string;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; installed: boolean; servers: string[]; skills: string[];
     installedVersion?: string; updateAvailable?: boolean;
+    /** the update calls' id for this installed plugin (#4504), never shown */
+    updateKey?: string;
     /** the plugin's site and declared icon (marketplace.json) */
     homepage?: string; icon?: string;
     /** #2759: converted from another format (Cursor), and what did not convert */
@@ -324,6 +330,7 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       ...(server.source && serverParent.has(server.name) ? { parent: serverParent.get(server.name) } : {}),
       ...(sources.whop?.server === server.name ? { parent: WHOP_KEY } : {}),
       ...(server.github ? { githubAccount: server.github } : {}),
+      ...(server.updateKey ? { updateKey: server.updateKey } : {}),
     });
   }
   for (const listing of sources.featured ?? []) {
@@ -355,6 +362,7 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       status: skill.enabled ? "connected" : "off",
       action: null,
       source: skill.source === "local-import" ? "local" : skill.source,
+      ...(skill.updateKey ? { updateKey: skill.updateKey } : {}),
       ...(skillParent.has(skill.name) && skill.source !== "local-import" ? { parent: skillParent.get(skill.name) } : {}),
     });
   }
@@ -377,6 +385,7 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
         ...(plugin.version ? { version: plugin.version } : {}),
         ...(plugin.installed && plugin.updateAvailable ? { updateAvailable: true } : {}),
         ...(plugin.installed && plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
+        ...(plugin.installed && plugin.updateKey ? { updateKey: plugin.updateKey } : {}),
         ...(plugin.convertedFrom ? { convertedFrom: plugin.convertedFrom } : {}),
         ...(plugin.notConverted?.length ? { notConverted: plugin.notConverted } : {}),
       });

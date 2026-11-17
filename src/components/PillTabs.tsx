@@ -9,7 +9,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 
-export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPrefix, label, after, tabAttributes, tabClassName, className, ...rest }: {
+export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPrefix, label, after, tabAttributes, tabClassName, className, variant = "pill", ...rest }: {
+  /** "line": the detail pages' tabs, underlined with a count, on a hairline */
+  variant?: "pill" | "line";
   tabs: readonly T[];
   tab: T;
   onTab: (tab: T) => void;
@@ -38,7 +40,7 @@ export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPref
         onTab(tabs[index]!);
         event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[index]?.focus();
       }}
-      className={cn("flex min-w-0 flex-wrap items-center gap-0.5", className)}
+      className={cn("flex min-w-0 flex-wrap items-center", variant === "line" ? "gap-5 border-b border-hairline-weak" : "gap-0.5", className)}
     >
       <TabIndicatorGroup>
         {tabs.map((id) => (
@@ -53,12 +55,15 @@ export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPref
             tabIndex={tab === id ? 0 : -1}
             onClick={() => onTab(id)}
             className={cn(
-              "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+              variant === "line"
+                ? "relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 py-2 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                : "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+              variant === "line" && (tab === id ? "border-ink" : "border-transparent"),
               tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
               tabClassName?.(id),
             )}
           >
-            {tab === id && <TabIndicator />}
+            {tab === id && variant === "pill" && <TabIndicator />}
             <span className="relative">{label(id)}</span>
             {after?.(id)}
           </button>

@@ -1,3 +1,4 @@
+import { statusState } from "../plugins/StateIcon";
 import type { ReactNode } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 
@@ -17,6 +18,8 @@ import {
   refusedKeys,
 } from "../McpServersPanel";
 import { AddAccountButton, SignInButton, type DetailAccount, type DetailTool } from "../plugins/PluginDetailView";
+import { sourceLine, type ConnectorWord } from "../plugins/DetailParts";
+import { filterLabel } from "../plugins/ConnectAppsView";
 import { grokConnectorDetail } from "./GrokConnectors";
 import { pluginSourceLabel, safeHost } from "./helpers";
 import type { DetailBase, DetailContext } from "./types";
@@ -141,7 +144,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
       };
     })],
     accountAction,
-    accountExtra: noAccount ? (server.managedBy ? <p className="py-1.5 text-[11.5px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p> : undefined) : (
+    accountExtra: noAccount ? (server.managedBy ? <p className="py-1.5 text-[12px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p> : undefined) : (
       <>
         {mcpAccountDraft?.server === name && (
           <form
@@ -191,7 +194,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
             {typeof oauthError === "string" ? oauthError : t(oauthError.key, oauthError.params)}
           </div>
         )}
-        {server.managedBy && <p className="mt-2 text-[11.5px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p>}
+        {server.managedBy && <p className="mt-2 text-[12px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p>}
       </>
     ),
     tools: {
@@ -211,7 +214,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     details: [
       { label: t("connectApps.detail.source"), value: pluginSourceLabel(item.source) },
       { label: t("connectApps.detail.transport"), value: remote ? (server.type === "sse" ? "SSE" : "HTTP") : "stdio" },
-      { label: remote ? t("connectApps.detail.url") : t("connectApps.detail.command"), value: remote ? server.url : [server.command, ...server.args].join(" "), mono: true },
+      { label: remote ? t("connectApps.detail.url") : t("connectApps.detail.command"), value: remote ? server.url : [server.command, ...server.args].join(" ") },
       ...(count ? [{ label: t("connectApps.detail.tools"), value: count }] : []),
     ],
     children: (
@@ -246,7 +249,7 @@ function conversionSection(item: PluginItem): ReactNode {
   return (
     <section data-plugin-conversion={item.convertedFrom}>
       <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.converted.title")}</h3>
-      <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.plugin.converted.from")}</p>
+      <p className="mb-2 text-[13px] leading-relaxed text-ink-secondary">{t("connectApps.plugin.converted.from")}</p>
       {notes.length === 0
         ? <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.converted.all")}</p>
         : (
@@ -262,7 +265,10 @@ function conversionSection(item: PluginItem): ReactNode {
 }
 
 /** A marketplace plugin: what it brought, each one a link to its own page. */
-export function pluginDetail(item: PluginItem, { items, marketplaces, installing, openItem, uninstallPlugin, updatePlugin, scope, botCard, openGithub, githubKey, githubSection }: DetailContext): DetailBase {
+const connectorWord = (status: PluginItem["status"]): ConnectorWord =>
+  status === "connected" ? "connected" : status === "needs_auth" ? "needsSignIn" : status === "pending" ? "pending" : "notAdded";
+
+export function pluginDetail(item: PluginItem, { items, marketplaces, installing, openItem, uninstallPlugin, updatePlugin, scope, scopeBotId, contentsOf, botCard, openGithub, githubKey, githubSection, mcp }: DetailContext): DetailBase {
   const [plugin, marketplace] = item.id.split("@") as [string, string];
   const market = marketplaces?.find((entry) => entry.name === marketplace);
   const entry = market?.plugins.find((candidate) => candidate.name === plugin);
@@ -270,19 +276,37 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
   // the GitHub plugin's page holds the GitHub connection, first (2026-10-29)
   const github = item.key === githubKey && githubSection ? githubSection : null;
   const installedVersion = item.installedVersion ?? item.version;
-  const subtitle = `${market?.source ?? marketplace}${installedVersion ? ` · ${installedVersion}` : ""}`;
-  const versionDetails = [
-    ...(installedVersion ? [{ label: t("connectApps.detail.version"), value: installedVersion }] : []),
-    ...(item.updateAvailable ? [{
-      label: t("connectApps.plugin.available"),
-      value: item.installedVersion && item.version ? item.version : t("connectApps.plugin.newerFiles"),
-    }] : []),
-  ];
+  // the skills it brings: its skill rows, and, where an install links none (a person's or a bot's own), the names it holds
+  const skillChildren = children.filter((child) => child.kind === "skill");
+  const heldSkills = (contentsOf?.(item.id)?.skills ?? []).filter((name) => !skillChildren.some((child) => child.name === name));
+  const skillCount = skillChildren.length + heldSkills.length;
+  // the connectors it declares, where an install links no server row of its own: their names, no state (it is not known here)
+  const heldServers = (contentsOf?.(item.id)?.servers ?? []).filter((name) => !children.some((child) => child.kind !== "skill" && child.name === name));
+  // "from <source> · <version> · N skills": what is known, one grey line (no "updated <when>": the marketplace never says)
+  const subtitle = sourceLine([
+    t("connectApps.detail.lineFrom", { source: market?.source ?? marketplace }),
+    installedVersion,
+    skillCount > 0 && (skillCount === 1 ? t("connectApps.count.skillOne") : t("connectApps.count.skillMany", { count: skillCount })),
+  ]);
+  // every category the data has: the marketplace's own word, else the app's category
+  const categories = entry?.category ? [entry.category] : item.category !== "other" ? [filterLabel(item.category)] : [];
+  // a connector that reaches the network: known only for the servers this page can read
+  const brought = children.filter((child) => child.kind !== "skill").map((child) => mcp.servers?.find((server) => server.name === child.id));
+  const network = brought.length > 0 && brought.every((server) => server !== undefined) ? brought.some((server) => server && isRemoteMcpListing(server)) : undefined;
+  // Contents: what the server holds of this install, read only: the person's own, a bot's, or the installation's
+  const filesUrl = scope === "me" ? `/api/me/plugins/${encodeURIComponent(item.id)}/files`
+    : scope === "bot" && scopeBotId ? `/api/bots/${encodeURIComponent(scopeBotId)}/plugins/${encodeURIComponent(item.id)}/files`
+      : scope === "workspace" ? `/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(plugin)}/files` : null;
+  const files = filesUrl && item.installed ? {
+    listUrl: filesUrl,
+    version: installedVersion,
+  } : undefined;
+  const versionDetails = installedVersion ? [{ label: t("connectApps.detail.version"), value: installedVersion }] : [];
   // The technical id and the repository: secondary, in Details (the header
   // shows the name people read).
   const sourceDetails = [
     { label: t("connectApps.detail.id"), value: item.id, mono: true },
-    ...(market?.source && market.source !== marketplace ? [{ label: t("connectApps.detail.repository"), value: market.source, mono: true }] : []),
+    ...(market?.source && market.source !== marketplace ? [{ label: t("connectApps.detail.repository"), value: market.source }] : []),
   ];
   // Grok Bot's plugin page: Accounts, then Tools, first (2026-11-06, #2146).
   // Accounts: the connectors it brought, each with its sign-in state (the
@@ -323,12 +347,32 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
   const shared = {
     item,
     subtitle,
+    ...(item.description ? { description: item.description } : {}),
+    categories,
+    ...(network !== undefined ? { network } : {}),
+    ...(files ? { files } : {}),
     busy: installing !== null,
     accounts,
     // #4154: no connector and no GitHub connection: no Accounts section; no
     // part at all: no Tools section (the view hides an empty list)
     accountExtra: github || githubAccount ? <>{github}{githubAccount}</> : undefined,
     tools: { list: toolRows, loading: false },
+    // the Skills and Connectors tabs: only a plugin that brings some has them
+    skills: [
+      ...skillChildren.map((child) => ({ name: child.name, description: child.description, onOpen: () => openItem(child) })),
+      ...heldSkills.map((name) => {
+        const row = items.find((candidate) => candidate.kind === "skill" && candidate.id === name);
+        return { name, description: row?.description ?? "", ...(row ? { onOpen: () => openItem(row) } : {}) };
+      }),
+    ],
+    connectors: [
+      ...connectors.map((child) => ({ key: child.key, name: child.name, item: child, state: statusState(child.status, () => openItem(child)), word: connectorWord(child.status), onOpen: () => openItem(child) })),
+      // the real mark when the app knows the connector (a row of its own, a shipped glyph), else the neutral tile
+      ...heldServers.map((name) => {
+        const known = items.find((candidate) => candidate.kind !== "skill" && candidate.kind !== "plugin" && candidate.name === name);
+        return { key: `declared:${name}`, name, item: known ?? { kind: "mcp" as const, name }, state: null };
+      }),
+    ],
   };
   // For a bot the page is that bot's install: the card says what it brings,
   // and its Update installs the marketplace's files again in place.
@@ -342,7 +386,6 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       ],
       more: (
         <>
-          {item.description && <p className="px-1 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {botCard}
           {conversionSection(item)}
         </>
@@ -365,9 +408,8 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
         {botCard}
         <section>
           <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.brings")}</h3>
-          {item.description && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {children.length === 0 && <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.bringsNothing")}</p>}
-          <p className="mt-2 text-[11.5px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
+          <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
         </section>
         {conversionSection(item)}
       </>

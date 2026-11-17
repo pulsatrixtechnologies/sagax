@@ -30,8 +30,9 @@ describe("plugin scope", () => {
     expect(initialPluginScope("rex", { id: "rex" })).toBe("bot");
     expect(initialPluginScope(null, { id: "maya" })).toBe("me");
     expect(initialPluginScope("rex", null)).toBe("me");
-    // #3910: sent to add a server, where servers are added (the panel shows Me to a non-manager)
-    expect(initialPluginScope("rex", { id: "rex" }, "mcp")).toBe("workspace");
+    // #3910, #4453: sent to add a server it opens on the bot's panel like any other; the
+    // organization-wide scope is the console's, no longer the window's
+    expect(initialPluginScope("rex", { id: "rex" }, "mcp")).toBe("me");
     expect(initialPluginScope("rex", { id: "rex" }, "apps")).toBe("bot");
   });
 

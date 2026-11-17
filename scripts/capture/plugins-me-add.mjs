@@ -60,7 +60,7 @@ try {
     const toInstalled = async () => {
       // The link can be clicked before React hydrates it: retry a few times.
       for (let attempt = 0; attempt < 4; attempt += 1) {
-        await page.click("[data-plugins-connected]");
+        await page.click('[data-plugins-view="installed"]');
         try { await page.waitForSelector("[data-plugins-add]", { timeout: 5_000 }); return; } catch { /* retry */ }
       }
       await page.waitForSelector("[data-plugins-add]");

@@ -29,6 +29,7 @@ import type { PerspicaxOrg } from "../lib/perspicax-org";
 import { catalogCategories, catalogSections, catalogTemplates } from "../lib/bot-catalog";
 import { loadLocale, t } from "../lib/i18n";
 import { flowSupersededFixture, flowSupersededPluginsFixture } from "../lib/flow-superseded.fixture";
+import { capabilityFixture } from "../lib/capabilities.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore } from "../state/store";
 import { parsePersonProducts } from "../../shared/person-products";
@@ -104,8 +105,9 @@ const MANAGE_API: Record<string, unknown> = {
   ] },
   "/api/config": { viewer: { role: admin ? "admin" : "member", principalId: "p-1" }, features: {} },
   "/api/bots": { bots: [
-    { id: "bot-a", name: "Rocket", instanceId: "claude-main", model: "default", ownerUserId: "p-1", threads: [], messages: [] },
-    { id: "bot-b", name: "Atlas", instanceId: "grok-main", model: "default", ownerUserId: "p-1", mcpServers: ["twilio-docs"], threads: [], messages: [] },
+    // &bundle=off: a vendor (Beacon Security) the person has not turned on, for the bundle card of Discover
+    { id: "bot-a", name: "Rocket", instanceId: "claude-main", model: "default", ownerUserId: "p-1", threads: [], messages: [], ...(params.get("bundle") === "off" ? { products: { "prod-edr": false, "prod-more-1": false } } : {}) },
+    { id: "bot-b", name: "Atlas", instanceId: "grok-main", model: "default", ownerUserId: "p-1", mcpServers: ["twilio-docs"], threads: [], messages: [], ...(params.get("bundle") === "off" ? { products: { "prod-edr": false, "prod-more-1": false } } : {}) },
   ], groups: [], sections: [] },
   "/api/org": ORG,
   // the GitHub plugin's page: the account, and one list of other credentials (2026-10-28)
@@ -126,12 +128,16 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "github", type: "http", url: "https://api.githubcopilot.com/mcp/", enabled: true, headerKeys: ["Authorization"], auth: "none" },
     // the GitHub plugin's server reads the person's GitHub account (not connected here; &github=store_*: saved, unreadable)
     { name: "github-github", type: "http", url: "https://api.githubcopilot.com/mcp/", enabled: true, source: "claude-plugins-official", headerKeys: ["Authorization"], auth: "none", github: githubStore === "store_sealed" || githubStore === "store_unavailable" ? "unreadable" : "missing" },
+    // the example plugin's connectors (invented): one reaches a service and needs a sign-in, one is connected, one is local
+    { name: "review-notes", type: "http", url: "https://notes.example.test/mcp", enabled: true, source: "claude-plugins-official", headerKeys: [], auth: "connected", accounts: [{ id: "default", auth: "connected" }] },
+    { name: "ticket-search", type: "http", url: "https://tickets.example.test/mcp", enabled: true, source: "claude-plugins-official", headerKeys: [], auth: "required" },
+    { name: "diff-reader", type: "stdio", command: "diff-reader", args: ["--stdio"], enabled: true, source: "claude-plugins-official", envKeys: [] },
   ], reserved: [] },
   "/api/marketplaces": { marketplaces: [
     { name: "claude-plugins-official", source: "anthropics/claude-plugins-official", visibility: "org", plugins: [
       { name: "github", description: "GitHub's MCP server", installed: true, servers: ["github-github"], skills: [], category: "development" },
       { name: "frontend-design", description: "Distinctive interfaces", installed: true, servers: [], skills: ["frontend-design"], category: "design", homepage: "https://claude.com/plugins" },
-      { name: "code-review", description: "Reviews a pull request", installed: true, servers: [], skills: ["code-review"], category: "development", updateAvailable: true, installedVersion: "1.0.0", version: "1.1.0", homepage: "https://github.com/anthropics/claude-plugins-official" },
+      { name: "code-review", description: "Reviews a pull request branch by branch.\nIt reads the diff, checks it against the team's checklist and writes a summary that names every file it skipped.", installed: true, servers: ["review-notes", "ticket-search", "diff-reader"], skills: ["code-review", "review-checklist"], category: "development", updateAvailable: true, installedVersion: "1.0.0", version: "1.1.0", homepage: "https://github.com/anthropics/claude-plugins-official" },
       { name: "pdf-tools", description: "Read and fill PDF forms", installed: false, servers: [], skills: ["pdf"], category: "productivity" },
       { name: "sentry", description: "Errors and releases", installed: false, servers: ["sentry"], skills: [], category: "monitoring" },
       // enough installed plugins for Manage's "Show all" (Grok Bot shows 6 rows, #2146)
@@ -155,11 +161,12 @@ const MANAGE_API: Record<string, unknown> = {
   "/api/skills-library": { skills: [
     { name: "frontend-design", description: "Distinctive interfaces", source: "claude-plugins-official", enabled: true },
     { name: "code-review", description: "Reviews a pull request", source: "claude-plugins-official", enabled: true },
+    { name: "review-checklist", description: "The team's checklist, one item at a time", source: "claude-plugins-official", enabled: true },
     { name: "triage", description: "", source: "example-ops", enabled: true },
     { name: "dispatch", description: "", source: "example-ops", enabled: true },
     { name: "time-review", description: "", source: "example-ops", enabled: true },
     { name: "tenant-rules", description: "", source: "example-ops", enabled: true },
-    { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true },
+    { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true, updateKey: "skill:me:me:weekly-summary" },
     { name: "meeting-notes", description: "Turns a call transcript into notes and actions", source: "local-import", enabled: true },
     { name: "release-checklist", description: "Steps before a version ships", source: "local-import", enabled: true },
     { name: "browser-check", description: "", source: "claude-plugins-official", enabled: true },
@@ -219,12 +226,12 @@ const MANAGE_API: Record<string, unknown> = {
   "/api/bots/bot-a/plugins": {
     marketplaces: [{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
       { name: "github", description: "GitHub's MCP server", installed: false, external: false, category: "development", contents: { agents: [], commands: [], skills: [] } },
-      { name: "code-review", description: "Reviews a pull request", installed: true, external: false, category: "development", contents: { agents: ["reviewer"], commands: ["review"], skills: ["code-review"] } },
+      { name: "code-review", description: "Reviews a pull request branch by branch.\nIt reads the diff, checks it against the team's checklist and writes a summary that names every file it skipped.", installed: true, external: false, category: "development", version: "1.0.0", updateKey: "plugin:me:me:code-review@claude-plugins-official", contents: { agents: ["reviewer"], commands: ["review"], skills: ["code-review", "review-checklist"] } },
     ] }, { name: "cursor-plugins", source: "cursor/plugins", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
-      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, external: false, category: "developer-tools", contents: { agents: ["ci-watcher"], commands: [], skills: ["rule-no-inline-imports", "ship-it"] }, convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
+      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, external: false, category: "developer-tools", updateKey: "plugin:me:me:cursor-team-kit@cursor-plugins", contents: { agents: ["ci-watcher"], commands: [], skills: ["rule-no-inline-imports", "ship-it"] }, convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
     ] }],
     plugins: [
-      { key: "code-review@claude-plugins-official", name: "code-review", marketplace: "claude-plugins-official", enabled: true, removed: [], declaredMcpServers: [] },
+      { key: "code-review@claude-plugins-official", name: "code-review", marketplace: "claude-plugins-official", enabled: true, removed: [], declaredMcpServers: ["review-notes", "ticket-search", "diff-reader"] },
       { key: "cursor-team-kit@cursor-plugins", name: "cursor-team-kit", marketplace: "cursor-plugins", enabled: true, removed: [], declaredMcpServers: [] },
     ],
     policy: { mode: "any" }, engine: { loadsPlugins: true }, canChange: true,
@@ -304,10 +311,63 @@ if (params.has("products")) {
     ];
     products.splice(0, products.length, ...real.map(([id, name]) => ({ id, name, auth_state: "ok", setup, state: "connected", base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "" } as never)));
   }
+  // #4453: the console files products under their vendor (invented names):
+  // one vendor row unfolds into its products; a product of no vendor stands alone
+  if (params.get("products") === "many") {
+    // example marks the console would serve: inline SVG, invented shapes (no real brand)
+    const mark = (fill: string, body: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${fill}"/>${body}</svg>`)}`;
+    const harbor = mark("#1d4ed8", '<path d="M32 12v26M20 24h24M14 38c3 10 11 14 18 14s15-4 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="14" r="4" fill="#fff"/>');
+    const beacon = mark("#be185d", '<path d="M32 12l16 28H16z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="48" r="4" fill="#fff"/>');
+    const tile = (fill: string, body: string) => mark(fill, body);
+    const vendorHarbor = { id: "harbor", name: "Harbor Suite", description: { en: "Service desk, monitoring, quoting and dashboards in one place.", fr: "Service desk, supervision, soumissions et tableaux de bord au même endroit." }, icon: { url: harbor }, logo: harbor };
+    const vendorBeacon = { id: "beacon", name: "Beacon Security", description: { en: "Endpoint protection and backup.", fr: "Protection des postes et sauvegarde." }, icon: { url: beacon }, logo: beacon };
+    const filed: Record<string, { group: typeof vendorHarbor; endpoints?: string[]; icon?: { url: string }; description?: string }> = {
+      "prod-psa": { group: vendorHarbor, icon: { url: tile("#0f766e", '<path d="M18 20h28v24H18zM18 28h28" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, description: "Tickets, time and agreements for the service desk", endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
+      "prod-more-0": { group: vendorHarbor, icon: { url: tile("#7c3aed", '<rect x="16" y="18" width="32" height="20" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M26 46h12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>') }, endpoints: ["Devices", "Alerts", "Scripts"] },
+      "prod-more-6": { group: vendorHarbor, icon: { url: tile("#b45309", '<path d="M20 22h24l-3 20H23zM28 22v-4a4 4 0 018 0v4" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, endpoints: ["Quotes", "Catalog", "Orders"] },
+      "prod-more-7": { group: vendorHarbor, endpoints: ["Gauges", "Dashboards"] },
+      "prod-edr": { group: vendorBeacon, icon: { url: tile("#9f1239", '<path d="M32 14l14 6v12c0 9-6 15-14 18-8-3-14-9-14-18V20z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') } },
+      "prod-more-1": { group: vendorBeacon },
+    };
+    for (const product of products as Array<{ id: string }>) Object.assign(product, filed[product.id] ?? {});
+  }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);
   MANAGE_API["/api/me/perspicax/products"] = { products: served };
   for (const product of served) MANAGE_API[`/api/me/perspicax/products/${product.id}`] = { product };
+}
+
+// #4453: what the organization console offers or requires of the person, per
+// kind (invented names): in the console's section at the top of each kind
+if (params.has("products") && !admin) {
+  const offered = (id: string, form: "plugin" | "skill" | "mcp", name: string, description: string, mode: "offered" | "imposed", on: boolean, version?: string, vendor?: string) => ({
+    id, mount: id, form, name, description, mode, enabled: true, state: on ? "installed" : "off", on, canToggle: mode === "offered", ...(version ? { version } : {}), ...(vendor ? { vendor } : {}),
+  });
+  MANAGE_API["/api/me/org-capabilities"] = { owner: "perspicax", items: [
+    offered("oc-1", "plugin", "Harbor Toolkit", "Templates and checks for the service desk", "offered", false, "1.2.0"),
+    offered("oc-2", "plugin", "Compliance Pack", "The organization's review rules", "imposed", true, "0.9.4"),
+    offered("oc-3", "skill", "Weekly summary", "Writes the week's recap", "offered", true),
+    offered("oc-4", "mcp", "Team search", "Searches the shared drive", "offered", false),
+    // a skill that goes with a vendor's bundle: its Skills tab
+    offered("oc-5", "skill", "Service desk macros", "Canned replies for the service desk", "offered", true, undefined, "harbor"),
+  ] };
+}
+// ?empty=plugins: a person with no plugin of their own (the first-block banner)
+if (params.get("empty") === "plugins") {
+  const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ plugins: Array<{ installed: boolean }> }> };
+  MANAGE_API["/api/me/plugins"] = { ...mine, plugins: [], marketplaces: mine.marketplaces.map((market) => ({ ...market, plugins: market.plugins.map((plugin) => ({ ...plugin, installed: false })) })) };
+}
+
+// #4504: what has an update waiting (invented items): two plugins (one will fail when run),
+// a skill, and one the organization console pins (no mark: the console decides its version)
+let galleryUpdates = [
+  { key: "plugin:me:me:code-review@claude-plugins-official", kind: "plugin", name: "Code Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, updateNotes: "Reviews now run on the whole branch, and the summary names the files it skipped.", canUpdate: true },
+  { key: "plugin:me:me:cursor-team-kit@cursor-plugins", kind: "plugin", name: "Cursor Team Kit", scope: "me", installedVersion: "0.9.1", availableVersion: "0.10.0", updateAvailable: true, canUpdate: true },
+  { key: "skill:me:me:weekly-summary", kind: "skill", name: "weekly-summary", scope: "me", installedVersion: "a1b2c3d", availableVersion: "e4f5a6b", updateAvailable: true, canUpdate: true },
+  { key: "plugin:organization:organization:compliance-pack", kind: "plugin", name: "Compliance Pack", scope: "organization", organization: "required", pinned: "0.9.4", installedVersion: "0.9.4", availableVersion: "0.9.5", updateAvailable: true, canUpdate: false },
+] as Array<Record<string, unknown> & { key: string; name: string; canUpdate: boolean; installedVersion?: string; availableVersion?: string }>;
+if (params.has("updates")) {
+  MANAGE_API["/api/me/capability-updates"] = { get count() { return galleryUpdates.filter((item) => item.canUpdate).length; }, checkedAt: Date.now(), checking: false, get items() { return galleryUpdates; } };
 }
 
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.
@@ -330,6 +390,9 @@ if (params.has("bot")) {
     items: [
       plugin("code-review", "Code Review", "claude-plugins-official", ["code-review"], ["reviewer"]),
       plugin("cursor-team-kit", "Cursor Team Kit", "cursor-plugins", ["rule-no-inline-imports", "ship-it"], ["ci-watcher"]),
+      // #4453: a skill, the person's own server, a server everyone may use
+      // (this bot's switch) and an engine account's connector, one per kind tab
+      ...capabilityFixture().items.filter((item) => item.form === "skill" || item.form === "mcp" || item.form === "connector"),
     ],
   };
 }
@@ -384,6 +447,27 @@ let galleryTailscale: {
       : null,
   error: seedPhase === "error" ? "The control plane did not answer. Try again." : null,
   computers: COMPUTERS,
+};
+
+/** The example plugin's files and a skill's, for Contents (invented, small). */
+const GALLERY_PLUGIN_FILES: Record<string, string> = {
+  "README.md": "# Code Review\n\nReviews a pull request branch by branch.\n\n## What it does\n\n- Reads the diff and the files around it\n- Checks it against the team's checklist\n- Writes a summary that **names every file it skipped**\n\n## Use it\n\nType `/review` in a chat, or let the bot pick it up when you ask for a review.\n\n```sh\n./scripts/run-checks.sh main\n```\n",
+  ".claude-plugin/plugin.json": '{\n  "name": "code-review",\n  "version": "1.0.0",\n  "description": "Reviews a pull request branch by branch"\n}\n',
+  "commands/review.md": "Review the current branch against main and write the summary.\n",
+  "agents/reviewer.md": "---\nname: reviewer\ndescription: Reads a diff like a careful colleague\n---\n\nRead the whole diff before you write anything.\n",
+  "skills/code-review/SKILL.md": "---\nname: code-review\ndescription: Reviews a pull request\n---\n\nStart with the riskiest file. Say what you did not read.\n",
+  "skills/code-review/checklist.md": "# Checklist\n\n1. Does it do what the title says?\n2. Is there a test that fails without it?\n3. Is anything renamed twice?\n",
+  "skills/review-checklist/SKILL.md": "---\nname: review-checklist\ndescription: The team's checklist, one item at a time\n---\n\nAsk the items one at a time.\n",
+  "scripts/run-checks.sh": "#!/bin/sh\n# usage: run-checks.sh <base-branch>\nset -eu\ngit diff --stat \"$1\"...HEAD\n",
+};
+/** An organization plugin's files (Compliance Pack), for its page's Contents. */
+const GALLERY_ORG_FILES: Record<string, string> = {
+  "README.md": "# Compliance Pack\n\nThe organization's review rules.\n\n- Every change names its reviewer\n- Anything touching billing waits for a second look\n",
+  "skills/review-rules/SKILL.md": "---\nname: review-rules\ndescription: The review rules\n---\n\nName the reviewer first.\n",
+};
+const GALLERY_SKILL_FILES: Record<string, string> = {
+  "notes/format.md": "# Format\n\nThree sections: what moved, what waits, what needs a decision.\n",
+  "scripts/collect.py": "# gathers the week's threads\nprint('collecting')\n",
 };
 
 if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?? "manage")) {
@@ -468,6 +552,16 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
       };
       return json(galleryTailscale);
     }
+    // what an item holds, read only (the Contents tab): a small invented set
+    const holds = /^\/api\/(?:marketplaces\/[^/]+\/plugins\/[^/]+|me\/plugins\/[^/]+|me\/org-capabilities\/[^/]+|bots\/[^/]+\/plugins\/[^/]+|(?:me\/)?skills-library\/[^/]+)\/files$/.exec(url.pathname);
+    if (holds && method === "GET") {
+      const isSkill = url.pathname.includes("skills-library");
+      const set = isSkill ? GALLERY_SKILL_FILES : url.pathname.includes("org-capabilities") ? GALLERY_ORG_FILES : GALLERY_PLUGIN_FILES;
+      const wanted = url.searchParams.get("path");
+      if (!wanted) return json({ files: Object.entries(set).map(([path, text]) => ({ path, bytes: text.length, kind: "text" }))});
+      const text = set[wanted] ?? (isSkill && wanted === "SKILL.md" ? "---\nname: weekly-summary\ndescription: Friday recap of my threads\n---\n\nRead the week's threads, then write a short recap: what moved, what waits, what needs a decision.\n" : undefined);
+      return text === undefined ? json({ error: "no such file" }, 404) : json({ path: wanted, kind: "text", text, bytes: text.length });
+    }
     const skillDetail = /^\/api\/(?:me\/)?skills-library\/([^/]+)$/.exec(url.pathname);
     if (skillDetail && method === "GET") {
       const name = decodeURIComponent(skillDetail[1]);
@@ -477,6 +571,18 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
         return json({ name, text, description: listed.description, source: listed.source, enabled: listed.enabled, changedAfterReview: false, reviewedText: null, warnings: [], files: [], editable: true, origin: "library" });
       }
     }
+    if (params.has("updates") && url.pathname === "/api/me/capability-updates" && method === "POST") {
+      const asked = JSON.parse(String(init?.body ?? "{}")) as { keys?: string[]; all?: true };
+      const wanted = galleryUpdates.filter((item) => item.canUpdate && (asked.all || asked.keys?.includes(item.key)));
+      await new Promise((resolve) => setTimeout(resolve, params.get("updates") === "slow" ? 4000 : 400));
+      const results = wanted.map((item) => item.name === "Cursor Team Kit"
+        ? { key: item.key, kind: item.kind, name: item.name, status: "failed", error: "The marketplace could not be reached." }
+        : { key: item.key, kind: item.kind, name: item.name, status: "updated", from: item.installedVersion, to: item.availableVersion });
+      galleryUpdates = galleryUpdates.filter((item) => !results.some((result) => result.key === item.key && result.status === "updated"));
+      return json({ results, count: galleryUpdates.filter((item) => item.canUpdate).length });
+    }
+    // &solo=1: a server with no organization: the person is the installation (the workspace scope, where a plugin lists what it brought)
+    if (params.has("solo") && url.pathname === "/api/org") return json({ error: "no organization" }, 404);
     const body = MANAGE_API[url.pathname];
     if (body !== undefined && method === "GET") return json(body);
     if (url.pathname.startsWith("/api/bots/") && url.pathname.endsWith("/plugins")) return json({ error: "not here" }, 404);

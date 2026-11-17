@@ -18,6 +18,8 @@ import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import type { Crumb } from "../Breadcrumb";
 import { PluginPageHeader } from "./PluginParts";
+import { PillTabs } from "../PillTabs";
+import { DetailHeader, DetailsBlock, FileExplorer, sourceLine, UpdateNote, VersionPill } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
@@ -40,12 +42,28 @@ export interface SkillPageProps {
   /** after Save: the skill's name (it may have changed) */
   onSaved: (name: string) => Promise<unknown> | void;
   onDeleted: () => Promise<unknown> | void;
+  /** where it comes from, in words (the grey line); absent: "Private skill" */
+  sourceLabel?: string;
+  /** #4504: the update waiting (the page says the versions and the notes, with the one Update) */
+  update?: { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void };
+}
+
+type SkillTab = "overview" | "contents";
+
+/** Hands a text out as a file (the same save a Publish menu does). */
+function saveTextFile(fileName: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 const fieldClass = cn(PLUGINS.field, "min-h-[46px] rounded-[14px] px-[17px] py-3 text-[14px] leading-[22px]");
-const labelClass = "px-2 text-[12.5px] leading-5 text-ink-secondary";
+const labelClass = "px-2 text-[13px] leading-5 text-ink-secondary";
 
-export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDeleted, basePath = "/api/skills-library" }: SkillPageProps) {
+export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDeleted, sourceLabel, update, basePath = "/api/skills-library" }: SkillPageProps) {
   const confirm = useConfirm();
   const creating = !skill;
   const [loaded, setLoaded] = useState(creating);
@@ -56,6 +74,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
   const [busy, setBusy] = useState<"save" | "delete" | "toggle" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<SkillTab>("overview");
   // what was loaded: Save stays off until the text differs from it
   const [baseline, setBaseline] = useState({ name: skill?.name ?? "", description: skill?.description ?? "", instructions: "" });
 
@@ -144,18 +163,34 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
     }
   };
 
+  const title = creating ? t("connectApps.skill.new") : skill.name;
+  const tabs: SkillTab[] = skill ? ["overview", "contents"] : ["overview"];
+  const filesBase = skill ? `${basePath}/${encodeURIComponent(skill.name)}/files` : "";
+  const detailRows = skill ? [
+    { label: t("connectApps.detail.source"), value: sourceLabel ?? t("connectApps.skill.private") },
+    ...(skill.version ? [{ label: t("connectApps.detail.version"), value: skill.version }] : []),
+  ] : [];
   return (
     <>
-      <PluginPageHeader title={creating ? t("connectApps.skill.new") : skill.name} trail={trail} onBack={onBack} />
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-[22px] sm:px-[34px]" data-plugins-skill={skill?.name ?? "new"}>
-        <div className="flex flex-wrap items-center gap-3" data-skill-head>
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>
-          <div className="min-w-0 flex-[1_1_200px] pl-0.5">
-            <div className="truncate text-[16px] leading-6 text-ink">{creating ? t("connectApps.skill.new") : skill.name}</div>
-            <div className="truncate text-[13px] leading-5 text-ink-secondary">{t("connectApps.skill.private")}</div>
-          </div>
-          {skill && (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+      <PluginPageHeader title={title} trail={trail} onBack={onBack} named />
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-plugins-skill={skill?.name ?? "new"}>
+        <DetailHeader
+          attrs={{ "data-skill-head": "" }}
+          icon={<div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>}
+          name={title}
+          line={skill ? sourceLine([sourceLabel ?? t("connectApps.skill.private"), skill.version]) : undefined}
+          actions={skill ? (
+            <>
+              {update?.onUpdate && (
+                <button type="button" data-plugin-action="update" disabled={update.running || busy !== null} onClick={update.onUpdate} className={cn(PLUGINS.fillPill, "h-8 px-5")}>
+                  {update.running ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
+                  {t("connectApps.plugin.update")}
+                </button>
+              )}
+              <span data-skill-enabled="" className="flex items-center gap-2">
+                {busy === "toggle" && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
+                <Switch checked={enabled} disabled={busy !== null || !loaded} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} title={t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")} />
+              </span>
               <PublishMenu disabled={!loaded} fileName={`${name.trim() || skill.name}.md`} text={skillMd} />
               {!readOnly && (
                 <button
@@ -168,13 +203,27 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
                   {busy === "delete" && <Loader2 size={13} className="animate-spin" />} {t("connectApps.skill.delete")}
                 </button>
               )}
-            </div>
-          )}
-        </div>
+            </>
+          ) : undefined}
+        />
 
-        {skill?.description && <p className="text-[14px] leading-[20px] text-ink-secondary" data-skill-summary>{skill.description}</p>}
+        {tabs.length > 1 && (
+          <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={title} idPrefix="skill"
+            label={(id) => t(id === "overview" ? "connectApps.detail.tab.overview" : "connectApps.detail.tab.contents")}
+            tabAttributes={(id) => ({ "data-skill-tab": id })} />
+        )}
+
+        {tab === "contents" && skill ? (
+          <FileExplorer
+            listUrl={filesBase}
+            extra={[{ path: "SKILL.md", kind: "text" }]}
+            pill={<VersionPill name={skill.name} version={skill.version ?? undefined} current={!update} />}
+            onDownload={() => saveTextFile(`${name.trim() || skill.name}.md`, skillMd())}
+          />
+        ) : (
+          <>
         {skill && !enabled && <p className="text-[12px] text-ink-secondary">{t("connectApps.skill.reviewHint")}</p>}
-        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[12.5px] text-ink-secondary">{readOnlyReason}</p>}
+        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[13px] text-ink-secondary">{readOnlyReason}</p>}
         {skill && skill.warnings.length > 0 && <ul className="list-disc pl-5 text-[12px] text-warning">{skill.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
 
         <form
@@ -213,22 +262,16 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           <p className="px-2 text-[12px] text-ink-secondary" data-skill-engines>
             <span className="text-ink">{t("capabilities.detail.engines")}</span>{t("capabilities.engines.colon")}{enginesLine("skill", { skills: true, indexOnly: true })}
           </p>
-          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[12.5px] text-danger">{error}</p>}
+          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">{error}</p>}
         </form>
-        {/* on or off: a row below the form, Grok Bot's header has no switch (#2146) */}
-        {skill && (
-          <label className="flex min-h-[44px] items-center justify-between gap-3 rounded-[14px] border-[0.5px] border-ink/10 px-4 text-[13px] text-ink" data-skill-enabled>
-            <span className="flex items-center gap-2">
-              {busy === "toggle" && <Loader2 size={13} className="animate-spin" />}
-              {t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")}
-            </span>
-            <Switch checked={enabled} disabled={busy !== null || !loaded} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} />
-          </label>
+        {skill && update && <UpdateNote from={update.from} to={update.to} notes={update.notes} />}
+        {skill && <DetailsBlock rows={detailRows} busy={busy !== null} />}
+          </>
         )}
       </div>
-      {!readOnly && (
+      {!readOnly && tab === "overview" && (
         <div className="flex shrink-0 items-center justify-end gap-3 border-t border-hairline-weak px-4 py-3" data-skill-savebar>
-          {saved && !error && !dirty && <span role="status" className="text-[12.5px] text-success">{t("connectApps.skill.saved")}</span>}
+          {saved && !error && !dirty && <span role="status" className="text-[13px] text-success">{t("connectApps.skill.saved")}</span>}
           <button type="submit" form="skill-form" disabled={!canSave} className={cn(PLUGINS.primaryPill, "h-9 px-6 text-[14px] disabled:bg-card disabled:text-ink-tertiary disabled:opacity-100")}>{busy === "save" ? <Loader2 size={14} className="animate-spin" /> : t("connectApps.skill.save")}</button>
         </div>
       )}
@@ -243,14 +286,7 @@ function PublishMenu({ text, fileName, disabled }: { text: () => string; fileNam
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   usePopoverDismiss(open, ref, () => setOpen(false));
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([text()], { type: "text/markdown" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  const download = () => saveTextFile(fileName, text());
   return (
     <div className="relative" ref={ref}>
       <button type="button" data-skill-publish aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn(PLUGINS.outlinePill, "h-[26px] px-3")}>

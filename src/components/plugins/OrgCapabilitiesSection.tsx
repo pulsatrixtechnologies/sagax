@@ -13,7 +13,7 @@
 // No new page and no bot panel tab: this section lives where the
 // Organization scope is already chosen.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpen, ChevronRight, LoaderCircle, Pencil, Plug, Plus, Puzzle, Trash2 } from "lucide-react";
 
 import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
@@ -30,7 +30,7 @@ import {
 import { Switch } from "../SettingsPrimitives";
 
 const CHIP = "rounded-full px-2 py-0.5 text-[11px] font-medium";
-const fieldClass = "w-full rounded-lg border border-border bg-raised px-3 py-2 text-[12.5px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
+const fieldClass = "w-full rounded-lg border border-border bg-raised px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
 
 function errorText(error: FieldError | undefined): string | null {
   return error ? t(error.key as never, error.vars) : null;
@@ -49,34 +49,26 @@ export function installWords(state: MemberOrgCapability["state"], enabled: boole
   return null;
 }
 
-function formWords(form: "plugin" | "skill" | "mcp"): string {
+export function formWords(form: "plugin" | "skill" | "mcp"): string {
   return t(`orgCapabilities.form.${form}` as never);
 }
 
-/** Me scope: the organization's capabilities for the person, with their
- * own switch on an offered one. */
-export function OrgCapabilitiesForMe() {
+/** The person's view of the organization's capabilities: read once, with
+ * their own switch (no administrator). Shared by the console's section of
+ * Connect Apps (which needs to know whether there is anything to list) and
+ * by the stand-alone list. */
+export function useOrgCapabilitiesForMe(active = true) {
   const [items, setItems] = useState<MemberOrgCapability[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!active) return;
     let alive = true;
     setError(null);
     void loadMine().then((answer) => { if (alive) setItems(answer.items); }, (failure) => { if (alive) setError(readableError(failure)); });
     return () => { alive = false; };
-  }, [attempt]);
-  // #2104: a failure says what did not load and offers to try again (a bare
-  // error code stood alone in red before)
-  if (error) {
-    return (
-      <p role="alert" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" data-org-capabilities-failed>
-        <span>{t("orgCapabilities.member.loadFailed", { error })}</span>
-        <button type="button" onClick={() => setAttempt((n) => n + 1)} className="text-[12.5px] font-medium text-accent-text hover:underline">{t("orgCapabilities.member.retry")}</button>
-      </p>
-    );
-  }
-  if (!items || items.length === 0) return null;
+  }, [attempt, active]);
   const toggle = async (item: MemberOrgCapability) => {
     setBusy(item.id);
     setError(null);
@@ -89,29 +81,89 @@ export function OrgCapabilitiesForMe() {
       setBusy(null);
     }
   };
-  return (
-    <section className="mb-4" data-org-capabilities="me">
-      <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>
-      <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
-        {items.map((item) => {
-          const state = installWords(item.state, item.enabled);
-          return (
-            <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} className="flex items-center gap-2 px-3 py-2">
-              <span className="min-w-0 flex-1">
-                <span className="block break-words text-[13px] text-ink">{item.name}</span>
-                <span className="block text-[11.5px] text-ink-secondary">{[formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" · ")}</span>
+  return { items, error, busy, toggle, retry: () => setAttempt((n) => n + 1) };
+}
+
+export type OrgCapabilitiesForMeState = ReturnType<typeof useOrgCapabilitiesForMe>;
+
+/** #4453: one kind of Connect Apps lists its own forms only */
+export function orgCapabilitiesOfForms(state: OrgCapabilitiesForMeState, forms?: readonly string[]): MemberOrgCapability[] {
+  return (forms ? state.items?.filter((item) => forms.includes(item.form)) : state.items) ?? [];
+}
+
+/** The skills the console offers that go with one vendor (its bundle's Skills
+ * tab): only a skill the console names the vendor of; none known, none listed
+ * (a name is never matched to a vendor by its words). `vendorKey` is the
+ * bundle's key, `vendor:<group id>`. */
+export function vendorSkillsOf(state: OrgCapabilitiesForMeState, vendorKey: string): Array<{ name: string; description: string }> {
+  const group = vendorKey.replace(/^vendor:/, "");
+  return orgCapabilitiesOfForms(state, ["skill"]).filter((item) => item.vendor === group).map((item) => ({ name: item.name, description: item.description }));
+}
+
+/** Me scope: the organization's capabilities for the person, with their
+ * own switch on an offered one. `bare`: the rows alone, for the console's
+ * section of Connect Apps, which has the title. */
+export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen, after }: { forms?: readonly string[]; state?: OrgCapabilitiesForMeState; bare?: boolean; /** a last row of the same list (the section's "Show N more"), before the hint */ after?: React.ReactNode; /** a plugin or skill that is on for the person opens its page (Contents) */ onOpen?: (item: MemberOrgCapability) => void } = {}) {
+  const own = useOrgCapabilitiesForMe(given === undefined);
+  const { items, error, busy, toggle, retry } = given ?? own;
+  // #2104: a failure says what did not load and offers to try again (a bare
+  // error code stood alone in red before)
+  if (error) {
+    return (
+      <p role="alert" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-inset px-4 py-3 text-[13px] text-ink-secondary" data-org-capabilities-failed>
+        <span>{t("orgCapabilities.member.loadFailed", { error })}</span>
+        <button type="button" onClick={retry} className="text-[13px] font-medium text-accent-text hover:underline">{t("orgCapabilities.member.retry")}</button>
+      </p>
+    );
+  }
+  const shown = orgCapabilitiesOfForms({ items } as OrgCapabilitiesForMeState, forms);
+  if (shown.length === 0) return null;
+  const rows = (
+    <ul className={bare ? "flex flex-col divide-y divide-hairline-weak" : "divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]"}>
+      {shown.map((item) => {
+        const state = installWords(item.state, item.enabled);
+        return (
+          <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} data-item-row="" className={cn("flex items-center gap-3", bare ? "px-3 py-3" : "px-3 py-2")}>
+            {bare && (
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary" aria-hidden="true">
+                {item.form === "plugin" ? <Puzzle size={18} /> : item.form === "skill" ? <BookOpen size={18} /> : <Plug size={18} />}
               </span>
-              <span className={cn(CHIP, item.mode === "imposed" ? "bg-accent/15 text-accent-text" : "bg-ink/10 text-ink-secondary")} data-org-capability-mode-chip="">{modeWords(item.mode)}</span>
+            )}
+            {(() => {
+              const text = (
+                <>
+                  <span className="block break-words text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
+                  <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", bare ? "" : formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
+                </>
+              );
+              // a plugin or skill that is installed and on for the person has a page: its files are theirs to read
+              const opens = onOpen && item.form !== "mcp" && item.on && item.state === "installed";
+              return opens
+                ? <button type="button" data-org-capability-open={item.id} aria-label={t("connectApps.openAria", { name: item.name })} onClick={() => onOpen(item)} className="min-w-0 flex-1 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">{text}</button>
+                : <span className="min-w-0 flex-1">{text}</span>;
+            })()}
+            {!bare && <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>}
+            {/* the same columns as every row's right side (state, switch, "..."), so the switches line up */}
+            <span className={cn("flex shrink-0 items-center", bare && "gap-2")}>
+              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
               {item.canToggle ? (
                 busy === item.id
                   ? <LoaderCircle size={14} className="mx-3 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" />
                   : <Switch checked={item.on} onClick={() => void toggle(item)} aria-label={t(item.on ? "orgCapabilities.me.offAria" : "orgCapabilities.me.onAria", { name: item.name })} />
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("orgCapabilities.me.hint")}</p>
+              ) : bare ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
+              {bare && <span className="size-7 shrink-0" aria-hidden="true" />}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+  return (
+    <section className={bare ? undefined : "mb-4"} data-org-capabilities="me">
+      {!bare && <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>}
+      {rows}
+      {after}
+      <p className={cn("text-[12px] leading-4 text-ink-secondary", bare ? "mt-1.5 px-3" : "mt-1.5")}>{t("orgCapabilities.me.hint")}</p>
     </section>
   );
 }
@@ -124,7 +176,7 @@ function DraftFieldView({ field, draft, set, errors, creating }: { field: DraftF
     <div className="flex flex-col gap-1" data-org-capability-field={field}>
       <label htmlFor={id} className="text-[12px] font-medium text-ink">{label}</label>
       {control}
-      {error && <p role="alert" className="text-[11.5px] text-danger">{error}</p>}
+      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
     </div>
   );
   switch (field) {
@@ -210,17 +262,17 @@ export function OrgCapabilityForm({ initial, onDone, onCancel }: { initial?: Dec
     <form data-org-capability-form={creating ? "new" : "edit"} className="mb-4 flex flex-col gap-3 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] p-4" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <h4 className="text-[13px] font-semibold text-ink">{t(creating ? "orgCapabilities.admin.addTitle" : "orgCapabilities.admin.editTitle")}</h4>
       {fields.filter((field) => !field.configuration).map((field) => <DraftFieldView key={field.key} field={field.key} draft={draft} set={set} errors={errors} creating={creating} />)}
-      <label className="flex items-center gap-2 text-[12.5px] text-ink">
+      <label className="flex items-center gap-2 text-[13px] text-ink">
         <input type="checkbox" checked={draft.enabled} onChange={(event) => set({ enabled: event.target.checked })} />
         {t("orgCapabilities.field.enabled")}
       </label>
       {!creating && (
-        <label className="flex items-center gap-2 text-[12.5px] text-ink" data-org-capability-replace="">
+        <label className="flex items-center gap-2 text-[13px] text-ink" data-org-capability-replace="">
           <input type="checkbox" checked={draft.replaceConfiguration} onChange={(event) => set({ replaceConfiguration: event.target.checked })} />
           {t("orgCapabilities.field.replaceConfiguration")}
         </label>
       )}
-      {!creating && !draft.replaceConfiguration && <p className="text-[11.5px] text-ink-secondary">{t("orgCapabilities.field.sealed")}</p>}
+      {!creating && !draft.replaceConfiguration && <p className="text-[12px] text-ink-secondary">{t("orgCapabilities.field.sealed")}</p>}
       {showConfiguration && fields.filter((field) => field.configuration).map((field) => <DraftFieldView key={field.key} field={field.key} draft={draft} set={set} errors={errors} creating={creating} />)}
       {failure && <p role="alert" className="text-[12px] text-danger">{failure}</p>}
       <div className="flex gap-2">
@@ -234,7 +286,7 @@ export function OrgCapabilityForm({ initial, onDone, onCancel }: { initial?: Dec
 /** Organization scope, for an admin, on a server whose Perspicax owns the
  * declarations: the list, Add, Edit and Remove. Unlinked: nothing (the
  * Organization scope keeps its local behaviour). */
-export function OrgCapabilitiesAdmin() {
+export function OrgCapabilitiesAdmin({ forms }: { forms?: readonly string[] } = {}) {
   const confirm = useConfirm();
   const [inventory, setInventory] = useState<OrgInventory | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +314,8 @@ export function OrgCapabilitiesAdmin() {
       setBusy(null);
     }
   };
-  const rows = inventory?.capabilities ?? [];
+  // #4453: one kind of Connect Apps lists its own forms only
+  const rows = (inventory?.capabilities ?? []).filter((row) => !forms || forms.includes(row.form));
   return (
     <details className="group" data-org-capabilities="admin">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[13px] text-ink-secondary hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -271,17 +324,17 @@ export function OrgCapabilitiesAdmin() {
       </summary>
       <div className="mt-2 mb-1.5 flex items-center justify-end gap-2">
         {inventory && editing === null && (
-          <button type="button" onClick={() => setEditing("new")} data-org-capability-add="" className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover">
+          <button type="button" onClick={() => setEditing("new")} data-org-capability-add="" className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised-hover">
             <Plus size={14} aria-hidden="true" /> {t("orgCapabilities.admin.add")}
           </button>
         )}
       </div>
-      <p className="mb-2 text-[11.5px] leading-relaxed text-ink-secondary">{t("orgCapabilities.admin.intro")}</p>
+      <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("orgCapabilities.admin.intro")}</p>
       {error && <p role="alert" className="mb-2 text-[12px] text-danger">{error}</p>}
       {editing !== null && (
         <OrgCapabilityForm initial={editing === "new" ? undefined : editing} onCancel={() => setEditing(null)} onDone={() => { setEditing(null); void reload(); }} />
       )}
-      {inventory && rows.length === 0 && editing === null && <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("orgCapabilities.admin.empty")}</p>}
+      {inventory && rows.length === 0 && editing === null && <p className="rounded-xl bg-inset px-4 py-3 text-[13px] text-ink-secondary">{t("orgCapabilities.admin.empty")}</p>}
       {rows.length > 0 && (
         <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
           {rows.map((row) => {
@@ -291,7 +344,7 @@ export function OrgCapabilitiesAdmin() {
               <li key={row.id} data-org-capability={row.form} data-org-capability-mode={row.mode} className="flex items-center gap-2 px-3 py-2">
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-[13px] text-ink">{row.name}</span>
-                  <span className="block text-[11.5px] text-ink-secondary" title={installed?.error}>{[formWords(row.form), row.mount_name, state ?? ""].filter(Boolean).join(" · ")}</span>
+                  <span className="block text-[12px] text-ink-secondary" title={installed?.error}>{[formWords(row.form), row.mount_name, state ?? ""].filter(Boolean).join(" · ")}</span>
                 </span>
                 <span className={cn(CHIP, row.mode === "imposed" ? "bg-accent/15 text-accent-text" : "bg-ink/10 text-ink-secondary")}>{modeWords(row.mode)}</span>
                 <button type="button" className="ui-icon-button" aria-label={t("orgCapabilities.admin.editAria", { name: row.name })} onClick={() => setEditing(row)} disabled={busy !== null}>

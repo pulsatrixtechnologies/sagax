@@ -19,6 +19,10 @@ export const PLUGINS = {
   sectionTitle: "pb-1.5 pl-3 pt-2 text-[14px] font-medium leading-5 text-ink",
   /** "View all", "Manage on ...": a quiet 12px pill at the group title's right */
   sectionLink: "mr-1 rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none",
+  /** the one type scale of Connect Apps and its pages (#4453, measured on the
+   * reference app: 11, 12, 13, 14; the window and page titles are 18): rows'
+   * names 13 medium, grey lines and states 12, section titles 14 medium,
+   * body 13. No 12.5, 13.5 or 11.5 anywhere. */
   /** "Installed", "Accounts", "Tools": gray labels over a list or a card */
   label: "text-[12px] leading-5 text-ink-secondary",
   /** the reference's list of rows (#4097, measured on the reference app:
@@ -30,14 +34,14 @@ export const PLUGINS = {
   grid: "@container grid grid-cols-2 gap-x-2 gap-y-0.5 *:min-w-0 *:rounded-2xl *:px-3 *:transition-colors *:hover:bg-ink/[0.05] *:@max-[560px]:col-span-full motion-reduce:*:transition-none",
   /** the name: 13px medium, one line */
   rowName: "block truncate text-[13px] font-medium leading-[18px] text-ink",
-  /** the grey line under the name: 13px, whole words, at most two lines (#4097: never cut mid-word) */
-  rowSub: "mt-px line-clamp-2 break-normal text-[13px] leading-[18px] text-ink-secondary",
+  /** the grey line under the name: 12px (the one scale: 11, 12, 13, 14), whole words, at most two lines (#4097: never cut mid-word) */
+  rowSub: "mt-px line-clamp-2 break-normal text-[12px] leading-4 text-ink-secondary",
   /** a card with a subtle border on the window's own background */
   card: "rounded-[14px] border-[0.5px] border-ink/[0.08] bg-ink/[0.015]",
   cardRow: "flex min-h-[52px] items-center gap-3 px-4 py-3",
   /** the round search of the home view */
   search: "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border-[0.5px] border-ink/10 px-3 focus-within:border-border-strong",
-  searchInput: "min-w-0 flex-1 bg-transparent text-[13.5px] leading-5 text-ink placeholder:text-ink-secondary focus:outline-none",
+  searchInput: "min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-ink placeholder:text-ink-secondary focus:outline-none",
   /** "Bot templates", "Publish", "Cancel": an outlined pill */
   outlinePill: "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-full border border-border px-3.5 text-[13px] text-ink transition-colors hover:bg-hover disabled:opacity-40 motion-reduce:transition-none",
   /** "Add a custom connector", "Uninstall": a filled gray pill */
@@ -45,11 +49,11 @@ export const PLUGINS = {
   /** "Add plugin", "Save": the white pill */
   primaryPill: "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-full bg-ink px-4 text-[13px] font-medium text-app transition-opacity hover:opacity-90 disabled:opacity-30 motion-reduce:transition-none",
   /** "Delete Skill" */
-  dangerPill: "inline-flex h-[26px] shrink-0 items-center justify-center gap-2 rounded-full bg-danger/15 px-3 text-[12.5px] text-danger transition-colors hover:bg-danger/25 disabled:opacity-40 motion-reduce:transition-none",
+  dangerPill: "inline-flex h-[26px] shrink-0 items-center justify-center gap-2 rounded-full bg-danger/15 px-3 text-[13px] text-danger transition-colors hover:bg-danger/25 disabled:opacity-40 motion-reduce:transition-none",
   /** a filled field (skill page) */
-  field: "w-full rounded-[12px] bg-card px-3.5 py-2.5 text-[13.5px] leading-5 text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-60",
+  field: "w-full rounded-[12px] bg-card px-3.5 py-2.5 text-[13px] leading-5 text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-60",
   /** an outlined field (custom connector) */
-  outlineField: "w-full rounded-[12px] border-[0.5px] border-ink/10 bg-transparent px-3.5 py-2.5 text-[13.5px] leading-5 text-ink placeholder:text-ink-tertiary focus:border-border-strong focus:outline-none disabled:opacity-60",
+  outlineField: "w-full rounded-[12px] border-[0.5px] border-ink/10 bg-transparent px-3.5 py-2.5 text-[13px] leading-5 text-ink placeholder:text-ink-tertiary focus:border-border-strong focus:outline-none disabled:opacity-60",
   /** "Bot templates": a hairline pill, a white round mark, the words, a gray arrow */
   textLink: "inline-flex h-8 shrink-0 items-center gap-2 rounded-full border-[0.5px] border-ink/10 pl-2 pr-3 text-[13px] text-ink transition-colors hover:bg-hover motion-reduce:transition-none",
   /** a quiet gray pill of Manage's title row (scope, refresh, + Add) */
@@ -60,7 +64,7 @@ export const PLUGINS = {
 /** A category pill: gray, the chosen one white with dark text. */
 export function pluginChipClass(active: boolean): string {
   return cn(
-    "inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[13.5px] leading-5 transition-colors motion-reduce:transition-none",
+    "inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[13px] leading-5 transition-colors motion-reduce:transition-none",
     active ? "bg-ink text-app" : "bg-ink/[0.06] text-ink hover:bg-ink/10",
   );
 }
@@ -68,7 +72,7 @@ export function pluginChipClass(active: boolean): string {
 /** A row's Connect / Add / Update button: a gray pill of one width. */
 export function pluginActionClass(variant: "fill" | "outline" = "fill"): string {
   return cn(
-    "inline-flex h-[26px] min-w-[96px] shrink-0 items-center justify-center gap-1.5 rounded-full px-3.5 text-[13.5px] leading-5 text-ink transition-colors disabled:opacity-50 motion-reduce:transition-none",
+    "inline-flex h-[26px] min-w-[96px] shrink-0 items-center justify-center gap-1.5 rounded-full px-3.5 text-[13px] leading-5 text-ink transition-colors disabled:opacity-50 motion-reduce:transition-none",
     variant === "fill" ? "bg-ink/[0.06] hover:bg-ink/10" : "border border-border hover:bg-hover",
   );
 }

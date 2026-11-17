@@ -7,7 +7,7 @@
 // exactly those Perspicax lists for the person: none other is drawn. The
 // "..." menu opens the product in Perspicax and copies its id.
 import { useState } from "react";
-import { Check, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, Wrench, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
@@ -19,10 +19,12 @@ import {
   removePersonProductKey, savePersonProductKey, testPersonProduct, type PersonProduct, type ProductKeyTarget,
 } from "@/lib/person-products";
 import type { Crumb } from "../Breadcrumb";
-import { PluginCard, PluginIcon, PluginPageHeader } from "./PluginParts";
-import { PluginActionsMenu } from "./PluginDetailView";
+import { PillTabs } from "../PillTabs";
+import { GlyphTile, PluginCard, PluginPageHeader } from "./PluginParts";
+import { DetailHeader, OverviewColumns, sourceLine } from "./DetailParts";
+import { ItemTrailer } from "./ItemTrailer";
 import { ProductKeyForm } from "./ProductKeyForm";
-import { productIcon, productMenuActions, ProductStateLabel } from "./ProductRows";
+import { ProductMark, productMenuActions, ProductStateLabel } from "./ProductRows";
 import { PLUGINS } from "./plugins-style";
 
 function KeyRow({ label, value, title }: { label: string; value: string; title?: string }) {
@@ -50,6 +52,9 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
   const [busy, setBusy] = useState<"test" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState<"overview" | "tools">("overview");
+  const tools = product.endpoints ?? [];
+  const tabs = ["overview" as const, ...(tools.length > 0 ? ["tools" as const] : [])];
   const targets = productKeyTargets(product);
   const key = product.key;
   const lastTest = key?.lastTest;
@@ -102,24 +107,44 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
   return (
     <>
       <PluginPageHeader title={product.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-4 pb-8 pt-[34px] sm:px-[34px]" data-person-product-page={product.id}>
-        <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
-          <PluginIcon item={productIcon(product)} className="size-14 rounded-[14px]" />
-          <div className="min-w-0 flex-[1_1_220px] pl-0.5">
-            <h2 className="truncate text-[16px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{product.name}</h2>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <ProductStateLabel product={product} />
-            <PluginActionsMenu
-              name={product.name}
-              busy={busy !== null}
-              actions={productMenuActions(product, 13, setCopied).map(({ run, ...action }) => ({ ...action, onSelect: run }))}
-            />
-          </div>
-          {copied && <p role="status" className="basis-full text-right text-[12px] text-success">{t("personProducts.idCopied")}</p>}
-        </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-person-product-page={product.id}>
+        <DetailHeader
+          icon={<ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className="size-14 rounded-[14px]" />}
+          name={product.name}
+          line={sourceLine([product.group && t("connectApps.detail.lineFrom", { source: product.group.name }), tools.length > 0 && (tools.length === 1 ? t("connectApps.detail.toolsCountOne") : t("connectApps.detail.toolsCount", { count: tools.length }))])}
+          actions={(
+            <>
+              <ProductStateLabel product={product} />
+              <ItemTrailer name={product.name} columns={false} busy={busy !== null}
+                actions={{ links: productMenuActions(product, 14, setCopied).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })) }} />
+            </>
+          )}
+        />
+        {copied && <p role="status" className="-mt-3 text-right text-[12px] text-success">{t("personProducts.idCopied")}</p>}
+        {tabs.length > 1 && (
+          <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={product.name} idPrefix="product"
+            label={(id) => t(id === "overview" ? "connectApps.detail.tab.overview" : "connectApps.detail.tab.tools")}
+            after={(id) => id === "tools" ? <span className="tabular-nums text-ink-tertiary">{tools.length}</span> : null}
+            tabAttributes={(id) => ({ "data-product-tab": id })} />
+        )}
 
-        {error && <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+        {tab === "tools" ? (
+          <div role="tabpanel" data-plugin-detail-panel="tools" className="space-y-1">
+            <p className={cn(PLUGINS.rowSub, "mb-2")}>{t("connectApps.detail.toolsLine")}</p>
+            <ul className="flex flex-col divide-y divide-hairline-weak">
+              {tools.map((tool) => (
+                <li key={tool} className="flex items-center gap-3 py-3">
+                  <GlyphTile glyph={Wrench} className="size-10 rounded-[10px]" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-[18px] text-ink" title={tool}>{tool}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <>
+        <OverviewColumns description={product.description} />
+
+        {error && <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</p>}
 
         <PluginCard title={t("personProducts.key.title")}>
           {key ? (
@@ -199,12 +224,14 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
                 return (
                   <li key={`${index}:${role.name}`} className="flex min-h-[38px] items-center gap-3 py-1.5" data-person-product-role={role.personal ? "direct" : "role"}>
                     <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">{role.personal ? t("personProducts.access.direct") : role.name}</span>
-                    {mode && <span className="shrink-0 text-[12.5px] text-ink-secondary" data-person-product-mode>{mode}</span>}
+                    {mode && <span className="shrink-0 text-[13px] text-ink-secondary" data-person-product-mode>{mode}</span>}
                   </li>
                 );
               })}
             </ul>
           </PluginCard>
+        )}
+          </>
         )}
       </div>
     </>

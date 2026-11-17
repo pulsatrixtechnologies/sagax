@@ -92,9 +92,10 @@ export interface ProductRole {
 export interface PersonProduct {
   id: string;
   name: string;
-  /** the product's mark: `url` (https, the console's own) when it serves one,
-   * else the site `domain` whose favicon stands in */
+  /** the mark the console serves (Perspicax #2071): its site, and an image address */
   icon?: { domain?: string; url?: string };
+  /** a larger image, when the console serves one (the banner's artwork) */
+  logo?: string;
   state: ProductState;
   /** Perspicax's stable reason code (a tooltip only) */
   stateCode?: string;
@@ -107,6 +108,13 @@ export interface PersonProduct {
   /** the whole authority: Sagax draws exactly these */
   actions: ProductAction[];
   consoleUrl?: string;
+  /** the vendor the console files it under (#4453): products of one vendor
+   * sit under one row; absent, the product stands alone */
+  group?: { id: string; name: string; /** the vendor's line, per language (the person's, English fallback) */ description?: { en?: string; fr?: string }; icon?: { domain?: string; url?: string }; logo?: string };
+  /** what it does, one line */
+  description?: string;
+  /** the endpoints it serves, by name, for one grey line */
+  endpoints?: string[];
   /** #4507: the record kinds it describes; absent when none */
   records?: RecordKindInfo[];
 }
@@ -123,6 +131,26 @@ const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const text = (value: unknown, max = 2_048): string | undefined =>
   typeof value === "string" && value.trim() && value.length <= max ? value.trim() : undefined;
+/** An image address the console serves: https, or an inline image (never a script address). */
+const imageUrl = (value: unknown): string | undefined => {
+  const raw = text(value, 64 * 1024);
+  return raw && (/^https:\/\//i.test(raw) || /^data:image\/(?:svg\+xml|png|webp|jpeg)[;,]/i.test(raw)) ? raw : undefined;
+};
+/** A line in the person's language: `{ en, fr }`, or one plain string read as English. */
+const parseLine = (value: unknown): { en?: string; fr?: string } | undefined => {
+  const plain = text(value, 512);
+  if (plain) return { en: plain };
+  const line = record(value);
+  const en = text(line?.en, 512);
+  const fr = text(line?.fr, 512);
+  return en || fr ? { ...(en ? { en } : {}), ...(fr ? { fr } : {}) } : undefined;
+};
+const parseIcon = (value: unknown): { domain?: string; url?: string } | undefined => {
+  const icon = record(value);
+  const domain = text(icon?.domain, 253);
+  const url = imageUrl(icon?.url);
+  return domain || url ? { ...(domain ? { domain } : {}), ...(url ? { url } : {}) } : undefined;
+};
 
 function parseTest(raw: unknown): ProductKeyTest | undefined {
   const test = record(raw);
@@ -203,17 +231,8 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const state: ProductState = (PRODUCT_STATES as readonly string[]).includes(product.state as string) ? product.state as KnownProductState : "unknown";
   const stateCode = text(product.reason_code, 128);
   const address = text(product.base_url);
-  const domain = text(record(product.icon)?.domain, 253);
-  const iconUrlRaw = text(record(product.icon)?.url, 2048);
-  const iconUrl = (() => {
-    if (!iconUrlRaw || /\s/.test(iconUrlRaw)) return undefined;
-    try {
-      const url = new URL(iconUrlRaw);
-      return url.protocol === "https:" && !url.username && !url.password ? url.toString() : undefined;
-    } catch {
-      return undefined;
-    }
-  })();
+  const icon = parseIcon(product.icon);
+  const logo = imageUrl(product.logo);
   const roles = Array.isArray(product.profiles)
     ? product.profiles.flatMap((entry): ProductRole[] => {
       const profile = record(entry);
@@ -229,10 +248,21 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const signInFields = parseFields(record(product.sign_in)?.fields);
   const actions = parseActions(product.actions);
   const consoleUrl = text(product.console_url);
+  const groupRaw = record(product.group);
+  const groupId = text(groupRaw?.id, 256) ?? (typeof product.group === "string" ? text(product.group, 256) : undefined);
+  const groupName = text(groupRaw?.name, 256) ?? groupId;
+  const description = text(product.description, 512);
+  const endpoints = Array.isArray(product.endpoints)
+    ? product.endpoints.flatMap((entry): string[] => { const value = typeof entry === "string" ? text(entry, 128) : text(record(entry)?.name, 128); return value ? [value] : []; }).slice(0, 64)
+    : [];
   const records = parseRecordKinds(product.records);
   return {
     id, name, state, roles, actions,
-    ...(domain || iconUrl ? { icon: { ...(domain ? { domain } : {}), ...(iconUrl ? { url: iconUrl } : {}) } } : {}),
+    ...(groupId && groupName ? { group: { id: groupId, name: groupName, ...(parseLine(groupRaw?.description) ? { description: parseLine(groupRaw?.description) } : {}), ...(parseIcon(groupRaw?.icon) ? { icon: parseIcon(groupRaw?.icon) } : {}), ...(imageUrl(groupRaw?.logo) ? { logo: imageUrl(groupRaw?.logo) } : {}) } } : {}),
+    ...(description ? { description } : {}),
+    ...(endpoints.length > 0 ? { endpoints } : {}),
+    ...(icon ? { icon } : {}),
+    ...(logo ? { logo } : {}),
     ...(stateCode ? { stateCode } : {}),
     ...(address ? { address } : {}),
     ...(key ? { key } : {}),

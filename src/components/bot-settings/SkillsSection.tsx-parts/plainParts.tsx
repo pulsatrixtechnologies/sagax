@@ -3,6 +3,7 @@ import { useId, useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { PILL } from "../../SettingsPrimitives";
+import { TipBubble } from "../../TipBubble";
 import { ProfileRow } from "../ProfileRow";
 import { skillActions } from "./actions";
 import { isChangedAfterReviewWarning } from "./helpers";
@@ -47,16 +48,7 @@ function SharedGlyph({ label }: { label: string }) {
       >
         <Users size={15} strokeWidth={1.75} aria-hidden="true" />
       </button>
-      {open && (
-        <span
-          id={tipId}
-          role="tooltip"
-          data-skill-shared-tip=""
-          className="pointer-events-none absolute bottom-[calc(100%+4px)] right-0 z-30 w-max max-w-[240px] rounded-lg bg-panel px-2.5 py-1.5 text-[12px] leading-4 text-ink shadow-xl ring-1 ring-ink/10 popover-surface"
-        >
-          {label}
-        </span>
-      )}
+      {open && <TipBubble id={tipId} open variant="panel" wide data-skill-shared-tip="" className="max-w-[240px]">{label}</TipBubble>}
     </span>
   );
 }

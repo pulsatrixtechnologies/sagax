@@ -83,9 +83,9 @@ function render(props: Omit<PluginDetailProps, "onBack">): HTMLElement {
 }
 const detail = (item: PluginItem, overrides: Partial<DetailContext> = {}) => render(detailProps(item, context(overrides)));
 /** The section cards by their title (PluginCard: a heading, then its card). */
-const titles = (page: HTMLElement) => [...page.querySelectorAll("section > div > h3")].map((heading) => heading.textContent);
+const titles = (page: HTMLElement) => [...page.querySelectorAll("section > div > h3, [data-plugin-details-block] > h3")].map((heading) => heading.textContent);
 const card = (page: HTMLElement, title: string) => {
-  const heading = [...page.querySelectorAll("section > div > h3")].find((candidate) => candidate.textContent === title);
+  const heading = [...page.querySelectorAll("section > div > h3, [data-plugin-details-block] > h3")].find((candidate) => candidate.textContent === title);
   return heading?.closest("section")?.lastElementChild as HTMLElement | undefined;
 };
 /** A box inside a card: an element with its own rounded border or fill. */
@@ -158,5 +158,57 @@ describe("plugin detail sections (#4154)", () => {
     const signInCard = card(signIn, "Accounts")!;
     expect(signInCard.querySelector("[data-mcp-client-form]")).not.toBeNull();
     expect(boxesIn(signInCard)).toEqual([]);
+  });
+});
+
+describe("the plugin page's tabs and its quiet Details block (#4453)", () => {
+  const skills = [{ name: "code-review", description: "Reviews a pull request", onOpen: vi.fn() }];
+  const connectors = [{ key: "mcp:notes", name: "Notes", item: { kind: "mcp" as const, name: "Notes" }, state: { tone: "fix" as const, text: "Needs sign-in", onFix: vi.fn() }, word: "needsSignIn" as const, onOpen: vi.fn() }];
+  const withParts = (parts: Partial<PluginDetailProps>) => {
+    act(() => root?.unmount());
+    host?.remove();
+    return render({ item: items[0]!, subtitle: "", busy: false, details: [], ...parts });
+  };
+
+  it("draws tabs only for what has content: none for a plugin that brings nothing", () => {
+    const page = withParts({});
+    expect(page.querySelector('[role="tablist"]')).toBeNull();
+  });
+
+  it("draws Overview, Skills · N and Connectors · N, underlined, only for the parts it has", () => {
+    const page = withParts({ skills, connectors });
+    expect([...page.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(["Overview", "Skills1", "Connectors1"]);
+    expect(page.querySelector('[role="tab"]')?.className).toContain("border-b-2");
+    expect(withParts({ skills }).querySelectorAll('[role="tab"]')).toHaveLength(2);
+  });
+
+  it("Skills: one grey line on how they are used, then a card per skill with \"/name\" and its line", () => {
+    const page = withParts({ skills, connectors });
+    act(() => { (page.querySelector('[data-plugin-detail-tab="skills"]') as HTMLElement).click(); });
+    const panel = page.querySelector("[data-plugin-detail-panel='skills']")!;
+    expect(panel.textContent).toContain("Invoke by typing / in chat");
+    expect(panel.querySelector("li")?.textContent).toContain("/code-review");
+    expect(panel.querySelector("li")?.textContent).toContain("Reviews a pull request");
+  });
+
+  it("Connectors: a line, then rows with the name, its state in words and the action that fixes it", () => {
+    const page = withParts({ skills, connectors });
+    act(() => { (page.querySelector('[data-plugin-detail-tab="connectors"]') as HTMLElement).click(); });
+    const panel = page.querySelector("[data-plugin-detail-panel='connectors']")!;
+    expect(panel.textContent).toContain("Tools and data sources this connects to.");
+    expect(panel.querySelector("li")?.textContent).toContain("Notes");
+    expect(panel.querySelector("[data-detail-connector='needsSignIn']")?.textContent).toContain("Needs sign-in");
+    const fix = panel.querySelector("[data-detail-connector-fix]") as HTMLElement;
+    expect(fix.textContent).toBe("Sign in");
+    act(() => fix.click());
+    expect(connectors[0]!.onOpen).toHaveBeenCalled();
+  });
+
+  it("keeps everything the Details table held, in a quiet block at the bottom of Overview", () => {
+    const page = withParts({ details: [{ label: "Source", value: "market" }, { label: "Identifier", value: "kit@market", mono: true }, { label: "Update", value: "1.0.0 → 1.1.0" }] });
+    const block = page.querySelector("[data-plugin-details-block]")!;
+    expect(block.className).not.toMatch(/rounded|bg-/);
+    expect([...block.querySelectorAll("dt")].map((node) => node.textContent)).toEqual(["Source", "Identifier", "Update"]);
+    expect(block.textContent).toContain("1.0.0 → 1.1.0");
   });
 });

@@ -17,7 +17,7 @@ export function GrokConnectorAction() {
       <button type="button" data-grok-manage onClick={() => void openGrokConnectors().then(setError)} className={cn(cardActionClass("quiet"), "inline-flex items-center gap-1")}>
         <ExternalLink size={12} /> {t("connectApps.providers.manage", { provider: "Grok" })}
       </button>
-      {error && <span role="alert" className="text-[11.5px] text-danger">{error}</span>}
+      {error && <span role="alert" className="text-[12px] text-danger">{error}</span>}
     </span>
   );
 }

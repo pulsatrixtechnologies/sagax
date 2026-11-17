@@ -84,7 +84,7 @@ export function ProductKeyForm({ form, productName, variant, onSave, onCancel, s
             {t("personProducts.form.cancel")}
           </button>
         )}
-        <span className="flex items-center gap-1 text-[11.5px] text-ink-tertiary">
+        <span className="flex items-center gap-1 text-[12px] text-ink-tertiary">
           <LockKeyhole size={11} aria-hidden="true" /> {t("personProducts.form.private")}
         </span>
       </div>

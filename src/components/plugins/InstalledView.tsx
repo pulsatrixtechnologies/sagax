@@ -10,18 +10,23 @@
 // organization's Flow ("imposed by the organization") and its Perspicax
 // Roles ("held" / "not held"). Every empty section is hidden.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Building2, ExternalLink, FileText, KeyRound, MoreHorizontal, Plus, RefreshCw, RotateCw, Settings2, Trash2, Users } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, ExternalLink, Plug, Puzzle, FileText, KeyRound, Plus, RefreshCw, Settings2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { entryIcon, type InstalledBrings, type InstalledEntry } from "@/lib/installed-model";
 import type { PluginItem } from "@/lib/plugins-model";
-import { botPluginKey, capabilityName, isBotSwitch, formWord, installationServerName, reasonText, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
+import { botPluginKey, capabilityName, isBotSwitch, formWord, installationServerName, reasonText, scopeWord, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
+import { entryKind, fromOrganization, kindOf, ORGANIZATION_PREVIEW, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { filterLabel, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
+import { ItemTrailer, ITEM_ROW_ATTR } from "./ItemTrailer";
+import { statusState } from "./StateIcon";
+import { updateKindOf } from "@/lib/capability-updates";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
-import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
  * "plugin (claude-plugins-official) · 3 skills", "1 connector". */
@@ -108,11 +113,102 @@ export interface InstalledViewProps {
   macApps?: ReactNode;
   /** the "+ Add" menu sits in Manage's title row: not drawn here */
   addInTitle?: boolean;
-  /** the organization's declarations (an admin, Perspicax): folded at the end */
-  organizationAdmin?: ReactNode;
+  /** #4453: the one kind shown (Skills, Connectors or Plugins); absent:
+   * every kind, as one list */
+  kind?: ConnectAppsKind;
+  /** #4453: the person's organization products, one row per vendor (a
+   * vendor's products unfold under it), in the console's section of
+   * Connectors, folded past its first six rows */
+  products?: ReadonlyArray<{ key: string; node: ReactNode }>;
+  /** #4453: the organization console's own section at the top of each kind,
+   * titled "<Console> · <Organization>"; absent: no such section */
+  consoleTitle?: string;
+  /** what the console offers the person of this kind (its capabilities with
+   * their own switch); `consoleHasExtras` says there is something to list */
+  consoleExtras?: ReactNode | ((after: ReactNode) => ReactNode);
+  consoleHasExtras?: boolean;
+  /** how many rows the console offers or requires of this kind (the badge next to its title) */
+  consoleCount?: number;
+  /** #4453: this bot's own switch of a server everyone may use (the bot's
+   * server list, the write "For which bots" makes) */
+  onToggleBotServer?: (item: Capability, next: boolean) => void;
+  /** #4453: what stands at an entry's right (where it is on, its switch, its
+   * menu: an ItemTrailer); absent: the "..." menu alone */
+  entryTrailer?: (entry: InstalledEntry) => ReactNode;
+  /** #4453: the same at a private skill's right */
+  skillTrailer?: (skill: PluginItem) => ReactNode;
+  /** a bot the viewer may not change (another person's): its switches show
+   * locked with this reason */
+  readOnlyReason?: string;
+  /** the sort chosen in the control row: by name, or what is on first */
+  sort?: ConnectAppsSort;
+  /** #4504: a failed update said under its own row: the notices of the rows with these update keys */
+  rowNotice?: (keys: ReadonlyArray<string | undefined>) => ReactNode;
+  /** whether an item has an update waiting (kind and readable name): "Updates first" */
+  hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string, updateKey?: string) => boolean;
+}
+
+export { ScopePill, RowSwitch } from "./ItemTrailer";
+
+const KIND_EMPTY = {
+  skills: "connectApps.kind.empty.skills",
+  connectors: "connectApps.kind.empty.connectors",
+  plugins: "connectApps.kind.empty.plugins",
+} as const satisfies Record<ConnectAppsKind, string>;
+
+/** "6 connectors", "1 skill", "3 plugins": the count at a group's right. */
+export function kindCountLabel(kind: ConnectAppsKind, count: number): string {
+  if (kind === "skills") return count === 1 ? t("connectApps.count.skillOne") : t("connectApps.count.skillMany", { count });
+  if (kind === "connectors") return count === 1 ? t("connectApps.count.connectorOne") : t("connectApps.count.connectorMany", { count });
+  return count === 1 ? t("connectApps.count.pluginOne") : t("connectApps.count.pluginMany", { count });
 }
 
 const INSTALLED_PREVIEW = 6;
+
+/** A row's category as a small outlined chip after its name; "other" and none say nothing. */
+export function CategoryChip({ category }: { category?: string }) {
+  if (!category || category === "other") return null;
+  return <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-row-category="">{filterLabel(category)}</span>;
+}
+
+/** A section's title with its count in a small rounded badge next to it. */
+export function SectionTitle({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <h3 className={PLUGINS.sectionTitle}>{title}</h3>
+      {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
+    </div>
+  );
+}
+
+const FIRST_KEY = {
+  skills: "connectApps.first.skills",
+  connectors: "connectApps.first.connectors",
+  plugins: "connectApps.first.plugins",
+} as const satisfies Record<ConnectAppsKind, string>;
+const FIRST_ICON = { skills: BookOpen, connectors: Plug, plugins: Puzzle } as const;
+
+/** What a person with none of their own of a kind sees first: one line and a
+ * button to Discover, with a small mark at the right. */
+export function FirstBanner({ kind, onDiscover }: { kind: ConnectAppsKind; onDiscover?: () => void }) {
+  const Glyph = FIRST_ICON[kind];
+  return (
+    <section data-plugins-empty="" data-first-banner={kind} className="mb-6 flex items-center gap-4 rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.06] to-ink/[0.015] p-5">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[14px] font-medium leading-5 text-ink">{t(FIRST_KEY[kind])}</h3>
+        <p className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t("connectApps.first.line")}</p>
+        {onDiscover && (
+          <button type="button" data-plugins-go-discover="" onClick={onDiscover} className={cn(PLUGINS.fillPill, "mt-3 h-8")}>{t("connectApps.manage.tab.discover")}</button>
+        )}
+      </div>
+      <span aria-hidden="true" className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-ink/[0.06] text-ink-secondary max-sm:hidden"><Glyph size={24} /></span>
+    </section>
+  );
+}
+
+/** #4453: Yours of one kind is one column (the design's row: the state, the
+ * scope pill, "..." and the switch need the width); the reference's row look */
+const YOURS_LIST = "flex flex-col divide-y divide-hairline-weak *:min-w-0 *:px-3";
 
 /** one entry of the "+ Add" menu */
 export interface AddAction {
@@ -125,7 +221,7 @@ export interface AddAction {
 
 /** The one "+ Add" button of Installed (#2104): a menu with every way to add
  * something by hand, where three buttons stood side by side. */
-export function AddMenu({ actions }: { actions: AddAction[] }) {
+export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /** #4453: the reference's filled "+ Add" beside the search */ filled?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -138,9 +234,10 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add
-        className={cn(PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
-        <Plus size={14} /> {t("connectApps.add")}
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add aria-label={t("connectApps.add")} title={t("connectApps.add")}
+        className={cn(filled ? cn(PLUGINS.primaryPill, "gap-1.5 pl-3.5 pr-3 [[data-plugins-layout=compact]_&]:size-8 [[data-plugins-layout=compact]_&]:justify-center [[data-plugins-layout=compact]_&]:p-0 [[data-plugins-layout=minimal]_&]:size-8 [[data-plugins-layout=minimal]_&]:justify-center [[data-plugins-layout=minimal]_&]:p-0") : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
+        <Plus size={14} /> <span className={cn(filled && "[[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden")}>{t("connectApps.add")}</span>
+        {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70 [[data-plugins-layout=compact]_&]:hidden [[data-plugins-layout=minimal]_&]:hidden" />}
       </button>
       {open && (
         <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>
@@ -167,141 +264,243 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [] }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate, rowNotice }: InstalledViewProps) {
   const [all, setAll] = useState(false);
+  const [allOrganization, setAllOrganization] = useState(false);
+  // #4453: one kind at a time; without one, every kind in one list
+  const has = (wanted: ConnectAppsKind) => kind === undefined || kind === wanted;
+  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name, entry.primary.updateKey)));
+  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off", (skill) => Boolean(hasUpdate?.("skill", skill.name, skill.updateKey))) : [];
+  const shownPersonal = has("connectors") ? (sort === "name" ? [...personal].sort((a, b) => a.key.localeCompare(b.key)) : personal) : [];
+  const shownProducts = kind === "skills" ? [] : products;
+  const shownOrganization = kind === undefined ? organization : organization.filter((item) => kindOf(item) === kind);
   // connected account rows first, then the notices, the ones to finish, the unverifiable
-  const accountLines: InstalledLine[] = (accounts?.sections ?? []).flatMap(({ group, rows }) => [
+  const accountLines: InstalledLine[] = (has("connectors") ? accounts?.sections ?? [] : []).flatMap(({ group, rows }) => [
     ...rows.map((row) => ({ kind: "account" as const, key: `account:${row.key}`, row })),
     ...(group.notice ? [{ kind: "notice" as const, key: `notice:${group.id}`, group }] : []),
   ]).sort((a, b) => lineRank(a) - lineRank(b));
   const lines: InstalledLine[] = [
-    ...(resolved === undefined ? entries.map((entry) => ({ kind: "entry" as const, key: entry.key, entry })) : []),
-    ...personal.map((row) => ({ kind: "custom" as const, key: `personal:${row.key}`, node: row.node })),
+    ...(resolved === undefined ? shownEntries.map((entry) => ({ kind: "entry" as const, key: entry.key, entry })) : []),
+    ...shownPersonal.map((row) => ({ kind: "custom" as const, key: `personal:${row.key}`, node: row.node })),
     ...accountLines,
   ];
-  const shownLines = all ? lines : lines.slice(0, INSTALLED_PREVIEW);
+  // #4453: a kind's list shows whole; only the organization's group folds
+  const shownLines = all || kind !== undefined ? lines : lines.slice(0, INSTALLED_PREVIEW);
   const accountRowCount = accountLines.filter((line) => line.kind === "account").length;
   const renderLine = (line: InstalledLine) => {
-    if (line.kind === "entry") return <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} />;
+    if (line.kind === "entry") return (
+      <>
+        <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} trailer={entryTrailer?.(line.entry)} hideOrigin={kind !== undefined && consoleShown} />
+        {rowNotice?.(line.entry.members.map((member) => member.updateKey))}
+      </>
+    );
     if (line.kind === "custom") return line.node;
     if (line.kind === "notice") return <AccountNoticeRow group={line.group} refreshing={accounts?.refreshing} onRefresh={accounts?.onRefresh} onSetUp={accounts?.onSetUp} />;
-    return <AccountInstalledRow row={line.row} onOpen={accounts?.onOpen?.(line.row)} />;
+    return <AccountInstalledRow row={line.row} onOpen={accounts?.onOpen?.(line.row)} scoped={kind !== undefined} />;
   };
+  const shownProductRows = allOrganization ? shownProducts : shownProducts.slice(0, ORGANIZATION_PREVIEW);
+  const resolvedRows = resolved ? sortRows(kind === undefined ? resolved.items : resolved.items.filter((item) => kindOf(item) === kind), sort, capabilityName, (item) => item.enabled && item.state !== "off") : [];
+  // the organization's rows of this bot sit in the console's section; a
+  // product the vendor rows already list is not listed twice
+  const productIds = new Set(shownProducts.length > 0 ? ["*"] : []);
+  const resolvedOrganization = kind === undefined ? [] : resolvedRows.filter((item) => fromOrganization(item) && !(productIds.has("*") && item.form === "product"));
+  const resolvedOwn = kind === undefined ? resolvedRows : resolvedRows.filter((item) => !fromOrganization(item));
+  const lockedReason = (item: Capability): string | undefined => {
+    if (readOnlyReason) return readOnlyReason;
+    if (item.scope === "organization" || item.scope === "account") return t(`capabilities.detail.where.${item.scope}`);
+    return undefined;
+  };
+  const entryOfItem = (item: Capability) => {
+    const plugin = botPluginKey(item);
+    const server = installationServerName(item);
+    return entries.find((candidate) => candidate.members.some((member) =>
+      plugin ? member.kind === "plugin" && member.id === plugin : Boolean(server && member.kind === "mcp" && member.id === server)));
+  };
+  const capabilityList = (data: BotCapabilities | null, extra: { title?: string; fold?: number } = {}) => (
+    <CapabilitiesBody botName={botName} data={data} error={resolvedError} onRetry={onRetryResolved} showReceived={false} title={extra.title} fold={extra.fold}
+      lockedReason={kind === undefined ? undefined : lockedReason}
+      switchable={(item) => Boolean(isBotSwitch(item)
+        ? onToggleBotSwitch && item.canToggle
+        : installationServerName(item)
+          ? onToggleBotServer && item.canToggle
+          : onToggleOrganization && item.scope === "organization" && item.orgDeclaration && item.canToggle)}
+      onToggle={(item, next) => (isBotSwitch(item) ? onToggleBotSwitch : installationServerName(item) ? onToggleBotServer : onToggleOrganization)?.(item, next)}
+      menuActions={kind === undefined ? undefined : (item) => {
+        const plugin = botPluginKey(item);
+        const entry = entryOfItem(item);
+        const superseded = plugin && item.supersededBy && item.canToggle && onRemoveSuperseded ? () => onRemoveSuperseded(item) : undefined;
+        // an obsolete copy keeps its one visible "Remove" button (rowActions), not a menu line
+        if (!entry) return undefined;
+        const actions = entryActions(entry);
+        return {
+          detail: () => onOpenEntry(entry),
+          ...(actions.update ? { update: actions.update, updateWaiting: entry.updateAvailable } : {}),
+          ...(actions.links ? { links: actions.links } : {}),
+          ...(!superseded && actions.remove ? { remove: actions.remove } : {}),
+        };
+      }}
+      rowActions={(item) => {
+        const plugin = botPluginKey(item);
+        const remove = plugin && item.supersededBy && item.canToggle && onRemoveSuperseded ? (
+          <button type="button" data-remove-superseded="" disabled={removingSuperseded !== null}
+            onClick={() => onRemoveSuperseded(item)}
+            className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40">
+            {t("connectApps.entry.remove")}
+          </button>
+        ) : null;
+        const server = installationServerName(item);
+        const entry = entries.find((candidate) => candidate.members.some((member) =>
+          plugin ? member.kind === "plugin" && member.id === plugin : Boolean(server && member.kind === "mcp" && member.id === server)));
+        if (kind !== undefined) return remove;
+        if (!entry) return remove;
+        return <>
+          <button type="button" onClick={() => onOpenEntry(entry)} className="ui-icon-button"
+            aria-label={t("connectApps.openAria", { name: capabilityName(item) })}>
+            <Settings2 size={14} aria-hidden="true" />
+          </button>
+          {remove ?? <EntryMenu name={capabilityName(item)} actions={entryActions(entry)} updateWaiting={entry.updateAvailable} />}
+        </>;
+      }} />
+  );
+  // none of their own of this kind: the first block says so, with a way to Discover
+  const ownEmpty = kind !== undefined && !loading && (resolved === undefined
+    ? lines.filter((line) => line.kind !== "notice").length === 0 && shownSkills.length === 0
+    : resolved !== null && resolvedOwn.length === 0);
+  // the section's LAST row, under the text of the rows above it: what is folded, counted so the heading's number adds up
+  const moreRow = shownProducts.length > ORGANIZATION_PREVIEW ? (
+    <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.sectionLink, "ml-[56px] mt-1")} data-plugins-organization-all>
+      {allOrganization ? t("connectApps.manage.showFewer") : t("connectApps.showMoreRows", { count: shownProducts.length - ORGANIZATION_PREVIEW })}
+    </button>
+  ) : null;
+  const consoleShown = kind !== undefined && (shownProducts.length > 0 || resolvedOrganization.length > 0 || consoleHasExtras);
+  const nothing = resolved === undefined && shownEntries.length === 0 && shownPersonal.length === 0 && shownProducts.length === 0 && accountRowCount === 0 && shownSkills.length === 0 && shownOrganization.length === 0 && !loading;
   return (
-    <div data-plugins-installed-tab>
+    <div data-plugins-installed-tab data-plugins-installed-kind={kind}>
       {add.length > 0 && !addInTitle && (
         <div className="mb-3 flex items-center justify-end" data-plugins-installed-tools>
           <AddMenu actions={add} />
         </div>
       )}
       {forms}
-      {resolved !== undefined && <CapabilitiesBody botName={botName} data={resolved} error={resolvedError} onRetry={onRetryResolved} showReceived={false}
-        switchable={(item) => Boolean(isBotSwitch(item)
-          ? onToggleBotSwitch && item.canToggle
-          : onToggleOrganization && item.scope === "organization" && item.orgDeclaration && item.canToggle)}
-        onToggle={(item, next) => (isBotSwitch(item) ? onToggleBotSwitch : onToggleOrganization)?.(item, next)}
-        rowActions={(item) => {
-          const plugin = botPluginKey(item);
-          const remove = plugin && item.supersededBy && item.canToggle && onRemoveSuperseded ? (
-            <button type="button" data-remove-superseded="" disabled={removingSuperseded !== null}
-              onClick={() => onRemoveSuperseded(item)}
-              className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40">
-              {t("connectApps.entry.remove")}
-            </button>
-          ) : null;
-          const server = installationServerName(item);
-          const entry = entries.find((candidate) => candidate.members.some((member) =>
-            plugin ? member.kind === "plugin" && member.id === plugin : Boolean(server && member.kind === "mcp" && member.id === server)));
-          if (!entry) return remove;
-          return <>
-            <button type="button" onClick={() => onOpenEntry(entry)} className="ui-icon-button"
-              aria-label={t("connectApps.openAria", { name: capabilityName(item) })}>
-              <Settings2 size={14} aria-hidden="true" />
-            </button>
-            {remove ?? <EntryMenu name={capabilityName(item)} actions={entryActions(entry)} updateWaiting={entry.updateAvailable} />}
-          </>;
-        }} />}
-      {resolved === undefined && entries.length === 0 && personal.length === 0 && accountRowCount === 0 && skills.length === 0 && organization.length === 0 && !loading && (
+      {kind !== undefined && ownEmpty && <FirstBanner kind={kind} onDiscover={onDiscover} />}
+      {resolved !== undefined && kind === undefined && capabilityList(resolved)}
+      {consoleShown && (
+        <section data-plugins-organization-group="" data-plugins-console-section="" className="mb-6">
+          <SectionTitle title={consoleTitle ?? t("connectApps.group.organization")} count={shownProducts.length + consoleCount || undefined} />
+          {shownProducts.length > 0 && (
+            <ul className={cn(YOURS_LIST, "mt-1")}>
+              {shownProductRows.map((row) => <li key={row.key}>{row.node}</li>)}
+            </ul>
+          )}
+          {typeof consoleExtras === "function" ? (consoleHasExtras ? consoleExtras(moreRow) : moreRow) : <>{consoleExtras}{moreRow}</>}
+          {resolvedOrganization.length > 0 && resolved && capabilityList({ ...resolved, items: resolvedOrganization }, { title: "", fold: ORGANIZATION_PREVIEW })}
+        </section>
+      )}
+      {resolved !== undefined && kind !== undefined && (resolved === null ? capabilityList(null) : (
+        (resolvedOwn.length > 0 || !consoleShown) && (
+          <>
+            {consoleShown && (
+              <SectionTitle title={t("connectApps.group.added")} />
+            )}
+            {capabilityList({ ...resolved, items: resolvedOwn }, { title: consoleShown ? "" : t("connectApps.group.botReceives", { name: botName }) })}
+          </>
+        )
+      ))}
+      {nothing && kind === undefined && (
         <EmptyLine action={onDiscover ? (
-          <button type="button" data-plugins-go-discover onClick={onDiscover} className="text-[12.5px] font-medium text-accent-text hover:underline">{t("connectApps.manage.tab.discover")}</button>
+          <button type="button" data-plugins-go-discover onClick={onDiscover} className="text-[13px] font-medium text-accent-text hover:underline">{t("connectApps.manage.tab.discover")}</button>
         ) : undefined}>
-          {t("connectApps.manage.nothingInstalled")}
+          {kind ? t(KIND_EMPTY[kind]) : t("connectApps.manage.nothingInstalled")}
         </EmptyLine>
       )}
       {lines.length > 0 && (
         <section data-plugins-installed className={cn(resolved !== undefined && "mt-8")}>
-          <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>
-          <ul className={cn(PLUGINS.grid, "mt-1")}>
+          {kind ? (
+            <SectionTitle title={t(consoleShown ? "connectApps.group.added" : "connectApps.view.yours")} count={lines.filter((line) => line.kind !== "notice").length} />
+          ) : <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>}
+          <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
             {shownLines.map((line) => (
               <li key={line.key} className={cn(line.kind === "notice" && "col-span-full")}>{renderLine(line)}</li>
             ))}
           </ul>
-          {lines.length > INSTALLED_PREVIEW && (
+          {kind === undefined && lines.length > INSTALLED_PREVIEW && (
             <button type="button" onClick={() => setAll((value) => !value)} className={cn(PLUGINS.sectionLink, "mt-2")} data-plugins-show-all>
               {all ? t("connectApps.manage.showFewer") : t("connectApps.manage.showAll", { count: lines.length })}
             </button>
           )}
         </section>
       )}
-      {resolved === undefined && organization.length > 0 && (
+      {resolved === undefined && shownOrganization.length > 0 && (
         <section className="mt-6 first:mt-0" data-plugins-organization>
           <h3 className={cn(PLUGINS.label, "mb-2")}>{t("capabilities.installed.organization")}</h3>
           <ul className={cn(PLUGINS.card, "divide-y divide-hairline-weak")}>
-            {organization.map((item) => (
+            {shownOrganization.map((item) => (
               <li key={item.key}><OrganizationRow item={item} /></li>
             ))}
           </ul>
         </section>
       )}
-      {resolved === undefined && skills.length > 0 && (
-        <section className="mt-8" data-plugins-skills>
-          <h3 className={PLUGINS.label}>{t("connectApps.manage.privateSkills")}</h3>
-          <ul className={cn(PLUGINS.grid, "mt-1")}>
-            {skills.map((skill) => (
-              <li key={skill.key}>
-                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-2xl px-3 py-3 text-left">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className={PLUGINS.rowName} title={skill.name}>{skill.name}</span>
-                    <span className={PLUGINS.rowSub} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
-                  </span>
-                  {skill.status === "off" && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
-                </button>
-              </li>
-            ))}
+      {resolved === undefined && shownSkills.length > 0 && (
+        <section className="mt-8 first:mt-0" data-plugins-skills>
+          <SectionTitle title={t("connectApps.manage.privateSkills")} count={shownSkills.length} />
+          <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
+            {shownSkills.map((skill) => {
+              return (
+                <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className="group flex flex-wrap items-center gap-2">
+                  <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className={cn(PLUGINS.rowName, "min-w-0")} title={skill.name}>{skill.name}</span>
+                        <CategoryChip category={skill.category} />
+                      </span>
+                      <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
+                    </span>
+                    {skill.status === "off" && !skillTrailer && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
+                  </button>
+                  {skillTrailer?.(skill)}
+                  {rowNotice && <div className="basis-full">{rowNotice([skill.updateKey])}</div>}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
-      {macApps}
-      {providers && (
+      {has("connectors") && macApps}
+      {has("connectors") && providers && (
         <section className="mt-8 first:mt-0" id="plugins-providers" data-plugins-providers>
           {providers}
         </section>
       )}
-      {organizationAdmin && <div className="mt-8" data-plugins-organization-admin>{organizationAdmin}</div>}
     </div>
   );
 }
 /** A private skill's line: where it comes from, then what it does. */
 function skillLine(skill: { source: string; description?: string }, sourceLabel: (source: string) => string): string {
-  const from = skill.source === "local" ? t("connectApps.skill.createdLocally") : t("connectApps.skill.from", { source: sourceLabel(skill.source) });
+  const from = skill.source === "local" ? t("connectApps.origin.you") : t("connectApps.skill.from", { source: sourceLabel(skill.source) });
   return skill.description ? `${from} · ${skill.description}` : from;
 }
 /** One installed entry: logo, name, what it brings, its state, "...". */
-export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions }) {
+export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = false }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions; trailer?: ReactNode; /** the section title already says it (Added by you): the line starts with what it does */ hideOrigin?: boolean }) {
   const icon = entryIcon(entry);
   return (
-    <div className="group flex items-center gap-2 py-3" data-installed-entry={entry.key}>
+    <div className="group flex items-center gap-2 py-3" data-installed-entry={entry.key} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
         <PluginIcon item={icon} className="size-10 rounded-[10px]" />
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
-          <span className={PLUGINS.rowName} title={entry.name}>{entry.name}</span>
-          <span className={PLUGINS.rowSub} title={bringsLabel(entry.brings)} data-installed-brings>{bringsLabel(entry.brings)}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0")} title={entry.name}>{entry.name}</span>
+            <CategoryChip category={entry.primary.category} />
+          </span>
+          {/* how it got there, then what it does, on one line */}
+          <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={bringsLabel(entry.brings)} data-installed-brings>
+            {[...(hideOrigin ? [] : [t("connectApps.origin.you")]), entry.primary.description || bringsLabel(entry.brings)].join(" \u00b7 ")}
+          </span>
         </span>
-        <PluginStatusLabel status={entry.status} className="text-[13px] font-normal" />
+        {!trailer && <PluginStatusLabel status={entry.status} className="text-[12px] font-normal" />}
       </button>
-      <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />
+      {trailer ?? <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />}
     </div>
   );
 }
@@ -318,7 +517,7 @@ const lineRank = (line: InstalledLine) => {
 /** An engine account's connector in Installed: the plugin row's look, its
  * state on the right (Connected, or Sign in in the Add format), and the
  * "..." menu: Manage on <provider>, Reconnect. */
-export function AccountInstalledRow({ row, onOpen }: { row: AccountConnectorRow; onOpen?: () => void }) {
+export function AccountInstalledRow({ row, onOpen, scoped = false }: { row: AccountConnectorRow; onOpen?: () => void; scoped?: boolean }) {
   const body = <AccountConnectorBody row={row} />;
   const actions: EntryActions = {
     links: [
@@ -327,78 +526,34 @@ export function AccountInstalledRow({ row, onOpen }: { row: AccountConnectorRow;
     ],
   };
   return (
-    <div className="group flex items-center gap-2 py-3" data-installed-entry={`account:${row.key}`} data-harness-connector={row.key}>
+    <div className="group flex items-center gap-2 py-3" data-installed-entry={`account:${row.key}`} data-harness-connector={row.key} {...{ [ITEM_ROW_ATTR]: "" }}>
       <span className="flex min-w-0 flex-1 items-center gap-3">
         {onOpen ? (
           <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
         ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
-        <AccountConnectorStatus row={row} installedMark={<PluginStatusLabel status="connected" className="text-[13px] font-normal" />} />
+        {/* connected is the state icon at the right (scoped); the pills that ask for a sign-in stay */}
+        <AccountConnectorStatus row={row} installedMark={scoped ? null : <PluginStatusLabel status="connected" className="text-[12px] font-normal" />} />
       </span>
-      <EntryMenu name={row.name} actions={actions} updateWaiting={false} hoverOnly />
+      {/* #4453: kept by the engine account, switched there: a locked switch */}
+      {scoped
+        ? <ItemTrailer state={row.status === "connected" ? statusState("connected") : null} name={row.name} where={scopeWord("account")} on={row.status === "connected"} lockedReason={t("capabilities.detail.where.account")} actions={{ links: actions.links }} />
+        : <EntryMenu name={row.name} actions={actions} updateWaiting={false} hoverOnly />}
     </div>
   );
 }
 
-export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: string; actions: EntryActions; updateWaiting: boolean; hoverOnly?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // the menu takes Escape before the panel steps back
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
-  const items: Array<{ id: string; label: string; icon: ReactNode; run: () => void; danger?: boolean }> = [];
-  if (actions.update) items.push({ id: "update", label: t("connectApps.plugin.update"), icon: <RotateCw size={14} />, run: actions.update });
-  if (actions.bots) items.push({ id: "bots", label: t("connectApps.entry.bots"), icon: <Users size={14} />, run: actions.bots });
-  for (const link of actions.links ?? []) items.push(link);
-  if (actions.remove) items.push({ id: "remove", label: t("connectApps.entry.remove"), icon: <Trash2 size={14} />, run: actions.remove, danger: true });
-  if (items.length === 0) return <span className="size-7 shrink-0" aria-hidden="true" />;
+/** The "..." menu of an entry: the one menu of the window (ItemTrailer's). */
+export function EntryMenu({ name, actions, updateWaiting }: { name: string; actions: EntryActions; updateWaiting: boolean; hoverOnly?: boolean }) {
   return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        data-entry-menu
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t("connectApps.entry.menuAria", { name })}
-        onClick={() => setOpen((value) => !value)}
-        className={cn("ui-icon-button relative", hoverOnly && !open && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100")}
-      >
-        <MoreHorizontal size={16} />
-        {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
-      </button>
-      {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-44")}>
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              data-entry-action={item.id}
-              onClick={() => { setOpen(false); item.run(); }}
-              className={item.danger ? MENU_ROW_DANGER : MENU_ROW}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <ItemTrailer name={name} columns={false}
+      actions={{
+        ...(actions.update ? { update: actions.update, updateWaiting } : {}),
+        links: [
+          ...(actions.bots ? [{ id: "bots", label: t("connectApps.entry.bots"), icon: <Users size={14} />, run: actions.bots }] : []),
+          ...(actions.links ?? []),
+        ],
+        ...(actions.remove ? { remove: actions.remove } : {}),
+      }} />
   );
 }
 
@@ -422,7 +577,7 @@ function OrganizationRow({ item }: { item: Capability }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12px] font-medium text-ink">{name}</span>
-        <span className="block truncate text-[11.5px] text-ink-secondary" title={reason ?? sub}>{reason ? `${sub} · ${reason}` : sub}</span>
+        <span className="block truncate text-[12px] text-ink-secondary" title={reason ?? sub}>{reason ? `${sub} · ${reason}` : sub}</span>
       </span>
       <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-[15px]", chip.tone)}>{chip.text}</span>
     </div>

@@ -10,6 +10,7 @@ import { BellRing } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { TipBubble, TipHost } from "./TipBubble";
 import { SECONDARY_CIRCLE } from "./ComposerControls";
 import { onNudgeSent } from "@/lib/desktop-nudge";
 import { nudgeWaitLabel } from "@/lib/nudge-wait";
@@ -96,7 +97,7 @@ export function NudgeButtonFace({
 }) {
   const tipId = `nudge-tip-${token.replace(/[^A-Za-z0-9_-]/g, "")}`;
   return (
-    <span className="group/nudge relative inline-flex">
+    <TipHost>
       <button
         type="button"
         data-nudge={token}
@@ -113,16 +114,7 @@ export function NudgeButtonFace({
       >
         <BellRing size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
-      {tip && (
-        <span
-          id={tipId}
-          role="tooltip"
-          data-nudge-tooltip=""
-          className="pointer-events-none absolute right-0 bottom-[calc(100%+6px)] z-30 whitespace-nowrap rounded-md bg-[#1c1c1e] px-2 py-1 text-[12px] leading-none text-white opacity-0 shadow-md ring-1 ring-white/15 group-hover/nudge:opacity-100 group-focus-within/nudge:opacity-100"
-        >
-          {tip}
-        </span>
-      )}
-    </span>
+      {tip && <TipBubble id={tipId} data-nudge-tooltip="" className="whitespace-nowrap">{tip}</TipBubble>}
+    </TipHost>
   );
 }

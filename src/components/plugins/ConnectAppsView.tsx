@@ -1,14 +1,16 @@
-// Plugins (#2104, JC 2026-11-06): a copy of Grok Bot's Connect Apps. The
-// home (Discover) lists what can be added under one round search; Manage
-// (Installed) lists what is here; Bots, Pages and Sources are views reached
-// from the home ("Bot templates") and from Manage. A page opened from a view
-// (a plugin, a skill, a custom connector) takes the whole pane under its own
-// bar. The shared row parts (pills, section titles, PluginRow) live here too.
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, Bot, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+// Connect Apps (#2104, the reference's look; #4453, a person asking "to be
+// able to see what are skills, connectors, plugins"). Three kind tabs
+// (Skills, Connectors, Plugins), each with Yours (what is here, in the chosen
+// scope) and Discover (what can be added); Bot templates, Published pages and
+// Sources under the title bar's "...". A page opened from a view (a plugin, a
+// skill, a custom connector) takes the whole pane under its own bar. The
+// shared row parts (pills, section titles, PluginRow) live here too.
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
+import { ADD_FALLBACK, rowLayout, type RowLayout } from "./connect-apps-row";
 import type { LocaleKey } from "@/locales";
 import {
   CATEGORY_ORDER,
@@ -19,7 +21,12 @@ import {
   type PluginSection,
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
+import { CONNECT_APPS_KINDS, type ConnectAppsKind } from "@/lib/capability-kinds";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
 import { BackButton } from "../Breadcrumb";
+import { PillTabs } from "../PillTabs";
+import { SEGMENT_GROUP, segmentOptionClass } from "./ScopeToggle";
 import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
@@ -45,6 +52,12 @@ export function categoryPills(items: readonly Pick<PluginItem, "category">[], fi
 export function moreCategoryPills(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
   const present = new Set<string>(items.map((item) => item.category));
   return CATEGORY_CHIPS.filter((chip) => MORE_CATEGORY_SET.has(chip) && (present.has(chip) || chip === filter));
+}
+
+/** Every category the filter lists: All, then the ones with a row (and the
+ * chosen one), main first. */
+export function filterChips(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
+  return [...categoryPills(items, filter), ...moreCategoryPills(items, filter)];
 }
 
 const FILTER_KEY: Record<string, LocaleKey> = {
@@ -111,14 +124,14 @@ export function normalizeConnectAppsTab(value: string | null | undefined): Conne
  * first (what a person has), Discover (the catalog), Bots (Browse Bots),
  * Pages (the published pages) and Sources (where plugins come from), as the
  * Grok Bot reference lays them out (docs/design 2.8). A deep link selects
- * its tab; the tab row never hides. The install scope is drawn only where
- * it applies (SCOPELESS_TABS do not depend on it); the one search covers
+ * its tab; the tab row never hides. The window has no scope control
+ * (#4453, 2026-11-16): each item says where it is on. The one search covers
  * every tab. */
 export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "bots", "pages", "sources"];
 export const SCOPELESS_TABS: readonly ConnectAppsTab[] = ["bots", "pages"];
 
 const TAB_KEY = {
-  installed: "connectApps.manage.tab.installed",
+  installed: "connectApps.view.yours",
   discover: "connectApps.manage.tab.discover",
   bots: "connectApps.manage.tab.bots",
   pages: "connectApps.manage.tab.pages",
@@ -130,17 +143,10 @@ export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
 }
 
-/** What the old "N connected" header counted, now on the tab that lists
- * them (2026-10-28, the owner: the button repeated Installed): the
- * person's own connected entries on Installed (the rows it shows) plus their
- * providers' connected connectors, which Installed lists too since
- * 2026-10-29. Zero: no counter. */
-export function connectedCounts(input: { entries: readonly { status: PluginItem["status"] }[]; engineConnected: number }): Partial<Record<ConnectAppsTab, number>> {
-  // the rows Installed shows (one per thing, installedEntries), connected
-  const own = input.entries.filter((entry) => entry.status === "connected").length;
-  const total = own + Math.max(0, input.engineConnected);
-  return total > 0 ? { installed: total } : {};
-}
+
+/** The filter and sort buttons live inside the search field at its right end:
+ * quiet icon buttons with no round background of their own. */
+const FIELD_ICON_BUTTON = "relative inline-flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none";
 
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
@@ -148,25 +154,33 @@ export interface ConnectAppsViewProps {
   /** Leave the Connect apps view (content frame back). */
   onBack?: () => void;
   /** views with something to show (Sources only when a source is reachable):
-   * Manage links to the ones past Installed */
+   * the "..." of the title bar opens the ones past Yours and Discover */
   tabs?: readonly ConnectAppsTab[];
-  /** connected things per view (connectedCounts) */
-  counts?: Partial<Record<ConnectAppsTab, number>>;
-  /** the home's "N connected": the count and a few icons, opens Manage */
-  connected?: { count: number; icons: readonly PluginItem[] };
-  /** the install scope (everyone, me, one bot): in Manage's title row */
-  scope?: ReactNode;
-  /** what the scope does here, under Manage's title */
+  /** #4453: the kind shown (Skills, Connectors, Plugins) and its tabs */
+  kind?: ConnectAppsKind;
+  onKind?: (kind: ConnectAppsKind) => void;
+  /** what the person has of each kind in the chosen scope, on its tab */
+  kindCounts?: Partial<Record<ConnectAppsKind, number>>;
+  /** where "< Connect Apps" of Bots, Pages and Sources leads: the view the
+   * person came from */
+  home?: "installed" | "discover";
+  /** the bot the window was opened from: the title carries its name */
+  botName?: string;
+  /** the filter button, Discover only: the categories live in it */
+  filterControl?: ReactNode;
+  /** the sort button, after the filter */
+  sortControl?: ReactNode;
+  /** "N updates" before Add: one press updates everything (#4504) */
+  updateControl?: ReactNode;
+  /** what the scope does here, over the list */
   scopeNote?: ReactNode;
-  /** a line under the home's search while a scope other than the default is on */
-  homeNote?: ReactNode;
-  /** Manage's "+ Add" menu, beside the refresh */
+  /** the one "+ Add" menu, beside the search */
   manageActions?: ReactNode;
   /** a page opened from a view (a plugin's detail, a skill): the whole pane */
   page?: ReactNode;
-  /** the one search (ConnectAppsSearch), on the home's sticky row */
+  /** the one search (ConnectAppsSearch), beside the kind tabs */
   search?: ReactNode;
-  /** what the search found: in place of the home's sections */
+  /** what the search found: in place of the list */
   results?: ReactNode;
   /** notices over the open view */
   notices?: ReactNode;
@@ -181,26 +195,98 @@ export interface ConnectAppsViewProps {
 }
 
 const BIG_TITLE_KEY = {
-  installed: "connectApps.manage.title",
+  installed: "connectApps.title",
   discover: "connectApps.title",
-  bots: "connectApps.manage.tab.bots",
-  pages: "connectApps.manage.tab.pages",
+  bots: "connectApps.botTemplates",
+  pages: "settings.section.pages",
   sources: "connectApps.manage.tab.sources",
 } as const satisfies Record<ConnectAppsTab, LocaleKey>;
 
-/** Plugins (#2104, JC 2026-11-06: identical to Grok Bot's Connect Apps).
- * Home (Discover): the title and "N connected" on one line, then the round
- * search and "Bot templates" on a row that sticks to the top when the list
- * scrolls (the X joins it there), then the pills and the sections. Manage
- * (Installed) and the other views: "< Connect Apps", a big title, the list.
+const KIND_KEY = {
+  skills: "connectApps.kind.skills",
+  connectors: "connectApps.kind.connectors",
+  plugins: "connectApps.kind.plugins",
+} as const satisfies Record<ConnectAppsKind, LocaleKey>;
+
+/** A kind's name, on its tab and in a search's "in Skills". */
+export function connectAppsKindLabel(kind: ConnectAppsKind): string {
+  return t(KIND_KEY[kind]);
+}
+
+/** The views under the title bar's "...": Bot templates, Published pages,
+ * Sources (#4453: they are none of the three kinds; one home each). */
+const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" | "sources">; key: LocaleKey; icon: ReactNode }> = [
+  { id: "bots", key: "connectApps.botTemplates", icon: <Bot size={14} aria-hidden="true" /> },
+  { id: "pages", key: "settings.section.pages", icon: <FileText size={14} aria-hidden="true" /> },
+  { id: "sources", key: "connectApps.manage.tab.sources", icon: <Library size={14} aria-hidden="true" /> },
+];
+
+/** Connect Apps (#4453, the reference's Customize): the title
+ * and "..." (Bot templates, Published pages, Sources); the three kind tabs
+ * (Skills, Connectors, Plugins) with their counts, the one search and the
+ * one "+ Add"; Yours or Discover with the refresh, and no scope (it is
+ * chosen on each item, #4453); then the list of the chosen kind, which
+ * alone scrolls. Bots, Pages and Sources open alone under "< Connect Apps".
  * A page (a plugin, a skill, a custom connector) takes the whole pane under
  * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, connected, scope, scopeNote, homeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
-  const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl, sortControl, updateControl } = props;
+  const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
+  // the row's width decides what shrinks, never a second line (connect-apps-row.ts): the search field,
+  // then the search as an icon, then "+ Add" as an icon, then the filter and sort inside the opened field
+  const headRef = useRef<HTMLDivElement | null>(null);
+  const [layout, setLayout] = useState<RowLayout>("full");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchToggle = useRef<HTMLButtonElement | null>(null);
+  const wasOpen = useRef(false);
+  // the opened field takes the keyboard (focus in it, the row under it unreachable); folded, its button gets focus back
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+    const overlay = head.querySelector<HTMLElement>("[data-plugins-search-expanded]");
+    for (const child of Array.from(head.children)) {
+      // the covered row neither takes focus nor paints (no border of it shows past the field)
+      const covered = child !== overlay && overlay !== null;
+      if (covered) child.setAttribute("inert", ""); else child.removeAttribute("inert");
+      (child as HTMLElement).style.visibility = covered ? "hidden" : "";
+    }
+    if (overlay && !wasOpen.current) overlay.querySelector<HTMLElement>("input")?.focus();
+    else if (!overlay && wasOpen.current) searchToggle.current?.focus();
+    wasOpen.current = overlay !== null;
+  });
+  const addLabel = useRef<{ locale: string; width: number } | null>(null);
+  const controlsWidth = useRef(0);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const width = head.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const of = (selector: string) => head.querySelector<HTMLElement>(selector)?.getBoundingClientRect().width ?? 0;
+      // no layout to measure (a test renderer): nothing to decide
+      const kinds = of("[data-plugins-kinds]");
+      if (kinds === 0) return;
+      // "+ Add" with its label is measured while the label shows, and kept for the layouts that hide it
+      const locale = activeLocale();
+      const addNow = of("[data-plugins-add]");
+      if (addNow > 0 && head.getAttribute("data-plugins-layout") !== "compact" && head.getAttribute("data-plugins-layout") !== "minimal") addLabel.current = { locale, width: addNow };
+      const addFull = addNow > 0 ? (addLabel.current?.locale === locale ? addLabel.current.width : ADD_FALLBACK) : 0;
+      // the filter and the sort leave the row in the narrowest layout: their width is kept from when they showed
+      const controlsNow = of("[data-plugins-search-controls]");
+      if (controlsNow > 0) controlsWidth.current = controlsNow;
+      const controls = controlsNow > 0 || head.querySelector("[data-plugins-search-slot], [data-plugins-search-toggle]") !== null ? controlsWidth.current : 0;
+      setLayout(rowLayout(width, { kinds, views: of("[data-plugins-views]"), update: of("[data-plugins-update-all]"), controls, addFull, search: head.querySelector("[data-plugins-search-slot], [data-plugins-search-toggle]") !== null }));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(head);
+    return () => watch.disconnect();
+  });
+  const narrow = layout !== "full";
+  useEffect(() => { if (!narrow) setSearchOpen(false); }, [narrow]);
   // each view opens at its top: the hairline of a scrolled list goes with it
-  useEffect(() => setStuck(false), [shown]);
+  useEffect(() => setStuck(false), [shown, kind]);
 
   if (page !== undefined && !results) {
     return (
@@ -212,69 +298,126 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
     );
   }
 
-  if (shown === "discover") {
+  if (shown === "installed" || shown === "discover") {
+    const moreViews = MORE_VIEWS.filter((view) => tabs.includes(view.id));
+    // the filter (Discover) and the sort, after the text, inside the field (a thin separator before them)
+    const controls = (filterControl || sortControl) ? (
+      <span className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-ink/10 pl-1" data-plugins-search-controls="">
+        {shown === "discover" && filterControl}
+        {sortControl}
+      </span>
+    ) : null;
+    const cloned = Boolean(search && isValidElement(search) && typeof search.type !== "string");
+    const field = cloned
+      ? cloneElement(search as ReactElement<{ trailing?: ReactNode }>, { trailing: controls })
+      : <>{search}{controls}</>;
     return (
-      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main="discover">
+      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-kind={kind}>
+        {/* the title, the kind tabs and the view row stay put: only the list
+            scrolls, under a hairline once it moves (#2948) */}
+        <div
+          className={cn(PLUGINS.gutter, "shrink-0 border-b border-transparent pb-3 pt-[22px]", stuck && "border-hairline-weak")}
+          data-plugins-title-row=""
+          data-plugins-stuck={stuck ? "" : undefined}
+        >
+          {/* the title line keeps the title, "..." and the close button */}
+          <header className="flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
+            {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-fit flex-1 break-words")}>
+              {botName ? t("connectApps.titleForBot", { name: botName }) : t("connectApps.title")}
+            </h2>
+            <MoreViewsMenu views={moreViews} onPick={onTab} onRefresh={onRefresh} refreshing={refreshing} />
+          </header>
+          {/* ONE row (#4453, 2026-11-16, the owner's layout): the kinds as pill
+              tabs (no counts), a separator, Yours | Discover as a segmented
+              control; then, right-aligned, the search, the filter (Discover,
+              icon only) and "+ Add". Every element is 32px high on one
+              baseline; narrow, the search shrinks, then is an icon button
+              that opens over the row; it never wraps. */}
+          <div ref={headRef} className="relative mt-3 flex h-8 flex-nowrap items-center gap-x-2.5" data-plugins-kind-row="" data-plugins-layout={layout}>
+            <PillTabs
+              tabs={CONNECT_APPS_KINDS}
+              tab={kind}
+              onTab={(id) => onKind?.(id)}
+              ariaLabel={t("connectApps.kind.aria")}
+              idPrefix="connect-apps-kind"
+              label={connectAppsKindLabel}
+              tabAttributes={(id) => ({ "data-plugins-kind-tab": id })}
+              tabClassName={() => "h-8 px-3.5 font-medium"}
+              className="shrink-0 flex-nowrap"
+              data-plugins-kinds=""
+            />
+            <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-ink/10" data-plugins-separator="" />
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_GROUP, "shrink-0")} data-plugins-views=""
+              onKeyDown={(event) => {
+                // arrow keys move the choice, as in any radio group
+                const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = shown === "installed" ? "discover" : "installed";
+                onTab(next);
+                event.currentTarget.querySelector<HTMLElement>(`[data-plugins-view="${next}"]`)?.focus();
+              }}>
+              {(["installed", "discover"] as const).map((id) => (
+                <button key={id} type="button" role="radio" aria-checked={shown === id} tabIndex={shown === id ? 0 : -1} data-plugins-view={id}
+                  onClick={() => onTab(id)} className={segmentOptionClass(shown === id, false, true)}>
+                  {t(id === "installed" ? "connectApps.view.yours" : "connectApps.manage.tab.discover")}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2.5" data-plugins-actions="">
+              {field && !narrow && <div className="min-w-[140px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
+              {narrow && layout !== "minimal" && controls}
+              {search && narrow && (
+                <button ref={searchToggle} type="button" onClick={() => setSearchOpen(true)} aria-expanded={searchOpen} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
+                  <Search size={15} aria-hidden="true" />
+                </button>
+              )}
+              {updateControl}
+              {manageActions}
+            </div>
+            {search && narrow && searchOpen && (
+              <div className="absolute inset-0 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded=""
+                onKeyDown={(event) => {
+                  // the field empties on its own Escape; empty, Escape folds the search, and only the next one is the window's
+                  if (event.key !== "Escape") return;
+                  // a filter or sort menu open in the field closes first (its own Escape, heard at the window)
+                  if (event.currentTarget.querySelector('[role="menu"]')) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSearchOpen(false);
+                }}>
+                <div className="min-w-0 flex-1">{field}</div>
+                <button type="button" onClick={() => setSearchOpen(false)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         <div
           className="min-h-0 flex-1 overflow-y-auto outline-none"
           onScroll={(event) => setStuck(event.currentTarget.scrollTop > 4)}
           tabIndex={-1}
           data-plugins-list=""
-          data-plugins-manage="discover"
+          data-plugins-manage={shown}
           data-plugins-results={results ? "" : undefined}
         >
-          {/* the title is never cut: when it and "N connected" do not fit on one line (French at phone width), "N connected" goes under it */}
-          <header className={cn(PLUGINS.gutter, "flex flex-wrap items-center gap-x-3 gap-y-1 pb-[9px] pt-[50px] pr-14")} data-plugins-head="">
-            {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
-            <h2 id="plugins-title" className={cn(PLUGINS.title, "max-w-full flex-[1_0_auto] break-words")}>{t("connectApps.title")}</h2>
-            {/* with nothing connected it still leads to Manage (scope, pages, sources) */}
-            {connected && (
-              <button
-                type="button"
-                onClick={() => onTab("installed")}
-                className="-mr-1 flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-1.5 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink"
-                data-plugins-connected={connected.count}
-              >
-                <span className="flex -space-x-1.5" aria-hidden="true">
-                  {connected.icons.slice(0, 4).map((item) => (
-                    <PluginIcon key={item.key} item={item} className="size-[22px] rounded-[7px] ring-2 ring-(--color-inset)" />
-                  ))}
-                </span>
-                <span>{connected.count > 0 ? t("connectApps.connectedCount", { count: connected.count }) : t("connectApps.manageLink")}</span>
-                <ChevronRight size={16} aria-hidden="true" />
-              </button>
-            )}
-          </header>
-          <div
-            className={cn(
-              PLUGINS.gutter,
-              "sticky top-0 z-10 flex items-center gap-3 bg-inset py-2 transition-[padding] motion-reduce:transition-none",
-              stuck && "border-b border-hairline-weak sm:pr-14",
-            )}
-            data-plugins-search-row
-            data-plugins-stuck={stuck ? "" : undefined}
-          >
-            {search && <div className="min-w-0 flex-1" data-plugins-search-slot>{search}</div>}
-            <button type="button" onClick={() => onTab("bots")} className={PLUGINS.textLink} data-plugins-bot-templates>
-              <span className="flex size-[18px] items-center justify-center rounded-full bg-ink text-app" aria-hidden="true"><Bot size={12} /></span>
-              {t("connectApps.botTemplates")}
-              <ArrowUpRight size={14} className="text-ink-secondary" aria-hidden="true" />
-            </button>
+          <div className={cn(PLUGINS.gutter, "pb-8")}>
+            {scopeNote}
+            {notices}
+            <div>{results ?? (shown === "installed" ? props.installed : props.discover)}</div>
           </div>
-          {homeNote && <div className={PLUGINS.gutter}>{homeNote}</div>}
-          {notices}
-          <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>{results ?? props.discover}</div>
         </div>
       </div>
     );
   }
 
-  const extraViews = tabs.filter((id) => id === "pages" || id === "sources");
   const backBar = (
     <div className="flex h-12 shrink-0 items-center px-3 pr-14" data-plugins-manage-bar>
       <button
         type="button"
-        onClick={() => onTab("discover")}
+        onClick={() => onTab(home)}
         className="-ml-0.5 flex h-8 items-center gap-1 rounded-full pl-1 pr-2.5 text-[13px] text-ink hover:bg-hover"
         data-plugins-home=""
         data-breadcrumb-back=""
@@ -307,13 +450,11 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
           <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
-          {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
           {shown !== "pages" && (
             <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
               <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
             </button>
           )}
-          {shown === "installed" && manageActions}
         </div>
       </div>
       <div
@@ -327,28 +468,177 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           {shown !== "pages" && scopeNote}
           {notices}
           <div className="mt-3">
-            {shown === "installed" && props.installed}
             {shown === "pages" && props.pages}
             {shown === "sources" && props.sources}
           </div>
-          {shown === "installed" && extraViews.length > 0 && (
-            <div className="mt-8" data-plugins-more-views>
-              <h3 className={cn(PLUGINS.label, "mb-1")}>{t("connectApps.manage.more")}</h3>
-              {extraViews.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onTab(id)}
-                  className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-hover"
-                  data-plugins-view-link={id}
-                >
-                  <span className={cn(PLUGINS.rowName, "flex-1")}>{connectAppsTabLabel(id)}</span>
-                  <ChevronRight size={16} className="text-ink-secondary" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The filter button of the one control row, Discover only (#4453): the
+ * categories (All, Productivity, ...) live in its menu, not in a row of
+ * pills. The chosen category shows on the button. */
+export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readonly PluginFilter[]; filter: PluginFilter; onPick: (filter: PluginFilter) => void; label: (chip: PluginFilter) => string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  if (chips.length <= 1) return null;
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-filter="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-filter-button="" onClick={() => setOpen((value) => !value)}
+        aria-label={filter === "all" ? t("connectApps.filter.button") : `${t("connectApps.filter.button")}: ${label(filter)}`}
+        title={filter === "all" ? t("connectApps.filter.button") : label(filter)}
+        className={cn(FIELD_ICON_BUTTON, filter !== "all" && "text-ink")}>
+        <ListFilter size={15} aria-hidden="true" />
+        {filter !== "all" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
+      </button>
+      {open && (
+        <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
+          {chips.map((chip) => (
+            <button key={chip} type="button" role="menuitemradio" aria-checked={filter === chip} data-plugins-chip={chip}
+              onClick={() => { setOpen(false); onPick(chip); }} className={filter === chip ? MENU_ROW_ACTIVE : MENU_ROW}>
+              <span className="min-w-0 flex-1 truncate">{label(chip)}</span>
+              {filter === chip && <Check size={14} className="shrink-0" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The "N updates" pill before Add: it says how many items have an update and
+ * updates all of them; none, nothing is drawn. */
+export function UpdateAllPill({ count, running, onUpdateAll }: { count: number; running: boolean; onUpdateAll: () => void }) {
+  if (count <= 0 && !running) return null;
+  const label = count === 1 ? t("connectApps.updates.one") : t("connectApps.updates.many", { count });
+  // compact: the refresh icon and the count; the words are the tooltip and the accessible name
+  return (
+    <button type="button" data-plugins-update-all={running ? "running" : ""} disabled={running} onClick={onUpdateAll}
+      aria-label={`${t("connectApps.updates.all")}: ${label}`} title={`${t("connectApps.updates.all")}: ${label}`}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent/15 px-2.5 text-[13px] leading-[18px] tabular-nums text-accent-text transition-colors hover:bg-accent/25 disabled:opacity-70 motion-reduce:transition-none">
+      <RefreshCw size={13} className={cn(running && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+      {running ? null : <span data-update-count="">{count}</span>}
+    </button>
+  );
+}
+
+/** How a list is ordered: the lists' own order, by name, or what is on first. */
+export type ConnectAppsSort = "default" | "name" | "on" | "update";
+
+/** The sort icon button of the control row (two opposed arrows): only the
+ * keys that have data here (name everywhere; "on first" on Yours). */
+export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; onSort: (sort: ConnectAppsSort) => void; options: readonly ConnectAppsSort[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  const LABEL: Record<ConnectAppsSort, LocaleKey> = { default: "connectApps.sort.default", name: "connectApps.sort.name", on: "connectApps.sort.on", update: "connectApps.sort.update" };
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-sort="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-sort-button="" onClick={() => setOpen((value) => !value)}
+        aria-label={t("connectApps.sort.button")} title={t("connectApps.sort.button")}
+        className={cn(FIELD_ICON_BUTTON, sort !== "default" && "text-ink")}>
+        <ArrowUpDown size={15} aria-hidden="true" />
+        {sort !== "default" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
+      </button>
+      {open && (
+        <div role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
+          {options.map((option) => (
+            <button key={option} type="button" role="menuitemradio" aria-checked={sort === option} data-plugins-sort-option={option}
+              onClick={() => { setOpen(false); onSort(option); }} className={sort === option ? MENU_ROW_ACTIVE : MENU_ROW}>
+              <span className="min-w-0 flex-1 truncate">{t(LABEL[option])}</span>
+              {sort === option && <Check size={14} className="shrink-0" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Rows in the chosen order; "default" leaves the list's own. Stable. */
+export function sortRows<T>(rows: readonly T[], sort: ConnectAppsSort, nameOf: (row: T) => string, onOf: (row: T) => boolean, updateOf?: (row: T) => boolean): T[] {
+  if (sort === "update" && updateOf) return [...rows].sort((a, b) => Number(updateOf(b)) - Number(updateOf(a)));
+  if (sort === "name") return [...rows].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  if (sort === "on") return [...rows].sort((a, b) => Number(onOf(b)) - Number(onOf(a)));
+  return [...rows];
+}
+
+/** The title bar's "..." (#4453): Bot templates, Published pages, Sources. */
+function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: ReadonlyArray<{ id: ConnectAppsTab; key: LocaleKey; icon: ReactNode }>; onPick: (tab: ConnectAppsTab) => void; onRefresh: () => void; refreshing: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-more="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("connectApps.more.aria")} title={t("connectApps.more.aria")}
+        onClick={() => setOpen((value) => !value)} className="ui-icon-button" data-plugins-more-button="">
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+          {/* Refresh: plugins, servers, skills and the engine accounts' connectors, together */}
+          <button type="button" role="menuitem" data-plugins-refresh="" disabled={refreshing}
+            onClick={() => { setOpen(false); onRefresh(); }} className={MENU_ROW}>
+            <RefreshCw size={14} aria-hidden="true" className={cn(refreshing && "animate-spin")} />
+            {t("connectApps.refresh")}
+          </button>
+          {views.map((view) => (
+            <button key={view.id} type="button" role="menuitem" data-plugins-view-link={view.id}
+              onClick={() => { setOpen(false); onPick(view.id); }} className={MENU_ROW}>
+              {view.icon}
+              {t(view.key)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The cards of Discover (#4453, the owner's layout): two columns of
+ * rounded tiles. */
+export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[560px]:col-span-full";
+
+/** A Discover card: a square icon tile; the name (a reviewed mark when the
+ * item comes from the reviewed catalog) and, where it applies, a small
+ * outlined chip; two lines of description; a last grey line (Added with a
+ * check when it is installed, then where it comes from); at the top right the
+ * item's action (the square "+" Install menu) or a green check. */
+export function DiscoverCard({ item, onOpen, action, from, sub, openable = false }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; /** where it comes from, in words */ from?: string; sub?: string; /** the card opens its page though it is not installed (a bundle) */ openable?: boolean }) {
+  const opens = item.installed || openable;
+  const reviewed = item.source === "catalog";
+  const chip = !item.installed && item.action === "add" && (item.kind === "featured" || item.kind === "mcp" || item.kind === "app") ? t("connectApps.card.noSignIn") : null;
+  return (
+    <div data-plugin-row={item.key} data-discover-card="" className="flex items-start gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] p-3 transition-colors hover:bg-ink/[0.04] motion-reduce:transition-none">
+      <button type="button" disabled={!opens} onClick={() => onOpen(item)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left disabled:cursor-default"
+        aria-label={opens ? t("connectApps.openAria", { name: item.name }) : undefined}>
+        <PluginIcon item={item} className="size-12 rounded-xl" />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0")}>{item.name}</span>
+            {reviewed && <BadgeCheck size={14} className="shrink-0 text-accent-text" aria-label={t("connectApps.card.verified")} data-card-verified="" />}
+            {chip && <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-card-chip="">{chip}</span>}
+          </span>
+          <span className={PLUGINS.rowSub} title={item.description}>{sub ?? item.description}</span>
+          {(item.installed || from) && (
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-tertiary" data-card-meta="">
+              {item.installed && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 text-success" data-card-added="">
+                  <Check size={11} aria-hidden="true" />{t("connectApps.card.added")}
+                </span>
+              )}
+              {from && <span className="min-w-0 truncate">{from}</span>}
+            </span>
+          )}
+        </span>
+      </button>
+      <div className="shrink-0" data-card-action="">
+        {item.installed && !action ? (
+          <span className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success" data-card-installed=""><Check size={15} aria-hidden="true" /></span>
+        ) : action}
       </div>
     </div>
   );
@@ -378,7 +668,7 @@ export function PluginRow({ item, onOpen, action, below, meta, sub }: { item: Pl
             </span>
           </span>
         </button>
-        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[13px] font-normal" />) : null)}
+        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[12px] font-normal" />) : null)}
       </div>
       {below}
     </div>

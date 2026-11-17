@@ -143,6 +143,8 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   // #4471: ids that only ride along a request aimed at the person's own bot,
   // thread or account (a remote session, a host, a recipe, a terminal card,
   // an event subscription, a model server, a page annotation)
+  // an item the organization offers: shared by everyone, the person only reads it or sets their own switch
+  "org-capabilities/": "fake",
   "remote-sessions/": "fake",
   "host-computers/h_": "unattendedHost",
   "saved-steps/": "fake",

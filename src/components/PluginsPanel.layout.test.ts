@@ -29,50 +29,70 @@ describe("Plugins panel views", () => {
     renderAction: (item: PluginItem) => item.action ? createElement("button", { type: "button" }, item.action === "connect" ? "Connect" : "Add") : null,
   };
   const page = (overrides: Partial<ConnectAppsViewProps> = {}) => renderToStaticMarkup(createElement(ConnectAppsView, {
-    tab: "discover", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop,
+    tab: "discover", onTab: noop, kind: "connectors", kindCounts: { skills: 3, connectors: 2, plugins: 0 }, refreshing: false, onRefresh: noop,
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
 
-  it("the reference app's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
-    const html = page({ connected: { count: 2, icons: [] } });
+  it("#4453: Connect Apps is three kind tabs with their counts, Yours and Discover, the scope, the one search and Add; Bots, Pages and Sources under \"...\"", () => {
+    const html = page({ tab: "installed", search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }), manageActions: createElement("button", { "data-test-add": "" }) });
     expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps<\/h2>/);
-    expect(html).toMatch(/data-plugins-connected="2"[\s\S]*?2 connected/);
-    expect(html).not.toContain('role="tablist"');
-    expect(html).not.toContain("data-breadcrumb");
     expect(html).not.toContain("Manage plugins and skills");
-    // nothing connected: the header still leads to Manage
-    expect(page({ connected: { count: 0, icons: [] } })).toMatch(/data-plugins-connected="0"[\s\S]*?>Manage</);
-    // one search: on the sticky row, with Bot templates on its right
-    const searched = page({ search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }) });
-    expect(searched).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-plugins-bot-templates/);
-    expect(searched).toMatch(/class="[^"]*sticky top-0[^"]*"[^>]*data-plugins-search-row/);
-    expect(searched.match(/data-plugins-search=""/g)).toHaveLength(1);
-    // the scope is not on the home
-    expect(page({ scope: createElement("div", null, "SCOPE") })).not.toContain("SCOPE");
-    // with text, the results take the catalogue's place
+    // the kinds, in the reference's order, the chosen one pressed, a count only where there is one
+    expect([...html.matchAll(/data-plugins-kind-tab="([a-z]+)"/g)].map((match) => match[1])).toEqual(["skills", "connectors", "plugins"]);
+    expect(html).toMatch(/role="tab"[^>]*data-plugins-kind-tab="connectors"[^>]*aria-selected="true"/);
+    // the owner's layout (2026-11-16): the pill tabs carry no counts
+    expect(html).toMatch(/data-plugins-kind-tab="skills"[\s\S]*?>Skills<\/span><\/button>/);
+    expect(html).not.toContain("data-plugins-kind-count");
+    // the title line: the title and "..."; then ONE row: the kinds, a separator, Yours | Discover, the search, Add
+    expect(html).toMatch(/data-plugins-head[\s\S]*?data-plugins-more-button[\s\S]*?data-plugins-kind-row[\s\S]*?data-plugins-kinds=""[\s\S]*?data-plugins-separator[\s\S]*?data-plugins-views=""[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add/);
+    expect(html.match(/data-plugins-search=""/g)).toHaveLength(1);
+    expect(html).toMatch(/data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover</);
+    // no third line, and Refresh is not in the head: it is the "..." menu's first line
+    expect(html).not.toContain("data-plugins-view-row");
+    expect(html).not.toContain("data-plugins-refresh");
+    // #4453 (2026-11-16): no scope control in the header: it is chosen on the item
+    expect(html).not.toContain("data-plugins-scope-slot");
+    expect(html).not.toContain("SCOPE");
+    // the shared pill tabs (PillTabs): the chosen one carries the sliding fill, the others do not; no underline
+    expect(html).not.toMatch(/data-plugins-kinds=""[\s\S]*?after:h-0\.5/);
+    expect(html).toMatch(/role="tablist"[^>]*data-plugins-kinds=""/);
+    const tab = (id: string) => html.match(new RegExp(`<button[^>]*data-plugins-kind-tab="${id}"[^>]*>([\\s\\S]*?)</button>`))?.[1] ?? "";
+    expect(tab("connectors")).toContain("data-tab-indicator");
+    for (const id of ["skills", "plugins"]) expect(tab(id)).not.toContain("data-tab-indicator");
+    // Yours | Discover is the shared segmented control, arrows move its choice
+    expect(html).toMatch(/data-plugins-views=""/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*data-plugins-view="installed"/);
+    expect(html).toContain("INSTALLED");
+    // the title row stays out of the list, which alone scrolls
+    expect(html.indexOf("data-plugins-title-row")).toBeLessThan(html.indexOf("data-plugins-list"));
+    // Bots, Pages and Sources: the "..." of the title bar, never a tab
+    expect(html).toContain("data-plugins-more-button");
+    // the "..." is always there now (Refresh), even with no view past Yours and Discover
+    expect(page({ tabs: ["installed", "discover"], tab: "installed" })).toContain("data-plugins-more-button");
+    expect(html).not.toContain("data-plugins-bot-templates");
+    expect(html).not.toContain("data-plugins-connected");
+    // Discover: the same head, its list
+    const discover = page({});
+    expect(discover).toContain("data-plugins-discover");
+    expect(discover).toMatch(/role="radio" aria-checked="true"[^>]*data-plugins-view="discover"/);
+    // the filter button of Discover sits on the same row when the panel gives one
+    const filtered = page({ search: createElement("input"), filterControl: createElement("button", { "data-test-filter": "" }) });
+    expect(filtered).toMatch(/data-plugins-kind-row[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-filter/);
+    // ...and Yours has none
+    expect(page({ tab: "installed", filterControl: createElement("button", { "data-test-filter": "" }) })).not.toContain("data-test-filter");
+    // with text, the results take the list's place
     const results = page({ results: "RESULTS" });
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
-    expect(html).not.toContain("INSTALLED");
-    // Manage: the back bar to Plugins, the big title, the scope, the links to Pages and Sources
-    const manage = page({ tab: "installed", scope: createElement("div", null, "SCOPE") });
-    expect(manage).toContain("INSTALLED");
-    expect(manage).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
-    expect(manage).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills<\/h2>[\s\S]*?SCOPE/);
-    expect([...manage.matchAll(/data-plugins-view-link="([a-z]+)"/g)].map((match) => match[1])).toEqual(["pages", "sources"]);
-    // Bots: its pane under the back bar, no scope
-    const bots = page({ tab: "bots", bots: "BOTS", scope: createElement("div", null, "SCOPE") });
+    // Bots: its pane under the back bar to Connect Apps, no scope
+    const bots = page({ tab: "bots", bots: "BOTS" });
     expect(bots).toContain("BOTS");
     expect(bots).toMatch(/data-plugins-manage="bots"/);
-    expect(bots).toContain("data-plugins-home");
-    expect(bots).not.toContain("SCOPE");
+    expect(bots).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
     expect(bots).not.toContain("data-apps-back");
     expect(page({ tab: "sources" })).toContain("SOURCES");
     expect(page({ tab: "pages" })).toContain("PAGES");
-    // a view left out is not linked from Manage
-    const noSources = page({ tabs: ["installed", "discover"], tab: "installed" });
-    expect(noSources).not.toContain('data-plugins-view-link="sources"');
   });
 
   it("Discover: no search of its own, every category pill and no Browse Bots button, sections in the card grid (#2948)", () => {
@@ -80,13 +100,13 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("placeholder=");
     expect(html).not.toContain("data-plugins-search");
     expect(html).not.toContain("Browse Bots");
-    const chips = [...html.matchAll(/data-plugins-chip="([^"]+)"/g)].map((match) => match[1]);
-    expect(chips[0]).toBe("all");
-    // the categories past the row wait behind More (the reference app's More chip)
-    expect(html).toContain("data-plugins-more-chips");
-    expect(html).toContain('data-plugins-section="recommended"');
-    expect(html).toContain("Recommended for you");
-    // two columns of borderless rows, one when the list is narrow (#4097)
+    // #4453: the categories are no row of pills: they live in the filter button of the header
+    expect(html).not.toContain("data-plugins-chip=");
+    expect(html).not.toContain("data-plugins-more-chips");
+    // the first pick is the one featured banner (a card of its own, never a carousel)
+    expect(html).toContain('data-plugins-section="featured"');
+    expect(html).toContain("data-featured-banner");
+    // two columns of cards, one when the list is narrow
     expect(html).toContain("@container grid grid-cols-2");
     expect(html).not.toContain("auto-fill");
     expect(html).toMatch(/data-plugin-row="featured:linear"[\s\S]*?>Connect</);
@@ -94,7 +114,7 @@ describe("Plugins panel views", () => {
     expect(html).not.toMatch(/Browse bots/i);
   });
 
-  it("Recommended for you is the first section, above From Sagax, with each pick's why on the shared row (#4207)", () => {
+  it("Recommended for you is the first section, with each pick's why on the shared row (#4207); no From Sagax (#4453)", () => {
     const rows = buildPluginItems({
       featured: [
         { id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" },
@@ -105,28 +125,27 @@ describe("Plugins panel views", () => {
     });
     const html = renderToStaticMarkup(createElement(DiscoverView, {
       ...discoverProps, items: rows, owned: ["Stripe"],
-      fromSagax: [{ key: "plugin:github", item: { key: "plugin:github", kind: "plugin", name: "GitHub" }, name: "GitHub", sub: "1 connector", status: "connected" }],
     }));
     const sections = [...html.matchAll(/data-plugins-section="([^"]+)"/g)].map((match) => match[1]);
-    expect(sections[0]).toBe("recommended");
-    expect(sections[1]).toBe("from-sagax");
-    expect(html.indexOf("data-plugins-chips")).toBeLessThan(html.indexOf('data-plugins-section="recommended"'));
-    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'), html.indexOf('data-plugins-section="from-sagax"'));
+    // two curated picks: both are slides of the one featured block, none is left for a shelf
+    expect(sections[0]).toBe("featured");
+    expect(sections).not.toContain("recommended");
+    expect(sections).not.toContain("from-sagax");
+    const featured = html.slice(html.indexOf('data-plugins-section="featured"'));
     // the basics first (chat before tickets), what the person has left out, the private network tool not picked
-    expect([...shelf.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1])).toEqual(["featured:slack", "featured:linear"]);
-    expect(shelf).toContain("Reads and posts in your team&#x27;s chat and meetings");
-    expect(shelf).toMatch(/title="Channels"/);
-    expect(shelf).toMatch(/>Connect</);
+    expect(featured).toMatch(/data-featured-slide="featured:slack"/);
+    expect((featured.match(/data-featured-dot=/g) ?? []).length).toBe(2);
+    expect(featured).toContain("Reads and posts in your team&#x27;s chat and meetings");
+    expect(featured).toMatch(/>Connect</);
     // an account connector counts only once connected: one waiting for a sign-in leaves chat open
     const teams = (status: "connected" | "needs_auth") => [{
       group: { id: "claude" as const, name: "Claude", source: "From Anthropic", manageUrl: "", connectors: [] },
       rows: [{ key: "claude:Microsoft Teams", engine: "claude" as const, provider: "Claude", name: "Microsoft Teams", status, manageUrl: "", category: "communication" as const, capabilities: ["teams" as const] }],
     }];
-    const shelfOf = (markup: string) => {
-      const start = markup.indexOf('data-plugins-section="recommended"');
-      const end = markup.indexOf("data-plugins-section=", start + 1);
-      return [...markup.slice(start, end < 0 ? undefined : end).matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1]);
-    };
+    // the picks: the featured banner and the recommended shelf
+    const shelfOf = (markup: string) => markup.split('data-plugins-section="').slice(1)
+      .filter((part) => part.startsWith("featured") || part.startsWith("recommended"))
+      .flatMap((part) => [...part.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1]));
     expect(shelfOf(renderToStaticMarkup(createElement(DiscoverView, { ...discoverProps, items: rows, owned: ["Stripe"], accounts: teams("needs_auth") })))).toContain("featured:slack");
     expect(shelfOf(renderToStaticMarkup(createElement(DiscoverView, { ...discoverProps, items: rows, owned: ["Stripe"], accounts: teams("connected") })))).not.toContain("featured:slack");
     // nothing left to recommend: no section at all
@@ -174,13 +193,14 @@ describe("Plugins panel views", () => {
       details: [{ label: "Source", value: "Added manually" }, { label: "Transport", value: "HTTP" }],
     }));
     expect(html).toContain('aria-label="Back to Connect Apps"');
-    // Turned on beside the name; Uninstall is the reference app's gray pill under the page,
-    // and with no Update, Test or Edit there is no "..." menu
-    expect(html).toMatch(/data-plugin-enabled[^>]*>Turned on<button[^>]*aria-label="Turn glitcho off"/);
-    expect(html).toMatch(/data-plugin-action="uninstall"[^>]*>Uninstall</);
-    expect(html).not.toContain('aria-label="More actions for glitcho"');
-    const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onUninstall: noop, onEdit: noop, details: [] }));
-    expect(withEdit).toContain('aria-label="More actions for glitcho"');
+    // the switch sits at the header's right, by the one "..." menu (Uninstall is in it, never a second pill)
+    expect(html).toContain('data-row-switch=""');
+    expect(html).toContain("data-entry-menu");
+    expect(html).not.toMatch(/data-plugin-action="uninstall"/);
+    const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onEdit: noop, details: [] }));
+    expect(withEdit).toContain("data-entry-menu");
+    // with no Update, Test, Edit or Uninstall there is no menu
+    expect(renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, details: [] }))).not.toContain("data-entry-menu");
     expect(html).toContain("Accounts");
     expect(html).toMatch(/qc1\.example\.net[\s\S]*?Connected/);
     expect(html).toContain("1 of 2 enabled");

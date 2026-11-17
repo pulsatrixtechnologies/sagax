@@ -218,7 +218,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           spellCheck={false}
           className="w-[130px] rounded-lg border border-border bg-raised px-3 py-2 font-mono text-[12px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent"
         />
-        <button type="submit" disabled={disabled || busy !== null || !source.trim()} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[12.5px] font-medium text-accent-ink disabled:opacity-40">
+        <button type="submit" disabled={disabled || busy !== null || !source.trim()} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40">
           {busy === "add" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {t("connectApps.market.add")}
         </button>
       </form>
@@ -226,7 +226,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
         <div className="mt-2 flex flex-wrap items-center gap-2" data-marketplace-add-visibility="">
           <span className="text-[12px] text-ink-secondary">{t("connectApps.market.visibility.label")}</span>
           <VisibilityChoice value={visibility} onChange={setVisibility} disabled={disabled || busy !== null} />
-          <span className="text-[11.5px] text-ink-secondary">{visibility === "org" ? t("connectApps.market.visibility.orgHint") : t("connectApps.market.visibility.privateHint")}</span>
+          <span className="text-[12px] text-ink-secondary">{visibility === "org" ? t("connectApps.market.visibility.orgHint") : t("connectApps.market.visibility.privateHint")}</span>
         </div>
       )}
       {credentials && needs === "add" && source.trim() && !hasCredentials && (
@@ -240,7 +240,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           <p className="text-[12px] text-ink-secondary">{t("sources.market.addOffer")}</p>
           <div className="flex flex-wrap items-center gap-2">
             <CredentialSelect id="add" value={addCredential} onChange={setAddCredential} disabled={disabled || busy !== null} label={t("sources.market.pickAria", { name: source.trim() })} />
-            <button type="button" disabled={disabled || busy !== null || !addCredential} className="rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-accent-ink disabled:opacity-40"
+            <button type="button" disabled={disabled || busy !== null || !addCredential} className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-ink disabled:opacity-40"
               onClick={() => void onAdd(source.trim(), ref.trim(), visibility, addCredential ?? undefined).then((ok) => {
                 if (ok) {
                   setSource("");
@@ -253,7 +253,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
               {t("sources.market.addWith")}
             </button>
           </div>
-          <p className="text-[11.5px] text-ink-secondary">{pickHint}</p>
+          <p className="text-[12px] text-ink-secondary">{pickHint}</p>
           {openGithub && <div>{openGithub}</div>}
         </div>
       )}
@@ -273,12 +273,12 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
                   <Store size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-medium text-ink">{market.name}</div>
-                    <div className="truncate text-[11.5px] text-ink-secondary">
+                    <div className="truncate text-[12px] text-ink-secondary">
                       <span className="font-mono">{market.source}{market.ref ? `#${market.ref}` : ""}</span>
                       {" · "}{t("connectApps.market.pluginCount", { count: market.plugins.length, installed })}
                     </div>
                     {credentials && credentialUsedText(market.credential) && (
-                      <div className="truncate text-[11.5px] text-ink-secondary" data-marketplace-credential-used={market.credential?.used?.via}>{credentialUsedText(market.credential)}</div>
+                      <div className="truncate text-[12px] text-ink-secondary" data-marketplace-credential-used={market.credential?.used?.via}>{credentialUsedText(market.credential)}</div>
                     )}
                   </div>
                   {market.visibility && (
@@ -308,7 +308,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
                 </div>
                 {credentials && needs === market.name && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline/60 pt-2" data-marketplace-token={market.name}>
-                    <p className="min-w-0 flex-1 text-[11.5px] text-ink-secondary">{hasCredentials || market.credential?.chosen ? `${needsPick} ${pickHint}` : t("sources.market.needsAccount")}</p>
+                    <p className="min-w-0 flex-1 text-[12px] text-ink-secondary">{hasCredentials || market.credential?.chosen ? `${needsPick} ${pickHint}` : t("sources.market.needsAccount")}</p>
                     {openGithub}
                   </div>
                 )}
@@ -354,7 +354,7 @@ function OfficialCatalogs({ marketplaces, disabled, adding, onAdd }: {
               <BookOpen size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-medium text-ink">{catalog.label}</div>
-                <div className="truncate text-[11.5px] text-ink-secondary">
+                <div className="truncate text-[12px] text-ink-secondary">
                   <span className="font-mono">{catalog.source}</span>{" · "}{officialCatalogBlurb(catalog.id)}
                 </div>
               </div>

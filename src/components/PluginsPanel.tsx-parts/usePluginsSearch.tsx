@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
+import { kindOf } from "@/lib/capability-kinds";
 import { searchConnectApps, visibleResults, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";
 import { ConnectAppsSearchField, ConnectAppsSearchResults } from "../plugins/ConnectAppsSearch";
 import type { PublishedPageSummary } from "../../../shared/published-pages";
@@ -18,7 +19,7 @@ export function usePluginsSearch(
 ) {
   const {
     mcp, botSources, setBotFocus, search, setSearch, openedGroups, setOpenedGroups, activeResult,
-    setActiveResult, setFilter, setType, setTab, scopedItems, revealLater, chooseTab,
+    setActiveResult, setFilter, setType, setTab, scopedItems, revealLater, chooseTab, setKind,
   } = s;
   const { openItem, githubHere, openGithub, marketSummaries } = a;
   // The one search (2026-10-29): every plugin, app, skill and server of the
@@ -69,6 +70,8 @@ export function usePluginsSearch(
     changeSearch("");
     if (result.kind === "item") {
       const item = result.item;
+      // #4453: in its kind's tab
+      setKind(kindOf(item));
       if (item.installed || item.kind === "plugin" || item.kind === "skill") {
         chooseTab(item.installed ? "installed" : "discover");
         openItem(item);
@@ -87,7 +90,8 @@ export function usePluginsSearch(
       return;
     }
     if (result.kind === "account") {
-      // its row in Discover's "From <provider>", in view
+      // its row in Connectors > Discover's "From <provider>", in view
+      setKind("connectors");
       chooseTab("discover");
       setFilter("all");
       setType("any");

@@ -5,7 +5,7 @@
 // the match's page or tab. The keyboard stays in the field: the arrows walk
 // the rows, Enter opens the lit one (the first by default), Escape empties
 // the field (then, empty, Escape steps back or closes as before).
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { FileText, GitBranch, Search, Store, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -48,10 +48,12 @@ export interface ConnectAppsSearchFieldProps {
   active: number;
   onActive: (index: number) => void;
   onOpen: (result: SearchResult) => void;
+  /** the filter and sort buttons, inside the field at its right end (#4453) */
+  trailing?: ReactNode;
 }
 
 /** The field: a combobox over the results below the tabs. */
-export function ConnectAppsSearchField({ query, onQuery, groups, opened, active, onActive, onOpen }: ConnectAppsSearchFieldProps) {
+export function ConnectAppsSearchField({ query, onQuery, groups, opened, active, onActive, onOpen, trailing }: ConnectAppsSearchFieldProps) {
   const rows = visibleResults(groups, opened);
   const searching = query.trim() !== "";
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -68,6 +70,8 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
       if (row) onOpen(row);
       return;
     }
+    // a filter or sort menu open in the field closes first (its own Escape, heard at the window)
+    if (event.key === "Escape" && event.currentTarget.closest("label")?.querySelector('[role="menu"]')) return;
     if (event.key === "Escape" && query !== "") {
       // empties the field; the window steps back or closes only when it is empty
       event.preventDefault();
@@ -98,6 +102,7 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
           <X size={14} aria-hidden="true" />
         </button>
       )}
+      {trailing}
     </label>
   );
 }
@@ -125,7 +130,7 @@ export function ConnectAppsSearchResults({ query, groups, opened, onOpenGroup, a
   return (
     <div ref={listRef} id={LISTBOX_ID} role="listbox" aria-label={t("connectApps.search.resultsAria")} data-plugins-search-results>
       {groups.length === 0 ? (
-        <p className="mt-2 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" role="status" data-plugins-search-empty>
+        <p className="mt-2 rounded-xl bg-inset px-4 py-3 text-[13px] text-ink-secondary" role="status" data-plugins-search-empty>
           {loading ? t("connectors.loadingCatalog") : t("connectApps.search.empty", { query: query.trim() })}
         </p>
       ) : groups.map((group) => {

@@ -107,7 +107,6 @@ describe("the rows' and cards' three dots menus", () => {
     "src/components/MessageHoverActions.tsx",
     "src/components/OutboundCard.tsx",
     "src/components/plugins/InstalledView.tsx",
-    "src/components/plugins/PluginDetailView.tsx",
     "src/components/routines/RoutineFolders.tsx",
     "src/components/routines/RoutineRowMenu.tsx",
     "src/components/settings/OrgSharing.tsx",

@@ -61,7 +61,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     push({ page: "detail", key });
   };
 
-  const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null) => {
+  const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null, afterInstall?: (serverName: string) => void) => {
     const listing = featured?.find((entry) => entry.id === item.id);
     if (region === undefined && listing?.regions?.length) {
       if (!anchor) return;
@@ -75,7 +75,10 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       await mcp.load();
       await loadFeatured();
       if (typeof result.authorizationUrl === "string") await openExternalLink(result.authorizationUrl);
-      if (typeof result.name === "string") showDetail(`mcp:${result.name}`);
+      if (typeof result.name === "string") {
+        afterInstall?.(result.name);
+        showDetail(`mcp:${result.name}`);
+      }
     } catch (cause) {
       setPanelError(readableError(cause));
     } finally {
@@ -211,7 +214,8 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     if (!scopedPluginTarget) return;
     void botAction(`toggle:${id}`, () => setBotPluginEnabled(scopedPluginTarget!, id, enabled));
   };
-  const botCard = (item: PluginItem): ReactNode => {
+  /** headerUpdates: the page's header already offers Update (from the updates list) */
+  const botCard = (item: PluginItem, headerUpdates = false): ReactNode => {
     if (!scopedPluginView || !scopedPluginTarget || item.kind !== "plugin") return null;
     const plugin = botPluginState(scopedPluginView, item.id);
     if (!plugin) return null;
@@ -220,6 +224,8 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       <BotPluginCard
         key={`${scope}:${item.key}`}
         installInHeader={scope !== "workspace"}
+        statedAbove={scope !== "workspace"}
+        updateInHeader={headerUpdates || Boolean(item.installed && item.updateAvailable)}
         personal={scope === "me"}
         botName={scopedPluginName}
         view={scopedPluginView}
@@ -227,7 +233,6 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         busy={busy}
         onInstall={() => installForBot(item.id)}
         onToggle={(enabled) => toggleForBot(item.id, enabled)}
-        onUninstall={() => uninstallForBot(item.id)}
         onSaveConfig={async (values) => {
           if (!scopedPluginTarget) return;
           setScopedPluginView(await setBotPluginConfig(scopedPluginTarget, item.id, values));
@@ -239,7 +244,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
    * (for everyone, on the bot in reach) and Install for <bot> beside the name
    * when that bot still needs it. Update lives in the Details card (Grok Bot
    * shows no Update pill in the header). */
-  const detailHead = (item: PluginItem): Pick<PluginDetailProps, "installState" | "primaryAction"> => {
+  const detailHead = (item: PluginItem): Pick<PluginDetailProps, "installState" | "primaryAction" | "onUninstall" | "uninstallLabel"> => {
     if (item.kind !== "plugin") return {};
     const [plugin, marketplace] = [item.id.slice(0, item.id.lastIndexOf("@")), item.id.slice(item.id.lastIndexOf("@") + 1)];
     // the workspace's own install: this list in its scope, else the
@@ -248,9 +253,18 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       ? item.installed
       : marketplaces?.find((market) => market.name === marketplace)?.plugins.find((entry) => entry.name === plugin)?.installed ?? null;
     const onBot = scopedPluginTarget && scopedPluginView ? botPluginState(scopedPluginView, item.id) : null;
+    // one chip per scope, said once; the one that differs from the bot's or the person's own is the only reason to show "everyone"
+    const scoped = onBot ? Boolean(onBot.installed) : null;
+    const showEveryone = everyone !== null && (scoped === null || everyone !== scoped);
     const installState: DetailInstallState[] = [
-      ...(everyone === null ? [] : [{ id: "everyone" as const, on: everyone, label: t(everyone ? "connectApps.detail.state.everyoneOn" : "connectApps.detail.state.everyoneOff") }]),
-      ...(onBot ? [{ id: scope === "me" ? "me" as const : "bot" as const, on: Boolean(onBot.installed), label: scope === "me" ? t(onBot.installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : t(onBot.installed ? "connectApps.detail.state.botOn" : "connectApps.detail.state.botOff", { name: scopedPluginName }) }] : []),
+      ...(showEveryone ? [{ id: "everyone" as const, on: Boolean(everyone), label: t(everyone ? "connectApps.detail.state.everyoneOn" : "connectApps.detail.state.everyoneOff") }] : []),
+      ...(onBot ? [{
+        id: scope === "me" ? "me" as const : "bot" as const,
+        on: Boolean(onBot.installed),
+        label: scope === "me" ? t(onBot.installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : t(onBot.installed ? "connectApps.detail.state.botOn" : "connectApps.detail.state.botOff", { name: scopedPluginName }),
+        // its switch beside it (the owner of the bot, or who manages it, may change it)
+        ...(onBot.installed && scopedPluginView?.canChange ? { toggle: { on: onBot.installed.enabled, busy: botBusy !== null, label: t("plugins.enabled", { name: onBot.plugin }), onToggle: () => toggleForBot(item.id, !onBot.installed!.enabled) } } : {}),
+      }] : []),
     ];
     let primaryAction: ReactNode = null;
     if (scope !== "workspace" && onBot && !onBot.installed && scopedPluginView?.canChange) {
@@ -262,7 +276,11 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         </button>
       );
     }
-    return { installState, primaryAction };
+    // the person's or the bot's own copy goes from the page's "..." menu, in its own words (where they may change it)
+    const removal = scope !== "workspace" && onBot?.installed && scopedPluginView?.canChange
+      ? { onUninstall: () => uninstallForBot(item.id), uninstallLabel: scope === "me" ? t("connectApps.mePlugin.uninstall") : t("connectApps.botPlugin.uninstall", { name: scopedPluginName }) }
+      : {};
+    return { installState, primaryAction, ...removal };
   };
   /** What a page's capability brings, for its "Engines" line and the
    * warning before an install (lib/capabilities, shared engineReceipt): a

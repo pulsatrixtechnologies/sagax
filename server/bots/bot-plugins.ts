@@ -961,6 +961,15 @@ export class BotPlugins {
     return { dir, present: existsSync(dir) };
   }
 
+  /** The folder of one installed plugin of this bot (its person, for "Me"), to read its files; null when it has none. */
+  installedPluginDir(botId: string, key: string): string | null {
+    if (!this.validId(botId)) return null;
+    const record = this.read(botId).plugins[key];
+    if (!record) return null;
+    const dir = this.pluginDir(botId, record.marketplace, record.name);
+    return existsSync(dir) ? dir : null;
+  }
+
   /** Enabled plugin folders. Claude loads them with `--plugin-dir`. */
   pluginDirs(botId: string): string[] {
     if (!this.validId(botId)) return [];

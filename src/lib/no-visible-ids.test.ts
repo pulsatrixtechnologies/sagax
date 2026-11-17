@@ -294,7 +294,7 @@ describe("no UUID on screen", () => {
       form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token" }, secret: true, required: true }] },
       consoleUrl: `https://console.example.test/products/${BOT_ID}`,
     };
-    const rows = productRows([product], () => {});
+    const rows = productRows([product], { bots: [], setProducts: () => {}, onOpen: () => {} });
     const text = visibleText(createElement("div", null, rows[0]!.node, createElement(ProductDetailView, { product, onChanged: () => {}, onBack: () => {} })));
     expectNoUuid(text);
     expect(text).toContain("Service Desk");

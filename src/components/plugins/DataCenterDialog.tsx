@@ -57,11 +57,11 @@ export function DataCenterDialog({ name, regions, defaultUrl, anchorRef, onCance
         onCancel();
       }}
     >
-      <h2 id="data-center-title" className="flex items-center gap-2 text-[15px] font-semibold">
+      <h2 id="data-center-title" className="flex items-center gap-2 text-[14px] font-semibold">
         <Globe2 size={16} aria-hidden="true" />
         {t("plugins.dataCenter.title", { name })}
       </h2>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-ink-secondary">{t("plugins.dataCenter.intro", { name })}</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">{t("plugins.dataCenter.intro", { name })}</p>
       <fieldset className="mt-3 space-y-1.5">
         <legend className="sr-only">{t("plugins.dataCenter.title", { name })}</legend>
         {regions.map((region) => (

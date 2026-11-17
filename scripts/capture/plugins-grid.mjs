@@ -66,7 +66,7 @@ try {
       await page.goto(`${base}/connect-apps.html?view=manage&skin=${skin}&lang=en`, { waitUntil: "networkidle" });
       await page.waitForSelector("[data-plugins-main]", { timeout: 60_000 });
       // Plugins opens on its home (Discover): "N connected" leads to Manage.
-      if (!(await page.locator('[data-plugins-manage="installed"]').count())) await page.click("[data-plugins-connected]");
+      if (!(await page.locator('[data-plugins-manage="installed"]').count())) await page.click('[data-plugins-view="installed"]');
       await page.waitForSelector('[data-plugins-manage="installed"]', { timeout: 30_000 });
       await page.waitForTimeout(800);
       const dialog = page.locator('[role="dialog"]').first();

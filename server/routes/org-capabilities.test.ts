@@ -1,5 +1,5 @@
 // Capabilities lot 4: admin/me routes for organization declarations.
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -122,5 +122,66 @@ describe("a person's switch of an organization item", () => {
     expect(choices).toEqual([["d2", false]]);
     expect(orgCapabilityLock(view("d2", "offered"))).toBeNull();
     expect(orgCapabilityLock(view("d3", "offered", false))).toBe("org_capability_off");
+  });
+});
+
+// what an organization plugin holds, read only, for a person it is on for
+describe("the files of an organization plugin", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sagax-org-plugin-"));
+  mkdirSync(join(dir, "skills", "triage"), { recursive: true });
+  writeFileSync(join(dir, "README.md"), "# Harbor Toolkit");
+  writeFileSync(join(dir, "skills", "triage", "SKILL.md"), "---\nname: triage\n---");
+  writeFileSync(join(dir, ".env"), "TOKEN=not-a-real-value");
+  writeFileSync(join(dir, "server.pem"), "not a real key");
+  async function get(query: string, who: string | null, folders: Record<string, string>) {
+    const route = createOrgCapabilityRoutes({
+      owner: () => "perspicax", person: () => (who ? { principalId: who } : null), subjectToken: async () => null,
+      call: async () => ({ ok: false, status: 500 }) as never, refreshed: () => undefined, views: () => [],
+      isMember: () => true, activeFor: () => true, setChoice: () => undefined,
+      folderOf: (principalId, id) => folders[`${principalId}:${id}`] ?? null,
+      policy: () => undefined, historical: () => undefined, dataDir: mkdtempSync(join(tmpdir(), "sagax-org-cap-")),
+    } as OrgCapabilityRouteDeps);
+    const sent: Array<{ status: number; body: Record<string, unknown> }> = [];
+    const url = new URL(`http://x/api/me/org-capabilities/oc-1/files${query}`);
+    const answered = await route({
+      req: {} as never, res: { setHeader: () => undefined, statusCode: 200, end: () => undefined } as never, url, path: url.pathname, method: "GET", auth: {} as never,
+      json: ((_: unknown, status: number, body: Record<string, unknown>) => { sent.push({ status, body }); }) as never,
+      readBody: (async () => ({})) as never,
+    });
+    return { sent: sent[0], answered };
+  }
+
+  it("a stray % in the id is a 400, never a 500 (the files read and the PUT beside it)", async () => {
+    const answer = async (method: "GET" | "PUT", rest: string) => {
+      const route = createOrgCapabilityRoutes({
+        owner: () => "perspicax", person: () => ({ principalId: "pr_ada" }), subjectToken: async () => null,
+        call: async () => ({ ok: false, status: 500 }) as never, refreshed: () => undefined, views: () => [],
+        isMember: () => true, activeFor: () => true, setChoice: () => undefined, folderOf: () => null,
+        policy: () => undefined, historical: () => undefined, dataDir: mkdtempSync(join(tmpdir(), "sagax-org-cap-")),
+      } as OrgCapabilityRouteDeps);
+      const sent: Array<{ status: number }> = [];
+      const url = new URL(`http://x/api/me/org-capabilities/${rest}`);
+      await route({ req: {} as never, res: { setHeader: () => undefined } as never, url, path: `/api/me/org-capabilities/${rest}`, method, auth: {} as never,
+        json: ((_: unknown, status: number) => { sent.push({ status }); }) as never, readBody: (async () => ({ enabled: true })) as never });
+      return sent[0]?.status;
+    };
+    expect(await answer("GET", "%zz/files")).toBe(400);
+    expect(await answer("PUT", "%zz")).toBe(400);
+  });
+
+  it("lists and reads what the person's own turns mount, never a secret, never what is not theirs", async () => {
+    const folders = { "pr_ada:oc-1": dir };
+    const list = await get("", "pr_ada", folders);
+    expect(list.sent?.status).toBe(200);
+    const paths = (list.sent!.body.files as Array<{ path: string }>).map((file) => file.path);
+    expect(paths).toEqual(expect.arrayContaining(["README.md", "skills/triage/SKILL.md"]));
+    expect(paths.some((path) => path === ".env" || path.endsWith(".pem"))).toBe(false);
+    expect((await get("?path=README.md", "pr_ada", folders)).sent).toMatchObject({ status: 200, body: { text: "# Harbor Toolkit" } });
+    expect((await get("?path=.env", "pr_ada", folders)).sent?.status).toBe(404);
+    expect((await get("?path=server.pem", "pr_ada", folders)).sent?.status).toBe(404);
+    expect((await get("?path=..%2Fx", "pr_ada", folders)).sent?.status).toBe(400);
+    // a person it is not on for (or a signed-out caller) reads nothing
+    expect((await get("", "pr_bob", folders)).sent?.status).toBe(404);
+    expect((await get("", null, folders)).sent?.status).toBe(401);
   });
 });

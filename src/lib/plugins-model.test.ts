@@ -281,3 +281,23 @@ describe("the GitHub plugin's server reads the person's GitHub account (2026-10-
     expect(buildPluginItems({ servers: [server()] }).find((item) => item.key === "mcp:github-github")?.githubAccount).toBeUndefined();
   });
 });
+
+describe("the server's updateKey rides on the items (#4504)", () => {
+  it("is carried by a server, a skill and an installed marketplace plugin, never invented", () => {
+    const items = buildPluginItems({
+      servers: [{ name: "notes", enabled: true, url: "https://mcp.example.test/notes", updateKey: "connector:me:me:notes" }, { name: "plain", enabled: true, url: "https://mcp.example.test/plain" }],
+      skills: [{ name: "recap", description: "", source: "local-import", enabled: true, updateKey: "skill:me:me:recap" }],
+      marketplaces: [{ name: "kit", plugins: [
+        { name: "reviewer", installed: true, servers: [], skills: [], updateKey: "plugin:me:me:reviewer@kit" },
+        { name: "offered", installed: false, servers: [], skills: [], updateKey: "plugin:me:me:offered@kit" },
+      ] }],
+    });
+    const key = (id: string) => items.find((item) => item.key === id)?.updateKey;
+    expect(key("mcp:notes")).toBe("connector:me:me:notes");
+    expect(key("mcp:plain")).toBeUndefined();
+    expect(key("skill:recap")).toBe("skill:me:me:recap");
+    expect(key("plugin:reviewer@kit")).toBe("plugin:me:me:reviewer@kit");
+    // a plugin that is only offered has no installed item to update
+    expect(key("plugin:offered@kit")).toBeUndefined();
+  });
+});

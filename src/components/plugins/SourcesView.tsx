@@ -37,18 +37,18 @@ export function SourcesView({ onOpenGithub, githubSummary, marketplaces, organiz
           <div className="flex items-center gap-2">
             <span className="flex size-5 shrink-0 items-center justify-center"><GitBranch size={16} aria-hidden="true" className="text-ink" /></span>
             <h3 className="min-w-0 truncate text-[13px] font-semibold text-ink">{t("connectApps.sources.githubConnection")}</h3>
-            {githubSummary && <span className="min-w-0 truncate text-[11.5px] text-ink-secondary" data-github-summary>{githubSummary}</span>}
+            {githubSummary && <span className="min-w-0 truncate text-[12px] text-ink-secondary" data-github-summary>{githubSummary}</span>}
             <span className="flex-1" />
             <button
               type="button"
               data-plugins-sources-github-open
               onClick={onOpenGithub}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-control px-2.5 py-1 text-[11.5px] font-medium text-ink hover:bg-raised-hover"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-control px-2.5 py-1 text-[12px] font-medium text-ink hover:bg-raised-hover"
             >
               {t("connectApps.detail.openGithub")}
             </button>
           </div>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-tertiary">{t("sources.github.intro")}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-tertiary">{t("sources.github.intro")}</p>
         </section>
       )}
       {marketplaces}

@@ -29,7 +29,7 @@ export function CapabilityTags({ capabilities, name = "" }: { capabilities: read
     .filter((label) => !name.toLowerCase().includes(label.toLowerCase()));
   if (!shown.length) return null;
   return (
-    <span data-connector-capabilities className="truncate text-[11.5px] text-ink-tertiary">
+    <span data-connector-capabilities className="truncate text-[12px] text-ink-tertiary">
       {shown.join(" · ")}
     </span>
   );

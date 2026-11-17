@@ -24,6 +24,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import type { CapabilityMarketplacePolicy, LinkPostResult } from "../perspicax/perspicax-link.ts";
 import type { OrgCapabilityView } from "../org/org-capabilities.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
+import { sendPluginFiles } from "../plugins/plugin-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PX_CAPABILITIES_PATH = "/api/v1/pulsabot/capabilities";
@@ -59,6 +60,8 @@ export interface OrgCapabilityRouteDeps {
   isMember: (principalId: string) => boolean;
   activeFor: (view: OrgCapabilityView, principalId: string) => boolean;
   setChoice: (principalId: string, id: string, enabled: boolean) => void;
+  /** The installed folder of a plugin or skill the organization declared, for a person it is on for (what their turns mount); null: none. */
+  folderOf?: (principalId: string, id: string) => string | null;
   /** The policy Perspicax sends: undefined (older), null (not set). */
   policy: () => CapabilityMarketplacePolicy | null | undefined;
   /** cfg.organization.pluginMarketplaces, the historical local rule. */
@@ -182,8 +185,16 @@ function memberRow(view: OrgCapabilityView, on: boolean, member: boolean) {
   };
 }
 
+/** A percent-encoded id read, or null when it is not valid (a stray % is a 400, never a 500). */
+function decoded(value: string): string | null {
+  try { return decodeURIComponent(value); } catch { return null; }
+}
+
+/** GET /api/me/org-capabilities/:id/files[?path=] */
+const ME_ORG_FILES = /^\/api\/me\/org-capabilities\/([^/]{1,200})\/files$/;
+
 export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     const me = path === ME_ORG_CAPABILITIES_ROUTE || path.startsWith(`${ME_ORG_CAPABILITIES_ROUTE}/`);
     const org = path === ORG_CAPABILITIES_ROUTE || path.startsWith(`${ORG_CAPABILITIES_ROUTE}/`);
     if (!me && !org) return PASS;
@@ -198,7 +209,19 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
         const member = deps.isMember(person.principalId);
         return json(res, 200, { owner: deps.owner(), items: deps.views().filter((view) => view.state !== "flow").map((view) => memberRow(view, deps.activeFor(view, person.principalId), member)) });
       }
-      const id = decodeURIComponent(path.slice(ME_ORG_CAPABILITIES_ROUTE.length + 1));
+      // what an organization plugin or skill holds, read only, for a person it is on for (the Contents tab of its page)
+      const own = ME_ORG_FILES.exec(path);
+      if (own && method === "GET") {
+        if (!person) return fail(401, "session_required");
+        const wanted = decoded(own[1]!);
+        if (wanted === null) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
+        const folder = deps.folderOf?.(person.principalId, wanted) ?? null;
+        if (!folder) return fail(404, "org_capability_unknown");
+        sendPluginFiles(res, json, folder, url.searchParams.get("path"));
+        return;
+      }
+      const id = decoded(path.slice(ME_ORG_CAPABILITIES_ROUTE.length + 1));
+      if (id === null) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
       if (method !== "PUT" || !id || id.includes("/")) return PASS;
       if (!person) return fail(401, "session_required");
       const body = await readBody(req).catch(() => null) as { enabled?: unknown } | null;
@@ -256,7 +279,9 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
       const migrated = await migrateMarketplaces(deps, token);
       if (!migrated.ok) return fail(migrated.refusal.status, migrated.refusal.code, migrated.refusal.message);
     }
-    const target = `${PX_CAPABILITIES_PATH}${rest.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/")}`;
+    const parts = rest.split("/").map((part) => decoded(part));
+    if (parts.includes(null)) return json(res, 400, { error: "that id is not valid", code: "bad_request" });
+    const target = `${PX_CAPABILITIES_PATH}${parts.map((part) => encodeURIComponent(part!)).join("/")}`;
     const writable = (method === "POST" && (rest === "" || rest === "/marketplaces"))
       || ((method === "PUT" || method === "DELETE") && /^\/(?:marketplaces\/)?[^/]+$/.test(rest) && rest !== "/migrate")
       || (method === "PUT" && rest === "/marketplace-policy");

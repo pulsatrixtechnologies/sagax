@@ -258,6 +258,8 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
     // server replays what we missed when it can, and re-downloading every
     // transcript on a reconnect it already covered is pure waste.
     handleFrame = (frame) => {
+      // #4504: updates changed (a check, an update): the Connect Apps window reads the list again
+      if (frame.kind === "capability.updates" && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sagax:capability-updates"));
       if (frame.kind === "config") bumpPeripheralVersion("config", "instances");
       else if (frame.kind === "routine" || frame.kind === "routine.deleted" || frame.kind === "routine.run" || frame.kind === "routine.folders") {
         bumpPeripheralVersion("routines");

@@ -8,9 +8,10 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
 } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
@@ -39,6 +40,7 @@ import {
   type SkillListing,
 } from "./skills.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
+import { credentialLocation } from "../safety/sensitive-path.ts";
 
 const SUPPORTING_TEXT_EXT = new Set([
   ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".csv", ".tsv",
@@ -125,16 +127,31 @@ function safeRelativeFile(directory: string, relativePath: string): string | nul
   return absolute;
 }
 
-function listFolderFiles(directory: string | null): SkillFolderFile[] {
+/** The ONE rule of every files route (a skill's, a plugin's: the person's, a bot's, the installation's): what the list leaves out, the read
+ * refuses. A path is hidden when any part of it can hold a secret (the app's own sensitive-path names: `.env*`, `*.pem`, `*.key`,
+ * credentials, tokens, `.ssh`...); in a skill, also any dotfile or dot folder; in a plugin (`whole`, which keeps its `.claude-plugin`
+ * and `.mcp.json`), `.git`, `node_modules` and the folder Sagax keeps the pre-configuration texts in. */
+export function folderFileHidden(relativePath: string, whole: boolean): boolean {
+  const parts = relativePath.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.some((part) => credentialLocation(part))) return true;
+  if (!whole) return parts.some((part) => part.startsWith("."));
+  return parts.some((part) => part === ".git" || part === "node_modules") || parts.slice(0, 2).join("/") === ".claude-plugin/sagax-originals";
+}
+
+/** A folder's files (symbolic links and big files left out). A skill's list leaves its SKILL.md to the editor and
+ * hidden names out; a plugin's (`whole`) keeps both, since its manifest and .mcp.json are hidden files, but never .git,
+ * node_modules or the folder Sagax keeps the pre-configuration texts in. */
+export function listFolderFiles(directory: string | null, whole = false): SkillFolderFile[] {
   if (!directory) return [];
   try {
     if (!lstatSync(directory).isDirectory()) return [];
   } catch {
     return [];
   }
+  const limit = whole ? SUPPORTING_MAX_FILES * 4 : SUPPORTING_MAX_FILES;
   const out: SkillFolderFile[] = [];
   const walk = (dir: string) => {
-    if (out.length >= SUPPORTING_MAX_FILES) return;
+    if (out.length >= limit) return;
     let names: string[];
     try {
       names = readdirSync(dir).sort();
@@ -142,8 +159,8 @@ function listFolderFiles(directory: string | null): SkillFolderFile[] {
       return;
     }
     for (const name of names) {
-      if (name.startsWith(".")) continue;
       const absolute = join(dir, name);
+      if (folderFileHidden(relative(directory, absolute).split(sep).join("/"), whole)) continue;
       let stat;
       try {
         stat = lstatSync(absolute);
@@ -157,9 +174,9 @@ function listFolderFiles(directory: string | null): SkillFolderFile[] {
       }
       if (!stat.isFile() || stat.size > SUPPORTING_MAX_BYTES) continue;
       const relativePath = relative(directory, absolute).split(sep).join("/");
-      if (relativePath === "SKILL.md") continue;
+      if (!whole && relativePath === "SKILL.md") continue;
       out.push({ path: relativePath, bytes: stat.size, kind: fileKind(relativePath) });
-      if (out.length >= SUPPORTING_MAX_FILES) return;
+      if (out.length >= limit) return;
     }
   };
   walk(directory);
@@ -314,17 +331,25 @@ export function afterLibrarySkillRemoved(name: string, root: string = skillsLibr
   removeReviewedSnapshot({ kind: "library", root }, name);
 }
 
+/** One file of a folder, read. The same hiding as the list (`folderFileHidden`), a link anywhere in the path refused (the real place must stay
+ * inside the folder), and a cap on its size (`maxBytes`). */
 export function readSkillFolderFile(
   directory: string | null,
   relativePath: string,
+  options: { whole?: boolean; maxBytes?: number } = {},
 ): { kind: SkillFileKind; bytes: number; text?: string; buffer?: Buffer; contentType: string } | { error: string; status: number } {
   if (!directory) return { error: "the skill folder is missing", status: 404 };
   const absolute = safeRelativeFile(directory, relativePath);
   if (!absolute) return { error: "invalid file path", status: 400 };
+  if (folderFileHidden(relativePath, options.whole === true)) return { error: "no such file", status: 404 };
   try {
     const stat = lstatSync(absolute);
     if (!stat.isFile() || stat.isSymbolicLink()) return { error: "no such file", status: 404 };
-    if (stat.size > SUPPORTING_MAX_BYTES) return { error: "file is too large", status: 413 };
+    const inside = realpathSync(absolute);
+    const root = realpathSync(directory);
+    const real = relative(root, inside);
+    if (real.startsWith("..") || isAbsolute(real)) return { error: "no such file", status: 404 };
+    if (stat.size > (options.maxBytes ?? SUPPORTING_MAX_BYTES)) return { error: "file is too large", status: 413 };
     const kind = fileKind(relativePath);
     const buffer = readFileSync(absolute);
     if (kind === "text") {

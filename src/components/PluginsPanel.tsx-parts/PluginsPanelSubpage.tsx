@@ -1,14 +1,19 @@
+import { groupByVendor } from "@/lib/capability-kinds";
+import { VendorPage } from "../plugins/VendorPage";
+import type { ProductRowsContext } from "../plugins/ProductRows";
+import { updateKindOf, type CapabilityUpdateItem, type UpdateKind } from "@/lib/capability-updates";
 import { useEffect, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
-import { permissionMissingText } from "@/lib/permissions";
 import { detailIdentity } from "@/lib/installed-model";
+import { botPluginState } from "@/lib/plugin-scope";
 import { fetchBotTailscale } from "@/lib/bot-tailscale";
 import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { TailscaleConnectView } from "../plugins/TailscaleConnectView";
 import type { Crumb } from "../Breadcrumb";
-import { connectAppsTabLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { connectAppsKindLabel, connectAppsTabLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import type { ConnectAppsKind } from "@/lib/capability-kinds";
 import { PluginCard, PluginPageHeader } from "../plugins/PluginParts";
 import { PluginDetailView } from "../plugins/PluginDetailView";
 import { SkillPage } from "../plugins/SkillPage";
@@ -17,8 +22,11 @@ import { MessagesSetupView } from "../plugins/MessagesSetupView";
 import { MacAppSetupView, macAppTitle } from "../plugins/MacAppSetupView";
 import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { ProductDetailView } from "../plugins/ProductDetailView";
+import { OrgItemPage } from "../plugins/OrgItemPage";
+import type { MemberOrgCapability } from "@/lib/org-capabilities";
 import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
+import { pluginSourceLabel, skillReadOnlyReason } from "./helpers";
 import type { Page } from "./types";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
@@ -34,7 +42,25 @@ export function PluginsPanelSubpage({
   botsForRows,
   toggleBotServers,
   products,
+  updateInfo,
+  productCtx,
+  itemUpdate,
+  orgItems,
+  consoleName,
+  vendorSkills,
 }: {
+  /** #4504: the update a skill has, with its Update (running while it runs), for its page */
+  itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
+  /** what the organization offers or requires of the person (an item that is on opens its page) */
+  orgItems?: readonly MemberOrgCapability[];
+  /** the console's name ("Perspicax · <organization>") for a bundle's grey line */
+  consoleName?: string;
+  /** the skills the console offers that go with a vendor (its Skills tab); none: no tab */
+  vendorSkills?: (vendorKey: string) => ReadonlyArray<{ name: string; description: string }>;
+  /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
+  productCtx?: ProductRowsContext;
+  /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
+  updateInfo?: (kind: UpdateKind, name: string, updateKey?: string, organizationId?: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
   products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
   s: PluginsPanelState;
@@ -46,7 +72,7 @@ export function PluginsPanelSubpage({
   toggleBotServers: (entry: InstalledEntry, botId: string, on: boolean) => void;
 }): ReactNode {
   const {
-    page, skills, skillsRoute, scope, ownerOrAdmin, libraryEditor, perspicaxOrg, marketplaces,
+    page, skills, skillsRoute, scope,
     back, setStack, loadSkills, items, mcp, mcpAccountDraft, setMcpAccountDraft,
     shownMarketplaces, installing,
   } = s;
@@ -64,9 +90,11 @@ export function PluginsPanelSubpage({
   const botsForMissing = page.page === "botsFor" && !botsForEntry && mcp.servers !== null && shownMarketplaces !== null;
   // #4185: a product no longer served to the person leaves its page too.
   const productMissing = page.page === "product" && !products.products.some((entry) => entry.id === page.id);
+  // an organization item that is no longer on for the person leaves its page too
+  const orgItemMissing = page.page === "orgItem" && orgItems !== undefined && orgItems.length > 0 && !orgItems.some((entry) => entry.id === page.id && entry.on);
   useEffect(() => {
-    if (detailMissing || skillMissing || botsForMissing || productMissing) back();
-  }, [detailMissing, skillMissing, botsForMissing, productMissing, back]);
+    if (detailMissing || skillMissing || botsForMissing || productMissing || orgItemMissing) back();
+  }, [detailMissing, skillMissing, botsForMissing, productMissing, orgItemMissing, back]);
   // The GitHub page opened before the marketplaces answered: the GitHub
   // plugin's page, once it is known.
   const githubLate = page.page === "github" && githubKey !== null;
@@ -76,14 +104,8 @@ export function PluginsPanelSubpage({
   }, [githubLate, githubKey, setStack]);
 
   const pageSkill = page.page === "skill" && page.name ? skills?.find((entry) => entry.name === page.name) : undefined;
-  const skillReadOnly = (skill: SkillsLibrarySkillWire): string | undefined => {
-    if (scope === "me") return undefined;
-    if (ownerOrAdmin === false && !libraryEditor) return perspicaxOrg !== null ? permissionMissingText("skills.library") : t("connectApps.skill.readOnlyOwner");
-    if (skill.version) return t("connectApps.skill.readOnlyOrganization");
-    const plugin = marketplaces?.find((market) => market.name === skill.source)?.plugins.find((entry) => entry.installed && entry.skills.includes(skill.name));
-    if (plugin) return t("connectApps.skill.readOnlyPlugin", { plugin: plugin.name });
-    return undefined;
-  };
+  const skillReadOnly = (skill: SkillsLibrarySkillWire): string | undefined => skillReadOnlyReason(s, skill);
+
 
   // A page opened from a tab (2026-10-28): inside that tab's panel, under
   // the title, scope and tabs. Browse Bots is the Bots tab, a pane of its
@@ -95,6 +117,8 @@ export function PluginsPanelSubpage({
         basePath={skillsRoute}
         skill={pageSkill}
         readOnlyReason={pageSkill ? skillReadOnly(pageSkill) : undefined}
+        sourceLabel={pageSkill ? (/^(local|local-import|upload:|learn:)/.test(pageSkill.source) ? t("connectApps.origin.you") : pluginSourceLabel(pageSkill.source)) : undefined}
+        update={pageSkill ? itemUpdate?.("skill", pageSkill.name, items.find((entry) => entry.kind === "skill" && entry.id === pageSkill.name)?.updateKey) : undefined}
         onBack={back}
         trail={trail}
         onSaved={async (name) => {
@@ -124,7 +148,7 @@ export function PluginsPanelSubpage({
       <>
         <PluginPageHeader title={t("myConnections.github.title")} trail={trail} onBack={back} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7 pt-3 sm:px-8" data-plugins-github-page>
-          {githubSection ? <PluginCard>{githubSection}</PluginCard> : <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
+          {githubSection ? <PluginCard>{githubSection}</PluginCard> : <p className="rounded-xl bg-inset px-4 py-3 text-[13px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
         </div>
       </>
     );
@@ -132,6 +156,14 @@ export function PluginsPanelSubpage({
   if (page.page === "product") {
     const product = products.products.find((entry) => entry.id === page.id);
     if (product) return <ProductDetailView key={product.id} product={product} onChanged={products.replace} onBack={back} trail={trail} />;
+  }
+  if (page.page === "orgItem") {
+    const item = orgItems?.find((entry) => entry.id === page.id);
+    if (item) return <OrgItemPage key={item.id} item={item} consoleName={consoleName} onBack={back} trail={trail} outdated={Boolean(updateInfo?.(item.form === "skill" ? "skill" : "plugin", item.name, undefined, item.id))} />;
+  }
+  if (page.page === "vendor" && productCtx) {
+    const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
+    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} />;
   }
   if (page.page === "connector") {
     return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
@@ -155,18 +187,28 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "detail" && detailItem) {
     const identity = detailIdentity(detailItem, entries);
+    const run = itemUpdate?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     const base = detailProps(detailItem, {
       mcp, mcpAccountDraft, setMcpAccountDraft, openGithub, githubKey, githubSection,
       items, marketplaces: shownMarketplaces, installing, openItem,
       uninstallPlugin: (item) => void uninstallPlugin(item),
       updatePlugin: (item) => void updatePlugin(item),
-      scope, botCard: botCard(detailItem),
+      scope, scopeBotId: s.scopeBotId, botCard: botCard(detailItem, Boolean(run?.onUpdate)),
+      contentsOf: (pluginId) => {
+        const known = botPluginState(scope === "me" ? s.personalView : scope === "bot" ? s.botView : null, pluginId);
+        return known ? { skills: known.contents?.skills ?? [], agents: known.contents?.agents ?? [], commands: known.contents?.commands ?? [], servers: known.installed?.declaredMcpServers ?? [] } : undefined;
+      },
     });
     const engines = engineInfo(detailItem);
+    // the versions (from, to) and the notes when the source gives them: said once, in the Overview
+    const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
+    const updateWaiting = upd ? { from: upd.installedVersion, to: upd.availableVersion, notes: upd.updateNotes } : detailItem.updateAvailable ? { from: detailItem.installedVersion, to: detailItem.version } : undefined;
     return (
       <PluginDetailView
         {...base}
-        details={engines.row ? [...base.details, engines.row] : base.details}
+        {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : {})}
+        details={[...base.details, ...(engines.row ? [engines.row] : [])]}
+        update={updateWaiting}
         notice={engines.notice}
         {...detailHead(detailItem)}
         displayName={identity.name}
@@ -186,9 +228,10 @@ export function PluginsPanelSubpage({
   return null;
 }
 
-export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = []): string {
+export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind, orgItems: readonly MemberOrgCapability[] = []): string {
   switch (entry.page) {
-    case "main": return connectAppsTabLabel(tab);
+    // #4453: a page opened from Yours or Discover names its kind ("Plugins")
+    case "main": return kind && (tab === "installed" || tab === "discover") ? connectAppsKindLabel(kind) : connectAppsTabLabel(tab);
     case "botsFor": return t("connectApps.entry.bots");
     case "detail": {
       const item = items.find((candidate) => candidate.key === entry.key);
@@ -201,5 +244,7 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "connector": return t("connectApps.addCustomConnector");
     case "tailscale": return t("connectApps.tailscale.title");
     case "product": return products.find((product) => product.id === entry.id)?.name ?? t("connectApps.back");
+    case "orgItem": return orgItems.find((item) => item.id === entry.id)?.name ?? t("connectApps.back");
+    case "vendor": return groupByVendor(products).find((vendor) => vendor.key === entry.key)?.name ?? t("connectApps.back");
   }
 }

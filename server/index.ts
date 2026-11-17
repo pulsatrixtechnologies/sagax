@@ -30589,6 +30589,7 @@ ROUTES.push(createOrgCapabilityRoutes({
     personConnections.setOrgCapability(principalId, id, enabled);
     broadcast({ kind: "config", ...configStatus() });
   },
+  folderOf: (principalId, id) => orgCapabilities.mountsFor(principalId).find((mount) => mount.view.id === id)?.dir ?? null,
   policy: () => perspicaxDirectory?.capabilityMarketplacePolicy(),
   historical: () => historicalPluginMarketplacePolicy(),
   dataDir: DATA_DIR

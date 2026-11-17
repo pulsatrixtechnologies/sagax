@@ -25,6 +25,8 @@ export interface MemberOrgCapability {
   state: InstallState;
   transport?: "stdio" | "http";
   version?: string;
+  /** the vendor group the console files it under (the group id of a product), when the console says so: a skill that goes with a vendor's bundle */
+  vendor?: string;
   on: boolean;
   canToggle: boolean;
 }

@@ -104,7 +104,8 @@ const toggle = () => host.querySelector<HTMLElement>("[data-bot-profile-search-t
 // The tabs the query leads to, best first is the one shown; the others stay plain.
 const matching = () => [...host.querySelectorAll("[data-bot-profile-tab][data-bot-profile-tab-match]")].map((el) => el.getAttribute("data-bot-profile-tab"));
 // The sections on view: the Appearance fold of the header and the cards of the tab or sub-page shown (#2271, #2612).
-const opened = () => [...host.querySelectorAll('#bot-profile-appearance[data-open], [data-bot-profile-panel]:not([hidden]) [data-bot-profile-section][data-open], [data-bot-profile-subpage] [data-bot-profile-section][data-open]')].map((el) => el.getAttribute("data-bot-profile-section"));
+// A sub-page is a modal over the page, portalled to the body (#4470).
+const opened = () => [...document.querySelectorAll('#bot-profile-appearance[data-open], [data-bot-profile-panel]:not([hidden]) [data-bot-profile-section][data-open], [data-bot-profile-subpage] [data-bot-profile-section][data-open]')].map((el) => el.getAttribute("data-bot-profile-section"));
 
 function type(value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -173,12 +174,18 @@ describe("bot profile settings search", () => {
     expect(opened()).toContain("appearance");
     expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(true);
     type("effort");
-    // V6 (#2612): the Model sub-page sits on General, opened by the search
+    // V6 (#2612): the Model sub-page sits on General; #4470: typing marks
+    // its row on the tab and keeps the field, Enter opens its modal
     expect(selectedTab()).toBe("general");
     expect(matching()[0]).toBe("general");
-    expect(opened()).toContain("model");
-    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("model");
+    expect(host.querySelector("[data-persona-modal]")!.hasAttribute("data-bot-profile-subpage-current")).toBe(false);
+    expect(host.querySelector('[data-bot-profile-subpage-open="model"]')!.hasAttribute("data-settings-search-hit")).toBe(true);
+    expect(document.querySelector("[data-bot-page-modal]")).toBeNull();
     expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(false);
+    key(input(), "Enter");
+    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("model");
+    expect(document.querySelector('[data-bot-page-modal="page-model"]')).not.toBeNull();
+    expect(opened()).toContain("model");
     act(() => setLocale("fr"));
     act(() => root.render(createElement(PersonaEditorModal)));
     type("modèle");
@@ -187,7 +194,8 @@ describe("bot profile settings search", () => {
   it("hides the rows that do not match on the tab shown and marks the first", () => {
     act(() => toggle().click());
     type("effort");
-    const rows = [...host.querySelectorAll('[data-bot-profile-section="model"] [data-settings-row]')];
+    key(input(), "Enter");
+    const rows = [...document.querySelectorAll('[data-bot-page-modal] [data-bot-profile-section="model"] [data-settings-row]')];
     expect(rows.map((row) => row.hasAttribute("data-settings-search-miss"))).toEqual([false, true]);
     expect(rows[0]!.hasAttribute("data-settings-search-hit")).toBe(true);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
@@ -222,10 +230,8 @@ describe("bot profile settings search", () => {
     key(input(), "Escape");
     expect(host.querySelector("[data-persona-search]")).toBeNull();
     expect(actions).not.toContain("closePersonaEditor");
-    // the search left the Model sub-page open: Escape goes Back first
-    key(host.querySelector("[data-bot-profile-page]")!, "Escape");
-    expect(host.querySelector("[data-bot-profile-subpage]")).toBeNull();
-    expect(actions).not.toContain("closePersonaEditor");
+    // typing opened no sub-page (#4470): the next Escape closes the page
+    expect(document.querySelector("[data-bot-profile-subpage]")).toBeNull();
     key(host.querySelector("[data-bot-profile-page]")!, "Escape");
     expect(actions).toContain("closePersonaEditor");
   });

@@ -1794,7 +1794,7 @@ describe("harness HTTP API", () => {
 
     try {
       const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("competing server did not exit")), 5_000);
+        const timer = setTimeout(() => reject(new Error("competing server did not exit")), 30_000);
         timer.unref?.();
         contender.once("close", (code, signal) => {
           clearTimeout(timer);

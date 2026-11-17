@@ -26,9 +26,9 @@ export function reduceUiSurfaces(
           ...(state.botCatalogTarget && !state.botCatalogOpen ? { botCatalogTarget: null } : {}),
         };
       }
-      // #4420: opened from the bot's profile page, it is a page of that
-      // page: the view under it stays the profile's, so the profile is not
-      // left and closing it returns there.
+      // #4420, #4470: opened from the bot's profile page, its window opens
+      // over that page: the view under it stays the profile's, so the
+      // profile is not left and closing it returns there.
       const inProfile = Boolean(action.inProfile && state.personaEditor);
       return {
         ...state,

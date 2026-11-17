@@ -170,6 +170,30 @@ export function sectionDelta(
   return out;
 }
 
+/** #4456: the ids of the opening block's sections a prompt carried because
+ * they changed since the copy the session holds, for the turn's latency
+ * line (sent): the stable and volatile sections that changed or went away
+ * (and the per-turn ones on a mention turn), "volatile" or "stable" for a
+ * half that rode whole with no section prints. Empty when the prompt
+ * carried the whole block (previous null, or a full receipt) or nothing. */
+export function sentSectionIds(
+  previous: PromptSplitReceipt | null,
+  receipt: PromptSplitReceipt,
+  perTurnVolatile = false,
+): string[] {
+  if (!previous || receipt.turnsSinceFull === 0) return [];
+  const ids: string[] = [];
+  if (previous.stable !== receipt.stable) {
+    if (previous.stableSections && receipt.stableSections) ids.push(...Object.keys(sectionDelta(receipt.stableSections, previous.stableSections)));
+    else ids.push("stable");
+  }
+  if (previous.volatile !== receipt.volatile || perTurnVolatile) {
+    if (previous.sections && receipt.sections) ids.push(...Object.keys(sectionDelta(receipt.sections, previous.sections, perTurnVolatile)));
+    else ids.push("volatile");
+  }
+  return [...new Set(ids)];
+}
+
 const receiptPath = (scope: string, key: string) =>
   join(DATA_DIR, "prompt-split", digest(JSON.stringify([scope, key])) + ".json");
 

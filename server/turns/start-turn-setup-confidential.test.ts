@@ -13,6 +13,7 @@ function run(task: { threadId: string; forgetSessionsAtNextTurn?: true }) {
     forgetThreadEngineSessions,
     store: { taskByThread: (_botId: string, threadId: string) => (threadId === task.threadId ? task : undefined) },
     turnTrace: () => undefined,
+    autoRecallEnabled: () => false,
     // the first step after the check: stop the turn here
     connectorPlanForTurn: () => { order.push("connectors"); throw new Stop(); },
   };

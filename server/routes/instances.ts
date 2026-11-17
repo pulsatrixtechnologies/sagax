@@ -93,6 +93,8 @@ export interface InstancesRouteDeps {
     setKey(owner: ProviderAccountOwner, provider: string, key: string | null): Promise<unknown>;
   };
   providerAccountOwner: (principalId: string | null) => ProviderAccountOwner | null | undefined;
+  /** #4435: the person an added account belongs to (organization server), else undefined. */
+  accountOwner?: (instanceId: string) => string | undefined;
   providerAuthSessions: {
     status(instanceId: string, owner: string, flowId: string): Promise<{ phase: string }>;
     start(instance: ProviderInstance, owner: string): Promise<{ phase: string }>;
@@ -126,7 +128,7 @@ export interface InstancesRouteDeps {
 }
 
 /** Selections of engines that currently have a turn in flight. */
-function busyProviderSelections(deps: InstancesRouteDeps): ModelSelection[] {
+function busyProviderSelections(deps: Pick<InstancesRouteDeps, "bots" | "tasks" | "threadBusy" | "botForThread" | "activeGroupTurnForBot">): ModelSelection[] {
   return deps.bots().flatMap((bot) => {
     const busyTasks = deps.tasks(bot.id).filter((task) => deps.threadBusy(bot.id, task.threadId));
     const selections = busyTasks.map((task) => deps.botForThread(bot.id, task.threadId)!.modelSelection);
@@ -136,8 +138,66 @@ function busyProviderSelections(deps: InstancesRouteDeps): ModelSelection[] {
   });
 }
 
+/** What removing an added account needs (the instance routes and a
+ * person's own list, server/routes/me-engines.ts, share it). */
+export type AddedAccountRemovalDeps = Pick<InstancesRouteDeps,
+  "cfg" | "getProviderConfigBusy" | "setProviderConfigBusy" | "providerInstancesChanging" | "persistProviderInstance" |
+  "bots" | "tasks" | "threadBusy" | "botForThread" | "activeGroupTurnForBot">;
+
+export type AddedAccountRemoval =
+  | { ok: true }
+  | { ok: false; status: number; body: { error: string; code?: string; [key: string]: unknown } };
+
+/** Removes the entry of an account added beside a provider's first one
+ * (#4415, #4435). `inUse` is the caller's refusal for bots that still use
+ * it; a turn in flight on it always waits. `beforeRemove` runs once nothing
+ * refuses, while the entry is still there (a sign-out reads it). */
+export async function removeAddedAccount(
+  deps: AddedAccountRemovalDeps,
+  instanceId: string,
+  options: { inUse?: () => AddedAccountRemoval | undefined; beforeRemove?: () => Promise<void> } = {},
+): Promise<AddedAccountRemoval> {
+  if (deps.getProviderConfigBusy()) return { ok: false, status: 409, body: { error: "provider settings are already being updated" } };
+  const instances = persistableInstanceConfigs(deps.cfg);
+  if (!Object.hasOwn(instances, instanceId)) return { ok: false, status: 404, body: { error: "unknown instance" } };
+  // #4415: every account added beside a provider's first one, of any
+  // provider (Claude, the ChatGPT plan, Antigravity), not Claude's only
+  if (!addedAccount(instanceId, instances[instanceId].driver)) {
+    return { ok: false, status: 400, body: { error: "Only an account added beside the provider's first one can be removed." } };
+  }
+  const refused = options.inUse?.();
+  if (refused) return refused;
+  if (busyProviderSelections(deps).some((selection) => selection.instanceId === instanceId)) {
+    return { ok: false, status: 409, body: { error: "Wait for the bots using this account to finish, then remove it.", code: "account_busy" } };
+  }
+  deps.setProviderConfigBusy(true);
+  deps.providerInstancesChanging.add(instanceId);
+  try {
+    await options.beforeRemove?.();
+    delete instances[instanceId];
+    await deps.persistProviderInstance(instanceId, instances);
+    return { ok: true };
+  } finally {
+    deps.providerInstancesChanging.delete(instanceId);
+    deps.setProviderConfigBusy(false);
+  }
+}
+
 function viewerOf(auth: RequestAuth): string | null {
   return auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null;
+}
+
+/** #4435: on an organization server, an account a person adds is theirs
+ * (the person signed in, never the server's loopback operator). */
+function addedBy(deps: Pick<InstancesRouteDeps, "identityKind">, auth: RequestAuth): { ownerPrincipalId: string } | Record<string, never> {
+  const viewer = deps.identityKind() === "perspicax" ? viewerOf(auth) : null;
+  return viewer ? { ownerPrincipalId: viewer } : {};
+}
+
+/** #4435: a member adding an account picks no folder of the server's own:
+ * that stays host.shell, as on PATCH /api/instances/:id. */
+function hostFolderRefused(deps: Pick<InstancesRouteDeps, "adminOrDelegate">, auth: RequestAuth): boolean {
+  return !auth.scopes.includes("admin") && !deps.adminOrDelegate(auth, "host.shell");
 }
 
 function sessionOwner(auth: RequestAuth): string {
@@ -192,6 +252,14 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
     }
     if (companyMutation && method !== "GET") {
       return json(res, 403, { error: "Company accounts are read-only here. Manage this connection in desktop Settings." });
+    }
+
+    // #4435: another person's account is not there for this caller: nobody
+    // else reads, signs in to, renames, updates or removes it.
+    const scoped = /^\/api\/instances\/([\w.-]+)(?:\/|$)/.exec(path)?.[1];
+    if (scoped && deps.identityKind() === "perspicax") {
+      const owner = deps.accountOwner?.(scoped);
+      if (owner !== undefined && owner !== viewerOf(auth)) return json(res, 404, { error: "unknown instance" });
     }
 
     // A masked access key pasted on a provider card. The answer is only
@@ -319,7 +387,7 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
         // Reuse the selected executable, never another account's environment.
         const cli = (instances.chatgpt?.config as { cli?: unknown } | undefined)?.cli
           ?? (instances.codex?.config as { cli?: unknown } | undefined)?.cli;
-        instances[instanceId] = { driver: "codex", displayName: parsed.data.displayName,
+        instances[instanceId] = { driver: "codex", displayName: parsed.data.displayName, ...addedBy(deps, auth),
           config: { authMode: "chatgpt-plan", ...(typeof cli === "string" && cli ? { cli } : {}) } };
         await deps.persistProviderInstance(instanceId, instances);
         return json(res, 201, { instanceId, instances: await deps.instancesForViewer(viewerOf(auth)) });
@@ -332,10 +400,12 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       }
       const parsed = createClaudeAccountSchema.safeParse(await readBody(req, 8192));
       if (!parsed.success) return json(res, 400, { error: "Enter an account name (up to 80 characters) and an optional configuration directory." });
+      if (parsed.data.configDir?.trim() && hostFolderRefused(deps, auth)) return json(res, 403, { ...permissionRefusal("host.shell"), field: "configDir" });
       if (deps.getProviderConfigBusy()) return json(res, 409, { error: "provider settings are already being updated" });
       deps.setProviderConfigBusy(true);
       try {
         const { instanceId, instances } = newClaudeAccount(deps.cfg, parsed.data);
+        Object.assign(instances[instanceId]!, addedBy(deps, auth));
         await deps.persistProviderInstance(instanceId, instances);
         return json(res, 201, { instanceId, instances: await deps.instancesForViewer(viewerOf(auth)) });
       } finally { deps.setProviderConfigBusy(false); }
@@ -523,31 +593,16 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
 
     if (method === "DELETE" && instancePatch) {
       const instanceId = instancePatch[1];
-      if (deps.getProviderConfigBusy()) return json(res, 409, { error: "provider settings are already being updated" });
-      const instances = persistableInstanceConfigs(deps.cfg);
-      if (!Object.hasOwn(instances, instanceId)) return json(res, 404, { error: "unknown instance" });
-      // #4415: every account added beside a provider's first one, of any
-      // provider (Claude, the ChatGPT plan, Antigravity), not Claude's only
-      if (!addedAccount(instanceId, instances[instanceId].driver)) {
-        return json(res, 400, { error: "Only an account added beside the provider's first one can be removed." });
-      }
-      // #4415: the refusal names the bots to move (the page says it in the person's words)
-      const users = accountUserNames(deps.bots(), deps.tasks, instanceId);
-      const defaultModel = deps.cfg.defaultModelSelection?.instanceId === instanceId;
-      if (users.length || defaultModel) return json(res, 409, accountInUseRefusal(users, defaultModel));
-      if (busyProviderSelections(deps).some((selection) => selection.instanceId === instanceId)) {
-        return json(res, 409, { error: "Wait for the bots using this account to finish, then remove it.", code: "account_busy" });
-      }
-      deps.setProviderConfigBusy(true);
-      deps.providerInstancesChanging.add(instanceId);
-      try {
-        delete instances[instanceId];
-        await deps.persistProviderInstance(instanceId, instances);
-        return json(res, 200, { instances: await deps.instancesForViewer(viewerOf(auth)) });
-      } finally {
-        deps.providerInstancesChanging.delete(instanceId);
-        deps.setProviderConfigBusy(false);
-      }
+      const removed = await removeAddedAccount(deps, instanceId, {
+        inUse: () => {
+          // #4415: the refusal names the bots to move (the page says it in the person's words)
+          const users = accountUserNames(deps.bots(), deps.tasks, instanceId);
+          const defaultModel = deps.cfg.defaultModelSelection?.instanceId === instanceId;
+          return users.length || defaultModel ? { ok: false, status: 409, body: accountInUseRefusal(users, defaultModel) } : undefined;
+        },
+      });
+      if (!removed.ok) return json(res, removed.status, removed.body);
+      return json(res, 200, { instances: await deps.instancesForViewer(viewerOf(auth)) });
     }
 
     return PASS;

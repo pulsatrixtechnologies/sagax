@@ -145,6 +145,12 @@ export type TurnState = {
   dispatchTask: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
+  /** #4456: the semantic recall query's embedding, started at setup and
+   * awaited just before dispatch */
+  semanticRecallPrepared: Promise<void> | undefined;
+  /** #4456: the Proactive alerts section (a read of the person's watches),
+   * started at setup and awaited where the tools are listed */
+  proactiveAskPrepared: Promise<string> | undefined;
   browser: any;
   browserCapture: any;
   contextOrder: any;
@@ -312,6 +318,8 @@ export function createTurnState(init: {
     checkpointCwd: undefined,
     dispatchTask: undefined,
     warmOk: false,
+    semanticRecallPrepared: undefined,
+    proactiveAskPrepared: undefined,
     browser: undefined,
     browserCapture: undefined,
     contextOrder: undefined,

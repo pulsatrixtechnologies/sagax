@@ -7,7 +7,7 @@ import type { MemoryNoteDetail, MemoryTierRow } from "@/lib/memory-manager";
 import { canDecideRow, type JournalFacts, type PageLink, type PageRow, type PageTier } from "@/lib/memory-page";
 import { MemoryImportDialog, type ImportDestination } from "./MemoryImportDialog";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
-import { TEAM_KINDS } from "./memory-manager-helpers";
+import { TEAM_KINDS, teamPublishable } from "./memory-manager-helpers";
 import { FIELD, PRIMARY_BUTTON } from "./memory-ui";
 import type { Target } from "./useMemoryManagerActions";
 
@@ -107,7 +107,7 @@ export function MemoryManagerReading(props: MemoryManagerReadingProps) {
                 onPin={() => togglePin(noteEntry.key)}
                 onSave={saveNote}
                 onDelete={note.mayEdit ? () => void deleteKeys([noteEntry.key]) : undefined}
-                onMove={noteEntry.source.kind === "perspicax" && note.mayEdit ? () => startMove([noteEntry.key]) : undefined}
+                onMove={(noteEntry.source.kind === "perspicax" && note.mayEdit) || teamPublishable(noteEntry, pxTiers) ? () => startMove([noteEntry.key]) : undefined}
                 onApprove={canDecideRow(noteEntry) ? () => void decideKeys([noteEntry.key], "approve") : undefined}
                 onDeny={canDecideRow(noteEntry) ? () => void decideKeys([noteEntry.key], "deny") : undefined}
                 onNeighbourhood={() => { setMapFocus(noteEntry.key); setView("map"); }}
@@ -207,7 +207,7 @@ export function MemoryManagerReading(props: MemoryManagerReadingProps) {
                 onSave={async () => false}
                 onEditPage={() => void openNote(preview.entry, true)}
                 onDelete={preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); void deleteKeys([key]); } : undefined}
-                onMove={preview.entry.source.kind === "perspicax" && preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); startMove([key]); } : undefined}
+                onMove={(preview.entry.source.kind === "perspicax" && preview.detail.mayEdit) || teamPublishable(preview.entry, pxTiers) ? () => { const key = preview.entry.key; setPreview(null); startMove([key]); } : undefined}
                 onApprove={canDecideRow(preview.entry) ? () => void decideKeys([preview.entry.key], "approve") : undefined}
                 onDeny={canDecideRow(preview.entry) ? () => void decideKeys([preview.entry.key], "deny") : undefined}
                 onNeighbourhood={() => { setMapFocus(preview.entry.key); setPreview(null); setView("map"); }}

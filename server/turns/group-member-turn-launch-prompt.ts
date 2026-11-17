@@ -23,7 +23,6 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     REACTION_PROMPT,
     ROUTINE_PROMPT,
     SESSION_SEARCH_SYSTEM_PROMPT,
-    TEAM_MEMORY_PROMPT,
     THREADS_PROMPT,
     WITHHELD_HOST_TOOLS_PROMPT,
     approvalLevelPrompt,
@@ -92,7 +91,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     syncPluginsForTurn,
     teamAvailabilityPart,
     teamComputerPrompt,
-    teamMemory,
+    teamMemoryPromptFor,
+    teamMemoryToolPrompt,
     turnHolder,
     userProfileSystemPrompt,
     usesCompactPrompt,
@@ -204,8 +204,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     ? ensureTaskWorkspace(bot.id, threadId)
     : groupTurnCwd(workspace, () => store.pinGroupCwd(readyGroup.id, threadId));
   if (IDENTITY.kind === "perspicax" && roomPrincipal) {
-    // #4394: at most a second; the copy goes on beside the member's turn
-    await pluginCopyForTurnStart(syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id));
+    // #4456: the copy goes on beside the member's turn, never waited for here
+    pluginCopyForTurnStart(syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id));
   }
   {
     const drift = checkSoulDrift(bot.id, bot.soul ?? "", bot.soulHash ?? "");
@@ -284,7 +284,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     teamAvailabilityPart(outsideRoom),
     { id: "recent", label: "Recent work", text: recentWorkPrompt(recentLines) },
     { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
-    { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
+    { id: "team-memory", label: "Team memory", text: teamMemoryPromptFor(bot) + (integrations.agents ? teamMemoryToolPrompt() : "") },
     // the room path has always put a newline before memory and trimmed
     // the block's leading space; keep that so existing prompts are
     // byte-identical. The write guidance follows the tools actually

@@ -253,8 +253,11 @@ describe("the admin gate on a member's bot", () => {
     expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", "speaker-key")).toBe(true);
     expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", undefined)).toBe(true);
     expect(viaGate("mcp__claude_ai___x", "subscription")).toBe(true);
-    // a shell-named connector tool is still a command
-    expect(viaGate("mcp__claude_ai_Thing__bash", "subscription")).toBe(true);
+    // #4449: a shell-named tool of the person's own connector runs at the
+    // provider as them, never a shell on the shared host: their own card
+    expect(viaGate("mcp__claude_ai_Thing__bash", "subscription")).toBe(false);
+    // not their own subscription: it stays an admin's
+    expect(viaGate("mcp__claude_ai_Thing__bash", "org-key")).toBe(true);
   });
   it("lets the owner answer their own Grok account connector, like a claude.ai one (#1930)", () => {
     // the gateway's tool name splits as server `cursor`, which no owner list names
@@ -287,8 +290,11 @@ describe("the admin gate on a member's bot", () => {
     expect(ownerGate("Bash", { command: "ls", cwd: root })).toBe(true);
     expect(ownerGate("WebFetch")).toBe(true);
     expect(ownerGate("other")).toBe(true);
-    // a remote server tool named like a shell is still a command
-    expect(ownerGate("mcp__my_remote__run_shell")).toBe(true);
+    // #4449: a tool of the person's own remote server named like a shell
+    // runs remotely as them, never on the shared host: their own card. The
+    // same name on a server that is not theirs stays an admin's.
+    expect(ownerGate("mcp__my_remote__run_shell")).toBe(false);
+    expect(ownerGate("mcp__someone_else__run_shell")).toBe(true);
     expect(ownerGate("mcp__perspicax_quasar__query", { command: "ls", cwd: root })).toBe(true);
   });
   it("sends every MCP tool to an admin when nothing says which servers are the owner's", () => {

@@ -31,6 +31,8 @@ function host(bot: Record<string, unknown>, kind: "solo" | "perspicax" = "solo")
     store: { bot: () => bot },
     managedPolicy: { filterMcp: (servers: Record<string, unknown>) => servers },
     userSandbox: kind === "perspicax" ? {} : undefined,
+    // the real host records the servers mounted for the turn's person (#4449)
+    turnPluginMcpServers: new Map(),
     personalStdioIntegration: (_bot: string, _thread: string, _gen: string, person: string, name: string, ref: unknown) => ({ command: "sandbox-relay", args: [person, name], env: {}, ref }),
   };
   h.scopedPluginMcp = createScopedPluginMcp(() => h);

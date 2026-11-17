@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { questionCardOptionLabel, questionCardSubtitle, questionCardTitle } from "@/lib/question-card-title";
 import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-question";
+import { isFirstRunQuizCard } from "../../shared/options-card";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
@@ -19,8 +20,16 @@ const OTHER_ROW = "\u0000other";
 
 /** First-run quiz, not a live provider ask (those carry requestId). */
 export function isOnboardingCard(message: Message): boolean {
-  // a proactive proposal (2026-10-30) stays until answered, like a live ask
-  return message.kind === "options" && !!message.card && !message.card.requestId && !message.card.proactiveProposal && !message.card.roleTransition;
+  // a proactive proposal (2026-10-30) stays until answered, like a live ask;
+  // #4475: so does a bot's question drawn in the chat (ask_choice)
+  return message.kind === "options" && isFirstRunQuizCard(message.card);
+}
+
+/** #4475: a bot's question drawn in the chat (ask_choice), answered by a
+ * click that becomes the person's next message: it waits until answered,
+ * and once answered keeps its card with the pick marked, like a live ask. */
+export function isChatAskCard(card: NonNullable<Message["card"]>): boolean {
+  return !card.requestId && card.requestType === "question" && !card.proactiveProposal;
 }
 
 /** Hide the quiz once they have talked past it — picked an option, typed in
@@ -66,6 +75,9 @@ export function OptionCard({
   // Full thread, not the mounted window: a search-focus slice can omit the
   // later user message that means they already talked past this quiz.
   if (!card || shouldHideOnboardingCard(message, transcript) || (card.requestId && card.dismissed && card.answered)) return null;
+  // #4475: a chat question put away without an answer (its key retired)
+  const chatAsk = isChatAskCard(card);
+  if (chatAsk && card.dismissed && !card.answered) return null;
   // 2026-11-05 (JC): no "Agit comme" card in the chat (rows saved before stay hidden)
   if (card.roleTransition) return null;
   // #3457: a choice card (propose_proactive) is the compact card with its
@@ -113,7 +125,7 @@ export function OptionCard({
       type: "answerCard", botId, threadId, messageId: message.id, answer: text.trim(), groupId,
       ...(picked ? { terminalDestination: picked } : {}),
     });
-    if (card.requestId || card.proactiveProposal) returnFocusToComposer();
+    if (card.requestId || card.proactiveProposal || chatAsk) returnFocusToComposer();
   };
 
   // #3471: a card that still waits (a live ask, a proposal) is skipped,
@@ -131,13 +143,14 @@ export function OptionCard({
       returnFocusToComposer();
     }
     : undefined;
-  const dismiss = skip ?? (canDismissOptionCard(card) && !card.proactiveProposal
+  // #4475: an answered chat question keeps its card, like an answered live ask
+  const dismiss = skip ?? (canDismissOptionCard(card) && !card.proactiveProposal && !(chatAsk && card.answered)
     ? () => dispatch({ type: "dismissCard", botId, threadId, messageId: message.id, groupId })
     : undefined);
 
   // A live ask that has been answered keeps its card: what was picked is
   // marked and the rest dimmed. The first-run quiz never gets here, it hides.
-  const settled = Boolean((card.requestId || card.proactiveProposal) && (card.answered || card.expired));
+  const settled = Boolean((card.requestId || card.proactiveProposal || chatAsk) && (card.answered || card.expired));
   // `answered` is the verdict for a permission-shaped ask and the picked
   // label for a flat one; a deny or a run that ended is no answer at all.
   const closed = settled && !card.answeredText && (card.answered === "deny" || card.answered === "unavailable" || card.skipped === true || card.expired === true);

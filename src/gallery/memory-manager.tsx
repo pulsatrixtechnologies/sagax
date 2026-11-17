@@ -12,6 +12,9 @@
  * review: Review with Approve and Deny on each row (a proposal of another team
  * has none); review-after: the same list once one row is approved and one denied.
  * Two more Perspicax teams (Field team, Back office) show one tier per team.
+ * own-preview / own-move (#4460): a server several people use: the viewer's
+ * own memory, an entry moved out of a former shared memory in the preview
+ * (where it came from), then its Move to a team of the console.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -226,6 +229,18 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
   const query = new URL(url, location.href).searchParams;
+  const own = view.startsWith("own-");
+  if (own && url.includes("/api/memory-manager/sources")) {
+    return json({
+      sources: [
+        { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas", linked: true },
+        { id: "bot:nova", kind: "bot", name: "Nova", detail: "Bot memory", mayWrite: true, botId: "nova", linked: true },
+        { id: "team:general", kind: "team", name: "Your memory", detail: "Team notes", mayWrite: true, section: "", owner: "self" },
+        { id: "perspicax", kind: "perspicax", name: "Perspicax", detail: "Personal, team and organization notes", mayWrite: true, mayManage: true, scope: "me" },
+      ],
+      perspicax: { available: true },
+    });
+  }
   if (url.includes("/api/memory-manager/sources")) {
     return json({
       sources: [
@@ -260,7 +275,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       section: "",
       label: "General",
       entries: [
-        { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot, the old name of the app.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 50 * D }, updatedAt: now - 10 * D },
+        { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot, the old name of the app.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 50 * D }, updatedAt: now - 10 * D, ...(own ? { movedFrom: "General" } : {}) },
         { id: "tm2", kind: "place", name: "Lab", detail: "The shared lab on the second floor.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 70 * D }, updatedAt: now - 30 * D },
         ...(decided.has("tm3") ? [] : [{ id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "proposed", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D }]),
         { id: "tm4", kind: "person", name: "Front desk", detail: "Answers ext 100 on weekdays.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 15 * D }, updatedAt: now - 15 * D },
@@ -408,6 +423,17 @@ function Shell() {
         click('[data-memory-row-key="perspicax|org/o1"] [data-memory-row-open]');
         await waitFor("[data-memory-preview]");
         await new Promise((done) => setTimeout(done, 300));
+      }
+      if (view === "own-preview" || view === "own-move") {
+        click('[data-memory-row-key="team:general|tm1"] [data-memory-row-open]');
+        await waitFor("[data-memory-preview]");
+        await new Promise((done) => setTimeout(done, 300));
+        if (view === "own-move") {
+          click("[data-memory-preview] [data-memory-note-more]");
+          await new Promise((done) => setTimeout(done, 100));
+          click("[data-memory-preview] [data-memory-note-move]");
+          await waitFor("[data-memory-move]");
+        }
       }
       if (view === "note") {
         document.querySelector('[data-memory-row-key="perspicax|org/o1"] [data-memory-row-open]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));

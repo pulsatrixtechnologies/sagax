@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { OptionCard, canDismissOptionCard, shouldHideOnboardingCard } from "./OptionCard";
 import { t } from "@/lib/i18n";
 import { StoreProvider, type Message } from "@/state/store";
+import { openOnboardingCard } from "@/state/store/model";
 
 const msg = (partial: Partial<Message> & Pick<Message, "id" | "kind">): Message => ({
   role: "bot",
@@ -66,6 +67,33 @@ describe("shouldHideOnboardingCard", () => {
       },
     });
     expect(shouldHideOnboardingCard(question, [user, question])).toBe(false);
+  });
+
+  // #4475: a bot drew two questions in the chat in one turn (ask_choice);
+  // the person answered the first, which became their next message: the
+  // second stays drawn and answerable, the first keeps its pick marked
+  it("never hides a bot's question drawn in the chat, nor its sibling once the first is answered", () => {
+    const first = msg({ id: "c1", kind: "options", card: { title: "Color", subtitle: "Which color?", options: ["Red", "Blue"], requestType: "question", answered: "Red" } });
+    const second = msg({ id: "c2", kind: "options", card: { title: "Size", subtitle: "Which size?", options: ["Small", "Large"], requestType: "question" } });
+    const answer = msg({ id: "u2", role: "user", kind: "text", text: "Red" });
+    const transcript = [greeting, first, second, answer];
+    expect(shouldHideOnboardingCard(second, transcript)).toBe(false);
+    expect(shouldHideOnboardingCard(first, transcript)).toBe(false);
+    const drawn = (message: Message) => renderToStaticMarkup(createElement(StoreProvider, null, createElement(OptionCard, { botId: "atlas", threadId: "t", message })));
+    expect(drawn(second)).toContain('data-ask-card="pending"');
+    expect(drawn(second)).toContain("Large");
+    expect(drawn(first)).toContain('data-ask-card="settled"');
+    expect(drawn(first)).toMatch(/aria-checked="true"[^]*Red/);
+  });
+});
+
+describe("openOnboardingCard (#4475)", () => {
+  it("a person's message puts away the first-run quiz only, never a bot's question", () => {
+    const quiz = msg({ id: "quiz", kind: "options", card: { title: "Pick", subtitle: "", options: ["A"] } });
+    const asked = msg({ id: "c2", kind: "options", card: { title: "Size", subtitle: "Which size?", options: ["Small", "Large"], requestType: "question" } });
+    const bot = { messages: [asked, quiz] } as unknown as Parameters<typeof openOnboardingCard>[0];
+    expect(openOnboardingCard(bot)?.id).toBe("quiz");
+    expect(openOnboardingCard({ messages: [asked] } as unknown as Parameters<typeof openOnboardingCard>[0])).toBeUndefined();
   });
 });
 

@@ -47,13 +47,14 @@ export function createStoreDispatch(ctx: StoreDispatchCtx): (action: Action) => 
       return { host, card: host?.messages.find((m) => m.id === action.messageId)?.card, inRoom: !!action.groupId };
     };
     // fire-and-forget card persistence; the route is optional server-side
-    const persistCard = (botId: string, messageId: string, patch: Partial<OptionCardData>) => {
+    // #4475: `threadId`, the conversation the card is in (a topic's own,
+    // not only the bot's main one); resolves once written, or failed
+    const persistCard = (botId: string, messageId: string, patch: Partial<OptionCardData>, threadId?: string): Promise<void> =>
       fetch(`/api/bots/${botId}/cards/${messageId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(patch),
-      }).catch(() => {});
-    };
+        body: JSON.stringify(threadId ? { ...patch, threadId } : patch),
+      }).then(() => undefined, () => undefined);
 
     const waitForExecutionSettings = async (expectedBots: Bot[], threadId?: string) => {
       // Capture this send's task save before waiting on slower profile saves.

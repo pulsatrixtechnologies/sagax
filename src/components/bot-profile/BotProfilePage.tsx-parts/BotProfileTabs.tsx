@@ -13,17 +13,20 @@ import { sectionLabel, TAB_LABEL } from "./cards";
 
 /** The search: the pages the query leads to, best first. The first one's
  * tab opens and hides its rows that do not match; the tabs of the others
- * stay plain, the rest dim. Command-F or a slash opens it from anywhere on
- * the page. */
+ * stay plain, the rest dim. A hit held on a sub-page marks that sub-page's
+ * row while the person types, and Enter opens its modal, its rows marked
+ * (#4470: a modal opened on each key would take the field away).
+ * Command-F or a slash opens it from anywhere on the page. */
 export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategory, rootFor }: {
   rootRef: RefObject<HTMLElement | null>;
   pages: readonly PersonaCategory[];
   tabOf: (id: PersonaCategory) => BotProfileTab;
   /** What is on screen (the tab and its open sub-page): the hit is marked again when it changes. */
   view: string;
-  /** Opens the tab and the sub-page that hold a section (V6, #2612); with
-   * the query, the sub-page that holds the matched option (#2623). */
-  onOpenCategory: (id: PersonaCategory, query?: string) => void;
+  /** Shows the tab that holds a section (V6, #2612), with the query the
+   * row of the sub-page that holds the matched option (#2623); `open` opens
+   * that sub-page's modal (Enter in the field, #4470). */
+  onOpenCategory: (id: PersonaCategory, query: string, open: boolean) => void;
   /** Where the hit is when it is not its section's block: a selector for
    * the query (General's Settings card for a switch held in place, #3398). */
   rootFor?: (query: string) => string | null;
@@ -42,11 +45,12 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
     if (!next) return;
     const first = personaPagesMatching(pages, next, sectionLabel)[0];
     if (!first) return;
-    onOpenCategory(first, next);
+    onOpenCategory(first, next, false);
   };
   useLayoutEffect(() => {
     const selector = searchHit ? (rootFor?.(q) ?? `[data-bot-profile-section="${searchHit}"]`) : null;
-    const root = selector ? rootRef.current?.querySelector<HTMLElement>(selector) : null;
+    // on the page, or on the sub-page's modal Enter opened (portalled to the body, #4470)
+    const root = selector ? rootRef.current?.querySelector<HTMLElement>(selector) ?? document.querySelector<HTMLElement>(`[data-bot-page-modal] ${selector}`) : null;
     if (!root || !q) return;
     let scroll = true;
     const apply = () => {
@@ -97,8 +101,14 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Escape clears the query, then puts the field away; on the page it closes.
+  // Enter opens the first hit's sub-page (#4470). Escape clears the query,
+  // then puts the field away; on the page it closes.
   const onSearchKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && !event.nativeEvent.isComposing && searchHit) {
+      event.preventDefault();
+      onOpenCategory(searchHit, q, true);
+      return;
+    }
     if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();

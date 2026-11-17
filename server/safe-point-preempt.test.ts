@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SafePointPreempts } from "./safe-point-preempt.ts";
+import { SafePointPreempts, stopClosesCard } from "./safe-point-preempt.ts";
 
 describe("safe-point preemption", () => {
   afterEach(() => vi.useRealTimers());
@@ -46,5 +46,18 @@ describe("safe-point preemption", () => {
     vi.advanceTimersByTime(5_000);
     preempts.toolEnded("t", 0);
     expect(fire).not.toHaveBeenCalled();
+  });
+});
+
+describe("stopClosesCard (#4475)", () => {
+  it("is an open permission, never a question, a chat card, a proposal or a settled card", () => {
+
+    expect(stopClosesCard({ requestId: "r", requestType: "permission", tool: "shell" })).toBe(true);
+    expect(stopClosesCard({ requestId: "r", requestType: "permission", tool: "shell", answered: "allow" })).toBe(false);
+    expect(stopClosesCard({ requestId: "r", requestType: "permission", tool: "shell", dismissed: true })).toBe(false);
+    expect(stopClosesCard({ requestId: "r", requestType: "question" })).toBe(false);
+    expect(stopClosesCard({ requestType: "question" })).toBe(false);
+    expect(stopClosesCard({ requestId: "r", tool: "x", routineRequest: {} })).toBe(false);
+    expect(stopClosesCard(undefined)).toBe(false);
   });
 });

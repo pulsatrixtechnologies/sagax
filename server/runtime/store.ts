@@ -106,6 +106,8 @@ defaultAnswer: z.string().optional(),
     name: z.string().optional(),
     step: z.string().optional(),
     plan: z.array(z.object({ name: z.string(), botId: z.string().optional() })).optional(),
+    // #4421: the work ended before its plan was handed out (close or clear)
+    ended: z.object({ at: z.number(), outcome: z.enum(["done", "dropped", "cleared"]), why: z.string().optional() }).optional(),
   }).optional(),
   version: z.literal(1),
 });

@@ -168,8 +168,9 @@ function configStatus() {
     ...(host.IDENTITY.kind === "perspicax" ? {} : { signIn: { admins: host.cfg.signIn?.admins ?? [], members: host.cfg.signIn?.members ?? [] } }),
     // whether that list decides anything here, or the organisation's Admin does
     membership: workspaceMembership(),
-    // organization server: the model providers its admin allows (null: all)
-    ...(host.IDENTITY.kind === "perspicax" ? { allowedEngines: host.orgAllowedEngines(), ownAccountsOutsideList: host.orgOwnAccountsOutsideList() } : {}),
+    // organization server: the model providers its admin allows (null: all);
+    // a person's own added accounts are added for them alone (configForPerson, #4435)
+    ...(host.IDENTITY.kind === "perspicax" ? { allowedEngines: host.orgAllowedEngines()?.filter((id) => !host.personalProviderInstances.ownerOf(id)) ?? null, ownAccountsOutsideList: host.orgOwnAccountsOutsideList() } : {}),
     // 2026-10-30 (lot 2): the models the organization turned off; on a solo
     // server, the installation's own switches (a person's own come with configForPerson)
     ...(host.IDENTITY.kind === "perspicax" ? { disabledModels: host.orgDisabledModels() } : { myDisabledModels: host.personDisabledModels(null) }),

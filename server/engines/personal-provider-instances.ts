@@ -2,17 +2,33 @@ import { createHash } from "node:crypto";
 import type { ProviderAccountsView } from "../../shared/provider-accounts.ts";
 import type { InstanceConfigMap } from "../contracts.ts";
 import type { ModelProvider } from "../perspicax/perspicax-link.ts";
+import { accountOwnedBy } from "./account-owner.ts";
 
 export interface PersonalProviderInstance { owner: string; serverId: string; provider: ModelProvider }
+interface PersonalProviderInstancesDeps {
+  load(configs: InstanceConfigMap): Promise<void>;
+  remove(id: string): Promise<void>;
+  /** #4435: the person an added account of the server's configuration belongs to. */
+  accountOwner?(id: string): string | undefined;
+}
 /** Names and endpoints belong to one person even if two people choose the
  * same server id. Only that owner's registry entries are reconciled. */
 export class PersonalProviderInstances {
   private entries = new Map<string, PersonalProviderInstance & { fingerprint: string }>();
   private queues = new Map<string, Promise<void>>();
-  private readonly deps: { load(configs: InstanceConfigMap): Promise<void>; remove(id: string): Promise<void> };
-  constructor(deps: { load(configs: InstanceConfigMap): Promise<void>; remove(id: string): Promise<void> }) { this.deps = deps; }
+  private readonly deps: PersonalProviderInstancesDeps;
+  constructor(deps: PersonalProviderInstancesDeps) { this.deps = deps; }
   get(id: string): PersonalProviderInstance | undefined { return this.entries.get(id); }
-  visible(id: string, owner: string): boolean { const personal = this.entries.get(id); return !personal || personal.owner === owner; }
+  /** The person a personal server or an added account (#4435) belongs to;
+   * undefined for the organization's. */
+  ownerOf(id: string): string | undefined { return this.entries.get(id)?.owner ?? this.deps.accountOwner?.(id); }
+  /** Whether `owner` sees and may use this instance: everyone the
+   * organization's, a person their own personal server and added accounts. */
+  visible(id: string, owner: string): boolean {
+    const personal = this.entries.get(id);
+    if (personal) return personal.owner === owner;
+    return accountOwnedBy(this.deps.accountOwner?.(id), owner);
+  }
   sync(owner: string, view: ProviderAccountsView, key: (provider: string) => Promise<string | undefined>): Promise<void> {
     const before = this.queues.get(owner) ?? Promise.resolve();
     const next = before.catch(() => {}).then(async () => {

@@ -126,11 +126,11 @@ describe("Persona editor state", () => {
     expect(reducer(opened, { type: "personaEditorSection", section: "soul" }).personaEditor?.section).toBe("soul");
   });
 
-  // #4420 (the owner 2026-11-15): an option of the bot page that opens
-  // another surface opens it as a page inside the bot page, never as the
-  // centred window that closed the page. Connect apps (Add > Apps or MCP
-  // servers, a Connect of the Access card, Mac Messages) is that surface.
-  it("regression #4420: Connect apps opened from the bot page is a page of it, with the way back", () => {
+  // #4420, #4470 (the owner 2026-11-16): an option of the bot page that
+  // opens another surface opens it over the bot page, never by closing the
+  // page. Connect apps (Add > Apps or MCP servers, a Connect of the Access
+  // card, Mac Messages) is its own window, over the page.
+  it("regression #4420, #4470: Connect apps opened from the bot page opens over it, and closing it returns there", () => {
     const base: AppState = { ...initialState, bots: [bot], selectedId: "pepper" };
     const opened = reducer(base, { type: "openPersonaEditor", botId: "pepper", section: "access" });
     const apps = reducer(opened, { type: "togglePlugins", open: true, surface: "apps", botId: "pepper", inProfile: true });
@@ -156,5 +156,20 @@ describe("Persona editor state", () => {
     expect(sidebar).toMatchObject({ pluginsOpen: true, activeView: "apps" });
     // with no bot page open, the flag changes nothing: the window, as before
     expect(reducer(base, { type: "togglePlugins", open: true, inProfile: true })).toMatchObject({ pluginsOpen: true, activeView: "apps" });
+  });
+
+  // #4470: Analytics > All bots opens the Settings window at Usage over the
+  // bot page (a window stays a window); it used to close the page.
+  it("regression #4470: Settings opened from the bot page opens over it, and closing it returns there", () => {
+    const base: AppState = { ...initialState, bots: [bot], selectedId: "pepper" };
+    const opened = reducer(base, { type: "openPersonaEditor", botId: "pepper", section: "usage" });
+    const usage = reducer(opened, { type: "toggleAppSettings", open: true, section: "usage", inProfile: true });
+    expect(usage).toMatchObject({ appSettingsOpen: true, appSettingsSection: "usage" });
+    expect(usage.personaEditor).toEqual(opened.personaEditor);
+    const back = reducer(usage, { type: "toggleAppSettings", open: false });
+    expect(back.appSettingsOpen).toBe(false);
+    expect(back.personaEditor).toEqual(opened.personaEditor);
+    // Settings opened from anywhere else still leaves the bot page
+    expect(reducer(opened, { type: "toggleAppSettings", open: true, section: "usage" }).personaEditor).toBeNull();
   });
 });

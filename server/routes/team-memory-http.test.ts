@@ -106,4 +106,33 @@ describe("createTeamMemoryHttpRoutes", () => {
     await route(call.context);
     expect(call.sent).toEqual([{ status: 404, body: { error: "no such entry" } }]);
   });
+
+  // #4460
+  it("moves an entry of the person's own memory to a console tier, and keeps it when the console refuses", async () => {
+    const publish = vi.fn(async () => ({ ok: true as const, status: 201, body: { state: "review", scope: "team:01J", id: "r1" } }));
+    const remove = vi.fn(() => true);
+    const route = createTeamMemoryHttpRoutes(deps({ publish, remove, storageKey: () => "person:p1" }));
+    const moved = ctx("/api/team-memory/e1/publish", "POST", owner, { scope: "team:01J" });
+    await route(moved.context);
+    expect(publish).toHaveBeenCalledWith(owner, { scope: "team:01J", topic: "terms", title: "VPN", body: "corp", tags: [] });
+    expect(remove).toHaveBeenCalledWith("person:p1", "e1");
+    expect(moved.sent[0]).toMatchObject({ status: 201, body: { published: { state: "review", scope: "team:01J", id: "r1" } } });
+
+    const refusedPublish = vi.fn(async () => ({ ok: false as const, error: "unauthorized" as const }));
+    const kept = vi.fn(() => true);
+    const refusing = createTeamMemoryHttpRoutes(deps({ publish: refusedPublish, remove: kept }));
+    const refused = ctx("/api/team-memory/e1/publish", "POST", owner, { scope: "team:01J" });
+    await refusing(refused.context);
+    expect(refused.sent[0]).toMatchObject({ status: 409, body: { code: "memory_sign_in_again" } });
+    expect(kept).not.toHaveBeenCalled();
+  });
+
+  it("answers no console on a server without one, and keeps the routes to who may use them", async () => {
+    const solo = ctx("/api/team-memory/e1/publish", "POST", owner, { scope: "team:01J" });
+    await createTeamMemoryHttpRoutes(deps())(solo.context);
+    expect(solo.sent[0]?.status).toBe(404);
+    const denied = ctx("/api/team-memory", "GET", owner);
+    await createTeamMemoryHttpRoutes(deps({ mayUse: () => false }))(denied.context);
+    expect(denied.sent[0]?.status).toBe(403);
+  });
 });

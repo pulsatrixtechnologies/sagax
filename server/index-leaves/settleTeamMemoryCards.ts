@@ -14,7 +14,7 @@ function settleTeamMemoryCards(auth: RequestAuth, section: string, entryId: stri
     if (cardSection === key) return true;
     // #2045: cards still carry the display name; the page settles by owner/id.
     const proposer = message.from?.botId ? host.store.bot(message.from.botId) : host.store.botByThread(threadId);
-    return host.teamStorageKeyFor(cardSection, proposer ? host.effectiveBotOwner(proposer) : undefined) === key;
+    return host.teamMemoryKeyFor(cardSection, proposer ? host.effectiveBotOwner(proposer) : undefined) === key;
   };
   const threads = new Set<string>();
   if (sourceThreadId) threads.add(sourceThreadId);

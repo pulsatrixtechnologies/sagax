@@ -49,7 +49,10 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
     // A sidebar section with no team note is not a tier of its own (General always is).
     for (const source of teamSources) {
       if (source.section && !(overviews[source.id]?.notes.length)) continue;
-      out.push({ key: source.id, name: source.name, kind: "team", color: tierColor("team", team++) });
+      // #4460: a server several people use: the viewer's own memory, or the
+      // entries a shared memory held with no known author (an admin's)
+      const name = source.owner === "self" ? t("memoryManager.teamOwn") : source.owner === "unclaimed" ? t("memoryManager.teamUnclaimed") : source.name;
+      out.push({ key: source.id, name, kind: "team", color: tierColor("team", team++) });
     }
     for (const tier of pxTiers) {
       if (tier.kind === "me") continue;

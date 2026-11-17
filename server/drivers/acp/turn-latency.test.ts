@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contractFieldsChanged, newTurnLatency, engineGoneWhy, noteEngineClosed, noteEngineExited, noteEngineOpened, type TurnToolWait, noteTurnActivity, takeEngineClosed, turnFirstWords, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
+import { contractFieldsChanged, newTurnLatency, engineGoneWhy, noteEngineClosed, noteEngineExited, noteEngineOpened, type TurnToolWait, noteTurnActivity, noteTurnShown, takeEngineClosed, turnFirstWords, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -18,7 +18,7 @@ describe("turn latency line", () => {
     trace.cachedTokens = 16_000;
     trace.stallMs = 10_000;
     expect(turnLatencyLine("grok", "800b207c-1a77-43fc-897a-2964d1c2d32f", trace, 3_132, "ok")).toBe(
-      "[turn-latency] grok thread=800b207c path=pooled queue=99ms setup=21ms ttfa=979ms ttft=1150ms tools=1 total=2132ms prompt=1655ch full=no in=18225 cached=16000 firstWords=think:171 stallGuard=10000ms ok",
+      "[turn-latency] grok thread=800b207c path=pooled queue=99ms setup=21ms ttfa=979ms ttft=1150ms tools=1 total=2132ms prompt=1655ch full=no in=18225 cached=16000 firstWords=think:171 ttfc=1269ms stallGuard=10000ms ok",
     );
   });
 
@@ -216,6 +216,43 @@ describe("turn latency line", () => {
 // #4394: ordinary turns took 22 to 27 s to their first words on a hosted
 // server, path=spawn every time, and the line could not say whether those
 // seconds were the model's or the engine's, nor why no warm engine took them.
+// #4456: first text after 16 to 46 s; the line must say where it went: the
+// first model token (ttfa), the first tool call (ttfc), the first text the
+// person saw from their message (shown) and what of the opening block rode
+// a follow-up (sent), beside the cached input tokens
+describe("the split of the time to the first text shown (#4456)", () => {
+  it("names the first tool call, the first text shown from the person's message and the sections sent", () => {
+    const trace = newTurnLatency(2_000, 1_000);
+    trace.path = "load";
+    trace.promptAt = 2_500;
+    trace.full = false;
+    trace.sent = ["recent", "memory"];
+    trace.inputTokens = 60_000;
+    trace.cachedTokens = 58_000;
+    noteTurnActivity(trace, "agent_thought_chunk", 3_000);
+    noteTurnActivity(trace, "tool_call", 3_400, { toolCallId: "a", status: "pending" });
+    noteTurnActivity(trace, "tool_call_update", 9_000, { toolCallId: "a", status: "completed" });
+    noteTurnActivity(trace, "agent_message_chunk", 9_200);
+    noteTurnShown(trace, 9_210);
+    noteTurnShown(trace, 9_900); // only the first counts
+    const line = turnLatencyLine("grok", "t", trace, 10_000, "ok");
+    expect(line).toContain(" ttfa=500ms ttft=6700ms tools=1 ");
+    expect(line).toContain(" in=60000 cached=58000 ");
+    expect(line).toContain(" ttfc=900ms shown=8210ms sent=recent,memory ok");
+  });
+
+  it("says nothing of a tool, a shown text or sections a turn did not have", () => {
+    const trace = newTurnLatency(0);
+    noteTurnShown(trace, 50); // before the prompt: ignored
+    trace.promptAt = 100;
+    trace.full = true;
+    trace.sent = ["soul"]; // a full block is never named section by section
+    noteTurnActivity(trace, "agent_message_chunk", 900);
+    const line = turnLatencyLine("grok", "t", trace, 1_000, "ok");
+    expect(line).not.toMatch(/ ttfc=| shown=| sent=/);
+  });
+});
+
 describe("what the line says of a spawn and of the time to the first words (#4394)", () => {
   it("splits the time to the first answer text into the first update's wait, reasoning, a tool and quiet gaps", () => {
     const trace = newTurnLatency(0);
@@ -233,7 +270,7 @@ describe("what the line says of a spawn and of the time to the first words (#439
     expect(trace.firstTextAt).toBe(24_500);
     expect(turnFirstWords(trace)).toBe("think:1300,tool:500,quiet:20000");
     expect(turnLatencyLine("grok", "t", trace, 31_000, "ok")).toContain(" ttfa=1700ms ttft=23500ms tools=1 ");
-    expect(turnLatencyLine("grok", "t", trace, 31_000, "ok")).toContain(" firstWords=think:1300,tool:500,quiet:20000 ok");
+    expect(turnLatencyLine("grok", "t", trace, 31_000, "ok")).toContain(" firstWords=think:1300,tool:500,quiet:20000 ttfc=3000ms ok");
   });
 
   it("counts a tool that runs several seconds without a progress update as tool, not quiet", () => {

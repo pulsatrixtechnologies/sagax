@@ -129,9 +129,9 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     if (plugins?.githubWithheld?.length) state.githubWithheld = [...(state.githubWithheld ?? []), ...plugins.githubWithheld];
     mark("mounts-ready");
     if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
-      // #4394: the turn waits at most a second for the copy; the copy goes
-      // on beside it and is tried again once the environment is up
-      await pluginCopyForTurnStart(syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id));
+      // #4456: the copy starts beside the turn, which never waits for it:
+      // the environment's tool calls and plugin servers wait for it themselves
+      pluginCopyForTurnStart(syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id));
       mark("plugins-synced");
     }
   };

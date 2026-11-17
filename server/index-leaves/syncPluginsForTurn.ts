@@ -1,21 +1,19 @@
 // @ts-nocheck
 /** syncPluginsForTurn (#1388). Pure move from server/index.ts. */
-import { settledWithin } from "../auth/idp-session.ts";
 import { pluginCopyFailures } from "../sandbox/sandbox-plugins.ts";
 
 export type Host = Record<string, any>;
 
-/** #4394: how long a turn's start waits for the plugin copy into the
- * person's environment. A copy into an environment still starting waited
- * there for minutes (310 s on a hosted server) and the turn with it; past
- * this the turn starts and the copy goes on beside it. A plugin's own tool
- * server and the turn's commands there still wait for their copy. */
-export const PLUGIN_COPY_TURN_WAIT_MS = 1_000;
-
-/** #4394: the turn's start waits for its plugin copy at most
- * PLUGIN_COPY_TURN_WAIT_MS; the copy itself is never cut. */
-export function pluginCopyForTurnStart(copy: Promise<unknown>): Promise<void> {
-  return settledWithin(copy, PLUGIN_COPY_TURN_WAIT_MS);
+/** #4394: a copy into an environment still starting waited there for
+ * minutes (310 s on a hosted server) and the turn with it. #4456: the
+ * turn's start no longer waits for the copy at all (it cost up to a second,
+ * 24 to 283 ms on every turn of a hosted server): everything that needs the
+ * plugins in the person's environment waits for this same copy on its own
+ * (the environment's tool calls and a plugin's own tool server,
+ * routes/internal-environments-handlers.ts), so the copy only starts here
+ * and goes on beside the turn. */
+export function pluginCopyForTurnStart(copy: Promise<unknown>): void {
+  void copy.catch(() => undefined);
 }
 
 /** Commands the plugin copy may run at once in one person's environment. The

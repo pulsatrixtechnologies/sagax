@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** closeOpenApprovals (#1388). Pure move from server/index.ts. */
 import { cancelPeerApprovalsForThread } from "../peers/peer-approval.ts";
+import { openTurnRequestCard, stopClosesCard } from "../safe-point-preempt.ts";
 export type Host = Record<string, any>;
 
 export function createCloseOpenApprovals(getHost: () => Host): any {
@@ -13,9 +14,8 @@ function closeOpenApprovals(threadId: string) {
   cancelPeerApprovalsForThread(threadId);
   for (const message of host.store.messagesFor(threadId)) {
     const card = message.card;
-    if (!card?.requestId || card.approvalOrigin || card.answered || card.dismissed) continue;
-    if (card.routineRequest || card.skillRequest) continue;
-    if (host.isPersistentQuestionCard(card)) {
+    if (!openTurnRequestCard(card)) continue;
+    if (!stopClosesCard(card)) {
       // Keep the durable card; its in-flight adapter mapping cannot survive
       // turn cleanup, and the response route can resume it from the transcript.
       host.askMessageByRequest.delete(`${threadId}:${card.requestId}`);

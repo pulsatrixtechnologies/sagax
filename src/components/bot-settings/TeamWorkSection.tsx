@@ -10,6 +10,10 @@
 // team bot's coding chat where the chat is. A bot without a team never
 // draws this: it keeps today's section.
 //
+// The person clears rows themselves (#4421): the row's X (the button the
+// coding rows already have) and "Clear finished" beside the count, for
+// every row nothing runs in any more. No administrator, no approval.
+//
 // The states come from the live state (shared/team-work.ts teamLive), never
 // from a plan. While the app's live stream is down no silent warning is
 // drawn: the rows stay, the app does not claim what it cannot know.
@@ -35,7 +39,7 @@ import {
   type TeamWorkItem,
   type TeamWorkStep,
 } from "@/lib/team-work";
-import { teamStepEnded, TEAM_WORK_STEPS_SHOWN } from "../../../shared/team-work";
+import { teamStepEnded, teamWorkSettled, TEAM_WORK_STEPS_SHOWN, type TeamWorkClear } from "../../../shared/team-work";
 import { BotAvatar } from "../Avatar";
 import { avatarBot } from "../BotExchangeChip";
 import { CodingSessionRow } from "./CodingSessionRow";
@@ -72,6 +76,8 @@ export interface TeamWorkSectionProps {
   children?: (lead: ReactNode) => ReactNode;
   /** Steps a piece of work shows before "N more" (tests). */
   stepsShown?: number;
+  /** The person clears rows (#4421); absent: no clear. */
+  onClear?: (clear: TeamWorkClear) => void;
 }
 
 /** The row's status icon: the one the existing rows draw for that state; a
@@ -137,6 +143,12 @@ function fitTeamLine(line: TeamLine, room: number, width: (text: string) => numb
   };
   const whoWidth = line.who ? width(line.who) : null;
   if (total(true, whoWidth) <= room) return { who: line.who ?? null, action: null, spare: true };
+  // a line that keeps its name (a closed piece of work, #4421): its words why give way first
+  if (line.keepWho && line.who && whoWidth !== null && line.action !== undefined) {
+    const over = total(true, whoWidth) - room;
+    const action = cutTo(line.parts[line.action]!, sizes[line.action]! - over, width);
+    if (action) return { who: line.who, action, spare: true };
+  }
   // the name first, while it keeps a few characters
   if (line.who && whoWidth !== null) {
     const over = total(true, whoWidth) - room;
@@ -252,7 +264,7 @@ function StepRow({ step, index, item, nameOf, bots, now, streaming, chosen, onOp
   );
 }
 
-function WorkRow({ item, nameOf, bots, now, streaming, openThreadId, orchestrator, onOpenStep, stepsShown }: {
+function WorkRow({ item, nameOf, bots, now, streaming, openThreadId, orchestrator, onOpenStep, stepsShown, onClear }: {
   item: TeamWorkItem;
   nameOf: (botId: string) => TeamName | undefined;
   bots: readonly Bot[];
@@ -262,6 +274,7 @@ function WorkRow({ item, nameOf, bots, now, streaming, openThreadId, orchestrato
   orchestrator?: TeamName & { botId?: string };
   onOpenStep: (step: TeamOpenStep) => void;
   stepsShown: number;
+  onClear?: (clear: TeamWorkClear) => void;
 }) {
   const holdsOpen = Boolean(openThreadId && item.steps.some((step) => step.threadId === openThreadId));
   const [open, setOpen] = useState(holdsOpen);
@@ -277,9 +290,14 @@ function WorkRow({ item, nameOf, bots, now, streaming, openThreadId, orchestrato
         title={item.name}
         status={workStatus(item, streaming)}
         pull={item.merged ? MERGED : undefined}
-        attrs={{ "data-team-work-item": item.key, "data-team-work-state": item.finished ? "finished" : item.live.state }}
+        attrs={{ "data-team-work-item": item.key, "data-team-work-state": item.finished ? "finished" : item.staleSince !== undefined ? "stale" : item.live.state }}
         subtitle={<Line line={line} bots={bots} />}
         subtitleHint={teamLineText(line)}
+        {...(onClear ? {
+          onIgnore: () => onClear({ keys: [item.key] }),
+          ignoreId: item.key,
+          ignoreText: { label: t("teamWork.clear.row"), aria: t("teamWork.clear.rowAria", { name: item.name }) },
+        } : {})}
         expanded={open}
         openLabel={t("teamWork.work.aria", { name: item.name, done: item.done, total: item.total })}
         onOpen={() => setOpen((value) => !value)}
@@ -343,14 +361,16 @@ function DoneToday({ items, children }: { items: readonly TeamWorkItem[]; childr
 
 const ownCard = (lead: ReactNode) => <ul aria-label={t("botPanel.coding.title")} className={PANEL_CARD}>{lead}</ul>;
 
-export function TeamWorkSection({ work, now, streaming, bots, orchestrator, openThreadId, onOpenStep, onOpenHistory, children = ownCard, stepsShown = TEAM_WORK_STEPS_SHOWN }: TeamWorkSectionProps) {
+export function TeamWorkSection({ work, now, streaming, bots, orchestrator, openThreadId, onOpenStep, onOpenHistory, children = ownCard, stepsShown = TEAM_WORK_STEPS_SHOWN, onClear }: TeamWorkSectionProps) {
   const names = new Map<string, TeamName>();
   for (const bot of work.team) if (bot.name) names.set(bot.botId, { name: bot.name, ...(bot.title ? { title: bot.title } : {}) });
   const nameOf = (botId: string) => names.get(botId);
   const count = streaming ? teamCount(work.team) : "";
   const row = (item: TeamWorkItem) => (
-    <WorkRow key={item.key} item={item} nameOf={nameOf} bots={bots} now={now} streaming={streaming} openThreadId={openThreadId} orchestrator={orchestrator} onOpenStep={onOpenStep} stepsShown={stepsShown} />
+    <WorkRow key={item.key} item={item} nameOf={nameOf} bots={bots} now={now} streaming={streaming} openThreadId={openThreadId} orchestrator={orchestrator} onOpenStep={onOpenStep} stepsShown={stepsShown} onClear={onClear} />
   );
+  // "Clear finished": only while a row nothing runs in is listed
+  const settled = onClear ? [...work.live, ...work.doneToday].filter(teamWorkSettled).length : 0;
   const lead = (
     <>
       {work.live.map(row)}
@@ -361,7 +381,21 @@ export function TeamWorkSection({ work, now, streaming, bots, orchestrator, open
     <section data-bot-settings-section="coding" data-team-work="" className="flex flex-col gap-2">
       <div className="flex min-w-0 items-center justify-between gap-3">
         <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={onOpenHistory} />
-        {count && <span data-team-count className={cn(PANEL_LABEL, "min-w-0 truncate")}>{count}</span>}
+        {(count || settled > 0) && (
+          <span className="flex min-w-0 items-center gap-3">
+            {count && <span data-team-count className={cn(PANEL_LABEL, "min-w-0 truncate")}>{count}</span>}
+            {settled > 0 && onClear && (
+              <button
+                type="button"
+                data-team-clear-finished={String(settled)}
+                onClick={() => onClear({ finished: true })}
+                className={cn(PANEL_LABEL, "shrink-0 rounded-md hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
+              >
+                {t("teamWork.clear.finished")}
+              </button>
+            )}
+          </span>
+        )}
       </div>
       {children(lead)}
     </section>

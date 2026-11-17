@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** proposalRuleCandidate (#1388). Pure move from server/index.ts. */
+import { teamMemoryWording } from "../memory/team-memory-scope.ts";
 export type Host = Record<string, any>;
 
 export function createProposalRuleCandidate(getHost: () => Host): any {
@@ -58,7 +59,7 @@ function proposalRuleCandidate(card: NonNullable<Message["card"]> | undefined): 
     return {
       tool: "sagax:team_memory",
       scope: { section: teamMemoryRequest.section, kind: teamMemoryRequest.kind },
-      description: `Remember ${teamMemoryRequest.kind} entries for the team`,
+      description: teamMemoryWording(host.teamMemoryPersonScoped() === true).ruleDescription(String(teamMemoryRequest.kind)),
       classes: []
     };
   }

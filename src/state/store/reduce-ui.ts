@@ -279,7 +279,9 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         pluginsOpen: open ? false : state.pluginsOpen,
         triggersOpen: open ? false : state.triggersOpen,
-        personaEditor: open ? null : state.personaEditor,
+        // #4470: opened from the bot's profile page, the window opens over
+        // that page, which is still there when it closes
+        personaEditor: open && !action.inProfile ? null : state.personaEditor,
       };
     }
   }

@@ -15,9 +15,11 @@
 //    stream lost frames it could not replay.
 // The last read is kept per orchestrator so a step's coding chat words its
 // meta line from the same list.
+// 5. the person clears rows themselves (#4421): the rows leave at once, the
+//    server's answer is the list read again.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { TEAM_WORK_FRAME, type TeamWork } from "../../shared/team-work";
+import { TEAM_WORK_FRAME, teamWorkSettled, type TeamWork, type TeamWorkClear } from "../../shared/team-work";
 import { listenLiveFrames } from "@/lib/live-events";
 import { foldTeamEvent, teamLiveThreads, teamWorkAt, teamWorkFace, teamWorkTicking, type TeamOverlay } from "@/lib/team-work";
 
@@ -47,6 +49,21 @@ export const loadTeamWork: TeamWorkLoader = async (botId, since) => {
   const { api } = await import("@/state/store");
   return api<TeamWork>(teamWorkPath(botId, since));
 };
+
+export type TeamWorkClearer = (botId: string, since: number, clear: TeamWorkClear) => Promise<TeamWork>;
+
+/** The person's clear (#4421): POST, answered with the list read again. */
+export const clearTeamWork: TeamWorkClearer = async (botId, since, clear) => {
+  const { api } = await import("@/state/store");
+  return api<TeamWork>(`/api/bots/${encodeURIComponent(botId)}/team-work/clear?since=${since}`, { method: "POST", body: JSON.stringify(clear) });
+};
+
+/** The list without the rows a clear takes, before the server answers. */
+export function withoutCleared(work: TeamWork, clear: TeamWorkClear): TeamWork {
+  const keys = new Set(clear.keys ?? []);
+  const keep = (item: TeamWork["live"][number]) => !keys.has(item.key) && !(clear.finished && teamWorkSettled(item));
+  return { ...work, live: work.live.filter(keep), doneToday: work.doneToday.filter(keep) };
+}
 
 // ── the last read, per orchestrator ───────────────────────────────────
 
@@ -89,10 +106,14 @@ export interface TeamWorkView {
   /** The first read failed: the caller keeps today's section. */
   failed: boolean;
   now: number;
+  /** Clear rows (#4421): by key, or every settled one. */
+  clear: (clear: TeamWorkClear) => void;
 }
 
-export function useTeamWork(botId: string, options: { load?: TeamWorkLoader; clock?: () => number } = {}): TeamWorkView {
+export function useTeamWork(botId: string, options: { load?: TeamWorkLoader; clock?: () => number; clearWork?: TeamWorkClearer } = {}): TeamWorkView {
   const load = options.load ?? loadTeamWork;
+  const clearWorkRef = useRef(options.clearWork ?? clearTeamWork);
+  clearWorkRef.current = options.clearWork ?? clearTeamWork;
   const clock = options.clock ?? Date.now;
   const [read, setRead] = useState<TeamWork | null>(null);
   const [failed, setFailed] = useState(false);
@@ -184,11 +205,28 @@ export function useTeamWork(botId: string, options: { load?: TeamWorkLoader; clo
     return () => { clearInterval(tick); clearInterval(safety); };
   }, [ticking, refresh]);
 
+  const clear = useCallback((what: TeamWorkClear) => {
+    const current = readRef.current;
+    if (current) setRead(withoutCleared(current, what));
+    const at = clockRef.current();
+    clearWorkRef.current(botId, localMidnight(at), what).then(
+      (next) => {
+        if (!alive.current) return;
+        threads.current = teamLiveThreads(next);
+        setRead(next);
+        setNow(clockRef.current());
+        keepRead(botId, { work: next, overlays: overlays.current });
+      },
+      // the server kept the rows: read the list again
+      () => { void refresh(); },
+    );
+  }, [botId, refresh]);
+
   // the overlays (a ref) are read again at each tick
   const work = useMemo(() => {
     const next = read ? teamWorkAt(read, overlays.current, now) : null;
     shown.current = next ? teamWorkFace(next, now) : "";
     return next;
   }, [read, now]);
-  return { work, failed: failed && read === null, now };
+  return { work, failed: failed && read === null, now, clear };
 }

@@ -58,9 +58,17 @@ struct CardView: View {
         return !ApprovalDockRules.isProposal(card) || !card.isPending
     }
 
-    /// A first-run quiz goes once picked, dismissed or talked past.
+    /// A first-run quiz goes once picked, dismissed or talked past; #4475:
+    /// a bot's question drawn in the chat only once put away unanswered.
     private var hidden: Bool {
-        OptionCardRules.hidesOnboardingCard(message, in: session.visibleTranscript(forThread: chat.threadId))
+        if let card = message.card, OptionCardRules.hidesChatQuestion(card) { return true }
+        return OptionCardRules.hidesOnboardingCard(message, in: session.visibleTranscript(forThread: chat.threadId))
+    }
+
+    /// Waiting on the person: a live ask, or (#4475) a bot's question drawn
+    /// in the chat that has no pick yet.
+    private func waits(_ card: OptionCard) -> Bool {
+        card.isPending || OptionCardRules.waitsForPick(card)
     }
 
     var body: some View {
@@ -76,7 +84,7 @@ struct CardView: View {
             DesktopPermissionCard(chat: chat, message: message, card: card, theme: desktop, waiting: waitingLine(card))
         } else if let card = message.card, !hidden {
             VStack(alignment: .leading, spacing: 10) {
-                if card.isPending && !answeredInDock {
+                if waits(card) && !answeredInDock {
                     Label("\(chat.name) is waiting on you", systemImage: "hand.raised.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.readable(tint))
@@ -177,14 +185,20 @@ struct CardView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.attentionSecondary)
                         .accessibilityIdentifier("card-waiting-\(message.id)")
-                } else if card.isPending {
+                } else if waits(card) {
                     HStack(spacing: 8) {
                         ForEach(card.options, id: \.self) { option in
                             Button {
                                 Haptics.selection()
                                 answering = true
                                 Task {
-                                    await session.answer(chat: chat, card: card, choice: option)
+                                    if OptionCardRules.isChatQuestion(card) {
+                                        // #4475: this card alone settles,
+                                        // then the pick goes out as a message
+                                        await session.answerChatQuestion(message, in: chat, pick: option)
+                                    } else {
+                                        await session.answer(chat: chat, card: card, choice: option)
+                                    }
                                     answering = false
                                 }
                             } label: {
@@ -215,6 +229,18 @@ struct CardView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.attentionSecondary)
                         .accessibilityIdentifier("card-outcome-\(message.id)")
+                } else if let pick = OptionCardRules.pick(card) {
+                    // #4475: a settled chat question: the pick marked, the
+                    // rest dimmed, as the desktop's settled card
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(card.options.contains(pick) ? card.options : card.options + [pick], id: \.self) { option in
+                            Label(option, systemImage: option == pick ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 14, weight: option == pick ? .semibold : .regular))
+                                .foregroundStyle(option == pick ? Theme.attentionText : Theme.attentionSecondary)
+                                .opacity(option == pick ? 1 : 0.6)
+                        }
+                    }
+                    .accessibilityIdentifier("card-pick-\(message.id)")
                 } else if let fold = WaitingCardSkip.fold(card) {
                     // #3471: closed without an answer, in one quiet line
                     WaitingCardFoldLine(fold: fold, ink: Theme.attentionSecondary, size: 14, id: message.id)
@@ -231,12 +257,12 @@ struct CardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(card.isPending ? Theme.attentionSurface : Theme.card)
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(card.isPending ? tint.opacity(0.08) : Color.clear))
+                    .fill(waits(card) ? Theme.attentionSurface : Theme.card)
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(waits(card) ? tint.opacity(0.08) : Color.clear))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(card.isPending ? tint : .clear, lineWidth: 1.5)
+                    .strokeBorder(waits(card) ? tint : .clear, lineWidth: 1.5)
             }
         }
     }

@@ -23,7 +23,7 @@ export type SlotKind =
   | "queueItem" | "parallelRun" | "card" | "resourceUsage" | "connectorSetup" | "phoneRequest"
   | "cardScan" | "purchase" | "phoneCall" | "invite" | "blocked" | "journalEntry" | "credentialGrant"
   | "draft" | "codeRun" | "cloudAgent" | "allowlistEntry" | "workflow" | "workflowRun" | "taskListItem" | "briefItem"
-  | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost";
+  | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost" | "teamMemoryEntry" | "callerOwnId";
 
 /** Kinds a person owns: the matrix aims A at B's. The rest only ride along. */
 export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
@@ -41,6 +41,15 @@ export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
  */
 export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "bots/": "bot",
+  // #4460: an entry of the caller's own team memory (the handler keys it by caller)
+  "team-memory/": "teamMemoryEntry",
+  // ids that only ride along in routes keyed by the caller (a learned fact #3424, a page's data and store keys, a product of the caller)
+  "learned/": "callerOwnId",
+  "products/": "callerOwnId",
+  "{callerOwnId}/": "callerOwnId",
+  "store/": "callerOwnId",
+  "data-approvals/": "callerOwnId",
+  "data/": "callerOwnId",
   "threads/": "thread",
   "messages/": "message",
   "groups/": "group",
@@ -285,6 +294,7 @@ export function fakeId(slot: Slot): string {
   if (c.includes("a-f0-9]{18}")) return "a".repeat(18);
   if (c.includes("a-f0-9]{16}")) return "a".repeat(16);
   if (c.includes("[a-z0-9]{8,40}")) return "zzfake0000";
+  if (c.includes("A-Za-z0-9_-]{16,40}")) return "zz-fake-id-0000000";
   if (c.startsWith("\\d")) return "1";
   if (c.startsWith("[a-z]")) return "zzfake";
   if (c.includes("A-Za-z0-9]{1,64}") || c.startsWith("[0-9A-Za-z]")) return "ZZFAKE";

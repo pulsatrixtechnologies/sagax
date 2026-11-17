@@ -23,6 +23,7 @@ import {
   TEAM_WORK_WINDOW_MS,
   buildTeamWork,
   teamStepEnded,
+  teamWorkName,
   type TeamOpenTurn,
   type TeamStepFacts,
   type TeamWork,
@@ -88,14 +89,25 @@ function openTurn(peek: TurnPeek): TeamOpenTurn {
 type Settled = Pick<TeamStepFacts, "tokens" | "did" | "failure" | "merged" | "coding">;
 
 /** The orchestrator's names for a hand-over (#3463), as the builder reads them. */
-function labelFacts(row: HandedOver): Pick<TeamStepFacts, "work" | "step" | "plan"> {
+function labelFacts(row: HandedOver): Pick<TeamStepFacts, "work" | "step" | "plan" | "ended"> {
   const label = row.work;
   if (!label) return {};
   return {
     ...(label.name ? { work: label.name } : {}),
     ...(label.step ? { step: label.step } : {}),
     ...(label.name && label.plan?.length ? { plan: label.plan } : {}),
+    ...(label.ended ? { ended: label.ended } : {}),
   };
+}
+
+/** The rows of one named piece of work this orchestrator's turns handed out
+ * for one person (#4421): what its close writes the end on. */
+export function workRowsNamed(rows: readonly HandedOver[], orchestratorId: string, person: string | undefined, name: string): string[] {
+  const wanted = teamWorkName(name);
+  if (!wanted) return [];
+  return rows.filter((row) => row.requesterBotId === orchestratorId && row.botId !== orchestratorId && row.person === person
+    && row.groupId === undefined && row.mode !== "consult" && Boolean(row.work?.name) && teamWorkName(row.work!.name!) === wanted)
+    .map((row) => row.id);
 }
 
 /** The names of the open pieces of work this orchestrator's turns handed

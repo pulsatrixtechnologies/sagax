@@ -20,7 +20,6 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     agentsIntegration,
     asPlaceFailure,
     attachTeamBoat,
-    autoRecallEnabled,
     autoVmClaims,
     bindTurnComputer,
     boat,
@@ -59,15 +58,12 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     ownerBotsReadOnly,
     peerRosterSystemPrompt,
     pendingCancelledProviderHandshakes,
-    prepareSemanticRecall,
     prewarmNamedTeammates,
     reachablePeers,
     readCuaConnection,
-    recallQuery,
     runLifecycleEvent,
     sameOwnerRosterMember,
     savedSteps,
-    semanticEmbeddingEndpoint,
     setupModeActive,
     shouldMountLocalComputer,
     store,
@@ -263,8 +259,9 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
         : state.userMessage;
       const ownThreadCreation = state.boundedCoordination && !state.coordinated && Boolean(state.origin && !state.origin.peerAsk);
       // #3431: the Proactive alerts section and propose_proactive, read
-      // before the tools are listed (an owner's one-to-one turn only)
-      state.proactiveAskPrompt = await host.proactiveAskForTurn(state.bot, state.threadId, state.commsDepth, { warm: Boolean(state.warmOnly) });
+      // before the tools are listed (an owner's one-to-one turn only).
+      // #4456: started at setup, beside the rest (start-turn-setup.ts)
+      state.proactiveAskPrompt = await (state.proactiveAskPrepared ?? host.proactiveAskForTurn(state.bot, state.threadId, state.commsDepth, { warm: Boolean(state.warmOnly) }));
       state.integrations.agents = agentsIntegration(state.bot.id, state.threadId, state.commsDepth, state.skillAuthoring, state.dispatchClaimId, state.opts?.coordination?.id, state.boundedCoordination, ownThreadCreation, state.worksInWorkspace, !engineHasNativeWebSearch(state.instance.driverKind, withholdHostToolsFor(state.instance), state.model));
     }
     if (state.instance.adapter.capabilities.hooks === true && hooksEnabled()) {
@@ -407,9 +404,10 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // pre-id window: wait for the old handshake to settle or for its bounded
     // quarantine to expire, then revalidate this exact claim before launch.
     // An embedding endpoint the person runs reads this turn's recall query
-    // first (bounded, server/recall/semantic-recall.ts), before the claim below
-    // is revalidated. Without one nothing is awaited.
-    if (state.bot.memoryEnabled !== false && autoRecallEnabled(cfg) && semanticEmbeddingEndpoint(cfg)) await prepareSemanticRecall(state.bot.id, recallQuery(state.resolvedImages.text));
+    // (bounded, server/recall/semantic-recall.ts), before the claim below is
+    // revalidated. #4456: started at setup, beside the rest; what is left of
+    // it is awaited here. Without one nothing is awaited.
+    if (state.semanticRecallPrepared) await state.semanticRecallPrepared;
     await pendingCancelledProviderHandshakes.waitForClear(state.threadId);
     if (!markDirectTurnDispatching(state.bot.id, state.dispatchClaimId, state.threadId)) {
       throw new DirectTurnSetupCancelled("turn stopped before dispatch");

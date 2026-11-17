@@ -9,6 +9,7 @@ import type { AppSettingsSection, BotSettingsSection } from "../settings-section
 import type { BotUpdatePatch } from "../bot-patch-queue";
 import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WaitingOnCard, WireBotConversation, WireTurnTiming, WireWaitingApproval } from "../../../shared/wire";
 import { type DataSheet, type DataTable } from "../../../shared/data-surface";
+import { isFirstRunQuizCard } from "../../../shared/options-card";
 import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
 import type { MessageReaction } from "../../../shared/reactions";
@@ -1829,8 +1830,8 @@ export type Action =
    * notification of a routine run refused in another person's thread. */
   | { type: "openBotActivity"; botId: string; itemId: string }
   | { type: "botActivityOpened" }
-  /** `inProfile`: opened from the bot's profile page, it opens as a page
-   * inside that page, which stays open behind it (#4420); ignored when no
+  /** `inProfile`: opened from the bot's profile page, its window opens over
+   * that page, which stays open behind it (#4420, #4470); ignored when no
    * profile page is open. */
   | { type: "togglePlugins"; open?: boolean; surface?: "apps" | "mcp"; botId?: string | null; page?: "pages" | "providers" | "accounts" | "sources" | "bots" | null; focusApps?: string[]; inProfile?: boolean }
   | { type: "toggleTriggers"; open?: boolean }
@@ -1858,7 +1859,9 @@ export type Action =
   | { type: "createFreshTopic"; botId: string }
   | { type: "focusMessageConsumed"; nonce: number }
   | { type: "unreadDividerDone"; threadId: string }
-  | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean }
+  /** `inProfile`: opened from the bot's profile page, the window opens over
+   * that page, which stays open behind it (#4470). */
+  | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean; inProfile?: boolean }
   | { type: "openBotCatalog"; section?: "templates"; installUrl?: string }
   | { type: "closeBotCatalog" }
   | { type: "openPersonaEditor"; botId: string; section?: BotSettingsSection }
@@ -2380,8 +2383,11 @@ export function patchGroupCard(state: AppState, groupId: string, messageId: stri
 
 /** First-run quiz still sitting on this bot's thread. */
 export function openOnboardingCard(bot: Bot): Message | undefined {
+  // #4475: never a bot's question drawn in the chat, a proposal or a role
+  // transition: the person's message (an answer to another card included)
+  // puts the first-run quiz away, nothing else
   return bot.messages.find(
-    (message) => message.kind === "options" && message.card && !message.card.requestId && !message.card.dismissed,
+    (message) => message.kind === "options" && isFirstRunQuizCard(message.card) && !message.card!.dismissed,
   );
 }
 

@@ -4,7 +4,7 @@ import { readableError } from "@/lib/plain-error";
 import { api } from "@/state/store";
 import {
   decidePerspicaxReview, deleteBotNotes, detectBodyKind, openBotNote, openPerspicaxNote, openPerspicaxReview, openTeamNote,
-  pxMemory, restoreBotChange, saveBotNote, undoBotDeletes,
+  publishTeamNote, pxMemory, restoreBotChange, saveBotNote, TEAM_PUBLISH_TOPICS, undoBotDeletes,
   type MemoryBrowse, type MemoryManagerSource, type MemoryNoteDetail, type MemoryTierRow,
 } from "@/lib/memory-manager";
 import { canDecideRow, rowKey, type PageRow } from "@/lib/memory-page";
@@ -12,7 +12,7 @@ import { confirmAsync } from "../ConfirmProvider";
 import type { CollectionSummary } from "./MemoryCollections";
 import type { NoteSave } from "./MemoryNoteView";
 import type { Place } from "./memory-manager-types";
-import { TEAM_KINDS, slugify, writePins } from "./memory-manager-helpers";
+import { defaultPublishScope, TEAM_KINDS, slugify, writePins } from "./memory-manager-helpers";
 import { tierSource } from "./memory-manager-data";
 import { memoryFolderActions } from "./memory-folder-actions";
 
@@ -452,8 +452,15 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
 
   const startMove = (keys: string[]) => {
     const first = lookup(keys[0] ?? "");
-    setMoveTopic(first?.row.folder || "notes");
-    setMoveScope(first?.row.scope || "me");
+    // #4460: an entry of the person's own memory goes to a console tier,
+    // a team of theirs first, in the folder of its kind
+    if (first?.source.kind === "team") {
+      setMoveTopic(TEAM_PUBLISH_TOPICS[first.row.kind ?? first.row.folder ?? ""] ?? "notes");
+      setMoveScope(defaultPublishScope(pxTiers));
+    } else {
+      setMoveTopic(first?.row.folder || "notes");
+      setMoveScope(first?.row.scope || "me");
+    }
     setScreen({ kind: "move", keys });
   };
 
@@ -461,12 +468,17 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
     if (screen.kind !== "move") return;
     const topic = moveTopic.trim();
     if (!topic) return;
-    const items = screen.keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry)).map((entry) => ({ scope: entry.row.scope || moveScope, id: entry.row.id }));
+    const entries = screen.keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry));
+    // #4460: an entry of this server's team memory is published to the tier
+    // (it then lives in the console); a console note moves within it
+    const team = entries.filter((entry) => entry.source.kind === "team");
+    const items = entries.filter((entry) => entry.source.kind !== "team").map((entry) => ({ scope: entry.row.scope || moveScope, id: entry.row.id }));
     setBusy(true);
     setError(null);
     try {
-      await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "move", items, topic, to: moveScope }) });
-      setNotice({ text: t("memoryManager.moved", { count: items.length }) });
+      for (const entry of team) await publishTeamNote(entry.source.section ?? "", entry.row.id, moveScope, topic);
+      if (items.length) await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "move", items, topic, to: moveScope }) });
+      setNotice({ text: t("memoryManager.moved", { count: team.length + items.length }) });
       setScreen({ kind: "list" });
       refresh();
     } catch (cause) {

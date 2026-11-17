@@ -21,7 +21,6 @@ export type GroupMemberTurnHost = {
   REACTION_PROMPT: any,
   ROUTINE_PROMPT: any,
   SESSION_SEARCH_SYSTEM_PROMPT: any,
-  TEAM_MEMORY_PROMPT: any,
   THREADS_PROMPT: any,
   WITHHELD_HOST_TOOLS_PROMPT: any,
   accessCardFor: any,
@@ -247,7 +246,9 @@ export type GroupMemberTurnHost = {
   surfacePrompt: any,
   teamAvailabilityPart: any,
   teamComputerPrompt: any,
-  teamMemory: any,
+  /** #4460: the bot's team memory block (server/memory/team-memory-scope.ts). */
+  teamMemoryPromptFor: any,
+  teamMemoryToolPrompt: any,
   toolErrorCorrectiveRoundsFor: any,
   toolScopeForTurn: any,
   turnCommandEnvironment: any,

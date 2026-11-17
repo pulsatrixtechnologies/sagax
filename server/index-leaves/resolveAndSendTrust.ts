@@ -28,7 +28,7 @@ function resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: s
       json(res, late.status, late.body);
       return true;
     }
-    const memoryKey = host.teamStorageKeyFor(request.section, proposer ? host.effectiveBotOwner(proposer) : undefined);
+    const memoryKey = host.teamMemoryKeyFor(request.section, proposer ? host.effectiveBotOwner(proposer) : undefined);
     const result = host.teamMemory.resolve(memoryKey, request.entryId, behavior === "allow" ? "accept" : "reject");
     if (!result.claimed || result.state === "already_settled") {
       // the entry was deleted, or accepted, before this card heard of it:

@@ -187,6 +187,9 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// Present when this card is a live provider ask — the thing that makes
     /// it answerable rather than historical.
     public var requestId: String?
+    /// "question" on a bot's question, a live one or one drawn in the chat
+    /// (#4475: never the first-run quiz a later message puts away).
+    public var requestType: String? = nil
     public var tool: String?
     /// Why auto mode stopped to ask anyway.
     public var held: String?

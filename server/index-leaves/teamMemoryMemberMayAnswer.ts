@@ -12,7 +12,10 @@ function teamMemoryMemberMayAnswer(threadId: string, card: { teamMemoryRequest?:
   const bot = botId ? host.store.bot(botId) : host.store.botByThread(threadId);
   return teamMemoryCardReachesMember({
     card,
-    sharing: teamMemorySharingOf(bot),
+    // #4460: on an organization server the entry goes to the bot owner's
+    // own memory: its card reaches only the people who see the card's bot
+    // and conversation, never every user of a section name
+    sharing: host.teamMemoryPersonScoped() ? "private" : teamMemorySharingOf(bot),
     sharedServer: host.teamMemoryShared(),
     cloudHome: false,
     confidential: host.store.isConfidentialThread(threadId),

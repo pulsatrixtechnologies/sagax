@@ -113,6 +113,10 @@ export interface InstanceConfig {
   /** Picker group for this instance, over its driver's default: an
    * `openai-compat` instance on a provider's own key is "api", not "custom". */
   access?: EngineAccess;
+  /** #4435: on an organization server, the person who added this account
+   * beside the provider's first one; theirs alone (server/engines/account-owner.ts).
+   * Absent: the organization's. */
+  ownerPrincipalId?: string;
   config?: unknown;
 }
 

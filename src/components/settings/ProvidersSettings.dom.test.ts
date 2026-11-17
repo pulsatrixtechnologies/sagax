@@ -14,6 +14,7 @@ import type { InstanceInfo } from "@/state/store";
 import type { MyEngine } from "@/lib/perspicax-org";
 import { setLocale } from "@/lib/i18n";
 import { XAI_GROUP_LABEL } from "../../../shared/model-provider";
+import { createMemberInstanceView } from "../../../server/index-leaves/memberInstanceView";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -654,6 +655,45 @@ describe("Settings > Providers, in an organization", () => {
     const services = host.querySelector('[data-settings-card="providers.services"]')!;
     expect(services.querySelector('[data-settings-card="connections.image"]')).toBeNull();
     expect(services.querySelector('[data-settings-row="providers.imageGen"]')).not.toBeNull();
+  });
+
+  it("#4435: a member adds their own account beside the first one (Claude, the ChatGPT plan), no administrator", async () => {
+    fixture.config = { viewer: { operator: false, role: "member" } };
+    // what the server really sends a member: its member view of each engine
+    const memberView = createMemberInstanceView(() => ({ engineNameForPerson: (_id: string, name: string) => name }));
+    fixture.instances = [
+      instance("claude", "claudeAgent", "Claude Code", { access: "subscription" }),
+      instance("codex", "codex", "Codex", { access: "subscription", snapshot: { state: "available", authenticated: true, chatgptPlan: true } }),
+    ].map((entry) => memberView(entry, "member-1") as InstanceInfo);
+    fixture.mine = [
+      mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+      mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+    ];
+    await page("anthropic");
+    const claude = host.querySelector('[data-settings-group="provider-accounts"] [data-provider-add-account]');
+    expect(claude, "Add account under Accounts").not.toBeNull();
+    expect(claude!.textContent).toBe("Add Claude account");
+    // a member picks no folder of the server's own: the field is not offered
+    await click(claude!.querySelector("button"));
+    expect(claude!.querySelector("form"), "the add form opens").not.toBeNull();
+    expect(claude!.textContent).not.toContain("Advanced");
+    expect(claude!.querySelectorAll("form input")).toHaveLength(1);
+    await page("openai");
+    const plan = host.querySelector('[data-settings-group="provider-accounts"] [data-provider-add-account]');
+    expect(plan, "Add another plan account under Accounts").not.toBeNull();
+    const planButton = plan!.querySelector("button");
+    expect(planButton, "the plan adder shows from the member's own copy of the engine").not.toBeNull();
+    await click(planButton);
+    const input = plan!.querySelector<HTMLInputElement>("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "My plan");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await click(plan!.querySelector('button[type="submit"]'));
+    expect(apiCalls("POST")).toEqual([["/api/instances/chatgpt-accounts", JSON.stringify({ displayName: "My plan" })]]);
+    // providerAccountsChanged: the person's own accounts and engines load again
+    expect(vi.mocked(apiMock).mock.calls.some(([path]) => path === "/api/me/providers"), "the person's own list reloads").toBe(true);
   });
 
   it("renames an account for this person alone: PUT /api/me/engines/:id/name (#4376)", async () => {

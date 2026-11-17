@@ -7,7 +7,9 @@ function memberInstanceView(instance: Awaited<ReturnType<typeof describeInstance
   const host = getHost();
 
   const { cli: _cli, cliDefault: _cliDefault, cliCandidates: _cliCandidates, install: _install, authentication: _authentication, claudeAccount: _claudeAccount, freeUpSpace: _freeUpSpace, managed: _managed, ...rest } = instance as typeof instance & Record<string, unknown>;
-  const { account: _account, authenticated: _authenticated, chatgptPlan: _chatgptPlan, authenticationUnavailableReason: _reason, update: _update, ...snapshot } = (instance.snapshot ?? {}) as Record<string, unknown>;
+  // #4435: chatgptPlan stays: it says what the engine is (the ChatGPT plan),
+  // as a client session's copy does, and a member adds their own plan account there
+  const { account: _account, authenticated: _authenticated, authenticationUnavailableReason: _reason, update: _update, ...snapshot } = (instance.snapshot ?? {}) as Record<string, unknown>;
   // #1533: never an address as an engine's name for a member
   // #1533 (2026-10-28): an engine the organization's key runs says so
   const displayName = typeof rest.displayName === "string" ? host.engineNameForPerson(instance.instanceId, rest.displayName, instance.driverKind, person) : rest.displayName;

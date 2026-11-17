@@ -11,6 +11,23 @@ export const ASK_CHOICE_TOOL = "ask_choice";
 // behind "show full question", so it is as long as a question card takes.
 export const ASK_CHOICE_LIMITS = { question: MAX_QUESTION_TEXT, title: 120, key: 120, to: 200 } as const;
 
+/** #4475: whether an options card is the first-run quiz (or a legacy
+ * passive card of its kind), the one card a later message of the person
+ * puts away. Never a live ask (a request id), a proactive proposal, a role
+ * transition, nor a bot's question drawn in the chat (requestType
+ * "question", ask_choice): those stay until they are answered, skipped or
+ * closed, whatever else the person writes, and answering one of them never
+ * puts another away. The app, the companion and the server read this one
+ * rule. */
+export function isFirstRunQuizCard(card: {
+  requestId?: unknown;
+  requestType?: unknown;
+  proactiveProposal?: unknown;
+  roleTransition?: unknown;
+} | null | undefined): boolean {
+  return Boolean(card) && !card!.requestId && !card!.proactiveProposal && !card!.roleTransition && card!.requestType !== "question";
+}
+
 /** Keep agent-authored cards small enough to remain useful on desktop and mobile. */
 export const OPTIONS_CARD_LIMITS = {
   title: 120,

@@ -17,7 +17,7 @@
 // down the change it records, and a turn must never fail because an audit
 // line did.
 import { randomUUID } from "node:crypto";
-import { closeSync, fstatSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { DATA_DIR } from "../config.ts";
@@ -29,7 +29,7 @@ import {
   hashMemoryText,
   memoryOverview,
   readMemoryDoc,
-  resolveMemoryPath,
+  memoryFileResolver,
   workspaceDocPaths,
   writeMemoryDoc,
 } from "./memory-store.ts";
@@ -473,12 +473,21 @@ function currentDocs(botId: string): Map<string, string> {
   const baseline = baselines.get(botId);
   let stats = baselineStats.get(botId);
   if (!stats) baselineStats.set(botId, (stats = new Map()));
+  // #4456: one pass resolves every file of the bot: the workspace's and the
+  // folders' real paths are read once, not for each file
+  const resolve = memoryFileResolver(botId);
   // RULES.md and docs/ are journaled like memory (server/workspace/workspace-files.ts)
+  // the topics and logs as the overview listed them (lstat, regular files only)
+  const listed = new Map([...overview.topics, ...overview.logs].map((file) => [file.path, { mtimeMs: file.modifiedAt, bytes: file.bytes }]));
   for (const path of [MEMORY_INDEX, ...overview.topics.map((t) => t.path), ...overview.logs.map((l) => l.path), ...workspaceDocPaths(botId)]) {
     let stat: { mtimeMs: number; bytes: number } | undefined;
     try {
-      const s = statSync(resolveMemoryPath(botId, path));
-      if (s.isFile()) stat = { mtimeMs: Math.trunc(s.mtimeMs), bytes: s.size };
+      const known = listed.get(path);
+      // the lstat the listing or the resolver's link check took: a regular
+      // file is its own stat (#4456: no second stat of each file)
+      const s = resolve(path, known !== undefined).stat;
+      if (known) stat = known;
+      else if (s?.isFile()) stat = { mtimeMs: Math.trunc(s.mtimeMs), bytes: s.size };
     } catch { /* unreadable: the read below decides */ }
     const cached = stats.get(path);
     const known = baseline?.get(path);

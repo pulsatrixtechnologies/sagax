@@ -12,8 +12,9 @@
 // So a member bot's server command no longer waits for an admin in a dead
 // end. When a non-admin drives the turn:
 //   - the bot has its own computer  -> it is told to run there (no card),
-//   - the bot has no computer        -> it is refused, with the reason that
-//     only an admin runs on the server (no silent fallback to the server).
+//   - the bot has no computer        -> it is refused in plain words with
+//     what the person can do (ownPlaceRefusal, #4449): no fallback to the
+//     server and no admin card.
 // When an admin drives the turn (or a person an admin gave the server-command
 // right), the existing "runs on the server" card stays: an admin may target
 // the shared server.
@@ -36,6 +37,30 @@ export function orgServerExecRouting(input: {
 }): OrgServerExecRouting {
   if (input.callerMayDriveOrgServer) return "admin-card";
   return input.botHasOwnComputer ? "use-bot-computer" : "no-computer";
+}
+
+/** #4449: what the bot reads when a member's turn asked for work on the
+ * shared host (a shell, an engine tool of the host such as a web fetch, a
+ * file outside its own folders) while the bot has a computer of its own this
+ * turn. Nothing waits for an admin: the work belongs in the person's own
+ * place. */
+export const EXEC_USE_BOT_COMPUTER =
+  "Refused: the organization's server is never this bot's place, for a shell, a web fetch or a file outside its own folders. Do it on this bot's own computer instead (its server environment, its Local VM, This computer or its cloud computer, for example sagax-environment run_command with curl or gh, sagax-desktop, vm_exec or the computer tools), not on the host.";
+
+/** #4449: the plain refusal when a member's turn asked for work on the
+ * shared host and no place of the person's own can be had this turn. Never
+ * an admin card, never a fallback to the shared host: it says why and what
+ * the person can do. `decision` is the turn's workplace (desktop-bridge.ts
+ * resolveBotWorkplace), absent when none was recorded. */
+export function ownPlaceRefusal(decision: { target: string; principal: string | null; reason: string } | undefined): string {
+  const never = "Commands and engine tools never run on the organization's server, and no admin is asked.";
+  if (decision?.target === "user-desktop" || decision?.reason === "pinned-desktop") {
+    return `Nothing ran: this conversation works on the person's own computer, and the Sagax desktop app on it is not connected right now. Tell them to open Sagax on that computer, or to set the bot's Workspace to Cloud to use their server environment. ${never}`;
+  }
+  if (!decision?.principal) {
+    return `Nothing ran: no person asked for this turn, so it has no computer of its own. Ask the person to send the request from their own message. ${never}`;
+  }
+  return `Nothing ran: this organization has no server environment for the person yet, and their own computer is not connected. Tell them to connect the Sagax desktop app on their computer and set the bot's Workspace to This computer or Local VM. ${never}`;
 }
 
 /** A workplace target that means the bot has its own computer for the turn:

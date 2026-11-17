@@ -3,6 +3,9 @@
  * Pure move out of server/index.ts; behaviour unchanged. Never imports index.ts.
  * Deps are read per request so late-bound index lets stay valid.
  */
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+
 import { PASS, type RouteHandler } from "./table.ts";
 import { cleanAccountName } from "../engines/account-names.ts";
 import { accountInUseRefusal } from "../engines/account-users.ts";
@@ -132,9 +135,26 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     if (!addedAccount(instanceId, driver)) return json(res, 400, { error: "Only an account added beside the provider's first one can be removed." });
     const users = deps.accountUsers?.(principalId, instanceId) ?? [];
     if (users.length) return json(res, 409, accountInUseRefusal(users, false));
+    // #4435: the person's own account goes for good (its entry, its sign-in
+    // folder); the organization's stays for everyone else, off this list only
+    const own = deps.personalProviderInstances.ownerOf?.(instanceId) === principalId.toLowerCase();
+    if (own && deps.cfg.defaultModelSelection?.instanceId === instanceId) return json(res, 409, accountInUseRefusal([], true));
     // its own sign-in folder goes with it; a folder another account reads stays
-    if (deps.isLoginDriver(driver) && separateAccountInstance(instanceId) && deps.logins.signedIn(principalId, driver, "primary", instanceId)) {
-      await deps.logins.signOut(principalId, instanceId, auth.kind === "session" ? auth.session.id : "loopback");
+    const signOut = async () => {
+      if (deps.isLoginDriver(driver) && separateAccountInstance(instanceId) && deps.logins.signedIn(principalId, driver, "primary", instanceId)) {
+        await deps.logins.signOut(principalId, instanceId, auth.kind === "session" ? auth.session.id : "loopback");
+      }
+    };
+    if (!own) await signOut();
+    if (own) {
+      // the removal of the instance routes (server/routes/instances.ts
+      // removeAddedAccount): a turn in flight on it waits, then the person
+      // signs out and the entry goes
+      const removed = await deps.removeAccountEntry(instanceId, signOut);
+      if (!removed.ok) return json(res, removed.status, removed.body);
+      if (separateAccountInstance(instanceId)) rmSync(join(deps.DATA_DIR, "principals", principalId, "accounts", instanceId), { recursive: true, force: true });
+      deps.accountNames.set(principalId, instanceId, "");
+      return json(res, 200, { ok: true });
     }
     deps.accountNames.remove(principalId, instanceId);
     return json(res, 200, { ok: true });
@@ -143,7 +163,8 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
   const action = /^\/api\/me\/engines\/([\w.-]+)\/login\/(start|complete|cancel|sign-out)$/.exec(path);
   const instanceId = (status ?? action)?.[1];
   if (!instanceId) return json(res, 404, { error: "not found" });
-  const entry = deps.registry.entries().find((candidate: any) => candidate.instanceId === instanceId);
+  // #4435: another person's account is not there for this person to sign in to
+  const entry = deps.registry.entries().find((candidate: any) => candidate.instanceId === instanceId && deps.personalProviderInstances.visible(candidate.instanceId, principalId));
   const driver = entry?.shadow?.driverKind ?? entry?.live?.driverKind ?? "";
   if (!entry || !deps.subscriptionDriver(driver)) return json(res, 404, { error: "This engine has no personal sign-in." });
   // 2026-10-29: `?account=second` is the person's second sign-in on an engine that keeps one (Grok)

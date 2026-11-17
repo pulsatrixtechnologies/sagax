@@ -49,7 +49,9 @@ export function memoryPrincipal(auth: RequestAuth, issuer: string): { principalI
   return { principalId, sub: idp.sub };
 }
 
-function mapResult(
+/** A Perspicax notes answer as this server's HTTP answer (also the team
+ * memory publish route's, server/routes/team-memory-http.ts). */
+export function mapNotesResult(
   result: NotesCallResult,
   json: (res: ServerResponse, status: number, body: unknown) => void,
   res: ServerResponse,
@@ -201,6 +203,6 @@ export function createMeMemoryNotesRoutes(deps: MeMemoryNotesDeps): RouteHandler
     }
     const upstream = body === undefined ? mapped : { ...mapped, body };
     const result = await deps.client.call(who.principalId, upstream.method, upstream.path, upstream.body);
-    mapResult(result, json, res);
+    mapNotesResult(result, json, res);
   };
 }

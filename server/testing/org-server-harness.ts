@@ -36,7 +36,7 @@ export interface OrgServer {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const cookiePair = (setCookie: string) => setCookie.split(";")[0]!;
 
-export async function startOrgServer(options: { user: FakeOidcUser; refreshAfterSeconds?: number; prefix?: string; env?: Record<string, string> }): Promise<OrgServer> {
+export async function startOrgServer(options: { user: FakeOidcUser; refreshAfterSeconds?: number; prefix?: string; env?: Record<string, string>; instances?: Record<string, unknown> }): Promise<OrgServer> {
   chmodSync(FAKE_CLI, 0o755);
   const idp = await startFakeOidcProvider({ user: options.user });
   const port = await freePortBlock([0, 1]);
@@ -45,7 +45,7 @@ export async function startOrgServer(options: { user: FakeOidcUser; refreshAfter
   const data = join(home, ".sagax");
   mkdirSync(data, { recursive: true });
   writeFileSync(join(data, "config.json"), JSON.stringify({
-    instances: { grok: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: false } } },
+    instances: { grok: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: false } }, ...options.instances },
   }));
   let child: ChildProcess | null = null;
   let output = "";

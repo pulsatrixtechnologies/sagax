@@ -11,9 +11,15 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([
 
 /** The dialog element should carry `tabIndex={-1}` so it can take focus when
  * it has no field to start in. Bind it for as long as the dialog is mounted. */
-export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose: () => void) {
+export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose: () => void, options?: {
+  /** An open popover inside the dialog (its trigger has aria-haspopup and
+   * aria-expanded="true": a pill list, a menu) owns that Escape: it closes
+   * itself and the dialog stays (the bot page's modals, #4470). */
+  popoversOwnEscape?: boolean;
+}) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const popoversOwnEscape = options?.popoversOwnEscape ?? false;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -24,6 +30,7 @@ export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === "Escape") {
+        if (popoversOwnEscape && dialog.querySelector('[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"]')) return;
         event.preventDefault();
         event.stopPropagation();
         onCloseRef.current();
@@ -47,5 +54,5 @@ export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose
       dialog.removeEventListener("keydown", onKey);
       previousFocus?.focus();
     };
-  }, [dialogRef]);
+  }, [dialogRef, popoversOwnEscape]);
 }

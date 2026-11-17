@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
-import { requiredScope } from "../auth/request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { BUSY_LEFTOVER_ERROR, createAntigravityLeftoverRoutes, type AntigravityLeftoverRouteDeps } from "./antigravity-leftovers.ts";
 import { dispatchRoutes } from "./table.ts";
 
@@ -16,7 +16,7 @@ afterEach(async () => {
 
 const SECRET_PATH = "C:\\Users\\ada\\AppData\\Local\\Temp\\_MEI000022222";
 
-async function serve(deps: Partial<AntigravityLeftoverRouteDeps> = {}): Promise<string> {
+async function serve(deps: Partial<AntigravityLeftoverRouteDeps> = {}, auth: RequestAuth = { kind: "loopback", scopes: ["admin"] }): Promise<string> {
   const routes = [createAntigravityLeftoverRoutes({
     hosted: false,
     isAntigravity: (id) => id === "antigravity",
@@ -28,7 +28,7 @@ async function serve(deps: Partial<AntigravityLeftoverRouteDeps> = {}): Promise<
     const url = new URL(req.url ?? "/", "http://localhost");
     const handled = await dispatchRoutes(routes, {
       req, res, url, path: url.pathname, method: req.method ?? "GET",
-      auth: { kind: "loopback", scopes: ["admin"] }, json, readBody,
+      auth, json, readBody,
     });
     if (!handled) json(res, 404, { from: "inline routes" });
   });
@@ -41,6 +41,24 @@ const post = (url: string, contentType = "application/json") =>
   fetch(url, { method: "POST", headers: { "content-type": contentType }, body: "{}" });
 
 describe("Free up space routes", () => {
+  it("#4435: another person's added account is not there, an administrator's call included", async () => {
+    let scans = 0;
+    const deps: Partial<AntigravityLeftoverRouteDeps> = {
+      isAntigravity: (id) => id.startsWith("antigravity"),
+      accountOwner: (id) => id === "antigravity-sam" ? "sam" : undefined,
+      find: async () => { scans++; return { folders: [], bytes: 0, complete: true }; },
+    };
+    const admin = await serve(deps);
+    expect((await fetch(`${admin}/api/instances/antigravity-sam/leftover-files`)).status).toBe(404);
+    expect((await post(`${admin}/api/instances/antigravity-sam/leftover-files/remove`)).status).toBe(404);
+    expect(scans).toBe(0);
+    // the organization's own account stays everyone's
+    expect((await fetch(`${admin}/api/instances/antigravity/leftover-files`)).status).toBe(200);
+    // the owner reaches their own
+    const sam = await serve(deps, { kind: "session", scopes: ["admin"], session: { principalId: "Sam" } } as unknown as RequestAuth);
+    expect((await fetch(`${sam}/api/instances/antigravity-sam/leftover-files`)).status).toBe(200);
+  });
+
   it("are for admins only", () => {
     expect(requiredScope("GET", "/api/instances/antigravity/leftover-files")).toBe("admin");
     expect(requiredScope("POST", "/api/instances/antigravity/leftover-files/remove")).toBe("admin");

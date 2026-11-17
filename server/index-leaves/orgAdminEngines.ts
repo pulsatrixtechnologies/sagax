@@ -9,7 +9,9 @@ function orgAdminEngines() {
   const { VOICE_SERVER_ENGINE, driverKeyBacked } = host;
 
   const configs = host.providerConfigs();
-  const engines: AdminEngine[] = host.registry.entries().filter((entry) => !host.personalProviderInstances.get(entry.instanceId)).map((entry) => {
+  // #4435: the organization-wide engines only; a person's own server or
+  // added account is theirs, never given by an administrator
+  const engines: AdminEngine[] = host.registry.entries().filter((entry) => !host.personalProviderInstances.ownerOf(entry.instanceId)).map((entry) => {
     const live = host.registry.get(entry.instanceId);
     const access = configs[entry.instanceId]?.access ?? host.registry.access(entry.instanceId);
     const auth: AdminEngine["auth"] = access === "api" ? "apiKey"

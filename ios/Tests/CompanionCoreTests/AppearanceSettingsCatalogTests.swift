@@ -1,5 +1,5 @@
 // #3642: Settings > Appearance read in French showed one row in English
-// ("Color 1:1 messages with the bot color"): its words were missing from
+// ("Accent on bot bubbles"): its words were missing from
 // the string catalog. Every sentence of the page comes from the catalog in
 // French like its neighbours, and that row in every language the catalog
 // carries.
@@ -35,7 +35,8 @@ final class AppearanceSettingsCatalogTests: XCTestCase {
     func testEverySentenceOfThePageIsInFrench() throws {
         let strings = try catalog()
         let words = try pageWords()
-        XCTAssertTrue(words.contains("Color 1:1 messages with the bot color"))
+        XCTAssertTrue(words.contains("Accent on bot bubbles"))
+        XCTAssertTrue(words.contains("Show bot replies in bubbles"))
         for key in words {
             XCTAssertTrue(translated(strings, key, "fr"), "Settings > Appearance stays in English in French: \(key)")
         }
@@ -48,7 +49,7 @@ final class AppearanceSettingsCatalogTests: XCTestCase {
             languages.formUnion(((entry["localizations"] as? [String: Any]) ?? [:]).keys)
         }
         XCTAssertTrue(languages.isSuperset(of: ["en", "fr"]))
-        for key in ["Color 1:1 messages with the bot color", "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color."] {
+        for key in ["Accent on bot bubbles", "A bot's reply bubbles take a soft tint of the accent. Off leaves them in the skin's grey.", "Show bot replies in bubbles", "Off draws a bot's replies as plain text, without the bubble."] {
             for language in languages.sorted() {
                 XCTAssertTrue(translated(strings, key, language), "\(key) has no \(language) words")
             }

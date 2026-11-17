@@ -370,6 +370,8 @@ final class SidebarPrefsModel: ObservableObject {
     var botBubble: Bool { prefs.botBubble }
     func setBotBubble(_ session: Session, _ on: Bool) { update(session) { $0.setBotBubble(on) } }
 
+    var botReplyBubbles: Bool { prefs.botReplyBubbles }
+    func setBotReplyBubbles(_ session: Session, _ on: Bool) { update(session) { $0.setBotReplyBubbles(on) } }
     var streamReplies: Bool { prefs.streamReplies }
     func setStreamReplies(_ session: Session, _ on: Bool) { update(session) { $0.setStreamReplies(on) } }
 

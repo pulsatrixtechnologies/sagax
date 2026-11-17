@@ -222,7 +222,7 @@ struct TextBubble: View {
                 }
             }
             .frame(maxWidth: desktopFills(mine: mine) ? .infinity : nil, alignment: .leading)
-            .padding(.horizontal, customCard ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH))
+            .padding(.horizontal, customCard || (!mine && !bubblePrefs.botReplyBubbles) ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH))
             .padding(.vertical, customCard ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.top : Theme.Chat.bubblePaddingV))
             // No tail (reference 02): your message is a bubble in the accent,
             // the bot's reply one in a quiet grey (2026-10-28).
@@ -314,11 +314,13 @@ struct TextBubble: View {
 
     private func bubbleFill(mine: Bool) -> Color {
         _ = bubblePrefs.botBubble
+        _ = bubblePrefs.botReplyBubbles
         _ = openBot.openBotColor
         if mine, let botPaint { return botPaint.fill.color }
         if mine { return desktop?.bubbleUser ?? BubbleColor.mine }
-        if let desktop, message.webhookContent != nil, BotBubblePaint.current == nil { return desktop.card }
-        return BubbleColor.theirs(desktop: desktop)
+        if let desktop, message.webhookContent != nil { return desktop.card }
+        // a bot's own reply only: the accent tint and "Show bot replies in bubbles"
+        return BubbleColor.botReply(desktop: desktop)
     }
 
     /// The desktop's cap: the wide one for tables and rich fences.

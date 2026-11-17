@@ -870,8 +870,8 @@ pref("appearance.floatingBots", "appearance", "omb.floatingBots.prefs.v1", "obje
 pref("appearance.botAccent", "appearance", "sagax.botAccent.v1", "enum:1|0", "The open bot's colour as the accent (1 on, 0 off)", "Settings > Appearance");
 pref("appearance.sidebarHidden", "appearance", "sagax.sidebarHidden.v1", "object", "Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}})", "Settings > Appearance > Hidden from the sidebar");
 pref("appearance.busySend", "appearance", "sagax.busySend.v1", "string", "Sending to a busy bot", "Settings > Appearance");
-pref("appearance.botReplyBubbles", "appearance", "sagax.botReplyBubbles.v1", "enum:on|off", "Show bot replies in bubbles (on by default; off leaves reply text on the conversation background)", "Settings > Appearance > Conversation");
-pref("appearance.botBubbleAccent", "appearance", "sagax.botBubble.v1", "enum:1|0", "Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone reads the same choice)", "Settings > Appearance > Conversation");
+pref("appearance.botReplyBubbles", "appearance", "sagax.botReplyBubbles.v1", "enum:on|off", "Show bot replies in bubbles (on by default; off leaves reply text on the conversation background; the phone follows)", "Settings > Appearance > Conversation");
+pref("appearance.botBubbleAccent", "appearance", "sagax.botBubble.v1", "enum:1|0", "Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice)", "Settings > Appearance > Conversation");
 pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > Appearance > Conversation");
 pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > Appearance > Conversation");
 pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > Notifications");

@@ -992,9 +992,9 @@ the one class a bot's reply asks for in `Bubble`, `RoomTextMessage` and
   `appearance.botBubbleAccent`). On tints only the bot's own reply bubble
   (class `bot-reply-accent`, `src/styles.css`) with the accent; another
   person's message in a room and every other surface on the grey keep it. It is
-  the key the phone already syncs (`ios/Sources/CompanionCore/BotBubble.swift`,
-  which paints the 1:1 bubble in the bot's colour); the phone does not read
-  Show bot replies in bubbles yet.
+  one synced key with the phone, which draws the same 14 % tint
+  (`ios/Sources/CompanionCore/BotBubble.swift`, `BubbleColor.botReply`) in a
+  chat and in a room, and reads Show bot replies in bubbles too.
 GitHub reference links in Markdown use the accent-text token like other links
 (`GITHUB_REF_CLASS`, `src/components/ChatMarkdown.tsx`).
 

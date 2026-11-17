@@ -69,8 +69,9 @@ export interface ConsoleAnswer {
 }
 
 export interface ConsoleRoute {
-  /** PATCH is used by the member API (routines); the admin console stays GET/POST. */
-  method: "GET" | "POST" | "PATCH";
+  /** PATCH (routines) and DELETE (a hidden conversation, lot S1) are used
+   * by the member API; the admin console stays GET/POST. */
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   /** Relative to /api/org/admin/, parameters in braces: `bots/{id}`. */
   path: string;
   min: ConsoleRole;

@@ -3,6 +3,7 @@
 import { describeApproval } from "../../shared/approval-describe.ts";
 import { inboxKey } from "../../shared/approvals-inbox.ts";
 import { todayRows, type TodayDeps } from "../approvals/today-rows.ts";
+import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 /** The Today rows' view of the host for one viewer (#2689): their own
@@ -10,9 +11,11 @@ export type Host = Record<string, any>;
 export function todayDepsFor(host: Host, auth: RequestAuth, viewer: InboxViewer): TodayDeps {
   const approvalViewer = host.viewerForApproval(auth);
   const viewerId = host.channelFilterViewerId(auth);
+  // lot S1: a surface bot's rows are its host product's, never on Today
+  const shown = (bot) => (bot && !isSurfaceBot(bot) ? bot : undefined);
   return {
-    bots: () => host.store.bots,
-    bot: (id) => host.store.bot(id) ?? undefined,
+    bots: () => host.store.bots.filter((bot) => shown(bot)),
+    bot: (id) => shown(host.store.bot(id)),
     threads: (botId) => {
       const tasks = host.store.tasks(botId);
       const main = host.store.bot(botId)?.threadId;
@@ -50,6 +53,11 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
   const teams = host.managedTeamIds(viewer.principalId);
   const out: InboxApproval[] = [];
   for (const { bot, threadId, message, card, question } of host.pendingInboxCards()) {
+    // lot S1: a surface bot's cards are answered in its host product, never
+    // on Today nor in a manager's or admin's list; only a server command an
+    // organization admin must decide still reaches that admin (the turn
+    // would wait on nobody otherwise), as the card in the conversation
+    if (isSurfaceBot(bot) && !(card.adminApproval && host.IDENTITY.kind === "perspicax" && orgAdmin && !question)) continue;
     const confidential = host.store.isConfidentialThread(threadId);
     // the person who answers this card (a destination's answerer included),
     // as approvalAnswerRefusal and the console read it

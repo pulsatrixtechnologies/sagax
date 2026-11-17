@@ -213,3 +213,24 @@ describe("Today through the store's reads keeps its rules (#3542)", () => {
     expect(keys).toContain("still-open");
   });
 });
+
+describe("lot S1: a surface bot's cards and rows are never on Today", () => {
+  afterEach(() => {
+    messageDb.closeMessageDb();
+    rmSync(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("leaves out every card and row of a surface bot, its owner's view included", () => {
+    const { host } = fixture(5, 1, 0);
+    expect(kinds(host)).toHaveLength(5);
+    const store: Store = host.store;
+    // the bots holding the open "needs you" row (the first) and the open permission card (the fourth)
+    for (const bot of [store.bots[0]!, store.bots[3]!]) {
+      store.setBotTemporary(bot.id, { via: "mcp", createdAt: T0, ownerPrincipalId: PERSON, createdBy: { kind: "person", principalId: PERSON }, idleHours: 24, lastActiveAt: T0, surface: true });
+    }
+    expect(kinds(host)).toEqual(["proposal:open-offer", "question:open-q", "request:open-input"]);
+    // an organization admin's view: still nothing of it
+    host.orgAdminCaller = () => true;
+    expect(kinds(host)).toEqual(["proposal:open-offer", "question:open-q", "request:open-input"]);
+  });
+});

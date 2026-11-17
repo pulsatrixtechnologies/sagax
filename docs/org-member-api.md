@@ -62,6 +62,9 @@ any other shape, so the plan's `clients.bots.read` is written
 | `GET capabilities` | none | the version and the routes |
 | `GET bots` | `clients.botsRead` | the bots the person can see, with status |
 | `POST bots/{id}/messages` | `clients.botsMessage` | send, optionally wait up to 120 s |
+| `POST surface-bot` | `clients.botsMessage` | the person's surface bot, made the first time (lot S1) |
+| `POST threads/{id}/stop` | `clients.botsMessage` | stop the turn running in one of their conversations (lot S1) |
+| `DELETE threads/{id}` | `clients.botsMessage` | delete one of their hidden conversations (lot S1) |
 | `GET threads/{id}?since&limit` | `clients.botsRead` | messages since a cursor, steps, pending cards |
 | `GET threads/{id}/stream?anchor&wait` | `clients.botsRead` | watch a running turn, streamed (lot C.3) |
 | `GET routines` | `clients.routinesRead` | the person's own routines |
@@ -131,6 +134,17 @@ any other shape, so the plan's `clients.bots.read` is written
 - `sendId`: 8 to 80 of `[A-Za-z0-9_-]`; a retry with the same id is the same
   message.
 - `stream`: `true` answers NDJSON instead (see "The streamed turn").
+- `hidden`: `true` makes the console's send land in a hidden conversation,
+  as an AI client's does (lot S1: a host product's chat answered by Sagax).
+  Without it the console keeps the person's own chat (#1170). A send to a
+  surface bot is always hidden.
+- `modelSelection`: `{instanceId, model, effort?, auto?}`, the engine and
+  model this send runs on (lot S1). It becomes the conversation's own model,
+  set by the app's own model picker route as the person, with the checks of
+  `update_agent_model` (a refusal passes through); left alone when the
+  conversation already runs on it. Each conversation keeps its own model, so
+  two sends on two conversations never mix. With no conversation named, the
+  person's chat with the bot (or a new conversation) is used.
 
 ```json
 {
@@ -146,6 +160,48 @@ finish within `wait`, or a card waits: read the thread later with
 `GET threads/{threadId}?since={cursor}`. `reply` is every bot text after the
 message, joined, at most 32,000 characters. Every answer also carries
 `summary` (see "The turn summary"), null when the message has no thread.
+
+### The surface bot (lot S1)
+
+A host product (a gateway that serves a person a chat home) makes Sagax
+answer in their name through one service bot of theirs, the **surface bot**:
+
+- `POST surface-bot` `{"name": "..."}` (optional, 1 to 80 characters, one
+  line, default `Assistant`, used only the first time) answers `201
+  {bot: {id, name, approvalMode}, created: true}` the first time, then `200`
+  with the same bot and `created: false`. One per person and server. A
+  member makes it without `clients.agentsCreate`.
+- It is made by the app's own creation as the person (their bot, in their
+  environment, with their engines and the ones the organization gives
+  them), as a temporary agent (`server/temporary-agents.ts`) marked
+  `surface`: pinned (it never expires), outside the temporary agents' quota.
+  Its level is Full access when the organization lets their bots have it,
+  else the level a new bot of theirs gets. The organization's Deny and Ask
+  first rules judge every tool call of its turns as for any bot: an Ask
+  first card arrives on the stream (`approval`) and is answered with
+  `POST approvals/{id}`.
+- It is the person's alone. It is in no list and no admin route: not `GET
+  /api/bots`, the event stream, `GET bots`, the catalogue, the agent API
+  (`list_agents`, `find_agents`, `send_prompt`), any bot's peers, the
+  organization admin's bots, files, approvals and decision history, the
+  person's Today, search or notifications; it never has a routine. Any app
+  route naming it or one of its conversations from another session (an
+  organization admin's included) answers `404`. Its usage stays in the
+  usage surfaces, as every turn's.
+- Every send to it lands in a hidden conversation; `newThread: true` opens
+  one per host chat, then `threadId` continues it.
+- Deleting the person (their data erased) deletes it with their other bots.
+
+### `POST threads/{id}/stop`, `DELETE threads/{id}`
+
+`stop` stops the turn running in a conversation the person may stop (the
+app's own stop, as them): `{stopped: true, threadId, status}`.
+
+`DELETE` deletes one hidden conversation of the person (an AI client's, or
+any of their surface bot's) with its messages, after stopping a running
+turn: `{deleted: true, threadId}`. Another person's conversation, a visible
+one and a confidential one are `404`. A deleted conversation reads `404`
+after.
 
 ### `GET threads/{id}`
 

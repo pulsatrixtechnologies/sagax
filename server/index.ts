@@ -581,7 +581,7 @@ import { hasQueuedSteeredMessages,
   restoreSteeredMessages } from "./turns/steer-queue.ts";
 import { parallelBlocked,
   parallelPending } from "./parallel-tasks.ts";
-import type { ParallelTaskRef } from "../shared/parallel-tasks.ts";
+import { MAX_PARALLEL_PER_PERSON, type ParallelTaskRef } from "../shared/parallel-tasks.ts";
 import { RoomMemberLock } from "./room-member-lock.ts";
 import { listSignedInSites, signOutOfSites } from "./browser-sites.ts";
 import { roomTurnNarrationIds } from "./room-reply.ts";
@@ -1206,7 +1206,7 @@ import { createToolGrantRoutes } from "./routes/tool-grants.ts";
 import { createMyToolGrantRoutes } from "./routes/my-tool-grants.ts";
 import { createBotRuntimeSettingsRoutes } from "./routes/bot-runtime-settings.ts";
 import { createGroupBotPayerRoutes } from "./routes/group-bot-payer.ts";
-import { botMaxParallelPerPerson, botRecoveryBackups } from "./bots/bot-runtime-settings.ts";
+import { botMaxParallelPerPerson, botRecoveryBackups, MAX_BOT_CONCURRENT_THREADS } from "./bots/bot-runtime-settings.ts";
 import { setSharedHost } from "./host-kind.ts";
 import { createBotWorkspaceRoutes } from "./routes/bot-workspace.ts";
 import { createBotRulesRoutes } from "./routes/bot-rules.ts";
@@ -1368,7 +1368,7 @@ import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, type MemberPerson }
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
-import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
+import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, isSurfaceBot, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
 import { agentPromptWithFiles, applySkillAndPluginSwitches, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentRoutinePatch, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
@@ -9825,8 +9825,11 @@ function routineCreateRefused(auth: RequestAuth, botId: unknown): typeof COLLABO
   return level === "owner" || level === "manage" ? null : COLLABORATORS_CANNOT_CREATE;
 }
 function hiddenRoutineTarget(body: unknown, visible: VisibleSet): string | null {
-  if (visible.everything || !body || typeof body !== "object") return null;
+  if (!body || typeof body !== "object") return null;
   const { botId, groupId } = body as { botId?: unknown; groupId?: unknown };
+  // lot S1: a surface bot never has a routine, whoever asks
+  if (typeof botId === "string" && isSurfaceBot(store.bot(botId))) return "no such bot";
+  if (visible.everything) return null;
   if (typeof botId === "string" && store.bot(botId) && !visible.bot(botId)) return "no such bot";
   if (typeof groupId === "string" && store.group(groupId) && !visible.group(groupId)) return "no such channel";
   return null;
@@ -13817,7 +13820,8 @@ const storedAvatarExists = (avatarUrl: string): boolean =>
  * member stream's first frame of it. With a viewer the page is the one that
  * person may read; without one it is the whole page, and the caller projects
  * it (projectBotTranscript) or the frame layer does. */
-const publicBotQueuedMessages = () => queuedSteerSnapshot((botId, threadId) => Boolean(store.taskByThread(botId, threadId)));
+// lot S1: a temporary agent's queued words stay out of the app's live frames (temporaryAgentFrame)
+const publicBotQueuedMessages = () => queuedSteerSnapshot((botId, threadId) => Boolean(store.taskByThread(botId, threadId)) && !store.bot(botId)?.temporary);
 
 
 /** Goal-orchestrator worker turns driven by enqueueGoalAssignment: system
@@ -16039,7 +16043,10 @@ function temporaryAgentFrame(payload: Record<string, unknown>): boolean {
   const named = (payload.bot && typeof payload.bot === "object" ? (payload.bot as { id?: unknown }).id : undefined) ?? payload.botId;
   if (typeof named === "string" && store.bot(named)?.temporary) return true;
   const message = payload.message && typeof payload.message === "object" ? payload.message as { threadId?: unknown } : undefined;
-  const threadId = typeof payload.threadId === "string" ? payload.threadId : typeof message?.threadId === "string" ? message.threadId : undefined;
+  // lot S1: a runtime event names its conversation one level down
+  const event = payload.event && typeof payload.event === "object" ? payload.event as { threadId?: unknown } : undefined;
+  const threadId = typeof payload.threadId === "string" ? payload.threadId : typeof message?.threadId === "string" ? message.threadId
+    : typeof event?.threadId === "string" ? event.threadId : undefined;
   return threadId !== undefined && Boolean(store.botByThread(threadId)?.temporary);
 }
 
@@ -17351,8 +17358,11 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
 /** Whether a notification belongs to an outside agent's conversation with a
  * bot and is not one the person must act on (shared/agent-conversation.ts). */
 function notificationInAgentConversation(notification: Notification): boolean {
-  if (!notification.threadId || agentConversationNotifies(notification.kind)) return false;
+  if (!notification.threadId) return false;
   const bot = store.botByThread(notification.threadId);
+  // lot S1: a surface bot's work is shown by the host product only, never notified
+  if (isSurfaceBot(bot)) return true;
+  if (agentConversationNotifies(notification.kind)) return false;
   return Boolean(bot && isAgentConversation(store.taskByThread(bot.id, notification.threadId)));
 }
 
@@ -21418,7 +21428,8 @@ const botWaits = waitsBoot.waits;
 // #4250 (S5): the lines are the pre-check of the bot's « Checklist » routine
 // (code check `heartbeat`); the routine scheduler beats, no timer of its own.
 const heartbeat = new HeartbeatManager({
-  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
+  // lot S1: a surface bot has no routine
+  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot) && !isSurfaceBot(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
   read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
   routines: () => routines ? {
     list: () => routines!.listRoutines(),
@@ -32695,7 +32706,8 @@ const orgBotsDeps: BotsDeps = {
 const CATALOG_MEMORY_MAX = 200;
 ROUTES.push(createBotCatalogRoutes({
   organization: () => IDENTITY.kind === "perspicax",
-  bots: () => store.bots.map((bot) => ({
+  // lot S1: a surface bot is in no catalogue
+  bots: () => store.bots.filter((bot) => !isSurfaceBot(bot)).map((bot) => ({
     id: bot.id,
     name: bot.name,
     title: bot.title ?? "",
@@ -32900,7 +32912,8 @@ const orgRoutinesDeps: RoutinesDeps = {
     return routine;
   },
   orgApprovals: (viewer) => pendingApprovalsFor(viewer, "org"),
-  decisions: (range) => readDecisionRange(DATA_DIR, range),
+  // lot S1: a surface bot's decisions are its person's, never in the admin history
+  decisions: (range) => readDecisionRange(DATA_DIR, range).filter((row) => !isSurfaceBot(row.botId ? store.bot(row.botId) : store.botByThread(row.threadId))),
   decisionPerson: (actor) => {
     if (!actor) return null;
     if (actor.kind === "loopback") return { principalId: "", sub: null, name: "This computer" };
@@ -33428,17 +33441,18 @@ const orgAdmin = createOrgAdminRoutes({
     ...computersRoutes(orgComputersDeps),
   ],
   // The console's file browser (Perspicax 2026-10-08, slice 1: read only).
+  // lot S1: a surface bot is no admin's to browse (adminBotOf)
   files: {
     reach: (botId) => {
-      const bot = store.bot(botId);
+      const bot = adminBotOf(botId);
       return bot ? orgBotReach(bot) : null;
     },
     botFiles: (botId) => {
-      const bot = store.bot(botId);
+      const bot = adminBotOf(botId);
       return bot ? { name: bot.name, roots: orgBotFileRoots(bot) } : null;
     },
     attachments: async (botId) => {
-      const bot = store.bot(botId);
+      const bot = adminBotOf(botId);
       return bot ? orgBotAttachments(bot) : [];
     },
     record: (principalId, entry) => {
@@ -33541,6 +33555,90 @@ function issueTemporaryCreateToken(record: TemporaryAgent, principalId: string):
   const token = randomBytes(32).toString("base64url");
   temporaryCreateTokens.set(token, { record, principalId: principalId.trim().toLowerCase(), expires: now + 60_000 });
   return token;
+}
+/** A temporary agent of a person, made by the app's own creation as them
+ * (POST /api/bots with a one-use pass, so every rule of a member's new bot
+ * holds): create_agent's and the surface bot's one path. */
+async function createPersonTemporary(member: MemberPerson, record: TemporaryAgent, body: Record<string, unknown>): Promise<{ ok: true; bot: BotRecord } | { ok: false; reply: { status: number; body: unknown }; passExpired: boolean }> {
+  const temporaryToken = issueTemporaryCreateToken(record, member.principalId);
+  const created = await performAsMember(member, { method: "POST", path: "/api/bots", body: { ...body, temporaryToken } });
+  temporaryCreateTokens.delete(temporaryToken);
+  const answer = (created.body ?? {}) as { bot?: { id?: unknown }; id?: unknown; error?: unknown };
+  if (created.status >= 300) {
+    // The one-use pass is checked first by the route: a refusal of it
+    // means it expired or was spent before the route ran.
+    return { ok: false, reply: created, passExpired: created.status === 400 && answer.error === "temporaryToken is not valid" };
+  }
+  const bot = store.bot(String(answer.bot?.id ?? answer.id ?? ""));
+  return bot ? { ok: true, bot } : { ok: false, reply: { status: 502, body: null }, passExpired: false };
+}
+/** Lot S1: the person's surface bot (server/temporary-agents.ts
+ * isSurfaceBot), live and not archived, or undefined. */
+function surfaceBotOf(principalId: string): BotRecord | undefined {
+  const owner = principalId.trim().toLowerCase();
+  return store.bots.find((bot) => isSurfaceBot(bot) && !bot.hidden && !bot.temporary!.archived && bot.temporary!.ownerPrincipalId === owner);
+}
+const surfaceBotCreations = new Map<string, Promise<SurfaceBotResult>>();
+type SurfaceBotResult = { ok: true; id: string; name: string; created: boolean; approvalMode: string | null } | { ok: false; reply: { status: number; body: unknown } };
+/** Lot S1: the person's one surface bot, made the first time through the
+ * app's own creation as them (a pinned temporary agent marked `surface`),
+ * on Full access when the organization lets their bots have it (no card
+ * added; its Deny and Ask first rules still judge every tool call), else on
+ * the level a new bot of theirs gets. One creation at a time per person. */
+function ensureSurfaceBot(person: MemberPerson, name: string): Promise<SurfaceBotResult> {
+  const owner = person.principalId.trim().toLowerCase();
+  const answer = (bot: BotRecord, created: boolean): SurfaceBotResult => ({ ok: true, id: bot.id, name: bot.name, created, approvalMode: approvalModeFor(bot) ?? null });
+  const existing = surfaceBotOf(owner);
+  if (existing) return Promise.resolve(answer(existing, false));
+  const running = surfaceBotCreations.get(owner);
+  if (running) return running.then((made) => (made.ok ? { ...made, created: false } : made));
+  const work = (async (): Promise<SurfaceBotResult> => {
+    const now = Date.now();
+    const creator: TemporaryCreator = { kind: "person", principalId: owner };
+    const record: TemporaryAgent = { via: "mcp", createdAt: now, ownerPrincipalId: owner, createdBy: creator, idleHours: TEMP_AGENT_DEFAULT_IDLE_HOURS, lastActiveAt: now, pinned: { principalId: owner, at: now }, surface: true };
+    let made = await createPersonTemporary(person, record, { name, approvalMode: "full" });
+    // the organization keeps Full from its members' bots: the level a new bot of theirs gets
+    if (!made.ok && !made.passExpired && (made.reply.status === 403 || made.reply.status === 409)) made = await createPersonTemporary(person, record, { name });
+    if (made.ok) {
+      // one conversation per host chat: its turns run side by side, as wide as a bot allows
+      const widened = await performAsMember(person, { method: "PATCH", path: `/api/bots/${encodeURIComponent(made.bot.id)}/runtime-settings`,
+        body: { maxConcurrentThreads: MAX_BOT_CONCURRENT_THREADS, maxParallelPerPerson: MAX_PARALLEL_PER_PERSON } });
+      if (widened.status >= 300) console.warn(`[surface-bot] ${made.bot.id}: parallel conversations kept at the default (HTTP ${widened.status})`);
+      return answer(store.bot(made.bot.id) ?? made.bot, true);
+    }
+    if (made.passExpired) return { ok: false, reply: { status: 503, body: { code: "create_pass_expired", message: "The server took too long to create the bot. Try again." } } };
+    return { ok: false, reply: made.reply };
+  })();
+  surfaceBotCreations.set(owner, work);
+  return work.finally(() => surfaceBotCreations.delete(owner));
+}
+/** Lot S1: a bot an admin route may name: never a surface bot. */
+function adminBotOf(botId: string): BotRecord | undefined {
+  const bot = store.bot(botId);
+  return bot && !isSurfaceBot(bot) ? bot : undefined;
+}
+/** Lot S1: a request that names a surface bot, or one of its conversations,
+ * from a session that is not its person: answered as an unknown bot (an
+ * organization admin's session included). The desktop and service loopback
+ * keep the paths a turn's own tools use. */
+function surfaceTargetRefused(auth: RequestAuth, path: string): boolean {
+  if (auth.kind !== "session") return false;
+  const named = /^\/api\/(bots|threads)\/([\w-]{1,160})(?:\/|$)/.exec(path);
+  if (!named) return false;
+  const bot = named[1] === "bots" ? store.bot(named[2]!) : store.botByThread(named[2]!);
+  if (!bot || !isSurfaceBot(bot)) return false;
+  return (auth.session.principalId?.trim().toLowerCase() ?? "") !== bot.temporary!.ownerPrincipalId;
+}
+/** Lot S1: the bot of a hidden conversation this person owns (an outside
+ * agent's conversation, or any conversation of their surface bot), never a
+ * confidential one; else null. */
+function hiddenConversationOf(threadId: string, principalId: string): { botId: string } | null {
+  const bot = store.botByThread(threadId);
+  if (!bot || store.isConfidentialThread(threadId)) return null;
+  const person = principalId.trim().toLowerCase();
+  if (isSurfaceBot(bot)) return bot.temporary!.ownerPrincipalId === person ? { botId: bot.id } : null;
+  const task = store.taskByThread(bot.id, threadId);
+  return task && isAgentConversation(task) && task.ownerPrincipalId === person ? { botId: bot.id } : null;
 }
 /** The record a token carries, once, for the person it was issued to. */
 /** The newest sign of life of a bot: its own conversations. */
@@ -33798,7 +33896,7 @@ async function agentsReachedBy(caller: AgentCaller, options?: { archived?: boole
     // A bot reaches the archived temporary agents it created, to restore
     // or delete them for good (delete_agent offers both to it).
     const archivedOwn = withArchived
-      ? store.bots.filter((bot) => bot.temporary?.archived && bot.temporary.createdBy.kind === "bot" && bot.temporary.createdBy.botId === from.id)
+      ? store.bots.filter((bot) => bot.temporary?.archived && !isSurfaceBot(bot) && bot.temporary.createdBy.kind === "bot" && bot.temporary.createdBy.botId === from.id)
         .map((bot) => ({ ...agentSummary(bot), archived: true }))
       : [];
     return [...agentPeersOf(from).map(agentSummary), ...archivedOwn];
@@ -33812,7 +33910,8 @@ async function agentsReachedBy(caller: AgentCaller, options?: { archived?: boole
   const person = caller.id.trim().toLowerCase();
   const reachesTemporary = (temporary: TemporaryAgent) => (withArchived || !temporary.archived) && (caller.admin === true || temporary.ownerPrincipalId === person ||
     (temporary.createdBy.kind === "bot" && ids.has(temporary.createdBy.botId)));
-  return store.bots.filter((bot) => (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
+  // lot S1: a surface bot is driven by the member API only, never an agent
+  return store.bots.filter((bot) => !isSurfaceBot(bot) && (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
     .map((bot) => (bot.hidden || bot.temporary?.archived ? { ...agentSummary(bot), archived: true } : agentSummary(bot)));
 }
 const agentApi = createAgentApi({
@@ -33881,21 +33980,15 @@ const agentApi = createAgentApi({
       if (temporaryActiveCount(store.bots.map((bot) => bot.temporary), temporaryQuotaKey(record)) >= TEMP_AGENT_QUOTA) {
         return agentRefuse(409, "temporary_quota", `You already have ${TEMP_AGENT_QUOTA} active temporary agents. Delete one with delete_agent first, or create a lasting bot with kind lasting.`, { quota: TEMP_AGENT_QUOTA });
       }
-      const temporaryToken = issueTemporaryCreateToken(record, creator.principalId);
-      const created = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: "/api/bots", body: { name: input.name, ...(input.description ? { description: input.description } : {}), temporaryToken } });
-      temporaryCreateTokens.delete(temporaryToken);
-      const body = (created.body ?? {}) as { bot?: { id?: unknown }; id?: unknown };
-      if (created.status >= 300) {
-        // The one-use pass is checked first by the route: a refusal of it
-        // means it expired or was spent before the route ran.
-        if (created.status === 400 && (created.body as { error?: unknown } | null)?.error === "temporaryToken is not valid") {
+      const made = await createPersonTemporary(memberForAgentCaller(caller), record, { name: input.name, ...(input.description ? { description: input.description } : {}) });
+      if (!made.ok) {
+        if (made.passExpired) {
           return agentRefuse(503, "create_pass_expired", "The server took too long to use this creation's one-use pass, so nothing was created. Call create_agent again with the same arguments.", { retryable: true });
         }
-        return agentRouteRefusal(created, "The agent could not be created.");
+        if (made.reply.status === 502 && made.reply.body === null) return agentRefuse(502, "not_created", "The agent was created but could not be read back. Call list_agents before creating it again.");
+        return agentRouteRefusal(made.reply, "The agent could not be created.");
       }
-      const id = String(body.bot?.id ?? body.id ?? "");
-      if (!store.bot(id)) return agentRefuse(502, "not_created", "The agent was created but could not be read back. Call list_agents before creating it again.");
-      return agentSummary(store.bot(id)!);
+      return agentSummary(made.bot);
     }
     const chief = agentApiCallerBot(caller);
     // Depth 1: an agent made by create_agent never makes another.
@@ -34613,6 +34706,14 @@ const orgMember = createOrgMemberRoutes({
     return bot ? agentConversationsOf(bot, principalId) : [];
   },
   markAiClientLine,
+  // lot S1: the person's surface bot and their hidden conversations
+  ensureSurfaceBot: (person, input) => ensureSurfaceBot(person, input.name),
+  surfaceBot: (botId) => {
+    const bot = store.bot(botId);
+    return bot && isSurfaceBot(bot) ? { ownerPrincipalId: bot.temporary!.ownerPrincipalId } : null;
+  },
+  hiddenConversationOf,
+  threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   expireDueApprovals: expireDueApprovalsInThread,
   pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
   approvalWords: (person) => serverApprovalWords(languageOfPerson(person.principalId)).t,
@@ -35532,7 +35633,8 @@ ROUTES.push(createSearchRoutes({
   }),
   visibleNow: (auth, path) => visibleTo(viewerFor(auth, path)),
   channelFilterViewerId,
-  hitVisibleNow: searchHitVisibleNow,
+  // lot S1: a surface bot's conversations are never search hits
+  hitVisibleNow: (threadId, viewerId) => !isSurfaceBot(store.botByThread(threadId)) && searchHitVisibleNow(threadId, viewerId),
   privateRowHidden,
   viewerForApproval
 }));
@@ -37386,6 +37488,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // lot S1: a surface bot and its conversations are its person's alone
+    if (surfaceTargetRefused(auth, path)) return void json(res, 404, { error: "no such bot" });
     // The app's language, for a person who never saved one (#2803, #2805).
     const askedIn = requestLanguage(req.headers);
     requestLanguages.note(actorPrincipalId(auth), askedIn);

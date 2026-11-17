@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgAdminBots (#1388). Pure move from server/index.ts. */
+import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createOrgAdminBots(getHost: () => Host): any {
@@ -8,7 +9,8 @@ function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
   const { approvalModeFor, attachmentExists, resolveEngineAccess, sectionKey } = host;
   const routineCounts = new Map<string, number>();
   for (const routine of host.routines?.listRoutines() ?? []) routineCounts.set(routine.botId, (routineCounts.get(routine.botId) ?? 0) + 1);
-  return host.store.bots.map((bot) => {
+  // lot S1: a surface bot is its person's alone, never in an admin list or route
+  return host.store.bots.filter((bot) => !isSurfaceBot(bot)).map((bot) => {
     const facts = host.botFacts(bot);
     const engine = host.engineOfBot(bot);
     const plan = host.IDENTITY.kind === "perspicax"

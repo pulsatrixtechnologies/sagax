@@ -3,9 +3,10 @@
 // org-member-api.e2e.test.ts.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
+import type { ModelSelection } from "../../shared/model-selection.ts";
 import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { routeRefusal } from "../agent-api.ts";
@@ -1359,5 +1360,185 @@ describe("a form card read by an AI client (#4490)", () => {
     expect(approval.questions).toHaveLength(12);
     expect(approval.questions![1]).toMatchObject({ question: "Row 2", kind: "duration" });
     expect(approval.questions![11]).toMatchObject({ optional: true });
+  });
+});
+
+describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hidden conversation", () => {
+  // Bob's surface bot is "sb"; Ann's ordinary bot is "b1".
+  let surfaces: Map<string, string>;
+  let made: number;
+  let models: Map<string, ModelSelection>;
+  let hiddenOwned: Map<string, { owner: string; botId: string }>;
+  let opened: Array<{ botId: string; principalId: string; fresh: boolean }>;
+  beforeEach(() => {
+    surfaces = new Map([["sb", "pr_bob"]]);
+    made = 0;
+    models = new Map();
+    hiddenOwned = new Map([["th_bob", { owner: "pr_bob", botId: "sb" }]]);
+    opened = [];
+    deps.ensureSurfaceBot = async (person, input) => {
+      const existing = [...surfaces].find(([, owner]) => owner === person.principalId);
+      if (existing) return { ok: true, id: existing[0], name: "Kept", created: false, approvalMode: "full" };
+      if (input.name === "Refused") return { ok: false, reply: { status: 403, body: { error: "forbidden: only a member of the organization can create bots", code: "create_bots_members_only" } } };
+      made += 1;
+      surfaces.set(`sb_${person.principalId}`, person.principalId);
+      return { ok: true, id: `sb_${person.principalId}`, name: input.name, created: true, approvalMode: "full" };
+    };
+    deps.surfaceBot = (botId) => (surfaces.has(botId) ? { ownerPrincipalId: surfaces.get(botId)! } : null);
+    deps.hiddenConversationOf = (threadId, principalId) => {
+      const found = hiddenOwned.get(threadId);
+      return found && found.owner === principalId ? { botId: found.botId } : null;
+    };
+    deps.threadModel = (_botId, threadId) => models.get(threadId) ?? null;
+    deps.agentConversation = (botId, person, fresh) => {
+      opened.push({ botId, principalId: person.principalId, fresh });
+      return `ac_${opened.length}`;
+    };
+  });
+  afterEach(() => {
+    deps.ensureSurfaceBot = undefined;
+    deps.surfaceBot = undefined;
+    deps.hiddenConversationOf = undefined;
+    deps.threadModel = undefined;
+    deps.agentConversation = undefined;
+  });
+  /** A Sagax that takes sends and model switches, and answers each send done. */
+  const serveSends = () => {
+    respond = (request) => {
+      if (request.method === "PATCH") {
+        const thread = request.path.split("/").pop()!;
+        models.set(thread, (request.body as { modelSelection: ModelSelection }).modelSelection);
+        return { status: 200, body: { task: {} } };
+      }
+      if (request.method === "POST" && request.path.endsWith("/messages")) {
+        const body = request.body as { threadId: string };
+        return { status: 200, body: { threadId: body.threadId, message: { id: `m_${body.threadId}` } } };
+      }
+      return { status: 200, body: { messages: [] } };
+    };
+  };
+
+  it("makes the person's surface bot once, without clients.agentsCreate, and the same one after", async () => {
+    people.get("bob")!.permissions = ["clients.botsMessage"];
+    const first = await call("POST", "surface-bot", token("ann", "admin"), { name: "Helper" });
+    expect(first.status).toBe(201);
+    expect(first.body).toEqual({ bot: { id: "sb_pr_ann", name: "Helper", approvalMode: "full" }, created: true });
+    expect(recorded.map((row) => row.action)).toEqual(["client.surface_bot"]);
+    const again = await call("POST", "surface-bot", token("ann", "admin"), {});
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ bot: { id: "sb_pr_ann" }, created: false });
+    expect(made).toBe(1);
+    // a member's own, with their default keys only
+    expect((await call("POST", "surface-bot", token("bob"), {})).body).toMatchObject({ bot: { id: "sb" }, created: false });
+    expect((await call("POST", "surface-bot", token("ann", "admin"), { name: "two\nlines" })).body.code).toBe("bad_request");
+    expect((await call("POST", "surface-bot", token("ann", "admin"), { name: "x", kind: "lasting" })).body.message).toBe("Unknown field: kind.");
+    surfaces.clear();
+    const refused = await call("POST", "surface-bot", token("ann", "admin"), { name: "Refused" });
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe("create_bots_members_only");
+    expect((await call("GET", "capabilities", token("bob"))).body.routes).toEqual(expect.arrayContaining(["POST surface-bot", "DELETE threads/{id}", "POST threads/{id}/stop"]));
+  });
+
+  it("the console's hidden send lands in a hidden conversation, a plain one keeps the person's chat", async () => {
+    serveSends();
+    const hidden = await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "hi", hidden: true, newThread: true });
+    expect(hidden.status).toBe(200);
+    expect(hidden.body.threadId).toBe("ac_1");
+    expect(opened).toEqual([{ botId: "b1", principalId: "pr_bob", fresh: true }]);
+    const sent = performed.find((p) => p.request.path === "/api/bots/b1/messages")!;
+    expect(sent.request.body).toMatchObject({ threadId: "ac_1", busyMode: "after", aiClient: true });
+    expect(recorded.at(-1)?.after).toMatchObject({ threadId: "ac_1", hidden: true });
+    performed = [];
+    await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "plain" });
+    expect(opened).toHaveLength(1);
+    expect(performed.find((p) => p.request.path === "/api/bots/b1/messages")!.request.body).toEqual({ text: "plain" });
+    expect((await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", hidden: "yes" })).body.code).toBe("bad_request");
+  });
+
+  it("a send to a surface bot is always hidden, and another person's surface bot is unknown, an admin's view included", async () => {
+    serveSends();
+    const own = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi" });
+    expect(own.status).toBe(200);
+    expect(own.body.threadId).toBe("ac_1");
+    performed = [];
+    const other = await call("POST", "bots/sb/messages", token("ann", "admin", "console"), { text: "peek", hidden: true });
+    expect(other.status).toBe(404);
+    expect(performed).toEqual([]);
+  });
+
+  it("a model per send: each conversation switched to its own before the send, never twice, and two at once never mix", async () => {
+    serveSends();
+    const fast = { instanceId: "claude", model: "small" };
+    const deep: ModelSelection = { instanceId: "codex", model: "large", effort: "high" };
+    const [a, b] = await Promise.all([
+      call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "one", threadId: "th_a", modelSelection: fast }),
+      call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "two", threadId: "th_b", modelSelection: deep }),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(models.get("th_a")).toEqual(fast);
+    expect(models.get("th_b")).toEqual(deep);
+    const patches = performed.filter((p) => p.request.method === "PATCH").map((p) => p.request);
+    expect(patches).toEqual(expect.arrayContaining([
+      { method: "PATCH", path: "/api/bots/sb/tasks/th_a", body: { modelSelection: fast } },
+      { method: "PATCH", path: "/api/bots/sb/tasks/th_b", body: { modelSelection: deep } },
+    ]));
+    // each switch lands before that conversation's send
+    for (const thread of ["th_a", "th_b"]) {
+      const at = (kind: string) => performed.findIndex((p) => p.request.method === kind && JSON.stringify(p.request).includes(thread));
+      expect(at("PATCH")).toBeLessThan(at("POST"));
+    }
+    performed = [];
+    await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "again", threadId: "th_a", modelSelection: fast });
+    expect(performed.some((p) => p.request.method === "PATCH")).toBe(false);
+    expect(recorded.at(-1)?.after).toMatchObject({ model: "small" });
+    // the route's refusal passes through, and nothing is sent
+    performed = [];
+    respond = (request) => (request.method === "PATCH" ? { status: 403, body: { error: "This engine is not allowed in your organization." } } : { status: 200, body: {} });
+    const refused = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "x", threadId: "th_c", modelSelection: { instanceId: "other", model: "m" } });
+    expect(refused.status).toBe(403);
+    expect(refused.body.message).toBe("This engine is not allowed in your organization.");
+    expect(performed.some((p) => p.request.path.endsWith("/messages"))).toBe(false);
+    for (const bad of [{ model: "m" }, { instanceId: "c", model: "m", effort: "loud" }, { instanceId: "c", model: "m", fast: {} }, "claude"]) {
+      expect((await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "x", modelSelection: bad })).body.code).toBe("bad_request");
+    }
+  });
+
+  it("deletes the person's own hidden conversation, stopping its turn first; any other is unknown", async () => {
+    let state: ThreadStatus = "working";
+    status = () => state;
+    respond = (request) => {
+      if (request.path.endsWith("/interrupt")) state = "idle";
+      return { status: 200, body: {} };
+    };
+    const deleted = await call("DELETE", "threads/th_bob", token("bob"));
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toEqual({ deleted: true, threadId: "th_bob" });
+    expect(performed.map((p) => `${p.request.method} ${p.request.path}`)).toEqual(["POST /api/bots/sb/interrupt", "DELETE /api/bots/sb/tasks/th_bob"]);
+    expect(recorded.at(-1)).toMatchObject({ action: "client.thread_delete", after: { botId: "sb" } });
+    performed = [];
+    // another person's (an admin's view included), a visible one, an unknown one
+    expect((await call("DELETE", "threads/th_bob", token("ann", "admin"))).status).toBe(404);
+    expect((await call("DELETE", "threads/t1", token("bob"))).status).toBe(404);
+    expect(performed).toEqual([]);
+    // once gone, it reads as gone
+    hiddenOwned.delete("th_bob");
+    expect((await call("DELETE", "threads/th_bob", token("bob"))).status).toBe(404);
+  });
+
+  it("stops a turn as the person, never on another person's surface bot", async () => {
+    respond = () => ({ status: 200, body: { ok: true } });
+    deps.botOfThread = (threadId) => (threadId === "th_bob" ? "sb" : threadId === "t1" ? "b1" : null);
+    try {
+      const stopped = await call("POST", "threads/th_bob/stop", token("bob"), {});
+      expect(stopped.status).toBe(200);
+      expect(stopped.body).toMatchObject({ stopped: true, threadId: "th_bob" });
+      expect(performed[0]!.request).toEqual({ method: "POST", path: "/api/bots/sb/interrupt", body: { threadId: "th_bob" } });
+      performed = [];
+      expect((await call("POST", "threads/th_bob/stop", token("ann", "admin"), {})).status).toBe(404);
+      expect((await call("POST", "threads/nowhere/stop", token("bob"), {})).status).toBe(404);
+      expect(performed).toEqual([]);
+    } finally {
+      deps.botOfThread = (threadId) => (threadId === "t1" ? "b1" : null);
+    }
   });
 });

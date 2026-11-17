@@ -17,6 +17,14 @@
 //     before the bot is deleted for good.
 //   - Only its owner or an organization admin deletes it (a bot only one it
 //     created itself, for the same owner).
+//
+// A surface bot (lot S1, 2026-11-17) is a temporary agent marked `surface`:
+// the one service bot a person's host product (a gateway that serves a chat
+// home) drives through the member API to answer as Sagax in their name. It
+// is the person's, pinned (it never expires), outside the quota, and it
+// leaves every list on top of the temporary agent's: the agent API, the
+// catalogue, peers, admin routes, the person's Today, search, routines and
+// notifications (isSurfaceBot).
 
 export const TEMP_AGENT_IDLE_HOURS_DEFAULT = 24;
 export const TEMP_AGENT_IDLE_HOURS_MAX = 720;
@@ -46,6 +54,15 @@ export interface TemporaryAgent {
   /** Where its Auto turns start (create_agent `workspace`,
    * server/computer/auto-computer.ts autoStartTarget); checked at every turn. */
   workspace?: "this_computer" | "browser" | "cloud" | "local_vm";
+  /** Lot S1: the person's surface bot, driven only by their host product
+   * through the member API (`POST surface-bot`). Never listed anywhere. */
+  surface?: true;
+}
+
+/** Whether a bot is a person's surface bot (lot S1): out of every list and
+ * admin route, reached only by its owner through the member API. */
+export function isSurfaceBot(bot: { temporary?: Pick<TemporaryAgent, "surface"> } | null | undefined): boolean {
+  return bot?.temporary?.surface === true;
 }
 
 const PRINCIPAL = /^[\w:.@-]{1,200}$/;
@@ -89,6 +106,7 @@ export function cleanTemporaryAgent(value: unknown): TemporaryAgent | undefined 
     out.archived = { at: archived.at, by, reason: archived.reason, purgeAt: archived.purgeAt };
   }
   if (v.workspace === "this_computer" || v.workspace === "browser" || v.workspace === "cloud" || v.workspace === "local_vm") out.workspace = v.workspace;
+  if (v.surface === true) out.surface = true;
   return out;
 }
 
@@ -115,13 +133,14 @@ export function quotaKey(agent: Pick<TemporaryAgent, "ownerPrincipalId" | "creat
 /** The active (not archived) temporary agents counted under `key`. */
 export function activeCount(agents: Iterable<TemporaryAgent | undefined>, key: string): number {
   let n = 0;
-  for (const agent of agents) if (agent && !agent.archived && quotaKey(agent) === key) n++;
+  // a surface bot (lot S1) is the person's service bot, never one of their agents
+  for (const agent of agents) if (agent && !agent.archived && !agent.surface && quotaKey(agent) === key) n++;
   return n;
 }
 
 /** Whether an active, unpinned agent has been idle past its expiry. */
 export function expired(agent: TemporaryAgent, lastActivity: number, now: number): boolean {
-  if (agent.archived || agent.pinned) return false;
+  if (agent.archived || agent.pinned || agent.surface) return false;
   return now - Math.max(agent.lastActiveAt, lastActivity) >= agent.idleHours * 3_600_000;
 }
 

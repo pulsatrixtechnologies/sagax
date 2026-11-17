@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  activeCount, archiveMark, capInstructions, cleanTemporaryAgent, defaultIdleHours, expired, mayDelete, mayPin, profileSections, purgeDue, quotaKey,
+  activeCount, archiveMark, capInstructions, cleanTemporaryAgent, defaultIdleHours, expired, isSurfaceBot, mayDelete, mayPin, profileSections, purgeDue, quotaKey,
   TEMP_AGENT_QUOTA, TEMP_AGENT_RETENTION_MS, temporaryOwner, type TemporaryAgent,
 } from "./temporary-agents.ts";
 
@@ -134,5 +134,23 @@ describe("temporary agents: the profile sections", () => {
     const long = capInstructions("x".repeat(40_000));
     expect(long.truncated).toBe(true);
     expect(long.text.length).toBeLessThan(33_000);
+  });
+});
+
+describe("lot S1: a person's surface bot", () => {
+  const surface = byPerson("pr_ana", { surface: true, pinned: { principalId: "pr_ana", at: T0 } });
+  it("keeps its mark through a load, and an ordinary agent never gets one", () => {
+    expect(cleanTemporaryAgent(surface)).toMatchObject({ surface: true, ownerPrincipalId: "pr_ana" });
+    expect(cleanTemporaryAgent({ ...byPerson("pr_ana"), surface: "yes" })?.surface).toBeUndefined();
+    expect(isSurfaceBot({ temporary: surface })).toBe(true);
+    expect(isSurfaceBot({ temporary: byPerson("pr_ana") })).toBe(false);
+    expect(isSurfaceBot({})).toBe(false);
+    expect(isSurfaceBot(undefined)).toBe(false);
+  });
+  it("is outside the temporary agents' quota and never expires", () => {
+    expect(activeCount([surface, byPerson("pr_ana")], quotaKey(surface))).toBe(1);
+    const unpinned: TemporaryAgent = { ...surface };
+    delete unpinned.pinned;
+    expect(expired(unpinned, T0, T0 + 10_000 * HOUR)).toBe(false);
   });
 });

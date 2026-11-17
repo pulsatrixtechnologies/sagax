@@ -20,6 +20,7 @@ import {
   roomPeerRosterSystemPrompt,
   roomRosterLine,
   setSameOwner,
+  surfaceAgent,
   teammateAvailabilityPrompt,
   type RosterMember,
 } from "./peer-roster.ts";
@@ -146,6 +147,12 @@ describe("one person's own Primary Bot (#1098)", () => {
     expect(canReachPeer(self, fleet[4]!)).toBe(true);
     // hidden and audience still apply
     expect(canReachPeer(self, { ...primary, hidden: true })).toBe(false);
+    // lot S1: a person's surface bot is reached by no bot, theirs included
+    const surface: RosterMember = { ...primary, id: "surface", chiefOfStaff: false, temporary: { surface: true } };
+    expect(surfaceAgent(surface)).toBe(true);
+    expect(canReachPeer(self, surface)).toBe(false);
+    expect(canReachPeer(primary, surface)).toBe(false);
+    expect(reachablePeers([...fleet, primary, surface], self).map(bot => bot.id)).not.toContain("surface");
     expect(canReachPeer(self, { ...primary, visibility: "admins" })).toBe(false);
   });
 

@@ -794,7 +794,7 @@ import { lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM
 import { answerRoutineFix, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
 import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
-import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
+import { alwaysChoiceOn, alwaysChoices, answeredCardText, answerHistory, answerLearningNote, answersOnKind, forgetAlwaysChoice, learnFromAnsweredCard, migrateAlwaysLines, type AnswerScope } from "./proactive/answer-learning.ts";
 import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
@@ -1265,6 +1265,7 @@ import { createModerationStore } from "./safety/moderation.ts";
 import { createGroupFolderRoutes } from "./routes/group-folders.ts";
 import { createNudgeRoutes } from "./routes/nudges.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
+import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
 import { createRoutineBulkRoutes } from "./routes/routine-bulk.ts";
 import { createMeetingRoutes } from "./routes/meetings.ts";
@@ -16849,8 +16850,8 @@ function keyedCardScope(threadId: string, message: Message): AnswerScope | null 
 
 /** #4250 (S7): a keyed card left the pending ones: when the person answered
  * it, the ledger keeps the answer by kind, and a click on its "Always do
- * this for this routine" option writes its line into the routine's
- * instructions (answer-learning.ts). Never in a room: another person's
+ * this for this routine" option keeps it as the person's preference for the
+ * routine and kind (#4558, answer-learning.ts), never in the instructions. Never in a room: another person's
  * answer never teaches someone's routine. */
 function learnFromKeyedCard(threadId: string, messageId: string, key: string, message: Message | undefined): void {
   const row = `${threadId}\u0000${messageId}`;
@@ -16867,18 +16868,7 @@ function learnFromKeyedCard(threadId: string, messageId: string, key: string, me
   }
   const scope = keyedCardScope(threadId, message);
   if (!scope) return;
-  learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, ...(card.answerLearning ? { learning: card.answerLearning } : {}) }, (routineId, kind, line) => {
-    const routine = routines?.routineById(routineId);
-    const prompt = routine ? instructionsWithAlwaysLine(routine.prompt, kind, line) : null;
-    if (!routine || prompt === null) return false;
-    try {
-      // the person's own click: the routine's line in the conversation says it
-      return Boolean(routines?.update(routine.id, { prompt }, undefined, { actorPrincipalId: scope.person || undefined, conversation: { threadId, messageId } }));
-    } catch (error) {
-      console.warn(`routine ${routine.id} always line: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
-  });
+  learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, ...(card.answerLearning ? { learning: card.answerLearning } : {}) });
 }
 
 /** #4250 (S7): a routine run's keyed cards learn from the person's answers
@@ -16892,17 +16882,19 @@ function routineAnswerLearning(threadId: string): Parameters<typeof createAgentC
   return {
     routineId: routine.id,
     answers: (key) => answersOnKind(signalLedger, scope, key),
-    instructions: () => routines?.routineById(routine.id)?.prompt ?? "",
+    always: (kind) => alwaysChoiceOn(signalLedger, scope, kind),
     language: personLanguageCode(languageOfPerson(scope.person || undefined)),
   };
 }
 
-/** #4250 (S7): the run's prompt section of the person's last answers. */
+/** #4250 (S7): the run's prompt section of the person's last answers and
+ * their "always" choices (#4558). */
 function routineAnswersNote(run: RoutineRun): string | undefined {
   if (run.target !== "bot" || !run.routineId) return undefined;
   const routine = routines?.routineById(run.routineId);
   if (!routine) return undefined;
-  const said = [answerLearningNote(answerHistory(signalLedger, routineAnswerScope(routine))), routineOpenCardsNote(routine)].filter(Boolean);
+  const scope = routineAnswerScope(routine);
+  const said = [answerLearningNote(answerHistory(signalLedger, scope), alwaysChoices(signalLedger, scope)), routineOpenCardsNote(routine)].filter(Boolean);
   return said.length ? said.join("\n") : undefined;
 }
 
@@ -30320,6 +30312,16 @@ ROUTES.push(createLimitResetRoutes({
   engineName: (engine) => engineLabel(engine, registry.get(engine) ?? undefined),
   heldUntil: (botId, threadId) => limitFailover.heldUntil(botId, threadId)
 }));
+// #4558: the person's "always" choices on a routine's cards
+// (routes/routine-always-choices.ts, proactive/answer-learning.ts).
+ROUTES.push(createRoutineAlwaysChoicesRoutes({
+  scopeOf: (id) => {
+    const routine = routines?.routineById(id);
+    return routine ? routineAnswerScope(routine) : undefined;
+  },
+  list: (scope) => alwaysChoices(signalLedger, scope),
+  forget: (scope, kind) => forgetAlwaysChoice(signalLedger, scope, kind),
+}));
 ROUTES.push(createRoutineAwayRoutes<Routine>({
   organization: () => IDENTITY.kind === "perspicax",
   beat: (beat) => {
@@ -37609,6 +37611,20 @@ const onListening = async () => {
   // States of watches whose routine is gone (deleted while stopped).
   // #4250: a Flow watch routine keeps its reading in the same states
   try { routineWatchStates.prune(routines!.listRoutines().filter((routine) => routine.precheck?.kind === "watch" || (routine.precheck?.kind === "code" && routine.precheck.check === FLOW_WATCH_CHECK)).map((routine) => routine.id)); } catch { /* best effort */ }
+  // #4558: "always" lines an older version wrote into routines'
+  // instructions become the person's preferences (answer-learning.ts) and
+  // leave the instructions, the rest of the text untouched; a second start
+  // finds none.
+  try {
+    const moved = migrateAlwaysLines(
+      signalLedger,
+      routines!.listRoutines().filter((routine) => routine.target === "bot").map((routine) => ({ id: routine.id, prompt: routine.prompt, scope: routineAnswerScope(routine) })),
+      (id, prompt) => {
+        try { return Boolean(routines!.update(id, { prompt })); } catch (error) { console.warn(`routine ${id} always lines: ${error instanceof Error ? error.message : String(error)}`); return false; }
+      },
+    );
+    if (moved) console.info(`[answer-learning] moved the "always" lines of ${moved} routine(s) out of their instructions`);
+  } catch (error) { reportBackgroundError(error); }
   routines!.start();
   botWaits.start();
   headlessTasks.start();

@@ -435,15 +435,49 @@ From those answers:
 - a keyed card of that routine shows the usual answer first among its
   options;
 - after three identical answers in a row, the card also offers
-  "<answer> (always for this routine)". Only the person's click on it writes
-  one line into the routine's instructions (`Always for "<question>" (key
-  <kind>): <answer>`), through the routine's own update, so the routine's
-  history says it. The offer is not made again once the line is there.
+  "<answer> (always for this routine)". Only the person's click on it keeps
+  the answer as the person's preference for that routine and card kind
+  (#4558).
 
-Never an automatic answer: every card stays the person's to answer.
+## "Always" answers (#4558)
+
+An "always" answer is the person's, never the routine's text:
+
+- It lives in the same signal ledger as the answers: one entry of kind
+  `card-always` per person, routine and card kind (key `always:<routine>:<kind>`,
+  the answer in `answer`, the kind in `label`, when it was chosen in
+  `answeredAt`). A new click on the same kind replaces it. It is never
+  written into the routine's instructions, which stay the author's text (a
+  person's, or a plugin's that keeps its routine up to date).
+- A run's prompt reads it with the answers (`answerLearningNote`), by card
+  kind, never by one card's question: "kind `ticket`: always `Approve`",
+  with the rule to act on that answer for an item of that kind without
+  raising its card, and to say what it did in the run's result. The choice
+  never widens what the routine may do.
+- The offer is not made again for a kind that has one, and never on a card
+  that offers its own "always" choice: an option label holding the word
+  "always" or "toujours" ("Always allow", "Toujours permettre")
+  (`cardOffersAlways`). The labels are the one thing every card carries,
+  whatever raised it, so one check covers a bot's card and a server's.
+- The routine's page lists them in its Settings tab, under "Always answers"
+  (card kind, when it was chosen, the answer, Remove). Nothing shows when
+  there is none. `GET /api/routines/:id/always-choices` lists them and
+  `DELETE /api/routines/:id/always-choices/:kind` removes one, for the
+  routine's person only (another person, an admin included, gets 404).
+- Once at start, the lines an older version wrote into instructions
+  (`Always for "<question>" (key <kind>): <answer>. ...` and its French
+  words) move to the ledger and leave the instructions with the blank line
+  before them; every other line stays as it was. Instructions made only of
+  such lines keep them (a routine needs words), the choice is kept anyway.
+
+Never an automatic answer: every card stays the person's to answer, except
+a kind the person chose "always" for, which the run follows.
 
 Tests: `server/proactive/answer-learning.test.ts` (prompt section, the
-card's order and offer, the click that writes the line, a restart).
+card's order and offer, the click that keeps the choice, a card with its
+own "always", the move of the old lines, a restart) and
+`server/routes/routine-always-choices.test.ts` (list, remove, another
+person).
 
 ## Usefulness metrics (`server/proactive/proactive-metrics.ts`, #4250 S9)
 

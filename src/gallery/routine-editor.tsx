@@ -5,7 +5,8 @@
  * ?lang=<code>&skin=<id>&view=editor|panel-editor|page|bot&trigger=clock|webhook&mode=view|edit&advanced=1
  * panel-editor: the routine panel in the side panel (400 px), as JC sees it;
  * mode=edit opens it editable (2026-11-03: view mode first), advanced=1 opens
- * Advanced. goal=1 gives the routine a goal in progress (#2696). */
+ * Advanced. goal=1 gives the routine a goal in progress (#2696). always=1
+ * gives the person two "always" answers on its cards (#4558, Settings). */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -37,6 +38,10 @@ if (params.get("advanced") === "1") {
   setTimeout(unfold, 50);
 }
 
+let alwaysChoices = [
+  { kind: "ticket", answer: "Approuver", at: Date.now() - 2 * 86_400_000 },
+  { kind: "inbox-review", answer: "Archiver sans réponse", at: Date.now() - 6 * 86_400_000 },
+];
 const realFetch = window.fetch.bind(window);
 (window as unknown as { __routinePatches: unknown[] }).__routinePatches = [];
 window.fetch = async (input, init) => {
@@ -49,6 +54,16 @@ window.fetch = async (input, init) => {
     saved = { ...saved, ...body, ...(method === "POST" ? { id: "routine-2" } : {}), updatedAt: Date.now() } as Routine;
     (window as unknown as { __routinePatches: unknown[] }).__routinePatches.push({ method, body });
     return new Response(JSON.stringify({ routine: saved }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  // #4558: always=1 gives the person two "always" answers on this routine's cards
+  if (/\/api\/routines\/routine-1\/always-choices/.test(url)) {
+    const choices = params.get("always") === "1" ? alwaysChoices : [];
+    if (method === "DELETE") {
+      const kind = decodeURIComponent(url.split("/always-choices/")[1] ?? "");
+      alwaysChoices = alwaysChoices.filter((choice) => choice.kind !== kind);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ choices }), { status: 200, headers: { "content-type": "application/json" } });
   }
   if (url.includes("/api/")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
   return realFetch(input, init);

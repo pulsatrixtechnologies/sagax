@@ -83,6 +83,8 @@ export type RoutinePageSlots = {
   runs?: ReactNode;
   /** How many runs the Runs tab lists (its count). */
   runCount?: number;
+  /** #4558: the person's "always" answers on this routine's cards (Settings). */
+  alwaysChoices?: ReactNode;
   /** Runs as, changed in place (Settings, #4357). */
   runAs?: ReactNode;
   /** The routine's state when it needs a look (failing, auto-paused), by the title. */

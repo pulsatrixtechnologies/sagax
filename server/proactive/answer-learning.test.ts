@@ -1,8 +1,8 @@
 // #4250 (S7): answer learning. The ledger keeps each keyed card's answer by
 // kind; a run reads the person's last answers in its prompt; a card puts the
 // usual answer first and, after three identical answers, offers "Always do
-// this for this routine", written into the instructions only on the
-// person's click. Never an automatic answer.
+// this for this routine", kept as the person's preference (never in the
+// instructions) only on their click. Never an automatic answer.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,8 +14,9 @@ import type { Message } from "../store.ts";
 import { AskKeyIndex } from "../widgets/ask-choice-keys.ts";
 import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts";
 import {
-  ALWAYS_AFTER, ANSWERS_KEPT, alwaysOffer, answerHistory, answerLearningNote, answeredCardText, answersOnKind, cardKindOf,
-  instructionsWithAlwaysLine, learnFromAnsweredCard, recordCardAnswer, type AnswerScope,
+  ALWAYS_AFTER, ANSWERS_KEPT, alwaysChoiceOn, alwaysChoices, alwaysOffer, answerHistory, answerLearningNote, answeredCardText, answersOnKind,
+  cardKindOf, cardOffersAlways, forgetAlwaysChoice, learnFromAnsweredCard, migrateAlwaysLines, recordCardAnswer, rememberAlwaysChoice,
+  takeAlwaysLines, type AnswerScope,
 } from "./answer-learning.ts";
 import { SignalLedger, signalLedgerDirStorage } from "./signal-ledger.ts";
 
@@ -132,17 +133,17 @@ describe("prompt section: the person's last answers on this kind", () => {
 });
 
 describe("\"Always do this for this routine\" after three identical answers", () => {
-  it("is offered after three identical answers in a row, never before, never when the line is there", () => {
+  const OPTIONS = ["Approve", "Refuse"];
+  it("is offered after three identical answers in a row, never before, never when the person already chose it", () => {
     const ledger = ledgerOn(tempDir());
     answer(ledger, ALWAYS_AFTER - 1, "Approve");
-    const input = { question: "Approve this time entry?", instructions: "Review the time entries.", language: "en" as const };
+    const input = { options: OPTIONS, chosen: null, language: "en" as const };
     expect(alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), input)).toBeNull();
     answer(ledger, 1, "Approve");
     const offer = alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), input)!;
-    expect(offer.option).toBe("Approve (always for this routine)");
-    expect(offer.answer).toBe("Approve");
-    expect(offer.line).toContain("(key ticket)");
-    expect(alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), { ...input, instructions: `Review.\n\n${offer.line}` })).toBeNull();
+    expect(offer).toEqual({ option: "Approve (always for this routine)", answer: "Approve" });
+    rememberAlwaysChoice(ledger, SCOPE, "ticket", "Approve");
+    expect(alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), { ...input, chosen: alwaysChoiceOn(ledger, SCOPE, "ticket") })).toBeNull();
     // a different answer breaks the streak
     answer(ledger, 1, "Refuse");
     expect(alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), input)).toBeNull();
@@ -151,33 +152,99 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     expect(alwaysOffer(answersOnKind(ledger, SCOPE, "ticket-1"), { ...input, language: "fr" })!.option).toBe("Approuver (toujours pour cette routine)");
   });
 
-  it("writes the line into the instructions only on the person's click on it, once", () => {
+  it("a card that offers its own \"always\" choice never gets a second one", () => {
     const ledger = ledgerOn(tempDir());
-    const written: string[] = [];
-    const write = (_routineId: string, kind: string, line: string) => {
-      const next = instructionsWithAlwaysLine(written.at(-1) ?? "Review.", kind, line);
-      if (next === null) return false;
-      written.push(next);
-      return true;
-    };
-    const always = { option: "Approve (always for this routine)", answer: "Approve", line: "Always for \"Approve?\" (key ticket): Approve. The person chose this on a card: do it without asking." };
+    answer(ledger, 3, "Allow");
+    const history = answersOnKind(ledger, SCOPE, "ticket-1");
+    expect(cardOffersAlways(["Allow", "Always allow", "Deny"])).toBe(true);
+    expect(cardOffersAlways(["Permettre", "Toujours permettre"])).toBe(true);
+    expect(cardOffersAlways(["Allow", "Deny"])).toBe(false);
+    expect(alwaysOffer(history, { options: ["Allow", "Always allow", "Deny"], chosen: null, language: "en" })).toBeNull();
+    expect(alwaysOffer(history, { options: ["Permettre", "Toujours permettre"], chosen: null, language: "fr" })).toBeNull();
+    expect(alwaysOffer(history, { options: ["Allow", "Deny"], chosen: null, language: "en" })).not.toBeNull();
+  });
+
+  it("the person's click keeps a preference for the routine and the card kind, never a line in the instructions", () => {
+    const ledger = ledgerOn(tempDir());
+    const always = { option: "Approve (always for this routine)", answer: "Approve" };
     const learning = { routineId: "r1", kind: "ticket", always };
-    // another answer on the offering card writes nothing
-    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-5", threadId: "t1", messageId: "m5", answer: "Refuse", learning }, write)).toBe("recorded");
-    expect(written).toEqual([]);
-    // the click writes one line, and the answer recorded is the usual one
+    // another answer on the offering card keeps nothing
+    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-5", threadId: "t1", messageId: "m5", answer: "Refuse", learning })).toBe("recorded");
+    expect(alwaysChoices(ledger, SCOPE)).toEqual([]);
+    // the click keeps one preference, by kind, and the answer recorded is the usual one
     clock += 1_000;
-    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-6", threadId: "t1", messageId: "m6", answer: always.option, learning }, write)).toBe("always");
-    expect(written).toEqual([`Review.\n\n${always.line}`]);
+    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-6", threadId: "t1", messageId: "m6", answer: always.option, learning })).toBe("always");
+    expect(alwaysChoices(ledger, SCOPE)).toEqual([{ kind: "ticket", answer: "Approve", at: clock }]);
     expect(answersOnKind(ledger, SCOPE, "ticket-1")!.answers[0]).toBe("Approve");
-    // the same card seen again (a restart, a second patch) writes nothing more
-    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-6", threadId: "t1", messageId: "m6", answer: always.option, learning }, write)).toBe("known");
-    expect(written).toHaveLength(1);
+    // the same card seen again (a restart, a second patch) keeps nothing more
+    expect(learnFromAnsweredCard(ledger, SCOPE, { askKey: "ticket-6", threadId: "t1", messageId: "m6", answer: always.option, learning })).toBe("known");
+    expect(alwaysChoices(ledger, SCOPE)).toHaveLength(1);
+  });
+
+  it("a preference is the person's own, for one routine, kept across a restart, and removable", () => {
+    const dir = tempDir();
+    const ledger = ledgerOn(dir);
+    rememberAlwaysChoice(ledger, SCOPE, "ticket", "Approve");
+    clock += 1_000;
+    rememberAlwaysChoice(ledger, SCOPE, "ticket", "Refuse");
+    clock += 1_000;
+    rememberAlwaysChoice(ledger, SCOPE, "inbox-review", "Archive");
+    ledger.flush();
+    const after = ledgerOn(dir);
+    expect(alwaysChoices(after, SCOPE).map((choice) => [choice.kind, choice.answer])).toEqual([["inbox-review", "Archive"], ["ticket", "Refuse"]]);
+    expect(alwaysChoiceOn(after, SCOPE, "ticket")!.answer).toBe("Refuse");
+    expect(alwaysChoices(after, { ...SCOPE, person: "pr_b" })).toEqual([]);
+    expect(alwaysChoices(after, { ...SCOPE, routineId: "r2" })).toEqual([]);
+    // never mixed with the answer history
+    expect(answerHistory(after, SCOPE)).toEqual([]);
+    expect(forgetAlwaysChoice(after, { ...SCOPE, person: "pr_b" }, "ticket")).toBe(false);
+    expect(forgetAlwaysChoice(after, SCOPE, "ticket")).toBe(true);
+    expect(alwaysChoiceOn(after, SCOPE, "ticket")).toBeNull();
+    expect(alwaysChoices(after, SCOPE).map((choice) => choice.kind)).toEqual(["inbox-review"]);
+  });
+
+  it("a run reads the preferences by card kind, never one card's question", () => {
+    const ledger = ledgerOn(tempDir());
+    answer(ledger, 1, "Approve");
+    rememberAlwaysChoice(ledger, SCOPE, "ticket", "Approve");
+    const note = answerLearningNote(answerHistory(ledger, SCOPE), alwaysChoices(ledger, SCOPE))!;
+    expect(note).toContain("- kind \"ticket\": always \"Approve\"");
+    expect(note).not.toContain("Ticket 77");
+    // the preferences alone are a section too
+    expect(answerLearningNote([], alwaysChoices(ledger, SCOPE))).toContain("kind \"ticket\": always \"Approve\"");
+    expect(answerLearningNote([], [])).toBeUndefined();
+  });
+});
+
+describe("the lines an older version wrote into the instructions move to the preferences", () => {
+  const EN = "Always for \"Ticket 77: 2 h logged. Approve?\" (key ticket): Approve. The person chose this on a card: do it without asking.";
+  const FR = "Toujours pour « Ticket 78 ? » (clé inbox-review) : Archiver. La personne l'a choisi sur une carte : fais-le sans demander.";
+  it("takes each line out, leaves the rest of the text as it was", () => {
+    expect(takeAlwaysLines(`Review the time entries.\n\n${EN}`)).toEqual({ instructions: "Review the time entries.", choices: [{ kind: "ticket", answer: "Approve" }] });
+    expect(takeAlwaysLines(`Review.\n  Keep this.\n\n${EN}\n\n${FR}`)).toEqual({
+      instructions: "Review.\n  Keep this.",
+      choices: [{ kind: "ticket", answer: "Approve" }, { kind: "inbox-review", answer: "Archiver" }],
+    });
+    expect(takeAlwaysLines(`${EN}\n\nReview.`)).toEqual({ instructions: "Review.", choices: [{ kind: "ticket", answer: "Approve" }] });
+    const plain = "Review.\nAlways for urgent tickets: call me.";
+    expect(takeAlwaysLines(plain)).toEqual({ instructions: plain, choices: [] });
+  });
+
+  it("migrates every routine once: preferences kept, instructions cleaned", () => {
+    const ledger = ledgerOn(tempDir());
+    const prompts = new Map([["r1", `Review.\n\n${EN}`], ["r2", "Nothing learned."]]);
+    const moved = migrateAlwaysLines(ledger, [...prompts].map(([id, prompt]) => ({ id, prompt, scope: { ...SCOPE, routineId: id } })), (id, prompt) => { prompts.set(id, prompt); return true; });
+    expect(moved).toBe(1);
+    expect(prompts.get("r1")).toBe("Review.");
+    expect(prompts.get("r2")).toBe("Nothing learned.");
+    expect(alwaysChoiceOn(ledger, SCOPE, "ticket")!.answer).toBe("Approve");
+    // a second pass finds nothing
+    expect(migrateAlwaysLines(ledger, [...prompts].map(([id, prompt]) => ({ id, prompt, scope: { ...SCOPE, routineId: id } })), () => true)).toBe(0);
   });
 });
 
 describe("the card: usual answer first, the offer, never an automatic answer", () => {
-  function world(ledger: SignalLedger, instructions = "Review the time entries.") {
+  function world(ledger: SignalLedger) {
     const rows = new Map<string, Message[]>();
     let next = 0;
     const of = (threadId: string) => rows.get(threadId) ?? rows.set(threadId, []).get(threadId)!;
@@ -212,7 +279,7 @@ describe("the card: usual answer first, the offer, never an automatic answer", (
       answerLearning: {
         routineId: "r1",
         answers: (key) => answersOnKind(ledger, SCOPE, key),
-        instructions: () => instructions,
+        always: (kind) => alwaysChoiceOn(ledger, SCOPE, kind),
         language: "en",
       },
     });
@@ -228,7 +295,8 @@ describe("the card: usual answer first, the offer, never an automatic answer", (
     const card = w.of("run-1").find((row) => row.id === (posted as { messageId: string }).messageId)!.card!;
     expect(card.options).toEqual(["Refuse", "Approve", "Correct", "Refuse (always for this routine)"]);
     expect(card.answerLearning).toMatchObject({ routineId: "r1", kind: "ticket", always: { option: "Refuse (always for this routine)", answer: "Refuse" } });
-    expect(card.answerLearning!.always!.line).toContain("Ticket 77: 2 h logged. Approve this time entry?");
+    // the offer quotes no card's question
+    expect(JSON.stringify(card.answerLearning)).not.toContain("Ticket 77");
     // never an automatic answer
     expect(card.answered).toBeUndefined();
     expect(card.autoApplied).toBeUndefined();
@@ -244,10 +312,11 @@ describe("the card: usual answer first, the offer, never an automatic answer", (
     expect(card.answerLearning).toEqual({ routineId: "r1", kind: "ticket" });
   });
 
-  it("no offer once the routine's instructions say it", () => {
+  it("no offer once the person chose \"always\" for this kind", () => {
     const ledger = ledgerOn(tempDir());
     answer(ledger, 3, "Refuse");
-    const w = world(ledger, "Review.\n\nAlways for \"Approve?\" (key ticket): Refuse.");
+    rememberAlwaysChoice(ledger, SCOPE, "ticket", "Refuse");
+    const w = world(ledger);
     const posted = w.ask({ key: "ticket-79", question: "Approve this time entry?", options: ["Approve", "Refuse"], wait: false });
     const card = w.of("run-1").find((row) => row.id === (posted as { messageId: string }).messageId)!.card!;
     expect(card.options).toEqual(["Refuse", "Approve"]);

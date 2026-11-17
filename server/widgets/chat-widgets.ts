@@ -17,7 +17,7 @@ import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, OPTIONS_CARD_LIMITS, parseAskChoiceInput } from "../../shared/options-card.ts";
-import { alwaysOffer, cardKindOf, learnedOptions, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
+import { alwaysOffer, cardKindOf, learnedOptions, type AlwaysChoice, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
 import { questionCardTitle } from "../approvals/approval-words.ts";
@@ -213,8 +213,9 @@ export function createAgentCard(args: {
     routineId: string;
     /** The person's answers on the kind of `key` in this routine, or null. */
     answers(key: string): KindAnswers | null;
-    /** The routine's instructions now. */
-    instructions(): string;
+    /** #4558: the person's "always" choice on this card kind in this
+     * routine (kept in their signal ledger), or null. */
+    always(kind: string): AlwaysChoice | null;
     language: LearningLanguage;
   };
   /** #2048: availability and remembered default for choose_page_target. */
@@ -454,7 +455,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
 /** #4250 (S7): a routine's keyed card learns from the person's answers on
  * its kind: their usual answer moves first among the options, and after
  * three identical answers in a row the card offers "Always do this for
- * this routine" (written into the instructions only on their click).
+ * this routine" (kept as their preference only on their click, #4558).
  * Reorders `value` in place; the card's `answerLearning` field. */
 function learnCard(
   learning: NonNullable<Parameters<typeof createAgentCard>[0]["answerLearning"]>,
@@ -462,7 +463,7 @@ function learnCard(
   value: { subtitle: string; options: string[]; details?: (string | undefined)[] },
 ): { answerLearning?: CardAnswerLearning } {
   const answers = learning.answers(askKey);
-  const always = alwaysOffer(answers, { question: value.subtitle, instructions: learning.instructions(), language: learning.language });
+  const always = alwaysOffer(answers, { options: value.options, chosen: learning.always(cardKindOf(askKey)), language: learning.language });
   const next = learnedOptions(value.options, value.details, answers?.usual, always, OPTIONS_CARD_LIMITS.maxOptions);
   value.options = next.options;
   if (next.details) value.details = next.details;

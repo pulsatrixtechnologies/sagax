@@ -474,6 +474,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                 <PanelRows>{rows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</PanelRows>
               </section>;
             })}
+            {page?.alwaysChoices}
           </div>}
         </div>
       </>

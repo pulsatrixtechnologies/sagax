@@ -918,6 +918,10 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/terminal-embeds\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/meetings\/[\w-]+$/ },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/team-work$/ },
+  // clearing the finished or named rows of a bot's team work is the reader's own
+  // view of a bot they can see (the handler resolves the bot for the caller and
+  // clears for that viewer only)
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/team-work\/clear$/ },
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/code\/pull$/ },
   // A conversation's live events, an archive's contents, a room's held bot.
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/events$/ },

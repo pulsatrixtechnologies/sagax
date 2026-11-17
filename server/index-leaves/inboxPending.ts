@@ -3,6 +3,7 @@
 import { describeApproval } from "../../shared/approval-describe.ts";
 import { inboxKey } from "../../shared/approvals-inbox.ts";
 import { todayRows, type TodayDeps } from "../approvals/today-rows.ts";
+import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 /** The Today rows' view of the host for one viewer (#2689): their own
@@ -10,9 +11,11 @@ export type Host = Record<string, any>;
 export function todayDepsFor(host: Host, auth: RequestAuth, viewer: InboxViewer): TodayDeps {
   const approvalViewer = host.viewerForApproval(auth);
   const viewerId = host.channelFilterViewerId(auth);
+  // lot S1: a surface bot's rows are its host product's, never on Today
+  const shown = (bot) => (bot && !isSurfaceBot(bot) ? bot : undefined);
   return {
-    bots: () => host.store.bots,
-    bot: (id) => host.store.bot(id) ?? undefined,
+    bots: () => host.store.bots.filter((bot) => shown(bot)),
+    bot: (id) => shown(host.store.bot(id)),
     threads: (botId) => {
       const tasks = host.store.tasks(botId);
       const main = host.store.bot(botId)?.threadId;
@@ -50,6 +53,11 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
   const teams = host.managedTeamIds(viewer.principalId);
   const out: InboxApproval[] = [];
   for (const { bot, threadId, message, card, question } of host.pendingInboxCards()) {
+    // lot S1: a surface bot's cards are answered in its host product. A
+    // server command card the existing rule gives to an organization admin
+    // still reaches every admin, decidable as is, and its owner, as waiting
+    // on an admin; a team manager's list never shows it
+    if (isSurfaceBot(bot) && !(card.adminApproval && host.IDENTITY.kind === "perspicax" && !question && (orgAdmin || host.cardAnswererId(bot, threadId, card) === viewer.principalId))) continue;
     const confidential = host.store.isConfidentialThread(threadId);
     // the person who answers this card (a destination's answerer included),
     // as approvalAnswerRefusal and the console read it

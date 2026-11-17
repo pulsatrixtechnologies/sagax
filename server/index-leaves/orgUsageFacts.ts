@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgUsageFacts (#1388). Pure move from server/index.ts. */
+import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createOrgUsageFacts(getHost: () => Host): any {
@@ -18,6 +19,9 @@ function orgUsageFacts(row: Omit<UsageRow, "at" | "costSource">) {
   }
   return {
     trigger,
+    // lot S1: a surface bot's turn: its person reads the row in full, anyone
+    // else one total per person (server/usage/surface-usage.ts)
+    ...(isSurfaceBot(bot) ? { surface: true as const } : {}),
     ...(row.ownerPrincipalId ? {} : bot ? { ownerPrincipalId: host.effectiveBotOwner(bot) } : {}),
     ...(access ? { access } : {}),
     ...(payerPrincipalId ? { payerPrincipalId } : {})

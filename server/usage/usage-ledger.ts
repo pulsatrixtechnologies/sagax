@@ -90,6 +90,9 @@ export interface UsageRow {
   /** #4100: what the usage served when it is not the engine's own turn:
    * the hearing of a listening session. Absent on every other row. */
   purpose?: "listening";
+  /** Lot S1: a turn of a person's surface bot (server/temporary-agents.ts):
+   * read in full by that person only (server/usage/surface-usage.ts). */
+  surface?: true;
 }
 
 export type UsageGroupBy = "bot" | "model" | "user" | "day" | "engine" | "routine";

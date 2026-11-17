@@ -5,7 +5,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { runCommand, commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
+import { runCommand, commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { DATA_DIR } from "./config.ts";
 import { closeMessageDb, insertMessage, readThread } from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
@@ -144,5 +144,25 @@ describe("receipts that change state (#2849)", () => {
     expect(commandReceipt("agent.send_prompt", "old")).toBeNull();
     expect(commandReceipt("agent.send_prompt", "new")).not.toBeNull();
     expect(commandReceipt("digest.append", "keep")).not.toBeNull();
+  });
+});
+
+describe("lot S1: receipts dropped with what they name", () => {
+  beforeEach(() => {
+    closeMessageDb();
+    rmSync(DATA_DIR, { recursive: true, force: true });
+    mkdirSync(DATA_DIR, { recursive: true });
+  });
+  it("drops the receipts a key or a result names, and only those", () => {
+    setCommandReceipt("member.new_thread", "pr_bob|sb|send-0000000000000001", { threadId: "t1" });
+    setCommandReceipt("member.new_thread", "pr_bob|sb|send-0000000000000002", { threadId: "t2" });
+    setCommandReceipt("member.new_thread", "pr_ann|sa|send-0000000000000001", { threadId: "t3" });
+    setCommandReceipt("agent.send_prompt", "pr_bob|x", { threadId: "t1" });
+    // a conversation deleted
+    expect(dropCommandReceiptsWhere("member.new_thread", (_key, result) => (result as { threadId: string }).threadId === "t1")).toBe(1);
+    // a person erased
+    expect(dropCommandReceiptsWhere("member.new_thread", (key) => key.startsWith("pr_bob|"))).toBe(1);
+    expect(commandReceipt("member.new_thread", "pr_ann|sa|send-0000000000000001")?.result).toEqual({ threadId: "t3" });
+    expect(commandReceipt("agent.send_prompt", "pr_bob|x")).not.toBeNull();
   });
 });

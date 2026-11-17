@@ -149,6 +149,9 @@ export interface DecisionRow {
    * shell line, its folder). Capped, redacted like the rest of the row, and
    * dropped with the summary in a confidential thread. */
   call?: DecisionCall;
+  /** Lot S1: a decision of a person's surface bot's turn, marked when
+   * written: an administrator's logs never show it. */
+  surface?: true;
 }
 
 export interface DecisionCall {
@@ -200,6 +203,13 @@ const lastPrune = new Map<string, number>();
 let retentionDays: () => number = () => DEFAULT_DECISION_RETENTION_DAYS;
 
 let confidentialThread: (threadId: string) => boolean = () => false;
+let surfaceDecision: (row: Pick<DecisionRow, "botId" | "threadId">) => boolean = () => false;
+
+/** Lot S1: the server binds which rows are a surface bot's; they are marked
+ * when written, so the mark outlives the bot. */
+export function bindSurfaceDecisions(isSurface: (row: Pick<DecisionRow, "botId" | "threadId">) => boolean): void {
+  surfaceDecision = isSurface;
+}
 
 /** The server binds which threads are confidential
  * (server/threads/confidential-threads.ts): their rows are written metadata only. */
@@ -242,7 +252,15 @@ export function withMatchedRuleId<T extends Partial<DecisionRow> & Pick<Decision
  * place, across the month files and the legacy pair: a confidential thread
  * deleted, or made confidential after rows were written. Serialized with
  * appends. Resolves to the number of rows changed. */
-export function scrubThreadDecisions(dataDir: string, threadId: string): Promise<number> {
+/** Lot S1: a row of this person's own (their answer, or what their turn
+ * decided by itself), never another person's answer (an administrator's on a
+ * server command card). */
+export function personsOwnDecision(principalId: string): (row: Partial<DecisionRow>) => boolean {
+  const person = principalId.trim().toLowerCase();
+  return (row) => !(row.actor?.kind === "session" && row.actor.userId && row.actor.userId.trim().toLowerCase() !== person);
+}
+
+export function scrubThreadDecisions(dataDir: string, threadId: string, scrubs: (row: Partial<DecisionRow>) => boolean = () => true): Promise<number> {
   const previous = writeQueues.get(dataDir) ?? Promise.resolve();
   let changed = 0;
   const queued = previous.then(async () => {
@@ -264,7 +282,7 @@ export function scrubThreadDecisions(dataDir: string, threadId: string): Promise
           if (!line) return line;
           let value: Partial<DecisionRow> | null | undefined;
           try { value = reader.at(raw, index) as Partial<DecisionRow> | null | undefined; } catch { return null; }
-          if (!value || value.threadId !== threadId || (value.summary === undefined && value.rule === undefined && value.ruleId === undefined && value.origin === undefined && value.call === undefined)) return null;
+          if (!value || value.threadId !== threadId || !scrubs(value) || (value.summary === undefined && value.rule === undefined && value.ruleId === undefined && value.origin === undefined && value.call === undefined)) return null;
           touched = true;
           changed += 1;
           return JSON.stringify(metadataOnly(value));
@@ -428,6 +446,7 @@ export function appendDecision(dataDir: string, row: Omit<DecisionRow, "at">): v
   // tool name, decision, who) and never what was asked: no summary, no rule.
   row = withMatchedRuleId(row);
   if (confidentialThread(row.threadId)) row = metadataOnly(row);
+  if (surfaceDecision(row)) row = { ...row, surface: true };
   const scope = row.source === "user" ? actorScope.getStore() : undefined;
   const actor = row.actor ?? scope?.actor;
   const via = row.via ?? scope?.via;

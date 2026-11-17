@@ -213,3 +213,46 @@ describe("Today through the store's reads keeps its rules (#3542)", () => {
     expect(keys).toContain("still-open");
   });
 });
+
+describe("lot S1: a surface bot's cards and rows are never on Today", () => {
+  afterEach(() => {
+    messageDb.closeMessageDb();
+    rmSync(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("leaves out every card and row of a surface bot, its owner's view included", () => {
+    const { host } = fixture(5, 1, 0);
+    expect(kinds(host)).toHaveLength(5);
+    const store: Store = host.store;
+    // the bots holding the open "needs you" row (the first) and the open permission card (the fourth)
+    for (const bot of [store.bots[0]!, store.bots[3]!]) {
+      store.setBotTemporary(bot.id, { via: "mcp", createdAt: T0, ownerPrincipalId: PERSON, createdBy: { kind: "person", principalId: PERSON }, idleHours: 24, lastActiveAt: T0, surface: true });
+    }
+    expect(kinds(host)).toEqual(["proposal:open-offer", "question:open-q", "request:open-input"]);
+    // an organization admin's view: still nothing of it
+    host.orgAdminCaller = () => true;
+    expect(kinds(host)).toEqual(["proposal:open-offer", "question:open-q", "request:open-input"]);
+  });
+
+  it("a server command card the existing rule gives an admin: the admin decides it, its owner sees it waits on an admin, a team manager sees nothing", () => {
+    const { host } = fixture(5, 1, 0);
+    const store: Store = host.store;
+    const surface = store.bots[3]!;
+    store.setBotTemporary(surface.id, { via: "mcp", createdAt: T0, ownerPrincipalId: PERSON, createdBy: { kind: "person", principalId: PERSON }, idleHours: 24, lastActiveAt: T0, surface: true });
+    const threadId = store.tasks(surface.id).find((task) => task.title === "Topic 0")!.threadId;
+    const row = host.readOneMessage(threadId, "open-perm") as Message;
+    store.patchMessage(threadId, "open-perm", { card: { ...row.card!, adminApproval: true } });
+    Object.assign(host, { IDENTITY: { kind: "perspicax" }, inboxPersonName: () => "Bob", orgAdminNames: () => ["Ann"], plainPersonName: () => true });
+    const perm = (viewer: string) => host.inboxPending(AUTH, { principalId: viewer }).find((item: { requestId?: string }) => item.requestId === "req-perm");
+    // its owner: waiting on an admin, not theirs to decide
+    expect(perm(PERSON)).toMatchObject({ scope: "org", decidable: false, waitingOn: "admin" });
+    // an organization admin: theirs to decide, the card as is
+    host.orgAdminCaller = () => true;
+    expect(perm("pr_admin")).toMatchObject({ scope: "org", decidable: true });
+    // a team manager of the owner: nothing
+    host.orgAdminCaller = () => false;
+    host.managedTeamIds = () => new Set(["team-1"]);
+    host.principals = { byId: () => ({ teams: [{ id: "team-1" }] }) };
+    expect(perm("pr_manager")).toBeUndefined();
+  });
+});

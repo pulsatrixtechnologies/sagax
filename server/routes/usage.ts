@@ -26,6 +26,7 @@ import {
   type UsageViewer,
   USAGE_GROUPINGS,
   type UsageGroupBy,
+  type UsageRow,
 } from "../usage/usage-ledger.ts";
 import { buildUsageStats, readToolSpans } from "../telemetry/usage-stats.ts";
 import { buildUsageTraces, parseTracePaging, USAGE_TRACE_MAX_JOBS } from "../usage/usage-trace.ts";
@@ -34,6 +35,12 @@ import { PASS, type RouteHandler } from "./table.ts";
 
 export interface UsageRouteDeps {
   dataDir: string;
+  /** Lot S1: the whole ledger as this caller reads it (another person's
+   * surface bot folded, server/usage/surface-usage.ts); as is without it. */
+  ledgerFor?(rows: UsageRow[], auth: RequestAuth, range: { from: Date; to: Date }): UsageRow[];
+  /** Lot S1: conversations whose tool calls this caller's stats leave out
+   * (another person's surface bot), from the raw rows. */
+  hiddenThreads?(rows: UsageRow[], auth: RequestAuth): ReadonlySet<string>;
   /** The operator's price list, when the server may read it (`billing`). */
   prices(): PriceList | null;
   /** The cap and where the month stands; null when there is no enforceable cap. */
@@ -61,6 +68,7 @@ export function ownUsageViewer(auth: RequestAuth, organization: boolean): UsageV
 }
 
 export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
+  const ledger = (rows: UsageRow[], auth: RequestAuth, range: { from: Date; to: Date }) => deps.ledgerFor?.(rows, auth, range) ?? rows;
   return async ({ res, req, url, path, method, json, readBody, auth }) => {
     // The person's own monthly spend limit (server/usage/personal-spend-cap.ts).
     // Read: every signed-in person. Write: admin scope (the owner), solo only.
@@ -140,11 +148,14 @@ export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
       const range = parseUsageRange(url.searchParams.get("from"), url.searchParams.get("to"));
       if (!range) return json(res, 400, { error: "from and to must be YYYY-MM-DD, from no later than to, at most a year apart" });
       const all = readUsage(deps.dataDir, range);
-      const rows = viewer ? usageRowsFor(all, viewer) : all;
+      const rows = viewer ? usageRowsFor(all, viewer) : ledger(all, auth, range);
       let spans = readToolSpans(deps.dataDir, range);
       if (viewer) {
         const threads = new Set(rows.map((row) => row.threadId));
         spans = spans.filter((span) => span.threadId !== undefined && threads.has(span.threadId));
+      } else if (deps.hiddenThreads) {
+        const hidden = deps.hiddenThreads(all, auth);
+        spans = spans.filter((span) => span.threadId === undefined || !hidden.has(span.threadId));
       }
       res.setHeader("cache-control", "no-store");
       return json(res, 200, { from: range.from.toISOString(), to: range.to.toISOString(), ...buildUsageStats(rows, spans) });
@@ -160,7 +171,7 @@ export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
       return json(res, 200, {
         from: range.from.toISOString(),
         to: range.to.toISOString(),
-        ...buildUsageTraces(readUsage(deps.dataDir, range), { ...(Number.isFinite(max) && max > 0 ? { max: Math.min(Math.trunc(max), USAGE_TRACE_MAX_JOBS) } : {}), ...(parseTracePaging(url.searchParams.get("limit"), url.searchParams.get("offset")) ) }),
+        ...buildUsageTraces(ledger(readUsage(deps.dataDir, range), auth, range), { ...(Number.isFinite(max) && max > 0 ? { max: Math.min(Math.trunc(max), USAGE_TRACE_MAX_JOBS) } : {}), ...(parseTracePaging(url.searchParams.get("limit"), url.searchParams.get("offset")) ) }),
       });
     }
     if (!(method === "GET" && (path === "/api/usage" || path === "/api/usage.csv"))) return PASS;
@@ -169,7 +180,7 @@ export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
     // ?mine=1 (2026-10-14): only the requester's own turns, for the app's
     // Settings > Usage; the organization's totals belong to its admin console.
     const all = readUsage(deps.dataDir, range);
-    const rows = url.searchParams.get("mine") === "1" ? usageRowsFor(all, usageViewerOf(auth)) : all;
+    const rows = url.searchParams.get("mine") === "1" ? usageRowsFor(all, usageViewerOf(auth)) : ledger(all, auth, range);
     // The operator's price list is applied only with the billing entitlement.
     const prices = deps.prices();
     if (path === "/api/usage.csv") {

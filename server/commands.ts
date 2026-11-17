@@ -11,7 +11,7 @@
 // publish committed state afterward. A receipt does not make external
 // side effects exactly-once.
 //
-import { deleteCommandReceipt, purgeCommandReceipts, putCommandReceipt, readCommandReceipt, withCommandReceipt } from "./messages/message-db.ts";
+import { commandReceiptKeys, deleteCommandReceipt, purgeCommandReceipts, putCommandReceipt, readCommandReceipt, withCommandReceipt } from "./messages/message-db.ts";
 
 export interface Command {
   /** Stable, dotted name of the mutation: "digest.append", "hook.ingest". */
@@ -55,6 +55,20 @@ export function setCommandReceipt<T>(kind: string, key: string, result: T, now: 
 
 export function dropCommandReceipt(kind: string, key: string): void {
   deleteCommandReceipt(kind, key);
+}
+
+/** Drop the receipts of `kind` whose key, or stored result, `match` names
+ * (an erasure: a conversation deleted, a person erased). How many went. */
+export function dropCommandReceiptsWhere(kind: string, match: (key: string, result: unknown) => boolean): number {
+  let dropped = 0;
+  for (const key of commandReceiptKeys(kind)) {
+    const stored = commandReceipt(kind, key);
+    if (stored && match(key, stored.result)) {
+      deleteCommandReceipt(kind, key);
+      dropped += 1;
+    }
+  }
+  return dropped;
 }
 
 /** Drop the receipts of `kind` older than `ttlMs`. Returns how many went. */

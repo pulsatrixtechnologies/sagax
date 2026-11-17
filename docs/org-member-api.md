@@ -49,7 +49,7 @@ Code: `server/org/org-member-routes.ts`, wired in `server/index.ts`
 | `clients.routinesWrite` | on (always) | enable, disable, rename, and edit schedule or instructions of routines they own |
 | `clients.approvalsAnswer` | off (the bot's owner holds it for their own bots) | allow or deny a card |
 | `clients.peopleNudge` | off | nudge a person |
-| `clients.agentsCreate` | off | create a bot with `agents/create_agent`; archive, restore or delete one for good with `agents/delete_agent` |
+| `clients.agentsCreate` | on (always) | create a bot with `agents/create_agent`; archive, restore or delete one for good with `agents/delete_agent` |
 
 Keys have two segments (`group.name`): Perspicax refuses a catalogue with
 any other shape, so the plan's `clients.bots.read` is written
@@ -62,6 +62,9 @@ any other shape, so the plan's `clients.bots.read` is written
 | `GET capabilities` | none | the version and the routes |
 | `GET bots` | `clients.botsRead` | the bots the person can see, with status |
 | `POST bots/{id}/messages` | `clients.botsMessage` | send, optionally wait up to 120 s |
+| `POST surface-bot` | `clients.botsMessage` | the person's surface bot, made the first time (lot S1) |
+| `POST threads/{id}/stop` | `clients.botsMessage` | stop the turn running in one of their conversations (lot S1) |
+| `DELETE threads/{id}` | `clients.botsMessage` | delete one of their hidden conversations (lot S1) |
 | `GET threads/{id}?since&limit` | `clients.botsRead` | messages since a cursor, steps, pending cards |
 | `GET threads/{id}/stream?anchor&wait` | `clients.botsRead` | watch a running turn, streamed (lot C.3) |
 | `GET routines` | `clients.routinesRead` | the person's own routines |
@@ -129,8 +132,40 @@ any other shape, so the plan's `clients.bots.read` is written
 - `wait`: 0 to 120 seconds (default 0). The request stays open until the bot
   has answered, a card waits, or the time is up.
 - `sendId`: 8 to 80 of `[A-Za-z0-9_-]`; a retry with the same id is the same
-  message.
+  message. With `newThread: true`, a retry with the same `sendId` (same
+  person and bot, for 24 h, kept as a durable receipt like `send_prompt`'s,
+  so after a restart too) lands in the conversation the first send opened,
+  never in another new one, and the work runs once (lot S1). The receipt
+  (person, bot, `sendId`, conversation; no text) goes with its conversation
+  when it is deleted, and with the person when they are erased.
+- The conversation is opened before anything is sent, and its id comes
+  with the answer: `threadId` in the JSON body, and for `stream: true` the
+  `X-Sagax-Thread-Id` header with the status line, before the `started`
+  event (lot S1).
 - `stream`: `true` answers NDJSON instead (see "The streamed turn").
+- `hidden`: `true` makes the console's send land in a hidden conversation,
+  as an AI client's does (lot S1: a host product's chat answered by Sagax).
+  Without it the console keeps the person's own chat (#1170). A send to a
+  surface bot is always hidden.
+- `modelSelection`: `{instanceId, model, effort?, auto?}`, the engine and
+  model this send runs on (lot S1). It becomes the conversation's own model,
+  set by the app's own model picker route as the person, with the checks of
+  `update_agent_model` (a refusal passes through); left alone when the
+  conversation already runs on it. Each conversation keeps its own model, so
+  two sends on two conversations never mix. With no conversation named, the
+  person's chat with the bot (or a new conversation) is used.
+- Every send of this API (not the agent API's `send_prompt`) to one
+  conversation, on any bot, goes one at a time, in arrival order; what
+  happens to it does not change (queued, or joined to the running turn,
+  never refused). A send that changes the conversation's model
+  first waits, within its own `wait`, for the turns before it (running or
+  queued) to finish on their own model: two models never cross in one
+  conversation. Still busy at the end of its `wait` (at once with `wait` 0)
+  answers `409 conversation_busy`; a card waiting in it answers `409
+  card_waiting` (answer the card, then send again). Nothing is switched or
+  sent then. A send that changes nothing waits only behind the sends before
+  it, so at most their own `wait` (120 s each). A queued send left
+  interrupted never counts as busy.
 
 ```json
 {
@@ -146,6 +181,87 @@ finish within `wait`, or a card waits: read the thread later with
 `GET threads/{threadId}?since={cursor}`. `reply` is every bot text after the
 message, joined, at most 32,000 characters. Every answer also carries
 `summary` (see "The turn summary"), null when the message has no thread.
+
+### The surface bot (lot S1)
+
+A host product (a gateway that serves a person a chat home) makes Sagax
+answer in their name through one service bot of theirs, the **surface bot**:
+
+- `POST surface-bot` `{"name": "..."}` (optional, 1 to 80 characters, one
+  line, default `Assistant`, used only the first time) answers `201
+  {bot: {id, name, approvalMode}, created: true}` the first time, then `200`
+  with the same bot and `created: false`. One per person and server. The
+  route's key is `clients.botsMessage`.
+- It is made by the app's own creation as the person (their bot, in their
+  environment, with their engines and the ones the organization gives
+  them), as a temporary agent (`server/temporary-agents.ts`) marked
+  `surface`: pinned (it never expires), outside the temporary agents' quota,
+  its parallel conversations at the bot ceiling. Its level is Full access
+  when the organization lets their bots have it, else the level a new bot of
+  theirs gets. The organization's Deny and Ask first rules judge every tool
+  call of its turns as for any bot: an Ask first card arrives on the stream
+  (`approval`) and is answered with `POST approvals/{id}`.
+- Every send to it lands in a hidden conversation; `newThread: true` opens
+  one per host chat, then `threadId` continues it.
+- It is the person's alone, by one rule (`server/bots/surface-bot-access.ts`):
+  any app route naming it or one of its conversations from another session,
+  an organization admin's included, answers `404`; the member API reaches it
+  through those same routes as the person. One exception: a server command
+  card the existing rule gives to an organization admin is answered by an
+  admin where it shows (the app's Today included), and nothing else of the
+  conversation. The admin is notified of it as for any bot, and its owner
+  sees on Today that it waits on an admin.
+- It is in no list: not `GET /api/bots`, the event stream, `GET bots`, the
+  catalogue, the agent API (`list_agents`, `find_agents`, `send_prompt`),
+  the organization admin's bots and files, admin approvals (but the server
+  command card above), the decision history of the console, Today (but the
+  waiting line above), a team manager's list, or search.
+- It reaches no other bot and no bot reaches it (peers, both ways): its
+  turns list no tool that reaches another bot (`PEER_HOP_ABSENT_TOOLS`
+  without `start_thread` and `run_with_engine`, `PEER_EXCHANGE_TOOLS`, the
+  `exchange` value of `SAGAX_PEER_HOP`), and the routes refuse them anyway.
+  Everything else of its turn stays as for any bot: skills, `/setup`, its
+  own threads, a part on another engine. It joins no room (`POST /api/groups` and adding members
+  answer `403`). The bots a host chat invites are the host product's to
+  orchestrate.
+- It never holds a routine or an automation: the routine store and the
+  triggers treat it as no bot. Asked for a routine in a chat, it proposes one
+  for one of the person's bots (`for_bot_id`, the bot they named, or it asks
+  which) through the same card and approvals as anywhere; a proposal on
+  itself answers `409 routine_needs_bot` with the person's bots listed.
+- Notifications: as any outside agent's conversation, only what someone must
+  act on (an approval, a question) is notified.
+- Usage: the person reads every row in their own usage (`/api/me/usage...`).
+  Anyone else (the ledger, its CSV, traces, stats, the console's usage) reads
+  one row per person, calendar month (dated the 1st, as the ledger and the
+  spend cap), engine and model, labelled `Chat`, with no conversation or bot
+  id and no day, read over the whole calendar months the asked range
+  touches (a one-day range gives the month); that row counts as one turn
+  (costs and tokens are exact, the number of turns is not); the stats leave
+  out its tool calls
+  (`server/usage/surface-usage.ts`). No cap.
+- Logs: every admin activity row and every decision about it is marked
+  `surface` when written (whoever writes it: the member API, the agent API,
+  an approval), so the mark outlives the bot; an administrator's logs
+  (`GET audit`, `/api/admin-activity`, the console's decision history) never
+  show one, before or after the person is erased.
+- Erasing the person erases it with their other bots and its conversations;
+  what the decision log kept of its conversations goes down to its
+  metadata for the person's own rows (an administrator's answer to a server
+  command card stays whole). Its usage rows stay, as every bot's (they hold
+  no text, and the month's spend does not drop); others read them folded.
+
+### `POST threads/{id}/stop`, `DELETE threads/{id}`
+
+`stop` stops the turn running in a conversation the person may stop (the
+app's own stop, as them): `{stopped: true, threadId, status}`.
+
+`DELETE` deletes one hidden conversation of the person (an AI client's, or
+any of their surface bot's) with its messages, after stopping a running
+turn: `{deleted: true, threadId}`. Another person's conversation, a visible
+one and a confidential one are `404`. A deleted conversation reads `404`
+after, and what the decision log kept of the person's own rows of it goes
+down to its metadata (an administrator's answer stays whole).
 
 ### `GET threads/{id}`
 

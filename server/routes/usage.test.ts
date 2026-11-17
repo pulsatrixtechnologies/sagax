@@ -49,13 +49,14 @@ describe("GET /api/me/usage", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  async function serve(organization = true) {
+  async function serve(organization = true, extra: Partial<Parameters<typeof createUsageRoutes>[0]> = {}) {
     const routes = [createUsageRoutes({
       dataDir,
       prices: () => null,
       budget: () => ({ capUsd: 500, spentUsd: 150.5 }) as never,
       currency: () => "USD",
       organization: () => organization,
+      ...extra,
     })];
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -71,7 +72,10 @@ describe("GET /api/me/usage", () => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     return async (path: string, who?: string, admin = false) => {
       const response = await fetch(`${base}${path}`, { headers: { ...(who ? { "x-who": who } : {}), ...(admin ? { "x-admin": "1" } : {}) } });
-      return { status: response.status, body: await response.json() as any };
+      const text = await response.text();
+      let body: any = null;
+      try { body = JSON.parse(text); } catch { /* the CSV */ }
+      return { status: response.status, body, text };
     };
   }
 
@@ -165,6 +169,39 @@ describe("GET /api/me/usage", () => {
     expect(JSON.stringify(mine.body)).not.toContain("Bash");
     expect((await api(`/api/me/usage/stats?${RANGE}`, undefined)).status).toBe(403);
     expect((await api("/api/usage/stats?from=bad&to=2026-10-15", ADA, true)).status).toBe(400);
+  });
+
+  it("lot S1: a one-day range of the whole ledger (and its CSV) carries another person's chat for the whole month", async () => {
+    const { surfaceLedger } = await import("../usage/surface-usage.ts");
+    const { readUsage } = await import("../usage/usage-ledger.ts");
+    const chat = (at: string, costUsd: number) => appendUsage(dataDir, {
+      at, botId: "sb", botName: "Desk", threadId: `t-${at}`, instanceId: "claude", driverKind: "claudeAgent", model: "claude-test",
+      input: 10, output: 5, costUsd, trigger: { kind: "user", principalId: BOB }, ownerPrincipalId: BOB, surface: true,
+    });
+    await chat("2026-10-03T09:00:00.000Z", 3);
+    await chat("2026-10-14T09:00:00.000Z", 5);
+    const api = await serve(true, { ledgerFor: (rows, auth, range) => surfaceLedger(rows, range, (auth as { session?: { principalId?: string } }).session?.principalId ?? null, (months) => readUsage(dataDir, months)) });
+    const oneDay = await api("/api/usage?from=2026-10-14&to=2026-10-14&groupBy=bot", ADA, true);
+    const folded = (oneDay.body.groups as Array<{ label: string; costUsd: number }>).find((group) => group.label === "Chat");
+    expect(folded?.costUsd).toBe(8);
+    expect(JSON.stringify(oneDay.body)).not.toContain("Desk");
+    // the CSV: one line for the chat, the month's spend, no conversation
+    const csv = (await api("/api/usage.csv?from=2026-10-14&to=2026-10-14", ADA, true)).text;
+    expect(csv).not.toContain("t-2026-10-14");
+    expect(csv).not.toContain("Desk");
+    expect(csv.split("\n").filter((line) => line.includes("Chat"))).toHaveLength(1);
+  });
+
+  it("lot S1: the whole ledger's stats leave out the tool calls of the conversations it folds (another person's surface bot)", async () => {
+    await appendFile(join(dataDir, "usage", "spans-2026-10.jsonl"), [
+      { t: "a", s: "1", n: "execute_tool Bash", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14), st: 1, at: { "sagax.tool.kind": "builtin", "gen_ai.tool.name": "Bash", "sagax.thread.id": "t-bob-bot" } },
+      { t: "b", s: "2", n: "execute_tool Read", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14), st: 1, at: { "sagax.tool.kind": "builtin", "gen_ai.tool.name": "Read", "sagax.thread.id": "t-ada-bot" } },
+    ].map((line) => JSON.stringify(line)).join("\n") + "\n");
+    const api = await serve(true, { hiddenThreads: () => new Set(["t-bob-bot"]) });
+    const all = await api(`/api/usage/stats?${RANGE}`, ADA, true);
+    expect(all.body.totals).toMatchObject({ toolCalls: 1 });
+    expect(JSON.stringify(all.body)).not.toContain("Bash");
+    expect(JSON.stringify(all.body)).toContain("Read");
   });
 });
 

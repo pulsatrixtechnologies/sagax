@@ -48,9 +48,20 @@ export interface AdminActionRow {
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
   actor: AdminActor;
+  /** Lot S1: about a person's surface bot (server/temporary-agents.ts),
+   * marked when written: an administrator's log never shows it. */
+  surface?: true;
 }
 
 const DIR = "admin-activity";
+
+let surfaceRow: (row: Pick<AdminActionRow, "target" | "after">) => boolean = () => false;
+
+/** Lot S1: the server binds which rows are about a surface bot; they are
+ * marked when written, so the mark outlives the bot. */
+export function bindSurfaceAdminActions(isSurface: (row: Pick<AdminActionRow, "target" | "after">) => boolean): void {
+  surfaceRow = isSurface;
+}
 
 // Values before and after a change: sealed at rest under the workspace's key
 // (docs/content-encryption.md), time, category and action in the clear.
@@ -86,6 +97,7 @@ export function appendAdminAction(dataDir: string, row: Omit<AdminActionRow, "at
     at: row.at ?? new Date().toISOString(),
     ...(row.before ? { before: auditValues(row.before) } : {}),
     ...(row.after ? { after: auditValues(row.after) } : {}),
+    ...(row.surface || surfaceRow(row) ? { surface: true as const } : {}),
   };
   const previous = writeQueues.get(dataDir) ?? Promise.resolve();
   const queued = previous.then(() => writeRow(dataDir, record)).catch(() => {
@@ -580,6 +592,8 @@ export function readOrgAuditPage(dataDir: string, input: {
   categories?: readonly string[];
   /** Only rows whose target has this id (a bot, a person, a routine). */
   target?: string;
+  /** Lot S1: rows this reader never shows (a person's surface bot). */
+  hidden?: (row: AdminActionRow) => boolean;
 }): { rows: IdentifiedAdminAction[]; next: string | null } {
   let months: string[] = [];
   try {
@@ -616,6 +630,7 @@ export function readOrgAuditPage(dataDir: string, input: {
       const value: unknown = reader.at(lines, index);
       if (!isRow(value) || !categories.has(value.category)) continue;
       if (input.target && value.target?.id !== input.target) continue;
+      if (input.hidden?.(value)) continue;
       const at = Date.parse(value.at);
       if (!(at >= from && at <= to)) continue;
       if (rows.length === input.limit) return { rows, next: rows.at(-1)!.id };

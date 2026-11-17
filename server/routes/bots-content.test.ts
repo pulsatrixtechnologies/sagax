@@ -198,10 +198,10 @@ describe("#4504: update fields and what the organization requires", () => {
     }));
   });
 
-  it("refuses to remove a skill the organization requires, and says why", async () => {
-    const handler = createBotsContentRoutes(baseDeps({ orgRequiredSkill: (_botId, name) => name === "house-rules" }));
+  it("a skill an organization package put on the bot (offered, preset) stays removable", async () => {
+    const handler = createBotsContentRoutes(baseDeps());
     const { ctx, json } = context("/api/bots/b1/skills/house-rules", "DELETE");
     await handler(ctx);
-    expect(json).toHaveBeenCalledWith(expect.anything(), 409, { error: "Your organization requires this skill: it cannot be removed here.", code: "org_required" });
+    expect(json).not.toHaveBeenCalledWith(expect.anything(), 409, expect.anything());
   });
 });

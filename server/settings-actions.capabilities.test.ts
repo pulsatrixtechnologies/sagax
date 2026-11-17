@@ -19,6 +19,8 @@ function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "
       planned.push({ effect: input.plan.effect, method: target.method, path: target.path, ...(target.body !== undefined ? { body: target.body } : {}) });
       // another person's bot: its route refuses, as the real one does
       if (target.path.includes("/bots/theirs")) return { status: 404, body: { error: "no such bot" } };
+      // the organization's imposed item: its route refuses (server/routes/org-capabilities.ts)
+      if (target.path === "/api/me/org-capabilities/d1") return { status: 409, body: { error: "The organization imposes this capability: it stays on.", code: "org_capability_imposed" } };
       if (input.plan.effect === "hold") return { status: 200, body: { held: true, text: "Approval needed." } };
       input.plan.onDone?.("run");
       return { status: 200, body: { text: "{}" } };
@@ -40,7 +42,6 @@ function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "
     screen: () => ({ status: 200, body: { text: "Done." } }),
     targetName: (_kind, id) => ({ b1: "Nimbus", b2: "Ada", b3: "Orbit", theirs: "Other" } as Record<string, string>)[id],
     ownBots: (person) => (person === "pr_owner" ? ["b1", "b2", "b3"] : []),
-    orgRequired: (_person, kind, name) => (kind === "plugin" && name === "policy") || (kind === "skill" && name === "house-rules") || (kind === "connector" && name === "audit-log"),
     ...over,
   });
   const call = (args: Record<string, unknown>) => service.handle({ args, botId: "b1", threadId: "th1", generation: "g", botName: "Nimbus", botColor: "#000" });
@@ -128,23 +129,35 @@ describe("a bot manages its person's skills, plugins and connectors (#4504)", ()
     ] });
   });
 
-  it("refuses to remove or turn off what the organization requires, and says why", async () => {
+  it("a person's own item is always theirs to remove or turn off, whatever its name", async () => {
+    // the organization imposes items named policy, house-rules and audit-log;
+    // the person's own items of the same names are still theirs
     const h = harness({ mode: "full" });
     for (const args of [
       { key: "bot.plugin", value: { marketplace: "acme", plugin: "policy", uninstall: true } },
       { key: "bot.plugin", value: { key: "policy@acme", enabled: false } },
       { key: "bot.skill", value: { name: "house-rules", remove: true } },
-      { key: "bot.skill", value: { name: "house-rules", enabled: false } },
+      { key: "bot.skill", value: { name: "house-rules", me: true, enabled: false } },
       { key: "connections.mcpServerRemove", value: "audit-log" },
-      { key: "bot.mcpServer", value: { name: "audit-log", attached: false } },
+      { key: "connections.mcpServerEnabled", value: { name: "audit-log", enabled: false } },
     ]) {
       const answer = await h.call({ action: "set", ...args });
-      expect(answer.status, args.key).toBe(409);
-      expect(String(answer.body.error ?? answer.body.text), args.key).toContain("required by the person's organization");
+      expect(answer.status, args.key).toBe(200);
+      done(answer.body.text);
     }
-    expect(h.planned).toEqual([]);
-    // turning it on, or adding it, is never refused
-    done((await h.call({ action: "set", key: "bot.skill", value: { name: "house-rules", enabled: true } })).body.text);
+    expect(h.planned).toHaveLength(6);
+  });
+
+  it("the organization's own item: an offered one turns off, an imposed one answers the route's refusal", async () => {
+    const h = harness({ mode: "full" });
+    done((await h.call({ action: "set", key: "capabilities.organization", value: { key: "skill:organization:organization:d2", enabled: false } })).body.text);
+    const imposed = await h.call({ action: "set", key: "capabilities.organization", value: { id: "d1", enabled: false } });
+    expect(imposed.status).toBe(409);
+    expect(String(imposed.body.error ?? imposed.body.text)).toContain("The organization imposes this capability: it stays on.");
+    expect(h.planned.map(({ method, path, body }) => [method, path, body])).toEqual([
+      ["PUT", "/api/me/org-capabilities/d2", { enabled: false }],
+      ["PUT", "/api/me/org-capabilities/d1", { enabled: false }],
+    ]);
   });
 
   it("another person's bot is out of reach, and all is the person's own bots only", async () => {

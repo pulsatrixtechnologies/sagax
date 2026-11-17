@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import type { GitHubSkillOrigin } from "../../shared/skill-import.ts";
 import {
+  CHECK_INTERVAL_MS,
   compareVersions,
   latestFolderCommits,
   latestPackageVersion,
@@ -146,9 +147,17 @@ export interface SkillProviderDeps {
   /** Import the same folder again over the installed copy; throws, and the
    * installed copy stays, when it cannot. */
   reimport(person: UpdatePerson, record: InstalledSkillRecord): Promise<{ commit?: string } | void>;
+  now?: () => number;
 }
 
+/** GitHub requests a check leaves unused in the hour, for the person's own
+ * imports (60 an hour without a sign-in). */
+export const GITHUB_RESERVE = 20;
+
 export const originKey = (origin: GitHubSkillOrigin): string => `${origin.owner}/${origin.repo}@${origin.ref}:${origin.path}`.toLowerCase();
+/** A source read with one person's access is known to that person only (a
+ * private repository's commit subjects never reach another person). */
+const readKey = (origin: GitHubSkillOrigin, owner: string | undefined): string => `${originKey(origin)}|${owner ?? ""}`;
 
 /** The fields #4504 adds to an installed item of a list the page reads. */
 export interface ListedUpdateFields {
@@ -157,6 +166,7 @@ export interface ListedUpdateFields {
   installedVersion?: string;
   availableVersion?: string;
   updateNotes?: string;
+  updateUnknown?: true;
 }
 
 function listed(item: UpdateItem): ListedUpdateFields {
@@ -166,21 +176,22 @@ function listed(item: UpdateItem): ListedUpdateFields {
     ...(item.installedVersion ? { installedVersion: item.installedVersion } : {}),
     ...(item.updateAvailable && item.availableVersion ? { availableVersion: item.availableVersion } : {}),
     ...(item.updateAvailable && item.updateNotes ? { updateNotes: item.updateNotes } : {}),
+    ...(item.updateUnknown ? { updateUnknown: true as const } : {}),
   };
 }
 
 export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & { fields(record: InstalledSkillRecord): ListedUpdateFields } {
   const commits = new Map<string, FolderCommit[]>();
-  const evaluate = (record: InstalledSkillRecord) => {
-    if (!record.github || record.organization) return null;
-    const known = commits.get(originKey(record.github));
-    return known ? skillFolderUpdate({ commit: record.github.commit, importedAt: record.importedAt }, known) : null;
-  };
+  const now = deps.now ?? Date.now;
+  let blockedUntil = 0;
+  const known = (record: InstalledSkillRecord) => record.github && !record.organization ? commits.get(readKey(record.github, record.owner)) : undefined;
   const item = (record: InstalledSkillRecord): UpdateItem => {
-    const update = evaluate(record);
+    const read = known(record);
+    const update = read && record.github ? skillFolderUpdate({ commit: record.github.commit, importedAt: record.importedAt }, read) : null;
     return {
       ...base("skill", record, record.name, record.name, record),
       ...(record.github ? { installedVersion: record.github.commit.slice(0, 7) } : {}),
+      ...(record.github && !record.organization && !read ? { updateUnknown: true as const } : {}),
       updateAvailable: Boolean(update),
       ...(update ? { availableVersion: update.available } : {}),
       ...(update?.notes ? { updateNotes: update.notes } : {}),
@@ -188,25 +199,37 @@ export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & {
   };
   return {
     kind: "skill",
+    checkEvery: CHECK_INTERVAL_MS,
     fields: (record) => listed(item(record)),
     items(person) {
       return deps.records(person).map(item);
     },
     async check() {
+      // GitHub refused for its rate limit: nothing until its reset
+      if (now() < blockedUntil) return false;
       const seen = new Map<string, InstalledSkillRecord>();
       for (const record of deps.allRecords()) {
         if (!record.github || record.organization) continue;
-        const key = originKey(record.github);
+        const key = readKey(record.github, record.owner);
         if (!seen.has(key)) seen.set(key, record);
       }
       let changed = false;
       for (const [key, record] of seen) {
-        const latest = await latestFolderCommits(record.github!, deps.fetcherFor(record.owner));
+        const answer = await latestFolderCommits(record.github!, deps.fetcherFor(record.owner), 8_000, now);
         // unreachable: what was known stays
-        if (!latest) continue;
+        if (!answer) continue;
+        if ("limitedUntil" in answer) {
+          blockedUntil = answer.limitedUntil;
+          break;
+        }
         const before = commits.get(key)?.[0]?.sha;
-        commits.set(key, latest);
-        if (before !== latest[0]?.sha) changed = true;
+        if (!commits.has(key) || before !== answer.commits[0]?.sha) changed = true;
+        commits.set(key, answer.commits);
+        // keep the rest of the hour for the person's own imports
+        if (answer.remaining !== undefined && answer.remaining <= GITHUB_RESERVE) {
+          blockedUntil = answer.resetAt ?? now() + 60 * 60_000;
+          break;
+        }
       }
       return changed;
     },
@@ -244,13 +267,14 @@ export function connectorUpdateProvider(deps: ConnectorProviderDeps): UpdateProv
     if (!pin) return null;
     const newest = record.organization ? undefined : latest.get(`${pin.registry}:${pin.name}`);
     const newer = newest !== undefined && (compareVersions(newest, pin.version) ?? 0) > 0;
-    return { pin, newest: newer ? newest : undefined };
+    return { pin, newest: newer ? newest : undefined, unknown: !record.organization && newest === undefined };
   };
   const item = (record: InstalledConnectorRecord): UpdateItem => {
     const state = known(record);
     return {
       ...base("connector", record, record.name, record.name, record),
       ...(state ? { installedVersion: state.pin.version } : {}),
+      ...(state?.unknown ? { updateUnknown: true as const } : {}),
       updateAvailable: Boolean(state?.newest),
       ...(state?.newest ? { availableVersion: state.newest } : {}),
     };

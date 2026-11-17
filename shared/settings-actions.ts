@@ -1155,6 +1155,19 @@ add({
     return keys.length ? { method: "POST", path: "/api/me/capability-updates", body: { keys } } : "value is {all: true} or {keys: [key, ...]} (get capabilities.updates lists them).";
   },
 });
+// #4504: the person's own switch of an organization item (an offered one
+// on or off); the route refuses an imposed one and says why
+add({
+  key: "capabilities.organization", family: "connections", target: "none", value: "object",
+  label: "An item of your organization on or off for you ({id or key from capabilities.updates, enabled}); an imposed one stays on", where: "Capabilities > Installed > Organization",
+  read: () => ({ path: "/api/me/org-capabilities", field: "items" }),
+  write: (_ids, v) => {
+    const r = (v ?? {}) as { id?: unknown; key?: unknown; enabled?: unknown };
+    const id = typeof r.id === "string" ? r.id : typeof r.key === "string" && r.key.includes(":organization:") ? r.key.split(":").slice(3).join(":") : "";
+    if (!/^[\w.-]{1,128}$/.test(id) || typeof r.enabled !== "boolean") return "value is {id or key, enabled} (get capabilities.updates lists the organization's items).";
+    return { method: "PUT", path: `/api/me/org-capabilities/${id}`, body: { enabled: r.enabled } };
+  },
+});
 add({
   key: "connections.githubDisconnect", family: "connections", target: "none", value: "boolean", label: "Disconnect GitHub (true)", where: "Capabilities > Sources > GitHub",
   write: (_ids, v) => v === true ? { method: "DELETE", path: "/api/me/github" } : "value is true.", classes: always("delete", "secret"),

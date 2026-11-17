@@ -90,3 +90,34 @@ describe("org.approvals names each admin's own Primary Bot (#4451)", () => {
     expect(read("member")).toBeNull();
   });
 });
+
+// #4504 review: a person's update count reaches that person's own streams only
+describe("capability.updates reaches its person only (#4504)", () => {
+  const host = {
+    STREAM_ID: "s",
+    IDENTITY: { kind: "perspicax" },
+    localPrincipalId: () => "local",
+    orgAdminStream: () => true,
+    PHONE_TOOLS_FRAME: "phone-tools",
+    DEVICE_SETTINGS_FRAME: "device-settings",
+    peopleDmFrameAllowed: () => true,
+    temporaryAgentFrame: () => false,
+    viewerNotificationMuted: () => false,
+    botTasksFrameAllowed: () => true,
+    approvalViewerOf: () => undefined,
+    scopeChannelApproval: () => ({ action: "keep" }),
+    privateThreads: () => false,
+    memberFrame: (_client: unknown, _seq: number, _payload: unknown, clientFrame: string) => clientFrame,
+  };
+  const frameFor = createSseFrameFor(() => host);
+  const payload = { kind: "capability.updates", audience: "ada", count: 2, checkedAt: 1 };
+  const frame = encodeSseDataFrame("s", 1, { ...payload, seq: 1 });
+
+  it("goes to the person it names, never to another member nor an admin's stream", () => {
+    expect(frameFor({ viewerId: "ada", admin: false }, 1, payload, frame, frame)).not.toBeNull();
+    expect(frameFor({ viewerId: "bob", admin: false }, 1, payload, frame, frame)).toBeNull();
+    expect(frameFor({ viewerId: "bob", admin: true }, 1, payload, frame, frame)).toBeNull();
+    // a stream with no viewer is the local person's
+    expect(frameFor({ viewerId: "", admin: true }, 1, { ...payload, audience: "local" }, frame, frame)).not.toBeNull();
+  });
+});

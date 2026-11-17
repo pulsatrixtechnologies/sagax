@@ -597,7 +597,6 @@ export function replaceLibrarySkill(
   if ("error" in indexRead) return indexRead;
   const entry = indexRead.index[name];
   if (!entry) return { error: `no library skill named "${name}"` };
-  if (entry.package) return { error: "your organization requires this skill: its version follows the organization console" };
   const next: SkillLibraryEntry = {
     ...entry,
     description: parsed.description,

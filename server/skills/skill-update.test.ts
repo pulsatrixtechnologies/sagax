@@ -39,3 +39,16 @@ describe("replaceImportedSkill", () => {
     expect(replaceImportedSkill(bot, "missing", "x", [], undefined)).toHaveProperty("error");
   });
 });
+
+describe("replaceImportedSkill restores the installed copy when storing fails", () => {
+  it("puts the old folder and its record back", () => {
+    const bot = `test-update-${Math.random().toString(36).slice(2, 10)}`;
+    bots.push(bot);
+    expect(installSkill(bot, "acme/skills/trip", [{ path: "SKILL.md", content: SKILL("Old steps.") }], origin("a"))).not.toHaveProperty("error");
+    expect(setSkillEnabled(bot, "trip-plan", true)).not.toHaveProperty("error");
+    const failing = () => ({ error: "disk full" });
+    expect(replaceImportedSkill(bot, "trip-plan", "acme/skills/trip", [{ path: "SKILL.md", content: SKILL("New steps.") }], origin("b"), failing)).toEqual({ error: "disk full" });
+    expect(readSkillFile(bot, "trip-plan")).toContain("Old steps.");
+    expect(listSkills(bot)[0]).toMatchObject({ enabled: true, github: { commit: "a".repeat(40) } });
+  });
+});

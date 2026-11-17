@@ -72,33 +72,8 @@ export type SettingsActionDeps = {
   targetName?: (kind: string, id: string, botId?: string) => string | undefined;
   /** #4504: the bots this person owns (target "all" on a bot setting). */
   ownBots?: (person: string) => string[];
-  /** #4504: whether the person's organization requires this item (it
-   * cannot be removed or turned off). */
-  orgRequired?: (person: string | null, kind: "plugin" | "skill" | "connector", name: string) => boolean;
 };
 
-/** #4504: the item a change removes or turns off, if it does. */
-export function removalOf(key: string, value: unknown): { kind: "plugin" | "skill" | "connector"; name: string } | null {
-  const r = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-  const text = (one: unknown) => typeof one === "string" && one.trim() ? one.trim() : undefined;
-  if (key === "bot.plugin") {
-    const name = text(r.plugin) ?? text(r.key)?.split("@")[0];
-    return name && (r.uninstall === true || r.enabled === false) ? { kind: "plugin", name } : null;
-  }
-  if (key === "bot.skill") {
-    const name = text(r.name);
-    return name && (r.remove === true || r.enabled === false) ? { kind: "skill", name } : null;
-  }
-  if (key === "connections.mcpServerRemove") {
-    const name = text(value);
-    return name ? { kind: "connector", name } : null;
-  }
-  if (key === "connections.mcpServerEnabled" || key === "bot.mcpServer") {
-    const name = text(r.name);
-    return name && (r.enabled === false || r.attached === false) ? { kind: "connector", name } : null;
-  }
-  return null;
-}
 
 export type SettingsActionInput = {
   args: Record<string, unknown>;
@@ -639,11 +614,6 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     if (!("value" in args)) return text(400, "set needs a value.");
     const value = args.value;
     if (!valueFits(spec.value, value)) return text(400, `${spec.key} takes ${spec.value}.`);
-    // #4504: what the organization requires is never removed nor turned off
-    const removal = removalOf(spec.key, value);
-    if (removal && deps.orgRequired?.(speaker, removal.kind, removal.name)) {
-      return text(409, `${removal.name} is required by the person's organization: it cannot be removed or turned off here. Tell the person so; the organization console manages it.`);
-    }
     let built = spec.write(ids, value);
     if (typeof built === "string") return text(400, built);
     // #1545 (2026-10-28): a secret given by reference is resolved here, on

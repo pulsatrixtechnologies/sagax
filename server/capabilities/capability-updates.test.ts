@@ -146,10 +146,8 @@ describe("the update service", () => {
       installed[target.key] = target.availableVersion!;
       applied.push(target.key);
     };
-    const onApplied = vi.fn();
     const updates = new CapabilityUpdates({
       providers: (["plugin", "skill", "connector"] as const).map((kind) => ({ kind, items: () => items().filter((row) => row.kind === kind), check: async () => false, update })),
-      onApplied,
     });
     const answer = await updates.apply(ADA, { all: true });
     expect(answer.results).toEqual([
@@ -160,7 +158,6 @@ describe("the update service", () => {
     // the organization's item is not part of "all", and the failed one stays
     expect(applied).toEqual(["plugin:me:me:a@m", "connector:me:me:c"]);
     expect(answer.count).toBe(1);
-    expect(onApplied).toHaveBeenCalledWith(ADA, answer.results);
   });
 
   it("an item the organization holds is refused with why; another person's key is out of reach", async () => {
@@ -283,5 +280,115 @@ describe("library skill replacement keeps the installed copy on a failure", () =
     expect(done).not.toHaveProperty("error");
     expect(readLibrarySkillFile("steps", root)).toContain("New.");
     expect((done as { github?: { commit: string } }).github?.commit).toBe("b".repeat(40));
+  });
+});
+
+describe("review of #4504", () => {
+  it("orders pre-releases by their numbers", () => {
+    expect(compareVersions("1.0.0-rc.10", "1.0.0-rc.9")).toBe(1);
+    expect(compareVersions("1.0.0-beta.2", "1.0.0-rc.1")).toBe(-1);
+    expect(compareVersions("1.0.0-rc.1", "1.0.0-rc.1")).toBe(0);
+  });
+
+  it("a folder commit after the imported one counts, whatever its date", () => {
+    const installed = { commit: "a".repeat(40), importedAt: "2026-11-01T00:00:00Z" };
+    expect(skillFolderUpdate(installed, [
+      { sha: "b".repeat(40), date: "2026-10-01T00:00:00Z", message: "Merged late" },
+      { sha: "a".repeat(40), date: "2026-09-01T00:00:00Z", message: "Imported" },
+    ])).toEqual({ available: "bbbbbbb", notes: "Merged late" });
+  });
+
+  it("a source never reached is unknown, never current, and shows no update mark", async () => {
+    const github = { owner: "acme", repo: "skills", ref: "main", path: "", commit: "a".repeat(40) };
+    const skills = skillUpdateProvider({ records: () => [{ scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github }], allRecords: () => [], fetcherFor: () => fetch, reimport: async () => undefined });
+    const connectors = connectorUpdateProvider({ records: () => [{ scope: "me", target: "me", name: "nimbus", command: "npx", args: ["nimbus-mcp@1.0.0"] }], allRecords: () => [], setArgs: () => undefined });
+    expect((await skills.items(ADA))[0]).toMatchObject({ updateAvailable: false, updateUnknown: true });
+    expect((await connectors.items(ADA))[0]).toMatchObject({ updateAvailable: false, updateUnknown: true });
+    const updates = new CapabilityUpdates({ providers: [skills, connectors] });
+    const answer = await updates.apply(ADA, { keys: ["skill:me:me:steps", "connector:me:me:nimbus"] });
+    expect(answer.results.map((row) => row.status)).toEqual(["unknown", "unknown"]);
+  });
+
+  it("a private source's commits are read and shown per person, with that person's own access", async () => {
+    const github = { owner: "acme", repo: "private", ref: "main", path: "steps", commit: "a".repeat(40) };
+    const records: InstalledSkillRecord[] = [
+      { scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github, owner: "pr_ada" },
+      { scope: "me", target: "me", name: "steps", importedAt: "2026-11-01T00:00:00Z", github, owner: "pr_bob" },
+    ];
+    const fetcherFor = (owner: string | undefined) => (async () => owner === "pr_ada"
+      ? new Response(JSON.stringify([{ sha: "b".repeat(40), commit: { message: "Secret subject", committer: { date: "2026-11-10T00:00:00Z" } } }]), { status: 200 })
+      : new Response("{}", { status: 404 })) as unknown as typeof fetch;
+    const provider = skillUpdateProvider({ records: (person) => records.filter((row) => row.owner === person.id), allRecords: () => records, fetcherFor, reimport: async () => undefined });
+    await provider.check();
+    expect((await provider.items(ADA))[0]).toMatchObject({ updateAvailable: true, updateNotes: "Secret subject" });
+    const bob = (await provider.items(BOB))[0]!;
+    expect(bob.updateAvailable).toBe(false);
+    expect(bob.updateNotes).toBeUndefined();
+  });
+
+  it("GitHub's rate limit: a refusal stops the round until its reset, and a reserve is left for imports", async () => {
+    let now = Date.parse("2026-11-16T12:00:00Z");
+    const reset = Math.floor(now / 1000) + 3600;
+    const asked: string[] = [];
+    let answer: "limited" | "low" | "ok" = "limited";
+    const fetcher = (async (url: string) => {
+      asked.push(String(url));
+      if (answer === "limited") return new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) } });
+      return new Response(JSON.stringify([]), { status: 200, headers: { "x-ratelimit-remaining": answer === "low" ? "5" : "50", "x-ratelimit-reset": String(reset) } });
+    }) as unknown as typeof fetch;
+    const records: InstalledSkillRecord[] = ["one", "two", "three"].map((path) => ({ scope: "me", target: "me", name: path, importedAt: "2026-11-01T00:00:00Z", github: { owner: "acme", repo: "skills", ref: "main", path, commit: "a".repeat(40) } }));
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor: () => fetcher, reimport: async () => undefined, now: () => now });
+    expect(provider.checkEvery).toBe(6 * 60 * 60_000);
+    await provider.check();
+    expect(asked).toHaveLength(1);
+    await provider.check();
+    expect(asked).toHaveLength(1);
+    now = (reset + 1) * 1000;
+    answer = "low";
+    await provider.check();
+    // past the reset: one request, then the reserve stops the round
+    expect(asked).toHaveLength(2);
+    answer = "ok";
+    await provider.check();
+    expect(asked).toHaveLength(5);
+  });
+
+  it("two updates of one item at once run one update", async () => {
+    let release: () => void = () => undefined;
+    const update = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    const updates = new CapabilityUpdates({ providers: [fakeProvider("plugin", { pr_ada: [item({ key: "plugin:me:me:a@m", kind: "plugin", updateAvailable: true, availableVersion: "2.0.0" })] }, update)] });
+    const first = updates.apply(ADA, { keys: ["plugin:me:me:a@m"] });
+    const second = updates.apply(ADA, { all: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(a.results[0]!.status).toBe("updated");
+    expect(b.results[0]!.status).toBe("updated");
+  });
+
+  it("the live frame: only when the person's own list changed, with the same count as their GET", async () => {
+    let available = false;
+    const sent: Array<[string, number]> = [];
+    const updates = new CapabilityUpdates({
+      providers: [{
+        kind: "plugin",
+        items: (person) => person.id === "pr_ada" ? [item({ key: "plugin:me:me:a@m", kind: "plugin", updateAvailable: available })]
+          : [item({ key: "plugin:installation:installation:b@m", kind: "plugin", scope: "installation", updateAvailable: available && person.manager })],
+        check: async () => true,
+        update: async () => undefined,
+      }],
+      people: () => [{ id: "pr_owner", manager: true }],
+      notify: (person, view) => { sent.push([person, view.count]); },
+    });
+    // a person with only Me items is known once they read their list
+    await updates.list(ADA);
+    await updates.check();
+    expect(sent).toEqual([]);
+    available = true;
+    await updates.check();
+    expect(sent.sort()).toEqual([["pr_ada", 1], ["pr_owner", 1]]);
+    await updates.check();
+    expect(sent).toHaveLength(2);
   });
 });

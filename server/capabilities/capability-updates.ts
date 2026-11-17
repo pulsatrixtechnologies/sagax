@@ -29,6 +29,8 @@ export interface UpdateItem {
   availableVersion?: string;
   updateAvailable: boolean;
   updateNotes?: string;
+  /** The source was never reached: no update mark, and an update answers unknown. */
+  updateUnknown?: true;
   organization?: "required" | "offered";
   pinned?: string;
   canUpdate: boolean;
@@ -45,7 +47,7 @@ export interface UpdateResult {
   key: string;
   kind: UpdateKind;
   name: string;
-  status: "updated" | "current" | "failed";
+  status: "updated" | "current" | "failed" | "unknown";
   from?: string;
   to?: string;
   updateNotes?: string;
@@ -76,6 +78,13 @@ export interface UpdateProvider {
 
 /** The live frame a person's app reads again on (the SSE stream). */
 export const CAPABILITY_UPDATES_FRAME = "capability.updates";
+
+/** The frame reaches the person it names only (a stream without a viewer
+ * is this computer's own person). */
+export function capabilityUpdatesFrameAllowed(payload: { kind?: unknown; audience?: unknown }, viewerId: string | undefined, localPersonId: string): boolean {
+  if (payload.kind !== CAPABILITY_UPDATES_FRAME) return true;
+  return typeof payload.audience === "string" && payload.audience === (viewerId || localPersonId);
+}
 
 /** A read of the list starts a background check past this age. */
 export const STALE_AFTER_MS = 30 * 60_000;
@@ -115,7 +124,20 @@ export function compareVersions(a: string, b: string): number | null {
   }
   if (x[2] && !y[2]) return -1;
   if (!x[2] && y[2]) return 1;
-  return x[2] && y[2] ? Math.sign(x[2].localeCompare(y[2])) : 0;
+  if (!x[2] || !y[2]) return 0;
+  // pre-release identifiers: numbers by value (rc.10 after rc.9), words by text
+  const xp = x[2].split(".");
+  const yp = y[2].split(".");
+  for (let index = 0; index < Math.max(xp.length, yp.length); index += 1) {
+    const left = xp[index];
+    const right = yp[index];
+    if (left === undefined) return -1;
+    if (right === undefined) return 1;
+    const numeric = /^\d+$/.test(left) && /^\d+$/.test(right);
+    const diff = numeric ? Number(left) - Number(right) : left.localeCompare(right);
+    if (diff) return Math.sign(diff);
+  }
+  return 0;
 }
 
 // ── connectors: a command server pinned to a package version ──────────
@@ -204,31 +226,44 @@ export interface FolderCommit {
   message: string;
 }
 
-/** The latest commits that touched a skill's folder on its ref (newest
- * first), or null when GitHub cannot be read. Never throws. */
+/** What one read of a folder's commits answered: the commits (newest
+ * first) and GitHub's rate window, a refusal for the rate limit with its
+ * reset, or null when GitHub could not be read. Never throws. */
+export type FolderCommitsAnswer =
+  | { commits: FolderCommit[]; remaining?: number; resetAt?: number }
+  | { limitedUntil: number }
+  | null;
+
 export async function latestFolderCommits(
   origin: { owner: string; repo: string; ref: string; path: string },
   fetcher: typeof fetch = fetch,
   timeoutMs = 8_000,
-): Promise<FolderCommit[] | null> {
+  now: () => number = Date.now,
+): Promise<FolderCommitsAnswer> {
   const query = new URLSearchParams({ per_page: "10" });
   if (origin.ref && origin.ref !== "HEAD") query.set("sha", origin.ref);
   if (origin.path) query.set("path", origin.path);
   const url = `https://api.github.com/repos/${encodeURIComponent(origin.owner)}/${encodeURIComponent(origin.repo)}/commits?${query}`;
   try {
     const response = await fetcher(url, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(timeoutMs) });
+    const remainingHeader = response.headers?.get?.("x-ratelimit-remaining");
+    const resetHeader = response.headers?.get?.("x-ratelimit-reset");
+    const remaining = remainingHeader !== null && remainingHeader !== undefined && /^\d+$/.test(remainingHeader) ? Number(remainingHeader) : undefined;
+    const resetAt = resetHeader && /^\d+$/.test(resetHeader) ? Number(resetHeader) * 1000 : undefined;
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
+      if (response.status === 429 || (response.status === 403 && remaining === 0)) return { limitedUntil: resetAt ?? now() + 60 * 60_000 };
       return null;
     }
     const body = await response.json() as unknown;
     if (!Array.isArray(body)) return null;
-    return body.flatMap((row) => {
+    const commits = body.flatMap((row) => {
       const r = row as { sha?: unknown; commit?: { message?: unknown; committer?: { date?: unknown } } };
       return typeof r.sha === "string" && /^[0-9a-f]{40}$/.test(r.sha)
         ? [{ sha: r.sha, date: typeof r.commit?.committer?.date === "string" ? r.commit.committer.date : "", message: typeof r.commit?.message === "string" ? r.commit.message : "" }]
         : [];
     });
+    return { commits, ...(remaining !== undefined ? { remaining } : {}), ...(resetAt !== undefined ? { resetAt } : {}) };
   } catch {
     return null;
   }
@@ -239,8 +274,11 @@ export async function latestFolderCommits(
  * imported commit itself. Their first lines are the notes. */
 export function skillFolderUpdate(installed: { commit: string; importedAt: string }, commits: readonly FolderCommit[]): { available: string; notes?: string } | null {
   const since = Date.parse(installed.importedAt);
-  if (commits[0]?.sha === installed.commit) return null;
-  const newer = commits.filter((commit) => commit.sha !== installed.commit && Number.isFinite(since) && Date.parse(commit.date) > since);
+  // the imported commit touched the folder: everything above it is newer, whatever its date
+  const at = commits.findIndex((commit) => commit.sha === installed.commit);
+  const newer = at >= 0
+    ? commits.slice(0, at)
+    : commits.filter((commit) => Number.isFinite(since) && Date.parse(commit.date) > since);
   if (!newer.length) return null;
   const notes = shortNotes(newer.map((commit) => commit.message.split("\n")[0]!.trim()).filter(Boolean).join("\n"));
   return { available: newer[0]!.sha.slice(0, 7), ...(notes ? { notes } : {}) };
@@ -252,10 +290,12 @@ export interface CapabilityUpdatesOptions {
   providers: readonly UpdateProvider[];
   now?: () => number;
   random?: () => number;
-  /** A check changed what is known (any person may see a new count). */
-  onChecked?: (checkedAt: number) => void;
-  /** An update ran for this person. */
-  onApplied?: (person: UpdatePerson, results: UpdateResult[]) => void;
+  /** People with installed items besides those who read their list (the
+   * bots' owners), with the same manager flag their own GET has. */
+  people?: () => UpdatePerson[];
+  /** Tell one person their list changed (the live frame), with the view
+   * their own GET answers. */
+  notify?: (personId: string, view: UpdatesView) => void;
   log?: (line: string) => void;
 }
 
@@ -266,6 +306,12 @@ export class CapabilityUpdates {
   private checkedAt: number | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  /** The people who read their list or updated, as their GET saw them. */
+  private readonly seen = new Map<string, UpdatePerson>();
+  /** What each person was last told (or read), to send only a change. */
+  private readonly told = new Map<string, string>();
+  /** One update of one item at a time; a second ask joins the first. */
+  private readonly inflight = new Map<string, Promise<UpdateResult>>();
 
   constructor(options: CapabilityUpdatesOptions) {
     this.options = options;
@@ -282,14 +328,48 @@ export class CapabilityUpdates {
   /** Every installed item of this person, the count of updates, and a
    * background check of each stale kind (never awaited). */
   async list(person: UpdatePerson): Promise<UpdatesView> {
-    const items = await this.items(person);
+    this.remember(person);
     this.checkStale();
+    const view = await this.view(person);
+    this.told.set(person.id, signature(view));
+    return view;
+  }
+
+  private async view(person: UpdatePerson): Promise<UpdatesView> {
+    const items = await this.items(person);
     return {
       count: items.filter((item) => item.updateAvailable && item.canUpdate).length,
       checkedAt: this.checkedAt,
       checking: this.running.size > 0,
       items,
     };
+  }
+
+  private remember(person: UpdatePerson): void {
+    this.seen.set(person.id, { id: person.id, manager: person.manager });
+  }
+
+  /** Send the live frame to each person whose list changed since they
+   * were last told or last read it. */
+  private async notifyPeople(only?: UpdatePerson): Promise<void> {
+    if (!this.options.notify) return;
+    const people = new Map<string, UpdatePerson>();
+    if (only) people.set(only.id, only);
+    else {
+      for (const person of this.options.people?.() ?? []) people.set(person.id, person);
+      for (const person of this.seen.values()) people.set(person.id, person);
+    }
+    for (const person of people.values()) {
+      try {
+        const view = await this.view(person);
+        const now = signature(view);
+        const before = this.told.get(person.id);
+        this.told.set(person.id, now);
+        if (before !== undefined && before !== now) this.options.notify(person.id, view);
+      } catch (error) {
+        this.log(`[capability-updates] the live frame could not be built: ${reason(error)}`);
+      }
+    }
   }
 
   private async items(person: UpdatePerson): Promise<UpdateItem[]> {
@@ -333,7 +413,7 @@ export class CapabilityUpdates {
         this.running.delete(provider.kind);
       }
       this.checkedAt = this.now();
-      if (changed) this.options.onChecked?.(this.checkedAt);
+      if (changed) await this.notifyPeople();
     })();
     this.running.set(provider.kind, run);
     return run;
@@ -342,6 +422,7 @@ export class CapabilityUpdates {
   /** Update the items named by `keys`, or every item with an update. One
    * at a time; a failure is that item's result and the next goes on. */
   async apply(person: UpdatePerson, request: { keys?: readonly string[]; all?: boolean }): Promise<{ results: UpdateResult[]; count: number }> {
+    this.remember(person);
     const items = await this.items(person);
     const byKey = new Map(items.map((item) => [item.key, item]));
     const chosen: Array<{ key: string; item?: UpdateItem }> = request.all
@@ -353,30 +434,34 @@ export class CapabilityUpdates {
         results.push({ key, kind: kindOfKey(key), name: key.split(":").slice(3).join(":") || key, status: "failed", error: "Not one of your installed items: get the list again." });
         continue;
       }
-      const base = { key, kind: item.kind, name: item.name, ...(item.installedVersion ? { from: item.installedVersion } : {}) };
-      if (item.organization || !item.canUpdate) {
-        results.push({ ...base, status: "failed", error: "Your organization manages this one: its version follows the organization console." });
-        continue;
+      let running = this.inflight.get(key);
+      if (!running) {
+        running = this.updateOne(person, item).finally(() => this.inflight.delete(key));
+        this.inflight.set(key, running);
       }
-      if (!item.updateAvailable) {
-        results.push({ ...base, status: "current" });
-        continue;
-      }
-      const provider = this.options.providers.find((candidate) => candidate.kind === item.kind);
-      try {
-        if (!provider) throw new Error("This kind cannot be updated here.");
-        const done = await provider.update(person, item);
-        const to = done?.to ?? item.availableVersion;
-        const notes = shortNotes(done?.notes) ?? item.updateNotes;
-        results.push({ ...base, status: "updated", ...(to ? { to } : {}), ...(notes ? { updateNotes: notes } : {}) });
-      } catch (error) {
-        results.push({ ...base, status: "failed", error: `${reason(error)} The installed version still works.` });
-      }
+      results.push(await running);
     }
-    const after = await this.items(person);
-    const count = after.filter((item) => item.updateAvailable && item.canUpdate).length;
-    if (results.length) this.options.onApplied?.(person, results);
+    const count = (await this.items(person)).filter((row) => row.updateAvailable && row.canUpdate).length;
+    if (results.length) await this.notifyPeople({ id: person.id, manager: person.manager });
     return { results, count };
+  }
+
+  private async updateOne(person: UpdatePerson, item: UpdateItem): Promise<UpdateResult> {
+    const base = { key: item.key, kind: item.kind, name: item.name, ...(item.installedVersion ? { from: item.installedVersion } : {}) };
+    // the organization's own item: canUpdate is its one verdict (the providers set it)
+    if (!item.canUpdate) return { ...base, status: "failed", error: "Your organization manages this one: its version follows the organization console." };
+    if (item.updateUnknown) return { ...base, status: "unknown", error: "Its source has not answered yet: nothing is known about a newer version." };
+    if (!item.updateAvailable) return { ...base, status: "current" };
+    const provider = this.options.providers.find((candidate) => candidate.kind === item.kind);
+    try {
+      if (!provider) throw new Error("This kind cannot be updated here.");
+      const done = await provider.update(person, item);
+      const to = done?.to ?? item.availableVersion;
+      const notes = shortNotes(done?.notes) ?? item.updateNotes;
+      return { ...base, status: "updated", ...(to ? { to } : {}), ...(notes ? { updateNotes: notes } : {}) };
+    } catch (error) {
+      return { ...base, status: "failed", error: `${reason(error)} The installed version still works.` };
+    }
   }
 
   /** The periodic check: first past FIRST_CHECK_DELAY_MS, then every
@@ -400,6 +485,10 @@ export class CapabilityUpdates {
       },
     };
   }
+}
+
+function signature(view: UpdatesView): string {
+  return JSON.stringify([view.count, view.items.map((item) => [item.key, item.updateAvailable, item.availableVersion ?? null, item.updateUnknown ?? false])]);
 }
 
 function kindOfKey(key: string): UpdateKind {

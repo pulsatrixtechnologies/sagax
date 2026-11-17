@@ -22,22 +22,33 @@ of them (`server/capabilities/capability-updates.ts`, the three kinds in
   connector, an unpinned package and a hand-written skill have nothing to
   update. A source out of reach changes nothing and shows no error.
 - Checks: past five minutes after start, then every six hours, and a read
-  of the list starts one when the last is older than 30 minutes (plugins:
-  six hours, a git pull); never during a turn, never awaited by a read.
+  of the list starts one when the last is older than 30 minutes (plugins
+  and skills: six hours); never during a turn, never awaited by a read.
+  GitHub: a 403 or 429 for its rate limit stops the round until its reset,
+  and a round stops when 20 requests are left in the hour, kept for the
+  person's own imports. A source read with one person's access is known to
+  that person only. A source never reached is `updateUnknown` (no mark; an
+  update answers unknown).
 - Routes: `GET /api/me/capability-updates` (items and count) and `POST`
   `{keys}` or `{all: true}` (one result per item: updated, current, or
   failed with the reason; a failure keeps the installed version). The
   session's person only, no admin; `apps.ownIntegrations` as for every own
   change. The installed items of the lists the page reads carry
   `updateKey`, `installedVersion`, `availableVersion`, `updateAvailable` and
-  `updateNotes`. A live frame `capability.updates` (the person's count)
-  follows a check that changed something and every update.
+  `updateNotes` (and `updateUnknown`). A live frame `capability.updates`
+  (the count of the person's own GET) goes to that person only
+  (`capabilityUpdatesFrameAllowed` in `sseFrameFor`), and only when their
+  list changed.
 - What the organization declares (imposed or offered, a pinned version) is
   listed with `organization` and `canUpdate: false`: its console decides.
-  `sagax_settings` refuses to remove or turn off what the organization
-  requires (`removalOf`, `orgRequired`), and a bot skill an organization
-  package installed is never deleted by its route (409 `org_required`).
+  A person's own item is always theirs to remove or turn off, whatever its
+  name (an offered or preset skill an organization package put on a bot
+  too). The organization's own item is switched by `PUT
+  /api/me/org-capabilities/:id`, whose one verdict is `orgCapabilityLock`
+  (imposed stays on); a bot replays that route
+  (`capabilities.organization`) and gets its answer.
 - A bot's hand: `capabilities.updates` (get lists, set updates),
+  `capabilities.organization` ({id or key, enabled}),
   `bot.plugin` (`me: true` for the person's own plugin), `bot.skill`
   (`remove: true`, `me: true`), `bot.skillImport` (`me: true`),
   `connections.mcpServer` and `connections.mcpServerRemove`, and target

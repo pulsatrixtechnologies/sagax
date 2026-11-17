@@ -100,8 +100,6 @@ export interface BotsContentRouteDeps {
   pluginSkillSource: (name: string) => { name: string; marketplace: string } | null;
   /** #4504: an installed skill's update fields (updateKey, versions, notes). */
   skillUpdateFields?: (place: { scope: "bot" | "me" | "installation"; target: string }, skill: { name: string; importedAt: string; github?: GitHubSkillOrigin }) => Record<string, unknown>;
-  /** #4504: whether the organization requires this bot skill (it is never removed here). */
-  orgRequiredSkill?: (botId: string, name: string) => boolean;
 }
 
 export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandler {
@@ -314,8 +312,6 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       return json(res, 200, { skill: result });
     }
     if (m && method === "DELETE") {
-      // #4504: what the organization requires is never removed here
-      if (deps.orgRequiredSkill?.(m[1]!, m[2]!)) return json(res, 409, { error: "Your organization requires this skill: it cannot be removed here.", code: "org_required" });
       const result = removeSkill(m[1]!, m[2]!);
       if ("error" in result) return json(res, 404, { error: result.error });
       afterBotSkillRemoved(m[1]!, m[2]!);

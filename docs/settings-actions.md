@@ -414,6 +414,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Your MCP server on or off ({name, enabled}) | Capabilities > Providers | `sagax_settings` get, set `connections.mcpServerEnabled` | simple |
 | Remove your MCP server (its name) | Capabilities > Providers | `sagax_settings` set `connections.mcpServerRemove` | suppression |
 | What you have installed (skills, plugins, connectors) and which has an update; set {all: true} updates every one, {keys: [key, ...]} the ones listed | Capabilities > Installed > Update | `sagax_settings` get, set `capabilities.updates` | simple |
+| An item of your organization on or off for you ({id or key from capabilities.updates, enabled}); an imposed one stays on | Capabilities > Installed > Organization | `sagax_settings` get, set `capabilities.organization` | simple |
 | Disconnect GitHub (true) | Capabilities > Sources > GitHub | `sagax_settings` set `connections.githubDisconnect` | suppression + secret |
 | Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
 | Your meme provider ({provider: tenor/giphy, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Memes | `sagax_settings` get, set `connections.memes` | simple |

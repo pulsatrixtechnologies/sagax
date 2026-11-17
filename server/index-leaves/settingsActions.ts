@@ -51,10 +51,8 @@ function settingsActions() {
       return rule ? [rule.description, ...Object.values(rule.scope ?? {})].join(" ") : undefined;
     },
     instanceName: (instanceId) => host.registry.get(instanceId)?.displayName,
-    // #4504: target "all" is the person's own bots; what the organization
-    // requires is never removed nor turned off
+    // #4504: target "all" is the person's own bots
     ownBots: (person) => host.updateOwnBots(person).map((bot) => bot.id),
-    orgRequired: (person, kind, name) => host.orgRequiredItem(person, kind, name),
     // #1545 (2026-10-28): a secret copied by reference stays on the server
     vaultValue: (person, itemId, field) => host.credentialVault.reveal(host.IDENTITY.kind === "perspicax" ? person : host.LOCAL_VAULT_PRINCIPAL, itemId, field),
     // #1545 (2026-10-28): an engine another person's bot, or the

@@ -2867,7 +2867,6 @@ bindLeafHost({
   get updateOwnBots() { return updateOwnBots; },
   // read by the MCP listing, which may run before the update service exists
   get connectorUpdates() { try { return connectorUpdates; } catch { return undefined; } },
-  get orgRequiredItem() { return orgRequiredItem; },
   get botOwnerOrgRole() { return botOwnerOrgRole; },
   get memberOwnedInOrg() { return memberOwnedInOrg; },
   get principalIsOrgAdmin() { return principalIsOrgAdmin; },
@@ -13102,6 +13101,28 @@ ROUTES.push(createGithubCredentialRoutes({
     after: { op: row.op, count: row.count, ...(row.id ? { id: row.id } : {}), ...(row.label ? { label: row.label } : {}) }, actor: orgAuditActor(auth)
   })
 }));
+/** A person's own MCP server replaced by an Edit (the add body; a token or
+ * env left out is kept). #4504: an update of its package goes through here too. */
+async function updatePersonalMcpServer(principalId: string, name: string, body: unknown): Promise<void> {
+  const previous = personConnections.servers(principalId)[name];
+  if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
+  const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
+  if (typeof next.name !== "string" || !next.name) next.name = name;
+  if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
+  if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
+  if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
+  const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
+  personConnections.remove(principalId, name);
+  try {
+    await addPersonalMcpServer(principalId, next, keepSignIn);
+  } catch (error) {
+    personConnections.add(principalId, name, previous);
+    throw error;
+  }
+  stdioRelay.closePerson(principalId, name);
+  if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
+  if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
+}
 ROUTES.push(createPersonConnectionRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   ownIntegrationsRefusal,
@@ -13133,26 +13154,7 @@ ROUTES.push(createPersonConnectionRoutes({
     // the body names another one). A token or env left out is kept, so the
     // screen never has to show a secret; an unchanged OAuth address keeps
     // its sign-in. Any refusal puts the previous server back as it was.
-    update: async (principalId, name, body) => {
-      const previous = personConnections.servers(principalId)[name];
-      if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
-      const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
-      if (typeof next.name !== "string" || !next.name) next.name = name;
-      if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
-      if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
-      if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
-      const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
-      personConnections.remove(principalId, name);
-      try {
-        await addPersonalMcpServer(principalId, next, keepSignIn);
-      } catch (error) {
-        personConnections.add(principalId, name, previous);
-        throw error;
-      }
-      stdioRelay.closePerson(principalId, name);
-      if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
-      if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
-    },
+    update: (principalId, name, body) => updatePersonalMcpServer(principalId, name, body),
     setEnabled: async (principalId, name, enabled) => {
       personConnections.setEnabled(principalId, name, enabled);
       if (!enabled) stdioRelay.closePerson(principalId, name);
@@ -26798,15 +26800,6 @@ function orgUpdatePlace(view: OrgCapabilityView) {
     ...(view.source.kind === "marketplace" && view.source.version ? { pinned: view.source.version } : {}),
   };
 }
-/** #4504: what the person's organization requires is never removed nor
- * turned off (sagax_settings refuses and says why). */
-function orgRequiredItem(person: string | null, kind: "plugin" | "skill" | "connector", name: string): boolean {
-  if (!person) return false;
-  const form = kind === "connector" ? "mcp" : kind;
-  const lower = name.trim().toLowerCase();
-  return orgUpdateDeclarations(person).some((view) => view.mode === "imposed" && view.form === form
-    && (view.name.toLowerCase() === lower || view.mount.toLowerCase() === lower));
-}
 async function pluginUpdateRecords(person: UpdatePerson): Promise<InstalledPluginRecord[]> {
   const viewer: MarketplaceViewer = person.context ? marketplaceViewer(person.context as RequestAuth) : IDENTITY.kind === "perspicax" ? { principal: person.id } : { seesAll: true };
   const records: InstalledPluginRecord[] = [];
@@ -26850,11 +26843,10 @@ async function pluginUpdateRecords(person: UpdatePerson): Promise<InstalledPlugi
 function skillUpdateRecordsOf(person: string, manager: boolean): InstalledSkillRecord[] {
   const records: InstalledSkillRecord[] = [];
   for (const bot of updateOwnBots(person)) {
-    const stamped = new Set(skillPackageStamps(bot.id).map((row) => row.name));
     for (const skill of listSkills(bot.id)) {
       records.push({
         scope: "bot", target: bot.id, bot: { id: bot.id, name: bot.name }, name: skill.name, importedAt: skill.importedAt, owner: person,
-        ...(skill.github ? { github: skill.github } : {}), ...(stamped.has(skill.name) ? { organization: "required" as const } : {}),
+        ...(skill.github ? { github: skill.github } : {}),
       });
     }
   }
@@ -26873,9 +26865,9 @@ function skillUpdateRecordsOf(person: string, manager: boolean): InstalledSkillR
 function installationSkillRecords(): InstalledSkillRecord[] {
   if (!skillsLibraryEnabled(cfg)) return [];
   const index = readSkillLibraryIndex();
-  return listLibrarySkills().map((skill) => ({
+  return listLibrarySkills().filter((skill) => !index[skill.name]?.package).map((skill) => ({
     scope: "installation" as const, target: "installation", name: skill.name, importedAt: skill.importedAt,
-    ...(skill.github ? { github: skill.github } : {}), ...(index[skill.name]?.package ? { organization: "required" as const } : {}),
+    ...(skill.github ? { github: skill.github } : {}),
   }));
 }
 /** Every person with something installed: the bots' owners, and this
@@ -26933,8 +26925,9 @@ const skillUpdates = skillUpdateProvider({
 const connectorUpdates = connectorUpdateProvider({
   records: (person) => connectorUpdateRecordsOf(person.id, person.manager),
   allRecords: () => [...updatePeople().flatMap((person) => connectorUpdateRecordsOf(person, false)), ...installationConnectorRecords()],
-  setArgs: (person, record, args) => {
-    if (record.scope === "me") return personConnections.setArgs(person.id, record.name, args);
+  setArgs: async (person, record, args) => {
+    // the person's own server: through its existing Edit (the same checks)
+    if (record.scope === "me") return updatePersonalMcpServer(person.id, record.name, { name: record.name, command: record.command, args });
     if (mcpConfigBusy) throw new Error("MCP servers are already being updated: try again in a moment.");
     mcpConfigBusy = true;
     try {
@@ -26968,18 +26961,10 @@ const capabilityUpdates = new CapabilityUpdates({
     skillUpdates,
     connectorUpdates,
   ],
-  onChecked: () => {
-    for (const person of updatePeople()) {
-      void capabilityUpdates.list({ id: person, manager: IDENTITY.kind !== "perspicax" })
-        .then((view) => broadcast({ kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt }))
-        .catch(reportBackgroundError);
-    }
-  },
-  onApplied: (person) => {
-    void capabilityUpdates.list(person)
-      .then((view) => broadcast({ kind: CAPABILITY_UPDATES_FRAME, audience: person.id, count: view.count, checkedAt: view.checkedAt }))
-      .catch(reportBackgroundError);
-  },
+  // the bots' owners, as their own GET sees them (an admin manages this
+  // installation's items); the people who read their list are known too
+  people: () => updatePeople().map((person) => ({ id: person, manager: IDENTITY.kind !== "perspicax" || principalIsOrgAdmin(person) })),
+  notify: (person, view) => broadcast({ kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt }),
 });
 ROUTES.push(createCapabilityUpdatesRoutes({
   updates: capabilityUpdates,
@@ -35683,13 +35668,8 @@ ROUTES.push(createBotsContentRoutes({
     const plugin = pluginMarketplaces.installed().find((entry) => entry.skills.includes(name) && readSkillLibraryIndex()[name]?.source === entry.marketplace);
     return plugin ? { name: plugin.name, marketplace: plugin.marketplace } : null;
   },
-  // #4504: the update fields of the lists, and what the organization requires
+  // #4504: the update fields of the lists
   skillUpdateFields: (place, skill) => skillUpdates.fields({ ...place, name: skill.name, importedAt: skill.importedAt, ...(skill.github ? { github: skill.github } : {}) }),
-  orgRequiredSkill: (botId, name) => {
-    if (skillPackageStamps(botId).some((row) => row.name === name)) return true;
-    const bot = store.bot(botId);
-    return Boolean(bot && orgRequiredItem(effectiveBotOwner(bot), "skill", name));
-  },
 }));
 ROUTES.push(createBrowserEngineRoutes({
   isShuttingDown,

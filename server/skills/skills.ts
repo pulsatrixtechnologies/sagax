@@ -879,12 +879,13 @@ export function replaceImportedSkill(
   source: string,
   files: readonly SkillFolderFile[],
   github: GitHubSkillOrigin | undefined,
+  /** the store step (a test makes it fail to see the restore) */
+  install: typeof installPreparedSkill = installPreparedSkill,
 ): SkillListing | { error: string } {
   if (!isSkillName(name)) return { error: "invalid skill name" };
   const manifest = readManifest(botId);
   const entry = manifest[name];
   if (!entry) return { error: `no imported skill named "${name}"` };
-  if (entry.package) return { error: "your organization requires this skill: its version follows the organization console" };
   if (entry.storageRevision || entry.appliedStageId) return { error: "this skill was written by the bot, not imported: it has no source to update from" };
   const folder = prepareSkillFolder(files);
   if ("error" in folder) return folder;
@@ -904,7 +905,7 @@ export function replaceImportedSkill(
     skippedFiles: folder.skipped.map((file) => file.path),
     folder: folder.files,
   };
-  const installed = installPreparedSkill(botId, source, prepared, { enabled: entry.enabled, ...(github ? { github } : {}) });
+  const installed = install(botId, source, prepared, { enabled: entry.enabled, ...(github ? { github } : {}) });
   if ("error" in installed) {
     if (entryExistsWithoutFollowing(target)) rmSync(target, { recursive: true, force: true });
     if (hadFolder) renameSync(aside, target);

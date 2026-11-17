@@ -423,16 +423,6 @@ export class PersonConnections {
     this.write(principalId, document);
   }
 
-  /** #4504: a command server's new arguments (an update of its package). */
-  setArgs(principalId: string, name: string, args: string[]): void {
-    const document = this.read(principalId);
-    const server = document.mcpServers[name];
-    if (!server) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
-    if (server.kind !== "stdio") throw new PersonConnectionsError("Only a command server has arguments.", "not_command", 400);
-    document.mcpServers[name] = { ...server, args: [...args] };
-    this.write(principalId, document);
-  }
-
   remove(principalId: string, name: string): boolean {
     const document = this.read(principalId);
     if (!Object.hasOwn(document.mcpServers, name)) return false;

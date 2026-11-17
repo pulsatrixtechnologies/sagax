@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { LinkPostResult } from "../perspicax/perspicax-link.ts";
 import {
+  createOrgCapabilityRoutes,
   marketplaceNameFor,
+  orgCapabilityLock,
   migrateMarketplaces,
   refusalOf,
   type OrgCapabilityRouteDeps,
@@ -79,5 +81,46 @@ describe("migrateMarketplaces", () => {
     expect(result).toEqual({ ok: true, done: true, imported: 0 });
     expect(call).not.toHaveBeenCalled();
     expect(JSON.parse(readFileSync(join(dataDir, "org-capabilities", "marketplace-migration.json"), "utf8")).done).toBe(true);
+  });
+});
+
+// #4504 review: one verdict on the organization's own items, the route's;
+// a bot's sagax_settings capabilities.organization replays this route.
+describe("a person's switch of an organization item", () => {
+  const view = (id: string, mode: "imposed" | "offered", enabled = true) => ({
+    id, mount: `mount-${id}`, form: "skill" as const, name: `item-${id}`, description: "", mode, enabled,
+    source: { kind: "manual" as const }, state: "installed",
+  }) as never;
+  async function put(views: unknown[], id: string, enabled: boolean) {
+    const choices: Array<[string, boolean]> = [];
+    const route = createOrgCapabilityRoutes({
+      owner: () => "perspicax", person: () => ({ principalId: "pr_ada" }), subjectToken: async () => null,
+      call: async () => ({ ok: false, status: 500 }) as never, refreshed: () => undefined, views: () => views as never,
+      isMember: () => true, activeFor: () => true, setChoice: (_p, decl, on) => { choices.push([decl, on]); },
+      policy: () => undefined, historical: () => undefined, dataDir: mkdtempSync(join(tmpdir(), "sagax-org-cap-")),
+    } as OrgCapabilityRouteDeps);
+    const sent: Array<{ status: number; body: Record<string, unknown> }> = [];
+    const url = new URL(`http://x/api/me/org-capabilities/${id}`);
+    await route({
+      req: {} as never, res: { setHeader: () => undefined } as never, url, path: url.pathname, method: "PUT", auth: {} as never,
+      json: ((_: unknown, status: number, body: Record<string, unknown>) => { sent.push({ status, body }); }) as never,
+      readBody: (async () => ({ enabled })) as never,
+    });
+    return { sent: sent[0]!, choices };
+  }
+
+  it("refuses to turn off an imposed item, and says why", async () => {
+    const { sent, choices } = await put([view("d1", "imposed")], "d1", false);
+    expect(sent).toMatchObject({ status: 409, body: { code: "org_capability_imposed", error: "The organization imposes this capability: it stays on." } });
+    expect(choices).toEqual([]);
+    expect(orgCapabilityLock(view("d1", "imposed"))).toBe("org_capability_imposed");
+  });
+
+  it("lets the person turn off an offered item they added", async () => {
+    const { sent, choices } = await put([view("d2", "offered")], "d2", false);
+    expect(sent.status).toBe(200);
+    expect(choices).toEqual([["d2", false]]);
+    expect(orgCapabilityLock(view("d2", "offered"))).toBeNull();
+    expect(orgCapabilityLock(view("d3", "offered", false))).toBe("org_capability_off");
   });
 });

@@ -20,7 +20,7 @@ import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { fixtureApi } from "./preview-fixture.ts";
-import { openSettingsPageJs } from "./ui-click.ts";
+import { openSettingsPageJs, openSettingsSubPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const CLI = join(ROOT, "scripts", "control-omb.ts");
@@ -307,7 +307,8 @@ describe("control-omb ui drives the real renderer", () => {
       await expect.poll(() => evaluate(`document.querySelector('[data-providers-page]').textContent`)).toContain("Azure Foundry");
       mkdirSync(evidenceDir, { recursive: true });
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-providers.png"));
-      await expect.poll(() => evaluate(openSettingsPageJs("Models"))).toBe(true);
+      // #4457: Models is a page further, Providers > Models and context
+      await expect.poll(() => evaluate(openSettingsSubPageJs("Providers", "providers.models")), { timeout: 10_000 }).toBe(true);
       await expect.poll(() => evaluate(`document.querySelector('[data-models-page]').textContent`)).toContain("azure-chat");
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-models.png"));
       await evaluate(`document.querySelector('[aria-label="Close settings"]').click(); true`);
@@ -395,11 +396,17 @@ describe("control-omb ui drives the real renderer", () => {
     const helloRows = transcript.match(/StaticText "hello"/g)!.length;
     // (a) the fake engine's reply text, as a transcript row
     expect(transcript).toContain(`StaticText "${REPLY}"`);
-    // (b) the scripted calls (Bash among them): the steps that worked fold
-    // into one "Worked" row, the failed one stays outside it (#3633, #3581:
-    // a failure is what the person needs to see), then "Used 3 tools"
-    expect(transcript).toContain('button "Worked, 2 tools, press to see the detail"');
-    expect(transcript).toContain('button "Could not run a command · Failed · Tool details"');
+    // (b) the scripted calls (Bash among them): each stretch of steps that
+    // worked folds into one "Worked" row, and the failed one stays where it
+    // happened, between the two stretches (#4462: only the work folds, one
+    // row per stretch; #3581: a failure is what the person needs to see),
+    // then "Used 3 tools"
+    const oneToolRow = 'button "Worked, 1 tool, press to see the detail"';
+    const failedRow = 'button "Could not run a command · Failed · Tool details"';
+    expect(transcript.split(oneToolRow).length - 1).toBe(2);
+    expect(transcript).toContain(failedRow);
+    expect(transcript.indexOf(oneToolRow)).toBeLessThan(transcript.indexOf(failedRow));
+    expect(transcript.lastIndexOf(oneToolRow)).toBeGreaterThan(transcript.indexOf(failedRow));
     expect(transcript).toMatch(/button "Used 3 tools/);
     expect(tree).not.toContain("Not logged in");
     expect(tree).not.toContain("Execution timeline");
@@ -514,9 +521,9 @@ describe("control-omb ui drives the real renderer", () => {
 
     await ui("click", info.ui, "--name", "You");
     await ui("click", info.ui, "--name", "Settings");
-    // The Inspector button's switch sits in Settings > Developer since
-    // 0.8.64 (DeveloperSettings.tsx).
-    await expect.poll(async () => (await ui("eval", info.ui, "--js", openSettingsPageJs("Developer"))).result, { timeout: 10_000 }).toBe(true);
+    // The Inspector button's switch sits in Developer's options since 0.8.64,
+    // which are Updates > Advanced since #4457 (seven pages).
+    await expect.poll(async () => (await ui("eval", info.ui, "--js", openSettingsSubPageJs("Updates", "updates.advanced"))).result, { timeout: 10_000 }).toBe(true);
     await expect.poll(async () => (await ui("eval", info.ui, "--js", `Boolean(document.querySelector('[aria-label="Show the Inspector button"]'))`)).result, { timeout: 10_000 }).toBe(true);
     await ui("eval", info.ui, "--js", `(() => {
       const sw = document.querySelector('[aria-label="Show the Inspector button"]');

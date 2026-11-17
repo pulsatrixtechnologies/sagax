@@ -172,7 +172,7 @@ describe("bot setup and tools in the real renderer", () => {
     // The new server is a row of Manage's Installed list ("Open Fixture");
     // its detail page holds the workspace switch. Adding a server can close
     // the plugins overlay: re-open it the same way first.
-    if (!(await snapshot()).includes("Turn fixture on")) {
+    if (!(await snapshot()).includes("Switch Fixture on")) {
       if (!(await snapshot()).includes('button "Open Fixture"')) {
         await openPersona("Access");
         await addMcpServers();
@@ -181,8 +181,8 @@ describe("bot setup and tools in the real renderer", () => {
       await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Open Fixture"');
       await click("Open Fixture");
     }
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Turn fixture on");
-    await click("Turn fixture on");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Switch Fixture on");
+    await click("Switch Fixture on");
     await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: true }]);
     // Plugins' own close button in its header (PluginsPanelFrame): a click
     // by the name "Close" alone could hit another dialog's (#3910).

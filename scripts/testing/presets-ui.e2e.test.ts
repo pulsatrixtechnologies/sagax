@@ -62,15 +62,16 @@ describe("Preset bots in the real renderer", () => {
       return true;
     })()`);
 
-    // Settings > Developer > Defaults for new bots > Share as preset…: counts
+    // Settings > Providers > Defaults for new bots > Share as preset…: counts
     // from the server, then Save file. The card left the Models page for
-    // Developer on 2026-11-08 (ModelsDeveloperCards, EnginesSettings.tsx).
+    // Developer on 2026-11-08 (ModelsDeveloperCards, EnginesSettings.tsx), and
+    // it is a row of Providers > Models since #4457 (NewBotDefaultsRow).
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "You"');
     await click("You");
     await click("Settings");
-    await expect.poll(() => evaluate(openSettingsPageJs("Developer")), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => evaluate(openSettingsPageJs("Providers")), { timeout: 10_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Share as preset…");
-    // The Developer page paints in steps: a click that lands while it still
+    // The Providers page paints in steps: a click that lands while it still
     // lays out opens nothing, so click again until the share dialog shows.
     const shareShown = async () => (await snapshot()).includes("What's in the file");
     await expect.poll(async () => {

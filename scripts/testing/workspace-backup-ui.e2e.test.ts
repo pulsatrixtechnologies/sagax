@@ -9,6 +9,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
+import { openSettingsSubPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -88,7 +89,8 @@ describe("full backup Settings in the real renderer", () => {
     await ui("press", "--keys", "Escape");
     await click("You");
     await click("Settings");
-    await click("Backups and storage");
+    // #4457: Backups and storage is one page further, a row of General
+    await expect.poll(() => evaluate(openSettingsSubPageJs("General", "general.backups")), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => evaluate("Boolean(document.querySelector('[data-backup-included]'))")).toBe(true);
     await evaluate("document.querySelector('[data-backup-included]').closest('details').querySelector('summary').click(); true");
     expect(await snapshot()).toContain("Saved account credentials and connections are not included");

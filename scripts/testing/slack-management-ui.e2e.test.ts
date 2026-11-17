@@ -44,7 +44,10 @@ describe("Slack management in agent settings", () => {
       try { return await ui("click", "--name", name); }
       catch (cause) { throw new Error(`Click ${name}`, { cause }); }
     };
-    const link = () => evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('href') ?? null");
+    // #4470: the row's Manage opens the channel's settings in a modal over the
+    // page (a portal, not inside the row): the Admin link is that modal's.
+    const modalSlack = '[data-bot-page-modal="channel-slack"]';
+    const link = () => evaluate(`document.querySelector('${modalSlack} a')?.getAttribute('href') ?? null`);
     const row = () => evaluate("Boolean(document.querySelector('[data-bot-profile-row=slack]'))");
     let currentName = "Pepper";
     const openProfile = async () => {
@@ -93,10 +96,11 @@ describe("Slack management in agent settings", () => {
     await expect.poll(link, { timeout: 10_000 }).toMatch(/^https:\/\/admin\.example\.test\/slack\?workspace=acme&bot=/);
     expect(await snapshot()).toContain("Give this agent its own Slack app, with its own name and picture, so your team can message it directly.");
     expect(await snapshot()).toContain("Manage in Admin");
-    expect(await evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('rel')")).toBe("noopener noreferrer");
-    expect(await evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('target')")).toBe("_blank");
-    // One link and the row's own toggle: no switches, no confirmations.
-    expect(await evaluate("document.querySelectorAll('[data-bot-profile-row=slack] a').length")).toBe(1);
+    expect(await evaluate(`document.querySelector('${modalSlack} a')?.getAttribute('rel')`)).toBe("noopener noreferrer");
+    expect(await evaluate(`document.querySelector('${modalSlack} a')?.getAttribute('target')`)).toBe("_blank");
+    // One link in the modal and the row's own Manage: no switches, no confirmations.
+    expect(await evaluate(`document.querySelectorAll('${modalSlack} a').length`)).toBe(1);
+    expect(await evaluate(`document.querySelectorAll('[data-bot-profile-channel=slack] button, [data-bot-profile-channel=slack] input').length`)).toBe(0);
     expect(await evaluate("document.querySelectorAll('[data-bot-profile-row=slack] button, [data-bot-profile-row=slack] input').length")).toBe(1);
 
     // Anything but an available answer removes the row, even though Slack was the open section.

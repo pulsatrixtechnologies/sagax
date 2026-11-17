@@ -67,15 +67,25 @@ final class PhoneSheetPlanTests: XCTestCase {
         XCTAssertFalse(PluginSheetSections.accountSignsIn(signedIn, pill: .status(.connected)))
     }
 
-    /// Measured on the reference (a 430 pt phone): the sheets take the bot
-    /// panel's margin and row, and keep their own gaps.
-    func testTheSheetsShareThePanelsMeasures() {
-        XCTAssertEqual(PhoneSheetMetrics.cardGap, 31)
-        // card bottom to the next card top with a group title between
-        XCTAssertEqual(PhoneSheetMetrics.titledGap + 14.3 + PhonePanelMetrics.titleToCard, 55.4, accuracy: 0.05)
-        XCTAssertEqual(PhoneSheetMetrics.personRow, 89)
-        // a Connect apps row: 13 pt of air around a 42 pt icon, 68 pt pitch
-        XCTAssertEqual(2 * PhoneSheetMetrics.rowPadding + PhoneSheetMetrics.icon, 68)
-        XCTAssertEqual(PhoneSheetMetrics.appsMargin, 24)
+    /// #4510: the Settings sheet follows the 402 pt references
+    /// (measure-settings.md), not the bot panel's 430 pt measures: a row is
+    /// 44.5 pt with 13.5 pt words and 11 pt notes.
+    func testTheSettingsSheetFollowsTheReferenceMeasures() {
+        XCTAssertEqual(PhoneSheetMetrics.row, 44.5)
+        XCTAssertGreaterThanOrEqual(PhoneSheetMetrics.row, 44, "a row stays a 44 pt touch target")
+        XCTAssertEqual(PhoneSheetMetrics.rowSize, 13.5)
+        XCTAssertEqual(PhoneSheetMetrics.subtitleSize, 11)
+        XCTAssertEqual(PhoneSheetMetrics.groupTitleSize, 11)
+        XCTAssertEqual(PhoneSheetMetrics.cardGap, 27)
+        XCTAssertEqual(PhoneSheetMetrics.labelledGap, 48.6, accuracy: 0.05)
+        XCTAssertEqual(PhoneSheetMetrics.personRow, 65.5)
+        XCTAssertEqual(PhoneSheetMetrics.avatar, 38.5)
+        XCTAssertEqual(PhoneSheetMetrics.textInset, 17.5)
+        XCTAssertEqual(PhoneSheetMetrics.chevronTrailing, 21)
+        // a one-line note row: title and one note line in the 61 pt row
+        XCTAssertEqual(2 * PhoneSheetMetrics.twoLinePadding + 13.5 * 1.19 + PhoneSheetMetrics.lineGap + 11 * 1.19, 61, accuracy: 3)
+        // a Connect apps row: 38.5 pt tile and 30.5 pt of air, 69 pt pitch
+        XCTAssertEqual(2 * PhoneSheetMetrics.rowPadding + PhoneSheetMetrics.icon, 69)
+        XCTAssertEqual(PhoneSheetMetrics.appsMargin, 21)
     }
 }

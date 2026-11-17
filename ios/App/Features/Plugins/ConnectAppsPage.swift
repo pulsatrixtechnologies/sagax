@@ -606,7 +606,10 @@ struct ConnectAppPillButton: View {
                 .padding(.horizontal, CGFloat(PhoneSheetMetrics.pillPadding))
                 .frame(minWidth: minWidth, minHeight: height)
                 .background(fill, in: Capsule())
-                .contentShape(Capsule())
+                // drawn at its measured height, pressed over at least 44 pt
+                .padding(.vertical, max(0, (44 - height) / 2))
+                .contentShape(Rectangle())
+                .padding(.vertical, -max(0, (44 - height) / 2))
         }
         .buttonStyle(.plain)
         // a state is shown, not pressed
@@ -1160,7 +1163,7 @@ struct ConnectAppsMain: View {
             HStack(spacing: 8) {
                 Text(verbatim: ConnectAppsWords.section(section.id))
                     .font(Theme.font(CGFloat(PhoneSheetMetrics.sectionSize)))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
                 if more != nil { ProfileChevron() }
             }

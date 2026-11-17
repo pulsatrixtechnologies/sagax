@@ -234,8 +234,6 @@ export function autoVerdict(
     /** The provider is asking to widen its configured sandbox rather than
      * perform one ordinary action. Only explicit Full may synthesize this. */
     requiresExplicitApproval?: boolean;
-    /** #4525: a consent disclosure. No mode, Full included, answers it. */
-    consentDisclosure?: boolean;
     /** Exact bot/provider/folder/command match against the person's saved rules. */
     commandAllowed?: boolean;
     /** A Sagax approval-gate card: the broker runs the call only on a
@@ -396,9 +394,6 @@ export function autoVerdict(
   // keeps the card even under Full access or a saved command.
   if (context?.customRule?.behavior === "deny") return { approve: null, source: "custom-rule-deny" };
   if (context?.customRule?.behavior === "ask") return { approve: null, source: "custom-rule-ask" };
-  // #4525: the person reads the disclosure on the card. Full would otherwise
-  // answer a requiresExplicitApproval hold (a sandbox widening) without one.
-  if (context?.consentDisclosure) return { approve: null, source: "explicit-approval-block" };
   const peerSend = context?.sagaxInternal === true && (isSagaxPeerSend(tool) || isSagaxPeerSend(context.toolName));
   const outward = !peerSend && (isOutboundTool(tool) || context?.outbound === true || (context?.toolName !== undefined && isOutboundTool(context.toolName)));
   if (context?.safetyAllow && !outward) return { approve: `approved ${tool} (read-only)`, source: "safety-read" };

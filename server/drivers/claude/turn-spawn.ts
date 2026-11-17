@@ -98,9 +98,7 @@ try {
             ? permissionCommand(ask.input.command, commandCwd) : undefined,
           paths: ask.kind === "permission" ? permissionPaths(ask.tool, ask.input, cwd) : undefined,
           ...(ask.kind === "permission" && readToolPaths(ask.tool, ask.input) ? { reads: readToolPaths(ask.tool, ask.input) } : {}),
-          requiresExplicitApproval: ask.explicit === true || (ask.kind === "permission" && ask.tool === "Bash" && ask.input.dangerouslyDisableSandbox === true) || undefined,
-          // #4525: Full answers a plain explicit hold. A consent disclosure does not.
-          ...(ask.explicit ? { consentDisclosure: true } : {}),
+          requiresExplicitApproval: ask.kind === "permission" && ask.tool === "Bash" && ask.input.dangerouslyDisableSandbox === true || undefined,
           // the proxy hands Claude its own suggested rules on `always`,
           // on the person's own computer too: they live in this
           // thread's process only, which another thread, bot or

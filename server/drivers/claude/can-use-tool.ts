@@ -2,13 +2,8 @@
 // stdout, including a consent disclosure the MCP approve wire cannot
 // carry. The answer is the same broker card as every other permission.
 import { newId } from "../../contracts.ts";
-import {
-  ARTIFACT_DATA_CONSENT_FALLBACK,
-  ARTIFACT_DATA_CONSENT_UNATTENDED,
-  isArtifactDataWriteConsent,
-} from "../../../shared/artifact-data-consent.ts";
+import { ARTIFACT_DATA_CONSENT_FALLBACK, isArtifactDataWriteConsent } from "../../../shared/artifact-data-consent.ts";
 import { reportBackgroundError } from "../../background-error.ts";
-import { hasArtifactDataWriteConsent, rememberArtifactDataWriteConsent } from "./artifact-data-consent-store.ts";
 import {
   ASK_USER_QUESTION,
   ASK_USER_QUESTION_UNANSWERABLE,
@@ -78,17 +73,10 @@ export function claudeCanUseTool(
       await send(nativeQuestionDecision(classified.input, classified.questions, answer));
       return;
     }
+    // An ArtifactData write carries its disclosure on the card. Full access,
+    // an allow rule or the bot's "ArtifactData" Always allow grant answer it
+    // like any other call (server/runtime-events/request-opened.ts).
     const consent = isArtifactDataWriteConsent(classified.tool, classified.askInput);
-    const botId = session.turn.input.botId;
-    const routine = typeof session.turn.input.approvalWaitMs === "number" && session.turn.input.approvalWaitMs > 0;
-    if (consent && hasArtifactDataWriteConsent(botId)) {
-      await send({ behavior: "allow", updatedInput: classified.updatedInput });
-      return;
-    }
-    if (consent && routine) {
-      await send({ behavior: "deny", message: ARTIFACT_DATA_CONSENT_UNATTENDED });
-      return;
-    }
     const disclosure = consent
       ? (text(request.description) || text(request.decision_reason) || ARTIFACT_DATA_CONSENT_FALLBACK).slice(0, DISCLOSURE_MAX)
       : undefined;
@@ -99,10 +87,8 @@ export function claudeCanUseTool(
       input: asPermissionInput(classified.askInput),
       at: Date.now(),
       ...(disclosure ? { disclosure } : {}),
-      ...(consent ? { explicit: true } : {}),
     });
     if (answer.behavior === "allow") {
-      if (consent && answer.source === "user") rememberArtifactDataWriteConsent(botId);
       await send(allowPermissionResult(
         classified.updatedInput,
         classified.suggestions,

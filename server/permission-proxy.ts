@@ -185,7 +185,7 @@ async function handle(msg: any) {
     const picksSeveral = isQuestion ? multiSelectQuestion(args) : null;
     if (isQuestion) {
       const answer: any = await askBroker({ t: "ask", id: askId, kind: "question", tool: "ask_user", input: { question: args.question, choices: args.choices, ...(picksSeveral ? { questions: picksSeveral } : {}) } });
-      let text = answer.message || "No answer was given — use your best judgment.";
+      let text = answer.message || "No answer was given: use your best judgment.";
       // The card answers in its Q:/A: form; hand back just the picks, the way
       // a one-tap answer arrives. Only the person's own words are unpacked.
       if (picksSeveral && answer.source === "user" && typeof answer.message === "string") {

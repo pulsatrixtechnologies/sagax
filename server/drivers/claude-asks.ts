@@ -9,8 +9,6 @@ export interface Ask {
   at: number;
   /** Consent text the card subtitle shows in place of the arguments (#4525). */
   disclosure?: string;
-  /** The person has to read this ask. Remembered allows do not answer it. */
-  explicit?: boolean;
 }
 export type AskBehavior = "allow" | "deny" | "answer";
 export type AskResolutionSource = "user" | "timeout" | "system";

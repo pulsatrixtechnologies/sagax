@@ -233,9 +233,6 @@ export type RuntimeEvent = RuntimeEventBase &
         /** Provider asks to widen its configured sandbox. Only explicit Full
          * access may answer this automatically; Auto/remembered grants may not. */
         requiresExplicitApproval?: boolean;
-        /** #4525: a consent disclosure the person must read. No mode, Full
-         * included, answers it. The card is the existing approval card. */
-        consentDisclosure?: boolean;
         /** Raised by Sagax's own MCP approval gate (grok-approval-gate). Only a
          * person's explicit allow runs the call, so no mode (not even Full)
          * may answer it for them: it always shows as a card. */

@@ -91,7 +91,7 @@ const URI = /^perspicax:\/\/\S{1,188}$/i;
 
 const productSubject = z.object({ type: z.literal("product"), api: z.string().regex(API_ID) }).passthrough();
 const voiceSubject = z.object({ type: z.literal("voice_line"), line: oneLine(128).optional(), number: oneLine(32).optional() }).passthrough();
-const hostSubject = z.object({ type: z.literal("host"), host: z.string().regex(API_ID), hostname: oneLine(256) }).passthrough();
+const hostSubject = z.object({ type: z.literal("host"), host: z.string().regex(API_ID), hostname: oneLine(256).refine((value) => value.trim().length > 0) }).passthrough();
 const resourceSubject = z.object({ type: z.literal("resource"), uri: z.string().regex(URI) }).passthrough();
 
 const eventSchema = z.object({

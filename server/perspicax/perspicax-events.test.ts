@@ -148,6 +148,12 @@ describe("parsePerspicaxEvent", () => {
     expect(parsePerspicaxEvent(hostPresence("unknown"))).toBeNull();
   });
 
+  it("refuses host presence with an empty or blank hostname", () => {
+    for (const hostname of ["", "   "]) {
+      expect(parsePerspicaxEvent(hostPresence("lost", { subject: { type: "host", host: "pc_1", hostname } }))).toBeNull();
+    }
+  });
+
   it("refuses a key that is not the one its subject names, another contract, or no event id", () => {
     expect(parsePerspicaxEvent(productHealth("failing", { key: "product:other" }))).toBeNull();
     expect(parsePerspicaxEvent(resourceChanged(undefined, { key: "watch:perspicax://s1/threats/open" }))).toBeNull();

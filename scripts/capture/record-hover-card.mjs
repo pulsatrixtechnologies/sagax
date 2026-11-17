@@ -32,7 +32,7 @@ const port = Number(arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
-const widths = arg("--busy") ? [] : [1280, 600, 544, 390];
+const widths = arg("--busy") || arg("--kinds") ? [] : [1280, 600, 544, 390];
 const variantScenes = ["longtitle", "fields12", "nonotes", "longnames"];
 const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgrefused", "neighbour"];
 // the card over a busy chat (#4572): hovered and pinned, in the app's own
@@ -128,6 +128,49 @@ try {
       }
     }
     await page.close();
+  }
+  if (arg("--kinds")) {
+    // lot S1 (#4572): the kinds a product declares beside the three existing kinds; hovered and pinned,
+    // French dark and English light, 1280, 600 and 390; a record named in a card opened in place and back
+    const scenes = ["ticket", "company", "project", "invoice", "agreement", "invoicelong", "invoicenoref", "agreementnoend", "agreementnodecimals"];
+    for (const width of [1280, 600, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+      await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
+      page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
+      for (const { id, lang, label } of [{ id: "pulsatrix", lang: "fr", label: "fr-dark" }, { id: "daylight", lang: "en", label: "en-light" }]) {
+        for (const scene of scenes) {
+          for (const pin of [false, true]) {
+            await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene, ...(pin ? { pinned: "1" } : {}) })}`);
+            await page.waitForSelector("[data-gallery-card]", { timeout: 120_000 });
+            await page.waitForTimeout(250);
+            await page.screenshot({ path: join(outDir, `${scene}-${pin ? "pinned" : "hover"}-${label}-${width}.png`), fullPage: true });
+          }
+        }
+        for (const step of ["open", "agreement", "company", "back"]) {
+          await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "chat2" })}`);
+          await page.waitForSelector("[data-gallery-chat]", { timeout: 120_000 });
+          const chip = page.locator('[data-record-link="invoice"]').first();
+          await chip.scrollIntoViewIfNeeded();
+          await chip.click();
+          await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
+          await page.waitForTimeout(500);
+          if (step !== "open") {
+            await page.locator("[data-record-ref-link]", { hasText: "Managed services" }).first().click();
+            await page.waitForTimeout(600);
+          }
+          if (step === "company" || step === "back") {
+            await page.locator("[data-record-company-link]").first().click();
+            await page.waitForTimeout(600);
+          }
+          if (step === "back") {
+            await page.locator("[aria-label=Retour], [aria-label=Back]").first().click();
+            await page.waitForTimeout(600);
+          }
+          await page.screenshot({ path: join(outDir, `ref-${step}-${label}-${width}.png`) });
+        }
+      }
+      await page.close();
+    }
   }
   if (arg("--busy")) {
     for (const width of [1280, 390]) {

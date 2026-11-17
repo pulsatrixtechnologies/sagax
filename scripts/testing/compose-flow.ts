@@ -47,6 +47,12 @@ export const CONNECT_APPS_BUTTON: string = (JSON.parse(
   readFileSync(new URL("../../src/locales/en.json", import.meta.url), "utf8"),
 ) as Record<string, string>)["connectApps.title"]!;
 
+/** The title bar's "..." of Connect Apps (#4453): Refresh, Bot templates,
+ * Published pages and Sources. Read from the locale like the foot button. */
+export const CONNECT_APPS_MORE: string = (JSON.parse(
+  readFileSync(new URL("../../src/locales/en.json", import.meta.url), "utf8"),
+) as Record<string, string>)["connectApps.more.aria"]!;
+
 /** View all or a bot detail. The hosted home is heading "Browse Bots", and
  * its Back returns to Connect Apps, so that Back is not a step to click. */
 export function nestedTemplatesCatalog(snap: string): boolean {
@@ -55,14 +61,14 @@ export function nestedTemplatesCatalog(snap: string): boolean {
     && (snap.includes("Browse Bots") || snap.includes('heading "Templates"'));
 }
 
-/** Open Connect Apps, then Bot templates. Import / Share a team are on that
+/** Open Connect Apps, then Bot templates (its "..." menu). Import / Share a team are on that
  * catalogue's Templates section. A catalogue already open on a detail walks
  * Back until those tools show; the home's own Back is left alone. */
 export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
   await flow.flag("features.templates=true");
   if (catalogTemplateTools(await flow.snapshot())) return;
   const snap = await flow.snapshot();
-  const inWindow = snap.includes('button "Bot templates"')
+  const inWindow = snap.includes('dialog "Connect Apps"')
     || snap.includes('heading "Browse Bots"')
     || nestedTemplatesCatalog(snap);
   if (!inWindow) await flow.click(CONNECT_APPS_BUTTON);
@@ -73,7 +79,9 @@ export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
       await flow.click("Back");
       return false;
     }
-    if (next.includes('button "Bot templates"')) await flow.click("Bot templates");
+    // #4453: Bot templates is an item of the title bar's "..." menu
+    if (next.includes('menuitem "Bot templates"')) await flow.click("Bot templates");
+    else if (next.includes(`button "${CONNECT_APPS_MORE}"`)) await flow.click(CONNECT_APPS_MORE);
     return false;
   }, 12_000, "Browse Bots template tools");
 }

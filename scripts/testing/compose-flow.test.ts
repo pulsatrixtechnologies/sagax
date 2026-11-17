@@ -2,7 +2,7 @@
 // lock the snapshot decisions openTemplatesCatalog makes without a browser.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CONNECT_APPS_BUTTON, catalogTemplateTools, nestedTemplatesCatalog, openTemplatesCatalog, type CatalogFlow } from "./compose-flow.ts";
+import { CONNECT_APPS_BUTTON, CONNECT_APPS_MORE, catalogTemplateTools, nestedTemplatesCatalog, openTemplatesCatalog, type CatalogFlow } from "./compose-flow.ts";
 
 const EN = JSON.parse(readFileSync(new URL("../../src/locales/en.json", import.meta.url), "utf8")) as Record<string, string>;
 
@@ -39,7 +39,7 @@ describe("openTemplatesCatalog", () => {
     const viewAll = ['button "Back"', 'heading "Templates"', "Browse Bots"].join("\n");
     expect(nestedTemplatesCatalog(viewAll)).toBe(true);
     expect(nestedTemplatesCatalog(HOME)).toBe(false);
-    expect(nestedTemplatesCatalog('heading "Connect Apps"\nbutton "Bot templates"')).toBe(false);
+    expect(nestedTemplatesCatalog('dialog "Connect Apps"\nmenuitem "Bot templates"')).toBe(false);
   });
 
   it("clicks the sidebar foot's button by the name the app shows, connectApps.title", () => {
@@ -49,14 +49,18 @@ describe("openTemplatesCatalog", () => {
     expect(CONNECT_APPS_BUTTON).toBe("Connect Apps");
   });
 
-  it("opens Connect Apps, then Bot templates, and stops once Import and Share a team show", async () => {
+  it("opens Connect Apps, then its \"...\" menu, then Bot templates, and stops once Import and Share a team show", async () => {
+    // #4453: Bot templates is an item of the title bar's "..." menu, named
+    // connectApps.more.aria, not a button of the page.
+    expect(CONNECT_APPS_MORE).toBe(EN["connectApps.more.aria"]);
     const { flow: catalog, clicks } = flow([
       'button "Connect Apps"',
-      'heading "Connect Apps"\nbutton "Bot templates"',
+      `dialog "Connect Apps"\nbutton "${CONNECT_APPS_MORE}"`,
+      'dialog "Connect Apps"\nmenuitem "Bot templates"',
       HOME,
     ]);
     await openTemplatesCatalog(catalog);
-    expect(clicks).toEqual(["Connect Apps", "Bot templates"]);
+    expect(clicks).toEqual(["Connect Apps", CONNECT_APPS_MORE, "Bot templates"]);
   });
 
   it("leaves the hosted home's Back alone", async () => {

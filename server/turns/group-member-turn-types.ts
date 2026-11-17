@@ -75,6 +75,7 @@ export type GroupMemberTurnHost = {
   cloudGuestOpened: any,
   cloudPlaceRefusal: any,
   compactPromptFor: any,
+  latestCompaction: any,
   compactVolatileOrder: any,
   computerPlaceRefusal: any,
   computerPrompt: any,

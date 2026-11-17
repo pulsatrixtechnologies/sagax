@@ -2,9 +2,11 @@
 import { MAX_QUESTION_TEXT, parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../../shared/ask-question.ts";
 import type { RequestOutcome } from "../../contracts.ts";
 import { newId } from "../../contracts.ts";
+import { agentsSearchedCall, agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
 import { acpPermissionCommand } from "../permission-command.ts";
 import { acpHostToolRequest } from "../host-tools.ts";
 import { acpReadPaths } from "../../own-file-reads.ts";
+import { askInputDetail } from "../../tools/tool-summary.ts";
 import { connectorAsk } from "./connector-ask.ts";
 import { gatedMcpAsk } from "./gated-mcp-ask.ts";
 import { sessionOperationKey } from "./helpers.ts";
@@ -132,14 +134,18 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
           // (`cursor__user-Outlook-send_5fmail___12`); its use_tool target
           // then names the call, so a rule ("Always allow") and the outbound
           // reading key on the very tool, never on the bare kind "other".
-          const mcpTool = !isQuestion && !["execute", "edit", "delete", "move"].includes(kind) && /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][a-z0-9_]{0,63}$/i.test(mcpTitle)
+          // #4527 lot C: the agents server's call_tool is asked about as the
+          // tool it runs, so a Refuse or Ask first rule on it applies
+          const searchedAgents = isQuestion || !agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? null : agentsSearchedCall(mcpTitle, toolCall.rawInput);
+          const mcpTool = searchedAgents ? searchedAgents.mcpTool
+            : !isQuestion && !["execute", "edit", "delete", "move"].includes(kind) && /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][a-z0-9_]{0,63}$/i.test(mcpTitle)
             ? mcpTitle
             : connector.engineConnector && connector.target && /^[A-Za-z0-9][\w.-]{0,63}__[A-Za-z0-9][\w.-]{0,255}$/.test(connector.target)
               ? connector.target
               : undefined;
           const accountConnector = connector.engineConnector && connector.target !== undefined
             && support.accountConnectorTool?.(getSession().sessionId ?? undefined, connector.target) === true;
-          const rawSummary = String(toolCall.rawInput?.command ?? toolCall.title ?? tool);
+          const rawSummary = searchedAgents ? searchedAgents.mcpTool : String(toolCall.rawInput?.command ?? toolCall.title ?? tool);
           const summary = rawSummary.slice(0, isQuestion ? MAX_QUESTION_TEXT : 200);
           // One structured question beside the flat choices: the richer card
           // renders from it while older clients keep answering through
@@ -260,7 +266,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             // for an outward call (review of #943): once each time. On the
             // person's computer it needs an exact operation to remember.
             allowSession: canAllowSession ? true : undefined,
-            ...(connector.input ? { input: connector.input } : {}),
+            ...(searchedAgents ? { input: askInputDetail(searchedAgents.input) ?? "{}" } : connector.input ? { input: connector.input } : {}),
             ...(connector.engineConnector ? { engineConnector: true } : {}),
             ...(accountConnector ? { accountConnector: true } : {}),
             ...(connector.outward ? { outbound: true } : {}),

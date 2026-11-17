@@ -35,7 +35,9 @@ function compactPromptFor(bot: BotRecord, person: string, turn: CompactTurn) {
     ...(typeof hasRoutines === "boolean" ? { hasRoutines } : {}),
     ...(turn.context ? { context: turn.context } : {}),
   });
-  return { ...verdict.pins, memoryDir: compactMemoryDir(DATA_DIR, bot.id, person) };
+  // lot C: the session's left out tools ride beside the compact pins (the
+  // caller takes them off before a compact prompt is handed to an engine)
+  return { ...verdict.pins, memoryDir: compactMemoryDir(DATA_DIR, bot.id, person), leftOut: verdict.leftOut };
 
 }
   return compactPromptFor;

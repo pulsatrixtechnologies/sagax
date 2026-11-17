@@ -6,6 +6,7 @@ import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
 import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
+import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
@@ -317,14 +318,22 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   // the verdict is that session's. A tool the prompt, the tool selection or
   // a rule names is never left out.
   const roomToolKeepPerson = roomSpeakerId || effectiveBotOwner(readyBot);
-  const roomCompactForBot = compactPromptFor(readyBot, roomToolKeepPerson, {
+  // lot C: the room conversation's compaction record in force gives this
+  // bot its new session there too, as in a direct conversation
+  const roomCompaction = host.latestCompaction?.(store.activePath?.(threadId) ?? [], store.taskByThread?.(readyBot.id, threadId))?.id ?? null;
+  const { leftOut: roomLeftOut, ...roomCompactForBot } = compactPromptFor(readyBot, roomToolKeepPerson, {
     threadId,
+    compaction: roomCompaction,
     routine: Boolean(roomRoutineSpeaker(threadId)),
     prompt: true,
-    context: { named: namedByToolScope(roomToolScope), namedText: [`${roomSystem.stable}${roomSystem.volatile}`, ...ruleTextsFor(readyBot.id, roomToolKeepPerson)] },
+    context: { named: namedByToolScope(roomToolScope), namedText: [`${roomSystem.stable}${roomSystem.volatile}`, typeof text === "string" ? text : "", ...ruleTextsFor(readyBot.id, roomToolKeepPerson)] },
   });
   const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
   const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;
+  // lot C: the agents tools this session leaves out wait behind search_tools
+  // on an engine with no tool search of its own (server/tools/tool-keep-listing.ts)
+  if (integrations.agents) integrations.agents = withKeptAgentsListing(integrations.agents, roomLeftOut ?? [], { driverKind: instance.driverKind, compactPrompt: Boolean(roomCompactPrompt) });
+  offerAgentsCatalog(readyBot.id, roomToolKeepPerson, threadId, integrations.agents);
     ctx.text = text;
     ctx.cwd = cwd;
     ctx.roomCompactPrompt = roomCompactPrompt;

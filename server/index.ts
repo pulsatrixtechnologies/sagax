@@ -36652,6 +36652,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   cloudGuestOpened,
   cloudPlaceRefusal,
   compactPromptFor,
+  latestCompaction,
   compactVolatileOrder,
   computerPlaceRefusal,
   computerPrompt,

@@ -21,7 +21,7 @@ import { fitToolList } from "../mcp/mcp-tool-schema.ts";
 import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
-import { mcpCallToolId } from "../../shared/searched-tool-call.ts";
+import { agentsSearchedFromEnv, mcpCallToolId } from "../../shared/searched-tool-call.ts";
 
 export interface ChatToolDefinition {
   type: "function";
@@ -389,7 +389,12 @@ function chatMcpServers(integrations: SendTurnInput["integrations"], computerUse
   const eligible = (server: string) => scope === undefined || canUseMcpServer(scope, server);
   if (computerUse && integrations?.localComputer && eligible("computer")) servers.push(["computer", integrations.localComputer]);
   if (computerUse && integrations?.browser && eligible("browser")) servers.push(["browser", integrations.browser]);
-  if (integrations?.agents && eligible("agents")) servers.push(["agents", integrations.agents]);
+  if (integrations?.agents && eligible("agents")) {
+    servers.push(["agents", integrations.agents]);
+    // #4527 lot C: the tools its session leaves out wait behind its own
+    // call_tool, read as the tool it runs (scope, card, use count)
+    if (agentsSearchedFromEnv((integrations.agents as { env?: Record<string, string> }).env)) searchable.add("agents");
+  }
   if (integrations?.data && eligible("data")) servers.push(["data", integrations.data]);
   if (integrations?.messages && eligible("messages")) servers.push(["messages", integrations.messages]);
   const besideBrowser = servers.some(([, descriptor]) => descriptor === integrations?.browser);
@@ -561,7 +566,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       for (const row of stale) {
         const revision = row.client.toolsRevision;
         row.tools = await row.client.tools(AbortSignal.any([signal, callSignal]), tool => includeTool(row.name, tool),
-          searchable.has(row.name) ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
+          searchable.has(row.name) && row.name !== "agents" ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
         row.revision = revision;
       }
       // The caller can append native tools such as ask_user to this array.
@@ -600,7 +605,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       const include = (tool: unknown) => includeTool(name, tool);
       // A searched URL server answers over the internet: its initialize and
       // whole tools/list get the URL budget; command servers keep theirs.
-      const tools = await client.tools(signal, include, searchable.has(name) ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
+      const tools = await client.tools(signal, include, searchable.has(name) && name !== "agents" ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
       // port of OpenMausBot #3111: a Local VM with no tools is an error, not a silent turn
       if (!tools.length && scope === undefined && descriptor === integrations?.localComputer) throw new Error("The Local VM listed no tools");
       // Harness mounts are known by the descriptor the harness passed, never

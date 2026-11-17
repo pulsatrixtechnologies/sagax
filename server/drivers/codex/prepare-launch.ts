@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
+import { agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
@@ -187,6 +188,9 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     mountSelected("agents", "agents", turn.toolScope === undefined
       ? { ...turn.integrations.agents, env: { ...turn.integrations.agents.env, SAGAX_MERGED_TOOLS: "1" } }
       : turn.integrations.agents, "approve");
+    // #4527 lot C: the tools this session leaves out are reached through the
+    // agents server's own call_tool, read everywhere as the tool it runs
+    if (agentsSearchedFromEnv(turn.integrations.agents.env)) directoryMounts.add("agents");
   }
   if (turn.integrations?.localComputer) {
     // The host daemon and isolated Local VM both arrive as a direct Cua

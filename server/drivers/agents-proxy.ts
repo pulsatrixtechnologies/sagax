@@ -51,6 +51,11 @@ const AVAILABLE_TOOLS = availableTools(PROFILE);
 // every other tool is found with search_tools and run with call_tool, through
 // the same call path, checks and approvals as a listed one. The list is the
 // same for every conversation of the bot, so a prefix cache serves it.
+// #4527 lot C, an engine with no tool search of its own (Codex, ACP, Muse
+// Code, Pi on a cloud model, the chat engines): SAGAX_COMPACT_TOOLS with
+// core "kept" lists every tool but the ones the bot's session leaves out
+// (server/tools/tool-keep.ts); those stay one search_tools / call_tool away,
+// through the same call path, checks and approvals.
 // #1703: SAGAX_CATALOG_GROUPS=1 lists the chat-turn core plus
 // list_tool_groups / load_tool_group / use_tool. Every other tool stays
 // reachable by group. Off by default so Grok, Codex and Pi keep the full
@@ -78,6 +83,7 @@ const BRIDGE_LISTED = BRIDGE
     .filter((tool) => compactListed(tool.name, { core: "used", pinned: COMPACT?.pinned ?? new Set(), coordinating: PROFILE.coordinating }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   : [];
+const COMPACT_LISTED = COMPACT ? AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })) : [];
 const LISTED_TOOLS = BRIDGE
   ? [
     ...BRIDGE_LISTED,
@@ -91,7 +97,10 @@ const LISTED_TOOLS = BRIDGE
   ? withCompactNativeDeferral(AVAILABLE_TOOLS, { pinned: COMPACT!.pinned, coordinating: PROFILE.coordinating })
   : COMPACT
   ? [
-    ...AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })),
+    // #4527 lot C: a kept listing (core "kept") is the engine's whole list
+    // but the tools its session leaves out; Codex still lists each family
+    // of what stays as one tool
+    ...(COMPACT.core === "kept" ? mergedListing(COMPACT_LISTED) : COMPACT_LISTED),
     ...(SEARCHED!.tools.length ? SEARCHED!.listed({ server: "agents", title: "Sagax", instructions: "Sagax's own tools: teammates, rooms, routines, settings, artifacts, transcripts, cloud agents, skills and the person's phone." }) : []),
   ]
   : mergedListing(process.env.SAGAX_DEFER_RARE_TOOLS === "1" ? withDeferredRareTools(AVAILABLE_TOOLS, { ...PROFILE, knownUse: KNOWN_USE }) : AVAILABLE_TOOLS);

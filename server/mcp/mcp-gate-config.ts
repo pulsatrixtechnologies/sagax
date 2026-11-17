@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
+import { agentsSearchedFromEnv } from "../../shared/searched-tool-call.ts";
 
 import { DATA_DIR } from "../config.ts";
 import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
@@ -264,6 +265,10 @@ export function gateServer(input: {
   // knows to look through call_tool at the tool underneath.
   // The gate's own search replaces the remote proxy's directory.
   const directory = input.directory === true && !search && remoteMcpSpec(server) !== undefined;
+  // #4527 lot C: Sagax's agents server with a kept listing serves the tools
+  // its session leaves out through call_tool: the gate reads that call as
+  // the tool it runs, for the tool selection, as for a directory
+  const agentsDirectory = name === "agents" && agentsSearchedFromEnv((server as { env?: Record<string, string> } | null)?.env);
   const spec = mcpStdioServer(server, {
     nodeEnv: input.nodeEnv,
     execPath: input.execPath,
@@ -281,7 +286,7 @@ export function gateServer(input: {
     SAGAX_GATE_SPILL_DIR: spillDir(input.threadId),
     SAGAX_GATE_BUDGET: String(budget),
     ...(scoped ? { SAGAX_GATE_TOOL_SCOPE: JSON.stringify(parsed.scope) } : {}),
-    ...(directory ? { SAGAX_GATE_DIRECTORY: "1" } : {}),
+    ...(directory || agentsDirectory ? { SAGAX_GATE_DIRECTORY: "1" } : {}),
     ...(aliased ? { SAGAX_GATE_TOOL_NAMES: "grok", SAGAX_GATE_REPORT_DIR: toolNameReportDir() } : {}),
     ...(approval ? {
       SAGAX_GATE_APPROVAL_SOCKET: approval.socket,

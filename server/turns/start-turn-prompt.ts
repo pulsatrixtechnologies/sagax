@@ -9,6 +9,7 @@ import { onDemandPromptParts, promptReferencesAvailable } from "../context/promp
 import { compactBotLast } from "../context/compact-prompt.ts";
 import { memoryExcerptBytes } from "../workspace/workspace.ts";
 import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
+import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -267,9 +268,10 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // #4527: every engine's turn is counted in its conversation's session
     // (server/tools/tool-keep.ts) for the person it acts for; the verdict is
     // the session's, frozen. A tool the prompt, the tool selection or a rule
-    // names is never left out.
+    // names is never left out. Lot C: the turn's own text names tools too (a
+    // routine's instruction lives there, not in the system prompt).
     state.toolKeepPerson = typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot);
-    const compactForBot = compactPromptFor(state.liveBot ?? state.bot, state.toolKeepPerson, {
+    const { leftOut: sessionLeftOut, ...compactForBot } = compactPromptFor(state.liveBot ?? state.bot, state.toolKeepPerson, {
       threadId: state.threadId,
       compaction: state.record?.id ?? null,
       routine: state.opts?.automationSource !== undefined,
@@ -277,11 +279,16 @@ export function createPromptStartTurn(host: StartTurnHost) {
       context: {
         voiceCall: Boolean(state.onCall),
         named: namedByToolScope(state.toolScope),
-        namedText: [`${state.prompt.stable}${state.prompt.volatile}`, ...ruleTextsFor(state.bot.id, state.toolKeepPerson)],
+        namedText: [`${state.prompt.stable}${state.prompt.volatile}`, typeof state.text === "string" ? state.text : "", ...ruleTextsFor(state.bot.id, state.toolKeepPerson)],
       },
     });
     state.compactPrompt = wantsCompact ? compactForBot : undefined;
     state.agentsKnownUse = !state.compactPrompt && needsAgentsUse && compactForBot.agents.core === "used" ? compactForBot.agents : undefined;
+    // #4527 lot C: an engine with no tool search of its own lists the agents
+    // tools but the ones this session leaves out (server/tools/tool-keep-listing.ts);
+    // what the turn offers is recorded in the session
+    if (state.integrations.agents) state.integrations.agents = withKeptAgentsListing(state.integrations.agents, sessionLeftOut ?? [], { driverKind: state.instance.driverKind, compactPrompt: Boolean(state.compactPrompt) });
+    if (!state.warmOnly) offerAgentsCatalog(state.bot.id, state.toolKeepPerson, state.threadId, state.integrations.agents);
     turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(state.prompt.stable), volatile: Buffer.byteLength(state.prompt.volatile) });
     const catalogBytes = toolDefinitionBytes(state.integrations.agents?.env);
     const buckets = measureContextBuckets({

@@ -8,30 +8,58 @@ now means the section of that title in one of the files of `docs/code/`.
 
 ## The Routines page, Overview tab (2026-11-17)
 
-The Automations page (`RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx`)
-has pill tabs under its title (`PageTabs` in `content-page.tsx`): Overview,
-Calendar, Run logs (with the unread problems count) and Webhooks. The old
-List view is replaced by the Overview (`components/routines/RoutinesOverview.tsx`),
-modelled on the reference dashboard's Cloud Agents page (the reference app
-itself has no routines page, only a card on a bot's page).
+The page is "Routines" everywhere (title, sidebar entry; the locale key ids keep
+their old `automations` names). It has pill tabs under its title (`PageTabs`
+in `content-page.tsx`, one line, scrolling sideways when needed): Overview,
+Calendar, Run logs (with the unread problems count) and Webhooks. The
+Overview (`components/routines/RoutinesOverview.tsx`) follows the reference
+dashboard's Cloud Agents page (the reference app itself has no routines page,
+only a card on a bot's page).
 
-Runs: a period (24 hours, 7 days, 30 days) and three figure cards computed
-from the runs the app holds, by one rule (`src/lib/routine-figures.ts`): a
-run counts when it settled (completed, failed, blocked, missed, nothing to
-report); queued, running, waiting and cancelled runs are left out; a run
-with nothing to report is a success; a completed run with problems, a block
-and a miss are failures; no run gives a dash, never 0%. A 30 day period loads
-the older runs (`useRoutineRunsFrom`). No server route serves a figure.
+Runs: a period (24 hours, 7 days, 30 days) and three figure cards computed from
+the runs the app holds by one rule (`src/lib/routine-figures.ts`): settled runs
+only; a run with nothing to report is a success; a completed run with problems,
+a block and a miss are failures; no run gives a dash. "View failed runs" opens
+the Run logs on the problems filter and on the same period (`showRoutines` with
+`period`). No server route serves a figure.
 
-Routines: search, Filters and New on the section's heading row, then a plain
-table (`src/lib/routine-table.ts` for its rows and order): routine, bot,
-schedule in words, last run, next run or a Paused chip, and the row menu
-(`routineRowActions`). Group by Bot or Folder still draws the grouped cards
-(folder management); None, the default, is the table. Tests:
-`routine-figures.test.ts`, `routine-table.test.ts`,
-`RoutinesOverview.dom.test.ts`, `RoutineCalendarPage.test.ts`. Captures:
-`node scripts/capture/routines-page.mjs` (gallery `src/gallery/routines-overview.html`),
-which also fails when a row is wider than the page at 390.
+Routines: search, Filters, Group by (None, Bot, Folder: one control, an icon
+menu on a narrow page) and New on the section's heading row, then ONE table
+(`RoutineTable.tsx`, rows from `src/lib/routine-table.ts`): Routine, Bot,
+Folder, Schedule, the trend of the last 7 runs, Next run (or a Paused chip),
+and the row menu. The trend (`src/lib/routine-trend.ts`) is seven bars of one
+size, oldest at the left, coloured by result (success, problems, failed, muted
+danger for blocked or missed, accent pulse for running, a faint track for an
+empty slot); each bar has a tooltip and opens its run; the cell says it in
+words. It is a `span` with a link role, never a button, because the retro skin
+paints buttons. The app holds two weeks of runs, so the Overview loads eight
+weeks (`useRoutineRunsFrom`) for a weekly routine's seven runs.
+
+Grouping (`RoutineGroupedTable.tsx`) is one level at a time, in the same table:
+each group is a block with a filled header band (click to fold, open by
+default, remembered per person) and its rows. Group by Bot hides the Bot
+column and shows Folder (rows by folder then name; the bot band's menu: New
+routine, New folder, Sort by prefix); Group by Folder hides Folder and shows
+Bot (the folder band's menu renames, pauses or deletes that folder in every bot
+that has it; a last block holds the routines with no folder). Move to folder is
+in every routine's row menu (`folderMoveTargets`, `moveRoutinesToFolder`). The
+bot panel's folder list keeps drag and drop (`useRoutineFolders`); the table
+has no folder heading rows to drop on.
+
+Layout: the table has its columns from 44rem of page (the trend with its text
+from 64rem); under that a row is the name, the bars and the menu on one line
+and one muted line (bot, folder, schedule, next run) under it. The header and
+the body share the 16 px gutter on a phone; only the title row keeps clear of
+the drawer button. The container query classes are literal (a template string
+once made the wide table fall back to the phone row). The usage notice is gone:
+its one action, move to after the reset, is one row of the header menu while a
+provider is near its limit (`LimitMoveMenu`). Tests: `routine-figures`,
+`routine-table`, `routine-trend`, `RoutinesOverview.dom`,
+`RoutineTable.layout`, `RoutineCalendarPage`, `RoutineCalendarPage.group-by.dom`.
+`node scripts/capture/routines-page.mjs` takes the captures at nine widths and
+fails on a missing column header, a row taller than one line (from 1024 wide),
+a phone row over two lines, a left edge off the gutter, controls on several
+rows or sideways scrolling.
 
 ## Outcomes (#4098, 2026-11-13)
 

@@ -717,6 +717,7 @@ const lastUse = new Map<string, number>();
  * verification fixture uses a second). */
 const graceFromEnv = Number(process.env.SAGAX_CONTENT_AT_REST_GRACE_MS?.trim() || NaN);
 let graceMs = Number.isInteger(graceFromEnv) && graceFromEnv >= 0 ? graceFromEnv : GRACE_MS;
+const RETRY_FLOOR_MS = 200;
 /** Soft cap so a long-lived org server cannot retain a hint per historical
  * upload forever even if a pass misses a path. */
 const AT_REST_HINT_MAX = 10_000;
@@ -830,10 +831,38 @@ export function releasePlain(holder: string): void {
 
 /** A file written plain by the server (an upload, a memory edit): sealed
  * once idle. `scope` overrides its root's default key (the uploader). */
+const sealingNoted = new Set<string>();
+let current: Promise<unknown> = Promise.resolve();
+
 export function noteAtRestWrite(path: string, scope?: ContentScope): void {
   lastUse.set(path, Date.now());
   if (scope) scopeHints.set(path, scope);
   scheduleAtRest(graceMs + 50);
+  // Grace already elapsed: seal this one file on the existing sealer now.
+  // A long migration pass must not leave a just-committed attachment plain.
+  if (graceMs === 0 && scope) void sealNotedNow(path);
+}
+
+async function sealNotedNow(path: string): Promise<void> {
+  if (!contentAutoMigrate() || !contentEncryptionOn()) return;
+  if (sealingNoted.has(path) || held(path)) return;
+  const scope = scopeHints.get(path);
+  if (!scope) return;
+  const want = sealingKeySafe(scope);
+  if (!want) {
+    scheduleAtRest(Math.max(graceMs + 50, RETRY_FLOOR_MS));
+    return;
+  }
+  sealingNoted.add(path);
+  try {
+    await whilePaused();
+    if (held(path)) return;
+    const outcome = await (current = replaceInPlace(path, want));
+    if (outcome === "done") forgetAtRestHint(path);
+    else if (outcome === "locked" || outcome === "changed" || outcome === "held") scheduleAtRest(graceMs + 50);
+  } finally {
+    sealingNoted.delete(path);
+  }
 }
 const scopeHints = new Map<string, ContentScope>();
 
@@ -1549,7 +1578,26 @@ export interface AtRestPass {
 const SLICE_MS = 4;
 const PAUSE_MS = 20;
 const SAFETY_PASS_MS = 5 * 60_000;
+const RETRY_CAP_MS = 30_000;
 const REPLACEMENTS_PER_PAUSE = 8;
+/** Backoff after a pass that left a file unsealed (key not ready, or the
+ * copy was skipped). The next try stays on this migration, not minutes away. */
+let retryMs = 0;
+
+function scheduleAfterPass(pass: AtRestPass): void {
+  if (pass.waiting) {
+    retryMs = 0;
+    scheduleAtRest(graceMs + 50);
+    return;
+  }
+  if (pass.locked || pass.failed) {
+    retryMs = Math.min(retryMs ? retryMs * 2 : Math.max(graceMs + 50, RETRY_FLOOR_MS), RETRY_CAP_MS);
+    scheduleAtRest(retryMs);
+    return;
+  }
+  retryMs = 0;
+  scheduleAtRest(SAFETY_PASS_MS);
+}
 
 function scheduleAtRest(delay = PAUSE_MS): void {
   if (!contentAutoMigrate()) return;
@@ -1568,7 +1616,7 @@ function scheduleAtRest(delay = PAUSE_MS): void {
     timer = null;
     // a request made during the pass is scheduled by the pass itself (its finally)
     void runAtRestMigration().then((pass) => {
-      scheduleAtRest(pass.waiting ? graceMs + 50 : SAFETY_PASS_MS);
+      scheduleAfterPass(pass);
     }, () => scheduleAtRest(SAFETY_PASS_MS)).catch(reportBackgroundError);
   }, delay);
   timer.unref?.();
@@ -1948,7 +1996,6 @@ function exportPlainLog(source: string, destination: string, mode: number): { si
 
 let pauses = 0;
 let resumeWaiters: Array<() => void> = [];
-let current: Promise<unknown> = Promise.resolve();
 
 /** Hold the migration between two files until the returned release. */
 export async function pauseAtRestMigration(): Promise<() => void> {
@@ -1992,9 +2039,11 @@ export function resetAtRestState(): void {
   scopeHints.clear();
   seen.clear();
   logSeen.clear();
+  sealingNoted.clear();
   forgetCachedBlocks();
   if (timer) { clearTimeout(timer); timer = null; }
   againAt = 0;
+  retryMs = 0;
   graceMs = Number.isInteger(graceFromEnv) && graceFromEnv >= 0 ? graceFromEnv : GRACE_MS;
 }
 

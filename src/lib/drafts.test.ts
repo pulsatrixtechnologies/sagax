@@ -16,6 +16,7 @@ import {
   changeDraftAttachmentPending,
   draftRevision,
   failedComposerSends,
+  forgetFailedComposerSend,
   getDraft,
   getDraftAttachments,
   getDraftChannelMode,
@@ -121,6 +122,25 @@ describe("channel draft delivery mode", () => {
       expect(failedComposerSends(draftId)[0]?.offline).toBe(true);
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it("queues an offline send that carries an attachment on the same outbox path", () => {
+    const store = memoryStorage();
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: store });
+    const draftId = "bot:offline-attachment:task";
+    const attachment = { kind: "file" as const, id: "clip", name: "clip.mp4", path: "/tmp/clip.mp4", size: 4 };
+    const requestText = 'Look\n<attached-file path="/tmp/clip.mp4" name="clip.mp4" />';
+    vi.stubGlobal("navigator", { onLine: false });
+    try {
+      const sent = { draftId, revision: draftRevision(draftId), sendId: "offline-clip", threadId: "task", text: "Look", requestText, attachments: [attachment] };
+      expect(recoverFailedComposerSend(sent)).toBe("outbox");
+      expect(getDraft(store, draftId)).toBe("");
+      expect(getDraftAttachments(store, draftId)).toEqual([]);
+      expect(failedComposerSends(draftId)[0]).toMatchObject({ offline: true, requestText, attachmentIds: ["clip"] });
+    } finally {
+      vi.unstubAllGlobals();
+      for (const failed of failedComposerSends(draftId)) forgetFailedComposerSend(draftId, failed.id);
     }
   });
 

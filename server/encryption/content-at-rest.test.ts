@@ -426,6 +426,20 @@ describe("migration", () => {
     expect(readMemoryFile("b2").text).toBe("the late note\n");
   });
 
+  it("seals a just-noted attachment on the existing sealer when grace is zero", async () => {
+    configureContentEncryption({ mode: "on", autoMigrate: true, resolveBotOwner: () => WORKSPACE_OWNER, resolveOwner: () => ({ owner: WORKSPACE_OWNER, confidential: false }) });
+    const dir = join(DATA_DIR, "attachments");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "clip.mp4");
+    const video = Buffer.alloc(64);
+    video.writeUInt32BE(24, 0);
+    video.write("ftypisom", 4, "ascii");
+    writeFileSync(path, video);
+    noteAtRestWrite(path, { owner: WORKSPACE_OWNER });
+    await expect.poll(() => sealedOnDisk(path), { timeout: 3_000, interval: 20 }).toBe(true);
+    expect(readAtRestSync(path).equals(video)).toBe(true);
+  });
+
   it("drops lastUse and scopeHints once a file is sealed or gone", async () => {
     writeMemoryFile("b1", "hint prune orchid\n");
     const path = join(workspaceDir("b1"), "MEMORY.md");

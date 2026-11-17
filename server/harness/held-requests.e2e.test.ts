@@ -306,7 +306,7 @@ posixOnly("#3346: server-held requests through the organization server", () => {
         stdio: {
           driver: "claudeAgent", access: "api",
           environment: {
-            FAKE_CLAUDE_DUMP: dumpOf("stdio"), FAKE_CLAUDE_TOOL_RAN: ranLog(),
+            FAKE_CLAUDE_DUMP: dumpOf("stdio"), FAKE_CLAUDE_DUMP_LOG: join(home, "stdio-launches.jsonl"), FAKE_CLAUDE_TOOL_RAN: ranLog(),
             FAKE_CLAUDE_CAN_USE_TOOL: JSON.stringify([
               { when: "[stdio:send]", tool_name: STDIO_SEND, input: { to: "client" } },
               { when: "[stdio:refused]", tool_name: STDIO_REFUSED, input: { id: "c-1" } },
@@ -574,7 +574,10 @@ posixOnly("#3346: server-held requests through the organization server", () => {
   const stdioTurn = async (bot: Bot, marker: string) => {
     rmSync(ranLog(), { force: true });
     await startTurn(admin, bot, "stdio", `${marker} Fais le suivi du client.`);
-    const launch = JSON.parse(readFileSync(dumpOf("stdio"), "utf8")) as { argv: string[] };
+    // the turn's own launch (the instance's one-shot -p calls write dumps too)
+    const launch = await waitFor(async () => (existsSync(join(home, "stdio-launches.jsonl"))
+      ? readFileSync(join(home, "stdio-launches.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { argv: string[]; prompt: unknown })
+      : []).findLast((row) => JSON.stringify(row.prompt).includes(marker) && row.argv.includes("--permission-prompt-tool")) ?? null);
     expect(launch.argv[launch.argv.indexOf("--permission-prompt-tool") + 1]).toBe("stdio");
   };
 

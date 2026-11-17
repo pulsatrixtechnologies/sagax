@@ -24,7 +24,7 @@ export type SlotKind =
   | "cardScan" | "purchase" | "phoneCall" | "invite" | "blocked" | "journalEntry" | "credentialGrant"
   | "draft" | "codeRun" | "cloudAgent" | "allowlistEntry" | "workflow" | "workflowRun" | "taskListItem" | "briefItem"
   | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost" | "teamMemoryEntry" | "callerOwnId"
-  | "learnedFact" | "fake";
+  | "fake";
 
 /** Kinds a person owns: the matrix aims A at B's. The rest only ride along. */
 export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
@@ -138,7 +138,6 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   // an engine instance's personal API key: the instance id names an engine
   "instances/": "engine",
   // a fact upkeep learned about the caller: their own About me only
-  "learned/": "learnedFact",
   // #4471: ids that only ride along a request aimed at the person's own bot,
   // thread or account (a remote session, a host, a recipe, a terminal card,
   // an event subscription, a model server, a page annotation)
@@ -154,13 +153,9 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "terminal/": "fake",
   "meetings/": "fake",
   "my-chrome/": "fake",
-  "data/": "fake",
   "design-systems/own-": "fake",
-  "data-approvals/": "fake",
-  "store/": "fake",
   // a page store's document, after its collection
   "{fake}/": "fake",
-  "products/": "fake",
   "direct-grants/": "fake",
 };
 

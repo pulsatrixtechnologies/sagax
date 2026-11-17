@@ -111,7 +111,7 @@ const LEVEL_GLYPH: Record<RecordLevel, string> = {
 };
 
 function Chip({ className, children, title }: { className: string; children: ReactNode; title?: string }) {
-  return <span title={title} className={cn("inline-flex h-5 max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
+  return <span title={title} className={cn("inline-flex h-5 min-w-0 max-w-full items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
 }
 
 function Bar({ className }: { className: string }) {
@@ -259,7 +259,7 @@ function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> })
   return (
     <Chip className={LEVEL_CLASS[priority.level]} title={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
-      <span className="max-w-[11rem] truncate">{priority.label}</span>
+      <span className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
     </Chip>
   );
 }
@@ -335,10 +335,12 @@ function Notes({ card, now, lang, description, pinned, stacked }: { card: Card; 
   return (
     <div className="flex flex-col" data-record-notes>
       {stacked && (pinned ? (
-        <button type="button" tabIndex={tab} aria-expanded={open} data-fit-row="n-title" className={cn(BUTTON, "-mx-2 w-[calc(100%+1rem)] justify-start text-popover-ink-secondary", description && "border-t border-popover-hairline")} onClick={() => setOpen((value) => !value)}>
-          <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 transition-transform rtl:-scale-x-100", open && "rotate-90 rtl:-rotate-90")} />
-          <span>{title}</span>
-        </button>
+        <div data-fit-row="n-title" className={cn(description && "border-t border-popover-hairline pt-1")}>
+          <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen((value) => !value)}>
+            <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 transition-transform rtl:-scale-x-100", open && "rotate-90 rtl:-rotate-90")} />
+            <span>{title}</span>
+          </button>
+        </div>
       ) : (
         <p data-fit-row="n-title" className={cn("flex items-center gap-1.5 text-[12px] leading-4 text-popover-ink-secondary", description && "border-t border-popover-hairline pt-2")}>
           <ChevronRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
@@ -391,9 +393,9 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       )}
       <RecordProductMark product={card ? { name: card.product.name, iconUrl: product?.iconUrl } : product} iconUrl={card?.product.icon?.url} />
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
-      {!hidden && <span dir="ltr" className="min-w-12 truncate font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
-      <span className="ms-auto flex shrink-0 items-center gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
+      {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
+      <span className="ms-auto flex min-w-0 items-center gap-1">
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] min-w-0 truncate">{card.state.label}</span></Chip>}
         {card?.priority && <PriorityChip priority={card.priority} />}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (

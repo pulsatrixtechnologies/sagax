@@ -3,7 +3,7 @@
 // search are tested without a DOM. The words of a row come from the same
 // helpers every routine list reads (routine-display.ts, schedule-label.ts).
 import type { Routine, RoutineRun } from "@/lib/routines";
-import { latestRoutineRun } from "@/lib/routine-display";
+import { routineTrend, type RoutineTrend } from "@/lib/routine-trend";
 import { scheduleLabelCompact } from "@/lib/schedule-label";
 
 export interface RoutineTableRow {
@@ -11,10 +11,8 @@ export interface RoutineTableRow {
   botName: string;
   /** The schedule or trigger in words, never cron. */
   when: string;
-  /** The latest run that is not queued, or none. */
-  lastRun: RoutineRun | undefined;
-  /** A run going right now: the row says Running in place of the last run. */
-  liveRun: RoutineRun | undefined;
+  /** Its last 7 runs as marks (src/lib/routine-trend.ts). */
+  trend: RoutineTrend;
   paused: boolean;
 }
 
@@ -31,13 +29,11 @@ export function routineTableRows(routines: readonly Routine[], runs: readonly Ro
   const rows: RoutineTableRow[] = [];
   for (const routine of routines) {
     const own = byRoutine.get(routine.id) ?? [];
-    const liveRun = own.find((run) => run.status === "running");
-    const lastRun = latestRoutineRun(routine.id, own.filter((run) => run.status !== "queued" && run !== liveRun));
     const paused = !routine.enabled && !(routine.schedule.type === "once" && routine.nextRunAt == null);
     const botName = options.botName(routine);
     const when = scheduleLabelCompact(routine.schedule);
     if (query && !`${routine.name} ${botName} ${when} ${routine.folder ?? ""}`.toLowerCase().includes(query)) continue;
-    rows.push({ routine, botName, when, lastRun, liveRun, paused });
+    rows.push({ routine, botName, when, trend: routineTrend(own), paused });
   }
   // The list's own order: on routines first, soonest next run, then name.
   return rows.sort((a, b) => Number(b.routine.enabled) - Number(a.routine.enabled)

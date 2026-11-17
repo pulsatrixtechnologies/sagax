@@ -20,13 +20,12 @@ describe("routineTableRows", () => {
     expect(rows.find((row) => row.routine.id === "r3")).toMatchObject({ botName: "Boreas", paused: true });
     expect(rows.find((row) => row.routine.id === "r1")?.when).toMatch(/9/);
   });
-  it("shows the latest run that is not queued, and a running run apart", () => {
+  it("gives each row the trend of its own last runs, oldest first, queued runs left out", () => {
     const runs = [run("a", "r1", "completed", 30), run("b", "r1", "failed", 2), run("c", "r1", "queued", 1), run("d", "r2", "running", 0.1), run("e", "r2", "completed", 9)];
     const rows = routineTableRows(routines, runs, { botName });
-    expect(rows.find((row) => row.routine.id === "r1")?.lastRun?.id).toBe("b");
-    const backup = rows.find((row) => row.routine.id === "r2")!;
-    expect(backup.liveRun?.id).toBe("d");
-    expect(backup.lastRun?.id).toBe("e");
+    expect(rows.find((row) => row.routine.id === "r1")?.trend.marks.filter((mark) => mark.run).map((mark) => mark.run!.id)).toEqual(["a", "b"]);
+    expect(rows.find((row) => row.routine.id === "r2")?.trend.marks.filter((mark) => mark.run).map((mark) => mark.kind)).toEqual(["success", "running"]);
+    expect(rows.find((row) => row.routine.id === "r3")?.trend.newest).toBeUndefined();
   });
   it("searches the name, the bot and the schedule", () => {
     expect(routineTableRows(routines, [], { botName, query: "inv" }).map((row) => row.routine.id)).toEqual(["r3"]);

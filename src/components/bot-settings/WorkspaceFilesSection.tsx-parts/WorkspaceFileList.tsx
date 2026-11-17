@@ -152,7 +152,6 @@ export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Fi
                   readOnly={open.readOnly}
                   onChange={(text) => setOpen({ ...open, text, dirty: true })}
                   minHeight={200}
-                  fillModal
                   dataField={`workspace-file:${open.path}`}
                   footer={open.path === "RULES.md" ? <RulesCounter text={open.text} /> : <span>{open.path}</span>}
                 />

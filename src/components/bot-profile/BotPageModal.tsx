@@ -33,10 +33,11 @@ export const BOT_PAGE_MODAL = {
   frame: "relative flex flex-col overflow-hidden rounded-[20px] border-[0.5px] border-border bg-app text-ink outline-none transition-[opacity,scale] duration-base ease-out-quint starting:scale-98 starting:opacity-0 motion-reduce:transition-none",
   size: {
     /** an editor, a list or a table: most of the window; the editors inside
-     * grow with it through --bot-modal-fill (MarkdownEditor's fillModal) */
-    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:max(calc((100dvh-96px)/2),calc(100dvh-430px))]",
+     * grow with it through --bot-modal-fill: the window less the modal's header, the
+     * rows above the editor, its counter line and the Save row, so Save shows unscrolled (MarkdownEditor's fillModal) */
+    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-540px)]",
     /** a list that may be short (Folder, Routines): as wide as large, as tall as its content up to the window */
-    wide: "max-h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:max(calc((100dvh-96px)/2),calc(100dvh-430px))]",
+    wide: "max-h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-540px)]",
     /** a few fields: wider than the reference's 560px, as tall as its content */
     medium: "max-h-[calc(100dvh-96px)] w-[min(720px,calc(100vw-32px))]",
   },

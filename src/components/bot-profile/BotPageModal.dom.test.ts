@@ -71,7 +71,7 @@ describe("bot page modals are larger (owner: we barely see anything)", () => {
     expect(BOT_PAGE_MODAL.size.medium).toContain("w-[min(720px,calc(100vw-32px))]");
     expect(BOT_PAGE_MODAL.size.wide, "a short list is sized to its content").toContain("w-[min(1100px,calc(100vw-32px))]");
     expect(BOT_PAGE_MODAL.size.wide).not.toMatch(/(^| )h-\[/);
-    expect(BOT_PAGE_MODAL.size.large, "the open editor gets at least half of the modal").toContain("(100dvh-96px)/2");
+    expect(BOT_PAGE_MODAL.size.large, "the editor leaves its counters and Save visible").toContain("--bot-modal-fill:calc(100dvh-540px)");
     expect(BOT_PAGE_MODAL.bodyFade, "the body's bottom edge fades while more is below").toContain("mask-image");
     expect(BOT_PAGE_MODAL.size.medium, "content height, never a fixed tall box").not.toMatch(/(^| )h-\[/);
     // header, body and footer share the 24px side edge

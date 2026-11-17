@@ -75,18 +75,21 @@ describe("sending while a question waits", () => {
     flushSync(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
   };
 
-  it("sends the message and leaves the question open, with no answer sent for the person", () => {
+  // #3214 (2026-11-09) replaced #940's rule: the waiting question is pinned
+  // over the composer, and what the person types answers it through the
+  // usual answer path, in the person's own words (never "best judgment").
+  it("answers the pinned question with the typed words, never a guess for the person", () => {
     mount([question]);
-    expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe("Answer the question above, or write something else: it stays open");
+    expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe("Type your answer to the pinned question, or pick an option above");
     sendWithEnter("Autre chose en attendant");
     const actions = fixture.dispatch.mock.calls.map(([action]) => action);
-    expect(actions).toContainEqual(expect.objectContaining({ type: "send", botId: bot.id, text: "Autre chose en attendant" }));
-    expect(actions.some((action) => action.type === "decideRequest")).toBe(false);
+    expect(actions).toContainEqual(expect.objectContaining({ type: "decideRequest", behavior: "answer", message: expect.stringContaining("A: Autre chose en attendant") }));
+    expect(actions.some((action) => action.type === "send")).toBe(false);
     expect(JSON.stringify(actions)).not.toContain("best judgment");
   });
 
   it("keeps the usual placeholder when no question waits", () => {
     mount([]);
-    expect(container.querySelector("textarea")!.getAttribute("placeholder")).not.toContain("stays open");
+    expect(container.querySelector("textarea")!.getAttribute("placeholder")).not.toContain("pinned question");
   });
 });

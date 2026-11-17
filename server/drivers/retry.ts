@@ -74,7 +74,7 @@ const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
   // ("Failed to authenticate: OAuth session expired and could not be refreshed").
   // A fresh process dies the same way, so it is never a transient crash.
   {
-    pattern: /\b(?:oauth session expired|oauth token (?:has )?expired|failed to authenticate|authentication_failed|could not be refreshed)\b/i,
+    pattern: /\b(?:oauth session expired|oauth token (?:has )?expired|failed to authenticate:\s*oauth|authentication_failed|oauth\b[^.\n]{0,80}could not be refreshed)\b/i,
     reason: "auth",
   },
   // Config refusal before the quota words: bare "billing"/"subscription" in

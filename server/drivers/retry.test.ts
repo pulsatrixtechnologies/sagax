@@ -110,6 +110,12 @@ describe("classifyError", () => {
     expect(classifyError({ exitCode: 3 })).toEqual({ transient: false, reason: "terminal_exit" });
   });
 
+  it("does not call a tool's own words about authenticating or refreshing a sign-in", () => {
+    for (const text of ["git: failed to authenticate with the remote, retrying", "the cache entry could not be refreshed", "Failed to authenticate to the proxy"]) {
+      expect(classifyError({ message: text }).reason, text).not.toBe("auth");
+    }
+  });
+
   it("treats an OAuth session that could not be refreshed as terminal auth", () => {
     const text = "Failed to authenticate: OAuth session expired and could not be refreshed";
     expect(classifyError({ text })).toEqual({ transient: false, reason: "auth" });

@@ -47,7 +47,10 @@ worked (the problem is cleared), the same problem came back, or the run was
 stopped before the end, a run cut by a server restart included
 (`RoutineCheckFollowUps`, #4579). The answered card carries the run it
 follows (`checkRunId`, written with its first line), so a restart during
-the check changes nothing; told once. Words of the person's
+the check changes nothing; told once. A run the restart itself failed is
+reported while the routines are still loading, before its card can be
+found: a pass right after they load (`catchUp`) tells every card whose run
+already ended. Words of the person's
 own reach the bot with the card's key, as any keyed card's. It rings once, as a
 question, when raised; later problem runs replace its words in place (the
 count); the first good run retires it; an answered card is not raised again

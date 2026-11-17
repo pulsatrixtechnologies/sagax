@@ -125,12 +125,9 @@ describe("Run a check: the card says what that run did (#4579)", () => {
     const followUps = () => new RoutineCheckFollowUps({
       words: () => ENGLISH_WORDS,
       stillWrong: () => wrong,
-      cardFor: (routineId, runId) => {
-        for (const [messageId, card] of cards) {
-          if (card.askKey === `routine-problem:${routineId}` && card.checkRunId === runId) return { routineId, threadId: "t1", messageId };
-        }
-        return null;
-      },
+      checkCards: (routineId) => [...cards]
+        .filter(([, card]) => card.askKey === `routine-problem:${routineId}` && card.checkRunId)
+        .map(([messageId, card]) => ({ routineId, threadId: "t1", messageId, runId: card.checkRunId! })),
       tell: (card, note) => {
         notes.push([card.messageId, note]);
         cards.set(card.messageId, cardWithCheckNote(cards.get(card.messageId)!, note));
@@ -175,6 +172,14 @@ describe("Run a check: the card says what that run did (#4579)", () => {
       ["m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
     ]);
     expect(w.cards.get("m1")!.answerNote).toBe(ENGLISH_WORDS.t("routine.problemCard.checkStopped"));
+  });
+
+  it("two cards following the same run (a second Run a check while it runs) both get the line", () => {
+    const w = world();
+    w.cards.set("m1", { askKey: "routine-problem:r1", checkRunId: "run-1" });
+    w.cards.set("m2", { askKey: "routine-problem:r1", checkRunId: "run-1" });
+    w.followUps().runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    expect(w.notes.map(([messageId]) => messageId).sort()).toEqual(["m1", "m2"]);
   });
 
   it("the new line replaces the card's note, and the one after its words for an app that reads only those", () => {

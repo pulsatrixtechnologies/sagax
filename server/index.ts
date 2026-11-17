@@ -17129,17 +17129,14 @@ const routineCheckFollowUps = new RoutineCheckFollowUps({
     const routine = routines?.routineById(routineId);
     return Boolean(routine && lastingProblem(routineFixNeed(routine)));
   },
-  cardFor: (routineId, runId) => {
+  checkCards: (routineId) => {
     const routine = routines?.routineById(routineId);
     const place = routine ? routineProblemPlace(routine, false) : null;
-    if (!place) return null;
+    if (!place) return [];
     const key = routineProblemKey(routineId);
-    const rows = store.messagesFor(place.threadId);
-    for (let index = rows.length - 1; index >= 0; index -= 1) {
-      const row = rows[index]!;
-      if (row.kind === "options" && row.card?.askKey === key && row.card.checkRunId === runId) return { routineId, threadId: place.threadId, messageId: row.id };
-    }
-    return null;
+    return store.messagesFor(place.threadId)
+      .filter((row) => row.kind === "options" && row.card?.askKey === key && typeof row.card.checkRunId === "string")
+      .map((row) => ({ routineId, threadId: place.threadId, messageId: row.id, runId: row.card!.checkRunId! }));
   },
   tell: (card, note) => {
     const row = store.messagesFor(card.threadId).find((message) => message.id === card.messageId);
@@ -21366,6 +21363,12 @@ routines = new RoutineManager({
     return bot ? effectiveBotOwner(bot) || undefined : undefined;
   },
 });
+// #4579: a check's run the restart failed was reported while `routines` was
+// still being built (its card could not be found): the cards following a run
+// that already ended get their line now
+try {
+  routineCheckFollowUps.catchUp(routines.listRoutines().map((routine) => routine.id), (routineId, runId) => routines?.runsOfRoutineAsStored(routineId).find((run) => run.id === runId));
+} catch (error) { reportBackgroundError(error); }
 /** #4250: whose signal ledger a run's notice is in: the run's person, else
  * the owner of the bot that tells it. */
 function routineRunPerson(run: RoutineRun, bot: BotRecord): string {

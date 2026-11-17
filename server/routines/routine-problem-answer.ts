@@ -129,9 +129,9 @@ export interface RoutineCheckFollowUpDeps {
   words(routineId: string): ApprovalWords;
   /** The routine's problem still stands, read when the run ended. */
   stillWrong(routineId: string): boolean;
-  /** The answered fix card (key `routine-problem:<routineId>`) that follows
-   * this run (its `checkRunId`), or null. */
-  cardFor(routineId: string, runId: string): RoutineCheckCard | null;
+  /** The routine's answered fix cards (key `routine-problem:<routineId>`)
+   * still following a run (their `checkRunId`). */
+  checkCards(routineId: string): Array<RoutineCheckCard & { runId: string }>;
   /** Write the card's new line (cardWithCheckNote: it follows no run after). */
   tell(card: RoutineCheckCard, note: string): void;
 }
@@ -150,16 +150,33 @@ export class RoutineCheckFollowUps {
     this.deps = deps;
   }
 
-  /** A run changed (RoutineManager onRunChanged). */
+  /** A run changed (RoutineManager onRunChanged): every card following it
+   * gets its line. */
   runChanged(run: { id: string; routineId?: string | null; status: string; error?: string }): void {
     if (!run.routineId || RUN_GOING.has(run.status)) return;
-    const card = this.deps.cardFor(run.routineId, run.id);
-    if (!card) return;
-    const words = this.deps.words(card.routineId);
+    const cards = this.deps.checkCards(run.routineId).filter((card) => card.runId === run.id);
+    if (!cards.length) return;
+    const words = this.deps.words(run.routineId);
     const key = RUN_STOPPED.has(run.status) || run.error === ROUTINE_RESTARTED
       ? "routine.problemCard.checkStopped"
-      : this.deps.stillWrong(card.routineId) ? "routine.problemCard.checkStill" : "routine.problemCard.checkClean";
-    this.deps.tell(card, words.t(key));
+      : this.deps.stillWrong(run.routineId) ? "routine.problemCard.checkStill" : "routine.problemCard.checkClean";
+    for (const card of cards) this.deps.tell(card, words.t(key));
+  }
+
+  /** Once the routines are loaded (server start): every card still
+   * following a run that already ended gets its line. A run the restart
+   * failed is reported while the routines are being built, before a card
+   * can be found; this pass catches it, and any other end missed. */
+  catchUp(
+    routineIds: readonly string[],
+    runOf: (routineId: string, runId: string) => { id: string; routineId?: string | null; status: string; error?: string } | undefined,
+  ): void {
+    for (const routineId of routineIds) {
+      for (const card of this.deps.checkCards(routineId)) {
+        const run = runOf(routineId, card.runId);
+        if (run) this.runChanged(run);
+      }
+    }
   }
 }
 

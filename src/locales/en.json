@@ -5289,6 +5289,7 @@
   "persona.menu.rename": "Rename the bot",
   "persona.noMatch": "Nothing matches “{query}”",
   "persona.overview.actions": "Quick actions",
+  "persona.overview.noDescription": "No description yet.",
   "persona.overview.owner": "Owner",
   "persona.overview.sharedCount": "Shared with {count}",
   "persona.overview.summary": "What it does",

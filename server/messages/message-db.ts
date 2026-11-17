@@ -1247,6 +1247,11 @@ export function deleteCommandReceipt(kind: string, key: string): void {
   db().prepare("DELETE FROM command_receipts WHERE kind = ? AND key = ?").run(kind, key);
 }
 
+/** Lot S1: the keys of one kind's receipts (an erasure finds its own). */
+export function commandReceiptKeys(kind: string): string[] {
+  return (db().prepare("SELECT key FROM command_receipts WHERE kind = ?").all(kind) as Array<{ key: string }>).map((row) => row.key);
+}
+
 /** Drop the receipts of one kind written before `before` (ms). */
 export function purgeCommandReceipts(kind: string, before: number): number {
   return Number(db().prepare("DELETE FROM command_receipts WHERE kind = ? AND at < ?").run(kind, before).changes);

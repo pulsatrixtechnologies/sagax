@@ -3,8 +3,9 @@
 // of it in their own usage (GET /api/me/usage...). Anyone else (an
 // organization admin's ledger, the console, traces, stats, the CSV) reads
 // one row per person, calendar month (dated the 1st, as the ledger's files
-// and the spend cap), engine and model: no conversation id, no bot, no day
-// or time, no list of sends, and none of its tool calls. Nothing is capped.
+// and the spend cap), engine and model, read over the whole month whatever
+// range is asked (surfaceLedger): no conversation id, no bot, no day or
+// time, no list of sends, and none of its tool calls. Nothing is capped.
 import type { UsageRow } from "./usage-ledger.ts";
 
 /** The bot label a folded row carries. */
@@ -62,4 +63,32 @@ export function foldedSurfaceThreads(rows: readonly UsageRow[], viewerPrincipalI
     if (row.surface === true && row.threadId && !(viewer !== null && (row.ownerPrincipalId?.trim().toLowerCase() ?? "") === viewer)) out.add(row.threadId);
   }
   return out;
+}
+
+/** The calendar months (UTC, as the ledger's files) a range touches, whole:
+ * from the 1st of its first month to the last instant of its last. */
+export function wholeMonths(range: { from: Date; to: Date }): { from: Date; to: Date } {
+  const from = new Date(Date.UTC(range.from.getUTCFullYear(), range.from.getUTCMonth(), 1));
+  const to = new Date(Date.UTC(range.to.getUTCFullYear(), range.to.getUTCMonth() + 1, 1) - 1);
+  return { from, to };
+}
+
+/** The ledger as `viewerPrincipalId` reads it over `range`: their own rows
+ * and every other bot's as read, and another person's surface rows read over
+ * the whole months the range touches, then folded, so no range (one day, a
+ * week) ever gives less than a month of a chat's spend. */
+export function surfaceLedger(
+  rows: readonly UsageRow[],
+  range: { from: Date; to: Date },
+  viewerPrincipalId: string | null,
+  read: (range: { from: Date; to: Date }) => UsageRow[],
+): UsageRow[] {
+  const viewer = viewerPrincipalId?.trim().toLowerCase() || null;
+  const others = (row: UsageRow) => row.surface === true && !(viewer !== null && (row.ownerPrincipalId?.trim().toLowerCase() ?? "") === viewer);
+  const months = wholeMonths(range);
+  const kept = rows.filter((row) => !others(row));
+  const widened = months.from.getTime() === range.from.getTime() && months.to.getTime() === range.to.getTime()
+    ? rows.filter(others)
+    : read(months).filter(others);
+  return foldSurfaceUsage([...kept, ...widened], viewer);
 }

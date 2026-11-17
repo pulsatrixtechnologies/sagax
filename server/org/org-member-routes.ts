@@ -1744,7 +1744,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // `hidden: true` (a host product's chat), and a surface bot only
         // ever works in hidden ones.
         const hidden = person.actor !== "console" || input.hidden === true || surface;
-        const sendKey = input.newThread === true && input.sendId ? `${person.principalId}|${botId}|${input.sendId as string}` : null;
+        const sendKey = input.newThread === true && input.sendId ? `${person.principalId.trim().toLowerCase()}|${botId}|${input.sendId as string}` : null;
         if (sendKey && !threadId) threadId = deps.newThreadReceipt?.get(sendKey) ?? undefined;
         const opening = !threadId;
         if (!threadId && hidden && deps.agentConversation) {

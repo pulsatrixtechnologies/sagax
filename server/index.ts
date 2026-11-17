@@ -174,7 +174,7 @@ import type { CommandAllowlistCandidate } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
 import { BrowserCleanupCoordinator, BrowserSweep, browserIdleMs, engineBrowsers } from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
-import { commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
+import { commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
@@ -396,7 +396,7 @@ import {
   type UsageRow,
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
-import { foldedSurfaceThreads, foldSurfaceUsage } from "./usage/surface-usage.ts";
+import { foldedSurfaceThreads, surfaceLedger } from "./usage/surface-usage.ts";
 import { surfaceTargetRefused as surfaceAccessRefused } from "./bots/surface-bot-access.ts";
 import { newPlanUsageAlerts,
   orgPlanAccounts,
@@ -2392,6 +2392,7 @@ bindLeafHost({
   get agentSpans() { return agentSpans; },
   get scrubThreadDecisions() { return scrubThreadDecisions; },
   get scrubSurfaceThreadDecisions() { return scrubSurfaceThreadDecisions; },
+  get forgetNewThreadReceipts() { return forgetNewThreadReceipts; },
   get appendProblem() { return appendProblem; },
   get peerApprovalFailure() { return peerApprovalFailure; },
   get CONFIDENTIAL_INCIDENT_TEXT() { return CONFIDENTIAL_INCIDENT_TEXT; },
@@ -25812,7 +25813,7 @@ ROUTES.push(createBrowserSiteRoutes({
 ROUTES.push(createUsageRoutes({
   dataDir: DATA_DIR,
   // lot S1: another person's surface bot as one total per person
-  ledgerFor: (rows, auth) => foldSurfaceUsage(rows, sessionPrincipal(auth) ?? null),
+  ledgerFor: (rows, auth, range) => surfaceLedger(rows, range, sessionPrincipal(auth) ?? null, (months) => readUsage(DATA_DIR, months)),
   // its tool calls too: from the rows, and from its live conversations (a turn not booked yet)
   hiddenThreads: (rows, auth) => {
     const viewer = sessionPrincipal(auth)?.trim().toLowerCase() ?? null;
@@ -32382,7 +32383,7 @@ const orgOverviewDeps = {
     principalId: person.principalId,
     state: publicPresence(presence.view(person.principalId), presenceHiddenFor(person.principalId)).state
   })),
-  usageRows: (range: { from: Date; to: Date }) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
+  usageRows: (range: { from: Date; to: Date }) => surfaceLedger(readUsage(DATA_DIR, range), range, null, (months) => readUsage(DATA_DIR, months)),
   routineRuns: (from: number) => (routines?.listRuns(from) ?? []).map((run) => {
     const bot = store.bot(run.botId);
     return {
@@ -32433,7 +32434,7 @@ const orgPeopleDeps: PeopleDeps = {
       return false;
     }
   },
-  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
+  usageRows: (range) => surfaceLedger(readUsage(DATA_DIR, range), range, null, (months) => readUsage(DATA_DIR, months)),
   shared: (principalId) => {
     const teams = new Set((principals.byId(principalId)?.teams ?? []).map((team) => team.id));
     return store.bots.flatMap((bot): Array<{ botId: string; botName: string; level: string; via: "user" | "team" | "section" }> => {
@@ -32912,7 +32913,7 @@ const orgRoutinesDeps: RoutinesDeps = {
   runAs: (routine) => effectiveRunAs(routine) ?? null,
   person: adminPerson,
   scheduleLabel: (routine) => routineScheduleLabel(routine.schedule),
-  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
+  usageRows: (range) => surfaceLedger(readUsage(DATA_DIR, range), range, null, (months) => readUsage(DATA_DIR, months)),
   inFlight: routineRunInFlight,
   // #2939: an admin's Run now is a person's run (no duplicate check).
   runNow: (routineId) => routines?.runNow(routineId, undefined, "person") ?? null,
@@ -33429,7 +33430,7 @@ const orgAdmin = createOrgAdminRoutes({
     return principals.list().filter((person) => (person.teams ?? []).some((team) => wanted.has(team.id))).map((person) => person.id);
   },
   bots: orgAdminBots,
-  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
+  usageRows: (range) => surfaceLedger(readUsage(DATA_DIR, range), range, null, (months) => readUsage(DATA_DIR, months)),
   approvalsFor: (viewer) => pendingApprovalsFor(viewer),
   answer: answerCardFromConsole,
   orgAlwaysAllow: () => {
@@ -33653,6 +33654,12 @@ function surfaceRecord(row: { surface?: true; after?: Record<string, unknown> })
  * own rows only: an administrator's answer to a server command card stays whole. */
 function scrubSurfaceThreadDecisions(threadId: string, principalId: string): Promise<number> {
   return scrubThreadDecisions(DATA_DIR, threadId, personsOwnDecision(principalId));
+}
+/** Lot S1: the durable receipts of new conversations (`member.new_thread`:
+ * person, bot, sendId, conversation; no text) that `match` names, dropped
+ * when their conversation is deleted or their person erased. */
+function forgetNewThreadReceipts(match: (key: string, result: unknown) => boolean): number {
+  return dropCommandReceiptsWhere("member.new_thread", match);
 }
 /** Lot S1: a bot an admin route may name: never a surface bot. */
 function adminBotOf(botId: string): BotRecord | undefined {
@@ -34765,7 +34772,10 @@ const orgMember = createOrgMemberRoutes({
     },
   },
   // what the decision log kept of a deleted hidden conversation goes down to its metadata
-  forgetThread: (threadId, principalId) => { void scrubSurfaceThreadDecisions(threadId, principalId).catch(reportBackgroundError); },
+  forgetThread: (threadId, principalId) => {
+    void scrubSurfaceThreadDecisions(threadId, principalId).catch(reportBackgroundError);
+    forgetNewThreadReceipts((_key, result) => (result as { threadId?: unknown } | null)?.threadId === threadId);
+  },
   hiddenConversationOf,
   threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   expireDueApprovals: expireDueApprovalsInThread,

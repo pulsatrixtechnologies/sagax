@@ -135,7 +135,9 @@ any other shape, so the plan's `clients.bots.read` is written
   message. With `newThread: true`, a retry with the same `sendId` (same
   person and bot, for 24 h, kept as a durable receipt like `send_prompt`'s,
   so after a restart too) lands in the conversation the first send opened,
-  never in another new one, and the work runs once (lot S1).
+  never in another new one, and the work runs once (lot S1). The receipt
+  (person, bot, `sendId`, conversation; no text) goes with its conversation
+  when it is deleted, and with the person when they are erased.
 - The conversation is opened before anything is sent, and its id comes
   with the answer: `threadId` in the JSON body, and for `stream: true` the
   `X-Sagax-Thread-Id` header with the status line, before the `started`
@@ -233,9 +235,10 @@ answer in their name through one service bot of theirs, the **surface bot**:
   Anyone else (the ledger, its CSV, traces, stats, the console's usage) reads
   one row per person, calendar month (dated the 1st, as the ledger and the
   spend cap), engine and model, labelled `Chat`, with no conversation or bot
-  id and no day; that row counts as one turn (costs and tokens are exact,
-  the number of turns is not), and a range that starts after the 1st leaves
-  it out; the stats leave out its tool calls
+  id and no day, read over the whole calendar months the asked range
+  touches (a one-day range gives the month); that row counts as one turn
+  (costs and tokens are exact, the number of turns is not); the stats leave
+  out its tool calls
   (`server/usage/surface-usage.ts`). No cap.
 - Logs: every admin activity row and every decision about it is marked
   `surface` when written (whoever writes it: the member API, the agent API,

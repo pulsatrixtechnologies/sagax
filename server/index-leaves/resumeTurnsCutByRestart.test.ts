@@ -87,7 +87,7 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
 
   /** The conversation as the stop left it: the person's request, the bot's
    * first words, a step already done, then the stop's note. */
-  function cutConversation(step: { name: string; output?: string; itemId?: string | null }) {
+  function cutConversation(step: { name: string; output?: string; itemId?: string | null }): any[] {
     const tool: Record<string, unknown> = { name: step.name, ok: true, ...(step.output ? { output: step.output } : {}) };
     if (step.itemId !== null) tool.itemId = step.itemId ?? "call-1";
     return [

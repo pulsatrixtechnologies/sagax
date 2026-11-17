@@ -203,7 +203,7 @@ export class Runtime {
           // First cut: one rerun, even when something outward already
           // happened. The labels are looked up and named so they are not
           // run again.
-          if (outward.length > 0) n.evidence = { ...(n.evidence ?? {}), outward: [...outward] };
+          if (outward.length > 0) n.evidence = { ...n.evidence, outward: [...outward] };
           n.restart = "rerun"; n.restarts += 1; n.lastActivityAt = now;
           n.status = this.store.children(n.id).length ? "resume" : "queued";
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: `${n.status}: rerun ${n.restarts}` });

@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+/**
+ * Headless screenshots of record cards (src/gallery/record-card.html): every
+ * kind, every state, the stacked narrow layout, the left-pane-only card, the
+ * link card beside it, and live chips (hover, pinned). Dark and light, French
+ * and English, a 1280 px window and a 390 px one. Synthetic data only.
+ * Headless Chrome: no window opens.
+ * Usage: node scripts/capture/record-hover-card.mjs [--out DIR] [--port N] [--only fr-dark]
+ */
+import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
+const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "record-hover-card"));
+const port = Number(arg("--port") ?? 5203);
+const only = arg("--only");
+const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
+const langs = ["fr", "en"];
+const widths = [1280, 390];
+const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
+const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }];
+
+async function waitForServer(url, ms = 120_000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    try { if ((await fetch(url)).status < 500) return; } catch { /* retry */ }
+    await new Promise((done) => setTimeout(done, 500));
+  }
+  throw new Error(`gallery did not start at ${url}`);
+}
+
+const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+  cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, NODE_ENV: "development" }, detached: true,
+});
+let log = "";
+vite.stdout?.on("data", (chunk) => { log += chunk; });
+vite.stderr?.on("data", (chunk) => { log += chunk; });
+
+let browser;
+try {
+  const base = `http://127.0.0.1:${port}/src/gallery/record-card.html`;
+  await waitForServer(base);
+  const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
+  await mkdir(outDir, { recursive: true });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  });
+  for (const width of widths) {
+    const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+    page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
+    page.on("console", (message) => { if (message.type() === "error") console.error("console:", message.text().slice(0, 300)); });
+    page.on("response", (response) => { if (response.status() >= 400) console.error("http", response.status(), response.url().slice(0, 160)); });
+    for (const lang of langs) {
+      for (const { id, label } of skins) {
+        if (only && only !== `${lang}-${label}`) continue;
+        const open = async (scene) => {
+          await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene })}`);
+          await page.waitForSelector("[data-gallery-card], [data-gallery-chat]", { timeout: 120_000 });
+          await page.waitForTimeout(250);
+        };
+        for (const scene of cardScenes) {
+          if (width < 600 && !["overview", "ticket", "company", "pinned", "noaccess"].includes(scene)) continue;
+          await open(scene);
+          await page.screenshot({ path: join(outDir, `${scene}-${lang}-${label}-${width}.png`), fullPage: true });
+        }
+        for (const { name, action } of chatScenes) {
+          await open("chat");
+          const chip = page.locator('[data-record-link="ticket"]').first();
+          await chip.scrollIntoViewIfNeeded();
+          if (action === "hover") await chip.hover();
+          else await chip.click();
+          await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
+          await page.waitForTimeout(700);
+          await page.screenshot({ path: join(outDir, `${name}-${lang}-${label}-${width}.png`) });
+        }
+      }
+    }
+    await page.close();
+  }
+  console.log(`captures in ${outDir}`);
+} finally {
+  await browser?.close();
+  try { process.kill(-vite.pid); } catch { /* already gone */ }
+  if (process.exitCode) console.error(log.slice(-2000));
+}

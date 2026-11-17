@@ -1,10 +1,20 @@
 // A preview card that floats above a link in a bot reply. It opens when the
 // pointer rests on the link, on keyboard focus, or on a long press, and
-// shows what the app knows about the link without fetching it.
+// shows what the app knows about the link without fetching it. HoverCard is
+// also the mechanics of the bot library's files and of record cards
+// (RecordLink.tsx), which ask for its optional intent, pin, warm switch and
+// motion.
+//
+// Parts of the hover card behavior and motion (warm switch, pointer-rest
+// intent, Escape keeping a dismissed card closed, grow-from-the-anchor
+// entrance) are adapted from Arc, Copyright (c) 2026 Elia Kuratli, used under
+// the MIT License (third_party/arc-library/LICENSE).
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, CircleDot, GitCommitHorizontal, GitBranch, GitPullRequest, Globe, Hash } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { useMenuMotion } from "@/components/MenuMotion";
 import { githubRefLabel, type GithubRef, type GithubRefKind } from "@/lib/github-refs";
 
 export const HOVER_OPEN_DELAY_MS = 300;
@@ -91,81 +101,229 @@ export function LinkHoverCard({ href, github, children }: { href: string; github
   return <HoverCard card={() => <LinkPreviewCard href={href} github={github} />} kind="link-preview">{children}</HoverCard>;
 }
 
+/** The pointer must rest this long on an anchor before `onIntent` runs (a
+ * pointer crossing it on the way elsewhere asks for nothing). */
+export const HOVER_INTENT_MS = 80;
+/** A card that closed less than this long ago keeps the next one warm. */
+export const HOVER_WARM_WINDOW_MS = 300;
+/** ...which then opens after this long instead of HOVER_OPEN_DELAY_MS. */
+export const HOVER_WARM_OPEN_MS = 80;
+/** The exit of a card that animates (`motion`). */
+export const HOVER_EXIT_MS = 120;
+
+/** What a card's render function is told while it is open. */
+export interface HoverCardState {
+  /** pinned open by a click, Enter or Space on the anchor */
+  pinned: boolean;
+  /** close (and unpin) the card */
+  close: () => void;
+}
+
+type Mode = "closed" | "hover" | "pinned";
+
+// When the last card that asked for the warm switch closed, and the one card
+// that is pinned (only one at a time).
+let warmClosedAt = Number.NEGATIVE_INFINITY;
+let pinnedHolder: { close: () => void } | null = null;
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /** The same mechanics around any card: `card` is called only while open
  * (so it may load what it shows lazily), `kind` names the floating box
- * (`data-<kind>`). Used by links and by the bot library's files. */
-export function HoverCard({ card, kind, children }: { card: () => ReactNode; kind: string; children: (anchor: AnchorProps) => ReactNode }) {
-  const [open, setOpen] = useState(false);
+ * (`data-<kind>`). Used by links, by the bot library's files and by record
+ * cards. Every prop after `children` is optional and off by default, so the
+ * first two users behave as before:
+ *
+ * - `onIntent`: runs once the pointer has rested on the anchor for 80 ms (a
+ *   prefetch);
+ * - `pinnable`: a click, Enter or Space on the anchor pins the card open. A
+ *   pinned card is a non-modal dialog (named by `label`), keeps its place
+ *   while the transcript scrolls, holds Tab inside, and closes on Escape
+ *   (focus goes back to the anchor), a click outside or its own close. One
+ *   card is pinned at a time. After Escape the card stays closed until the
+ *   pointer has left the anchor;
+ * - `warm`: a card that closed less than 300 ms ago makes the next one open
+ *   after 80 ms;
+ * - `motion`: the card fades in over 160 ms with a 4 px rise from the side
+ *   of the anchor, and out over 120 ms; a fade only when warm or under
+ *   reduced motion.
+ */
+export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false }: {
+  card: (state: HoverCardState) => ReactNode;
+  kind: string;
+  children: (anchor: AnchorProps) => ReactNode;
+  onIntent?: () => void;
+  pinnable?: boolean;
+  label?: string;
+  warm?: boolean;
+  motion?: boolean;
+}) {
+  const [mode, setMode] = useState<Mode>("closed");
+  const open = mode !== "closed";
+  const pinned = mode === "pinned";
   const id = useId();
   const anchorRef = useRef<HTMLElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const intent = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pressed = useRef(false);
   const pressStart = useRef<{ x: number; y: number } | null>(null);
+  const dismissed = useRef(false);
+  const openedWarm = useRef(false);
+  // focus handed back to the anchor after Escape must not reopen the card
+  const returning = useRef(false);
+  const wasOpen = useRef(false);
   const clear = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = undefined;
   };
+  const clearIntent = () => {
+    if (intent.current) clearTimeout(intent.current);
+    intent.current = undefined;
+  };
   const later = useCallback((value: boolean, ms: number) => {
     clear();
-    timer.current = setTimeout(() => setOpen(value), ms);
+    timer.current = setTimeout(() => setMode((current) => value ? (current === "closed" ? "hover" : current) : current === "pinned" ? current : "closed"), ms);
   }, []);
-  useEffect(() => clear, []);
+  const closeNow = useCallback(() => {
+    clear();
+    setMode("closed");
+  }, []);
+  useEffect(() => () => { clear(); clearIntent(); }, []);
+
+  const anim = useMenuMotion(motion && open, HOVER_EXIT_MS);
+  const rendered = motion ? anim.shown : open;
+
+  useEffect(() => {
+    if (wasOpen.current && !open && warm) warmClosedAt = Date.now();
+    wasOpen.current = open;
+  }, [open, warm]);
+
+  // one pinned card at a time
+  useEffect(() => {
+    if (!pinned) return;
+    const holder = { close: closeNow };
+    pinnedHolder?.close();
+    pinnedHolder = holder;
+    return () => { if (pinnedHolder === holder) pinnedHolder = null; };
+  }, [pinned, closeNow]);
+
+  // pinning by keyboard or click moves focus into the card's first action
+  useEffect(() => {
+    if (!pinned) return;
+    const frame = requestAnimationFrame(() => {
+      const box = cardRef.current;
+      if (!box) return;
+      const first = box.querySelector<HTMLElement>("[data-hover-card-first]") ?? box.querySelector<HTMLElement>(FOCUSABLE);
+      first?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pinned]);
 
   useLayoutEffect(() => {
     if (!open) return;
     const update = () => {
-      const anchor = anchorRef.current, card = cardRef.current;
-      if (!anchor || !card) return;
+      const anchor = anchorRef.current, box = cardRef.current;
+      if (!anchor || !box) return;
       const rects = anchor.getClientRects();
-      const box = rects.length ? rects[0]! : anchor.getBoundingClientRect();
-      const spot = placeCard(box, { width: card.offsetWidth, height: card.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
-      card.style.left = `${spot.left}px`;
-      card.style.top = `${spot.top}px`;
-      card.dataset.side = spot.side;
-      card.style.visibility = "visible";
+      const rect = rects.length ? rects[0]! : anchor.getBoundingClientRect();
+      const spot = placeCard(rect, { width: box.offsetWidth, height: box.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
+      box.style.left = `${spot.left}px`;
+      box.style.top = `${spot.top}px`;
+      box.dataset.side = spot.side;
+      box.style.visibility = "visible";
     };
     update();
-    const close = () => setOpen(false);
     const outside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!anchorRef.current?.contains(target) && !cardRef.current?.contains(target)) setOpen(false);
+      if (!anchorRef.current?.contains(target) && !cardRef.current?.contains(target)) closeNow();
     };
+    // a card that loads grows or shrinks: it keeps its place against the anchor
+    const observer = typeof ResizeObserver === "undefined" || !cardRef.current ? null : new ResizeObserver(update);
+    if (observer && cardRef.current) observer.observe(cardRef.current);
     window.addEventListener("resize", update);
-    // a scrolled transcript moves the link away from the card
-    window.addEventListener("scroll", close, true);
+    // a scrolled transcript moves the link away from the card: an unpinned
+    // card goes, a pinned one follows its anchor
+    const onScroll = pinned ? update : closeNow;
+    window.addEventListener("scroll", onScroll, true);
     document.addEventListener("pointerdown", outside, true);
     return () => {
+      observer?.disconnect();
       window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("pointerdown", outside, true);
     };
-  }, [open]);
+  }, [open, pinned, closeNow]);
+
+  // Escape anywhere closes a pinnable card and keeps it closed while the
+  // pointer still rests on the anchor
+  useEffect(() => {
+    if (!pinnable || !open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const holdsFocus = cardRef.current?.contains(document.activeElement) ?? false;
+      dismissed.current = true;
+      clear();
+      setMode("closed");
+      if (holdsFocus || pinned) {
+        returning.current = true;
+        anchorRef.current?.focus({ preventScroll: true });
+        returning.current = false;
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [pinnable, open, pinned]);
+
+  const togglePin = () => {
+    clear();
+    setMode((current) => current === "pinned" ? "closed" : "pinned");
+  };
 
   const anchor: AnchorProps = {
     ref: (node) => { anchorRef.current = node; },
-    "aria-describedby": open ? id : undefined,
+    "aria-describedby": open && !pinned ? id : undefined,
+    ...(pinnable ? { "aria-haspopup": "dialog" as const, "aria-expanded": pinned } : {}),
     onPointerEnter: (event) => {
       if (event.pointerType === "touch") return;
-      later(true, HOVER_OPEN_DELAY_MS);
+      if (dismissed.current) return;
+      clearIntent();
+      if (onIntent) intent.current = setTimeout(onIntent, HOVER_INTENT_MS);
+      const isWarm = warm && Date.now() - warmClosedAt < HOVER_WARM_WINDOW_MS;
+      openedWarm.current = isWarm;
+      later(true, isWarm ? HOVER_WARM_OPEN_MS : HOVER_OPEN_DELAY_MS);
     },
     onPointerLeave: (event) => {
       if (event.pointerType === "touch") return;
+      dismissed.current = false;
+      clearIntent();
       later(false, HOVER_CLOSE_GRACE_MS);
     },
     onFocus: (event) => {
       // keyboard focus only: a click focuses the link too
-      if (event.currentTarget.matches(":focus-visible")) {
+      if (!returning.current && event.currentTarget.matches(":focus-visible")) {
         clear();
-        setOpen(true);
+        openedWarm.current = false;
+        onIntent?.();
+        setMode((current) => current === "closed" ? "hover" : current);
       }
     },
-    onBlur: () => later(false, 0),
+    onBlur: () => {
+      if (pinned) return;
+      later(false, 0);
+    },
     onKeyDown: (event) => {
       if (event.key === "Escape" && open) {
         event.stopPropagation();
         clear();
-        setOpen(false);
+        dismissed.current = pinnable;
+        setMode("closed");
+        return;
+      }
+      // Space presses a link like a button; Enter already clicks it
+      if (pinnable && event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        togglePin();
       }
     },
     onPointerDown: (event) => {
@@ -175,7 +333,7 @@ export function HoverCard({ card, kind, children }: { card: () => ReactNode; kin
       clear();
       timer.current = setTimeout(() => {
         pressed.current = true;
-        setOpen(true);
+        setMode((current) => current === "closed" ? "hover" : current);
       }, LONG_PRESS_MS);
     },
     onPointerMove: (event) => {
@@ -197,6 +355,12 @@ export function HoverCard({ card, kind, children }: { card: () => ReactNode; kin
       if (pressed.current) {
         event.preventDefault();
         pressed.current = false;
+        return;
+      }
+      // a click pins; Cmd or Ctrl + click is the owner's own (open it)
+      if (pinnable && !event.defaultPrevented && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        togglePin();
       }
     },
     onContextMenu: (event) => {
@@ -204,21 +368,47 @@ export function HoverCard({ card, kind, children }: { card: () => ReactNode; kin
     },
   };
 
+  const onCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!pinned || event.key !== "Tab") return;
+    const box = cardRef.current;
+    if (!box) return;
+    const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((item) => item.tabIndex >= 0);
+    if (!items.length) {
+      event.preventDefault();
+      return;
+    }
+    const first = items[0]!, last = items[items.length - 1]!;
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !box.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !box.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  const motionClass = !motion ? "" : anim.closing ? "hover-card-out" : openedWarm.current ? "hover-card-warm" : "hover-card-in";
+
   return (
     <>
       {children(anchor)}
-      {open && createPortal(
+      {rendered && createPortal(
         <div
           ref={cardRef}
           id={id}
-          role="tooltip"
+          role={pinned ? "dialog" : "tooltip"}
+          aria-label={pinned ? label : undefined}
           {...{ [`data-${kind}`]: "" }}
-          className="fixed z-50"
+          data-pinned={pinned ? "" : undefined}
+          className={cn("fixed z-50", motionClass)}
           style={{ left: 0, top: 0, visibility: "hidden" }}
+          {...(motion ? anim.exitProps : {})}
+          onKeyDown={onCardKeyDown}
           onPointerEnter={(event) => { if (event.pointerType !== "touch") clear(); }}
           onPointerLeave={(event) => { if (event.pointerType !== "touch") later(false, HOVER_CLOSE_GRACE_MS); }}
         >
-          {card()}
+          {card({ pinned, close: closeNow })}
         </div>,
         document.body,
       )}
@@ -229,6 +419,8 @@ export function HoverCard({ card, kind, children }: { card: () => ReactNode; kin
 export type AnchorProps = {
   ref: (node: HTMLElement | null) => void;
   "aria-describedby"?: string;
+  "aria-haspopup"?: "dialog";
+  "aria-expanded"?: boolean;
   onPointerEnter: (event: React.PointerEvent<HTMLElement>) => void;
   onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;

@@ -326,6 +326,12 @@ const POPOVER_PAIRS = [
     ["--color-popover", "--color-popover-field", "--color-popover-hover"].map((s) => [ink, s, 4.5])),
   ["--color-popover-accent", "--color-popover", 4.5],
   ["--color-popover-accent", "--color-popover-hover", 4.5],
+  // a record card's state and priority chips: the tone on its own tint
+  // over the popover (RecordCard.tsx)
+  ...["--color-danger", "--color-success", "--color-warning"].flatMap((tone) => [
+    [tone, "--color-popover", 4.5],
+    [tone, `${tone}/15`, 4.5, "--color-popover"],
+  ]),
   // the field outline and the popover's own edge identify them: 3:1
   ["--color-popover-border", "--color-popover", 3],
   ["--color-popover-border", "--color-popover-field", 3],

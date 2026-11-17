@@ -56,6 +56,9 @@ import { TRANSCRIPT_WINDOW_SIZE } from "../lib/transcript-window";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
 import { githubRefFromProps, remarkGithubRefs } from "@/lib/github-refs";
 import { GITHUB_REF_ICONS, LinkHoverCard } from "@/components/LinkHoverCard";
+import { REF_PILL_CLASS } from "@/components/ref-pill";
+import { RecordLink } from "@/components/RecordLink";
+import { looksLikeRecordLink, parseRecordLink } from "../../shared/record-cards";
 import { useThreadLinkMenu } from "@/components/ThreadLinkMenu";
 import { looksLikeThreadRefUrl, parseThreadRefUrl, resolveThreadRefAddress, remarkThreadRefs } from "../lib/thread-refs";
 import { looksLikePermissionLink, parsePermissionLink } from "../lib/os-permissions";
@@ -181,6 +184,9 @@ export function chatUrlTransform(value: string, key?: string): string {
   if (looksLikeThreadRefUrl(value)) return value;
   // a bot's sagax://permission/<id> is a button that grants it (#2614)
   if (looksLikePermissionLink(value)) return value;
+  // a record of a connected product (sagax://record/...) is a chip with a
+  // card, never an external navigation (#4507)
+  if (looksLikeRecordLink(value)) return value;
   // an inline raster image needs no network and runs no script; only an
   // image source may use one (a link to data: stays stripped)
   if (key === "src" && isInlineRasterDataUrl(value)) return value;
@@ -1081,7 +1087,7 @@ function ExternalLink({ href, github, children }: { href: string; github: Return
               // a GitHub reference reads as a small pill. Left to right and
               // isolated, so "#2547" never turns into "2547#" in a right-to-left
               // line. The full address is the tooltip.
-              <a {...anchor} href={href} target="_blank" rel="noreferrer" dir="ltr" title={href} data-github-ref={github!.kind} className={GITHUB_REF_CLASS}>
+              <a {...anchor} href={href} target="_blank" rel="noreferrer" dir="ltr" title={href} data-github-ref={github!.kind} className={REF_PILL_CLASS}>
                 <Icon size={13} aria-hidden="true" className="shrink-0 self-center text-ink-tertiary" />
                 <span>{children}</span>
               </a>
@@ -1098,8 +1104,7 @@ function ExternalLink({ href, github, children }: { href: string; github: Return
 }
 
 const LINK_CLASS = "break-words text-accent-text underline decoration-accent/40 hover:decoration-accent [unicode-bidi:isolate]";
-const GITHUB_REF_CLASS =
-  "inline-flex items-baseline gap-1 whitespace-nowrap rounded-full bg-inset px-1.5 align-baseline font-mono text-[0.88em] text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [unicode-bidi:isolate]";
+
 
 // GitHub alerts: "> [!NOTE]" (and TIP, IMPORTANT, WARNING, CAUTION) as the
 // first line of a blockquote turns it into a callout. The marker is removed
@@ -1401,6 +1406,11 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         const permission = parsePermissionLink(href);
         if (permission) return <OsPermissionChatButton id={permission}>{children}</OsPermissionChatButton>;
         if (href && looksLikePermissionLink(href)) return <span className="break-words">{children}</span>;
+        // sagax://record/<product>/<kind>/<id>: the chip and its card; a
+        // malformed link, or a surface with no card (inert), is its text
+        const record = href ? parseRecordLink(href) : null;
+        if (record && !inert) return <RecordLink record={record} botId={botId} threadId={scopedMessage?.threadId}>{children}</RecordLink>;
+        if (href && looksLikeRecordLink(href)) return <span className="break-words">{children}</span>;
         const localPath = localFilePath(href);
         if (localPath) {
           // a link to a file the bot delivered saves that delivered copy, so

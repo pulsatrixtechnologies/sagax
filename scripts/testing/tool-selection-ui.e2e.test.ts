@@ -6,7 +6,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
-import { dismissOverlays, openSettingsPageJs } from "./ui-click.ts";
+import { dismissOverlays, openSettingsSubPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env })) || process.env.SAGAX_UI_E2E === "1";
@@ -47,7 +47,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     };
     const openTools = async (name: string) => {
       await click("Open app settings");
-      await expect.poll(() => evaluate(openSettingsPageJs("Developer"))).toBe(true);
+      await expect.poll(() => evaluate(openSettingsSubPageJs("Updates", "updates.advanced"))).toBe(true);
       await expect.poll(() => evaluate("Boolean(document.querySelector('[data-developer-bot-picker] button'))")).toBe(true);
       await evaluate("document.querySelector('[data-developer-bot-picker] button').click(); true");
       await expect.poll(() => evaluate(`[...document.querySelectorAll('[role=option]')].some(option => option.textContent.trim() === ${JSON.stringify(name)})`)).toBe(true);

@@ -51,6 +51,22 @@ export function openSettingsPageJs(page: string): string {
   })()`;
 }
 
+/** A sub-page of a Settings page (#4457: seven pages, what a former page held
+ * is one page further, a "▸" row). Poll it: it opens the rail page first,
+ * then clicks the page's row for the sub-page (SubPageEntry, whose card id is
+ * the sub-page id), and is true once the sub-page itself is drawn. A page
+ * whose row is not drawn (a gate says so) never turns true. */
+export function openSettingsSubPageJs(page: string, subPage: string): string {
+  return `(() => {
+    if (document.querySelector('[data-settings-subpage="' + ${jsLiteral(subPage)} + '"]')) return true;
+    const row = document.querySelector('[data-settings-subpage-row][data-settings-card="' + ${jsLiteral(subPage)} + '"] button');
+    if (row) { row.click(); return false; }
+    const entry = [...document.querySelectorAll('[role="dialog"] nav button')].find((button) => button.textContent.trim() === ${jsLiteral(page)});
+    entry?.click();
+    return false;
+  })()`;
+}
+
 /** The bot panel's bot menu (Edit bot, Rename, Archive...). The reference
  * look keeps no "..." in the panel's header (UX reference 2.3, 0.8.52): the
  * menu is a right click on the mascot or the name, so this sends that right

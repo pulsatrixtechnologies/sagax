@@ -755,7 +755,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         </SubPageModal>
       )}
       {page === "folder" && memoryOpen && (
-        <BotPageModal id="memory" title={t("memoryManager.title")} size="page" bare onClose={() => setMemoryOpen(false)}>
+        <BotPageModal id="memory" title={t("memoryManager.title")} size="large" bare onClose={() => setMemoryOpen(false)}>
           {/* drawn as a page of this modal: no window strip; its own close closes the modal */}
           <PageHostProvider value={{ onClose: () => setMemoryOpen(false) }}>
             <MemoryManagerPanel />

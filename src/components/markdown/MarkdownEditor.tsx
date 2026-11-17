@@ -200,6 +200,10 @@ export interface MarkdownEditorProps {
   minHeight?: number | string;
   /** maximum height before the writing area scrolls (default 60vh) */
   maxHeight?: number | string;
+  /** inside a bot page modal (BotPageModal, size large): the writing area
+   * grows to the room the modal gives it (--bot-modal-fill), never less than
+   * minHeight; outside it, minHeight alone */
+  fillModal?: boolean;
   autoFocus?: boolean;
   /** word and character count in the status line (default on) */
   showCount?: boolean;
@@ -235,6 +239,7 @@ export function MarkdownEditor({
   invalid,
   maxLength,
   minHeight = 160,
+  fillModal = false,
   maxHeight = "60vh",
   autoFocus,
   showCount = true,
@@ -334,7 +339,7 @@ export function MarkdownEditor({
     "--md-font-size": "13px",
     ...(full
       ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" }
-      : { "--md-min-h": typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
+      : { "--md-min-h": fillModal ? `max(${typeof minHeight === "number" ? `${minHeight}px` : minHeight}, var(--bot-modal-fill, 0px))` : typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
   } as CSSProperties;
 
   const markEditing = (next: boolean) => {

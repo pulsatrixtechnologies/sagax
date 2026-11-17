@@ -145,4 +145,12 @@ describe("compact and full screen (routine instructions, 2026-10-29)", () => {
     flushSync(() => host.querySelector<HTMLButtonElement>("[data-md-full]")!.click());
     expect(host.querySelector("[data-markdown-count]")?.textContent).toMatch(/2 words/);
   });
+
+  it("fillModal grows the writing area to the bot page modal's room, never under minHeight; without it minHeight alone", () => {
+    render({ value: "x", onChange: () => {}, minHeight: 220, fillModal: true });
+    const style = host.querySelector<HTMLElement>("[data-markdown-editor]")!.parentElement!.outerHTML;
+    expect(style).toContain("max(220px, var(--bot-modal-fill, 0px))");
+    render({ value: "x", onChange: () => {}, minHeight: 220 });
+    expect(host.innerHTML).not.toContain("--bot-modal-fill");
+  });
 });

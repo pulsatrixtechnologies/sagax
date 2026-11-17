@@ -131,6 +131,7 @@ export function SoulField({
         ariaLabelledBy={`bot-soul-label-${bot.id}`}
         dataField="soul"
         minHeight={simple ? 140 : 220}
+        fillModal={!simple}
         placeholder={simple ? simple.placeholder : t("botPanel.soul.placeholder")}
         invalid={over}
         disabled={resolving}

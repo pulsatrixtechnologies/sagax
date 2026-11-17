@@ -1004,6 +1004,27 @@ struct ChatView: View {
                 // starts on the newest message rather than the oldest.
                 // A desktop group starts at the top (GroupView.tsx).
                 .scrollAnchorCompat(desktopRoom == nil ? .bottom : .top)
+                // where each piece of a pending form is, for the reading place
+                // across a text size change (#4490)
+                .onPreferenceChange(FormPieceFrames.self) { FormCardStore.shared.frames = $0 }
+                .onAppear {
+                    follow.textSizeAnchor = { edge in
+                        guard let id = FormCardStore.shared.pieceAtTop(of: edge) else { return false }
+                        // a shrinking transcript clamps the offset to its end, which is
+                        // not the reader asking to follow: hold until they drag
+                        follow.hold()
+                        Task { @MainActor in
+                            // the stack lays out in steps: scroll again as it settles
+                            for delay in [60, 200, 500, 1000] {
+                                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
+                                guard follow.held else { return }
+                                proxy.scrollTo(id, anchor: .top)
+                            }
+                            follow.releaseHold()
+                        }
+                        return true
+                    }
+                }
                 // Tapping the transcript puts the keyboard away. The composer
                 // is a sibling of this scroll view rather than inside it, so
                 // nothing else here drops its focus — until this, the only way

@@ -44,6 +44,9 @@ final class BottomFollow: ObservableObject {
         pause()
     }
 
+    /// The programmatic scroll is done: the end counts as the reader's own again.
+    func releaseHold() { if held { held = false } }
+
     /// Something else scrolled the transcript away (a search hit, a reply
     /// quote, the pinned banner): stop following until the end is reached.
     func pause() { if following { following = false } }
@@ -78,6 +81,10 @@ final class BottomFollow: ObservableObject {
     /// while not following the end, and until when to restore it.
     private var sizeChange: (fraction: CGFloat, until: Date)?
     private var sizeObserver: NSObjectProtocol?
+    /// Set by the transcript: given the screen y of the top of what is visible,
+    /// keeps the reader on the row there across the size change and says
+    /// whether it did. When it did not, the share of the content is used.
+    var textSizeAnchor: ((CGFloat) -> Bool)?
 
     /// A live text size change reflows every row; a reader away from the end
     /// keeps their place by the same share of the new content (#4490). A reader
@@ -89,6 +96,9 @@ final class BottomFollow: ObservableObject {
         ) { [weak self, weak scroll] _ in
             MainActor.assumeIsolated {
                 guard let self, let scroll, !self.following, scroll.contentSize.height > 0 else { return }
+                // the transcript keeps the reader on the same row when it knows it
+                let edge = (scroll.superview?.convert(scroll.frame.origin, to: nil).y ?? 0) + scroll.adjustedContentInset.top
+                if self.textSizeAnchor?(edge) == true { self.sizeChange = nil; return }
                 let top = scroll.contentOffset.y + scroll.adjustedContentInset.top
                 self.sizeChange = (max(0, top) / scroll.contentSize.height, Date().addingTimeInterval(1.5))
             }
@@ -117,7 +127,9 @@ final class BottomFollow: ObservableObject {
     /// A short transcript is pinned too: SwiftUI bottom aligns it with a top
     /// inset, and its resting offset is `-inset.top` (#3992).
     private func pinToBottomIfFollowing(_ scroll: UIScrollView) {
-        guard following, !FormCardStore.shared.isEditing else { return }
+        // a typed form field is not scrolled away by a new message, but a text
+        // size change reflows the end and the transcript stays pinned to it
+        guard following, !FormCardStore.shared.isEditing || FormCardStore.shared.sizeJustChanged else { return }
         if let y = TranscriptScrollPin.followOffset(Self.geometry(scroll), userScrolling: Self.userScrolling(scroll)) {
             scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
         }

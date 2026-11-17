@@ -47,6 +47,16 @@ final class FormCardStore: ObservableObject {
     private var states: [String: FormCardState] = [:]
     /// Bumped when a card is answered, so the transcript redraws it settled.
     @Published private(set) var sentRevision = 0
+    /// Where each drawn piece of a pending form sits on screen (updated while
+    /// the transcript lays out; read when the text size changes, to keep the
+    /// reader on the same piece). Not published: nothing redraws for it.
+    var frames: [String: CGRect] = [:]
+
+    /// The scroll id of the piece the reader is looking at: the first piece
+    /// whose bottom is below the top edge of what is visible.
+    func pieceAtTop(of edge: CGFloat) -> String? {
+        frames.filter { $0.value.maxY > edge + 1 }.min { $0.value.minY < $1.value.minY }?.key
+    }
 
     /// A person is typing in a form: the transcript does not follow a new
     /// message to the end and pull the field out from under them.
@@ -64,6 +74,22 @@ final class FormCardStore: ObservableObject {
     }
 
     func answered() { sentRevision += 1 }
+
+    /// When the system text size last changed.
+    private var sizeChangedAt = Date.distantPast
+    private var sizeObserver: NSObjectProtocol?
+    var sizeJustChanged: Bool { Date().timeIntervalSince(sizeChangedAt) < 2 }
+
+    init() {
+        sizeObserver = NotificationCenter.default.addObserver(
+            forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.sizeChangedAt = Date() }
+        // the keyboard going away is the end of a focus SwiftUI no longer tracks
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, !self.sizeJustChanged else { return }
+            for state in self.states.values where state.focus != nil { state.focus = nil }
+        }
+    }
 
     #if DEBUG
     /// `-form-cards-fill`: a form half filled in (every row but the last
@@ -141,7 +167,12 @@ struct FormRowContent: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(question.question)
         .onChange(of: field) { new in
-            if let new { state.focus = new } else if state.focus.map({ $0 / 10 }) == index { state.focus = nil }
+            if let new { state.focus = new } else if let held = state.focus, held / 10 == index {
+                // a text size change makes SwiftUI let go of a field that still
+                // has the keyboard: the store keeps the focus (and so the Done
+                // button); the keyboard hiding is what ends it
+                if !FormCardStore.shared.sizeJustChanged { state.focus = nil }
+            }
         }
         .onAppear {
             // a rebuilt row takes the keyboard back where it was
@@ -241,7 +272,7 @@ struct FormRowContent: View {
         case .number:
             numberField(index, \.value, sub: 0, width: 128, label: question.question, keyboard: .decimalPad, decimal: true, grows: true)
         case .text, .longText:
-            FormFieldBox(colors: colors, focused: field == index * 10, onTap: { field = index * 10 }, onDone: { dismissKeyboard() }) {
+            FormFieldBox(colors: colors, focused: state.focus == index * 10, onTap: { field = index * 10 }, onDone: { dismissKeyboard() }) {
                 // the placeholder is in the layout, so a long one wraps and the box grows
                 ZStack(alignment: .topLeading) {
                     if state.draft(index).value.isEmpty {
@@ -282,7 +313,7 @@ struct FormRowContent: View {
         keyboard: UIKeyboardType, decimal: Bool = false, grows: Bool = false, inlineDone: Bool = true
     ) -> some View {
         let id = index * 10 + sub
-        let box = FormFieldBox(colors: colors, focused: inlineDone && field == id, onTap: { field = id }, onDone: { dismissKeyboard() }) {
+        let box = FormFieldBox(colors: colors, focused: inlineDone && state.focus == id, onTap: { field = id }, onDone: { dismissKeyboard() }) {
             TextField("", text: binding(index, path, decimal: decimal))
                 .font(colors.font(13.5).monospacedDigit())
                 .foregroundStyle(colors.ink)
@@ -589,7 +620,7 @@ struct FormSplitHead: View {
     let message: Message
 
     var body: some View {
-        FormSegment(first: true, last: false) {
+        FormSegment(first: true, last: false, key: message.id, scrollable: false) {
             FormHeadContent(chat: chat, message: message, state: FormCardStore.shared.state(chat: chat, message: message))
         }
     }
@@ -611,14 +642,14 @@ extension FormCardPieces {
         let state = FormCardStore.shared.state(chat: chat, message: message)
         if state.checklist {
             ForEach(Array(state.questions[0].options.indices), id: \.self) { position in
-                FormSegment(first: false, last: false) { FormChecklistItem(state: state, index: position) }
+                FormSegment(first: false, last: false, key: "\(message.id)#\(position)") { FormChecklistItem(state: state, index: position) }
             }
         } else {
             ForEach(Array(state.questions.indices), id: \.self) { position in
-                FormSegment(first: false, last: false) { FormRowContent(state: state, index: position) }
+                FormSegment(first: false, last: false, key: "\(message.id)#\(position)") { FormRowContent(state: state, index: position) }
             }
         }
-        FormSegment(first: false, last: true) { FormFooterContent(chat: chat, message: message, state: state) }
+        FormSegment(first: false, last: true, key: "\(message.id)#end") { FormFooterContent(chat: chat, message: message, state: state) }
     }
 }
 
@@ -640,6 +671,10 @@ struct FormSegment<Content: View>: View {
     @Environment(\.desktopChatText) private var desktop
     let first: Bool
     let last: Bool
+    /// The piece's name: its place on screen is reported under it, and the
+    /// transcript can scroll to it (the head is the message's own row).
+    var key = ""
+    var scrollable = true
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -651,6 +686,30 @@ struct FormSegment<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(FormSegmentShape(top: first, bottom: last).fill(colors.fill).padding(.bottom, last ? 0 : -1))
             .frame(maxWidth: colors.desktop == nil ? .infinity : 560, alignment: .leading)
+            .background {
+                if !key.isEmpty {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: FormPieceFrames.self, value: [key: geometry.frame(in: .global)])
+                    }
+                }
+            }
+            .modifier(FormPieceId(key: key, apply: scrollable && !key.isEmpty))
+    }
+}
+
+/// Where each drawn piece of a pending form sits, by piece name.
+struct FormPieceFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+private struct FormPieceId: ViewModifier {
+    let key: String
+    let apply: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if apply { content.id(key) } else { content }
     }
 }
 

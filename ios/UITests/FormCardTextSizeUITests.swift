@@ -165,12 +165,13 @@ final class FormCardTextSizeUITests: XCTestCase {
         field.tap()
         field.typeText("keep this note")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        for (n, name) in [largest, "large", largest, "large"].enumerated() {
+        for (n, name) in [largest, "large", largest, "large", largest, "large"].enumerated() {
             try size(name)
             snap(app, "typed-note-step-\(n)-\(name)")
             let text = screenText(app)
             XCTAssertTrue(text.contains("keep") && text.contains("note"), "step \(n): the typed note was lost (screen reads: \(text.prefix(200)))")
             XCTAssertTrue(app.keyboards.firstMatch.exists, "step \(n): the keyboard (the focus) was lost")
+            XCTAssertTrue(text.contains("Done") || app.buttons["form-keyboard-done"].exists, "step \(n): the field's Done button is gone (screen reads: \(text.prefix(200)))")
         }
     }
 
@@ -198,24 +199,33 @@ final class FormCardTextSizeUITests: XCTestCase {
         try XCTSkipIf(signalDir.isEmpty, "run ios/parity/form-cards-text-size.sh")
         let app = launch("f-twelve", fill: false)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Row 12: Which channels?")).firstMatch.waitForExistence(timeout: 30))
-        for _ in 0..<4 { app.swipeDown(velocity: .fast) }
-        let anchor = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row '")).firstMatch
-        XCTAssertTrue(anchor.waitForExistence(timeout: 5))
-        let label = anchor.label
+        // read to the middle of the card: short drags until row 6 is on screen
+        // (fast swipes overshoot to the top of a 1400 pt card)
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+        var drags = 0
+        while !isShown(app, "Row 6:") && drags < 30 { from.press(forDuration: 0.05, thenDragTo: to); drags += 1; Thread.sleep(forTimeInterval: 1) }
+        XCTAssertTrue(isShown(app, "Row 6:"), "could not read to row 6")
+        snap(app, "reading-place-before")
+        // the first row on screen is the reader's place; it stays on screen, give or take one row
+        func rows(_ text: String) -> [Int] { (1...12).filter { text.contains("Row \($0):") || text.contains("Row \($0) ") } }
+        let before = rows(screenText(app))
+        XCTAssertFalse(before.isEmpty)
         try size(largest)
         snap(app, "reading-place-after-largest")
         XCTAssertTrue(nonFlat(app), "the chat is blank after the size change")
-        // the row the reader was looking at is still the neighbourhood on screen
-        // the rows the reader was looking at are still the neighbourhood on screen
-        let rowNumber = Int(label.dropFirst(4).prefix { $0.isNumber }) ?? 0
-        let text = screenText(app)
-        let near = (max(1, rowNumber - 3)...min(12, rowNumber + 3)).filter { text.contains("Row \($0)") }
-        XCTAssertFalse(near.isEmpty, "after the size change the screen reads \(text.prefix(240)), far from \"\(label)\"")
+        let after = rows(screenText(app))
+        let top = before.min() ?? 0
+        XCTAssertTrue(after.contains { abs($0 - top) <= 1 }, "the reader was at row \(top) (screen showed rows \(before)); after the size change the screen shows rows \(after)")
+        // and back: the place is kept the other way too
+        try size("large")
+        let back = rows(screenText(app))
+        XCTAssertTrue(back.contains { abs($0 - top) <= 2 }, "back at the large size the screen shows rows \(back), the reader was at row \(top)")
     }
 
     /// A bot message arriving while a note is typed neither takes the focus nor scrolls the field away.
     func testIncomingMessageLeavesTheTypedFieldAlone() throws {
-        let app = launch("f-kinds", fill: false, extra: ["-form-cards-incoming", "6"])
+        let app = launch("f-kinds", fill: false, extra: ["-form-cards-incoming", "3"])
         let field = app.textFields["Anything the reviewers should know?"]
         XCTAssertTrue(field.waitForExistence(timeout: 30))
         XCTAssertTrue(revealField(field, in: app))

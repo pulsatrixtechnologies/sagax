@@ -700,7 +700,9 @@ final class Session: ObservableObject {
                let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }),
                let rows = state.messages[state.bots[index].threadId],
                let end = rows.firstIndex(where: { $0.id == arguments[at + 1] }) {
-                state.messages[state.bots[index].threadId] = Array(rows[...end])
+                // `-form-cards-alone`: just that card under the first message
+                state.messages[state.bots[index].threadId] = arguments.contains("-form-cards-alone")
+                    ? [rows[0], rows[end]] : Array(rows[...end])
                 state.bots[index].activeLeafId = rows[end].id
                 state.activeLeafIds[state.bots[index].threadId] = rows[end].id
             }

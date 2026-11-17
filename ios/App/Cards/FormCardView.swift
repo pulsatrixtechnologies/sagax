@@ -18,12 +18,19 @@ struct FormCardView: View {
     /// The harness settles the card after a round trip; holding the sent
     /// answer closes the window where the controls are still live.
     @State private var sent: String?
+    /// Which field has the keyboard: row * 10 + 0 (the field) or + 1 (a duration's minutes).
     @FocusState private var focus: Int?
+    /// #4490: Dynamic Type. Every size in the form and its sheet scales with it.
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+    /// A date or time row whose picker is open and not yet answered.
+    @State private var picking: Set<Int> = []
+    @State private var pickerDate: [Int: Date] = [:]
 
     private var card: OptionCard? { message.card }
     private var questions: [AskQuestion] { card?.questions ?? [] }
     private var checklist: Bool { questions.count == 1 && questions[0].isChecklist }
-    private var colors: QuestionSheetColors { QuestionSheetColors(desktop: desktop) }
+    private var colors: QuestionSheetColors { QuestionSheetColors(desktop: desktop, scale: scale) }
+    private var ink2: Color { colors.inkSecondary }
     private var settled: Bool { (card?.answered != nil) || sent != nil || card.flatMap(WaitingCardSkip.fold) != nil }
 
     private func draft(_ index: Int) -> FormDraft {
@@ -119,7 +126,7 @@ struct FormCardView: View {
                         if question.isOptional {
                             Text("Optional")
                                 .font(colors.font(11.5))
-                                .foregroundStyle(colors.inkSecondary.opacity(0.8))
+                                .foregroundStyle(colors.inkSecondary)
                         }
                     }
                     control(index, question)
@@ -138,35 +145,25 @@ struct FormCardView: View {
             )
             .padding(.top, 4)
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focus = nil }
-            }
-        }
     }
 
     private var checklistBody: some View {
         let only = questions[0]
         let picked = Set(draft(0).picked)
         return VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(only.options.enumerated()), id: \.offset) { position, option in
-                        let key = only.key(option)
-                        QuestionSheetRow(
-                            colors: colors, index: position, label: option.label, detail: option.detail,
-                            multi: true, on: picked.contains(key), quiet: true, disabled: answering
-                        ) {
-                            update(0) { value in
-                                if value.picked.contains(key) { value.picked.removeAll { $0 == key } } else { value.picked.append(key) }
-                            }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(only.options.enumerated()), id: \.offset) { position, option in
+                    let key = only.key(option)
+                    QuestionSheetRow(
+                        colors: colors, index: position, label: option.label, detail: option.detail,
+                        multi: true, on: picked.contains(key), quiet: true, minHeight: 44, disabled: answering
+                    ) {
+                        update(0) { value in
+                            if value.picked.contains(key) { value.picked.removeAll { $0 == key } } else { value.picked.append(key) }
                         }
                     }
                 }
             }
-            .frame(maxHeight: 360)
-            .fixedSize(horizontal: false, vertical: true)
             QuestionSheetButtons(
                 colors: colors, actions: only.actions ?? [], enabled: !answering,
                 onPress: { sendChecklist($0) }
@@ -184,30 +181,42 @@ struct FormCardView: View {
         case .multi:
             pills(index, question, multi: true)
         case .duration:
-            HStack(spacing: 8) {
-                numberField(index, \.hours, width: 64, label: String(localized: "Hours for \(question.question)"), keyboard: .numberPad)
-                Text("question.form.hours").font(colors.font(13)).foregroundStyle(colors.inkSecondary)
-                numberField(index, \.minutes, width: 64, label: String(localized: "Minutes for \(question.question)"), keyboard: .numberPad)
-                Text("question.form.minutes").font(colors.font(13)).foregroundStyle(colors.inkSecondary)
+            FormPillsLayout(spacing: 8, lineSpacing: 0) {
+                numberField(index, \.hours, sub: 0, width: 64, label: String(localized: "Hours for \(question.question)"), keyboard: .numberPad, inlineDone: false)
+                Text("question.form.hours").font(colors.font(13)).foregroundStyle(ink2).frame(minHeight: 44)
+                numberField(index, \.minutes, sub: 1, width: 64, label: String(localized: "Minutes for \(question.question)"), keyboard: .numberPad, inlineDone: false)
+                Text("question.form.minutes").font(colors.font(13)).foregroundStyle(ink2).frame(minHeight: 44)
+                if focus == index * 10 || focus == index * 10 + 1 {
+                    Button { dismissKeyboard() } label: {
+                        Text("Done").font(colors.font(13, .medium)).foregroundStyle(colors.ink).padding(.horizontal, 8).frame(minHeight: 44).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("form-keyboard-done")
+                }
             }
         case .time:
-            pickerRow(index, component: .hourAndMinute, format: "HH:mm", prompt: String(localized: "Choose a time"))
+            pickerRow(index, question, component: .hourAndMinute, format: "HH:mm", prompt: String(localized: "Choose a time"))
         case .date:
-            pickerRow(index, component: .date, format: "yyyy-MM-dd", prompt: String(localized: "Choose a date"))
+            pickerRow(index, question, component: .date, format: "yyyy-MM-dd", prompt: String(localized: "Choose a date"))
         case .number:
-            numberField(index, \.value, width: 128, label: question.question, keyboard: .decimalPad, decimal: true)
+            numberField(index, \.value, sub: 0, width: 128, label: question.question, keyboard: .decimalPad, decimal: true, grows: true)
         case .text, .longText:
-            FormFieldBox(colors: colors) {
+            FormFieldBox(colors: colors, focused: focus == index * 10, onTap: { focus = index * 10 }, onDone: { dismissKeyboard() }) {
                 TextField("Type your answer", text: binding(index, \.value), axis: .vertical)
                     .font(colors.font(13.5))
                     .foregroundStyle(colors.ink)
                     .lineLimit(1...(question.kind == .longText ? 8 : 4))
                     .textFieldStyle(.plain)
-                    .focused($focus, equals: index)
+                    .focused($focus, equals: index * 10)
                     .disabled(answering)
                     .accessibilityLabel(question.question)
             }
         }
+    }
+
+    private func dismissKeyboard() {
+        focus = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private func binding(_ index: Int, _ path: WritableKeyPath<FormDraft, String>, decimal: Bool = false) -> Binding<String> {
@@ -223,63 +232,98 @@ struct FormCardView: View {
     }
 
     private func numberField(
-        _ index: Int, _ path: WritableKeyPath<FormDraft, String>, width: CGFloat, label: String,
-        keyboard: UIKeyboardType, decimal: Bool = false
+        _ index: Int, _ path: WritableKeyPath<FormDraft, String>, sub: Int, width: CGFloat, label: String,
+        keyboard: UIKeyboardType, decimal: Bool = false, grows: Bool = false, inlineDone: Bool = true
     ) -> some View {
-        FormFieldBox(colors: colors) {
+        let id = index * 10 + sub
+        let box = FormFieldBox(colors: colors, focused: inlineDone && focus == id, onTap: { focus = id }, onDone: { dismissKeyboard() }) {
             TextField("", text: binding(index, path, decimal: decimal))
                 .font(colors.font(13.5).monospacedDigit())
                 .foregroundStyle(colors.ink)
                 .keyboardType(keyboard)
                 .textFieldStyle(.plain)
-                .focused($focus, equals: index)
+                .focused($focus, equals: id)
                 .disabled(answering)
                 .accessibilityLabel(label)
         }
-        .frame(width: width)
+        // the layout (duration) needs a width; a lone number field takes up to one
+        return Group {
+            if grows { box.frame(maxWidth: width * scale, alignment: .leading) } else { box.frame(width: width * scale) }
+        }
     }
 
-    /// A native date or time picker. Empty until the person asks for one, so
-    /// an unanswered row never reads as answered by a default.
-    private func pickerRow(_ index: Int, component: DatePickerComponents, format: String, prompt: String) -> some View {
+    /// A native date or time picker, open without a value: the row counts as
+    /// answered only once the person picks (or presses Set).
+    private func pickerRow(_ index: Int, _ question: AskQuestion, component: DatePickerComponents, format: String, prompt: String) -> some View {
         let formatter = Self.formatter(format)
         let value = draft(index).value
-        return HStack(spacing: 10) {
-            if let date = formatter.date(from: value) {
+        let answered = formatter.date(from: value)
+        let open = answered != nil || picking.contains(index)
+        func commit(_ date: Date) {
+            update(index) { $0.value = formatter.string(from: date) }
+            picking.remove(index)
+        }
+        // the native picker is measured by the stack, never by the wrapping layout
+        // (at the largest text size that gave it an unbounded height)
+        @ViewBuilder var row: some View {
+            if open {
                 DatePicker(
                     "", selection: Binding(
-                        get: { date },
-                        set: { next in update(index) { $0.value = formatter.string(from: next) } }
+                        get: { answered ?? pickerDate[index] ?? Date() },
+                        set: { next in pickerDate[index] = next; commit(next) }
                     ),
                     displayedComponents: component
                 )
                 .labelsHidden()
+                .frame(minHeight: 44)
                 .disabled(answering)
+                .accessibilityLabel(Text(verbatim: question.question))
+                if answered == nil {
+                    // today, or the time shown now, without having to move the picker
+                    Button(String(localized: "Set")) { Haptics.selection(); commit(pickerDate[index] ?? Date()) }
+                        .font(colors.font(13.5, .medium))
+                        .foregroundStyle(colors.ink)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel(Text(verbatim: "\(question.question), \(String(localized: "Set"))"))
+                }
                 Button {
                     Haptics.selection()
                     update(index) { $0.value = "" }
+                    picking.remove(index)
+                    pickerDate[index] = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(colors.inkSecondary.opacity(0.7))
+                        .font(colors.font(15))
+                        .foregroundStyle(ink2)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Clear"))
+                .accessibilityLabel(Text(verbatim: "\(question.question), \(String(localized: "Clear"))"))
             } else {
                 Button {
                     Haptics.selection()
-                    update(index) { $0.value = formatter.string(from: Date()) }
+                    pickerDate[index] = Date()
+                    picking.insert(index)
                 } label: {
                     Text(prompt)
                         .font(colors.font(13.5))
-                        .foregroundStyle(colors.inkSecondary)
+                        .foregroundStyle(ink2)
                         .padding(.horizontal, 14)
-                        .frame(height: 32)
+                        .padding(.vertical, 7)
                         .background(colors.ink.opacity(0.04), in: Capsule())
+                        .padding(.vertical, 4)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(answering)
+                .accessibilityLabel(Text(verbatim: "\(question.question), \(prompt.lowercasedFirst)"))
             }
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { row }
+            VStack(alignment: .leading, spacing: 0) { row }
         }
     }
 
@@ -292,9 +336,10 @@ struct FormCardView: View {
     }
 
     /// A choice row's answers as pills: one tap picks (several for multi).
+    /// Drawn 34 pt tall, a 44 pt target; a long answer wraps inside the card.
     private func pills(_ index: Int, _ question: AskQuestion, multi: Bool) -> some View {
         let picked = draft(index).picked
-        return FormPillsLayout(spacing: 6) {
+        return FormPillsLayout(spacing: 6, lineSpacing: 0) {
             ForEach(Array(question.options.enumerated()), id: \.offset) { _, option in
                 let key = question.key(option)
                 let on = picked.contains(key)
@@ -311,18 +356,22 @@ struct FormCardView: View {
                     HStack(spacing: 5) {
                         if on {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 11 * scale, weight: .bold))
                                 .foregroundStyle(.green)
                         }
                         Text(optionLabel(question, option))
                             .font(colors.font(13.5))
-                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.horizontal, 14)
-                    .frame(height: 34)
-                    .foregroundStyle(on ? colors.ink : colors.inkSecondary)
+                    .padding(.vertical, 7)
+                    .frame(minHeight: 34)
+                    .foregroundStyle(on ? colors.ink : ink2)
                     .background(colors.ink.opacity(on ? 0.08 : 0.04), in: Capsule())
-                    .contentShape(Capsule())
+                    .padding(.vertical, 5)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(answering)
@@ -408,20 +457,28 @@ struct FormCardView: View {
                     ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                         let given = byQuestion[question.question]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         let value = given == AskQuestionAnswer.leftEmpty ? "" : given
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(question.question)
-                                .font(colors.font(13))
-                                .foregroundStyle(colors.inkSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(value.isEmpty ? String(localized: "Not answered") : shown(question, value))
-                                .font(colors.font(13, .medium))
-                                .foregroundStyle(value.isEmpty ? colors.inkSecondary.opacity(0.7) : colors.ink)
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 180, alignment: .trailing)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
+                        let label = Text(question.question)
+                            .font(colors.font(13))
+                            .foregroundStyle(ink2)
+                        let answerText = Text(value.isEmpty ? String(localized: "Not answered") : shown(question, value))
+                            .font(colors.font(13, .medium))
+                            .foregroundStyle(value.isEmpty ? ink2 : colors.ink)
+                        // at a large text size the answer goes under its question
+                        Group {
+                            if scale > 1.4 {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    label.frame(maxWidth: .infinity, alignment: .leading)
+                                    answerText.frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            } else {
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    label.frame(maxWidth: .infinity, alignment: .leading)
+                                    answerText.multilineTextAlignment(.trailing).frame(maxWidth: 180, alignment: .trailing)
+                                }
+                            }
                         }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                         .padding(.vertical, 6)
                         .overlay(alignment: .top) {
                             if index > 0 { Rectangle().fill(colors.ink.opacity(0.06)).frame(height: 1) }
@@ -458,28 +515,57 @@ struct FormCardView: View {
     }
 }
 
-/// The plain field chrome of the sheet (`QuestionSheetField`'s fill and hairline).
+/// The plain field chrome of the sheet (`QuestionSheetField`'s fill and
+/// hairline), a 44 pt target that takes the keyboard wherever it is pressed,
+/// with its own Done while it holds the keyboard.
 private struct FormFieldBox<Content: View>: View {
     let colors: QuestionSheetColors
+    let focused: Bool
+    let onTap: () -> Void
+    let onDone: () -> Void
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        content()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.ink.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(colors.ink.opacity(0.12), lineWidth: 1))
+        HStack(spacing: 8) {
+            content()
+            if focused {
+                Button(action: onDone) {
+                    Text("Done")
+                        .font(colors.font(13, .medium))
+                        .foregroundStyle(colors.ink)
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("form-keyboard-done")
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, focused ? 4 : 12)
+        .frame(minHeight: 44)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.ink.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(colors.ink.opacity(0.12), lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
     }
 }
 
-/// Pills that wrap onto the next line, each line starting at the left.
+private extension String {
+    /// "Choose a time" read after the question: "Start, choose a time".
+    var lowercasedFirst: String { prefix(1).lowercased() + dropFirst() }
+}
+
+/// Pills that wrap onto the next line, each line starting at the left. An
+/// item wider than the card is measured at the card's width, so it wraps.
 private struct FormPillsLayout: Layout {
     var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let placed = place(width: proposal.width ?? .infinity, subviews: subviews)
-        return CGSize(width: proposal.width ?? placed.width, height: placed.height)
+        return CGSize(width: min(proposal.width ?? placed.width, placed.width), height: placed.height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -496,9 +582,10 @@ private struct FormPillsLayout: Layout {
         for subview in subviews {
             var size = subview.sizeThatFits(.unspecified)
             if size.width > width { size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)) }
-            if x > 0, x + size.width > width {
+            size.width = min(size.width, width)
+            if x > 0, x + size.width > width + 0.5 {
                 x = 0
-                y += rowHeight + spacing
+                y += rowHeight + lineSpacing
                 rowHeight = 0
             }
             origins.append(CGPoint(x: x, y: y))

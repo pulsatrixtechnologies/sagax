@@ -17,16 +17,20 @@ struct QuestionSheetColors {
     let ink: Color
     let inkSecondary: Color
     let desktop: DesktopTheme?
+    /// #4490: Dynamic Type factor (a form passes its `ScaledMetric`); 1 keeps
+    /// every other card exactly as it was.
+    let scale: CGFloat
 
-    init(desktop: DesktopTheme?) {
+    init(desktop: DesktopTheme?, scale: CGFloat = 1) {
         self.desktop = desktop
+        self.scale = scale
         fill = desktop?.card ?? BubbleColor.theirs
         ink = desktop?.ink ?? BubbleColor.theirsText
         inkSecondary = desktop?.inkSecondary ?? BubbleColor.theirsText.opacity(0.62)
     }
 
     func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        desktop?.font(size, weight) ?? .system(size: size + 1, weight: weight)
+        desktop?.font(size * scale, weight) ?? .system(size: (size + 1) * scale, weight: weight)
     }
 }
 
@@ -63,12 +67,13 @@ struct QuestionSheet<Content: View>: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(colors.inkSecondary)
-                            .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, -5)
-                    .padding(.trailing, -6)
+                    .padding(.top, -13)
+                    .padding(.trailing, -14)
+                    .padding(.bottom, -13)
                     .accessibilityLabel(dismissLabel.map { Text(verbatim: $0) } ?? Text("Dismiss"))
                     .accessibilityIdentifier(dismissId ?? "question-dismiss")
                 }
@@ -95,6 +100,8 @@ struct QuestionSheetRow: View {
     var settled = false
     /// #4490: a checklist row ticks without the highlighted fill.
     var quiet = false
+    /// #4490: a checklist row is a 44 pt target.
+    var minHeight: CGFloat = 0
     var disabled = false
     let action: () -> Void
 
@@ -145,6 +152,7 @@ struct QuestionSheetRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
+            .frame(minHeight: minHeight)
             .background {
                 if on && !quiet {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(colors.ink.opacity(settled ? 0.06 : 0.07))
@@ -288,35 +296,50 @@ struct QuestionSheetSend: View {
 }
 
 /// #4490: the buttons of a form or a checklist. The first action is the main
-/// one and is drawn last, filled, where the eye ends; the others are quiet text.
+/// one and is drawn last, filled, where the eye ends; the others are quiet
+/// text. Each is a 44 pt target; at a large text size they stack and wrap.
 struct QuestionSheetButtons: View {
     let colors: QuestionSheetColors
     let actions: [String]
     let enabled: Bool
     let onPress: (String) -> Void
 
+    private var ordered: [String] { Array(actions.dropFirst()) + actions.prefix(1) }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Spacer(minLength: 0)
-            ForEach(Array((Array(actions.dropFirst()) + actions.prefix(1)).enumerated()), id: \.offset) { position, action in
-                let main = position == actions.count - 1
-                Button {
-                    Haptics.selection()
-                    if enabled { onPress(action) }
-                } label: {
-                    Text(action)
-                        .font(colors.font(13.5, .medium))
-                        .lineLimit(1)
-                        .foregroundStyle(main ? colors.fill : colors.ink)
-                        .padding(.horizontal, 16)
-                        .frame(height: 36)
-                        .background { if main { Capsule().fill(colors.ink) } }
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .opacity(enabled ? 1 : 0.35)
-                .accessibilityIdentifier("form-action-\(position)")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                ForEach(Array(ordered.enumerated()), id: \.offset) { position, action in button(action, position) }
             }
+            VStack(alignment: .trailing, spacing: 6) {
+                ForEach(Array(ordered.reversed().enumerated()), id: \.offset) { position, action in
+                    button(action, ordered.count - 1 - position)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
+    }
+
+    private func button(_ action: String, _ position: Int) -> some View {
+        let main = position == actions.count - 1
+        return Button {
+            Haptics.selection()
+            if enabled { onPress(action) }
+        } label: {
+            Text(action)
+                .font(colors.font(13.5, .medium))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(main ? colors.fill : colors.ink)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(minHeight: 44)
+                .background { if main { Capsule().fill(colors.ink).padding(.vertical, 4) } }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityIdentifier("form-action-\(position)")
     }
 }

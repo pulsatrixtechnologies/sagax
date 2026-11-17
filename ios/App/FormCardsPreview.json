@@ -180,7 +180,7 @@
      "role": "bot",
      "id": "f-kinds",
      "at": 1787028602000,
-     "parentId": "f-time"
+     "parentId": "f-user"
     },
     {
      "kind": "options",
@@ -240,7 +240,7 @@
      "role": "bot",
      "id": "f-list",
      "at": 1787028603000,
-     "parentId": "f-kinds"
+     "parentId": "f-user"
     },
     {
      "kind": "options",
@@ -334,7 +334,7 @@
      "role": "bot",
      "id": "f-time-done",
      "at": 1787028604000,
-     "parentId": "f-list"
+     "parentId": "f-user"
     },
     {
      "kind": "options",
@@ -396,7 +396,59 @@
      "role": "bot",
      "id": "f-list-done",
      "at": 1787028605000,
-     "parentId": "f-time-done"
+     "parentId": "f-user"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Report details",
+      "subtitle": "A few answers before the weekly report goes out.",
+      "options": [],
+      "requestId": "form-kinds-short",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Which day should the report cover?",
+         "kind": "date",
+         "options": []
+        },
+        {
+         "question": "When should it go out?",
+         "kind": "time",
+         "options": []
+        },
+        {
+         "question": "How many reviewers?",
+         "kind": "number",
+         "options": []
+        },
+        {
+         "question": "Which channels?",
+         "kind": "multi",
+         "options": [
+          {
+           "label": "Email"
+          },
+          {
+           "label": "Chat"
+          },
+          {
+           "label": "Newsletter"
+          },
+          {
+           "label": "Blog"
+          }
+         ],
+         "multiSelect": true
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-kinds-short",
+     "at": 1787028602000,
+     "parentId": "f-user"
     }
    ],
    "pinned": true

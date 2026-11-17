@@ -1178,6 +1178,22 @@ describe("PiDriver turns (fake CLI)", () => {
     expect(recorder.events.find((e) => e.type === "runtime.error" && e.turnId === turnId)).toMatchObject({ message: "503 Service Unavailable" });
   });
 
+  // #4410: the vendor refuses the person's Claude account under pi: the turn
+  // is rejected as not started with nothing shown, so the harness lands it
+  // in the Claude engine; another failure keeps pi's own words
+  it("rejects a turn whose Claude account the vendor refused, with nothing shown, and keeps other failures", async () => {
+    const signIn = { via: "subscription", identity: "subscription:pr_test:claude", environment: { ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-fake-refused-value-0000000000000001" } };
+    await create("turn-error", { FAKE_PI_ERROR: "OAuth authentication is currently not supported." });
+    await expect(instance.adapter.sendTurn({ threadId: "t-refused", text: "hi", model: "anthropic/claude-test", startupRecovery: true, access: signIn as never }))
+      .rejects.toMatchObject({ name: "PiClaudeAccountRefusedError" });
+    expect(recorder.events.filter((e) => e.threadId === "t-refused" && (e.type === "runtime.error" || e.type === "turn.completed"))).toEqual([]);
+    await instance?.dispose();
+    await create("turn-error", { FAKE_PI_ERROR: "429 rate_limit_error" });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "t-limited", text: "hi", model: "anthropic/claude-test", startupRecovery: true, access: signIn as never });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(recorder.events.find((e) => e.type === "runtime.error" && e.turnId === turnId)).toMatchObject({ message: "429 rate_limit_error" });
+  });
+
   it("advertises images and every harness effort level", async () => {
     await create();
     expect(instance.adapter.capabilities.images).toBe(true);

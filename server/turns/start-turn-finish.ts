@@ -3,6 +3,8 @@
 // Orchestrator owns try/catch/finally; these handlers take TurnState + host.
 // Never imports server/index.ts.
 import { recoveryCapabilityError } from "../automatic-recovery.ts";
+import { PiClaudeAccountRefusedError } from "../drivers/pi-claude-refusal.ts";
+import { claudeLanding } from "./claude-landing.ts";
 import { INACTIVE_CAPABILITY_FAILED, inactiveCapabilityOutcome, isInactiveTurnCapabilityError } from "./inactive-turn-capability.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
@@ -215,7 +217,12 @@ let e: any = cause;
       }
       const current = store.projectBotForTask(state.bot.id, state.threadId);
       // The bot's own recovery setting (server/bots/bot-runtime-settings.ts).
-      const backups = botRecoveryBackups(current, cfg);
+      // #4410: the vendor refused the person's Claude account under pi: the
+      // turn lands once on the Claude engine, the sign-in it came from, and
+      // nothing is said (the person's decision of 2026-11-15)
+      const landing = e instanceof PiClaudeAccountRefusedError && !state.opts?.automaticRecoveryAttempted
+        ? claudeLanding(registry.instances(), { instanceId: state.instanceId, model: state.model }) : null;
+      const backups = landing ? [landing] : botRecoveryBackups(current, cfg);
       const nextIndex = backups.findIndex((candidate: any, index: any) => index >= (state.opts?.automaticRecoveryIndex ?? 0) &&
         registry.get(candidate.instanceId)?.enabled && !orgEngineTurnRefusal(state.bot, registry.get(candidate.instanceId)!, state.opts?.speaker ?? { origin: "person" }) &&
         (!(e instanceof TurnAuthenticationRefusedError) || candidate.instanceId !== state.instanceId) &&
@@ -245,7 +252,7 @@ let e: any = cause;
             store.switchTaskModel(state.bot.id, state.threadId, checked.selection, false, {
               ...hostedModels?.resetTask(current.modelSelection, checked.selection), rewound: true
             });
-            store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: {
+            if (!landing) store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: {
               name: `recovery: Automatic recovery: ${state.instance.displayName || state.instance.driverKind} ${e instanceof TurnAuthenticationRefusedError ? "is signed out" : "could not start"}. Trying ${target.displayName || target.driverKind} · ${checked.selection.model} once in this thread.`, ok: true
             } });
             await state.startTurn(state.bot.id, state.text, { ...state.opts, threadId: state.threadId, userMessage: state.userMessage, editedMessageId: undefined,

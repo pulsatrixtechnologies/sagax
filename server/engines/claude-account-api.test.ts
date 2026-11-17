@@ -81,7 +81,8 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "..", "testing", "f
 `, { mode: 0o755 });
   writeFileSync(join(dataDir, "config.json"), JSON.stringify({
     instances: {
-      ghost: { driver: "not-a-real-driver", displayName: "Preserved shadow" },
+      // alone in its driver (#4426): the only account of a provider is never removed
+      ghost: { driver: "not-a-real-ghost-driver", displayName: "Preserved shadow" },
       // The `claude` product fleet auto-adds these IDs unless configured.
       // Pin shadows so this test never probes an installed provider CLI.
       ...Object.fromEntries(["cursor", "openaiCompat", "qwen", "hermes", "pi"].map(id => [id, { driver: "not-a-real-driver" }])),
@@ -179,7 +180,11 @@ describe("Claude account HTTP API", () => {
     expect(saved().instances).toHaveProperty("claude");
     expect(readFileSync(marker, "utf8")).toBe("Keep the user's CLI account files");
     expect((await api("GET", "/api/instances")).body.instances.some((row: any) => row.instanceId === first.id)).toBe(false);
-    // #4426: the first account can go while another Claude account remains
+    // #4426: the first account can go while another Claude account remains,
+    // once the bots that still use it have moved to another one
+    for (const using of (await api("GET", "/api/bots")).body.bots.filter((row: any) => row.modelSelection?.instanceId === "claude")) {
+      expect((await api("PATCH", `/api/bots/${using.id}/model`, { instanceId: second.id, model: MODEL })).status).toBe(200);
+    }
     expect((await api("DELETE", "/api/instances/claude")).status).toBe(200);
     expect(saved().instances).not.toHaveProperty("claude");
     expect((await api("DELETE", "/api/instances/ghost")).status).toBe(400);

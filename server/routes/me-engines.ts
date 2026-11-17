@@ -145,7 +145,7 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     const others = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any): string => candidate.instanceId);
     // a key engine is removed with its key, never as an account
     if (deps.keyOnlyInstance?.(instanceId) || !(addedAccount(instanceId, driver) || removableAccount(instanceId, others))) return json(res, 400, { error: ONLY_ACCOUNT_ERROR });
-    const users = [...new Set(account.flatMap((candidate: any) => deps.accountUsers?.(principalId, candidate.instanceId) ?? []))];
+    const users: string[] = [...new Set<string>(account.flatMap((candidate: any): string[] => deps.accountUsers?.(principalId, candidate.instanceId) ?? []))];
     if (users.length) return json(res, 409, accountInUseRefusal(users, false));
     // #4435: the person's own account goes for good (its entry, its sign-in
     // folder); the organization's stays for everyone else, off this list only

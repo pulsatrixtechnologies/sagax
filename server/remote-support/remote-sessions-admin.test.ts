@@ -35,25 +35,44 @@ function make(rows: AdminSessionInput[], closeById = vi.fn(async () => true)) {
 }
 
 describe("remote sessions admin visibility", () => {
-  it("an admin sees every session, a non-admin only their own", () => {
-    const rows = [input({ id: "aaaaaaaaaaaa", ownerId: "tech@example.com" }), input({ id: "bbbbbbbbbbbb", ownerId: "other@example.com", serial: "SN-B" })];
-    const { admin } = make(rows);
-    expect(admin.list({ principalId: "x", orgAdmin: true }).map((r) => r.id).sort()).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
-    expect(admin.list({ principalId: "tech@example.com", orgAdmin: false }).map((r) => r.id)).toEqual(["aaaaaaaaaaaa"]);
-    expect(admin.canSee({ principalId: "tech@example.com", orgAdmin: false }, "bbbbbbbbbbbb")).toBe(false);
+  // Person isolation: A opens a session; B (member) and C (admin) neither list
+  // it nor read its log nor end it; A sees it, and so does A's bot acting for A
+  // (the bot's session carries A as its opener).
+  const A = "person-a@example.com";
+  const B = "person-b@example.com";
+  const C = "person-c@example.com";
+  const rows = () => [
+    input({ id: "aaaaaaaaaaaa", ownerId: A, openedBy: A, botId: "bot-a" }),
+    input({ id: "bbbbbbbbbbbb", ownerId: B, openedBy: B, botId: "bot-b", serial: "SN-B" }),
+  ];
+
+  it("each person lists only the sessions they or their bots opened, an admin included", () => {
+    const { admin } = make(rows());
+    expect(admin.list({ principalId: A, orgAdmin: false }).map((r) => r.id)).toEqual(["aaaaaaaaaaaa"]);
+    expect(admin.list({ principalId: B, orgAdmin: false }).map((r) => r.id)).toEqual(["bbbbbbbbbbbb"]);
+    expect(admin.list({ principalId: C, orgAdmin: true })).toEqual([]);
+    expect(admin.list({ principalId: C, orgAdmin: true }, { botId: "bot-a" })).toEqual([]);
+    // Case and spaces never widen or narrow the match.
+    expect(admin.list({ principalId: " Person-A@Example.com ", orgAdmin: false }).map((r) => r.id)).toEqual(["aaaaaaaaaaaa"]);
   });
 
-  it("logs and end respect visibility", async () => {
-    const rows = [input({ id: "bbbbbbbbbbbb", ownerId: "other@example.com" })];
-    const { admin, closeById } = make(rows);
-    const viewer = { principalId: "tech@example.com", orgAdmin: false };
-    expect(admin.logs(viewer, "bbbbbbbbbbbb")).toBeNull();
-    expect(await admin.end(viewer, "bbbbbbbbbbbb")).toBe("forbidden");
+  it("another person's session, its log and End read as not found, for a member and an admin", async () => {
+    const { admin, closeById } = make(rows());
+    for (const viewer of [{ principalId: B, orgAdmin: false }, { principalId: C, orgAdmin: true }]) {
+      expect(admin.canSee(viewer, "aaaaaaaaaaaa")).toBe(false);
+      expect(admin.logs(viewer, "aaaaaaaaaaaa")).toBeNull();
+      expect(await admin.end(viewer, "aaaaaaaaaaaa")).toBe(false);
+    }
     expect(closeById).not.toHaveBeenCalled();
-    const okAdmin = { principalId: "x", orgAdmin: true };
-    expect(admin.logs(okAdmin, "bbbbbbbbbbbb")).toHaveLength(1);
-    expect(await admin.end(okAdmin, "bbbbbbbbbbbb")).toBe(true);
-    expect(closeById).toHaveBeenCalledWith("bbbbbbbbbbbb");
+    const owner = { principalId: A, orgAdmin: false };
+    expect(admin.logs(owner, "aaaaaaaaaaaa")).toHaveLength(1);
+    expect(await admin.end(owner, "aaaaaaaaaaaa")).toBe(true);
+    expect(closeById).toHaveBeenCalledWith("aaaaaaaaaaaa");
+  });
+
+  it("a viewer with no principal sees nothing", () => {
+    const { admin } = make([input({ ownerId: "" })]);
+    expect(admin.list({ principalId: "", orgAdmin: true })).toEqual([]);
   });
 });
 
@@ -119,7 +138,7 @@ describe("unattended grant and revoke", () => {
     const admin = createRemoteSessionsAdmin({ rows: () => rows, botLabel: () => "Atlas", consent, log: () => [], closeById: vi.fn(async () => true), onRevoke, now: () => NOW });
     const mine = { principalId: "tech@example.org", orgAdmin: false };
     expect(admin.list(mine)[0]?.unattendedMine).toBe(true);
-    expect(admin.list({ principalId: "boss@example.org", orgAdmin: true })[0]?.unattendedMine).toBeUndefined();
+    expect(admin.list({ principalId: "boss@example.org", orgAdmin: true })).toEqual([]);
     const out = await admin.revokeUnattended(mine, "sn-b");
     expect(out.ok).toBe(true);
     expect(onRevoke).toHaveBeenCalledWith(expect.objectContaining({ hostKey: "sn-b" }), "tech@example.org", "");

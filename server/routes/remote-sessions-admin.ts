@@ -1,9 +1,9 @@
 // The admin "Remote Sessions" page routes. Admin-scoped (/api/admin/...), so
 // the tool policy marks them defaultEnabled false: an agent tool never reaches
 // them without an explicit grant. A signed-in person reaches them from the
-// account menu; the aggregator then enforces who may see each session (a
-// workspace admin sees the organization's sessions, anyone else only their
-// own), who may record unattended consent (any signed-in person for a host of
+// account menu; the aggregator then enforces who may see each session (each
+// person, a workspace admin included, only the sessions they or their own bots
+// opened; another person's session and its log answer not found), who may record unattended consent (any signed-in person for a host of
 // their own, recorded under their principal) and who may revoke it (the
 // person who recorded it, or an admin). The enrolled hosts (/hosts) are
 // Perspicax's: any person here lists them, opens one, and revokes the ones
@@ -234,13 +234,13 @@ export function createRemoteSessionsAdminRoutes(deps: {
       if (action === "logs") {
         if (method !== "GET") return json(res, 405, { error: "method not allowed" });
         const entries = deps.admin.logs(viewer, id);
-        if (entries === null) return json(res, 403, { error: "You cannot see that remote session." });
+        // Another person's session reads as not found (person isolation).
+        if (entries === null) return json(res, 404, { error: "That remote session was not found." });
         return json(res, 200, { entries });
       }
       if (action === "end") {
         if (method !== "POST") return json(res, 405, { error: "method not allowed" });
         const out = await deps.admin.end(viewer, id);
-        if (out === "forbidden") return json(res, 403, { error: "You cannot end that remote session." });
         if (!out) return json(res, 404, { error: "That remote session is not open." });
         return json(res, 200, { ok: true });
       }

@@ -1,12 +1,14 @@
 // The admin side of the Remote Sessions page: it aggregates every Tailcat
 // session this server knows into the rows the page shows, enforces who may see
-// them (a workspace admin sees the organization's sessions; anyone else sees
-// only the sessions they own), and serves the redacted per-session log. It also
+// them (each person, a workspace admin included, sees only the sessions they
+// opened themselves or that their own bots opened for them: person isolation;
+// an organization-wide view belongs to the organization console, never to this
+// page), and serves the redacted per-session log. It also
 // records and revokes the install-time unattended consent: any signed-in
 // person for a host of their own, recorded under their principal; an admin
 // for any host. One Sagax server is
 // one organization, so "org isolation" here is: no row leaves this server, and
-// a non-admin never sees another person's session.
+// nobody, an admin included, sees another person's session or its log.
 import {
   adminHostKey,
   filterAdminRows,
@@ -48,8 +50,14 @@ export function createRemoteSessionsAdmin(deps: {
 }) {
   const now = deps.now ?? (() => Date.now());
 
+  const samePrincipal = (a: string | undefined | null, b: string | undefined | null) =>
+    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+  // The opener only: the person whose credentials opened the session (their
+  // own turn, or one of their bots acting for them). Never widened for an
+  // admin: the page is the person's own, not an organization view.
   const visible = (viewer: AdminViewer, input: AdminSessionInput) =>
-    viewer.orgAdmin || input.ownerId === viewer.principalId;
+    samePrincipal(input.ownerId, viewer.principalId);
 
   const rowFor = (input: AdminSessionInput, viewer?: AdminViewer): RemoteSessionAdminRow => {
     const consent = deps.consent.get(adminHostKey(input));
@@ -60,9 +68,6 @@ export function createRemoteSessionsAdmin(deps: {
   };
 
   const find = (id: string) => deps.rows().find((row) => row.id === id) ?? null;
-
-  const samePrincipal = (a: string | undefined | null, b: string | undefined | null) =>
-    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
   /** Whether a non-admin may act on this host's unattended consent: no
    * session of another person runs on it, and no live consent of another
@@ -80,7 +85,7 @@ export function createRemoteSessionsAdmin(deps: {
       const mine = deps.rows().filter((input) => visible(viewer, input));
       return sortAdminRows(filterAdminRows(mine.map((input) => rowFor(input, viewer)), filters));
     },
-    /** Whether the viewer may see / act on this session. */
+    /** Whether the viewer may see / act on this session: only its opener. */
     canSee(viewer: AdminViewer, id: string): boolean {
       const input = find(id);
       return Boolean(input && visible(viewer, input));
@@ -89,9 +94,10 @@ export function createRemoteSessionsAdmin(deps: {
     logs(viewer: AdminViewer, id: string): RemoteSessionLogEntry[] | null {
       return this.canSee(viewer, id) ? deps.log(id) : null;
     },
-    /** End a session the viewer may see. Returns false when it is gone. */
-    async end(viewer: AdminViewer, id: string): Promise<boolean | "forbidden"> {
-      if (!this.canSee(viewer, id)) return "forbidden";
+    /** End a session the viewer may see. Returns false when it is gone or is
+     * another person's (not found, never a hint that it exists). */
+    async end(viewer: AdminViewer, id: string): Promise<boolean> {
+      if (!this.canSee(viewer, id)) return false;
       return deps.closeById(id);
     },
     /** Record install-time unattended consent, attributed to the caller's

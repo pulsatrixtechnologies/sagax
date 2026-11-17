@@ -7,7 +7,7 @@ library of declarative actions and a helper script (`scripts/px_flow.py`,
 
 ## Where `flow` and `flow_action` live
 
-Sagax does not implement `flow` or `flow_action`. Perspicax serves them
+Sagax does not implement `flow` or `flow_action`, and the agents catalog does not copy them: a copy would hide the account connection's own tools (#2189) and a routine call of that name comes back "Tool not found" (#4432). Perspicax serves them
 (connector crate, `crates/connector/src/mcp/flow_tools.rs`, runner in
 `crates/connector-core/src/flow/`): `flow` lists the active signed pack's
 actions (`catalog`) and describes one (`describe`); `flow_action` runs one

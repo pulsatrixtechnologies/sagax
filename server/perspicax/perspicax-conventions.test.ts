@@ -139,7 +139,7 @@ describe("perspicaxToolIdsPrompt", () => {
   it("names Claude Code's exact mcp__ ids and rules out titles", () => {
     const text = perspicaxToolIdsPrompt("perspicax", CLAUDE_KIND);
     expect(text).toContain("`mcp__perspicax__api_search`");
-    expect(text).toContain("never a display title such as \"Api search\"");
+    expect(text).toContain("never a display title such as \"Api search\" or \"Flow\"");
   });
   it("names Grok's use_tool ids and keeps search_tool native", () => {
     const text = perspicaxToolIdsPrompt("perspicax", "grokAgent");
@@ -164,6 +164,8 @@ describe("tool ids name the server that really lists each tool (#3019)", () => {
     for (const tool of GATEWAY_FINDER_TOOLS) expect(PERSPICAX_TOOL_NAMES.has(tool)).toBe(true);
     const withheld = withholdForConnector("perspicax", [...PERSPICAX_TOOL_NAMES]);
     for (const tool of GATEWAY_FINDER_TOOLS) expect(withheld).toContain(tool);
+    expect(withheld).not.toContain("flow");
+    expect(withheld).not.toContain("flow_action");
     expect(withheld).not.toContain("identity_switch");
     expect(perspicaxGatewayServer("perspicax", true)).toBe("agents");
     expect(perspicaxGatewayServer("perspicax", false)).toBeUndefined();
@@ -178,6 +180,10 @@ describe("tool ids name the server that really lists each tool (#3019)", () => {
     expect(text).not.toContain("mcp__perspicax__api_search");
     expect(text).not.toContain("mcp__perspicax__api_result_query");
     expect(text).toContain("`perspicax` does not list them");
+    expect(text).toContain("`mcp__perspicax__flow`");
+    expect(text).toContain("`mcp__perspicax__flow_action`");
+    expect(text).toContain("`mcp__perspicax__flow_run`");
+    expect(text).not.toContain("mcp__agents__flow");
     expect(text).toContain("never a server prefix your tool list does not show");
     expect(text).not.toMatch(/[–—]/);
   });
@@ -185,6 +191,10 @@ describe("tool ids name the server that really lists each tool (#3019)", () => {
     const text = perspicaxToolIdsPrompt("perspicax", "grokAgent", "agents");
     expect(text).toContain("`agents__api_search`");
     expect(text).toContain("`perspicax__cw_psa_query`");
+    expect(text).toContain("`perspicax__flow`");
+    expect(text).toContain("`perspicax__flow_action`");
+    expect(text).toContain("`perspicax__flow_run`");
+    expect(text).not.toContain("`agents__flow`");
     expect(text).not.toContain("`perspicax__api_search`");
     expect(text).toContain("only when that server lists it");
   });

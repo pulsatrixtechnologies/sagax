@@ -51,6 +51,14 @@ export function ServiceIcon({ card, className = "size-11", glyph, faviconSize = 
   return glyph ? <GlyphTile glyph={glyph} className={className} /> : <LetterTile name={card.label} className={className} />;
 }
 
+/** An image the console serves by its https address: crisp at any size, and
+ * the one neutral tile when it cannot load. */
+export function RemoteImage({ src, name, className }: { src: string; name: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <LetterTile name={name} className={className} />;
+  return <img src={src} alt="" loading="lazy" data-remote-image="" onError={() => setFailed(true)} className={cn("shrink-0 object-contain", className)} />;
+}
+
 /** An item with no mark at all: ONE neutral tile, the app's quiet surface with
  * a grey letter, identical for every item (never a coloured letter). */
 export function LetterTile({ name, className = "size-10" }: { name: string; className?: string }) {

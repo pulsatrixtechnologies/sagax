@@ -391,7 +391,7 @@ describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon fo
     expect(view.querySelector("img")?.getAttribute("src")).toContain("desk.example.com");
     // an image address the console serves is used as is: crisp at any size
     const served = await marks([px({ id: "b", name: "Quoting", icon: { url: "https://cdn.example.test/quoting.svg" } })]);
-    expect(served.querySelector("[data-product-icon]")?.getAttribute("src")).toBe("https://cdn.example.test/quoting.svg");
+    expect(served.querySelector("[data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/quoting.svg");
     expect(served.querySelector("[data-letter-tile]")).toBeNull();
   });
 
@@ -400,7 +400,7 @@ describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon fo
     expect(withIcon.querySelector("[data-vendor] > div img")?.getAttribute("src")).toContain("desk.example.com");
     // the vendor's own icon, when the console serves one, wins
     const served = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }, { ...px({ id: "b", name: "Monitoring" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }]);
-    expect(served.querySelector("[data-vendor] > div [data-product-icon]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
+    expect(served.querySelector("[data-vendor] > div [data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
     const without = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
     expect(without.querySelector("[data-vendor] > div [data-letter-tile]")?.textContent).toBe("H");
   });

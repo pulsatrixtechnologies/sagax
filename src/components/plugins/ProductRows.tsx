@@ -16,7 +16,7 @@ import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-
 import { botProductEnabled } from "../../../shared/bot-products";
 import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
 import type { RowState } from "./StateIcon";
-import { LetterTile, PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { LetterTile, PluginIcon, PluginStatusLabel, RemoteImage } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
 /** The "..." actions of a product, the same in its row and on its page:
@@ -60,7 +60,7 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
  * address, crisp at any size), else its site's mark, else ONE neutral tile.
  * Never a coloured letter. */
 export function ProductMark({ name, icon, className }: { name: string; icon?: { domain?: string; url?: string }; className: string }) {
-  if (icon?.url) return <img src={icon.url} alt="" data-product-icon="" className={cn("shrink-0 rounded-[10px] object-contain", className)} />;
+  if (icon?.url) return <RemoteImage src={icon.url} name={name} className={cn("rounded-[10px]", className)} />;
   if (icon?.domain) return <PluginIcon item={{ key: `perspicax-product:${name}`, kind: "app", name, domain: icon.domain }} className={cn("shrink-0 rounded-[10px]", className)} />;
   return <LetterTile name={name} className={className} />;
 }
@@ -71,7 +71,7 @@ export function ProductMark({ name, icon, className }: { name: string; icon?: { 
 export function VendorArt({ vendor }: { vendor: ProductVendor<PersonProduct> }) {
   const first = vendor.products.find((product) => product.logo || product.icon);
   const url = vendor.logo ?? vendor.icon?.url ?? first?.logo ?? first?.icon?.url;
-  if (url) return <img src={url} alt="" data-vendor-art="" className="size-20 object-contain" />;
+  if (url) return <RemoteImage src={url} name={vendor.name} className="size-20" />;
   const domain = vendor.icon?.domain ?? first?.icon?.domain;
   if (domain) return <PluginIcon item={{ key: `perspicax-vendor:${vendor.key}`, kind: "app", name: vendor.name, domain }} faviconSize={256} className="size-20 rounded-2xl" />;
   return <LetterTile name={vendor.name} className="size-20 rounded-2xl text-[28px]" />;
@@ -113,7 +113,7 @@ export function productRowState(product: Pick<PersonProduct, "state" | "stateCod
 /** The control at a product's (or a vendor's) right: where it is on, its
  * switch for every bot (or the one bot), the "..." menu, the Choose the bots
  * checklist. */
-function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions, state?: RowState) {
+export function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions, state?: RowState) {
   if (ctx.forBot) {
     const on = ids.every((id) => botProductEnabled(ctx.forBot, id));
     return <ItemTrailer state={state} name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
@@ -147,7 +147,7 @@ function worstState(products: readonly PersonProduct[]): PersonProduct {
 
 /** One product's row: the mark, the name, one grey line (its endpoints on
  * one line), the state, then its own trailer. The name opens its page. */
-function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean }) {
+export function ProductRow({ product, ctx, nested = false, partOf }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean; /** the bundle it belongs to: a small chip after the name, opening it */ partOf?: { name: string; onOpen: () => void } }) {
   const what = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
   // how it got there, then what it does (a vendor's products sit under its own line)
   const sub = nested ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
@@ -155,10 +155,20 @@ function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; 
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
         aria-label={t("connectApps.openAria", { name: product.name })}>
-        <ProductMark name={product.name} icon={product.icon} className={nested ? "size-8" : "size-10"} />
+        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={nested ? "size-8" : "size-10"} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="min-w-0 flex-1" data-person-product-line>
-          <span className={PLUGINS.rowName}>{product.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0")}>{product.name}</span>
+            {partOf && (
+              <span role="link" tabIndex={0} data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
+                onClick={(event) => { event.stopPropagation(); partOf.onOpen(); }}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); partOf.onOpen(); } }}
+                className="shrink-0 cursor-pointer rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                {t("connectApps.vendor.in", { name: partOf.name })}
+              </span>
+            )}
+          </span>
           {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
         </span>
       </button>
@@ -203,9 +213,52 @@ function VendorRow({ vendor, ctx }: { vendor: ProductVendor<PersonProduct>; ctx:
   );
 }
 
-/** The rows of the console's section: one per vendor (a product with no
- * vendor stands alone). */
-export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext): Array<{ key: string; node: ReactNode }> {
+/** One vendor as ONE plugin-like bundle (#4453): its logo, "N connectors · M on",
+ * its state rolled up (the worst wins, one icon), one switch for all of it and
+ * the menu. It opens the vendor's page; it never unfolds. */
+export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext; onOpen: () => void }) {
+  const ids = vendor.products.map((product) => product.id);
+  const worst = worstState(vendor.products);
+  const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
+  return (
+    <div className="group flex items-center gap-3 py-3" data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+        aria-label={t("connectApps.openAria", { name: vendor.name })}>
+        <ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
+        <span className="min-w-0 flex-1">
+          <span className={PLUGINS.rowName}>{vendor.name}</span>
+          <span className={PLUGINS.rowSub}>{vendorLine(vendor.products.length, on)}</span>
+        </span>
+      </button>
+      {productTrailer(ctx, vendor.name, ids, { detail: onOpen }, productRowState(worst, onOpen))}
+    </div>
+  );
+}
+
+/** "N connectors · M on" */
+export function vendorLine(connectors: number, on: number): string {
+  return t("connectApps.vendor.line", {
+    connectors: connectors === 1 ? t("connectApps.count.connectorOne") : t("connectApps.count.connectorMany", { count: connectors }),
+    on: on === 1 ? t("connectApps.vendor.onOne") : t("connectApps.vendor.onMany", { count: on }),
+  });
+}
+
+/** The rows of the console's section for one kind. Under Connectors every
+ * product is its own row (marked "in <vendor>" when it is part of a bundle,
+ * the chip opening it); under Plugins a vendor is one bundle row. */
+export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void }): Array<{ key: string; node: ReactNode }> {
+  if (bundles?.mode === "connectors") {
+    return products.map((product) => ({
+      key: `product:${product.id}`,
+      node: <ProductRow product={product} ctx={ctx} partOf={product.group ? { name: product.group.name, onOpen: () => bundles.onOpenVendor(`vendor:${product.group!.id}`) } : undefined} />,
+    }));
+  }
+  if (bundles?.mode === "plugins") {
+    return groupByVendor(products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
+      key: vendor.key,
+      node: <VendorBundleRow vendor={vendor} ctx={ctx} onOpen={() => bundles.onOpenVendor(vendor.key)} />,
+    }));
+  }
   return groupByVendor(products).map((vendor) => ({
     key: vendor.key,
     node: vendor.products.length === 1 && !vendor.products[0]!.group

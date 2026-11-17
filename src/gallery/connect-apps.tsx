@@ -313,8 +313,8 @@ if (params.has("products")) {
     const harbor = mark("#1d4ed8", '<path d="M32 12v26M20 24h24M14 38c3 10 11 14 18 14s15-4 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="14" r="4" fill="#fff"/>');
     const beacon = mark("#be185d", '<path d="M32 12l16 28H16z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="48" r="4" fill="#fff"/>');
     const tile = (fill: string, body: string) => mark(fill, body);
-    const vendorHarbor = { id: "harbor", name: "Harbor Suite", icon: { url: harbor }, logo: harbor };
-    const vendorBeacon = { id: "beacon", name: "Beacon Security", icon: { url: beacon }, logo: beacon };
+    const vendorHarbor = { id: "harbor", name: "Harbor Suite", description: { en: "Service desk, monitoring, quoting and dashboards in one place.", fr: "Service desk, supervision, soumissions et tableaux de bord au même endroit." }, icon: { url: harbor }, logo: harbor };
+    const vendorBeacon = { id: "beacon", name: "Beacon Security", description: { en: "Endpoint protection and backup.", fr: "Protection des postes et sauvegarde." }, icon: { url: beacon }, logo: beacon };
     const filed: Record<string, { group: typeof vendorHarbor; endpoints?: string[]; icon?: { url: string }; description?: string }> = {
       "prod-psa": { group: vendorHarbor, icon: { url: tile("#0f766e", '<path d="M18 20h28v24H18zM18 28h28" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, description: "Tickets, time and agreements for the service desk", endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
       "prod-more-0": { group: vendorHarbor, icon: { url: tile("#7c3aed", '<rect x="16" y="18" width="32" height="20" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M26 46h12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>') }, endpoints: ["Devices", "Alerts", "Scripts"] },

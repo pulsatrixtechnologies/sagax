@@ -92,23 +92,32 @@ export interface ProductVendor<P> {
   /** the mark and the larger logo the console serves for the vendor, when it does */
   icon?: { domain?: string; url?: string };
   logo?: string;
+  /** the vendor's line, per language */
+  description?: { en?: string; fr?: string };
 }
 
 /** Groups products by the vendor the console names (`group`), in the order
  * the first product of each vendor appears. A product with no vendor stands
  * alone, so nothing is guessed from a name. */
-export function groupByVendor<P extends { id: string; name: string; group?: { id: string; name: string; icon?: { domain?: string; url?: string }; logo?: string } }>(products: readonly P[]): Array<ProductVendor<P>> {
+export function groupByVendor<P extends { id: string; name: string; group?: { id: string; name: string; description?: { en?: string; fr?: string }; icon?: { domain?: string; url?: string }; logo?: string } }>(products: readonly P[]): Array<ProductVendor<P>> {
   const vendors: Array<ProductVendor<P>> = [];
   const byKey = new Map<string, ProductVendor<P>>();
   for (const product of products) {
     const key = product.group ? `vendor:${product.group.id}` : `product:${product.id}`;
     let vendor = byKey.get(key);
     if (!vendor) {
-      vendor = { key, name: product.group?.name ?? product.name, products: [], ...(product.group?.icon ? { icon: product.group.icon } : {}), ...(product.group?.logo ? { logo: product.group.logo } : {}) };
+      vendor = { key, name: product.group?.name ?? product.name, products: [], ...(product.group?.icon ? { icon: product.group.icon } : {}), ...(product.group?.logo ? { logo: product.group.logo } : {}), ...(product.group?.description ? { description: product.group.description } : {}) };
       byKey.set(key, vendor);
       vendors.push(vendor);
     }
     vendor.products.push(product);
   }
   return vendors;
+}
+
+/** A line the console sends per language, in the person's (English fallback). */
+export function inLanguage(line: { en?: string; fr?: string } | undefined, locale: string): string | undefined {
+  if (!line) return undefined;
+  const code = locale.toLowerCase().startsWith("fr") ? "fr" : "en";
+  return line[code] ?? line.en ?? line.fr;
 }

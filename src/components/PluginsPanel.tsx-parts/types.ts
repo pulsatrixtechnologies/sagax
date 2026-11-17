@@ -53,7 +53,9 @@ export type Page =
   /** Connect Apps > "Add a custom connector" (Grok Bot's form) */
   | { page: "connector" }
   /** #4185: one of the person's Perspicax products */
-  | { page: "product"; id: string };
+  | { page: "product"; id: string }
+  /** a vendor the organization console offers: its products as one bundle (Perspicax #2071) */
+  | { page: "vendor"; key: string };
 
 export interface HarnessAnswer {
   manageUrl?: string;

@@ -7,13 +7,15 @@
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import type { PluginItem, PluginStatus } from "@/lib/plugins-model";
 import { Switch } from "../SettingsPrimitives";
+import { PillTabs } from "../PillTabs";
+import { StateIcon, type RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
@@ -102,15 +104,23 @@ export interface PluginDetailProps {
   /** the rest, below Tools behind a disclosure (Grok Bot shows Accounts then
    * Tools first): the per-bot scope, what it adds, the notes */
   more?: ReactNode;
+  /** the skills it brings, for the Skills tab (only tabs that have content are drawn) */
+  skills?: Array<{ name: string; description: string; onOpen: () => void }>;
+  /** the connectors it brings, for the Connectors tab */
+  connectors?: Array<{ key: string; name: string; item: Pick<PluginItem, "kind" | "name" | "logo" | "domain"> & { key?: string }; state: RowState | null; onOpen: () => void }>;
 }
 
+type DetailTab = "overview" | "skills" | "connectors";
+
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
   const [linkCopied, setLinkCopied] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const tabs: DetailTab[] = ["overview", ...(skills && skills.length > 0 ? ["skills" as const] : []), ...(connectors && connectors.length > 0 ? ["connectors" as const] : [])];
+  const [tab, setTab] = useState<DetailTab>("overview");
   const toolList = tools?.list ?? null;
   const enabledCount = toolList?.filter((tool) => tool.enabled).length ?? 0;
   // #4154 (owner: "if it has no account or no tools, dont show the section"):
@@ -161,6 +171,48 @@ export function PluginDetailView(props: PluginDetailProps) {
           {linkCopied && <p role="status" data-plugin-link-copied className="basis-full text-right text-[12px] text-success">{t("connectApps.detail.linkCopied")}</p>}
         </div>
 
+
+        {tabs.length > 1 && (
+          <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={name} idPrefix="plugin-detail"
+            label={(id) => t(id === "overview" ? "connectApps.detail.tab.overview" : id === "skills" ? "connectApps.detail.tab.skills" : "connectApps.detail.tab.connectors")}
+            after={(id) => id === "skills" ? <span className="tabular-nums text-ink-tertiary">{skills?.length}</span> : id === "connectors" ? <span className="tabular-nums text-ink-tertiary">{connectors?.length}</span> : null}
+            tabAttributes={(id) => ({ "data-plugin-detail-tab": id })} />
+        )}
+
+        {tab === "skills" && skills ? (
+          <div data-plugin-detail-panel="skills" role="tabpanel" className="space-y-3">
+            <p className={PLUGINS.rowSub}>{t("connectApps.detail.skillsLine")}</p>
+            <ul className="grid gap-2">
+              {skills.map((skill) => (
+                <li key={skill.name}>
+                  <button type="button" onClick={skill.onOpen} className="flex w-full min-w-0 items-center gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] p-3 text-left hover:bg-ink/[0.04]">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary"><BookOpen size={18} aria-hidden="true" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium leading-[18px] text-ink">/{skill.name}</span>
+                      {skill.description && <span className="block truncate text-[12px] leading-4 text-ink-secondary">{skill.description}</span>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : tab === "connectors" && connectors ? (
+          <div data-plugin-detail-panel="connectors" role="tabpanel" className="space-y-1">
+            <p className={cn(PLUGINS.rowSub, "mb-2")}>{t("connectApps.detail.connectorsLine")}</p>
+            <ul className="flex flex-col divide-y divide-hairline-weak">
+              {connectors.map((connector) => (
+                <li key={connector.key} className="flex items-center gap-3 py-3">
+                  <button type="button" onClick={connector.onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
+                    <PluginIcon item={connector.item} className="size-10 rounded-[10px]" />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-[18px] text-ink">{connector.name}</span>
+                  </button>
+                  {connector.state && <StateIcon state={connector.state} />}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <>
         {notice}
 
         {children}
@@ -285,12 +337,13 @@ export function PluginDetailView(props: PluginDetailProps) {
           </details>
         )}
 
-        <PluginCard title={t("connectApps.detail.details")}>
-          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[13px] leading-5" data-plugin-details>
+        <section data-plugin-details-block="" className="border-t-[0.5px] border-ink/10 pt-4">
+          <h3 className="mb-1 text-[12px] leading-4 text-ink-secondary">{t("connectApps.detail.details")}</h3>
+          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[12px] leading-4" data-plugin-details>
             {details.map((row) => (
               <div key={row.label} className="contents">
-                <dt className="py-[9px] text-ink-tertiary">{row.label}</dt>
-                <dd className={cn("min-w-0 break-all py-[9px] text-right text-ink-secondary", row.mono && "font-mono text-[13px]")}>{row.value}</dd>
+                <dt className="py-2 text-ink-tertiary">{row.label}</dt>
+                <dd className={cn("min-w-0 break-all py-2 text-right text-ink-secondary", row.mono && "font-mono text-[12px]")}>{row.value}</dd>
               </div>
             ))}
           </dl>
@@ -309,7 +362,9 @@ export function PluginDetailView(props: PluginDetailProps) {
               <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} />
             </label>
           )}
-        </PluginCard>
+        </section>
+          </>
+        )}
       </div>
     </>
   );

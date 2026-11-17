@@ -1,3 +1,6 @@
+import { groupByVendor } from "@/lib/capability-kinds";
+import { VendorPage } from "../plugins/VendorPage";
+import type { ProductRowsContext } from "../plugins/ProductRows";
 import { updateKindOf, type CapabilityUpdateItem, type UpdateKind } from "@/lib/capability-updates";
 import { useEffect, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
@@ -37,7 +40,10 @@ export function PluginsPanelSubpage({
   toggleBotServers,
   products,
   updateInfo,
+  productCtx,
 }: {
+  /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
+  productCtx?: ProductRowsContext;
   /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
   updateInfo?: (kind: UpdateKind, name: string, updateKey?: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
@@ -132,6 +138,10 @@ export function PluginsPanelSubpage({
     const product = products.products.find((entry) => entry.id === page.id);
     if (product) return <ProductDetailView key={product.id} product={product} onChanged={products.replace} onBack={back} trail={trail} />;
   }
+  if (page.page === "vendor" && productCtx) {
+    const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
+    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} />;
+  }
   if (page.page === "connector") {
     return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
   }
@@ -207,5 +217,6 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "connector": return t("connectApps.addCustomConnector");
     case "tailscale": return t("connectApps.tailscale.title");
     case "product": return products.find((product) => product.id === entry.id)?.name ?? t("connectApps.back");
+    case "vendor": return groupByVendor(products).find((vendor) => vendor.key === entry.key)?.name ?? t("connectApps.back");
   }
 }

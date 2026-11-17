@@ -72,6 +72,20 @@ export function updateOf(data: CapabilityUpdates | null | undefined, kind: Updat
   return data.items.find((item) => item.kind === kind && item.updateAvailable && norm(item.name) === wanted);
 }
 
+/** The locale key of a failed update's reason: the server's sentence is read
+ * for what it says and never printed (the person reads their own language). */
+export type UpdateReasonKey =
+  | "connectApps.updates.reason.unreachable" | "connectApps.updates.reason.organization"
+  | "connectApps.updates.reason.signin" | "connectApps.updates.reason.missing" | "connectApps.updates.reason.unknown";
+export function updateReasonKey(error: string | undefined): UpdateReasonKey {
+  const text = (error ?? "").toLowerCase();
+  if (/organi[sz]ation|console|pinned|manages/.test(text)) return "connectApps.updates.reason.organization";
+  if (/sign.?in|sign.?out|log.?in|auth|credential|token|unauthori[sz]ed|forbidden|permission|denied/.test(text)) return "connectApps.updates.reason.signin";
+  if (/not found|no longer|removed|gone|does not exist|missing/.test(text)) return "connectApps.updates.reason.missing";
+  if (/reach|network|timed? ?out|offline|unreachable|connect|dns|refused|unavailable|fetch|rate.?limit/.test(text)) return "connectApps.updates.reason.unreachable";
+  return "connectApps.updates.reason.unknown";
+}
+
 /** One failed update, named: the item and why; the old version stays. */
 export interface UpdateFailure {
   key: string;

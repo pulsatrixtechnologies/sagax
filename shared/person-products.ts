@@ -105,7 +105,7 @@ export interface PersonProduct {
   consoleUrl?: string;
   /** the vendor the console files it under (#4453): products of one vendor
    * sit under one row; absent, the product stands alone */
-  group?: { id: string; name: string; icon?: { domain?: string; url?: string }; logo?: string };
+  group?: { id: string; name: string; /** the vendor's line, per language (the person's, English fallback) */ description?: { en?: string; fr?: string }; icon?: { domain?: string; url?: string }; logo?: string };
   /** what it does, one line */
   description?: string;
   /** the endpoints it serves, by name, for one grey line */
@@ -128,6 +128,15 @@ const text = (value: unknown, max = 2_048): string | undefined =>
 const imageUrl = (value: unknown): string | undefined => {
   const raw = text(value, 64 * 1024);
   return raw && (/^https:\/\//i.test(raw) || /^data:image\/(?:svg\+xml|png|webp|jpeg)[;,]/i.test(raw)) ? raw : undefined;
+};
+/** A line in the person's language: `{ en, fr }`, or one plain string read as English. */
+const parseLine = (value: unknown): { en?: string; fr?: string } | undefined => {
+  const plain = text(value, 512);
+  if (plain) return { en: plain };
+  const line = record(value);
+  const en = text(line?.en, 512);
+  const fr = text(line?.fr, 512);
+  return en || fr ? { ...(en ? { en } : {}), ...(fr ? { fr } : {}) } : undefined;
 };
 const parseIcon = (value: unknown): { domain?: string; url?: string } | undefined => {
   const icon = record(value);
@@ -241,7 +250,7 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
     : [];
   return {
     id, name, state, roles, actions,
-    ...(groupId && groupName ? { group: { id: groupId, name: groupName, ...(parseIcon(groupRaw?.icon) ? { icon: parseIcon(groupRaw?.icon) } : {}), ...(imageUrl(groupRaw?.logo) ? { logo: imageUrl(groupRaw?.logo) } : {}) } } : {}),
+    ...(groupId && groupName ? { group: { id: groupId, name: groupName, ...(parseLine(groupRaw?.description) ? { description: parseLine(groupRaw?.description) } : {}), ...(parseIcon(groupRaw?.icon) ? { icon: parseIcon(groupRaw?.icon) } : {}), ...(imageUrl(groupRaw?.logo) ? { logo: imageUrl(groupRaw?.logo) } : {}) } } : {}),
     ...(description ? { description } : {}),
     ...(endpoints.length > 0 ? { endpoints } : {}),
     ...(icon ? { icon } : {}),

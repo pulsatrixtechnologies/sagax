@@ -1,3 +1,4 @@
+import { statusState } from "../plugins/StateIcon";
 import type { ReactNode } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 
@@ -329,6 +330,9 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     // part at all: no Tools section (the view hides an empty list)
     accountExtra: github || githubAccount ? <>{github}{githubAccount}</> : undefined,
     tools: { list: toolRows, loading: false },
+    // the Skills and Connectors tabs: only a plugin that brings some has them
+    skills: children.filter((child) => child.kind === "skill").map((child) => ({ name: child.name, description: child.description, onOpen: () => openItem(child) })),
+    connectors: connectors.map((child) => ({ key: child.key, name: child.name, item: child, state: statusState(child.status, () => openItem(child)), onOpen: () => openItem(child) })),
   };
   // For a bot the page is that bot's install: the card says what it brings,
   // and its Update installs the marketplace's files again in place.

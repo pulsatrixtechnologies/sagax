@@ -30,6 +30,7 @@ import { productRows, VendorArt, type ProductRowsContext } from "../plugins/Prod
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
 import { statusState } from "../plugins/StateIcon";
+import { UpdateNotice } from "../plugins/UpdateNotice";
 import { updateKindOf, updateOf, useCapabilityUpdates, type UpdateKind } from "@/lib/capability-updates";
 import { usePersonProducts } from "@/lib/person-products";
 import { ConnectAppsView, DiscoverFilter, SortControl, UpdateAllPill, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
@@ -168,10 +169,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     <>
       {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
       {updates.failures.map((failure) => (
-        <div key={failure.key} role="alert" data-update-failure={failure.key} className="mx-6 mt-2 flex items-start gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">
-          <span className="min-w-0 flex-1">{t("connectApps.updates.failed", { name: failure.name, error: failure.error || t("connectApps.updates.unknownError") })}</span>
-          <button type="button" onClick={() => updates.dismissFailure(failure.key)} className="shrink-0 underline">{t("connectApps.updates.dismiss")}</button>
-        </div>
+        <UpdateNotice key={failure.key} failure={failure} onClose={() => updates.dismissFailure(failure.key)}
+          onRetry={() => { updates.dismissFailure(failure.key); void updates.update([failure.key]); }} />
       ))}
       {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
       <SavedKeysResetNotice panel />
@@ -207,6 +206,24 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // tab ("Installed"); Browse Bots too, from Discover (2026-10-28).
   const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products, kind), onSelect: () => popTo(depth) }));
   const skillsOn = skills !== null && skillsLibraryOn;
+  // the console's products: the person's bots and the one write they all share
+  const productBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "products"));
+  const setProducts = (botIds: readonly string[], productIds: readonly string[], next: boolean) => {
+    for (const botId of botIds) {
+      const bot = state.bots.find((candidate) => candidate.id === botId);
+      if (!bot) continue;
+      dispatch({ type: "updateBot", botId, patch: { products: { ...bot.products, ...Object.fromEntries(productIds.map((id) => [normalProductId(id), next])) } } });
+    }
+    // the resolver reads the saved bot: refresh once every patch landed
+    void Promise.all(botIds.map((botId) => flushBotPatches(botId))).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
+  };
+  const productCtx: ProductRowsContext = {
+    bots: productBots.map((bot) => ({ id: bot.id, name: bot.name, products: bot.products })),
+    ...(scope === "bot" && scopeBot ? { forBot: { id: scopeBot.id, name: scopeBot.name, products: scopeBot.products } } : {}),
+    ...(scope === "bot" && botView && !botView.canChange ? { lockedReason: t("plugins.readOnly") } : {}),
+    setProducts,
+    onOpen: (product) => push({ page: "product", id: product.id }),
+  };
   // Only pass a page node when one is open: ConnectAppsView treats any
   // defined page as a subpage and hides the open tab's list.
   const subpage: ReactNode = page.page === "main" ? null : (
@@ -215,6 +232,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       a={a}
       products={products}
       updateInfo={(kind, name, key) => updateOf(updates.data, kind, name, key)}
+      productCtx={productCtx}
       trail={trail}
       entries={entries}
       botsForEntry={botsForEntry}
@@ -367,24 +385,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     );
   };
 
-  // the console's products: the person's bots and the one write they all share
-  const productBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "products"));
-  const setProducts = (botIds: readonly string[], productIds: readonly string[], next: boolean) => {
-    for (const botId of botIds) {
-      const bot = state.bots.find((candidate) => candidate.id === botId);
-      if (!bot) continue;
-      dispatch({ type: "updateBot", botId, patch: { products: { ...bot.products, ...Object.fromEntries(productIds.map((id) => [normalProductId(id), next])) } } });
-    }
-    // the resolver reads the saved bot: refresh once every patch landed
-    void Promise.all(botIds.map((botId) => flushBotPatches(botId))).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
-  };
-  const productCtx: ProductRowsContext = {
-    bots: productBots.map((bot) => ({ id: bot.id, name: bot.name, products: bot.products })),
-    ...(scope === "bot" && scopeBot ? { forBot: { id: scopeBot.id, name: scopeBot.name, products: scopeBot.products } } : {}),
-    ...(scope === "bot" && botView && !botView.canChange ? { lockedReason: t("plugins.readOnly") } : {}),
-    setProducts,
-    onOpen: (product) => push({ page: "product", id: product.id }),
-  };
   // one featured slide per vendor the console files products under: its name, logo and
   // line are the console's data (never written here)
   const vendorSlides = perspicaxOrg !== null ? groupByVendor(products.products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
@@ -393,7 +393,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     name: vendor.name,
     line: vendor.products.map((product) => product.description).find(Boolean) ?? (vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length })),
     art: <VendorArt vendor={vendor} />,
-    onGo: () => chooseTab("installed"),
+    onGo: () => push({ page: "vendor", key: vendor.key }),
   })) : [];
   // the filter of Discover: the categories of the chosen kind, in a menu
   const filterControl = tab === "discover" ? (
@@ -470,7 +470,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               entries={entries}
               personal={personalHere ? personal.rows : undefined}
               // #4453: the console's section: one row per vendor, its products under it
-              products={(scope === "me" || scope === "bot") && perspicaxOrg !== null ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx) : undefined}
+              products={(scope === "me" || scope === "bot") && perspicaxOrg !== null
+                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }) })
+                : undefined}
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}
               consoleCount={scope === "me" ? orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length : 0}

@@ -94,7 +94,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     urlEditing, command, input, reconnect, execute, startRecording, stopRecording, discardRecording, action, confirm, setError,
   } = p;
   return (
-<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink">
+<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink">
     <div className="flex min-h-12 items-center gap-1 px-2 pt-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.length ? tabs.map((tab) => <div key={tab.tabId} className={`flex max-w-52 shrink-0 items-center gap-1 rounded-xl px-1 text-[12px] ${tab.active ? "bg-inset text-ink" : "text-ink-secondary"}`}>
@@ -208,7 +208,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       </AnchoredPopover>
     )}
     {showNetwork && <NetworkDebuggerDialog botId={bot.id} botName={bot.name} onClose={() => setShowNetwork(false)} />}
-    {taught && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />}
+    {taught && (
+      <div className="absolute inset-0 z-20 flex min-h-0 flex-col">
+        <TeachStepsDialog inline botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />
+      </div>
+    )}
     {showTyping && (
       <AnchoredPopover
         anchorRef={menuSummary}

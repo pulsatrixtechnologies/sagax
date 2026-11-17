@@ -1,12 +1,14 @@
 // Teach by demonstration, after the recording: the steps as an editable
 // list, then saved as a skill of the bot (added turned off, through the same
 // upload route as Skills > Upload, so the person turns it on after reading
-// it). The list lives only in this panel: closing it without saving drops
-// it, and the raw recording is downloaded only when the person asks to keep
-// it. Also the small chooser the composer's "Teach a task" opens when the
-// bot has a browser: show it there, or describe it in words (/learn).
-// 2026-11-01 lot 7: steps in DetailPanel beside the thread; chooser as an
-// anchored popover on the composer +.
+// it). The list lives only here: closing it without saving drops it, and
+// the raw recording is downloaded only when the person asks to keep it.
+// In the bot's screen window the list stays in that window (`inline`). A
+// detail panel beside the thread closed the computer, which unmounted the
+// window and dropped the steps (#4208). My Chrome has no screen window, so
+// its review stays a detail panel. Also the small chooser the composer's
+// "Teach a task" opens when the bot has a browser: show it there, or
+// describe it in words (/learn). The chooser is an anchored popover on +.
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowDown, ArrowUp, Globe, MousePointerClick, MessageSquareText, Plus, Trash2, X } from "lucide-react";
 import { t } from "@/lib/i18n";
@@ -82,12 +84,14 @@ function StepFields({ step, onChange }: { step: TeachStep; onChange: (next: Teac
   return <span className="flex-1" />;
 }
 
-export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, replay: recordedReplay, onClose }: {
+export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, replay: recordedReplay, onClose, inline = false }: {
   botId: string; botName: string; steps: TeachStep[]; recordedAt: string;
   /** Shown in the person's own Chrome: where the bot replays it (the
    * person picks; the recorder's guess comes first). */
   replay?: TeachReplay;
   onClose: () => void;
+  /** Inside the screen window that recorded. Not a second panel. */
+  inline?: boolean;
 }) {
   const [replay, setReplay] = useState<TeachReplay | undefined>(recordedReplay);
   const [steps, setSteps] = useState<TeachStep[]>(recorded);
@@ -140,26 +144,19 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
     onClose();
   };
 
-  return (
-    <DetailPanel
-      label={t("teach.title")}
-      title={t("teach.title")}
-      closeLabel={t("teach.close")}
-      onClose={() => { if (phase !== "saving") onClose(); }}
-      data-teach-steps=""
-      footer={phase === "saved" ? (
-        <button type="button" className={PRIMARY_PILL} onClick={onClose}>{t("teach.done")}</button>
-      ) : (
-        <>
-          <button type="button" className={PILL} disabled={phase === "saving"} onClick={refuse}>{t("teach.discard")}</button>
-          {confirmReplace && <button type="button" data-teach-replace="" className={PILL} disabled={phase === "saving"} onClick={() => void save(true)}>{t("teach.replace")}</button>}
-          <button type="button" data-teach-save="" className={`${PRIMARY_PILL} ml-auto`} disabled={phase === "saving"} onClick={() => void save(false)}>
-            {phase === "saving" ? t("teach.saving") : t("teach.save")}
-          </button>
-        </>
-      )}
-    >
-      {phase === "saved" ? (
+  const close = () => { if (phase !== "saving") onClose(); };
+  const footer = phase === "saved" ? (
+    <button type="button" className={PRIMARY_PILL} onClick={onClose}>{t("teach.done")}</button>
+  ) : (
+    <>
+      <button type="button" className={PILL} disabled={phase === "saving"} onClick={refuse}>{t("teach.discard")}</button>
+      {confirmReplace && <button type="button" data-teach-replace="" className={PILL} disabled={phase === "saving"} onClick={() => void save(true)}>{t("teach.replace")}</button>}
+      <button type="button" data-teach-save="" className={`${PRIMARY_PILL} ml-auto`} disabled={phase === "saving"} onClick={() => void save(false)}>
+        {phase === "saving" ? t("teach.saving") : t("teach.save")}
+      </button>
+    </>
+  );
+  const fields = phase === "saved" ? (
         <div className="flex flex-col gap-3 px-4 py-5 text-[13px]" role="status">
           <p>{t("teach.saved", { name: savedName, bot: botName })}</p>
         </div>
@@ -199,7 +196,40 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
           {confirmReplace && <p role="status" className="text-[12px] text-ink-secondary">{t("teach.replaceAsk", { name: savedName })}</p>}
           {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
         </div>
-      )}
+      );
+  if (inline) {
+    return (
+      <section
+        data-teach-steps=""
+        data-teach-steps-place="window"
+        aria-label={t("teach.title")}
+        className="flex min-h-0 flex-1 flex-col bg-card text-ink"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || phase === "saving") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-hairline/40 pl-4 pr-2">
+          <h2 className="min-w-0 flex-1 truncate text-[16px] font-medium text-ink">{t("teach.title")}</h2>
+          <button type="button" data-teach-steps-close="" onClick={close} aria-label={t("teach.close")} title={t("teach.close")} className={iconButton}><X size={16} /></button>
+        </div>
+        {fields}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">{footer}</div>
+      </section>
+    );
+  }
+  return (
+    <DetailPanel
+      label={t("teach.title")}
+      title={t("teach.title")}
+      closeLabel={t("teach.close")}
+      onClose={close}
+      data-teach-steps=""
+      footer={footer}
+    >
+      {fields}
     </DetailPanel>
   );
 }

@@ -6,6 +6,33 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## The Routines page, Overview tab (2026-11-17)
+
+The Automations page (`RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx`)
+has pill tabs under its title (`PageTabs` in `content-page.tsx`): Overview,
+Calendar, Run logs (with the unread problems count) and Webhooks. The old
+List view is replaced by the Overview (`components/routines/RoutinesOverview.tsx`),
+modelled on the reference dashboard's Cloud Agents page (the reference app
+itself has no routines page, only a card on a bot's page).
+
+Runs: a period (24 hours, 7 days, 30 days) and three figure cards computed
+from the runs the app holds, by one rule (`src/lib/routine-figures.ts`): a
+run counts when it settled (completed, failed, blocked, missed, nothing to
+report); queued, running, waiting and cancelled runs are left out; a run
+with nothing to report is a success; a completed run with problems, a block
+and a miss are failures; no run gives a dash, never 0%. A 30 day period loads
+the older runs (`useRoutineRunsFrom`). No server route serves a figure.
+
+Routines: search, Filters and New on the section's heading row, then a plain
+table (`src/lib/routine-table.ts` for its rows and order): routine, bot,
+schedule in words, last run, next run or a Paused chip, and the row menu
+(`routineRowActions`). Group by Bot or Folder still draws the grouped cards
+(folder management); None, the default, is the table. Tests:
+`routine-figures.test.ts`, `routine-table.test.ts`,
+`RoutinesOverview.dom.test.ts`, `RoutineCalendarPage.test.ts`. Captures:
+`node scripts/capture/routines-page.mjs` (gallery `src/gallery/routines-overview.html`),
+which also fails when a row is wider than the page at 390.
+
 ## Outcomes (#4098, 2026-11-13)
 
 An outcome is a named result that one or more routines of a bot keep true.

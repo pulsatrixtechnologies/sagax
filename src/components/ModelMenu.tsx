@@ -24,6 +24,7 @@ import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type Key
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { MENU_BOX } from "./menu-look";
 import { t } from "@/lib/i18n";
 import {
   activeRowKey, filterModelSections, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, previewProviderRows, stepRow,
@@ -883,10 +884,11 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
         ...(placement.side === "right" ? { left: `calc(100% + ${SUBMENU_GAP}px)` } : { right: `calc(100% + ${SUBMENU_GAP}px)` }),
       }}
       className={cn(
-        "absolute z-30 flex flex-col text-popover-ink popover-surface bg-popover",
+        "absolute z-30 flex flex-col text-popover-ink",
         stacked
-          ? "inset-0 overflow-hidden rounded-xl py-1"
-          : "max-w-[calc(100vw-16px)] rounded-xl border border-popover-hairline shadow-2xl shadow-black/50",
+          ? "inset-0 overflow-hidden py-1"
+          : "max-w-[calc(100vw-16px)]",
+        MENU_BOX,
       )}
     >
       {stacked && (

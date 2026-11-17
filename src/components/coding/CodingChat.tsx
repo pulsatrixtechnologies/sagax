@@ -226,7 +226,7 @@ function FollowUp({ botName, onSend }: { botName: string; onSend: (text: string)
   };
   return (
     <div data-coding-followup className="flex w-full max-w-[42rem] flex-col gap-1">
-      <div className="flex items-end gap-2 rounded-[22px] border-[0.5px] border-border bg-composer py-1.5 pl-4 pr-1.5 transition-colors focus-within:border-border-strong hover:border-border-strong motion-reduce:transition-none">
+      <div className="flex items-end gap-2 rounded-[22px] menu-edge bg-composer py-1.5 pl-4 pr-1.5 transition-colors focus-within:border-[var(--composer-focus-edge)] motion-reduce:transition-none">
         <textarea
           ref={field}
           rows={1}

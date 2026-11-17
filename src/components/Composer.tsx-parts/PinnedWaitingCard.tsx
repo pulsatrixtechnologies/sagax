@@ -187,7 +187,7 @@ export function PinnedWaitingCard({
   const skipButton = skip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
   const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
-  const frame = "mb-2 overflow-hidden rounded-3xl bg-composer ring-1 ring-composer-ring";
+  const frame = "mb-2 overflow-hidden rounded-3xl menu-edge bg-composer";
 
   if (collapsed) {
     return (

@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadMenu } from "./ThreadMenu";
-import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
+import { COMPOSER_ANCHOR_INSET, COMPOSER_POPOVER_GAP, COMPOSER_POPOVER_RISE, MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -187,6 +187,75 @@ describe("the rows' and cards' three dots menus", () => {
       return /popover-surface menu-surface p-1\.5/.test(text) || /h-8 w-full shrink-0 items-center gap-1\.5 rounded-\[10px\]/.test(text);
     });
     expect(copies).toEqual(["src/components/menu-look.tsx"]);
+  });
+});
+
+describe("the composer and its popovers share the menu family's edge", () => {
+  // The + menu, the mode and model menus, the "/" and "@" lists and the
+  // memes picker wear the shared box; the composer's field and the cards
+  // pinned above it draw `menu-edge` (the same hairline and shadow tokens).
+  const POPOVERS = [
+    "src/components/ComposerControls.tsx",
+    "src/components/ApprovalModeSelector.tsx",
+    "src/components/ModelMenu.tsx",
+    "src/components/ModelPicker.tsx",
+    "src/components/ModelPicker.tsx-parts/ModelPickerMenu.tsx",
+    "src/components/ComposerCommandMenu.tsx",
+    "src/components/Composer.tsx-parts/ComposerMentionMenu.tsx",
+    "src/components/MemePicker.tsx",
+  ];
+  it.each(POPOVERS)("%s draws its popover on the shared look", (file) => {
+    const text = readFileSync(file, "utf8");
+    expect(text).toMatch(/from "(\.\/|\.\.\/)menu-look"/);
+    expect(text).toMatch(/\bMENU_(SURFACE|BOX)\b/);
+    // no outline or heavy shadow of its own on the popover's box
+    expect(text).not.toMatch(/border(-\[0\.5px\])? border-(popover-hairline|border|hairline\/40)[^"]*(popover-surface|bg-popover|bg-raised|bg-elevated)/);
+    expect(text).not.toMatch(/shadow-2xl shadow-black\/50/);
+    expect(text).not.toMatch(/rounded-xl border border-hairline\/40 bg-raised shadow-lg/);
+  });
+  it("every composer popover keeps the account menu's 4px gap above the capsule", () => {
+    expect(COMPOSER_POPOVER_GAP).toBe(4);
+    expect(COMPOSER_POPOVER_RISE).toBe(COMPOSER_POPOVER_GAP + COMPOSER_ANCHOR_INSET);
+    for (const file of ["src/components/ComposerControls.tsx", "src/components/ModelPicker.tsx", "src/components/ModelPicker.tsx-parts/ModelPickerMenu.tsx"]) {
+      const text = readFileSync(file, "utf8");
+      expect(text).toContain("COMPOSER_POPOVER_RISE_CLASS");
+      expect(text).not.toMatch(/bottom-full[^"]*\bmb-(?:1\.5|2)\b/);
+    }
+    for (const file of ["src/components/ComposerCommandMenu.tsx", "src/components/Composer.tsx-parts/ComposerMentionMenu.tsx"]) {
+      expect(readFileSync(file, "utf8")).toContain("COMPOSER_LIST_RISE_CLASS");
+    }
+    expect(readFileSync("src/components/ApprovalModeSelector.tsx", "utf8")).toContain("gap={COMPOSER_POPOVER_RISE}");
+    expect(readFileSync("src/components/MemePicker.tsx", "utf8")).toContain("gap: COMPOSER_POPOVER_RISE");
+  });
+  it("the + menu's rows are the menu rows", () => {
+    const text = readFileSync("src/components/ComposerControls.tsx", "utf8");
+    expect(text).not.toContain("h-[30px]");
+    expect(text).not.toContain('role="separator" className="mx-2 my-1');
+  });
+  it.each([
+    "src/components/Composer.tsx-parts/ComposerEditor.tsx",
+    "src/components/task/TaskComposer.tsx",
+    "src/components/coding/CodingChat.tsx",
+    "src/components/Composer.tsx-parts/PinnedWaitingCard.tsx",
+    "src/components/PendingApproval.tsx",
+  ])("%s draws the menu edge, not its own outline", (file) => {
+    const text = readFileSync(file, "utf8");
+    expect(text).toContain("menu-edge");
+    expect(text).not.toMatch(/bg-composer[^"]*(?:ring-composer-ring|shadow-\[0_2px_8px)/);
+    expect(text).not.toMatch(/border-\[0\.5px\] border-border bg-composer/);
+  });
+  it("menu-edge and menu-surface read the same two tokens", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const rule = (name: string) => css.slice(css.indexOf(`  .${name} {`), css.indexOf("}", css.indexOf(`  .${name} {`)));
+    for (const name of ["menu-surface", "menu-edge"]) {
+      expect(rule(name)).toContain("border: 0.5px solid var(--menu-hairline)");
+      expect(rule(name)).toContain("box-shadow: var(--menu-shadow)");
+    }
+  });
+  it("high contrast strengthens the shared edge", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const start = css.indexOf(':root[data-contrast="high"]:not(#a11y)');
+    expect(css.slice(start, css.indexOf("}", start))).toContain("--menu-hairline: color-mix(in srgb, var(--color-ink) 55%");
   });
 });
 

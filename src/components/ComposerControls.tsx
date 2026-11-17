@@ -15,6 +15,7 @@ import { formatDictationTime } from "@/lib/composer-dictation";
 import { focusFirstMenuItem, moveMenuFocus } from "@/lib/menu-keys";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 import { useMenuMotion } from "./MenuMotion";
+import { COMPOSER_POPOVER_RISE_CLASS, MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
 import type { ComposerModelChip, ComposerModelMenuControl } from "./ModelPicker";
 import { composerModelLabel } from "./ModelPicker.tsx-parts/helpers";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -173,7 +174,10 @@ export function ComposerPlusMenu({
             if (moveMenuFocus(event.currentTarget, event.key, document.activeElement)) event.preventDefault();
           }}
           className={cn(
-            "absolute bottom-full left-0 z-40 mb-2 flex min-w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5",
+            "absolute bottom-full left-0 z-40",
+            COMPOSER_POPOVER_RISE_CLASS,
+            MENU_SURFACE,
+            MENU_FIT_ROW,
             motion.className,
           )}
           {...motion.exitProps}
@@ -183,7 +187,7 @@ export function ComposerPlusMenu({
             const mode = item.checked !== undefined;
             return (
               <div key={item.id} className="contents">
-                {startsGroup && <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />}
+                {startsGroup && <MenuDivider />}
                 <button
                   type="button"
                   role={mode ? "menuitemcheckbox" : "menuitem"}
@@ -195,9 +199,9 @@ export function ComposerPlusMenu({
                     close();
                     item.onSelect();
                   }}
-                  className="flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+                  className={cn(menuRow(), "focus-visible:outline-none disabled:cursor-not-allowed")}
                 >
-                  <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">{item.icon}</span>
+                  <MenuGlyph>{item.icon}</MenuGlyph>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.hint && <span className="shrink-0 font-mono text-[11px] text-ink-tertiary">{item.hint}</span>}
                   {mode && (
@@ -211,7 +215,7 @@ export function ComposerPlusMenu({
             const content = rows(() => close(true));
             return content ? (
               <div data-composer-plus-rows="" className={rowsClassName}>
-                <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
+                <MenuDivider />
                 {content}
               </div>
             ) : null;
@@ -250,9 +254,9 @@ export function ComposerModelRow({ chip, onOpen }: {
       onKeyDown={(event) => {
         if (event.key === "ArrowRight" && !chip.open) { event.preventDefault(); toggle(); }
       }}
-      className="flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none aria-expanded:bg-hover disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+      className={cn(menuRow(), "focus-visible:outline-none aria-expanded:bg-menu-active disabled:cursor-not-allowed")}
     >
-      <Brain size={16} className="shrink-0" aria-hidden="true" />
+      <MenuGlyph><Brain size={16} aria-hidden="true" /></MenuGlyph>
       <span className="min-w-0 flex-1 truncate">{t("composer.plus.model")}</span>
       <span data-composer-model-value className={cn("max-w-[140px] shrink truncate text-ink-tertiary", chip.ultracode && "ultracode-effort-chip")}>{chip.label}</span>
       <ChevronRight size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />

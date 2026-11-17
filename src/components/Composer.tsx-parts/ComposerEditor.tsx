@@ -19,6 +19,10 @@ import type { MyChromeRecordingResult } from "@/lib/my-chrome";
 import { groupComposerHint, jevRoomRoutingOn } from "@/lib/group-routing";
 import type { Message } from "@/state/store";
 
+/** The composer's field: the menu family's edge (`menu-edge`, the account
+ * menu's hairline and shadow), a softer focus step, the raised fill. */
+export const COMPOSER_PILL = "@container/composer relative z-[1] min-h-11 rounded-[22px] menu-edge bg-composer px-2 py-[5px] transition-colors focus-within:border-[var(--composer-focus-edge)]";
+
 export function ComposerEditor({
   bot,
   group,
@@ -157,7 +161,7 @@ export function ComposerEditor({
       data-tour="composer"
       data-ultracode={bot && ultracodeFromSelection(bot.modelSelection) ? "" : undefined}
       className={cn(
-        "@container/composer relative z-[1] min-h-11 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-[5px] shadow-[0_2px_8px_-1px_#0000000d,0_1px_2px_#00000008,0_0_0_1px_#e4e4e40a] transition-colors hover:border-border-strong focus-within:border-border-strong",
+        COMPOSER_PILL,
         bot && ultracodeFromSelection(bot.modelSelection) && "ultracode-chrome",
       )}
     >

@@ -6,6 +6,7 @@ import { mentionRowDescription } from "@/lib/mentions";
 import { normalizeState } from "@/lib/mascot";
 import { BotAvatar } from "../Avatar";
 import { ComposerMenuRow } from "../ComposerMenuRow";
+import { COMPOSER_LIST_RISE_CLASS, MENU_BOX } from "../menu-look";
 import type { MentionChoice } from "./types";
 
 export function ComposerMentionMenu({
@@ -34,7 +35,7 @@ export function ComposerMentionMenu({
       ref={listRef}
       role="listbox"
       aria-label={t("composer.mention.aria")}
-      className={cn("absolute bottom-full start-2 z-20 mb-2 max-h-72 w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-hairline/40 bg-raised shadow-lg", className)} {...exitProps}
+      className={cn("absolute bottom-full start-2 z-20 max-h-72 w-72 overflow-x-hidden overflow-y-auto overscroll-contain", COMPOSER_LIST_RISE_CLASS, MENU_BOX, className)} {...exitProps}
     >
       {candidates.map((peer, i) => {
         const description = mentionRowDescription(peer.bot

@@ -22,7 +22,7 @@ export function useAnchoredPopover(
   open: boolean,
   anchorRef: RefObject<HTMLElement | null>,
   popupRef: RefObject<HTMLElement | null>,
-  { prefer, align }: { prefer: "above" | "below"; align: "start" | "end" },
+  { prefer, align, gap }: { prefer: "above" | "below"; align: "start" | "end"; gap?: number },
 ) {
   useLayoutEffect(() => {
     if (!open) return;
@@ -42,7 +42,7 @@ export function useAnchoredPopover(
       const rtl = getComputedStyle(anchor).direction === "rtl";
       const edge = (align === "end") !== rtl ? "right" : "left";
       const view = { width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight };
-      const spot = placePopover(box, { width: popup.offsetWidth, height }, view, { prefer, edge });
+      const spot = placePopover(box, { width: popup.offsetWidth, height }, view, { prefer, edge, gap });
       popup.style.left = `${spot.left}px`;
       popup.style.top = `${spot.top}px`;
       const maxHeight = spot.maxHeight === undefined ? "" : `${spot.maxHeight}px`;

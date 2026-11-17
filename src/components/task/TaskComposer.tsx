@@ -28,7 +28,7 @@ export function TaskComposer({ onSend, className }: {
   };
   return (
     <div data-activity-steer="" className={cn("flex flex-col gap-1", className)}>
-      <div className="flex min-h-11 items-center gap-2 rounded-[22px] border-[0.5px] border-border bg-composer py-1.5 pl-4 pr-1.5 transition-colors focus-within:border-border-strong hover:border-border-strong motion-reduce:transition-none">
+      <div className="flex min-h-11 items-center gap-2 rounded-[22px] menu-edge bg-composer py-1.5 pl-4 pr-1.5 transition-colors focus-within:border-[var(--composer-focus-edge)] motion-reduce:transition-none">
         <input
           id="activity-steer"
           value={text}

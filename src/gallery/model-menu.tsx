@@ -91,7 +91,7 @@ function ChatBar({ narrow }: { narrow: boolean }) {
   return (
     <div data-chat-bar
       style={narrow ? { left: 8, right: 8, bottom: 8 } : { left: 24, right: 24, bottom: 16 }}
-      className="fixed z-40 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5 shadow-[0_2px_8px_-1px_#0000000d,0_1px_2px_#00000008]">
+      className="fixed z-40 rounded-[22px] menu-edge bg-composer px-2 py-1.5">
       <div className="px-2 py-2 text-[15px] text-ink-secondary">{t("composer.placeholder.bot", { name: "Nimbus" })}</div>
       <div className="flex items-center gap-1">
         <span className="flex size-8 items-center justify-center rounded-full text-ink-secondary"><Plus size={18} aria-hidden="true" /></span>

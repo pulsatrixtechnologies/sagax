@@ -9,6 +9,7 @@ import { useAnchoredPopover } from "@/hooks/use-anchored-popover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { COMPOSER_POPOVER_RISE, MENU_BOX } from "./menu-look";
 import { materializeMeme, searchMemes, type MemeSearchHit } from "@/lib/memes";
 import { readableErrorMessage } from "@/lib/readable-error";
 
@@ -54,7 +55,7 @@ export function MemePicker({ open, onClose, anchorRef, onPick, onUploadLocal }: 
     },
   });
   usePopoverDismiss(open, inside, onClose);
-  useAnchoredPopover(open, anchorRef, rootRef, { prefer: "above", align: "start" });
+  useAnchoredPopover(open, anchorRef, rootRef, { prefer: "above", align: "start", gap: COMPOSER_POPOVER_RISE });
 
   const load = useCallback(async (q: string) => {
     const id = ++req.current;
@@ -110,7 +111,7 @@ export function MemePicker({ open, onClose, anchorRef, onPick, onUploadLocal }: 
       role="dialog"
       aria-label={t("memes.title")}
       data-meme-picker=""
-      className="fixed left-0 top-0 z-50 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2 overflow-hidden rounded-2xl border-[0.5px] border-border popover-surface bg-elevated p-2 shadow-xl"
+      className={cn("fixed left-0 top-0 z-50 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2 overflow-hidden p-2", MENU_BOX)}
     >
       <div className="flex items-center justify-between gap-2 px-1">
         <p className="text-[13px] font-medium text-popover-ink">{t("memes.title")}</p>

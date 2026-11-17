@@ -33,7 +33,7 @@ const typedText = lines > 1
   ? Array.from({ length: lines }, (_, i) => `Ligne ${i + 1} du message`).join("\n")
   : state === "typed" ? "Peux-tu vérifier la sauvegarde de ce soir ?" : state === "dictation" ? "Rappelle-moi d'appeler" : "";
 
-const PILL = "@container/composer relative z-[1] min-h-11 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5 shadow-[0_2px_8px_-1px_#0000000d,0_1px_2px_#00000008,0_0_0_1px_#e4e4e40a]";
+const PILL = "@container/composer relative z-[1] min-h-11 rounded-[22px] menu-edge bg-composer px-2 py-1.5";
 
 function Field({ value }: { value: string }) {
   return (

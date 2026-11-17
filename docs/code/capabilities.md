@@ -137,6 +137,56 @@ longer borrows the use of the owner's other bots. Today it feeds the
 compact prompt and Claude Code's deferral; lot C applies `leftOut` to every
 engine's listing.
 
+A tool is named by a text when the text writes its id in any spelling
+(`crm/list_deals`, `mcp__crm__list_deals`), its compound name as a whole
+token (`list_deals`, never inside `list_deals_v2`), or a one-word name as
+code (`` `deals` ``): a common word of a sentence keeps nothing listed. The
+texts are the system prompt, the turn's own text (a routine's instruction
+lives there), and the organization's and the person's rules. A tool named
+on a later turn of a session comes back from that turn on, for the rest of
+the session; the other left out tools stay as the session froze them.
+
+### Lot C: every engine's listing (`server/tools/tool-keep-listing.ts`)
+
+- Claude Code keeps its native tool search (every name listed, rare schemas
+  deferred, the session's compact pins loaded); a compact prompt (Pi on a
+  local model) keeps its compact listing; the external runtime's 9-tool
+  profile is never pruned.
+- Codex, the ACP engines, Muse Code, Pi on a cloud model and the
+  chat-completions engines get `SAGAX_COMPACT_TOOLS` with core `kept`: the
+  agents proxy lists every tool but the session's left out ones, plus
+  `search_tools`, `describe_tool` and `call_tool`; Codex still lists each
+  family of what stays as one tool. A left out tool runs in the same turn
+  through `call_tool`, through the proxy's same guard, and every layer reads
+  that call as the tool it runs: Codex (`directoryMounts`), the ACP step and
+  permission ask (`agentsSearchedCall`, so an organization Refuse or Ask
+  first rule on the tool applies), the chat engines (`searchable`), Pi
+  (`searched`), Muse Code (`prefixedToolId`), and the MCP gate under a tool
+  selection (`SAGAX_GATE_DIRECTORY`). A bot in Full access is not asked, as
+  for a listed call.
+- What a turn offers is recorded with its session (`toolKeepOffered`, only
+  the tools the bot does not know yet), so a tool never called is counted
+  as unused. A room turn passes its conversation's compaction record. Pi's
+  own compaction ends a session (`contextRenewed`), as a context renewal
+  does on Claude Code, Codex and the ACP engines.
+- Connector servers are lot D (the gate's search with the kept tools).
+- The saving is pinned by `server/drivers/agents-catalog-kept.test.ts`.
+
+### Lot E: the person's side
+
+The tool selection card (Settings > Developer > Per bot) shows one more row,
+"Not listed up front", only when the bot left something out for the person
+reading: each tool with its human label (the id in the tooltip), Left out or
+Always listed, a switch that keeps it listed always, and "Bring all back".
+Read through `toolKeep` of `GET /api/bots/:id/capabilities`, changed through
+`PATCH /api/bots/:id` with `{ toolKeep: ... }` alone, and by the bots through
+`sagax_settings` key `bot.toolsLeftOut`
+(`server/tools/tool-keep-person.ts`). Each person changes their own list only;
+no administrator is involved. A change takes effect at the bot's next
+conversation: a running conversation keeps the list its session started
+with, so its prompt cache is never broken; meanwhile every tool is one
+search away. Nothing is said in the chat when a tool is left out.
+
 ## Scoped skill discovery and API plugin delivery (2026-10-31)
 
 The turn, preview, Capabilities `promptIndex` and `skills_list` share

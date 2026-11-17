@@ -19201,7 +19201,15 @@
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "listening.microphoneDenied": "a1691ca140ddd4f880f8f3b24968e1a2d540ebb28c3fc43a6283cef2be8a98a7"
+      "listening.microphoneDenied": "a1691ca140ddd4f880f8f3b24968e1a2d540ebb28c3fc43a6283cef2be8a98a7",
+      "botAccess.tools.keepGroup": "946eb45c50df8347b704cc7edf99c932a467c1b1a467b046e256438c1ac3ddc8",
+      "botAccess.tools.keepStatus": "43bdf1492443911170c859d74f12fbb98a9d4452f12d36485ad27917ba630f01",
+      "botAccess.tools.keepAlwaysStatus": "e1c34120e7716a0e043930b9d928335f26af7ab020aa4723efb4543c9237c406",
+      "botAccess.tools.leftOut": "d9287c9fc2d4f1920b2cd63e2b1c03f62d5467191acbff73989671cf97fe4bc9",
+      "botAccess.tools.alwaysListed": "43e9757b043e5606f211e185dec5c7f5e2e9f87248b806ac68095429d5b8160f",
+      "botAccess.tools.keepAria": "3d72597f8d48a708a6815676f6b83f2afb61d46c252b29d76059bf14e780aaae",
+      "botAccess.tools.bringAllBack": "f3c79725d9c3a4b29c88413975ac80c746e68ed6fe99d8439fff0310f563b59a",
+      "botAccess.tools.keepHint": "344cebec70195158f133b89636017ef6bb3cc305136b065ee3bf7b8f91351c60"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

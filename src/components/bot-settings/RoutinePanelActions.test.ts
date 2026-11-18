@@ -19,7 +19,6 @@ vi.mock("@/state/store", async (importOriginal) => {
 afterAll(() => vi.unstubAllGlobals());
 
 const { RoutinePanelActions } = await import("./RoutinesSection");
-const { ACTION_LABEL, ACTION_LABEL_MAIN } = await import("../ActionBar");
 const { RoutineDetail } = await import("../routines/RoutineDetail");
 const { RoutineRunDetail } = await import("../routines/RoutineRunDetail");
 
@@ -36,7 +35,7 @@ const buttons = (markup: string) => [...markup.matchAll(/<button[^>]*>.*?<\/butt
 const iconOf = (button: string) => /lucide-([a-z-]+)/.exec(button.replace(/lucide lucide-/, "lucide-"))?.[1];
 
 describe("a routine's action bar", () => {
-  it("names every action in words, folding to an icon with a tooltip only when the bar is tight", () => {
+  it("keeps the primary label and three named icon buttons at every width", () => {
     const markup = panel(false);
     const all = buttons(markup);
     // 2026-11-06 (the owner, one pane): [Run now] [Check] [Disable or Enable] [Delete], no Edit.
@@ -46,13 +45,9 @@ describe("a routine's action bar", () => {
       const label = /aria-label="([^"]+)"/.exec(button)?.[1];
       expect(label).toBeTruthy();
       expect(button).toContain(`title="${label}"`);
-      // the words are there; only a tight container hides them
-      expect(button.includes(`<span class="${ACTION_LABEL}">`) || button.includes(`<span class="${ACTION_LABEL_MAIN}">`)).toBe(true);
-      expect(button).toMatch(/<span class="[^"]+">[^<]+<\/span>/);
     }
-    // Run now keeps its words longest; Enable and Delete fold first
-    expect(all[0]).toContain(ACTION_LABEL_MAIN);
-    for (const button of all.slice(1)) expect(button).toContain(`class="${ACTION_LABEL}"`);
+    expect(all[0]).toContain('<span class="whitespace-nowrap">Run now</span>');
+    for (const button of all.slice(1)) expect(button).not.toContain("<span");
   });
 
   it("keeps the same buttons in the same places while a run is in flight (#4436)", () => {
@@ -68,7 +63,7 @@ describe("a routine's action bar", () => {
       // only the run slot changes: it says Running in its own box
       expect(running.slice(1)).toEqual(idle.slice(1));
       expect(running[0]).toContain("data-run-now");
-      expect(running[0]).toContain(`<span class="${ACTION_LABEL_MAIN}">Running</span>`);
+      expect(running[0]).toContain(`<span class="whitespace-nowrap">Running…</span>`);
     }
   });
 

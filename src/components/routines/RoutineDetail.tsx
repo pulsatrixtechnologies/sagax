@@ -19,7 +19,7 @@ import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { isRoutineProblemRun } from "@/lib/routines";
 import { routineDateTime, routineNextText, routineRunAgo, routineRunDuration, routineRunLabel, routineRunPreview, routineRunTime, routineRunTone, routineState, routineWeekRunsText, type RoutineStateTone } from "@/lib/routine-display";
-import { niceTime, scheduleLabel } from "@/lib/schedule-label";
+import { scheduleLabel } from "@/lib/schedule-label";
 import { formatUsd } from "@/lib/usage";
 import type { Bot, Group } from "@/state/store";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
@@ -27,7 +27,6 @@ import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { runActivityStatus } from "./RoutineRunDetail";
 import { PANEL_LABEL, PANEL_TEXT_ACTION, PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
 import { RoutineRunClock } from "./RoutineList";
-import { dayLabel, localDay } from "@/lib/transcript-derivations";
 import { RunAsField, useRunAsOptions } from "./RunAsField";
 import { RoutineActAsField, useRoutineRoleCoverage } from "./RoutineActAsField";
 import { TriggerPopover } from "./TriggerPopover";
@@ -245,36 +244,7 @@ export function RoutineLastRun({ routine, runs, now = Date.now(), onOpenRun }: {
   </section>;
 }
 
-/** The routine page's Runs tab (#4357): every run, one line each, grouped
- * by day (Today, Yesterday, then the date), newest first; Clear run logs at
- * the top right. The count is the tab's. */
-export function RoutineRunsByDay({ routine, runs, now = Date.now(), onOpenRun, onClearRuns }: {
-  routine: Routine;
-  runs: RoutineRun[];
-  now?: number;
-  onOpenRun: (run: RoutineRun) => void;
-  onClearRuns?: () => void;
-}) {
-  const history = routineHistory(routine, runs);
-  const today = localDay(now);
-  const days: { day: number; runs: RoutineRun[] }[] = [];
-  for (const run of history) {
-    const day = localDay(routineRunTime(run));
-    const last = days[days.length - 1];
-    if (last && last.day === day) last.runs.push(run);
-    else days.push({ day, runs: [run] });
-  }
-  if (history.length === 0) return <p data-routine-runs="" className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>;
-  return <section data-routine-runs="" aria-label={t("routineDetail.runs")} className="min-w-0 space-y-4">
-    {days.map(({ day, runs: dayRuns }, index) => <div key={day} data-routine-runs-day={day} className="min-w-0 space-y-1">
-      <div className="flex min-h-7 items-center justify-between gap-2">
-        <h3 className={PANEL_LABEL}>{dayLabel(routineRunTime(dayRuns[0]!), today)}</h3>
-        {index === 0 && onClearRuns && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
-      </div>
-      <ol data-routine-history="" className="-mx-2 flex flex-col">{dayRuns.map((run) => <RunHistoryRow key={run.id} run={run} now={now} when={niceTime(routineRunTime(run))} onOpen={onOpenRun} />)}</ol>
-    </div>)}
-  </section>;
-}
+export { RoutineRunsByDay } from "./RoutineRunsByDay";
 
 export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDelete, onOpenGroup, onPatch, onClearRuns, actions = true, readiness: externalReadiness }: {
   routine: Routine;

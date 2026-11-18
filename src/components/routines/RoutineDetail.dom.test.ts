@@ -27,7 +27,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 const { setLocale } = await import("@/lib/i18n");
 const { ConfirmProvider, useConfirm } = await import("@/components/ConfirmProvider");
 const routineDetail = await import("./RoutineDetail");
-const { RoutineDetail, RoutineLastRun, RoutineRunsByDay, RoutineRunsSection, RoutineStateBadge, RoutineStatusRows, clearRoutineRuns } = routineDetail;
+const { RoutineDetail, RoutineLastRun, RoutineRunsByDay, RoutineStateBadge, RoutineStatusRows, clearRoutineRuns } = routineDetail;
 
 const bot = { id: "runner", threadId: "main", name: "Runner", color: "green", tasks: [] } as unknown as Bot;
 const routine = {
@@ -134,41 +134,27 @@ describe("the routine page's runs (#4357)", () => {
     { id: "other", routineId: "r2", status: "completed", scheduledFor: at(0, 9) },
   ].map((run) => ({ routineId: "r1", routineName: routine.name, botId: bot.id, target: "bot", runOn: "maus", ...run })) as unknown as RoutineRun[];
 
-  it("groups every run of this routine by day, newest first, one line each with the coloured clock; a click opens the run", () => {
+  it("opens each chronological tick and lists only produced results and unseen causes", () => {
     const onOpenRun = vi.fn();
-    const onClearRuns = vi.fn();
-    flushSync(() => root.render(createElement(RoutineRunsByDay, { routine, runs: history, now, onOpenRun, onClearRuns })));
+    const more = [
+      { ...history[1]!, id: "repeat" },
+      { ...history[1]!, id: "seen", seenAt: now },
+      { ...history[0]!, id: "quiet", status: "nothing_to_report" as const },
+    ];
+    flushSync(() => root.render(createElement(RoutineRunsByDay, { routine, runs: [...history, ...more], now, onOpenRun, onClearRuns: vi.fn() })));
     const days = [...host.querySelectorAll("[data-routine-runs-day]")];
-    expect(days.map((group) => group.querySelector("h3")?.textContent)).toEqual(["Today", "Yesterday", expect.any(String)]);
-    expect(days.map((group) => [...group.querySelectorAll("[data-run-row]")].map((row) => row.getAttribute("data-run-row")))).toEqual([["a", "b"], ["c"], ["d"]]);
-    expect(host.querySelector("[data-run-row=other]")).toBeNull();
-    expect(host.querySelector("[data-run-row=a] [data-routine-clock]")?.getAttribute("data-routine-clock")).toBe("neutral");
-    expect(host.querySelector("[data-run-row=b] [data-routine-clock]")?.getAttribute("data-routine-clock")).toBe("danger");
-    expect(host.querySelector("[data-run-row=a]")!.textContent).toContain("5 min");
-    expect(host.querySelector("[data-run-row=a] [data-run-row-preview]")?.textContent).toBe("All quiet today.");
-    expect(host.querySelector("[data-run-row=c]")!.textContent).toContain("$0.12");
-    expect(host.querySelector("[data-run-row=d]")!.textContent).toContain("Manual");
-    // Clear run logs once, at the top right; the count is the tab's.
-    expect(host.querySelectorAll("[data-routine-clear-runs]").length).toBe(1);
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-run-row=c]")!.click());
-    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
-  });
-
-  it("one run row for every list: the side panel's history and the page's lines give a run the same words, unread dot and click (nothing in double)", () => {
-    expect("RoutineRunLine" in routineDetail).toBe(false);
-    const onOpenRun = vi.fn();
-    flushSync(() => root.render(createElement(RoutineRunsSection, { routine, runs: history, now, onOpenRun })));
-    const panelRow = host.querySelector<HTMLButtonElement>("[data-run-row=b]")!;
-    const panelLabel = panelRow.getAttribute("aria-label");
-    expect(panelLabel).toContain("Unseen failure");
-    expect(panelRow.querySelector("[data-run-row-label]")).not.toBeNull();
-    flushSync(() => root.render(createElement(RoutineRunsByDay, { routine, runs: history, now, onOpenRun })));
-    const pageRow = host.querySelector<HTMLButtonElement>("[data-run-row=b]")!;
-    expect(pageRow.getAttribute("aria-label")).toBe(panelLabel);
-    expect(pageRow.querySelector("[data-run-row-label]")).toBeNull();
-    expect(pageRow.querySelector(".bg-danger.rounded-full")).not.toBeNull();
-    flushSync(() => pageRow.click());
-    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }));
+    expect(days.map(group => group.querySelector("h3")?.textContent)).toEqual(["Today", "Yesterday", expect.any(String)]);
+    expect(days[0]!.querySelectorAll("[data-run-tick]")).toHaveLength(5);
+    expect(host.querySelector("[data-run-tick=other]")).toBeNull();
+    expect(host.querySelectorAll("[data-run-result]")).toHaveLength(1);
+    expect(host.querySelector("[data-run-result=a]")?.textContent).toContain("All quiet today.");
+    expect(days[0]!.textContent).toContain("×2 today");
+    expect(days[0]!.textContent).toContain("Needs a look (1)");
+    expect(host.querySelectorAll("[data-routine-clear-runs]")).toHaveLength(1);
+    const tick = host.querySelector<HTMLButtonElement>("[data-run-tick=b]")!;
+    expect(tick.getAttribute("aria-label")).toContain("The board did not answer.");
+    tick.click();
+    expect(onOpenRun).toHaveBeenCalledWith(history[1]);
   });
 
   it("Last run: the newest run on one line, how long ago; nothing before a first run", () => {

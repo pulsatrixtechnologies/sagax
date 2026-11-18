@@ -17,13 +17,15 @@ export const ACTION_LABEL_MAIN = "whitespace-nowrap @max-[22rem]/actionbar:hidde
 
 const BASE = "flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-hairline/50 text-[13px] font-medium hover:bg-raised disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
 const FOLD = {
+  icon: "w-10 flex-none px-0",
+  persistent: "min-w-0 flex-1 px-2",
   secondary: "flex-1 px-3 @max-[38rem]/actionbar:w-10 @max-[38rem]/actionbar:flex-none @max-[38rem]/actionbar:px-0",
   main: "flex-1 px-3 @max-[22rem]/actionbar:w-10 @max-[22rem]/actionbar:flex-none @max-[22rem]/actionbar:px-0",
 } as const;
 
 /** Classes of one action button: its label shows while the bar has room
  * (a main action longer than the others), then it folds to an icon. */
-export function actionButtonClass(tone: "primary" | "default" | "danger" = "default", fold: "main" | "secondary" = "secondary"): string {
+export function actionButtonClass(tone: "primary" | "default" | "danger" = "default", fold: keyof typeof FOLD = "secondary"): string {
   return cn(
     BASE,
     FOLD[fold],
@@ -44,14 +46,14 @@ export function ActionButton({ icon, label, tone = "default", fold = "secondary"
   icon: ReactNode;
   label: string;
   tone?: "primary" | "default" | "danger";
-  fold?: "main" | "secondary";
+  fold?: "main" | "secondary" | "icon";
   danger?: boolean;
   onClick: () => void;
   disabled?: boolean;
 } & Record<`data-${string}`, string | boolean | undefined>) {
   return <button type="button" {...rest} aria-label={label} title={label} onClick={onClick} disabled={disabled}
-    className={cn(actionButtonClass(danger ? "danger" : tone, fold), danger && "ml-1 @max-[38rem]/actionbar:ml-0")}>
+    className={cn(actionButtonClass(danger ? "danger" : tone, fold), danger && fold !== "icon" && "ml-1 @max-[38rem]/actionbar:ml-0")}>
     {icon}
-    <span className={fold === "main" ? ACTION_LABEL_MAIN : ACTION_LABEL}>{label}</span>
+    {fold !== "icon" && <span className={fold === "main" ? ACTION_LABEL_MAIN : ACTION_LABEL}>{label}</span>}
   </button>;
 }

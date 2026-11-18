@@ -419,7 +419,6 @@ pro.name
 pro.reauthShort
 pro.seePlans
 pro.settingsSummary
-question.status.waiting
 releaseNotes.update
 releaseNotes.updateReady
 releaseNotes.updateRestart

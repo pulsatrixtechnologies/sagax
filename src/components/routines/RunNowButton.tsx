@@ -35,12 +35,14 @@ export function routineRunInFlight(runs: readonly Pick<RoutineRun, "routineId" |
   return runs.some((run) => run.routineId === routineId && IN_FLIGHT.has(run.status));
 }
 
-export function RunNowButton({ routine, bot, className, labelClassName, onStarted, onError }: {
+export function RunNowButton({ routine, bot, className, labelClassName, panelLabel, retryLabel, onStarted, onError }: {
   routine: Routine;
   bot: Bot | undefined;
   className: string;
   /** Classes of the label span (an action bar hides it when compact). */
   labelClassName?: string;
+  panelLabel?: boolean;
+  retryLabel?: boolean;
   onStarted?: (run: RoutineRun) => void;
   onError?: (error: unknown) => void;
 }) {
@@ -70,10 +72,10 @@ export function RunNowButton({ routine, bot, className, labelClassName, onStarte
       onSettled: () => { pending.current = false; setStarting(false); },
     });
   };
-  const label = running ? t("routines.status.running") : t("routines.runNow");
+  const label = retryLabel ? t("routineRun.runAgain") : running ? t(panelLabel ? "runHistory.running" : "routines.status.running") : t(panelLabel ? "runHistory.start" : "routines.runNow");
   return (
-    <button type="button" data-run-now data-run-in-flight={running ? "" : undefined} onClick={run} disabled={disabled} aria-disabled={running || undefined} aria-label={label} title={label} className={className}>
-      {starting || running ? <Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> : <Play size={15} fill="currentColor" />}
+    <button type="button" data-run-now={retryLabel ? undefined : ""} data-run-in-flight={running ? "" : undefined} onClick={run} disabled={disabled} aria-disabled={running || undefined} aria-label={label} title={retryLabel && running ? t("routines.status.running") : label} className={className}>
+      {!retryLabel && (starting || running ? <Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> : <Play size={15} fill="currentColor" />)}
       <span className={labelClassName}>{starting ? t("routines.runNow.starting") : label}</span>
     </button>
   );

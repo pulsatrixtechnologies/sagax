@@ -88,6 +88,20 @@ test("saved grants and stale consent cannot bypass a disabled or unavailable loc
   }
 });
 
+test("a temporary capability lookup failure allows the next check to recover", async t => {
+  const { dir } = await fixture(t);
+  const stub = stubWorkspace();
+  let available = null;
+  const sharing = createComputerSharing({
+    file: path.join(dir, "sharing.json"), environments: () => [stub.env],
+    enabled: async () => available, fetch: stub.fetchImpl,
+  });
+  t.after(() => sharing.close());
+  await assert.rejects(sharing.identity(stub.env), /Waiting for the server/);
+  available = true;
+  assert.ok((await sharing.identity(stub.env)).sessionId);
+});
+
 test("selected folders are read-only; writes require an explicit grant and fresh hash", async t => {
   const { dir, folder, run } = await fixture(t);
   await writeFile(path.join(dir, "note.txt"), "hello 🌱");

@@ -20,6 +20,12 @@ describe("tool policy coverage", () => {
     expect(inventory.length).toBeGreaterThan(300);
   });
 
+  it("does not treat the surface bot access check as a route", () => {
+    // server/bots/surface-bot-access.ts names bots and threads that already
+    // have routes. Listing its matcher would open every bot and thread path.
+    expect(inventory.some((route) => route.file === "server/bots/surface-bot-access.ts")).toBe(false);
+  });
+
   it("still lists the hang-up route extracted from index.ts", () => {
     expect(inventory.map(policyKey)).toContain("POST exact /api/internal/voice-call/end");
   });

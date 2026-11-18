@@ -11,6 +11,7 @@ import { WidgetChart } from "./WidgetChart";
 import { WidgetBadge, WidgetImage, WidgetProgress } from "./WidgetContent";
 import { useWidgetForm, widgetActionUrl, widgetCanPress, widgetFieldId, WidgetButton, WidgetGlyph, type WidgetForm } from "./WidgetControls";
 import { WIDGET_CAPTION, WIDGET_FIELD_TYPES, WidgetFieldView } from "./WidgetFields";
+import { WidgetBooking } from "./WidgetBooking";
 import { WidgetCarousel, WidgetProduct } from "./WidgetProduct";
 import { WidgetTable } from "./WidgetTable";
 import {
@@ -73,6 +74,8 @@ export function WidgetNodeView({ node, where }: { node: WidgetNode; where: Widge
       return <WidgetCarousel node={node} draw={drawChild} />;
     case "Product":
       return <WidgetProduct node={node} draw={drawChild} />;
+    case "Booking":
+      return <WidgetBooking node={node} />;
     case "Button":
       return (
         <WidgetButton

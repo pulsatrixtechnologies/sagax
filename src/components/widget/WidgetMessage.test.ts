@@ -115,7 +115,8 @@ describe("drawing a widget", () => {
     mount(message);
     expect(find('[data-widget="w1"]')!.getAttribute("data-widget-state")).toBe("live");
     // every action the widget offers is on the page, under its own ref
-    for (const entry of widgetActions(message.widget!.root)) expect(find(`[data-widget-ref="${entry.ref}"]`), entry.label).not.toBeNull();
+    // (a Booking shows five times of one day at a time; its own test covers the rest)
+    for (const entry of widgetActions(message.widget!.root)) if (entry.action.type !== "book_slot") expect(find(`[data-widget-ref="${entry.ref}"]`), entry.label).not.toBeNull();
     expect(warned).not.toHaveBeenCalled();
   });
 

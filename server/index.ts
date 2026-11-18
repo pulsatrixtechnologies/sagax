@@ -243,6 +243,7 @@ import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
+import { createBookingOutcome } from "./widgets/booking-outcome.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
 import { createPersonAboutMe, type AboutMeOwner } from "./profiles/person-about-me.ts";
 import { archivedAgent, canAccessBot, canAccessTeam, primaryCovers, canReachPeer, peerAllowed, peerName, peerRosterSystemPrompt, peerInScope, reachablePeers, sameOwnerBots, setPeerScope, setPrimaryCover, setSameOwner, roomPeerRosterSystemPrompt, roomRosterLine, uniquePeerName, PEER_ACCESS_HELP } from "./peers/peer-roster.ts";
@@ -12074,6 +12075,9 @@ bus.subscribe((event: RuntimeEvent) => {
   if (event.type === "turn.started") credentialVault.turnPhase(event.threadId, "started");
   else if (event.type === "turn.completed" || event.type === "session.exited") credentialVault.turnPhase(event.threadId, "ended");
 });
+// A Booking card is booked only when the person's calendar tool confirms it (server/widgets/booking-outcome.ts).
+const bookingOutcome = createBookingOutcome(store);
+bus.subscribe((event: RuntimeEvent) => bookingOutcome.observe(event));
 // R13 (parité the reference design V4, 59, 83): phone call and purchase cards
 // (server/outbound/outbound-wiring.ts); every outward action keeps its card.
 const outbound = outboundWiring({

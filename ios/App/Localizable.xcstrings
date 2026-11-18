@@ -2312,6 +2312,22 @@
         }
       }
     },
+    "%@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
     "%@ · %@ notes": {
       "localizations": {
         "fr": {
@@ -7095,6 +7111,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Analytique"
+          }
+        }
+      }
+    },
+    "and %lld more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "and %lld more"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "et %lld de plus"
           }
         }
       }
@@ -15029,6 +15061,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Negrito"
+          }
+        }
+      }
+    },
+    "Book a call": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Book a call"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réserver un appel"
+          }
+        }
+      }
+    },
+    "Booked · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booked · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservé · %@"
+          }
+        }
+      }
+    },
+    "Booking %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booking %@…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservation du %@…"
+          }
+        }
+      }
+    },
+    "Booking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booking…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservation…"
           }
         }
       }
@@ -29399,6 +29495,22 @@
         }
       }
     },
+    "Earlier days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier days"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jours précédents"
+          }
+        }
+      }
+    },
     "Earlier topics": {
       "localizations": {
         "fr": {
@@ -42047,6 +42159,22 @@
         }
       }
     },
+    "Later days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later days"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jours suivants"
+          }
+        }
+      }
+    },
     "Lead": {
       "localizations": {
         "fr": {
@@ -45389,6 +45517,22 @@
         }
       }
     },
+    "Meeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rencontre"
+          }
+        }
+      }
+    },
     "Meeting notetaker (Google Meet)": {
       "localizations": {
         "fr": {
@@ -46769,6 +46913,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plus de réactions"
+          }
+        }
+      }
+    },
+    "More times": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More times"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus d'heures"
           }
         }
       }
@@ -54331,6 +54491,22 @@
         }
       }
     },
+    "Nothing was booked. Pick a time to try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing was booked. Pick a time to try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'a été réservé. Choisis une heure pour réessayer."
+          }
+        }
+      }
+    },
     "Nothing was said yet.": {
       "localizations": {
         "en": {
@@ -54649,6 +54825,38 @@
         }
       }
     },
+    "The booking did not go through. Pick a time to try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The booking did not go through. Pick a time to try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réservation n'a pas fonctionné. Choisis une heure pour réessayer."
+          }
+        }
+      }
+    },
+    "The booking did not go through: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The booking did not go through: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réservation n'a pas fonctionné : %@"
+          }
+        }
+      }
+    },
     "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Connect Apps pill sits right beside it.": {
       "localizations": {
         "fr": {
@@ -54841,6 +55049,38 @@
         }
       }
     },
+    "Today · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aujourd'hui · %@"
+          }
+        }
+      }
+    },
+    "Tomorrow · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tomorrow · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demain · %@"
+          }
+        }
+      }
+    },
     "Top users": {
       "localizations": {
         "en": {
@@ -54853,6 +55093,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Principaux utilisateurs"
+          }
+        }
+      }
+    },
+    "Upcoming bookings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming bookings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservations à venir"
           }
         }
       }

@@ -9,7 +9,7 @@ import { createContext, useContext } from "react";
 import { Calendar, Check, ChevronsUpDown, LoaderCircle, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { WIDGET_LIMITS, widgetNumber, widgetString, type WidgetActionEntry, type WidgetField, type WidgetNode, type WidgetValues } from "../../../shared/widget";
+import { WIDGET_LIMITS, widgetNumber, widgetString, type WidgetActionEntry, type WidgetBookingState, type WidgetField, type WidgetNode, type WidgetValues } from "../../../shared/widget";
 import { isWidgetDot, widgetIcon, widgetIconFilled } from "./widget-icons";
 
 export interface WidgetForm {
@@ -30,6 +30,10 @@ export interface WidgetForm {
   pendingRef?: string;
   /** The ref whose press just went through without settling the widget. */
   sentRef?: string;
+  /** The ref whose press settled the widget (the booked slot of a Booking). */
+  settledRef?: string;
+  /** Where a Booking's pressed time stands: pending until the calendar tool confirms it. */
+  booking?: WidgetBookingState;
   press: (ref: string) => void;
   /** Remote images wait for a click, as they do in a bot's Markdown. */
   imagesAllowed: boolean;

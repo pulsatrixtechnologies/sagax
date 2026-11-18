@@ -35,7 +35,7 @@ final class ChatWidgetTests: XCTestCase {
     func testEveryWidgetRowDecodesWithItsTree() throws {
         let rows = try messages()
         let widgets = rows.filter { $0.kind == .widget }
-        XCTAssertEqual(widgets.count, 14)
+        XCTAssertEqual(widgets.count, 15)
         for row in widgets where row.id != "widget-broken" {
             XCTAssertNotNil(row.drawableWidget, row.id)
             XCTAssertFalse((row.text ?? "").isEmpty, row.id)
@@ -49,7 +49,7 @@ final class ChatWidgetTests: XCTestCase {
     func testActionsScopesAndDefaultsMatchTheServer() throws {
         let expectations = try JSONDecoder().decode([String: Expectation].self, from: fixture("widget-expectations"))
         let rows = try messages()
-        XCTAssertEqual(expectations.count, 11)
+        XCTAssertEqual(expectations.count, 12)
         for (id, expected) in expectations {
             let root = try XCTUnwrap(rows.first { $0.id == id }?.widget?.root, id)
             let actions = ChatWidgetRules.actions(root)

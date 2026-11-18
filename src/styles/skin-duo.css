@@ -452,7 +452,7 @@
 }
 /* the composer's send circle (ComposerControls.tsx, CTA_DEFAULT = bg-ink) and
    the miniature send dot: a filled accent in the duo's two colours */
-:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) [data-composer-send].bg-ink {
+:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) :is([data-composer-send], [data-jump-pill]).bg-ink {
   background-color: var(--color-accent);
   background-image: var(--accent-gradient);
   color: var(--color-accent-ink);

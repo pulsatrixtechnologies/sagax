@@ -990,15 +990,16 @@ struct ChatView: View {
                 }
                 .overlay(alignment: .bottom) {
                     if !follow.following, !follow.held, !transcript.isEmpty {
+                        let paint = BubbleColors.user(botColor: current.isBot ? current.color : nil)
                         if desktopChat != nil {
                             // JumpToLatestPill.tsx: 16 above the composer
-                            DesktopJumpToLatestPill {
+                            DesktopJumpToLatestPill(paint: paint) {
                                 follow.resume()
                                 withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
                             }
                             .padding(.bottom, 16)
                         } else {
-                            JumpToLatestButton {
+                            JumpToLatestButton(paint: paint) {
                                 follow.resume()
                                 withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
                             }

@@ -4140,6 +4140,26 @@ html[data-animations-paused] *::after {
 .bg-success {
   color: var(--color-success-ink);
 }
+/* The chat sets the bubble pair on its root. Its well is chosen to keep
+   text readable through a mix of up to 24%, including neutral bot colors.
+   Keep these paints over the retro skin's button-chrome overrides. */
+@layer utilities {
+  .jump-pill-bot {
+    background-color: var(--color-bubble-user) !important;
+    color: var(--color-bubble-user-ink) !important;
+  }
+
+  @media (hover: hover) {
+    .jump-pill-bot:hover {
+      background-color: color-mix(in srgb, var(--color-bubble-user-well) 10%, var(--color-bubble-user)) !important;
+    }
+  }
+
+  .jump-pill-bot:active {
+    background-color: color-mix(in srgb, var(--color-bubble-user-well) 20%, var(--color-bubble-user)) !important;
+  }
+}
+
 /* The person's own bubble is filled with the accent (src/styles/skin-bubble.css:
    white text as the reference, on the accent or the same hue a step deeper
    where white would not read at 4.5:1, in every skin, colour, duo-tone and

@@ -31,7 +31,7 @@ describe("JumpToLatestPill", () => {
     pane.remove();
   });
 
-  const mount = async (chip: DOMRect | null) => {
+  const mount = async (chip: DOMRect | null, room = false) => {
     scroller.replaceChildren();
     if (chip) {
       const node = document.createElement("button");
@@ -50,7 +50,7 @@ describe("JumpToLatestPill", () => {
     };
     const parent = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetParent");
     Object.defineProperty(HTMLElement.prototype, "offsetParent", { configurable: true, get() { return pane; } });
-    await act(async () => root.render(createElement(JumpToLatestPill, { onClick, bottom: 70, scrollRef })));
+    await act(async () => root.render(createElement(JumpToLatestPill, { onClick, bottom: 70, scrollRef, room })));
     proto.getBoundingClientRect = original;
     if (parent) Object.defineProperty(HTMLElement.prototype, "offsetParent", parent);
     else delete (HTMLElement.prototype as { offsetParent?: unknown }).offsetParent;
@@ -61,10 +61,17 @@ describe("JumpToLatestPill", () => {
   it("stays centered and jumps when nothing is under it", async () => {
     const { pill, onClick } = await mount(null);
     expect(pill.dataset.jumpPill).toBe("center");
+    expect(pill.classList.contains("jump-pill-bot")).toBe(true);
     expect(pill.className).toContain("-translate-x-1/2");
     expect(pill.getAttribute("aria-label")).toBe("Jump to latest messages");
     pill.click();
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("uses the composer fill and ink in a room", async () => {
+    const { pill } = await mount(null, true);
+    expect(pill.classList.contains("bg-ink")).toBe(true);
+    expect(pill.classList.contains("text-app")).toBe(true);
   });
 
   it("steps beside the stacked conversations chip instead of covering it", async () => {

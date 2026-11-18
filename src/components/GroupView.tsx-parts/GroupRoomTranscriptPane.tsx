@@ -217,7 +217,7 @@ export function GroupRoomTranscriptPane({
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
       {!following && (
-        <JumpToLatestPill onClick={jumpToLatest} bottom={composerDockHeight + 16} scrollRef={scrollRef} />
+        <JumpToLatestPill room onClick={jumpToLatest} bottom={composerDockHeight + 16} scrollRef={scrollRef} />
       )}
 
       <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">

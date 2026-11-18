@@ -14,6 +14,7 @@ const BOB = "pr_bob";
 const CAROL = "pr_carol";
 function harness(options: {
   warmBudget?: WarmResourceBudget;
+  writeOnceScope?: PerspicaxMcpOptions["writeOnceScope"];
   mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>;
   onCall?: Set<string>;
   engineWarm?: Set<string>;
@@ -80,6 +81,7 @@ function harness(options: {
     });
   }) as typeof fetch;
   const mcp = new PerspicaxMcp({
+    writeOnceScope: options.writeOnceScope,
     warmBudget: options.warmBudget ?? new WarmResourceBudget({ intervalMs: 0 }),
     issuer: ISS,
     link: () => link,
@@ -1596,5 +1598,61 @@ describe("withFailureWords (2026-11-05)", () => {
     expect(withFailureWords(worded, "flow_run")).toBe(worded);
     const ok = { jsonrpc: "2.0", id: 1, result: { content: [] } };
     expect(withFailureWords(ok, "flow_run")).toBe(ok);
+  });
+});
+
+describe("large memory journals", () => {
+  it.each(["memory_write", "memory_propose", "memory_save"])("preserves every byte of %s and the audience of each part", async (name) => {
+    const args = name === "memory_save" ? { place: "personal" } : name === "memory_write" ? { scope: "me", topic: "work" } : { target: "team:review", topic: "work" };
+    const original = "é".repeat(1950) + "📝\n".repeat(1800) + "\n";
+    const parts: string[] = [];
+    const h = harness({ mcp: ({ body }) => {
+      if (!body) return new Response(null, { status: 204 });
+      if (body.id === undefined) return new Response(null, { status: 202 });
+      if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [
+        { name, inputSchema: { properties: { body: { type: "string", maxLength: 4096 } } } },
+      ] } });
+      if (body.method === "tools/call") {
+        expect(body.params.name).toBe(name);
+        const { body: piece, ...fields } = body.params.arguments;
+        expect(fields).toEqual(args);
+        expect(Buffer.byteLength(piece)).toBeLessThanOrEqual(4096);
+        parts.push(piece);
+      }
+      return Response.json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "stored" }] } });
+    } });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect(listed.body).toMatchObject({ result: { tools: [{ inputSchema: { properties: { body: { type: "string" } } } }] } });
+    expect(JSON.stringify(listed.body)).not.toContain("maxLength");
+    const result = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: { ...args, body: original } } } });
+    expect(parts.length).toBeGreaterThan(1);
+    const journal = (result.body as { result: { structuredContent: { journal: string } } }).result.structuredContent.journal;
+    expect(parts.map((part, i) => {
+      const header = `[journal ${journal} ${i + 1}/${parts.length}]\n`;
+      expect(part.startsWith(header)).toBe(true);
+      expect(part.endsWith("\n[/journal]")).toBe(true);
+      return part.slice(header.length, -"\n[/journal]".length);
+    }).join("")).toEqual(original);
+    await h.mcp.endAll();
+  });
+
+  it("retries an interrupted journal without sending its acknowledged prefix again", async () => {
+    const attempts: number[] = [];
+    const h = harness({ writeOnceScope: () => "run", mcp: ({ body }) => {
+      if (!body) return new Response(null, { status: 204 });
+      if (body.id === undefined) return new Response(null, { status: 202 });
+      const part = Number(/ (\d+)\/\d+\]/.exec(body.params?.arguments?.body ?? "")?.[1]);
+      const refused = part === 2 && !attempts.includes(2);
+      if (part) attempts.push(part);
+      const result = { content: [{ type: "text", text: refused ? "Unavailable" : "Saved" }], isError: refused };
+      return Response.json({ jsonrpc: "2.0", id: body.id, result });
+    } });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const save = (id: number) => h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name: "memory_save", arguments: { body: "a".repeat(9000) } } } });
+    expect((await save(1)).body).toMatchObject({ result: { isError: true, content: [ { text: expect.stringContaining("1 of 3 parts acknowledged") }, { text: "Unavailable", type: "text" } ] } });
+    expect((await save(2)).body).toMatchObject({ id: 2, result: { structuredContent: { parts: expect.any(Array) } } });
+    expect(attempts).toEqual([1, 2, 2, 3]);
+    await h.mcp.endAll();
   });
 });

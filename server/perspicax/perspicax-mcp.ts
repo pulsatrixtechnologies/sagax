@@ -29,6 +29,7 @@ import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
+import { journalCatalog, relayMemoryJournal } from "./memory-journal.ts";
 import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
@@ -439,6 +440,10 @@ function blockWith(answer: PerspicaxRelayAnswer, id: unknown, note: string): Per
   const error = isObject(answer.body) && isObject(answer.body.error) ? answer.body.error : null;
   const message = error && typeof error.message === "string" ? error.message.slice(0, 300) : "";
   return toolError(id, message ? `${note}\nVendor answer: ${message}` : note);
+}
+
+function successfulToolAnswer(answer: PerspicaxRelayAnswer): boolean {
+  return answer.status === 200 && isObject(answer.body) && isObject(answer.body.result) && answer.body.result.isError !== true;
 }
 
 function toolError(id: unknown, text: string): PerspicaxRelayAnswer {
@@ -1500,6 +1505,7 @@ export class PerspicaxMcp {
       if (sweep.kind === "args") input = { ...input, frame: { ...frame, params: { ...params, arguments: sweep.args } } };
     }
     const answer = await this.relayKept(input);
+    if (frame?.method === "tools/list") answer.body = journalCatalog(answer.body);
     this.noteRemoteSupport(input, answer);
     const carded = await this.withRecordsNote(input, await this.withProductKeyCard(input, answer));
     if (!products || carded.status !== 200) return carded;
@@ -1626,8 +1632,7 @@ export class PerspicaxMcp {
   private async relayKept(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
     const once = this.writeOnceKey(input);
     if (!once) return this.relayFrame(input);
-    const kept = (answer: PerspicaxRelayAnswer) => answer.status === 200 && isObject(answer.body) && isObject(answer.body.result) && answer.body.result.isError !== true;
-    const { value, replayed } = await this.writes.run(once, () => this.relayFrame(input), kept);
+    const { value, replayed } = await this.writes.run(once, () => this.relayFrame(input), successfulToolAnswer);
     if (!replayed || !isObject(value.body) || !isObject(value.body.result)) return value;
     this.log("perspicax mcp: write not sent again (same execution key)");
     const result = value.body.result;
@@ -2000,7 +2005,15 @@ export class PerspicaxMcp {
     const blocked = input.judged ? null : telephonyBlock(frame, entry.twilioTools) ?? await this.permissionBlock(entry, frame);
     if (blocked) return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: blocked }], isError: true } } };
     // #3062: never sent while Sagax has the session under another role
-    return this.gateOf(entry).shared(() => this.relayFrameSent(input, entry, frame));
+    return this.gateOf(entry).shared(() => relayMemoryJournal(frame, async (part) => {
+      const send = () => this.relayFrameSent(input, entry, part);
+      if (part === frame) return send();
+      // A later part may fail. Retrying the journal reuses acknowledged parts.
+      const once = this.writeOnceKey({ ...input, frame: part });
+      if (!once) return send();
+      const saved = await this.writes.run(once, send, successfulToolAnswer);
+      return saved.value;
+    }));
   }
 
   /** The engine frame on the wire, under the session's own role. */

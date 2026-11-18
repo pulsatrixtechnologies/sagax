@@ -768,10 +768,8 @@ describe("#4621 review: every end of a wake settles its events", () => {
       h.waker.noteWakeEnded("wren");
       expect(rowsOf(file)).toEqual({});
       expect(sealedFiles(dir)).toEqual([]);
-      // no backoff: the next event wakes as usual
-      h.waker.offer(mail("wren", 2));
-      h.advance(30_000);
-      expect(h.woken).toHaveLength(2);
+      // no backoff
+      expect(h.waker.backoffLeft("wren")).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

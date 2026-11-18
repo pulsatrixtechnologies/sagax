@@ -53,7 +53,10 @@ describe("proactive sealed rows at rest (#4621 review)", () => {
     const second = new ProactivePendingFile(file);
     const [row] = second.take();
     expect(row?.ref.kind).toBe("sealed");
-    expect(second.readSealed((row!.ref as { id: string }).id)).toMatchObject({ botId: "wren", key: "mail-1", detail: secret, from: "alex@example.com" });
+    const replayed = second.readSealed((row!.ref as { id: string }).id);
+    expect(replayed).toMatchObject({ botId: "wren", key: "mail-1", detail: secret, from: "alex@example.com" });
+    // the replay gathers it again, then its wake settles: the file goes
+    second.set("wren", [replayed!]);
     second.set("wren", []);
     expect(existsSync(path)).toBe(false);
   });

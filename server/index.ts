@@ -989,7 +989,9 @@ import { systemVoicesAvailable } from "./tts/system-voices.ts";
 import { ClaudeAiConnectorInventory, connectorPrincipalFor, createHarnessConnectorRoutes, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
 import { claudeAiConnectorsOwn, createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
 import { forgetTurnReach,
-  registerReachProvider } from "./turns/turn-reach.ts";
+  registerReachProvider, turnPersonFor } from "./turns/turn-reach.ts";
+import { createToolRefusalMemory, refusalLines, refusalReason, refusalTarget } from "./tools/tool-refusals.ts";
+import { createToolRefusalGuard } from "./host/tool-refusal-guard.ts";
 import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
 import { turnConnectorsRecord, withHubCall } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
@@ -12471,6 +12473,8 @@ const cloudAgentStore = new CloudAgentStore(DATA_DIR);
 const cloudAgentCredentials = new CloudAgentCredentialStore(DATA_DIR, vaultKeySource);
 let cloudAgentManager!: CloudAgentManager;
 const personOAuthManagers = new Map<string, McpOAuthManager>();
+/** #4720: tools a provider refused for a person's access (server/tools/tool-refusals.ts). */
+const toolRefusals = createToolRefusalMemory({ dataDir: DATA_DIR, log: (line) => console.warn(line) });
 /** A person's GitHub connection, or why their saved one could not be read on
  * this launch (#4155: shown, never taken for a sign-out). */
 function readPersonGithub(principalId: string | null | undefined): ReturnType<PersonConnections["readGithub"]> {
@@ -15615,6 +15619,14 @@ process.once("exit", () => resourceUsage.close());
 // While a Tailcat session is open, the owner's turn names the two tools
 // (Grok offers them directly instead of behind search_tool).
 registerReachProvider("tailcat-remote-session", remoteSessionReach((input) => remoteSessions.reachFor(input)));
+// #4720: a connector's tool refused for this person's access, on any engine:
+// said once per turn, with the provider's reason, until it answers again
+registerReachProvider("tool-refusals", ({ connectorPrincipalId, room }) => {
+  if (room || !connectorPrincipalId) return null;
+  const refused = toolRefusals.list(connectorPrincipalId);
+  if (!refused.length) return null;
+  return { lines: refusalLines(refused), refused: refused.map((row) => `${row.connector}/${row.tool}`) };
+});
 // #1499: from remote_support_open on, Sagax asks for the session's state by
 // itself, in the opener's name, on the conversation it was opened in. When
 // the end user's computer joins, that same status call connects it and the
@@ -21531,9 +21543,25 @@ const shellLoopGuard = wireLoopGuard({
   interrupt: async (threadId, _cause) => {
     const bot = store.botByThread(threadId);
     if (bot) await stopDirectThread(bot.id, threadId);
-  }
+  },
+  knownRefusal: (threadId, step) => {
+    const person = turnPersonFor(threadId);
+    const target = person ? refusalTarget(step) : null;
+    const refusal = person && target ? toolRefusals.get(person, target.connector, target.tool) : undefined;
+    return refusal && target ? refusalReason(target.connector, refusal) : undefined;
+  },
 });
 subscribeLoopGuard(shellLoopGuard, (listener) => bus.subscribe(listener), shouldIgnoreProviderEvent);
+// #4720: after the loop guard, so its note reads what was known before this call
+const toolRefusalGuard = createToolRefusalGuard({
+  memory: toolRefusals,
+  person: (threadId) => turnPersonFor(threadId),
+  tell: (threadId, row) => void store.appendMessage(threadId, { role: "bot", kind: "activity", tool: row }),
+  log: (line) => console.info(line),
+});
+bus.subscribe((event) => {
+  if (!shouldIgnoreProviderEvent(event)) toolRefusalGuard.onEvent(event);
+});
 // #2737: a direct turn has a settable ceiling of active minutes and steps,
 // and ends with a partial answer in the person's language, never silently.
 const directTurnBudget = wireTurnBudget({
@@ -36507,7 +36535,19 @@ PRE_AUTH_ROUTES.push(createPushRelayRoutes({
   send: (device, request) => pushHub.relaySend(device, request),
 }));
 PRE_AUTH_ROUTES.push(createMcpOAuthCallbackRoutes({
-  findOwner: (state) => [...personOAuthManagers.values()].find((manager) => manager.ownsState(state)) ?? mcpOAuth,
+  findOwner: (state) => {
+    const person = [...personOAuthManagers].find(([, manager]) => manager.ownsState(state));
+    const owner = person?.[1] ?? mcpOAuth;
+    // #4720: a connector signed in again is asked again: its refusals were for the old access
+    return { callback: async (query, signal) => {
+      const result = await owner.callback(query, signal);
+      if (result.ok && result.name) {
+        if (person) toolRefusals.forgetConnector(person[0], result.name);
+        else for (const bot of store.bots) toolRefusals.forgetConnector(effectiveBotOwner(bot), result.name);
+      }
+      return result;
+    } };
+  },
   phoneReturnLocation,
   callbackPage,
 }));

@@ -25,15 +25,19 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
     ? (solo ? ownerPrincipalId : undefined)
     : speaker.principalId?.trim().toLowerCase() || undefined;
   const payerPrincipalId = solo ? ownerPrincipalId : host.autoPayerKey(bot, speaker);
+  // whose connections the turn uses: the one rule the connectors read (#4720)
+  const connectorPrincipalId = host.connectorPrincipalFor({ identity: host.IDENTITY.kind, speaker, ownerPrincipalId, localPrincipalId: host.localPrincipalId() }) || undefined;
   const reach = reachContributions({
     botId: bot.id,
     threadId,
     ownerPrincipalId,
     ...(speakerPrincipalId ? { speakerPrincipalId } : {}),
     ...(payerPrincipalId && payerPrincipalId !== "unknown" ? { payerPrincipalId } : {}),
+    ...(connectorPrincipalId ? { connectorPrincipalId } : {}),
     room: false
   });
-  noteTurnReach(threadId, reach);
+  // a tool refused on this turn is refused for whoever's connections it uses
+  noteTurnReach(threadId, reach, connectorPrincipalId);
   return reachSummaryPrompt({
     servers: Object.keys(integrations.custom ?? {}),
     builtins,

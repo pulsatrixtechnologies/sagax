@@ -352,6 +352,9 @@ export function grokCatalogSection(input: {
   /** Prefer this Perspicax / connector profile when folding duplicate Sagax
    * agent tools across gateway connectors (Perspicax #1050). */
   activeProfile?: string;
+  /** Tools refused for the speaker, `<connector>/<tool>` lower case
+   * (server/tools/tool-refusals.ts, #4720): never named as the example. */
+  refused?: readonly string[];
 }): { id: string; text: string } | null {
   const catalog = input.catalog ?? [];
   const favored = new Set([...(input.known ?? []), ...(input.pinned ?? [])]);
@@ -396,7 +399,7 @@ export function grokCatalogSection(input: {
   // exact name to call, never as `<server>__<tool>`.
   const gatewayLine = gatewayGroups.length
     ? `\nConnected on this xAI account through grok.com (these ARE your tools for them; call use_tool with the full tool name, exactly as written, never prefixed with a server name; search_tool with the connector's name lists the others): ${gatewayGroups.map((group) => {
-      const base = `${group.label} (${group.tools.length} tool${group.tools.length === 1 ? "" : "s"}, e.g. ${exampleTool(group.tools)})`;
+      const base = `${group.label} (${group.tools.length} tool${group.tools.length === 1 ? "" : "s"}, e.g. ${exampleTool(answering(group.tools, input.refused))})`;
       return group.sagaxAgentToolsNote ? `${base}. ${group.sagaxAgentToolsNote}` : base;
     }).join("; ")}.`
     : "";
@@ -441,6 +444,17 @@ export function grokCatalogSection(input: {
     text = `${intro}${listed}${more ? ` and ${more} more` : ""}${outro}${keptTail}`.trim();
   }
   return { id: GROK_KNOWN_TOOLS_SECTION, text };
+}
+
+/** A group's tools without the ones refused for the speaker (all of them when none is left). */
+function answering(tools: readonly string[], refused: readonly string[] | undefined): readonly string[] {
+  if (!refused?.length) return tools;
+  const names = gatewayServerNames(tools);
+  const left = tools.filter((tool) => {
+    const parsed = parseGrokGatewayToolId(tool, names);
+    return !parsed || !refused.includes(`${parsed.server}/${parsed.tool}`.toLowerCase());
+  });
+  return left.length ? left : tools;
 }
 
 /** A read-only tool to name as the example: the model's first call is a safe one. */

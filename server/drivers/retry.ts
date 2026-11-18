@@ -21,6 +21,7 @@ export type TransientReason =
 
 export type TerminalReason =
   | "auth"
+  | "permission"
   | "quota"
   | "unknown_model"
   | "invalid_request"
@@ -64,6 +65,29 @@ export { USAGE_LIMIT };
  * billing here only say it will not be used (#1758); that is config/auth,
  * never a spent usage limit. */
 export const PROVIDER_NOT_CONFIGURED = /\bprovider_not_configured\b|\bbilling will not be used\b/i;
+
+/** A provider that knows who asks and refuses this one call for that
+ * person's access: a 403 or 402 whose body names why (X's
+ * `client-forbidden` / `billing-scope-missing` / `required_scope`, OAuth's
+ * `insufficient_scope`, GitHub's "Resource not accessible by integration").
+ * Durable until the person's access changes, so never retried; a bare 403
+ * "Forbidden" or a 401 stays `auth`, a 429 or a 5xx stays transient (#4720). */
+export const PERMISSION_REFUSAL =
+  /\bclient[-_ ]forbidden\b|\bbilling[-_ ]scope[-_ ]missing\b|\brequired[-_ ]scopes?\b|\binsufficient[-_ ]scopes?\b|\bnot accessible by integration\b|\b40[23]\b[^\n]{0,200}\b(?:missing|lacks?|requires?|grant(?:s|ed)?)\b[^\n]{0,40}\b(?:scopes?|permissions?)\b/i;
+const NOT_PERMISSION = /\b(?:401|429|5\d{2})\b|\bunauthorized\b|\brate.?limit/i;
+
+/** Whether a failure's words are a durable permission refusal (PERMISSION_REFUSAL). */
+export function isPermissionRefusal(text: string): boolean {
+  return PERMISSION_REFUSAL.test(text) && !NOT_PERMISSION.test(text);
+}
+
+/** A reason only the person can fix by connecting again: signed out
+ * (`auth`), or signed in without the access the call needs (`permission`:
+ * a new sign-in can grant it). The one test every reader of a sign-in
+ * refusal uses, so `permission` never drops the reconnect invitation. */
+export function needsReconnect(reason: string): boolean {
+  return reason === "auth" || reason === "permission";
+}
 
 const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
   {
@@ -146,6 +170,7 @@ export function classifyError(err: FailureInput): ErrorClassification {
     }
     return { transient: false, reason: "terminal_exit" };
   }
+  if (isPermissionRefusal(text)) return { transient: false, reason: "permission" };
   for (const { pattern, reason } of TERMINAL_PATTERNS) {
     if (pattern.test(text)) return { transient: false, reason };
   }

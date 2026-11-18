@@ -5,7 +5,7 @@ import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
 import { decodeCodexSelection } from "../codex-catalog.ts";
 import { codexDeveloperInstructions, syncCodexInstructions } from "../codex-instructions.ts";
 import { sectionFingerprints, volatileContextNote, volatileSectionsUpdate, withContextNote } from "../prompt-split.ts";
-import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
+import { classifyError, needsReconnect, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { classifyResumeFailure, mayReplay, rebuiltSessionNotice, recoveryPromptFor } from "../../resume-recovery.ts";
 import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import { codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
@@ -382,7 +382,7 @@ try {
   const refused = s.chatgptTurn && s.loginMark() !== null && codexSignInRefused({ message: raw });
   const message = refused ? codexSignInExpired(raw) : codexUserError(raw, s.route);
   const verdict = classifyError(failure);
-  const needsAuth = refused || verdict.reason === "auth" || /(?:\b401\b|unauthorized|missing bearer|authentication required)/i.test(raw);
+  const needsAuth = refused || needsReconnect(verdict.reason) || /(?:\b401\b|unauthorized|missing bearer|authentication required)/i.test(raw);
   // Three guards hold here: main's abandoned attempt never retries,
   // neither does a Company session already recovered once from canonical
   // history, and a Stop already asked for must not be undone by a relaunch.

@@ -7,6 +7,11 @@ import { useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 
+/** The "Show N more" line's words, singular apart ("Afficher 1 autre"); every fold in the app reads them from here. */
+export function foldMoreLabel(count: number): string {
+  return t(count === 1 ? "fold.showMoreOne" : "fold.showMore", { count });
+}
+
 /** Splits a list into the rows shown while folded and the rows the fold
  * hides. Items `keep` marks (one that needs the person) are never hidden:
  * they come first, in their own order, and the shown part grows to hold them
@@ -42,7 +47,7 @@ export function ShowMoreFold<T>({ items, shown, keep, render, toggleAttr }: {
           onClick={() => setOpen((value) => !value)}
           className={SHOW_MORE_ROW}
         >
-          {open ? t("fold.showLess") : t("fold.showMore", { count: rest.length })}
+          {open ? t("fold.showLess") : foldMoreLabel(rest.length)}
         </button>
       )}
     </>

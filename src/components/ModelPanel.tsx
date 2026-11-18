@@ -20,7 +20,7 @@ import type { EffortLevel } from "../../shared/wire";
 import { filterModelSections, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
 import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
-import { foldItems } from "./ShowMoreFold";
+import { foldItems, foldMoreLabel } from "./ShowMoreFold";
 import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { MODELS_SHOWN } from "./settings/ModelSwitchesSettings";
 
@@ -293,7 +293,7 @@ export function ModelPanel(props: ModelPanelProps) {
       {view !== AUTO_VIEW && fold.rest.length > 0 && (
         <button type="button" data-model-panel-fold={expanded ? "less" : "more"} aria-expanded={expanded}
           onMouseDown={(event) => event.preventDefault()} onClick={() => setExpanded((open) => !open)} className={cn(SHOW_MORE_ROW, "text-popover-ink-secondary hover:text-popover-ink")}>
-          {expanded ? t("fold.showLess") : t("fold.showMore", { count: fold.rest.length })}
+          {expanded ? t("fold.showLess") : foldMoreLabel(fold.rest.length)}
         </button>
       )}
       </div>

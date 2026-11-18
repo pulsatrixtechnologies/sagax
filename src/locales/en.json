@@ -14608,6 +14608,7 @@
   "botProfile.accounts.loading": "Loading access…",
   "botProfile.accounts.error": "Couldn't load this bot's access",
   "fold.showMore": "Show {count} more",
+  "fold.showMoreOne": "Show {count} more",
   "fold.showLess": "Show less",
   "botProfile.retry": "Try again",
   "botProfile.memoryPage": "Open the Memory page",

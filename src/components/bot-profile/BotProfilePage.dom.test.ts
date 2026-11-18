@@ -746,13 +746,13 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(card.querySelector("[data-bot-profile-accounts-fold]"), "no control for two rows").toBeNull();
   });
 
-  it("#4075: French counts the hidden rows (Afficher 2 de plus)", async () => {
+  it("#4075: French counts the hidden rows (Afficher 2 autres)", async () => {
     capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.slice(0, 4).map(app) };
     serversAnswer = { servers: [] };
     vaultAnswer = { items: [] };
     await mount("fr");
     const card = await folded();
-    expect(card.querySelector("[data-bot-profile-accounts-fold]")?.textContent).toBe("Afficher 2 de plus");
+    expect(card.querySelector("[data-bot-profile-accounts-fold]")?.textContent).toBe("Afficher 2 autres");
   });
 
   it("French: the menu items and the empty row say what they do", async () => {

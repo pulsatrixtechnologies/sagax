@@ -248,7 +248,7 @@ describe("Skills on the profile page (plain)", () => {
     setLocale("fr");
     skillsAnswer = { skills: many(6), staged: [], library: [], assignedSkills: [] };
     await render();
-    expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Afficher 2 de plus");
+    expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Afficher 2 autres");
   });
 
   it("#4104: a blocked skill beyond the fourth is never hidden: it comes first, its short orange state on the row", async () => {

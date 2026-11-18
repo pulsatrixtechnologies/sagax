@@ -10,6 +10,7 @@ import {
   connectorReauthText,
   connectorSetupText,
   isConnectorSetupUrl,
+  MAC_AUTOMATION_URL,
   MAC_FULL_DISK_ACCESS_URL,
   resolveConnectorSetupTarget,
   type ConnectorSetupProof,
@@ -255,5 +256,18 @@ describe("the other expired connections of the proactive report (#2690)", () => 
     expect(connectorReauthText(failure!, "fr")).toContain("accès complet au disque");
     expect(connectorReauthProblem(failure!)).toContain("Full Disk Access");
     expect(connectorReauthFailure("mcp__messages__read_messages", "No chat matches")).toBeNull();
+  });
+
+  // 2026-11-17: a Mail call refused by Automation read "Messages lost Full Disk Access"
+  it("an Apple app refused by Automation names its own app and opens the Automation pane", () => {
+    const said = "macOS has not allowed Sagax to control Mail. Open System Settings > Privacy & Security > Automation and turn on Mail under Sagax.";
+    const failure = connectorReauthFailure("mcp__messages__mac_mail_search", said);
+    expect(failure).toMatchObject({ label: "Mail", connector: "mail", provider: "mac", url: MAC_AUTOMATION_URL });
+    expect(connectorReauthFailure("messages__mac_calendar_list", "Not authorized to send Apple events to Calendar. (-1743)")).toMatchObject({ label: "Calendar", url: MAC_AUTOMATION_URL });
+    expect(connectorReauthText(failure!, "fr")).toContain("Automatisation");
+    expect(connectorReauthText(failure!, "en")).not.toContain("Full Disk Access");
+    expect(connectorReauthProblem(failure!)).toMatch(/^macOS does not let Sagax control Mail/);
+    expect(isConnectorSetupUrl(MAC_AUTOMATION_URL)).toBe(true);
+    expect(connectorReauthFailure("mcp__messages__mac_mail_search", "Mail did not answer in time.")).toBeNull();
   });
 });

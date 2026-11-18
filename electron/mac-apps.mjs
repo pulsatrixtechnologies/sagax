@@ -709,9 +709,10 @@ const PRELUDE = "function run(argv){var a=JSON.parse(argv[0]);var out=main(a);re
 // by its path (a nested one as Parent/Child) inside an account; the app-level
 // mailboxes (inbox, drafts, sent, trash, junk, outbox) when no account is given.
 const MAIL_LIB = `var Mail=Application('Mail');
+var T0=Date.now();var STOP=false;function late(ms){return Date.now()-T0>ms}
 var SPECIAL={inbox:'inbox',drafts:'draftsMailbox',sent:'sentMailbox',trash:'trashMailbox',junk:'junkMailbox',outbox:'outbox'};
-var KIND={inbox:['inbox'],junk:['junk','spam','junk e-mail','junk email','bulk mail','courrier indésirable','indésirables','pourriel','spam-verdacht','junk-e-mail','correo no deseado','posta indesiderata','lixo eletrônico','迷惑メール','垃圾邮件','垃圾郵件'],archive:['archive','archives','all mail','archiv','archivo','archivio','arquivo','arquivar','archief','arkiv','アーカイブ','归档','歸檔','封存']};
-function walk(acct,visit){var seen={};function go(list,prefix,d){for(var i=0;i<list.length;i++){var b=list[i];var nm='';try{nm=b.name()}catch(e){continue}
+var KIND={inbox:['inbox','boîte de réception','posteingang','bandeja de entrada','posta in arrivo','caixa de entrada','postvak in','inkorgen','受信','收件箱'],junk:['junk','spam','junk e-mail','junk email','bulk mail','courrier indésirable','indésirables','pourriel','spam-verdacht','junk-e-mail','correo no deseado','posta indesiderata','lixo eletrônico','迷惑メール','垃圾邮件','垃圾郵件'],archive:['archive','archives','all mail','archiv','archivo','archivio','arquivo','arquivar','archief','arkiv','アーカイブ','归档','歸檔','封存']};
+function walk(acct,visit){var seen={};function go(list,prefix,d){for(var i=0;i<list.length;i++){if(STOP)return;var b=list[i];var nm='';try{nm=b.name()}catch(e){continue}
 var p=prefix&&nm.indexOf(prefix+'/')!==0?prefix+'/'+nm:nm;if(!seen[p]){seen[p]=1;visit(p,b)}
 if(d<6){var kids=[];try{kids=b.mailboxes()}catch(e){}if(kids.length)go(kids,p,d+1)}}}
 go(acct?acct.mailboxes():Mail.mailboxes(),'',0)}
@@ -726,8 +727,9 @@ function kindBox(acct,kind){var hit=null;walk(acct,function(p,b){if(hit)return;v
 function boxFor(account,mailbox){var key=String(mailbox||'').toLowerCase();
 if(!account){if(!mailbox)return Mail.inbox;if(SPECIAL[key])return Mail[SPECIAL[key]];var b=findIn(null,mailbox);if(b)return b;
 var l=Mail.accounts();for(var i=0;i<l.length;i++){b=findIn(l[i],mailbox);if(b)return b}throw new Error('No mailbox named '+mailbox+'. mac_mail_list_mailboxes gives the names.')}
-var acct=acctNamed(account);if(!mailbox)key='inbox';var box=mailbox?findIn(acct,mailbox):null;if(!box&&KIND[key])box=kindBox(acct,key);
-if(!box)throw new Error('No mailbox named '+mailbox+' in '+account+'. Its mailboxes: '+names(acct).join(', '));return box}
+var acct=acctNamed(account);if(!mailbox)key='inbox';var box=mailbox?findIn(acct,mailbox):null;if(!box&&key==='inbox')box=inboxOf(account);if(!box&&KIND[key])box=kindBox(acct,key);
+if(!box)throw new Error((mailbox?'No mailbox named '+mailbox:'No inbox found')+' in '+account+'. Its mailboxes: '+names(acct).join(', '));return box}
+function inboxOf(account){var l=[];try{l=Mail.inbox.mailboxes()}catch(e){}for(var i=0;i<l.length;i++){try{if(l[i].account().name()===account)return l[i]}catch(e){}}return null}
 function refOf(m){var b=m.mailbox();var bn=b.name();var an='';try{an=b.account().name()}catch(e){}return [an,bn,m.id()]}
 function msgFor(r){if(r.mailbox){var b=findIn(r.account?acctNamed(r.account):null,r.mailbox);if(!b)throw new Error('No mailbox named '+r.mailbox+'. Search again.');
 try{var m=b.messages.byId(r.n);m.subject();return m}catch(e){}var f=b.messages.whose({id:r.n})();if(f.length)return f[0];throw new Error('That email is no longer in '+r.mailbox+'. Search again.')}
@@ -752,20 +754,28 @@ function replyOf(a,ref){var m=msgFor(ref);var r=Mail.reply(m,{openingWindow:fals
 var quoted='';try{quoted=String(r.content()||'')}catch(e){}r.content=a.body+(quoted?'\\n\\n'+quoted:'');attach(r,a.files);return r}
 `;
 const MAIL = PRELUDE + MAIL_LIB;
+/** 2026-11-17: Mail sends one Apple Event per mailbox and per message, so a
+ * large account took past the script's 60 s and the call failed with
+ * nothing. A list or a search stops collecting at this budget and answers
+ * with what it has (a search with its next cursor, previews skipped past
+ * half of it; a mailbox list marked partial, unread counts skipped past half). */
+export const MAIL_BUDGET_MS = 25_000;
 const MAIL_SCRIPTS = {
-  mac_mail_list_mailboxes: MAIL + `function boxes(acct){var out=[];walk(acct,function(p,b){if(out.length>=500)return;var o={name:p,unread:null};try{o.unread=b.unreadCount()}catch(e){}out.push(o)});return out}
+  mac_mail_list_mailboxes: MAIL + `function boxes(acct){var out=[];walk(acct,function(p,b){if(out.length>=500)return;if(late(${MAIL_BUDGET_MS})){STOP=true;return}var o={name:p,unread:null};if(!late(${MAIL_BUDGET_MS / 2})){try{o.unread=b.unreadCount()}catch(e){}}out.push(o)});return out}
 function main(a){var out=[];var l=Mail.accounts();for(var i=0;i<l.length;i++){var x=l[i];var nm=x.name();if(a.account&&nm!==a.account)continue;
 var o={name:nm,enabled:true,emails:[],mailboxes:boxes(x)};try{o.enabled=x.enabled()}catch(e){}try{o.emails=x.emailAddresses()}catch(e){}out.push(o)}
 if(a.account&&!out.length)throw new Error('No Mail account named '+a.account);var r={accounts:out};
-if(!a.account){var local=boxes(null);if(local.length)r.onMyMac=local;try{r.inboxUnread=Mail.inbox.unreadCount()}catch(e){}}return r;}`,
-  mac_mail_search: MAIL + `function summary(m){var r=refOf(m);var o={ref:r,account:r[0],mailbox:r[1],subject:cut(m.subject(),300),sender:cut(m.sender(),300),date:iso(m.dateReceived()),read:m.readStatus(),flagged:false,preview:null};
-try{o.flagged=m.flaggedStatus()}catch(e){}try{o.preview=cut(m.content(),200)}catch(e){}return o}
+if(!a.account){var local=boxes(null);if(local.length)r.onMyMac=local;try{r.inboxUnread=Mail.inbox.unreadCount()}catch(e){}}
+if(STOP)r.partial='Mail was slow: this list stopped early. Ask again for one account (account) to get all of its mailboxes.';return r;}`,
+  mac_mail_search: MAIL + `function summary(m,preview){var r=refOf(m);var o={ref:r,account:r[0],mailbox:r[1],subject:cut(m.subject(),300),sender:cut(m.sender(),300),date:iso(m.dateReceived()),read:m.readStatus(),flagged:false,preview:null};
+try{o.flagged=m.flaggedStatus()}catch(e){}if(preview){try{o.preview=cut(m.content(),200)}catch(e){}}return o}
 function main(a){var box=boxFor(a.account,a.mailbox);var c=[];
 if(a.query){var q=[{subject:{_contains:a.query}},{sender:{_contains:a.query}}];if(a.inBody)q.push({content:{_contains:a.query}});c.push({_or:q})}
 if(a.from)c.push({sender:{_contains:a.from}});if(a.since)c.push({dateReceived:{_greaterThanEquals:new Date(a.since)}});if(a.until)c.push({dateReceived:{_lessThan:new Date(a.until)}});
 if(a.unread===true)c.push({readStatus:false});if(a.unread===false)c.push({readStatus:true});if(a.flagged===true)c.push({flaggedStatus:true});if(a.flagged===false)c.push({flaggedStatus:false});
 var list=c.length===0?box.messages:c.length===1?box.messages.whose(c[0]):box.messages.whose({_and:c});
-var total=list.length;var end=Math.min(total,a.offset+a.limit);var out=[];for(var i=a.offset;i<end;i++)out.push(summary(list[i]));
+var total=list.length;var end=Math.min(total,a.offset+a.limit);var out=[];
+for(var i=a.offset;i<end;i++){if(out.length&&late(${MAIL_BUDGET_MS})){end=i;break}out.push(summary(list[i],!late(${MAIL_BUDGET_MS / 2})))}
 var r={messages:out};if(end<total)r.next=end;return r;}`,
   mac_mail_read: MAIL + `function main(a){var m=msgFor(a.ref);var r=refOf(m);var body='';try{body=String(m.content()||'')}catch(e){}
 var att=[];try{var l=m.mailAttachments();for(var i=0;i<l.length;i++){var x=l[i];var o={index:i,name:null,mime:null,bytes:null,downloaded:null};
@@ -1108,12 +1118,24 @@ export function macAppErrorText(appId, error) {
   if (/-1743|not allowed|Not authorized/i.test(raw)) {
     return { denied: true, message: `macOS has not allowed Sagax to control ${name}. Open System Settings > Privacy & Security > Automation and turn on ${name} under Sagax.` };
   }
-  if (error?.killed || /ETIMEDOUT|timed out/i.test(raw)) return { denied: false, message: `${name} did not answer in time.` };
+  // 2026-11-17: an aborted call (the turn ended, the server cancelled it)
+  // and a timeout said "returned an error: The operation was aborted" and "did
+  // not answer in time": each now says what happened and what to do.
+  if (error?.name === "AbortError" || error?.code === "ABORT_ERR") {
+    return { denied: false, message: `The call to ${name} was cancelled before ${name} answered (its turn ended or the server stopped waiting). Nothing more was done.` };
+  }
+  if (error?.killed || /ETIMEDOUT|timed out/i.test(raw)) {
+    return { denied: false, message: `${name} did not answer in time. ${name} is busy (syncing a large account, or a dialog is open in it): try again in a moment${appId === "mail" ? ", or narrow the call (one account, a mailbox, since)" : ""}.` };
+  }
   const line = raw.split("\n").map((part) => part.replace(/^.*execution error:\s*/, "").trim()).find(Boolean) ?? "";
   return { denied: false, message: `${name} returned an error: ${line.slice(0, 300) || "unknown error"}` };
 }
 
-async function runScript(appId, script, args, { execFile = execFilePromise, signal, timeoutMs = 60_000 } = {}) {
+/** How long one Apple app script may run. Mail's own scripts stop collecting
+ * at MAIL_BUDGET_MS and answer with what they have, well before this. */
+export const MAC_APP_SCRIPT_TIMEOUT_MS = 60_000;
+
+async function runScript(appId, script, args, { execFile = execFilePromise, signal, timeoutMs = MAC_APP_SCRIPT_TIMEOUT_MS } = {}) {
   const { stdout } = await execFile("osascript", macAppArgv(script, args), { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, ...(signal ? { signal } : {}) });
   const raw = String(stdout ?? "").trim();
   try { return raw ? JSON.parse(raw) : null; } catch { return raw; }

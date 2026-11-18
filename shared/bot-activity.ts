@@ -159,6 +159,9 @@ export interface BotActivityStep {
   /** 2026-11-02: a failed call's own error (bounded, redacted), so the run's
    * steps say why it failed instead of "returned no error message". */
   error?: string;
+  /** The product or app the server declared for the call (an Apple app tool
+   * reads "Mail", "Calendar"), so the run's steps name it as the chat does. */
+  product?: string;
   /** A call a sub-agent made: the step of the Agent call that started it. */
   parentId?: string;
   /** On a sub-agent's own step (Claude's Agent tool): what it was asked

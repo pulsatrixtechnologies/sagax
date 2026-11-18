@@ -32,6 +32,9 @@ export type ConnectorSetupProvider = "grok" | "claude" | "mac";
 
 /** The System Settings pane where Sagax gets Full Disk Access back (Messages). */
 export const MAC_FULL_DISK_ACCESS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+/** The System Settings pane where Sagax is allowed to control Mail, Calendar,
+ * Contacts, Reminders, Notes or Messages (Apple Events). */
+export const MAC_AUTOMATION_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation";
 
 export interface ConnectorSetupTarget {
   /** a stable id: the Grok catalog id when there is one, else the cleaned name */
@@ -132,7 +135,7 @@ export function chooseConnectorSetupRoute(input: {
 /** https on grok.com or claude.ai, no credentials in the URL; or the one
  * System Settings pane a Messages card opens. */
 export function isConnectorSetupUrl(raw: string): boolean {
-  if (raw === MAC_FULL_DISK_ACCESS_URL) return true;
+  if (raw === MAC_FULL_DISK_ACCESS_URL || raw === MAC_AUTOMATION_URL) return true;
   let url: URL;
   try {
     url = new URL(raw);
@@ -238,6 +241,11 @@ const X_NOT_ENROLLED = /\bclient[-_]not[-_]enrolled\b/i;
 const HTTP_400 = /\bHTTP\s*(?:status\s*)?400\b|\b400\s+Bad\s+Request\b|\bstatus(?:\s+code)?[:\s]+400\b/i;
 /** The Messages tools (shared/imessage.ts MESSAGES_MCP_SERVER) and what they say without this Mac's permission. */
 const MESSAGES_TOOL = /(?:^|__|\b)(?:messages|imessage)__|^(?:mcp__)?(?:messages|imessage)\b/i;
+/** An Apple app tool of the person's Mac (mac_mail_search), and its app. */
+const MAC_APP_TOOL = /(?:^|__)mac_(messages|mail|calendar|contacts|reminders|notes)_[a-z_]+$/i;
+const MAC_APP_LABEL: Record<string, string> = { messages: "Messages", mail: "Mail", calendar: "Calendar", contacts: "Contacts", reminders: "Reminders", notes: "Notes" };
+/** macOS refused Sagax the right to control that app (Automation, -1743). */
+const MAC_AUTOMATION_FAILURE = /\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b|\(-1743\)|\bhas\s+not\s+allowed\s+Sagax\s+to\s+control\b/i;
 const MESSAGES_ACCESS_FAILURE = /\bneeds\s+Full\s+Disk\s+Access\b|\bFull\s+Disk\s+Access\b.*\b(?:denied|missing|required|needed)\b|\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b|\bunable\s+to\s+open\s+database\s+file\b|\bauthori[sz]ation\s+denied\b|\boperation\s+not\s+permitted\b/i;
 /** A grok.com connector call goes through Grok's managed gateway. */
 const GATEWAY_FAILURE = /\bmanaged\s+mcp\s+gateway\b|\bmanaged_gateway:/i;
@@ -258,6 +266,13 @@ export interface ConnectorReauthFailure {
 export function connectorReauthFailure(tool: string | undefined, output: string | undefined): ConnectorReauthFailure | null {
   const said = String(output ?? "");
   const name = String(tool ?? "").trim();
+  // 2026-11-17: an Apple app tool refused by Automation names its own app
+  // (Mail, Calendar...) and opens the Automation pane, never "Messages lost
+  // Full Disk Access" for a Mail call
+  const macApp = MAC_APP_TOOL.exec(name)?.[1]?.toLowerCase();
+  if (macApp && MAC_AUTOMATION_FAILURE.test(said)) {
+    return { label: MAC_APP_LABEL[macApp]!, connector: macApp, provider: "mac", url: MAC_AUTOMATION_URL };
+  }
   // #2690: Messages lost this Mac's Full Disk Access (or Automation): the
   // same one card, opening the System Settings pane
   if (MESSAGES_TOOL.test(name) && MESSAGES_ACCESS_FAILURE.test(said)) {
@@ -291,12 +306,18 @@ export function connectorReauthFailure(tool: string | undefined, output: string 
 
 /** The routine problem line for an expired connector sign-in. */
 export function connectorReauthProblem(failure: ConnectorReauthFailure): string {
+  if (failure.provider === "mac" && failure.url === MAC_AUTOMATION_URL) return `macOS does not let Sagax control ${failure.label}: turn on ${failure.label} under Sagax in System Settings, Privacy & Security, Automation, then run the routine again. Its calls failed until then.`;
   if (failure.provider === "mac") return `${failure.label} lost this Mac's Full Disk Access: give it back to Sagax in System Settings, Privacy & Security, then run the routine again. Its calls failed until then.`;
   return `${failure.label} needs a new sign-in: reconnect it on ${HOST_LABEL[failure.provider]} (${failure.url}), then run the routine again. Its calls failed until then.`;
 }
 
 /** The chat line beside the card for an expired sign-in. */
 export function connectorReauthText(failure: Pick<ConnectorReauthFailure, "label" | "provider" | "url">, language: "fr" | "en"): string {
+  if (failure.provider === "mac" && failure.url === MAC_AUTOMATION_URL) {
+    return language === "fr"
+      ? `macOS ne laisse pas Sagax contrôler ${failure.label} : active ${failure.label} sous Sagax dans Réglages Système, Confidentialité et sécurité, Automatisation. Ses appels échouent d'ici là.`
+      : `macOS does not let Sagax control ${failure.label}: turn on ${failure.label} under Sagax in System Settings, Privacy & Security, Automation. Its calls fail until then.`;
+  }
   if (failure.provider === "mac") {
     return language === "fr"
       ? `${failure.label} n'a plus accès à ce Mac : redonne l'accès complet au disque à Sagax dans Réglages Système, Confidentialité et sécurité. Ses appels échouent d'ici là.`

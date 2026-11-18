@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   MAC_APP_IDS,
   MAC_APP_SCRIPTS,
+  MAIL_BUDGET_MS,
   MAC_APP_TEST_SCRIPTS,
   MAC_APP_TOOLS,
   appleDate,
@@ -229,6 +230,38 @@ test("a chat.db read error reads as a read error, never as Messages refused", as
   assert.doesNotMatch(failed.error, /refused/);
   assert.match(messagesReadErrorText(Object.assign(new Error("x"), { code: "EPERM" })), /Full Disk Access/);
   assert.doesNotMatch(macAppErrorText("mail", new Error("execution error: boom")).message, /refused/);
+});
+
+// 2026-11-17: an Apple Mail routine's calls failed with "did not answer in
+// time" and "returned an error: The operation was aborted".
+test("a timeout and a cancelled call say what happened, per app", async () => {
+  const timedOut = Object.assign(new Error("Command failed"), { killed: true, signal: "SIGTERM" });
+  const mail = macAppErrorText("mail", timedOut).message;
+  assert.match(mail, /^Mail did not answer in time\. Mail is busy/);
+  assert.match(mail, /narrow the call/);
+  assert.doesNotMatch(macAppErrorText("calendar", timedOut).message, /narrow the call|Mail/);
+  const aborted = Object.assign(new Error("The operation was aborted"), { name: "AbortError", code: "ABORT_ERR" });
+  assert.match(macAppErrorText("mail", aborted).message, /^The call to Mail was cancelled before Mail answered/);
+  const result = await runMacAppCall("mac_mail_list_mailboxes", {}, { platform: "darwin", execFile: async () => { throw timedOut; } });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /^Mail did not answer in time/);
+});
+
+test("Mail's list and search stop at their time budget and say so", () => {
+  assert.ok(MAIL_BUDGET_MS < 60_000 / 2);
+  assert.match(MAC_APP_SCRIPTS.mac_mail_list_mailboxes, new RegExp(`late\\(${MAIL_BUDGET_MS}\\)\\)\\{STOP=true`));
+  assert.match(MAC_APP_SCRIPTS.mac_mail_list_mailboxes, /r\.partial=/);
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, new RegExp(`if\\(out\\.length&&late\\(${MAIL_BUDGET_MS}\\)\\)\\{end=i;break\\}`));
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, /if\(preview\)\{try\{o\.preview=/);
+});
+
+// 2026-11-17: a search of an account without a mailbox threw "No mailbox
+// named undefined" when that account's inbox has a localized name.
+test("an account's inbox is found by Mail's own inbox, whatever its name", () => {
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, /if\(!box&&key==='inbox'\)box=inboxOf\(account\)/);
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, /Mail\.inbox\.mailboxes\(\)/);
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, /'boîte de réception'/);
+  assert.doesNotMatch(MAC_APP_SCRIPTS.mac_mail_search, /'No mailbox named '\+mailbox\+' in '/);
 });
 
 // --- Automation: helper status and the Ask button (mocked native layer) -----

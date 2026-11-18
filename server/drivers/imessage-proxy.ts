@@ -1,8 +1,36 @@
-// Stdio MCP proxy for Messages. It holds only the turn token and forwards
-// every call to the solo server on loopback. It does not open chat.db and
-// it does not launch Messages.app.
+// Stdio MCP proxy for Messages and the other Apple apps (mac_* tools). It
+// holds only the turn token and forwards every call to the Sagax server on
+// loopback. It does not open chat.db and it does not launch any app.
 import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
+import { macAppInfo, macAppOfTool } from "../../electron/mac-apps.mjs";
+
+/** Longer than the longest wait behind it: the desktop bridge gives a Mac
+ * call up to 3 minutes (server/desktop/desktop-bridge.ts), and the Mac's own
+ * script stops at 60 s. 2026-11-17: at 30 s this proxy gave up first, so a
+ * slow Mail read came back as "Messages could not be reached" while Mail
+ * was still answering. */
+export const MESSAGES_PROXY_TIMEOUT_MS = 720_000;
+
+/** The app a call acts in, as the person reads it (mac_mail_search: Mail). */
+export function messagesCallApp(params: Record<string, unknown>): string {
+  const app = typeof params.name === "string" ? macAppOfTool(params.name) : null;
+  return (app && macAppInfo(app)?.name) || "Messages";
+}
+
+/** Why a call never got the server's answer, in words the bot can act on. */
+export function messagesCallFailure(app: string, error: unknown, status?: number, said?: unknown): string {
+  if (status !== undefined) {
+    const words = typeof said === "string" && said.trim() ? ` (${said.trim().slice(0, 300)})` : "";
+    return `${app} on your Mac could not be used: the Sagax server answered HTTP ${status}${words}. Nothing was done.`;
+  }
+  const name = (error as { name?: unknown } | null)?.name;
+  if (name === "TimeoutError" || name === "AbortError") {
+    return `${app} on your Mac did not answer within ${Math.round(MESSAGES_PROXY_TIMEOUT_MS / 60_000)} minutes. The outcome is unknown: check in ${app} before repeating it.`;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return `${app} on your Mac could not be reached: the connection to the Sagax server failed${message ? ` (${message.slice(0, 300)})` : ""}. Nothing was done.`;
+}
 
 type Json = Record<string, unknown>;
 
@@ -38,16 +66,16 @@ export async function forwardMessagesCall(message: Json, env: NodeJS.ProcessEnv 
       redirect: "error",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ method, params }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(MESSAGES_PROXY_TIMEOUT_MS),
     });
-    const payload = await response.json() as { result?: unknown; error?: unknown };
+    const payload = await response.json().catch(() => null) as { result?: unknown; error?: unknown } | null;
     if (!response.ok || !payload || typeof payload !== "object" || !Object.hasOwn(payload, "result")) {
-      ok(id, { content: [{ type: "text", text: "Messages is unavailable on this Mac." }], isError: true });
+      ok(id, { content: [{ type: "text", text: messagesCallFailure(messagesCallApp(params), null, response.status, payload?.error) }], isError: true });
       return;
     }
     ok(id, payload.result);
-  } catch {
-    ok(id, { content: [{ type: "text", text: "Messages could not be reached. Nothing was sent." }], isError: true });
+  } catch (error) {
+    ok(id, { content: [{ type: "text", text: messagesCallFailure(messagesCallApp(params), error) }], isError: true });
   }
 }
 

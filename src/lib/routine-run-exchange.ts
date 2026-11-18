@@ -49,6 +49,11 @@ function stepMessage(step: BotActivityStep, bot: RoutineExchangeBot, index: numb
       ok: step.ok,
       input: step.input,
       at: step.at,
+      // A failed step keeps its own words: without them the opened row read
+      // "The tool failed and returned no error message" though the server
+      // sent the reason (Apple Mail routine, 2026-11-17).
+      ...(step.ok === false && step.error ? { output: step.error } : {}),
+      ...(step.product ? { product: step.product } : {}),
     },
   } as Message;
 }

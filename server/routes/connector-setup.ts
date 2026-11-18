@@ -17,6 +17,7 @@ import {
   connectorProofMatches,
   connectorSetupText,
   isConnectorSetupUrl,
+  MAC_AUTOMATION_URL,
   resolveConnectorSetupTarget,
   type ConnectorSetupProof,
   type ConnectorSetupView,
@@ -115,6 +116,11 @@ function grokReachShows(view: ConnectorSetupView, reach: GrokReachFact | undefin
 
 function check(view: ConnectorSetupView, proofs: readonly ConnectorSetupProof[], botId: string | undefined, claude: Array<{ name: string; status: string }> | null, now: number, grokReach?: GrokReachFact, macAccess?: boolean): ConnectorSetupView {
   // #2690: a Messages card is connected once this Mac reads Messages again
+  // an Apple app's Automation card: connected once a call of that app worked after it
+  if (view.provider === "mac" && view.url === MAC_AUTOMATION_URL) {
+    const worked = /^[a-z]+$/.test(view.connector) && proofs.some((proof) => proof.ok && proof.at > view.createdAt && new RegExp(`(?:^|__)mac_${view.connector}_`).test(proof.name));
+    return { ...view, status: worked ? "connected" : "pending", checkedAt: now };
+  }
   if (view.provider === "mac") return { ...view, status: macAccess ? "connected" : "pending", checkedAt: now };
   const target = resolveConnectorSetupTarget(view.label);
   // Grok: a call of the card's own person on the card's bot, or their Grok

@@ -41,6 +41,8 @@ function labelledFields(node: WidgetNode, into = new Set<string>()): Set<string>
 /** Why a booking did not happen, in the card's own words. */
 function bookingProblem(booking: WidgetBookingState): string {
   if (booking.code === "not_booked") return t("widget.booking.notBooked");
+  if (booking.code === "check_calendar") return booking.detail ? t("widget.booking.checkCalendar", { tool: booking.detail }) : t("widget.booking.unconfirmed");
+  if (booking.code === "unconfirmed") return t("widget.booking.unconfirmed");
   return booking.detail ? t("widget.booking.failed", { reason: booking.detail }) : t("widget.booking.failedNoReason");
 }
 

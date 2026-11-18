@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import type { WidgetPayload } from "../../shared/widget.ts";
-import { armBooking, createBookingOutcome, failureDetail, isCalendarCreate } from "./booking-outcome.ts";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { armBooking, bookingWatchFiles, classifyTool, createBookingOutcome, failureDetail, isCalendarCreate, RESTART_GRACE_MS, toolLabel } from "./booking-outcome.ts";
 
 const THREAD = "t1";
 const base = { eventId: "e", provider: "claude", threadId: THREAD, createdAt: "2026-11-09T19:50:00Z" } as const;
@@ -92,16 +95,6 @@ describe("a booking press waits for the calendar tool", () => {
     expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "not_booked" });
   });
 
-  it("reads no event of a thread nothing is waiting on, but still the end of a turn after a restart", () => {
-    const { rows, outcome } = setup();
-    // a restart forgot what was armed: the next turn's end settles the stale pending card
-    const fresh = createBookingOutcome({ messagesFor: () => rows, patchMessage: (_t: string, _i: string, patch: { widget: WidgetPayload }) => { rows[0]!.widget = patch.widget; } }, () => 7);
-    fresh.observe(ev({ type: "turn.completed", ok: true, turnId: "turn9" }));
-    expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "not_booked" });
-    expect(rows[0]!.widget.settled).toBeUndefined();
-    void outcome;
-  });
-
   it("does nothing for a thread with no pending booking", () => {
     const { rows, outcome } = setup();
     rows[0]!.widget = { ...rows[0]!.widget, booking: { state: "booked", at: 1 } };
@@ -140,5 +133,135 @@ describe("a time pressed on a Booking card", () => {
     if (!again.ok) throw new Error(again.error);
     again.settle();
     expect(rows[0]!.widget.booking).toMatchObject({ state: "pending" });
+  });
+});
+
+describe("which tools are the booking, by what the tool policy declares", () => {
+  it("reads the policy's own classification first and the name list only as a fallback", () => {
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_calendar_event_create")).toBe("create");
+    expect(classifyTool("mcp__claude_ai_Google_Calendar__create_event")).toBe("create");
+    // a server the policy does not know, named like a create
+    expect(classifyTool("book_meeting")).toBe("create");
+    // writes the policy sees but that are not a create
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_calendar_event_update")).toBe("write");
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_calendar_delete_event")).toBe("write");
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_flag_message")).toBe("write");
+    // reads, a mail send and a built-in are no calendar write
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_calendar_list_events")).toBe("other");
+    expect(classifyTool("mcp__claude_ai_Microsoft_365__outlook_send_mail")).toBe("other");
+    expect(classifyTool("Read")).toBe("other");
+    expect(toolLabel("mcp__claude_ai_Microsoft_365__outlook_flag_message")).toBe("outlook_flag_message");
+  });
+
+  it("says to check the calendar, not that nothing was booked, when a write that is not the create ran", () => {
+    const { rows, outcome } = setup();
+    outcome.observe(ev({ type: "turn.started" }));
+    outcome.observe(started("w1", "mcp__claude_ai_Microsoft_365__outlook_flag_message"));
+    outcome.observe(done("w1", true));
+    outcome.observe(turnDone);
+    expect(rows[0]!.widget.settled).toBeUndefined();
+    expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "check_calendar", detail: "outlook_flag_message" });
+  });
+
+  it("does not take an update for the booking, and a write that failed did not run", () => {
+    const { rows, outcome } = setup();
+    outcome.observe(ev({ type: "turn.started" }));
+    outcome.observe(started("u1", "mcp__claude_ai_Microsoft_365__outlook_calendar_event_update"));
+    outcome.observe(done("u1", true));
+    expect(rows[0]!.widget.booking!.state).toBe("pending");
+    outcome.observe(started("u2", "mcp__claude_ai_Microsoft_365__outlook_flag_message"));
+    outcome.observe(done("u2", false, "no"));
+    outcome.observe(turnDone);
+    expect(rows[0]!.widget.booking).toMatchObject({ code: "check_calendar", detail: "outlook_calendar_event_update" });
+  });
+});
+
+describe("a restart", () => {
+  const dir = mkdtempSync(join(tmpdir(), "booking-watches-"));
+  const files = () => bookingWatchFiles(dir);
+  const reset = () => rmSync(dir, { recursive: true, force: true });
+  const store = (rows: Array<{ id: string; kind: string; widget: WidgetPayload }>) => ({
+    messagesFor: () => rows,
+    patchMessage: (_t: string, id: string, patch: { widget: WidgetPayload }) => { rows.find((row) => row.id === id)!.widget = patch.widget; },
+  });
+  const widget = (): WidgetPayload => ({
+    v: 1, root: { type: "Card", id: "n1", children: [] },
+    settled: { ref: "n3", label: "Book", tone: "submit", at: 1 }, booking: { state: "pending", at: 1 },
+  });
+
+  it("keeps the watch on disk and leaves the press pending, then lets a resumed turn book it", () => {
+    reset();
+    const rows = [{ id: "w1", kind: "widget", widget: widget() }];
+    armBooking(THREAD);
+    const before = createBookingOutcome(store(rows), () => 10, files());
+    before.observe(ev({ type: "turn.started" }));
+    before.observe(started("c1", "mcp__claude_ai_Microsoft_365__outlook_calendar_event_create"));
+    expect(existsSync(join(dir, "booking-watches", `${THREAD}.json`))).toBe(true);
+    // the server stops and starts again: a new tracker reads the watch back
+    const after = createBookingOutcome(store(rows), () => 20, files());
+    expect(after.restore()).toBe(1);
+    // the cut turn's own end settles nothing
+    after.observe(ev({ type: "turn.completed", ok: false }));
+    expect(rows[0]!.widget.booking!.state).toBe("pending");
+    // a resumed turn does the booking
+    after.observe(ev({ type: "turn.started", turnId: "turn2" }));
+    after.observe(ev({ type: "item.started", itemType: "tool", itemId: "c9", title: "mcp__claude_ai_Microsoft_365__outlook_calendar_event_create", turnId: "turn2" }));
+    after.observe(ev({ type: "item.completed", itemType: "tool", itemId: "c9", ok: true, turnId: "turn2" }));
+    expect(rows[0]!.widget.booking!.state).toBe("booked");
+    expect(existsSync(join(dir, "booking-watches", `${THREAD}.json`))).toBe(false);
+  });
+
+  it("says to check the calendar when the call that was running at the restart never reported", () => {
+    reset();
+    const rows = [{ id: "w1", kind: "widget", widget: widget() }];
+    armBooking(THREAD);
+    const before = createBookingOutcome(store(rows), () => 10, files());
+    before.observe(ev({ type: "turn.started" }));
+    before.observe(started("c1", "mcp__claude_ai_Microsoft_365__outlook_calendar_event_create"));
+    const after = createBookingOutcome(store(rows), () => 20, files());
+    after.restore();
+    after.observe(ev({ type: "turn.started", turnId: "turn2" }));
+    after.observe(ev({ type: "turn.completed", ok: true, turnId: "turn2" }));
+    expect(rows[0]!.widget.settled).toBeUndefined();
+    expect(rows[0]!.widget.booking).toMatchObject({ code: "check_calendar", detail: "outlook_calendar_event_create" });
+  });
+
+  it("waits the grace for a resumed turn, then settles on what it knows", () => {
+    reset();
+    const rows = [{ id: "w1", kind: "widget", widget: widget() }];
+    armBooking(THREAD);
+    const before = createBookingOutcome(store(rows), () => 10, files());
+    before.observe(ev({ type: "turn.started" }));
+    let clock = 100;
+    const after = createBookingOutcome(store(rows), () => clock, files());
+    after.restore();
+    clock += RESTART_GRACE_MS - 1;
+    after.sweep();
+    expect(rows[0]!.widget.booking!.state).toBe("pending");
+    clock += 2;
+    after.sweep();
+    // no call was ever started: nothing was booked, and that is known
+    expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "not_booked" });
+    reset();
+  });
+
+  it("forgets a watch whose card was settled another way", () => {
+    reset();
+    const rows = [{ id: "w1", kind: "widget", widget: widget() }];
+    armBooking(THREAD);
+    createBookingOutcome(store(rows), () => 10, files()).observe(ev({ type: "turn.started" }));
+    rows[0]!.widget = { ...rows[0]!.widget, booking: { state: "booked", at: 5 } };
+    expect(createBookingOutcome(store(rows), () => 20, files()).restore()).toBe(0);
+    expect(existsSync(join(dir, "booking-watches", `${THREAD}.json`))).toBe(false);
+    reset();
+  });
+
+  it("calls a pending card no watch knows unconfirmed when a turn ends in its thread", () => {
+    const rows = [{ id: "w1", kind: "widget", widget: widget() }];
+    // nothing armed this thread and no file: the card is one an older build left
+    const thread = "t-legacy";
+    const tracker = createBookingOutcome({ messagesFor: () => rows, patchMessage: (_t: string, id: string, patch: { widget: WidgetPayload }) => { rows.find((row) => row.id === id)!.widget = patch.widget; } }, () => 7);
+    tracker.observe({ ...base, threadId: thread, turnId: "x", type: "turn.completed", ok: true } as unknown as RuntimeEvent);
+    expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "unconfirmed" });
   });
 });

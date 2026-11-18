@@ -16505,6 +16505,38 @@
         }
       }
     },
+    "Check your calendar: %@ ran": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your calendar: %@ ran"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifie ton calendrier : %@ a roulé"
+          }
+        }
+      }
+    },
+    "Check your calendar: the booking could not be confirmed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your calendar: the booking could not be confirmed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifie ton calendrier : la réservation n'a pas pu être confirmée."
+          }
+        }
+      }
+    },
     "Chosen: %@": {
       "localizations": {
         "en": {

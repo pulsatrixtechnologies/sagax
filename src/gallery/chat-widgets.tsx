@@ -3,7 +3,7 @@
  * Every sample of shared/widget-samples.ts is drawn by the real renderer;
  * a press is answered here (nothing leaves the page) and folds the card
  * as the server's answer would.
- * ?skin=<id>&lang=<code>&only=<sample name>&narrow=1&booked=<slot index of bookingCard>&bookstate=pending|booked|failed */
+ * ?skin=<id>&lang=<code>&only=<sample name>&narrow=1&booked=<slot index of bookingCard>&bookstate=pending|booked|failed|check */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { WidgetCardFrame } from "../components/widget/WidgetCardFrame";
@@ -39,10 +39,12 @@ function message(name: string, extra: Partial<WidgetPayload> = {}): Message | nu
   if (!parsed.ok) return null;
   // a booked Booking: the time at this index of its slots was pressed
   const booked = name === "bookingCard" ? widgetActions(parsed.value)[Number(params.get("booked"))] : undefined;
-  // &bookstate=pending|booked|failed: where the calendar tool's answer stands (default booked)
+  // &bookstate=pending|booked|failed|check: where the calendar tool's answer stands (default booked)
   const bookstate = params.get("bookstate") ?? "booked";
   if (booked && params.has("booked")) {
-    extra = bookstate === "failed"
+    extra = bookstate === "check"
+      ? { ...extra, booking: { state: "failed", at: 0, code: "check_calendar", detail: "outlook_calendar_event_update" } }
+      : bookstate === "failed"
       ? { ...extra, booking: { state: "failed", at: 0, code: "tool_failed", detail: "That time is no longer free." } }
       : { ...extra, settled: { ref: booked.ref, label: booked.label, tone: "submit", at: 0 }, booking: { state: bookstate === "pending" ? "pending" : "booked", at: 0 } };
   }

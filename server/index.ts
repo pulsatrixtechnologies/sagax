@@ -242,7 +242,7 @@ import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
-import { createBookingOutcome } from "./widgets/booking-outcome.ts";
+import { bookingWatchFiles, createBookingOutcome } from "./widgets/booking-outcome.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
 import { createPersonAboutMe, type AboutMeOwner } from "./profiles/person-about-me.ts";
 import { archivedAgent, canAccessBot, canAccessTeam, primaryCovers, canReachPeer, peerAllowed, peerName, peerRosterSystemPrompt, peerInScope, reachablePeers, sameOwnerBots, setPeerScope, setPrimaryCover, setSameOwner, roomPeerRosterSystemPrompt, roomRosterLine, uniquePeerName, PEER_ACCESS_HELP } from "./peers/peer-roster.ts";
@@ -12075,8 +12075,11 @@ bus.subscribe((event: RuntimeEvent) => {
   else if (event.type === "turn.completed" || event.type === "session.exited") credentialVault.turnPhase(event.threadId, "ended");
 });
 // A Booking card is booked only when the person's calendar tool confirms it (server/widgets/booking-outcome.ts).
-const bookingOutcome = createBookingOutcome(store);
+const bookingOutcome = createBookingOutcome(store, Date.now, bookingWatchFiles(DATA_DIR));
 bus.subscribe((event: RuntimeEvent) => bookingOutcome.observe(event));
+// a restart keeps a pressed time pending and watched (booking-outcome.ts); one no resumed turn takes over settles after a short wait
+bookingOutcome.restore();
+setInterval(() => bookingOutcome.sweep(), 60_000).unref();
 // R13 (parité the reference design V4, 59, 83): phone call and purchase cards
 // (server/outbound/outbound-wiring.ts); every outward action keeps its card.
 const outbound = outboundWiring({

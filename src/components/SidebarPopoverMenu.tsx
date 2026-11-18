@@ -180,7 +180,7 @@ function hasStarSlot(entries: SidebarSubmenuEntry[]): boolean {
 }
 
 /** One row of a second level: an info line, an inline rename field, or an action. */
-function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEntry; starSlot: boolean; onClose: () => void }) {
+export function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEntry; starSlot: boolean; onClose: () => void }) {
   return (
     <div className="shrink-0">
       {entry.separatorBefore && <MenuDivider />}
@@ -262,7 +262,7 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
           className={cn(
             menuRow(entry.active ? "active" : "idle"),
             entry.subtitle && "h-auto min-h-8 py-1",
-            entry.rename && "pr-14",
+            entry.rename && "group-hover/entry:bg-menu-hover group-focus-within/entry:bg-menu-hover",
           )}
         >
           {entry.icon && <MenuGlyph>{entry.icon}</MenuGlyph>}
@@ -272,7 +272,16 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
           </span>
           {entry.value && <span className="shrink-0 tabular-nums text-ink-tertiary">{entry.value}</span>}
           {entry.trailing}
-          {entry.checked && <Check size={16} aria-label="✓" className="shrink-0 text-ink" />}
+          {entry.checked && (
+            <Check
+              size={16}
+              aria-label="✓"
+              data-menu-check=""
+              className={cn("shrink-0 text-ink", entry.rename && "group-hover/entry:opacity-0 group-focus-within/entry:opacity-0 touch:opacity-100")}
+            />
+          )}
+          {/* The edit icon takes the check's place at the right edge, on hover or focus only. */}
+          {entry.rename && !entry.checked && <span aria-hidden="true" className="size-4 shrink-0" />}
         </button>
         {entry.rename && (
           <button
@@ -284,7 +293,7 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
               // Stay in the menu: the row becomes the field (lot 6).
               entry.rename?.onRename();
             }}
-            className="absolute right-8 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-tertiary opacity-50 hover:bg-menu-hover hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus group-hover/entry:opacity-100 touch:opacity-100"
+            className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-tertiary opacity-0 hover:bg-menu-active hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus group-hover/entry:opacity-100 group-focus-within/entry:opacity-100 touch:right-8 touch:opacity-100"
           >
             <Pencil size={13} aria-hidden="true" />
           </button>

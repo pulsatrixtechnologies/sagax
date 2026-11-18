@@ -3,7 +3,6 @@ import { useMemo } from "react";
 import { confirmAsync } from "@/components/ConfirmProvider";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { readableError } from "@/lib/plain-error";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { installedEntries, type InstalledEntry } from "@/lib/installed-model";
 import { type EntryActions } from "../plugins/InstalledView";
@@ -15,9 +14,9 @@ import type { PluginsPanelActions } from "./usePluginsPanelActions";
 export function usePluginsInstalledEntries(s: PluginsPanelState, a: PluginsPanelActions) {
   const {
     state, dispatch, mcp, page, push, scope, scopedPluginView, scopedItems,
-    setInstalling, setPanelError, setMarketplaces, loadSkills, loadFeatured,
+    setPanelError, setMarketplaces, loadSkills, loadFeatured,
   } = s;
-  const { installForBot, uninstallForBot, updatePlugin } = a;
+  const { installForBot, uninstallForBot, updatePlugin, queued } = a;
   // Manage > Installed: one entry per thing (installed-model.ts).
   const entries = useMemo(() => installedEntries(scopedItems, s.featured ?? []), [scopedItems, s.featured]);
   const enabledServers = useMemo(() => (mcp.servers ?? []).filter((server) => server.enabled).map((server) => server.name), [mcp.servers]);
@@ -40,25 +39,24 @@ export function usePluginsInstalledEntries(s: PluginsPanelState, a: PluginsPanel
   const removeEntry = async (entry: InstalledEntry) => {
     if (!(await confirmAsync({ title: t("connectApps.entry.removeConfirm", { name: entry.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setPanelError(null);
-    setInstalling(entry.key);
-    try {
-      const plugins = entry.members.filter((member) => member.kind === "plugin");
-      const pluginKeys = new Set(plugins.map((plugin) => plugin.key));
-      for (const plugin of plugins) {
-        const [name, marketplace] = plugin.id.split("@") as [string, string];
-        const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
-        setMarketplaces(result.marketplaces ?? []);
+    const plugins = entry.members.filter((member) => member.kind === "plugin");
+    await queued([entry.key, ...plugins.map((plugin) => plugin.id)], async () => {
+      try {
+        const pluginKeys = new Set(plugins.map((plugin) => plugin.key));
+        for (const plugin of plugins) {
+          const [name, marketplace] = plugin.id.split("@") as [string, string];
+          const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
+          setMarketplaces(result.marketplaces ?? []);
+        }
+        for (const server of entry.members.filter((member) => member.kind === "mcp" && !(member.parent && pluginKeys.has(member.parent)))) {
+          await api(`/api/mcp/servers/${encodeURIComponent(server.id)}`, { method: "DELETE" });
+        }
+        void Promise.all([mcp.load(true), loadSkills(), loadFeatured()]);
+      } catch (cause) {
+        void mcp.load(true);
+        throw cause;
       }
-      for (const server of entry.members.filter((member) => member.kind === "mcp" && !(member.parent && pluginKeys.has(member.parent)))) {
-        await api(`/api/mcp/servers/${encodeURIComponent(server.id)}`, { method: "DELETE" });
-      }
-      await Promise.all([mcp.load(true), loadSkills(), loadFeatured()]);
-    } catch (cause) {
-      setPanelError(readableError(cause));
-      void mcp.load(true);
-    } finally {
-      setInstalling(null);
-    }
+    }, "panel");
   };
   const entryActions = (entry: InstalledEntry): EntryActions => {
     const plugin = entry.members.find((member) => member.kind === "plugin");

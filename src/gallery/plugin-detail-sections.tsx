@@ -107,7 +107,7 @@ const mcpItem = (name: string): PluginItem => ({
 
 const context = (githubSection: ReactNode): DetailContext => ({
   mcp, openGithub: noop, githubKey: github.key, githubSection, mcpAccountDraft: null, setMcpAccountDraft: noop,
-  items, marketplaces, installing: null, openItem: noop, uninstallPlugin: noop, updatePlugin: noop,
+  items, marketplaces, installing: new Set<string>(), openItem: noop, uninstallPlugin: noop, updatePlugin: noop,
   scope: "workspace", botCard: null,
 });
 

@@ -107,7 +107,30 @@ export function usePluginsPanelState() {
     return () => window.removeEventListener("sagax:open-mac-messages", openMacMessages);
   }, []);
   const [skills, setSkills] = useState<SkillsLibrarySkillWire[] | null>(null);
-  const [installing, setInstalling] = useState<string | null>(null);
+  // what is being added, updated or removed, one entry per card: several run at
+  // once (queued one after the other, see usePluginsPanelActions), none blocks
+  // the others; an error stays on its own card
+  const [installing, setInstalling] = useState<ReadonlySet<string>>(() => new Set());
+  const [itemErrors, setItemErrors] = useState<Readonly<Record<string, string>>>({});
+  /** just added: the card shows its Added state for a moment before it moves to Installed */
+  const [justAdded, setJustAdded] = useState<ReadonlySet<string>>(() => new Set());
+  const markInstalling = (id: string, on: boolean) => setInstalling((previous) => {
+    if (previous.has(id) === on) return previous;
+    const next = new Set(previous);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  });
+  const setItemError = (id: string, message: string | null) => setItemErrors((previous) => {
+    if (message === null && !(id in previous)) return previous;
+    const { [id]: _dropped, ...rest } = previous;
+    return message === null ? rest : { ...rest, [id]: message };
+  });
+  const markJustAdded = (id: string, on: boolean) => setJustAdded((previous) => {
+    if (previous.has(id) === on) return previous;
+    const next = new Set(previous);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  });
   const [panelError, setPanelError] = useState<string | null>(null);
   const [mcpAccountDraft, setMcpAccountDraft] = useState<{ server: string; label: string } | null>(null);
   const [marketplaces, setMarketplaces] = useState<MarketplaceListing[] | null>(null);
@@ -413,9 +436,8 @@ export function usePluginsPanelState() {
     activeResult, setActiveResult, filter, setFilter, type, setType, tab, setTab,
     harness, claudeConnectors, ownerOrAdmin, libraryEditor,
     perspicaxOrg, organization, mayManageOrganization, featured, setFeatured, dataCenterFor, setDataCenterFor,
-    macAppsVisible, macAppsSetup, skills, setSkills, installing, setInstalling, panelError, setPanelError,
+    macAppsVisible, macAppsSetup, skills, setSkills, installing, markInstalling, itemErrors, setItemError, justAdded, markJustAdded, panelError, setPanelError,
     mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, officialErrors, marketBusy, setMarketBusy,
-    marketError, setMarketError, marketNeedsToken, setMarketNeedsToken, panelNotice, setPanelNotice,
     workspaceMarkets, scopeBot, scopeBotId, setScopeChoice, scope, botView, personalView,
     scopedPluginView, scopedPluginTarget, scopedPluginName, setScopedPluginView, orgRevision, botCapabilities,
     botBusy, setBotBusy, loadFeatured, skillsRoute, loadSkills, loadMarketplaces, loadBotView,

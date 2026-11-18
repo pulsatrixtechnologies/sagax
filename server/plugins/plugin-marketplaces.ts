@@ -32,6 +32,7 @@
 // then the organization's tokens); the token itself stays per bot
 // (server/plugins/marketplace-tokens.ts), never here.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cp, lstat, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -822,7 +823,7 @@ export class PluginMarketplaces {
     if (!NAME.test(name)) throw new BotPluginError("invalid marketplace", "invalid_source");
     const target = this.repoDir(name);
     if (input.from && existsSync(join(input.from, ".claude-plugin", "marketplace.json")) && !existsSync(join(target, ".claude-plugin", "marketplace.json"))) {
-      copyPlain(input.from, target);
+      copyPlainSync(input.from, target);
     }
     if (!same) {
       state.marketplaces[name] = { ...input.record };
@@ -869,7 +870,7 @@ export class PluginMarketplaces {
         const checkout = join(this.root, "plugins", `.checkout-${this.now()}`);
         try {
           await this.clone(entry.source.git, checkout, actor);
-          copyPlain(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, target);
+          await copyPlain(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, target);
         } finally {
           rmSync(checkout, { recursive: true, force: true });
         }
@@ -878,7 +879,7 @@ export class PluginMarketplaces {
         // MCP servers over https; skills need a repository (git) marketplace.
         await this.fetchPluginFiles(market.manifestUrl, entry.source.path, target);
       } else {
-        copyPlain(insideRoot(repo, entry.source.path), target);
+        await copyPlain(insideRoot(repo, entry.source.path), target);
       }
       return { dir: target, plan: pluginInstallPlan(target), ...(entry.version ? { version: entry.version } : {}), ...(revision ? { revision } : {}) };
     })();
@@ -1123,16 +1124,30 @@ export function startMarketplaceBackgroundRefresh(options: MarketplaceBackground
   };
 }
 
-/** Copy a plugin folder without links or git metadata. */
-function copyPlain(from: string, to: string): void {
+/** Copy a plugin folder without links or git metadata, file after file
+ * without holding the loop (a plugin of hundreds of files). */
+async function copyPlain(from: string, to: string): Promise<void> {
+  if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
+  await rm(to, { recursive: true, force: true });
+  notePluginFolderChanged(to);
+  await mkdir(join(to, ".."), { recursive: true });
+  await cp(from, to, {
+    recursive: true,
+    dereference: false,
+    filter: async (path) => plainCopyPath(path, (await lstat(path)).isSymbolicLink()),
+  });
+}
+
+/** The same copy for the one-time migration (`adopt`), which is synchronous. */
+function copyPlainSync(from: string, to: string): void {
   if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
   rmSync(to, { recursive: true, force: true });
   notePluginFolderChanged(to);
   mkdirSync(join(to, ".."), { recursive: true });
-  cpSync(from, to, {
-    recursive: true,
-    dereference: false,
-    // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
-    filter: (path) => withoutMacMetadata(path) && !lstatSync(path).isSymbolicLink() && !path.split(/[\\/]/).includes(".git"),
-  });
+  cpSync(from, to, { recursive: true, dereference: false, filter: (path) => plainCopyPath(path, lstatSync(path).isSymbolicLink()) });
+}
+
+// #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
+function plainCopyPath(path: string, isLink: boolean): boolean {
+  return withoutMacMetadata(path) && !isLink && !path.split(/[\\/]/).includes(".git");
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -6,7 +6,8 @@ import { api, ApiError } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
-import { WHOP_KEY, TAILSCALE_KEY, marketplacePluginKey, type PluginItem } from "@/lib/plugins-model";
+import { createInstallQueue } from "@/lib/install-queue";
+import { WHOP_KEY, TAILSCALE_KEY, type PluginItem } from "@/lib/plugins-model";
 import { openExternalLink } from "@/lib/app-links";
 import {
   addMarketplace as addBotMarketplace,
@@ -39,12 +40,12 @@ import type { PluginsPanelState } from "./usePluginsPanelState";
 export function usePluginsPanelActions(s: PluginsPanelState) {
   const confirm = useConfirm();
   const {
-    mcp, featured, setDataCenterFor, setInstalling, setPanelError, showDetail, push,
+    mcp, featured, setDataCenterFor, markInstalling, setItemError, markJustAdded, setPanelError, showDetail, push,
     setMarketBusy, setMarketError, setMarketNeedsToken, workspaceMarkets, mayManageOrganization,
     scope, botView, personalView, scopedPluginTarget, scopedPluginName, setScopedPluginView,
     loadMarketplaces, loadBotView, setMarketplaces, setPanelNotice, filter, setFilter,
     organization, items, scopeBotId, setBotBusy, botBusy, scopedPluginView, marketplaces,
-    botCapabilities, scopeBot, loadSkills, loadFeatured, installing, setTailscaleView,
+    botCapabilities, scopeBot, loadSkills, loadFeatured, installing, itemErrors, setTailscaleView,
   } = s;
 
   const openItem = (item: PluginItem) => {
@@ -61,6 +62,18 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     push({ page: "detail", key });
   };
 
+  // An add, update or removal of a card runs in one queue, one after the
+  // other, and never holds the panel: the card shows its own spinner at once
+  // (queued ones too), the others stay usable, an error lands on that card
+  // only. One at a time keeps each answer's list of marketplaces in order.
+  const [installQueue] = useState(() => createInstallQueue({ mark: markInstalling, cardError: setItemError, panelError: setPanelError, describe: readableError }));
+  const queued = installQueue.run;
+  /** the card shows Added for a few seconds, then it moves to Installed */
+  const showAdded = (id: string) => {
+    markJustAdded(id, true);
+    window.setTimeout(() => markJustAdded(id, false), 6000);
+  };
+
   const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null, afterInstall?: (serverName: string) => void) => {
     const listing = featured?.find((entry) => entry.id === item.id);
     if (region === undefined && listing?.regions?.length) {
@@ -68,22 +81,17 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       setDataCenterFor({ item, regions: listing.regions, defaultUrl: listing.url, anchor });
       return;
     }
-    setInstalling(item.id);
-    setPanelError(null);
-    try {
+    return queued([item.id], async (alone) => {
       const result = await api("/api/plugins/install", { method: "POST", body: JSON.stringify({ id: item.id, ...(region ? { region } : {}) }) });
-      await mcp.load();
-      await loadFeatured();
+      void mcp.load();
+      void loadFeatured();
       if (typeof result.authorizationUrl === "string") await openExternalLink(result.authorizationUrl);
       if (typeof result.name === "string") {
         afterInstall?.(result.name);
-        showDetail(`mcp:${result.name}`);
+        // adding one: its page opens to finish setting it up; adding several in a row stays on the list
+        if (alone) showDetail(`mcp:${result.name}`);
       }
-    } catch (cause) {
-      setPanelError(readableError(cause));
-    } finally {
-      setInstalling(null);
-    }
+    });
   };
 
   const marketAction = async (busy: string, work: () => Promise<unknown>): Promise<boolean> => {
@@ -195,10 +203,13 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       setBotBusy(null);
     }
   };
-  const installForBot = (id: string) => {
+  const installForBot = (id: string, errorOn: "card" | "panel" = "panel") => {
     const at = id.lastIndexOf("@");
     if (!scopedPluginTarget || at <= 0) return;
-    void botAction(`install:${id}`, () => installBotPlugin(scopedPluginTarget!, id.slice(at + 1), id.slice(0, at)));
+    setPanelError(null);
+    void queued([id], async () => {
+      setScopedPluginView(await installBotPlugin(scopedPluginTarget!, id.slice(at + 1), id.slice(0, at)));
+    }, errorOn);
   };
   const uninstallForBot = (id: string) => {
     if (!scopedPluginTarget) return;
@@ -219,7 +230,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     if (!scopedPluginView || !scopedPluginTarget || item.kind !== "plugin") return null;
     const plugin = botPluginState(scopedPluginView, item.id);
     if (!plugin) return null;
-    const busy = botBusy?.endsWith(`:${item.id}`) ? botBusy.slice(0, botBusy.indexOf(":")) : botBusy ? "other" : null;
+    const busy = installing.has(item.id) ? "install" : botBusy?.endsWith(`:${item.id}`) ? botBusy.slice(0, botBusy.indexOf(":")) : botBusy ? "other" : null;
     return (
       <BotPluginCard
         key={`${scope}:${item.key}`}
@@ -268,9 +279,9 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     ];
     let primaryAction: ReactNode = null;
     if (scope !== "workspace" && onBot && !onBot.installed && scopedPluginView?.canChange) {
-      const busy = botBusy === `install:${item.id}`;
+      const busy = installing.has(item.id);
       primaryAction = (
-        <button type="button" data-plugins-detail-primary="install-bot" disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass("primary"), "gap-1.5")}>
+        <button type="button" data-plugins-detail-primary="install-bot" disabled={busy || botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass("primary"), "gap-1.5")}>
           {busy && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
           {busy ? t("plugins.installing") : (scope === "me" ? t("connectApps.mePlugin.install") : t("connectApps.botPlugin.install", { name: scopedPluginName }))}
         </button>
@@ -282,7 +293,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       : {};
     // "Update" on a copy the person or bot holds: a button in the header beside the "..." (the card no longer carries it)
     const reinstall = scope !== "workspace" && onBot?.installed && scopedPluginView?.canChange
-      ? { onUpdate: () => installForBot(item.id), updating: botBusy === `install:${item.id}` }
+      ? { onUpdate: () => installForBot(item.id), updating: installing.has(item.id) }
       : undefined;
     return { installState, primaryAction, ...removal, ...(reinstall ? { reinstall } : {}) };
   };
@@ -326,58 +337,43 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     };
   };
   /** Add on a marketplace plugin: its MCP servers and skills, for every bot. */
-  const installPlugin = async (item: PluginItem) => {
+  const installPlugin = (item: PluginItem): Promise<void> => {
     const [plugin, marketplace] = item.id.split("@") as [string, string];
-    setInstalling(item.id);
     setPanelError(null);
     setPanelNotice(null);
-    try {
+    return queued([item.id], async () => {
       const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(plugin)}`, { method: "POST", body: "{}" });
       setMarketplaces(result.marketplaces ?? []);
-      await Promise.all([mcp.load(), loadSkills()]);
+      void Promise.all([mcp.load(), loadSkills()]);
       const skipped: string[] = Array.isArray(result.skipped) ? result.skipped : [];
       if (skipped.length) setPanelNotice(t("connectApps.plugin.skipped", { parts: skipped.join("; ") }));
-      showDetail(marketplacePluginKey(marketplace, plugin));
-    } catch (cause) {
-      setPanelError(readableError(cause));
-    } finally {
-      setInstalling(null);
-    }
+      showAdded(item.id);
+    });
   };
   /** Update in place: same server names, switches and bot choices. */
-  const updatePlugin = async (item: PluginItem) => {
+  const updatePlugin = (item: PluginItem): Promise<void> => {
     const [plugin, marketplace] = item.id.split("@") as [string, string];
-    setInstalling(item.id);
     setPanelError(null);
     setPanelNotice(null);
-    try {
+    return queued([item.id], async () => {
       const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(plugin)}/update`, { method: "POST", body: "{}" });
       setMarketplaces(result.marketplaces ?? []);
-      await Promise.all([mcp.load(), loadSkills()]);
+      void Promise.all([mcp.load(), loadSkills()]);
       const skipped: string[] = Array.isArray(result.skipped) ? result.skipped : [];
       setPanelNotice(skipped.length
         ? t("connectApps.plugin.skipped", { parts: skipped.join("; ") })
         : t("connectApps.plugin.updated", { name: plugin }));
-    } catch (cause) {
-      setPanelError(readableError(cause));
-    } finally {
-      setInstalling(null);
-    }
+    }, "panel");
   };
-  const uninstallPlugin = async (item: PluginItem) => {
+  const uninstallPlugin = async (item: PluginItem): Promise<void> => {
     const [plugin, marketplace] = item.id.split("@") as [string, string];
     if (!(await confirm({ title: t("connectApps.plugin.uninstallConfirm", { name: plugin }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
-    setInstalling(item.id);
     setPanelError(null);
-    try {
+    return queued([item.id], async () => {
       const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(plugin)}`, { method: "DELETE" });
       setMarketplaces(result.marketplaces ?? []);
-      await Promise.all([mcp.load(), loadSkills()]);
-    } catch (cause) {
-      setPanelError(readableError(cause));
-    } finally {
-      setInstalling(null);
-    }
+      void Promise.all([mcp.load(), loadSkills()]);
+    }, "panel");
   };
 
   const renderAction = (item: PluginItem) => {
@@ -403,29 +399,29 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         // switch and install date stay, server/bots/bot-plugins.ts)
         if (!scopedPluginView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
-          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={pluginActionClass(item.installed ? "outline" : "fill")}>
-            {botBusy === `install:${item.id}` ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.installed ? "connectApps.plugin.update" : "connectApps.action.add")}
+          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={installing.has(item.id) || botBusy !== null} onClick={() => installForBot(item.id)} className={pluginActionClass(item.installed ? "outline" : "fill")}>
+            {installing.has(item.id) ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.installed ? "connectApps.plugin.update" : "connectApps.action.add")}
           </button>
         );
       }
       if (item.installed && !item.updateAvailable) return null;
       if (item.installed) {
         return (
-          <button type="button" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={pluginActionClass("outline")} data-plugin-update>
-            {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.plugin.update")}
+          <button type="button" disabled={installing.has(item.id)} onClick={() => void updatePlugin(item)} className={pluginActionClass("outline")} data-plugin-update>
+            {installing.has(item.id) ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.plugin.update")}
           </button>
         );
       }
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={pluginActionClass()}>
-          {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.action.add")}
+        <button type="button" disabled={installing.has(item.id)} onClick={() => void installPlugin(item)} className={pluginActionClass()}>
+          {installing.has(item.id) ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.action.add")}
         </button>
       );
     }
     if (item.kind === "featured") {
       return (
-        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={pluginActionClass()}>
-          {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
+        <button type="button" disabled={installing.has(item.id)} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={pluginActionClass()}>
+          {installing.has(item.id) ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
         </button>
       );
     }
@@ -434,7 +430,11 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
 
   const renderBelow = (item: PluginItem) => {
     if (item.key === WHOP_KEY) return <WhopBelow mcp={mcp} />;
-    return null;
+    // a failed add, update or removal says so under its own card
+    const failed = itemErrors[item.id];
+    return failed ? (
+      <p role="alert" data-plugin-card-error={item.id} className="col-span-full -mt-1 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{failed}</p>
+    ) : null;
   };
 
   const removeSuperseded = (item: Parameters<typeof botPluginKey>[0]) => {
@@ -449,7 +449,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     refreshMarketplace, removeMarketplace, githubHere, githubKey, githubSection, openGithub,
     marketCredentials, marketSummaries, installForBot, uninstallForBot, toggleForBot, botCard,
     detailHead, engineInfo, installPlugin, updatePlugin, uninstallPlugin, renderAction, renderBelow,
-    setTailscaleView, botBusy, removeSuperseded,
+    setTailscaleView, botBusy, removeSuperseded, queued,
   };
 }
 

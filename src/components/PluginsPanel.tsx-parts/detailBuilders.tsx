@@ -351,7 +351,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     categories,
     ...(network !== undefined ? { network } : {}),
     ...(files ? { files } : {}),
-    busy: installing !== null,
+    busy: installing.has(item.id),
     accounts,
     // #4154: no connector and no GitHub connection: no Accounts section; no
     // part at all: no Tools section (the view hides an empty list)
@@ -395,7 +395,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
   return {
     ...shared,
     onUninstall: () => uninstallPlugin(item),
-    ...(item.installed && item.updateAvailable ? { onUpdate: () => updatePlugin(item), updating: installing === item.id } : {}),
+    ...(item.installed && item.updateAvailable ? { onUpdate: () => updatePlugin(item), updating: installing.has(item.id) } : {}),
     details: [
       { label: t("connectApps.detail.source"), value: marketplace },
       ...sourceDetails,

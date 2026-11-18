@@ -62,7 +62,7 @@ const mcp = (probe: Record<string, ProbeResult>, extra: Record<string, unknown> 
 }) as unknown as McpServers;
 const context = (overrides: Partial<DetailContext> = {}): DetailContext => ({
   mcp: mcp({}), openGithub: noop, githubKey: github.key, githubSection: null, mcpAccountDraft: null, setMcpAccountDraft: noop,
-  items, marketplaces, installing: null, openItem: noop, uninstallPlugin: noop, updatePlugin: noop,
+  items, marketplaces, installing: new Set<string>(), openItem: noop, uninstallPlugin: noop, updatePlugin: noop,
   scope: "workspace", botCard: null, ...overrides,
 });
 

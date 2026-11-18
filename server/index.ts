@@ -868,7 +868,7 @@ import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.
 import { openTriggerSeenStore } from "./triggers/trigger-seen-store.ts";
 import type { WebhookTrigger } from "../shared/webhooks.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
-import { installLibrarySkill, removeLibrarySkillFrom, replaceLibrarySkill, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills } from "./skills/skill-library.ts";
+import { installLibrarySkill, installLibrarySkills, removeLibrarySkillFrom, replaceLibrarySkill, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills } from "./skills/skill-library.ts";
 import { InstallationPlugins } from "./plugins/installation-plugins.ts";
 import { PersonalSkills, createPersonalSkillRoutes, libraryInputFromFetched } from "./skills/personal-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
@@ -4971,6 +4971,7 @@ bindLeafHost({
   get insideFolderRoots() { return insideFolderRoots; },
   get inspectBotZip() { return inspectBotZip; },
   get installLibrarySkill() { return installLibrarySkill; },
+  get installLibrarySkills() { return installLibrarySkills; },
   get installMainRuntimeEventSubscriber() { return installMainRuntimeEventSubscriber; },
   get installOrgSkill() { return installOrgSkill; },
   get installResourceUsage() { return installResourceUsage; },
@@ -26963,18 +26964,18 @@ ROUTES.push(createMarketplaceRoutes({
     for (const name of addedServers) await mcpOAuth.forget(name).catch(() => undefined);
     if (addedServers.length) await probeMcpOAuth(addedServers);
     const addedSkills: string[] = [];
-    for (const skill of plan.skills) {
-      const installed = installLibrarySkill({
-        name: skill.name, instructions: skill.text, source: marketplace,
-        warnings: scanSkillText(skill.text), reviewState: "disabled"
-      });
-      if ("error" in installed) skipped.push(`skill ${skill.name} (${installed.error})`);
-      else addedSkills.push(skill.name);
+    // in slices that give the loop back (#4647): a plugin of hundreds of skills never holds the server
+    for (const installed of await installLibrarySkills(plan.skills.map((skill) => ({
+      name: skill.name, instructions: skill.text, source: marketplace,
+      warnings: scanSkillText(skill.text), reviewState: "disabled" as const
+    })))) {
+      if ("error" in installed) skipped.push(`skill ${installed.name} (${installed.error})`);
+      else addedSkills.push(installed.name);
     }
     const record = await pluginMarketplaces.recordInstall(marketplace, plugin, {
       ...(version ? { version } : {}), ...(revision ? { revision } : {}), servers: addedServers, serverNames, skills: addedSkills
     });
-    installationPlugins.refresh(record);
+    await installationPlugins.refresh(record);
     return { status: 200, body: { plugin: record, skipped, servers: mcpServerResponse(mcpViewer(auth)).servers } };
   },
   update: updateInstallationPlugin,

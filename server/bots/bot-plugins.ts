@@ -790,11 +790,11 @@ export class BotPlugins {
       // stopped process left beside it goes first (#3636)
       clearSwapLeftovers(target);
       const staged = `${target}.staging-${process.pid}-${this.now()}`;
-      let result: ReturnType<typeof copySanitizedPlugin>;
+      let result: Awaited<ReturnType<typeof copySanitizedPluginAsync>>;
       const executionRoot = `${SANDBOX_PLUGINS_DIR}/${input.plugin}`;
       try {
         if (entry.source.kind === "path") {
-          result = copySanitizedPlugin(insideRoot(marketRoot, entry.source.path), staged, rawEntry, executionRoot);
+          result = await copySanitizedPluginAsync(insideRoot(marketRoot, entry.source.path), staged, rawEntry, executionRoot);
         } else {
           // #1098: a private marketplace (its author's own) for a bot is not
           // held to the organization's list; a shared one is
@@ -802,7 +802,7 @@ export class BotPlugins {
           const checkout = join(this.root(botId), "plugins", ".checkout");
           await this.clone(entry.source.git, checkout, await this.cloneEnvironment(botId, entry.source.git, actor, { marketplaceSource: market.source }));
           try {
-            result = copySanitizedPlugin(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, staged, rawEntry, executionRoot);
+            result = await copySanitizedPluginAsync(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, staged, rawEntry, executionRoot);
           } finally {
             rmSync(checkout, { recursive: true, force: true });
           }

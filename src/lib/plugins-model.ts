@@ -27,6 +27,8 @@ export interface PluginItem {
   category: PluginCategory;
   /** added or connected on this installation */
   installed: boolean;
+  /** just added from Discover: the card shows Added where it is, until the list moves on (cards must not jump under a person adding several in a row) */
+  justAdded?: boolean;
   status: PluginStatus;
   /** what the row's button does: Add (nothing to sign in to), Connect (an
    * account), or nothing (installed: the row opens the detail page) */
@@ -467,7 +469,7 @@ export function matchesType(item: PluginItem, type: PluginTypeFilter): boolean {
 
 /** Installed first, then by name: what the person has is what they look for. */
 function byInstalledThenName(a: PluginItem, b: PluginItem): number {
-  return Number(b.installed) - Number(a.installed) || a.name.localeCompare(b.name);
+  return Number(b.installed && !b.justAdded) - Number(a.installed && !a.justAdded) || a.name.localeCompare(b.name);
 }
 
 export interface PluginSection {

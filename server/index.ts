@@ -37977,7 +37977,8 @@ const onListening = async () => {
   // the background (first start, and when a later version brings a new one)
   if (!companyShutdown && !officialCatalogsAuto) {
     officialCatalogsAuto = startOfficialCatalogsAuto({
-      enabled: () => IDENTITY.kind !== "perspicax",
+      // never inside a test run: its servers must not clone from the network
+      enabled: () => IDENTITY.kind !== "perspicax" && !process.env.VITEST && process.env.SAGAX_TEST_SEAMS !== "1" && process.env.SAGAX_NO_OFFICIAL_CATALOGS !== "1",
       sources: () => pluginMarketplaces.sources(),
       dismissed: () => pluginMarketplaces.dismissedOfficial(),
       add: (catalog) => pluginMarketplaces.add({ source: catalog.source }, undefined, { visibility: "private" }),

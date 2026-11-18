@@ -53,6 +53,11 @@ window.fetch = async (input, init) => {
   if (url.pathname === "/api/pages/policy") return reply({ linkSharing: true, readerComments: true });
   const version = /^\/api\/pages\/[^/]+\/versions\/(\d+)$/.exec(url.pathname);
   if (version) return reply({ version: { n: Number(version[1]), kind: "html", title, state: "proposed", previewPath: `/pages/preview/${pageId}/${version[1]}` } });
+  // Undo of the bot's edit (#4099): the page answers decline and publish
+  if (/^\/api\/pages\/[^/]+\/(decline|publish)$/.test(url.pathname)) {
+    window.__pageChatReal.sends.push({ api: `${init?.method ?? "GET"} ${url.pathname}`, body: init?.body ?? null });
+    return reply({ page: summary() });
+  }
   if (/^\/api\/pages\/[^/]+$/.test(url.pathname)) return reply({ page: summary() });
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);

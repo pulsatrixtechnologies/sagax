@@ -18,17 +18,23 @@ let win: Window;
 let document: Window["document"];
 /** The app (window.top) and the preview wrapper between it and the frame
  * (window.parent): what reaches each is kept apart. */
-const app = { postMessage: (message: unknown) => { posted.push(message); } };
-const wrapper = { postMessage: (message: unknown) => { toWrapper.push(message); } };
+// (made again by every `load`: a timer of an earlier page, which the script
+// debounces a keyboard selection with, never writes in a later test's lists)
+let app: { postMessage: (message: unknown) => void } = { postMessage: () => {} };
+let wrapper: { postMessage: (message: unknown) => void } = { postMessage: () => {} };
 
 function load(html: string) {
   win = new Window({ url: "https://frame.example/" });
+  const mine: unknown[] = [];
+  const mineWrapper: unknown[] = [];
+  posted = mine;
+  toWrapper = mineWrapper;
+  app = { postMessage: (message) => { mine.push(message); } };
+  wrapper = { postMessage: (message) => { mineWrapper.push(message); } };
   Object.defineProperty(win, "parent", { value: wrapper });
   Object.defineProperty(win, "top", { value: app });
   document = win.document;
   document.body.innerHTML = html;
-  posted = [];
-  toWrapper = [];
   new Function("window", "document", SELECTION_BRIDGE_SOURCE)(win, document);
 }
 
@@ -52,7 +58,8 @@ async function select(node: unknown, start: number, end: number) {
   win.getSelection()!.removeAllRanges();
   win.getSelection()!.addRange(range);
   document.dispatchEvent(new win.MouseEvent("mouseup", { bubbles: true }));
-  await tick();
+  // a moment after the pointer is up: a double or triple click is finished first
+  await new Promise((resolve) => setTimeout(resolve, 340));
 }
 
 afterEach(() => { void win?.happyDOM.close(); });
@@ -138,6 +145,84 @@ describe("the preview frame's selection, for the app's in-place ask", () => {
     win.dispatchEvent(new win.Event("scroll"));
     await tick();
     expect(posted).toHaveLength(1);
+  });
+
+  it("reports a keyboard selection (Shift and the arrows, Select all) once the keys rest, and not twice for a mouse one", async () => {
+    load("<p>Le volume a augmenté de 12 %.</p>");
+    boxes({ left: 8, top: 40, width: 120, height: 18 });
+    const node = document.querySelector("p")!.firstChild as never;
+    const range = document.createRange();
+    range.setStart(node, 3);
+    range.setEnd(node, 9);
+    win.getSelection()!.removeAllRanges();
+    win.getSelection()!.addRange(range);
+    // no pointer, no Shift keyup: the selection changed on its own
+    document.dispatchEvent(new win.Event("selectionchange"));
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ type: PAGE_SELECTION_MESSAGE, anchor: { quote: "volume" }, rect: { x: 8, y: 40, w: 120, h: 18 } });
+    // the same selection, reported again by the browser: said once
+    document.dispatchEvent(new win.Event("selectionchange"));
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    expect(posted).toHaveLength(1);
+    // a mouse selection is reported by its mouseup, not again after it
+    await select(node, 12, 20);
+    document.dispatchEvent(new win.Event("selectionchange"));
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    expect(posted.filter((message) => (message as { anchor?: { quote?: string } }).anchor?.quote === "augmenté")).toHaveLength(1);
+    expect(posted.at(-1)).toMatchObject({ anchor: { quote: "augmenté" } });
+  });
+
+  it("says nothing mid-drag, only when the pointer is up", async () => {
+    load("<p>Le volume a augmenté.</p>");
+    boxes({ left: 0, top: 0, width: 10, height: 10 });
+    const node = document.querySelector("p")!.firstChild as never;
+    document.dispatchEvent(new win.MouseEvent("mousedown", { bubbles: true }));
+    const range = document.createRange();
+    range.setStart(node, 3);
+    range.setEnd(node, 9);
+    win.getSelection()!.removeAllRanges();
+    win.getSelection()!.addRange(range);
+    document.dispatchEvent(new win.Event("selectionchange"));
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    expect(posted).toEqual([]);
+    document.dispatchEvent(new win.MouseEvent("mouseup", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 340));
+    expect(posted).toHaveLength(1);
+  });
+
+  it("waits for a double or triple click to finish: one report, after the last click", async () => {
+    load("<p>Le volume a augmenté de 12 %.</p>");
+    boxes({ left: 0, top: 0, width: 10, height: 10 });
+    const node = document.querySelector("p")!.firstChild as never;
+    for (const [start, end] of [[3, 9], [0, 12], [0, 29]]) {
+      document.dispatchEvent(new win.MouseEvent("mousedown", { bubbles: true }));
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      win.getSelection()!.removeAllRanges();
+      win.getSelection()!.addRange(range);
+      document.dispatchEvent(new win.MouseEvent("mouseup", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(posted).toEqual([]);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ anchor: { quote: "Le volume a augmenté de 12 %." } });
+  });
+
+  it("Escape in the page puts the passage away: a clear to the app, the selection gone", async () => {
+    load("<p>Le volume a augmenté.</p>");
+    boxes({ left: 0, top: 0, width: 10, height: 10 });
+    await select(document.querySelector("p")!.firstChild, 3, 9);
+    expect(posted).toHaveLength(1);
+    document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(posted.at(-1)).toEqual({ type: PAGE_SELECTION_MESSAGE, v: 1, anchor: null });
+    expect(win.getSelection()!.rangeCount === 0 || win.getSelection()!.isCollapsed).toBe(true);
+    // nothing selected: Escape says nothing
+    const count = posted.length;
+    document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(posted).toHaveLength(count);
   });
 
   it("uses no network", () => {

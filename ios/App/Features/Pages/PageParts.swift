@@ -107,11 +107,18 @@ struct PageWebView: UIViewRepresentable {
     /// (the server's preview wrapper only, never the demo's document).
     var capabilities: PageCapabilityBroker?
     var relay: PageCapRelay?
+    /// The in-place ask about a selected passage (#4099): where the page's
+    /// frame says the selection is, the edit menu's entry (nil: none) and
+    /// what it does, and the relay that posts back to the frame.
+    var onSelection: ((PageSelectionUpdate) -> Void)?
+    var askTitle: String?
+    var onAsk: (() -> Void)?
+    var selectionRelay: PageSelectionRelay?
 
     static let placeWorld = "sagax-page-place"
     static let placeHandler = "sagaxPagePlace"
 
-    func makeCoordinator() -> Coordinator { Coordinator(apiBase: apiBase, onPlace: onPlace, capabilities: capabilities) }
+    func makeCoordinator() -> Coordinator { Coordinator(apiBase: apiBase, onPlace: onPlace, capabilities: capabilities, onSelection: onSelection, onAsk: onAsk) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -133,7 +140,10 @@ struct PageWebView: UIViewRepresentable {
             controller.add(WeakCapsHandler(context.coordinator), contentWorld: world, name: PageCapBridge.handler)
             controller.addUserScript(WKUserScript(source: PageCapBridge.script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))
         }
-        let view = WKWebView(frame: .zero, configuration: config)
+        let view = PageAskWebView(frame: .zero, configuration: config)
+        view.askTitle = askTitle
+        view.onAsk = { [weak coordinator = context.coordinator] in coordinator?.onAsk?() }
+        selectionRelay?.webView = view
         relay?.webView = view
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
@@ -149,6 +159,10 @@ struct PageWebView: UIViewRepresentable {
 
     func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.onPlace = onPlace
+        context.coordinator.onSelection = onSelection
+        context.coordinator.onAsk = onAsk
+        if let view = view as? PageAskWebView { view.askTitle = askTitle }
+        selectionRelay?.webView = view
         if context.coordinator.capabilities !== capabilities {
             context.coordinator.capabilities = capabilities
             capabilities?.start()
@@ -176,8 +190,10 @@ struct PageWebView: UIViewRepresentable {
     static let placeScript = """
     (function(){"use strict";
     var h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.\(placeHandler);if(!h)return;
+    window.__sagaxSelPost=function(m){var f=window.frames&&window.frames[0];if(f)f.postMessage(m,"*")};
     window.addEventListener("message",function(e){try{
     var f=window.frames&&window.frames[0];if(!f||e.source!==f)return;var d=e.data;
+    if(d&&typeof d==="object"&&d.type==="sagax-page-selection"&&d.v===1){h.postMessage(d);return}
     if(!d||typeof d!=="object"||d.type!=="sagax-page-scroll"||d.v!==1||typeof d.y!=="number")return;
     h.postMessage({type:"sagax-page-scroll",v:1,y:d.y});}catch(x){}});
     if(location.protocol==="about:"){var t=0;window.addEventListener("scroll",function(){clearTimeout(t);t=setTimeout(function(){
@@ -188,15 +204,19 @@ struct PageWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let apiBase: URL?
         var onPlace: ((Int) -> Void)?
+        var onSelection: ((PageSelectionUpdate) -> Void)?
+        var onAsk: (() -> Void)?
         var capabilities: PageCapabilityBroker?
         private var loaded: PageWebSource?
         private var loadedDraw = -1
         private var htmlPlace = 0
 
-        init(apiBase: URL?, onPlace: ((Int) -> Void)?, capabilities: PageCapabilityBroker?) {
+        init(apiBase: URL?, onPlace: ((Int) -> Void)?, capabilities: PageCapabilityBroker?, onSelection: ((PageSelectionUpdate) -> Void)?, onAsk: (() -> Void)?) {
             self.apiBase = apiBase
             self.onPlace = onPlace
             self.capabilities = capabilities
+            self.onSelection = onSelection
+            self.onAsk = onAsk
         }
 
         func load(_ source: PageWebSource, drawID: Int, into view: WKWebView) {
@@ -213,6 +233,11 @@ struct PageWebView: UIViewRepresentable {
         }
 
         func receive(_ body: Any) {
+            // the page's selection, for the in-place ask
+            if let update = PageViewRules.parseSelection(body) {
+                onSelection?(update)
+                return
+            }
             guard let y = PageViewRules.parseScroll(body) else { return }
             onPlace?(y)
         }

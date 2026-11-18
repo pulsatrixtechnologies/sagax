@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { initialState, reducer, type Bot } from "@/state/store";
-import { pageAskSend } from "./ChatViewPagePanel";
+import { pageAskOffered, pageAskSend } from "./ChatViewPagePanel";
 
 const selection = { kind: "text" as const, quote: "Closed tickets, response times", prefix: "", suffix: " and backlog", path: "body > p", tag: "p" };
 const page = { pageId: "abcdefgh12345678", title: "Report", version: 2, selection };
@@ -21,5 +21,17 @@ describe("pageAskSend (#4099)", () => {
     expect(shown.role).toBe("user");
     expect(shown.text).toBe("Make this shorter");
     expect(shown.dataContext?.page?.selection).toEqual(selection);
+  });
+});
+
+describe("pageAskOffered (#4099)", () => {
+  it("is offered where the person can write in this bot's conversation, and not on a page they only read", () => {
+    expect(pageAskOffered(true, "scout", "scout")).toBe(true);
+    expect(pageAskOffered(null, undefined, "scout")).toBe(true);
+    expect(pageAskOffered(undefined, "scout", "scout")).toBe(true);
+    // read only for this person: no composer
+    expect(pageAskOffered(false, "scout", "scout")).toBe(false);
+    // another bot's page
+    expect(pageAskOffered(true, "other", "scout")).toBe(false);
   });
 });

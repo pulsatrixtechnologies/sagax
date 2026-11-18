@@ -202,6 +202,92 @@ final class PageViewTests: XCTestCase {
         XCTAssertNotEqual(odd.dataContext?.page?.isDrawable, true)
     }
 
+    // MARK: Selection (#4099, the in-place ask)
+
+    func testAnAskAboutAPassageCarriesItOnTheBotRoute() {
+        let quote = PageQuote(quote: "Le volume a augmenté", prefix: "Septembre. ", suffix: " de 12 %.", path: "body > p", tag: "p")
+        let ref = PageContextRef(pageId: "page_id_1", title: "Plan", version: 2, selection: quote)
+        var body: [String: Any] = [:]
+        SendOptions(page: ref).apply(to: &body, destination: .bot(id: "b", threadId: "t"))
+        let page = (body["dataContext"] as? [String: Any])?["page"] as? [String: Any]
+        let selection = page?["selection"] as? [String: Any]
+        XCTAssertEqual(selection?["quote"] as? String, "Le volume a augmenté")
+        XCTAssertEqual(selection?["kind"] as? String, "text")
+        XCTAssertEqual(selection?["tag"] as? String, "p")
+        // and a message that carries one reads it back
+        let message = try? JSONDecoder().decode(Message.self, from: Data(#"""
+        {"id":"m","role":"user","kind":"text","at":1,"text":"Shorter","dataContext":{"page":{"pageId":"page_id_1","title":"Plan","selection":{"kind":"text","quote":"Le volume","prefix":"","suffix":"","path":"body > p","tag":"p"}}}}
+        """#.utf8))
+        XCTAssertEqual(message?.dataContext?.page?.selection?.quote, "Le volume")
+    }
+
+    func testTheFrameSaysWhereTheSelectionIsOrThatItIsGone() {
+        let anchor: [String: Any] = ["kind": "text", "quote": "volume", "prefix": "Le ", "suffix": " a", "path": "body > p", "tag": "p"]
+        let selected = PageViewRules.parseSelection(["type": "sagax-page-selection", "v": 1, "anchor": anchor, "rect": ["x": 40.4, "y": 120, "w": 9.6, "h": 18]])
+        XCTAssertEqual(selected, .selected(PageQuote(quote: "volume", prefix: "Le ", suffix: " a", path: "body > p", tag: "p"), PageSelectionRect(x: 40, y: 120, w: 10, h: 18)))
+        XCTAssertEqual(PageViewRules.parseSelection(["type": "sagax-page-selection", "v": 1, "anchor": NSNull()]), .cleared)
+        // words and context are cut as the server cuts them
+        let long = PageViewRules.parseSelection(["type": "sagax-page-selection", "v": 1, "anchor": ["quote": String(repeating: "x", count: 900), "prefix": String(repeating: "p", count: 200)], "rect": ["x": 0, "y": 0, "w": 1, "h": 1]])
+        guard case let .selected(cut, _)? = long else { return XCTFail("not a selection") }
+        XCTAssertEqual(cut.quote.count, 500)
+        XCTAssertEqual(cut.prefix.count, 64)
+        for bad: Any in [
+            "x", [:] as [String: Any], ["type": "sagax-page-scroll", "v": 1, "y": 1],
+            ["type": "sagax-page-selection", "v": 2, "anchor": NSNull()],
+            ["type": "sagax-page-selection", "v": 1, "anchor": anchor],
+            ["type": "sagax-page-selection", "v": 1, "anchor": anchor, "rect": ["x": 0, "y": 0, "w": -1, "h": 1]],
+            ["type": "sagax-page-selection", "v": 1, "anchor": anchor, "rect": ["x": 0, "y": 0, "w": "1", "h": 1]],
+            ["type": "sagax-page-selection", "v": 1, "anchor": ["quote": "  "], "rect": ["x": 0, "y": 0, "w": 1, "h": 1]],
+        ] {
+            XCTAssertNil(PageViewRules.parseSelection(bad))
+        }
+    }
+
+    func testTheRequestToTheFrameFollowsAPassageOrDropsIt() throws {
+        XCTAssertEqual(PageViewRules.selectionRequestJSON(nil), #"{"anchor":null,"type":"sagax-page-selection","v":1}"#)
+        let json = PageViewRules.selectionRequestJSON(PageQuote(quote: "volume", path: "body > p", tag: "p"))
+        let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        XCTAssertEqual((parsed["anchor"] as? [String: Any])?["quote"] as? String, "volume")
+        XCTAssertEqual(parsed["type"] as? String, "sagax-page-selection")
+    }
+
+    func testTheComposerGoesUnderThePassageOrOverItAndNeverPastASide() {
+        let rect = PageSelectionRect(x: 40, y: 120, w: 200, h: 18)
+        let under = PageViewRules.selectionComposerPlace(rect: rect, width: 800, height: 600)
+        XCTAssertEqual(under.left, 40)
+        XCTAssertEqual(under.width, 360)
+        XCTAssertEqual(under.top, 148)
+        XCTAssertNil(under.bottom)
+        let over = PageViewRules.selectionComposerPlace(rect: PageSelectionRect(x: 40, y: 560, w: 200, h: 18), width: 800, height: 600)
+        XCTAssertNil(over.top)
+        XCTAssertEqual(over.bottom, 50)
+        XCTAssertEqual(PageViewRules.selectionComposerPlace(rect: PageSelectionRect(x: 700, y: 120, w: 60, h: 18), width: 800, height: 600).left, 432)
+        let narrow = PageViewRules.selectionComposerPlace(rect: PageSelectionRect(x: 10, y: 120, w: 60, h: 18), width: 300, height: 600)
+        XCTAssertEqual(narrow.left, 8)
+        XCTAssertEqual(narrow.width, 284)
+    }
+
+    func testUndoingTheBotsEditPublishesTheVersionAskedAboutOrDeclinesTheProposal() throws {
+        // the bot's version is the published one: the first is published again
+        let live = try page("published", access: "link", current: 2, versions: [(1, "proposed"), (2, "published")])
+        XCTAssertEqual(PageViewRules.undoSteps(page: live, from: 1, to: 2),
+                       [PageShareStep(method: "POST", path: "/publish", body: ["version": 1, "access": "link", "expiresAt": NSNull()])])
+        // a proposal beside a published page: declined
+        let proposal = try page("published", access: "link", current: 1, versions: [(1, "published"), (2, "proposed")])
+        XCTAssertEqual(PageViewRules.undoSteps(page: proposal, from: 1, to: 2),
+                       [PageShareStep(method: "POST", path: "/decline", body: ["version": 2])])
+        // already decided: nothing more
+        let decided = try page("draft", versions: [(1, "proposed"), (2, "declined")])
+        XCTAssertEqual(PageViewRules.undoSteps(page: decided, from: 1, to: 2), [])
+    }
+
+    func testAVersionTheCallerSentBackIsNotDrawnAgain() {
+        XCTAssertNil(PageViewRules.followedVersion(nil, skipped: 0))
+        XCTAssertEqual(PageViewRules.followedVersion(2, skipped: 0), 2)
+        XCTAssertNil(PageViewRules.followedVersion(2, skipped: 2))
+        XCTAssertEqual(PageViewRules.followedVersion(3, skipped: 2), 3)
+    }
+
     // MARK: Share
 
     func testAPageNotSharedYetIsPublishedByTheGesture() throws {

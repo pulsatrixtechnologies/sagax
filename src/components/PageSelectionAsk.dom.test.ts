@@ -82,14 +82,14 @@ async function post(data: unknown, source: unknown = pageWindow) {
 const selected = (rect = { x: 40, y: 120, w: 200, h: 18 }) => ({ type: PAGE_SELECTION_MESSAGE, v: 1, anchor, rect });
 const ask = (over: Record<string, unknown> = {}) => ({ avatar: createElement("span", { "data-test-avatar": "" }), botName: "Scout", working: false, onSend: vi.fn(), ...over });
 
-async function type(input: HTMLInputElement, value: string) {
+async function type(input: HTMLTextAreaElement, value: string) {
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-async function key(target: HTMLElement, name: string) {
-  await act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true })); });
+async function key(target: HTMLElement, name: string, init: KeyboardEventInit = {}) {
+  await act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init })); });
 }
 
 describe("ask the bot about a selected passage, in place (#4099)", () => {
@@ -104,12 +104,17 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     await post(selected());
     const outline = host.querySelector<HTMLElement>("[data-page-selection-outline]")!;
     expect(outline).not.toBeNull();
-    expect(outline.style.left).toBe("38px");
-    expect(outline.style.top).toBe("118px");
+    expect(outline.style.left).toBe("36px");
+    expect(outline.style.top).toBe("116px");
+    // the reference's ring: 4 off the passage, 1.5 stroke, 8 radius, the accent at 90 and 12
+    expect(outline.style.width).toBe("208px");
+    expect(outline.style.borderWidth).toBe("1.5px");
+    expect(outline.className).toContain("var(--color-accent)_90%");
+    expect(outline.className).toContain("var(--color-accent)_12%");
     expect(outline.querySelector("[data-page-selection-tag]")!.textContent).toBe(t("pages.selection.tag"));
     const composer = host.querySelector<HTMLElement>("[data-page-selection-composer='ready']")!;
     expect(composer.querySelector("[data-test-avatar]")).not.toBeNull();
-    const input = composer.querySelector<HTMLInputElement>("input")!;
+    const input = composer.querySelector<HTMLTextAreaElement>("textarea")!;
     expect(input.getAttribute("placeholder")).toBe(t("pages.selection.placeholder"));
     expect(document.activeElement).toBe(input);
     expect(composer.querySelector<HTMLButtonElement>("[data-page-selection-send]")!.disabled).toBe(true);
@@ -121,7 +126,7 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     await flush();
     wireFrame();
     await post(selected());
-    const input = host.querySelector<HTMLInputElement>("[data-page-selection-composer] input")!;
+    const input = host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!;
     await type(input, "Plus court, s'il te plaît");
     await key(input, "Enter");
     expect(onSend).toHaveBeenCalledWith("Plus court, s'il te plaît", { pageId: "abcdefgh12345678", title: "Bilan", version: 1, selection: anchor });
@@ -140,7 +145,7 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     expect(pageWindow.postMessage).toHaveBeenCalledWith(pageSelectionRequest(anchor), "*");
     // found again: the outline follows it
     await post(selected({ x: 40, y: 300, w: 180, h: 18 }));
-    expect(host.querySelector<HTMLElement>("[data-page-selection-outline]")!.style.top).toBe("298px");
+    expect(host.querySelector<HTMLElement>("[data-page-selection-outline]")!.style.top).toBe("296px");
     // not found in this version: the outline goes
     await post({ type: PAGE_SELECTION_MESSAGE, v: 1, anchor: null });
     expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
@@ -154,7 +159,7 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     await post(selected());
     // busy before the ask: the field, not the working line
     expect(host.querySelector("[data-page-selection-working]")).toBeNull();
-    const input = host.querySelector<HTMLInputElement>("[data-page-selection-composer='ready'] input")!;
+    const input = host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer='ready'] textarea")!;
     await type(input, "Plus court");
     expect(host.querySelector<HTMLButtonElement>("[data-page-selection-send]")!.disabled).toBe(false);
     await key(input, "Enter");
@@ -168,7 +173,7 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     await flush();
     wireFrame();
     await post(selected());
-    await key(host.querySelector<HTMLInputElement>("[data-page-selection-composer] input")!, "Escape");
+    await key(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Escape");
     expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
     expect(pageWindow.postMessage).toHaveBeenCalledWith(pageSelectionRequest(null), "*");
     expect(onClose).not.toHaveBeenCalled();
@@ -182,10 +187,103 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
   });
 
-  it("the composer goes under the passage, over it near the bottom, and never past a side", () => {
-    expect(selectionComposerPlace({ x: 40, y: 120, w: 200, h: 18 }, 800, 600)).toEqual({ left: 40, top: 146, width: 380 });
-    expect(selectionComposerPlace({ x: 40, y: 560, w: 200, h: 18 }, 800, 600)).toEqual({ left: 40, top: 508, width: 380 });
-    expect(selectionComposerPlace({ x: 700, y: 120, w: 60, h: 18 }, 800, 600)).toEqual({ left: 412, top: 146, width: 380 });
-    expect(selectionComposerPlace({ x: 10, y: 120, w: 60, h: 18 }, 300, 600)).toEqual({ left: 8, top: 146, width: 284 });
+  it("the composer goes 10 under the passage, over it (growing upward) when there is no room under, clear of the docked composer, and never past a side", () => {
+    expect(selectionComposerPlace({ x: 40, y: 120, w: 200, h: 18 }, 800, 600)).toEqual({ left: 40, top: 148, width: 360 });
+    expect(selectionComposerPlace({ x: 40, y: 560, w: 200, h: 18 }, 800, 600)).toEqual({ left: 40, bottom: 50, width: 360 });
+    // room under it only once the docked composer's room is not kept
+    expect(selectionComposerPlace({ x: 40, y: 400, w: 200, h: 18 }, 800, 600, 0)).toEqual({ left: 40, top: 428, width: 360 });
+    expect(selectionComposerPlace({ x: 700, y: 120, w: 60, h: 18 }, 800, 600)).toEqual({ left: 432, top: 148, width: 360 });
+    expect(selectionComposerPlace({ x: 10, y: 120, w: 60, h: 18 }, 300, 600)).toEqual({ left: 8, top: 148, width: 284 });
+  });
+
+  it("the tag sits above the outline's top left corner, which is square under it", async () => {
+    render({ ask: ask() });
+    await flush();
+    wireFrame();
+    await post(selected());
+    const outline = host.querySelector<HTMLElement>("[data-page-selection-outline]")!;
+    const tag = outline.querySelector<HTMLElement>("[data-page-selection-tag]")!;
+    expect(tag.style.bottom).toContain("100%");
+    expect(tag.className).toContain("bg-accent");
+    expect(outline.style.borderTopLeftRadius).toBe("0px");
+    expect(outline.style.borderTopRightRadius).toBe("8px");
+    expect(outline.style.borderBottomRightRadius).toBe("8px");
+  });
+
+  it("the field takes several lines: Enter sends, Shift and Enter make a new line", async () => {
+    const onSend = vi.fn();
+    render({ ask: ask({ onSend }) });
+    await flush();
+    wireFrame();
+    await post(selected());
+    const field = host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!;
+    await type(field, "Plus court\nsans perdre le chiffre");
+    await key(field, "Enter", { shiftKey: true });
+    expect(onSend).not.toHaveBeenCalled();
+    await key(field, "Enter");
+    expect(onSend).toHaveBeenCalledWith("Plus court\nsans perdre le chiffre", expect.objectContaining({ selection: anchor }));
+  });
+
+  it("Escape anywhere in the app puts it away too, with the page staying open", async () => {
+    const onClose = vi.fn();
+    render({ ask: ask(), onClose });
+    await flush();
+    wireFrame();
+    await post(selected());
+    await key(document.body, "Escape");
+    expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
+    expect(pageWindow.postMessage).toHaveBeenCalledWith(pageSelectionRequest(null), "*");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("the bot's edit is drawn as soon as it lands, with one line and Undo that sends the page back to the version asked about", async () => {
+    const onSend = vi.fn();
+    const { api } = await import("@/state/store");
+    render({ ask: ask({ onSend }), latestVersion: 1 });
+    await flush();
+    wireFrame();
+    await post(selected());
+    await type(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Plus court");
+    await key(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Enter");
+    expect(host.querySelector("[data-page-edit-undo]")).toBeNull();
+    // the bot proposes version 2 (a proposal: the page is not published)
+    summary = { ...summary, versions: [version(1), { ...version(2), state: "proposed" }] };
+    render({ ask: ask({ onSend }), latestVersion: 2 });
+    await flush();
+    expect(wireFrame().getAttribute("src")).toContain("/abcdefgh12345678/2");
+    const line = host.querySelector<HTMLElement>("[data-page-edit-undo]")!;
+    expect(line.textContent).toContain(t("pages.edit.applied", { name: "Scout" }));
+    // Undo: the proposal is declined and version 1 is drawn again, and not skipped to 2 again
+    (api as unknown as ReturnType<typeof vi.fn>).mockClear();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-page-edit-undo-button]")!.click(); });
+    await flush();
+    const calls = (api as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([path, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${path}`);
+    expect(calls).toContain("POST /api/pages/abcdefgh12345678/decline");
+    expect(wireFrame().getAttribute("src")).toContain("/abcdefgh12345678/1");
+    expect(host.querySelector("[data-page-edit-undo]")).toBeNull();
+    render({ ask: ask({ onSend }), latestVersion: 2 });
+    await flush();
+    expect(wireFrame().getAttribute("src")).toContain("/abcdefgh12345678/1");
+  });
+
+  it("Undo of an edit the bot published publishes the version asked about again", async () => {
+    const onSend = vi.fn();
+    const { api } = await import("@/state/store");
+    summary = { ...summary, status: "published", access: "link", currentVersion: 1, keepUpdated: true, versions: [{ ...version(1), state: "published" }] };
+    render({ ask: ask({ onSend }), latestVersion: 1 });
+    await flush();
+    wireFrame();
+    await post(selected());
+    await type(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Plus court");
+    await key(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Enter");
+    summary = { ...summary, currentVersion: 2, versions: [{ ...version(1), state: "proposed" }, { ...version(2), state: "published" }] };
+    render({ ask: ask({ onSend }), latestVersion: 2 });
+    await flush();
+    (api as unknown as ReturnType<typeof vi.fn>).mockClear();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-page-edit-undo-button]")!.click(); });
+    await flush();
+    const publish = (api as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([path]) => path === "/api/pages/abcdefgh12345678/publish");
+    expect(publish).toBeTruthy();
+    expect(JSON.parse((publish![1] as RequestInit).body as string)).toMatchObject({ version: 1, access: "link" });
   });
 });

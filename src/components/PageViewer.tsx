@@ -59,6 +59,7 @@ import { encodeSkinTokens } from "@/lib/page-theme";
 import { MenuItem, PopoverMenu } from "./bot-settings/FilesSection";
 import { PageCapabilityStrip, useCapabilityStripVisible, usePageCapabilityBroker } from "./PageCapabilityStrip";
 import { PageSelectionAsk } from "./PageSelectionAsk";
+import { followedVersion, PageEditUndo, undoEditPlan, type PageEdit } from "./PageEditUndo";
 import type { PageContextRef } from "../../shared/data-context";
 
 export { needsLinkConfirm, pageErrorText };
@@ -427,11 +428,37 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   }, [follow, pageId]);
 
   // the bot changed this page: show its new version, at the same place
-  const newer = newerVersion(version, latestVersion ?? followed);
+  // (a version the person sent back with Undo is not drawn again)
+  const skippedRef = useRef(0);
+  const newer = followedVersion(newerVersion(version, latestVersion ?? followed), skippedRef.current);
+  // the version the person last asked about from the page, and what the bot
+  // answered with: the one line that says so, with Undo
+  const askedFromRef = useRef<number | null>(null);
+  const [edited, setEdited] = useState<PageEdit | null>(null);
   useEffect(() => {
     if (newer === null || !page) return;
+    const from = askedFromRef.current;
+    if (from !== null && newer > from) {
+      askedFromRef.current = null;
+      setEdited({ from, to: newer });
+    }
     return load(newer);
   }, [newer, page === null, load]);
+  const undoEdit = async () => {
+    if (!edited || !page) return;
+    const plan = undoEditPlan(page, edited);
+    skippedRef.current = Math.max(skippedRef.current, edited.to, latestVersion ?? 0, followed ?? 0);
+    if (plan.republish) {
+      const answer = await call<{ page: PublishedPageSummary }>("/publish", { method: "POST", body: JSON.stringify(republishBody(page, edited.from)) });
+      if (!answer) return;
+      update(answer.page);
+    } else if (plan.decline) {
+      const answer = await call<{ page: PublishedPageSummary }>("/decline", { method: "POST", body: JSON.stringify({ version: edited.to }) });
+      if (answer) update(answer.page);
+    }
+    setVersion(edited.from);
+    setEdited(null);
+  };
 
   useEffect(() => {
     if (version === null) return;
@@ -688,9 +715,14 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
               avatar={ask.avatar}
               botName={ask.botName}
               working={ask.working}
-              onSend={(text, selection) => ask.onSend(text, { pageId, title, ...(version !== null ? { version } : {}), selection })}
+              onSend={(text, selection) => {
+                askedFromRef.current = version;
+                setEdited(null);
+                ask.onSend(text, { pageId, title, ...(version !== null ? { version } : {}), selection });
+              }}
             />
           )}
+          {ask && edited && !gone && <PageEditUndo botName={ask.botName} busy={busy} onUndo={() => void undoEdit()} onClose={() => setEdited(null)} />}
           {footer}
         </div>
         {page && panel && (

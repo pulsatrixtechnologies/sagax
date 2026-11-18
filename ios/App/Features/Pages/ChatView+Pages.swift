@@ -39,11 +39,29 @@ extension ChatView {
                     if let title = summary?.title, !title.isEmpty { open.title = title }
                     if let version { open.version = version }
                     if open != openPage { openPage = open }
-                }
+                },
+                ask: pageAsk(for: page)
             )
             .id(page.pageId)
             .ignoresSafeArea(.container, edges: .bottom)
             .transition(.opacity)
+        }
+    }
+}
+
+extension ChatView {
+    /// The in-place ask about a selected passage (#4099): only over this
+    /// bot's own conversation, where the person can write. The words go as
+    /// their ordinary message there, with the page and the passage
+    /// (`dataContext.page.selection`); a bot busy with something else takes
+    /// it as the composer's own sends do. A person who only reads is not
+    /// offered it at all.
+    func pageAsk(for page: OpenPageRef) -> PageAsk? {
+        let chat = current
+        guard chat.isBot, page.botId == chat.id, session.account?.canWrite(in: threadId) != false else { return nil }
+        let busyMode: BusySendMode? = BusySendChoice.routesAuto(for: chat) && session.surfaceGate.allows(.busySendChoice) ? .auto : nil
+        return PageAsk(chat: chat, working: chat.busy) { words, ref in
+            Task { _ = await session.send(text: words, attachments: [], to: chat, options: SendOptions(busyMode: busyMode, page: ref)) }
         }
     }
 }

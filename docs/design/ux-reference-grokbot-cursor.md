@@ -1134,6 +1134,30 @@ seul endroit par largeur. La barre est une grille de trois colonnes : les côté
 passent jamais sous leurs boutons et se partagent le reste, la pastille de titre reste
 centrée tant qu'elle peut et se coupe avant de passer sous un bouton (390 px compris).
 
+**Éditer une page par sa sélection, mesuré (2026-11-17, #4099, valeurs lues en lecture
+seule dans l'app de référence installée, sans la lancer).** Le texte choisi dans la
+page porte un contour et un compositeur flottant sous lui ; le bot ne change que ce
+passage. Mesures du compositeur de la référence (son éditeur de note, forme « roomy ») :
+360 de large, rayon 18, bordure de 0,5 en gris translucide, fond surélevé, ombre de
+popover (0 0 0 0,5 de bordure, 0 2 6 et 0 10 24 à 10 % d'encre) ; 8 de marge
+intérieure et 8 d'écart ; hauteur minimale 44 ; l'avatar du bot de 28 à gauche, le champ
+qui grandit (corps 14/20, rayon 14, 4 de marge, 28 à 128 de haut, Entrée envoie, Maj+Entrée
+change de ligne), le bouton d'envoi rond de 28 à l'accent à droite ; posé à 10 sous le
+passage (au-dessus quand il n'y a pas la place dessous), jamais à moins de 8 d'un
+bord, jamais sous le compositeur de la page (96 gardés au bas) ; il entre en 0,16 s de
+96 % à 100 % avec un fondu, depuis le point où il est ancré. Le contour : 4 de marge
+autour du passage, trait de 1,5, rayon 8, l'accent à 90 % en trait et 12 % en fond.
+Notre étiquette « Texte sélectionné » (la référence n'en dessine pas dans la version
+installée, la capture de JC en a une) : un onglet de l'accent collé sur le bord haut du
+contour, à gauche, coin gauche carré, 11 px gras moyen, 18 de haut. Le bot répond par une
+nouvelle version de la page, dessinée en place dès qu'elle arrive ; une ligne dit « {bot}
+a modifié ce passage » avec Annuler (la version demandée revient, la version du bot reste
+dans la liste). Échap (dans le champ, dans la page ou ailleurs) ou un clic ailleurs range
+le tout sans fermer la page ; une sélection au clavier (Maj et flèches, Tout sélectionner)
+ouvre le compositeur comme une sélection à la souris. Page en lecture seule pour la
+personne : pas de compositeur. iPhone et iPad : le menu d'édition de la sélection
+ajoute « Demander à {bot} », qui ouvre le même compositeur.
+
 ### 2.13 Aperçu d'un fichier
 
 Visionneuse en lecture seule : grand cadre sur l'app voilée, nom du fichier en haut à

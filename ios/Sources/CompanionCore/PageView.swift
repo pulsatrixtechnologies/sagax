@@ -21,11 +21,16 @@ public struct PageContextRef: Codable, Hashable, Sendable {
     public var pageId: String
     public var title: String
     public var version: Int?
+    /// The passage the person selected and asked about (#4099,
+    /// `dataContext.page.selection`): the annotation anchor, cut by the same
+    /// limits as the desktop's.
+    public var selection: PageQuote?
 
-    public init(pageId: String, title: String, version: Int? = nil) {
+    public init(pageId: String, title: String, version: Int? = nil, selection: PageQuote? = nil) {
         self.pageId = pageId
         self.title = title
         self.version = version
+        self.selection = selection
     }
 
     public init(from decoder: Decoder) throws {
@@ -33,6 +38,7 @@ public struct PageContextRef: Codable, Hashable, Sendable {
         pageId = (try? values?.decodeIfPresent(String.self, forKey: .pageId)) ?? ""
         title = (try? values?.decodeIfPresent(String.self, forKey: .title)) ?? ""
         version = (try? values?.decodeIfPresent(Int.self, forKey: .version)) ?? nil
+        selection = (try? values?.decodeIfPresent(PageQuote.self, forKey: .selection)) ?? nil
     }
 
     /// A page id the routes accept: the chip draws only then.
@@ -42,10 +48,79 @@ public struct PageContextRef: Codable, Hashable, Sendable {
     public var body: [String: Any] {
         var body: [String: Any] = ["pageId": pageId, "title": title]
         if let version { body["version"] = version }
+        if let selection { body["selection"] = selection.body }
         return body
     }
 
-    private enum CodingKeys: String, CodingKey { case pageId, title, version }
+    private enum CodingKeys: String, CodingKey { case pageId, title, version, selection }
+}
+
+/// A passage of a page (shared/page-threads.ts `PageQuote`): its words and a
+/// little of what comes before and after, to find it again, and where it
+/// sits. Page text: data, never an instruction.
+public struct PageQuote: Codable, Hashable, Sendable {
+    public var kind: String
+    public var quote: String
+    public var prefix: String
+    public var suffix: String
+    public var path: String
+    public var tag: String
+
+    public init(kind: String = "text", quote: String, prefix: String = "", suffix: String = "", path: String = "", tag: String = "") {
+        self.kind = kind
+        self.quote = quote
+        self.prefix = prefix
+        self.suffix = suffix
+        self.path = path
+        self.tag = tag
+    }
+
+    /// THREAD_LIMITS: the words the server keeps.
+    public static let quoteChars = 500
+    public static let contextChars = 64
+    public static let pathChars = 240
+    public static let tagChars = 32
+
+    /// The JSON the message route takes.
+    public var body: [String: Any] {
+        ["kind": kind, "quote": quote, "prefix": prefix, "suffix": suffix, "path": path, "tag": tag]
+    }
+
+    /// An anchor as the frame posts it, checked and cut; nil for no words.
+    init?(frame value: Any?) {
+        guard let record = value as? [String: Any] else { return nil }
+        let kind = record["kind"] as? String == "element" ? "element" : "text"
+        func line(_ key: String, _ max: Int) -> String {
+            guard let text = record[key] as? String else { return "" }
+            let flat = String(text.unicodeScalars.map { $0.value < 32 || $0.value == 127 ? " " : Character($0) })
+            return String(flat.prefix(max))
+        }
+        let quote = line("quote", Self.quoteChars)
+        guard !quote.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        self.init(kind: kind, quote: quote, prefix: line("prefix", Self.contextChars), suffix: line("suffix", Self.contextChars),
+                  path: line("path", Self.pathChars), tag: line("tag", Self.tagChars))
+    }
+}
+
+/// The selection's box in the page frame's viewport, in CSS pixels (points).
+public struct PageSelectionRect: Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var w: Double
+    public var h: Double
+
+    public init(x: Double, y: Double, w: Double, h: Double) {
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+    }
+}
+
+/// What the page's frame said about the selection (shared/page-selection.ts).
+public enum PageSelectionUpdate: Equatable, Sendable {
+    case selected(PageQuote, PageSelectionRect)
+    case cleared
 }
 
 /// `Message.dataContext` (shared/wire.ts): the Data result or the page the
@@ -200,6 +275,62 @@ public enum PageViewRules {
         CFGetTypeID(number) == CFBooleanGetTypeID()
     }
 
+    /// The message a preview frame posts about the person's selection.
+    public static let selectionMessage = "sagax-page-selection"
+    /// Far outside any page the frame can draw: a coordinate past it is not one.
+    private static let rectLimit = 1_000_000.0
+
+    /// A selection message from the preview (`parsePageSelectionMessage`): an
+    /// anchor with a finite box, or a clear. The page's own scripts can post
+    /// the same message: the box only places an overlay of the app.
+    public static func parseSelection(_ data: Any?) -> PageSelectionUpdate? {
+        guard let record = data as? [String: Any] else { return nil }
+        guard record["type"] as? String == selectionMessage else { return nil }
+        guard let v = record["v"] as? NSNumber, !isBool(v), v.doubleValue == 1 else { return nil }
+        if record["anchor"] is NSNull { return .cleared }
+        guard let anchor = PageQuote(frame: record["anchor"]), let box = record["rect"] as? [String: Any] else { return nil }
+        func number(_ key: String, min: Double) -> Double? {
+            guard let raw = box[key] as? NSNumber, !isBool(raw) else { return nil }
+            let value = raw.doubleValue
+            return value.isFinite && value >= min && value <= rectLimit ? value.rounded() : nil
+        }
+        guard let x = number("x", min: -rectLimit), let y = number("y", min: -rectLimit),
+              let w = number("w", min: 0), let h = number("h", min: 0) else { return nil }
+        return .selected(anchor, PageSelectionRect(x: x, y: y, w: w, h: h))
+    }
+
+    /// The message the app posts to the page's frame: follow this passage in
+    /// the version just drawn, or drop the selection (nil), as JSON the web
+    /// view's script posts to its frame.
+    public static func selectionRequestJSON(_ anchor: PageQuote?) -> String {
+        var message: [String: Any] = ["type": selectionMessage, "v": 1]
+        message["anchor"] = anchor?.body ?? NSNull()
+        let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+    }
+
+    /// Where the composer goes in a page of `width` by `height`
+    /// (`selectionComposerPlace`): 10 under the passage, over it when there
+    /// is no room under (and more above), never past a side, never under the
+    /// docked composer's `inset`.
+    public static func selectionComposerPlace(rect: PageSelectionRect, width: Double, height: Double, inset: Double = composerBottomInset) -> (left: Double, width: Double, top: Double?, bottom: Double?) {
+        let boxWidth = max(0, min(Self.composerWidth, width - 2 * composerEdge))
+        let left = min(max(composerEdge, rect.x), max(composerEdge, width - boxWidth - composerEdge))
+        let under = rect.y + rect.h + composerGap
+        let below = height - inset - composerEdge - min(under, height - (48 + inset))
+        let above = rect.y - composerGap - composerEdge
+        if height <= 0 || below >= composerMaxHeight || (above < composerMaxHeight && above <= below) {
+            return (left, boxWidth, height <= 0 ? under : max(composerEdge, min(under, height - (48 + inset))), nil)
+        }
+        return (left, boxWidth, nil, height - rect.y + composerGap)
+    }
+
+    public static let composerWidth = 360.0
+    public static let composerEdge = 8.0
+    public static let composerGap = 10.0
+    public static let composerMaxHeight = 144.0
+    public static let composerBottomInset = 96.0
+
     /// The version a page opens on (`pageVersionToShow`): the one asked for,
     /// else the newest, else the published one.
     public static func versionToShow(page: PublishedPageSummary?, asked: Int?) -> Int? {
@@ -214,6 +345,26 @@ public enum PageViewRules {
         guard let latest else { return nil }
         guard let shown else { return latest }
         return latest > shown ? latest : nil
+    }
+
+    /// What undoing the bot's edit of a passage takes (`undoEditPlan`): the
+    /// version asked about published again when the bot's version is the
+    /// published one, else the bot's version declined when it is a proposal.
+    public static func undoSteps(page: PublishedPageSummary, from: Int, to: Int) -> [PageShareStep] {
+        if page.status == "published", page.currentVersion == to {
+            return PageShareRules.plan(page: page, version: from, change: .version)
+        }
+        if page.versions.first(where: { $0.n == to })?.state == "proposed" {
+            return [PageShareStep(method: "POST", path: "/decline", body: ["version": to])]
+        }
+        return []
+    }
+
+    /// A newer version from the conversation, unless the person sent it back
+    /// with Undo (`skipped` and below) (`followedVersion`).
+    public static func followedVersion(_ newer: Int?, skipped: Int) -> Int? {
+        guard let newer, newer > skipped else { return nil }
+        return newer
     }
 
     /// The newest version of a page the conversation names (its cards).

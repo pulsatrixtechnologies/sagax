@@ -289,11 +289,11 @@ export function PageMenuSeparator() {
   return <MenuDivider />;
 }
 
-/** The body under the header: the frame's card, a scroller and the centred column. */
+/** The body under the header: the frame's card, a scroller and the full-width body (the header's own side margins). */
 export function PageBody({ children, ...rest }: { children: ReactNode } & DataAttributes) {
   return (
     <div className="content-card-body flex min-h-0 flex-1 flex-col">
-      <div className={PAGE_SCROLL} {...rest}><div className={PAGE_COLUMN}>{children}</div></div>
+      <div className={PAGE_SCROLL} {...rest}><div className={PAGE_FULL}>{children}</div></div>
     </div>
   );
 }

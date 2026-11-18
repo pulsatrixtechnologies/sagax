@@ -73,11 +73,12 @@ function RunsSection({ runs, now, period, onPeriod, loadingFigures, onFailedRuns
       <PillSelect<RunsPeriod> ariaLabel={t("routinesOverview.period")} value={period} onChange={onPeriod} bordered
         options={RUNS_PERIODS.map((value) => ({ value, label: t(`routinesOverview.period.${value}`) }))} />
     </PageHeading>
-    {/* The older runs of a longer period are on their way: say so, never figures of the days already held. */}
-    <div aria-busy={loadingFigures || undefined} className="grid grid-cols-2 gap-3 @[46rem]/routines:grid-cols-[1fr_1fr_1.7fr]">
+    {/* The older runs of a longer period are on their way: say so, never figures of the days already held.
+        The three cards always share one width (owner, 2026-11-17): three equal columns when wide, one column when narrow. */}
+    <div aria-busy={loadingFigures || undefined} className="grid grid-cols-1 gap-3 @[46rem]/routines:grid-cols-3">
       <StatCard testId="routines-total" label={t("routinesOverview.total")} value={loadingFigures ? "…" : figures.total} />
       <StatCard testId="routines-rate" label={t("routinesOverview.rate")} value={loadingFigures || figures.rate === null ? (loadingFigures ? "…" : "-") : `${figures.rate}%`} {...(loadingFigures || figures.rate === null ? {} : { ring: figures.rate / 100 })} />
-      <div data-testid="routines-outcome" className="flex min-w-0 flex-col gap-1 rounded-xl border border-hairline bg-card px-3.5 py-3 col-span-2 @[46rem]/routines:col-span-1">
+      <div data-testid="routines-outcome" className="flex min-w-0 flex-col gap-1 rounded-xl border border-hairline bg-card px-3.5 py-3">
         <span className="flex items-center justify-between gap-2 text-[12px] text-ink-secondary">
           <span className="truncate">{t("routinesOverview.recent")}</span>
           {!loadingFigures && figures.failed > 0 && <button type="button" data-routines-failed-runs title={t("routineCalendar.openProblemLogs")} onClick={() => onFailedRuns(period)} className="-my-1 shrink-0 rounded-full bg-ink/[0.06] px-2.5 py-1 text-[12px] font-medium text-ink hover:bg-ink/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{t("routinesOverview.viewFailed")}</button>}

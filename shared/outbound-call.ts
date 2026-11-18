@@ -57,6 +57,9 @@ export interface OutboundCallRequest {
   maxMinutes?: number;
   /** A conversation: the short message left on a voicemail. */
   voicemail?: string;
+  /** Who the bot calls, when it knows: shown on the live card and sent to
+   * Perspicax Voice as `callee_name`. Not part of what an approval covers. */
+  calleeName?: string;
 }
 
 /** Whether a number is a Canadian geographic number. */
@@ -140,11 +143,13 @@ function parseConversation(row: Record<string, unknown>, to: string, fallbackLan
     return `max_minutes: a whole number of minutes from 1 to ${CONVERSATION_LIMITS.maxMinutes} (${CONVERSATION_LIMITS.defaultMinutes} when left out).`;
   }
   const language = row.language === "en" || row.language === "fr" ? row.language : fallbackLanguage;
+  const calleeName = typeof (row.callee_name ?? row.calleeName) === "string" ? clean(row.callee_name ?? row.calleeName, 80) : "";
   return {
     to, from: "", purpose: objective, message: "", language, mode: "conversation",
     maxMinutes: typeof minutes === "number" ? minutes : CONVERSATION_LIMITS.defaultMinutes,
     ...(instructions ? { instructions } : {}),
     ...(voicemail ? { voicemail } : {}),
+    ...(calleeName ? { calleeName } : {}),
   };
 }
 
@@ -204,6 +209,7 @@ export function voiceCallArgs(request: OutboundCallRequest, input: { botName: st
     bot_name: clean(input.botName, 80) || "Assistant",
     ref: input.ref,
     ...(request.voicemail ? { voicemail: request.voicemail } : {}),
+    ...(request.calleeName ? { callee_name: request.calleeName } : {}),
     confirm: true,
     ...(input.botId ? { bot: `sagax:${input.botId}` } : {}),
     ...(input.dryRun ? { dry_run: true } : {}),
@@ -224,6 +230,7 @@ export const PLACE_PHONE_CALL_TOOL_SPEC = {
       max_minutes: { type: "integer", minimum: 1, maximum: 20, description: "Default 5." },
       voicemail: { type: "string", description: "Left if a voicemail answers, at most 300 characters; nothing confidential." },
       language: { type: "string", enum: ["fr", "en"], description: "Defaults to the person's." },
+      callee_name: { type: "string", description: "Who you are calling, when you know (a person or a business), at most 80 characters; shown on the live call card." },
     },
     required: ["to", "objective"],
   },

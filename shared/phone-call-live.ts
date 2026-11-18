@@ -61,6 +61,35 @@ export function liveCallElapsed(startedAt: number | undefined, now: number): num
   return Math.min(86_400, Math.max(0, Math.floor((now - startedAt) / 1000)));
 }
 
+/** Drops a line that arrives twice: the same speaker at the same instant
+ * (a batch resent), or, with no instant, the very same words twice in a row.
+ * Order is kept; the first copy wins. */
+export function dedupeLiveLines<T extends { speaker: string; text: string; at?: number }>(lines: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const line of lines) {
+    if (line.at !== undefined) {
+      const key = `${line.at}|${line.speaker}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+    } else {
+      const last = out[out.length - 1];
+      if (last && last.at === undefined && last.speaker === line.speaker && last.text === line.text) continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/** The instant the timer counts from: the callee picked up (`liveAnsweredAt`),
+ * and for a card from before it existed, the start of the dialing when the
+ * call is already past ringing. Undefined while it still dials or rings. */
+export function liveTimerStart(card: { phase?: PhoneCallPhase; liveStartedAt?: number; liveAnsweredAt?: number }): number | undefined {
+  if (card.liveAnsweredAt) return card.liveAnsweredAt;
+  if (card.phase === "in_call" || card.phase === "on_hold" || card.phase === "transferred") return card.liveStartedAt;
+  return undefined;
+}
+
 /** "4:07" for the live timer and the ended chip. */
 export function formatLiveDuration(seconds: number): string {
   const total = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;

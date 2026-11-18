@@ -460,14 +460,15 @@ export function callCard(row: OutboundCallRecord, botName: string, live?: Partia
       ...(placedLive ? {
         phase: live?.phase ?? "dialing",
         liveStartedAt: live?.liveStartedAt ?? row.answeredAt ?? row.createdAt,
-        ...(live?.calleeName ? { calleeName: live.calleeName } : {}),
+        ...((live?.calleeName ?? row.request.calleeName) ? { calleeName: live?.calleeName ?? row.request.calleeName } : {}),
+        ...(live?.liveAnsweredAt ? { liveAnsweredAt: live.liveAnsweredAt } : {}),
         ...(live?.liveTranscript?.length ? { liveTranscript: live.liveTranscript } : {}),
         ...(live?.liveEvents?.length ? { liveEvents: live.liveEvents } : {}),
       } : {}),
       ...(live?.recordingUrl && row.result ? { recordingUrl: live.recordingUrl } : {}),
       ...(live?.phase === "ended" || row.result ? { phase: live?.phase ?? "ended" } : {}),
     } : {}),
-    ...(live?.calleeName && !placedLive ? { calleeName: live.calleeName } : {}),
+    ...(!placedLive && (live?.calleeName ?? row.request.calleeName) ? { calleeName: live?.calleeName ?? row.request.calleeName } : {}),
   };
 }
 
@@ -603,7 +604,13 @@ function noLiveVoice(value: unknown): string | undefined {
  * Perspicax older than #2022 knows only the line's own bots as `bot` and
  * refuses any other: the call then goes without it, as before. */
 async function callVoice(deps: PlaceCallDeps, args: Record<string, unknown>): Promise<ToolAnswer> {
-  const answer = await deps.voice!(args);
+  let answer = await deps.voice!(args);
+  // a Perspicax older than the callee name refuses the extra argument: the call then goes without it
+  if ("callee_name" in args && answer.ok && answer.isError && /callee_name|additional|unexpected|unknown/i.test(shortError(answer.value, ""))) {
+    const { callee_name: _name, ...rest } = args;
+    args = rest;
+    answer = await deps.voice!(args);
+  }
   if (!("bot" in args) || !answer.ok || !answer.isError || !/bot: one of the line's bots/.test(shortError(answer.value, ""))) return answer;
   const { bot: _bot, ...rest } = args;
   return deps.voice!(rest);

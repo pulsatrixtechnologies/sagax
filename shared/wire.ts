@@ -2133,6 +2133,8 @@ export interface OutboundCard {
   phase?: PhoneCallPhase;
   /** epoch ms when dialing started; drives the live timer. */
   liveStartedAt?: number;
+  /** epoch ms when the callee answered; the live timer counts from it. */
+  liveAnsweredAt?: number;
   /** Streaming transcript while the call is live (also kept after end). */
   liveTranscript?: PhoneCallLiveLine[];
   /** Hold, DTMF and transfer events shown in the live stream. */

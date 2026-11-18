@@ -59,20 +59,29 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
     ...conversation, id: "call_0000000000000012", status: "done", phase: "dialing", liveStartedAt, calleeName: "Thermopompes Québec", via: "Chef",
   }) },
   { message: row(17, {
-    ...conversation, id: "call_0000000000000017", status: "done", phase: "in_call", liveStartedAt, calleeName: "Marie Tremblay",
+    ...conversation, id: "call_0000000000000017", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
     liveTranscript: [
       { speaker: "bot", text: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex.", at: liveStartedAt + 5_000 },
       { speaker: "callee", text: "Oui, bonjour.", at: liveStartedAt + 12_000 },
     ],
     liveEvents: [{ kind: "dtmf", detail: "1", at: liveStartedAt + 18_000 }],
   }) },
+  // a long conversation: the transcript keeps its capped height and follows the newest line
+  { message: row(20, {
+    ...conversation, id: "call_0000000000000020", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
+    liveTranscript: Array.from({ length: 24 }, (_, index) => ({
+      speaker: index % 2 === 0 ? "bot" as const : "callee" as const,
+      text: index % 2 === 0 ? `Question ${index / 2 + 1}: est-ce que mardi matin, vers 9 h, vous irait pour l'entretien?` : `Réponse ${(index - 1) / 2 + 1}: oui, mardi à 9 h fonctionne bien pour nous.`,
+      at: liveStartedAt + 9_000 + index * 2_000,
+    })),
+  }) },
   { message: row(18, {
-    ...conversation, id: "call_0000000000000018", status: "done", phase: "on_hold", liveStartedAt, calleeName: "Marie Tremblay",
+    ...conversation, id: "call_0000000000000018", status: "done", phase: "on_hold", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
     liveTranscript: [{ speaker: "bot", text: "Je vous mets en attente un instant.", at: liveStartedAt + 20_000 }],
     liveEvents: [{ kind: "hold", detail: "hold", at: liveStartedAt + 21_000 }],
   }) },
   { message: row(19, {
-    ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, calleeName: "Marie Tremblay",
+    ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
     liveEvents: [{ kind: "transfer", detail: "+1 514 555 0199", at: liveStartedAt + 40_000 }],
   }) },
   { message: row(13, { ...conversation, id: "call_0000000000000013", status: "done", calleeName: "Thermopompes Québec", phase: "ended", recordingUrl: SILENT_WAV, result: {

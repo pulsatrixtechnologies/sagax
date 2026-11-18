@@ -52,7 +52,7 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
       // #4460: a server several people use: the viewer's own memory, or the
       // entries a shared memory held with no known author (an admin's)
       const name = source.owner === "self" ? t("memoryManager.teamOwn") : source.owner === "unclaimed" ? t("memoryManager.teamUnclaimed") : source.name;
-      out.push({ key: source.id, name, kind: "team", color: tierColor("team", team++) });
+      out.push({ key: source.id, name, kind: "team", color: tierColor("team", team++), fixed: source.owner === "self" || undefined });
     }
     for (const tier of pxTiers) {
       if (tier.kind === "me") continue;

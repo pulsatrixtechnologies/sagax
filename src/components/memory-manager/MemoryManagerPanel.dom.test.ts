@@ -429,7 +429,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
     expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("5");
-    expect(host.querySelector("[data-memory-map-count]")?.textContent).toMatch(/^5 notes, \d+ links/);
+    expect(host.querySelector("[data-memory-map-count]")?.getAttribute("title")).toMatch(/^5 notes, \d+ links/);
     expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 5 notes");
     const columns = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Columns")!;
     await act(async () => { columns.click(); });
@@ -438,6 +438,26 @@ describe("MemoryManagerPanel page", () => {
     await wait();
     await settle();
     expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
+  });
+
+  it("Map: the fixed scopes stay buttons, every other team lives in one Teams select, on one row", async () => {
+    (globalThis as { __memoryOwn?: boolean }).__memoryOwn = true;
+    await render();
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    const bar = host.querySelector("[data-memory-map-tiers]")!;
+    expect(bar.querySelector('[data-memory-map-tier="mine"]')).not.toBeNull();
+    expect(bar.querySelector('[data-memory-map-tier="team:general"]')?.textContent).toContain("Facts my bots learned");
+    // data-built entries are not buttons
+    expect(bar.querySelector('[data-memory-map-tier="team:unclaimed:"]')).toBeNull();
+    expect(host.querySelector("[data-memory-map-bar]")?.className).toContain("flex-nowrap");
+    const teams = host.querySelector('[data-memory-map-teams] button[aria-haspopup="listbox"]') as HTMLButtonElement;
+    expect(teams.textContent).toContain("Teams");
+    await act(async () => { teams.click(); });
+    const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent ?? "");
+    expect(options.some((text) => text.includes("No known author"))).toBe(true);
+    await act(async () => { (document.querySelector('[role="option"]') as HTMLElement).click(); });
+    expect(host.querySelector('[data-memory-map-teams] button[aria-haspopup="listbox"]')?.textContent).toContain("No known author");
   });
 
   it("Collections: the list, one collection, its notes in order", async () => {

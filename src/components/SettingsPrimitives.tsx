@@ -1,6 +1,6 @@
 import { createContext, Fragment, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, CircleHelp, Copy, ExternalLink, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, CircleHelp, Copy, ExternalLink, Search, X } from "lucide-react";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { SWITCH_OFF, SWITCH_ON, SWITCH_THUMB_OFF, SWITCH_THUMB_ON } from "@/lib/status-tones";
@@ -552,7 +552,13 @@ export const PILL = "ui-button min-h-[44px] disabled:opacity-50 md:min-h-0";
  * choosable (an engine that is not ready, a saved value that is gone).
  * `hint`: one grey line under the option, in the open list only ("Runs
  * with" names the tool there, #4329). */
-export type PillOption<T extends string> = { value: T; label: string; group?: string; disabled?: boolean; hint?: string };
+export type PillOption<T extends string> = {
+  value: T; label: string; group?: string; disabled?: boolean; hint?: string;
+  /** A colour dot before the label (a memory team) and a count after it. */
+  color?: string; count?: number;
+  /** Listed only while a search is typed (an empty team stays findable). */
+  quiet?: boolean;
+};
 
 /** The reference design's borderless pill menu ("Follow System ⌄"): the current value
  * and a chevron; the choices open in a small list under it. A listbox, so
@@ -574,7 +580,21 @@ export function PillSelect<T extends string>({
   mixedLabel,
   fill = false,
   bordered = false,
+  searchAbove,
+  searchLabel,
+  placeholder,
+  active,
+  triggerClass,
 }: {
+  /** Replaces the pill look of the control (a chip of its row). */
+  triggerClass?: string;
+  /** The open list gets a search field once it holds more than this many options. */
+  searchAbove?: number;
+  searchLabel?: string;
+  /** Shown on the control while no value is set. */
+  placeholder?: string;
+  /** The control looks chosen (a filter in use) while it shows a value. */
+  active?: boolean;
   value: T | undefined;
   options: ReadonlyArray<PillOption<T>>;
   onChange: (next: T) => void;
@@ -590,13 +610,19 @@ export function PillSelect<T extends string>({
   bordered?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const current = mixed || value === undefined ? undefined : options.find((option) => option.value === value);
+  const searchOn = searchAbove !== undefined && options.filter((option) => !option.quiet).length > searchAbove;
+  const needle = query.trim().toLowerCase();
+  const listed = options.filter((option) => (needle ? option.label.toLowerCase().includes(needle) : !option.quiet || option.value === value));
   const close = (focusTrigger = false) => {
     setOpen(false);
+    setQuery("");
     if (focusTrigger) triggerRef.current?.focus();
   };
   // The list is portalled out of rootRef, so a press in it must still count as inside.
@@ -610,7 +636,7 @@ export function PillSelect<T extends string>({
   const show = () => {
     setOpen(true);
     const selected = Math.max(0, options.findIndex((option) => option.value === value));
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => focusOption(selected));
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => (searchOn ? searchRef.current?.focus() : focusOption(selected)));
   };
   const choose = (next: T) => {
     if (options.find((option) => option.value === next)?.disabled) return;
@@ -618,7 +644,7 @@ export function PillSelect<T extends string>({
     // Mixed / unset: any pick counts, including one bot's current value.
     if (mixed || value === undefined || next !== value) onChange(next);
   };
-  const shown = current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value);
+  const shown = current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value === undefined && placeholder ? placeholder : value);
   return (
     // min-w-0 / max-w-full: in a row that runs out of room the pill gives way
     // and its text ends with an ellipsis, never its neighbour's label (#4194)
@@ -644,9 +670,10 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2")}
+        className={triggerClass ?? (fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2", active && "bg-raised"))}
       >
-        <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
+        <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{current?.color && <span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full align-middle" style={{ background: current.color }} />}{shown}</span>
+        {current?.count !== undefined && <span className="shrink-0 tabular-nums text-ink-tertiary">{current.count}</span>}
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
       {open && (
@@ -666,6 +693,7 @@ export function PillSelect<T extends string>({
             const index = items.indexOf(document.activeElement as HTMLElement);
             if (event.key === "ArrowDown") { event.preventDefault(); focusOption(index + 1); }
             else if (event.key === "ArrowUp") { event.preventDefault(); focusOption(index - 1); }
+            else if (event.target instanceof HTMLInputElement && (event.key === "Home" || event.key === "End")) return;
             else if (event.key === "Home") { event.preventDefault(); focusOption(0); }
             else if (event.key === "End") { event.preventDefault(); focusOption(items.length - 1); }
             else if (event.key === "Tab") close();
@@ -679,9 +707,26 @@ export function PillSelect<T extends string>({
           }}
           className="popover-surface flex w-max min-w-[180px] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5"
         >
-          {options.map((option, index) => {
+          {searchOn && (
+            <li role="presentation" className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-0.5 bg-elevated px-1.5 pb-1 pt-1.5">
+              <label className="flex h-8 items-center gap-2 rounded-lg border border-border bg-panel px-2.5 text-ink-secondary focus-within:ring-2 focus-within:ring-accent/50">
+                <Search size={14} aria-hidden="true" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  aria-label={searchLabel ?? ariaLabel}
+                  placeholder={searchLabel ?? ariaLabel}
+                  data-pill-search=""
+                  className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-tertiary"
+                />
+              </label>
+            </li>
+          )}
+          {listed.length === 0 && <li role="presentation" className="px-2 py-1.5 text-[13px] text-ink-secondary">{t("chat.find.noResults")}</li>}
+          {listed.map((option, index) => {
             const selected = option.value === value;
-            const heading = option.group && option.group !== options[index - 1]?.group ? option.group : null;
+            const heading = option.group && option.group !== listed[index - 1]?.group ? option.group : null;
             return (
               <Fragment key={option.value}>
               {heading && (
@@ -706,7 +751,13 @@ export function PillSelect<T extends string>({
                     <span className="truncate">{option.label}</span>
                     <span data-pill-option-hint="" className="text-[12px] leading-4 text-ink-secondary">{option.hint}</span>
                   </span>
-                ) : <span className="min-w-0 flex-1 truncate">{option.label}</span>}
+                ) : (
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {option.color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: option.color }} />}
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {option.count !== undefined && <span className="tabular-nums text-ink-tertiary">{option.count}</span>}
+                  </span>
+                )}
                 <Check size={14} aria-hidden="true" className={cn("shrink-0 text-ink-secondary", !selected && "invisible")} />
               </li>
               </Fragment>

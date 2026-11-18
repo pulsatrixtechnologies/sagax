@@ -71,6 +71,6 @@ describe("Memory > Map > Graph", () => {
 
   it("follows the rail's scope", () => {
     render({ scope: (entry) => entry.folderPath === "Atlas / Logs" });
-    expect(host.querySelector("[data-memory-map-count]")?.textContent).toContain("1 notes");
+    expect(host.querySelector("[data-memory-map-count]")?.getAttribute("title")).toContain("1 notes");
   });
 });

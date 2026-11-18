@@ -5,7 +5,7 @@
 // a bulk answer for several plain permissions at once, and the History of
 // what was answered. Keys: Y yes, N no, J / K move, Enter open, Escape back,
 // X tick a row. The data is server/routes/approvals-inbox.ts.
-import { ChevronDown, Loader2, ShieldAlert, X } from "lucide-react";
+import { ChevronDown, Loader2, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
@@ -20,7 +20,8 @@ import {
   type InboxBulkRefusal,
   type InboxFilters,
 } from "../../../shared/approvals-inbox";
-import { WindowDragStrip } from "../DesktopCapabilities";
+import { useCaptionChrome } from "../DesktopCapabilities";
+import { PAGE_HEADER_BUTTON, PageHeader, PageSegment, PageTopStrip } from "../content-page";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { bulkAnswer, inboxChatTarget, inboxTitle, useHeldSignals, useInbox } from "@/lib/approvals-inbox";
 import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
@@ -193,6 +194,7 @@ function EmptyCalm({ filtered, onClear }: { filtered: boolean; onClear: () => vo
 
 export function ApprovalsPage() {
   const { state, dispatch } = useStore();
+  const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const [filters, setFilters] = useState<InboxFilters>(() => (typeof location !== "undefined" ? parseInboxHash(location.hash) : { ...DEFAULT_INBOX_FILTERS }));
   const patch = useCallback((next: Partial<InboxFilters>) => setFilters((was) => ({ ...was, ...next })), []);
 
@@ -411,25 +413,38 @@ export function ApprovalsPage() {
 
   return (
     <main data-approvals-page="" className="relative flex h-full min-w-0 flex-1 flex-col bg-app">
-      <WindowDragStrip />
-      <header className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-12">
-        <h1 className="text-[20px] font-semibold tracking-tight text-ink">{t("approvals.todayTitle")}</h1>
-        <div role="tablist" aria-label={t("approvals.todayTitle")} className="flex rounded-full bg-control/70 p-0.5">
-          {(["pending", "history", "journal"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={filters.tab === tab}
-              onClick={() => patch({ tab })}
-              className={cn("rounded-full px-3 py-1 text-[12.5px] transition-colors", filters.tab === tab ? "bg-card font-medium text-ink shadow-sm" : "text-ink-secondary hover:text-ink")}
-            >
-              {tab === "pending" ? t("approvals.tab.pending", { count: pendingCount }) : tab === "history" ? t("approvals.tab.history") : t("approvals.tab.journal")}
-            </button>
-          ))}
-        </div>
-        {(filters.tab === "journal" ? journal.error : error) && <span role="alert" className="text-[12.5px] text-danger">{t("approvals.error")}</span>}
-      </header>
+      <PageTopStrip />
+      <PageHeader
+        name="approvals"
+        icon={ShieldCheck}
+        title={t("approvals.todayTitle")}
+        count={pendingCount}
+        {...dragProps}
+        topbar
+        style={dragProps.style}
+        actionsStyle={{ ...noDragStyle, ...controlsShiftStyle }}
+        actions={
+          <button type="button" aria-label={t("common.close")} title={t("common.close")} data-approvals-close="" className={PAGE_HEADER_BUTTON} onClick={() => dispatch({ type: "showChat" })}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        }
+        primaryStyle={noDragStyle}
+        primary={
+          <div className="flex" data-approvals-tabs="">
+            <PageSegment
+              label={t("approvals.todayTitle")}
+              value={filters.tab}
+              onChange={(tab) => patch({ tab })}
+              options={[
+                { value: "pending" as const, label: t("approvals.tab.pending", { count: pendingCount }), data: { "data-page-tab": "pending" } },
+                { value: "history" as const, label: t("approvals.tab.history"), data: { "data-page-tab": "history" } },
+                { value: "journal" as const, label: t("approvals.tab.journal"), data: { "data-page-tab": "journal" } },
+              ]}
+            />
+          </div>
+        }
+        below={(filters.tab === "journal" ? journal.error : error) ? <p role="alert" className="mt-3 text-[12.5px] text-danger" style={noDragStyle}>{t("approvals.error")}</p> : null}
+      />
 
       {filters.tab === "journal" ? (
         <ApprovalsJournal data={journal.data} loading={!journal.data} days={journalDays} onDays={setJournalDays} query={filters.q} onQuery={(q) => patch({ q })} onOpenThread={openJournalThread} />
@@ -437,7 +452,7 @@ export function ApprovalsPage() {
         <ApprovalsHistory rows={data?.history ?? []} query={filters.q} onQuery={(q) => patch({ q })} loading={!data} />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-1.5 px-5 pb-3" data-approvals-filters="">
+          <div className="flex flex-wrap items-center gap-1.5 px-6 py-3 max-sm:px-4" data-approvals-filters="">
             <Chip active={filters.scope === "all"} onClick={() => patch({ scope: "all" })} testId="all">{t("approvals.filter.all")}</Chip>
             <Chip active={filters.scope === "mine"} onClick={() => patch({ scope: filters.scope === "mine" ? "all" : "mine" })} testId="mine">{t("approvals.filter.mine")}</Chip>
             {scopes.org && <Chip active={filters.scope === "org"} onClick={() => patch({ scope: filters.scope === "org" ? "all" : "org" })} testId="org">{t("approvals.filter.org")}</Chip>}

@@ -40,7 +40,7 @@ export function ApprovalsHistory({ rows, query, onQuery, loading }: {
   const today = new Date();
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-approvals-history="">
-      <div className="px-5 pb-3 pt-1">
+      <div className="px-6 max-sm:px-4 pb-3 pt-1">
         <label className="flex max-w-md items-center gap-2 rounded-xl border border-hairline/50 bg-inset px-3 py-1.5 focus-within:border-accent/60">
           <Search size={14} aria-hidden="true" className="text-ink-tertiary" />
           <input
@@ -53,7 +53,7 @@ export function ApprovalsHistory({ rows, query, onQuery, loading }: {
           />
         </label>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 max-sm:px-4 pb-6">
         {shown.length === 0 ? (
           <div className="pt-16 text-center text-[13.5px] text-ink-secondary">
             {loading ? t("approvals.loading") : query.trim() ? t("approvals.history.noMatch") : t("approvals.history.empty")}

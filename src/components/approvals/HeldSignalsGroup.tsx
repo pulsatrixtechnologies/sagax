@@ -27,7 +27,7 @@ export function HeldSignalsGroup({
 }) {
   if (items.length === 0) return null;
   return (
-    <section data-held-signals="" aria-label={t("approvals.held.title")} className="border-t border-hairline/40 px-5 py-2.5">
+    <section data-held-signals="" aria-label={t("approvals.held.title")} className="border-t border-hairline/40 px-6 max-sm:px-4 py-2.5">
       <div className="flex items-center gap-2">
         <h2 className="text-[13px] font-semibold text-ink">{t("approvals.held.title")}</h2>
         <span className="rounded-full bg-control px-1.5 py-px text-[11px] font-medium tabular-nums text-ink-secondary">{items.length}</span>

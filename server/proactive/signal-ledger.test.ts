@@ -170,6 +170,29 @@ describe("tellPerson", () => {
     expect(pushes).toEqual([false, true]);
     expect(ledger.get("pr_a", "b1", "notice-2")).toMatchObject({ state: "told", channels: ["push"] });
   });
+
+  it("a push refused twice is not tried a third time, across a restart too", () => {
+    const dir = tempDir();
+    let pushes = 0;
+    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({
+      ledger,
+      notify: () => {
+        pushes += 1;
+        return [{ channel: "push", ok: false }];
+      },
+      log: () => {},
+    });
+    const push = { key: "notice-3", kind: "reach-notice", bot: "b1", notification: "brief" };
+    const first = ledgerOn(dir);
+    expect(tellOn(first)("pr_a", push)).toBe("not_told");
+    expect(tellOn(first)("pr_a", push)).toBe("not_told");
+    first.flush();
+    const again = ledgerOn(dir);
+    expect(tellOn(again)("pr_a", push)).toBe("not_told");
+    expect(tellOn(again)("pr_a", push)).toBe("not_told");
+    expect(pushes).toBe(2);
+    expect(again.isTold("pr_a", "b1", "notice-3")).toBe(false);
+  });
 });
 
 describe("moved: the waker's event keys", () => {

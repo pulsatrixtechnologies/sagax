@@ -30,6 +30,8 @@ export type SignalState = "open" | "told" | "answered" | "retired" | "expired";
 export interface ChannelAnswer {
   channel: string;
   ok: boolean;
+  /** How many sends in a row this channel refused (a refusal only; absent means one). */
+  refusals?: number;
 }
 
 export const SIGNAL_STATES: readonly SignalState[] = ["open", "told", "answered", "retired", "expired"];
@@ -102,7 +104,8 @@ function readAnswers(value: unknown): ChannelAnswer[] | undefined {
     if (!item || typeof item !== "object") continue;
     const raw = item as { channel?: unknown; ok?: unknown };
     if (typeof raw.channel !== "string" || !raw.channel || raw.channel.length > 40 || typeof raw.ok !== "boolean") continue;
-    answers.push({ channel: raw.channel, ok: raw.ok });
+    const refusals = (raw as { refusals?: unknown }).refusals;
+    answers.push({ channel: raw.channel, ok: raw.ok, ...(!raw.ok && Number.isInteger(refusals) && (refusals as number) > 1 ? { refusals: Math.min(refusals as number, 99) } : {}) });
     if (answers.length >= 10) break;
   }
   return answers.length ? answers : undefined;
@@ -270,7 +273,10 @@ export class SignalLedger {
     for (const answer of answers) {
       if (!answer.channel || typeof answer.ok !== "boolean") continue;
       const index = next.findIndex((item) => item.channel === answer.channel);
-      const clean = { channel: answer.channel.slice(0, 40), ok: answer.ok };
+      const clean: ChannelAnswer = { channel: answer.channel.slice(0, 40), ok: answer.ok };
+      // A refusal after a refusal is counted, so a channel tried once more is not tried forever.
+      const before = index >= 0 ? next[index] : undefined;
+      if (!clean.ok && before && !before.ok) clean.refusals = Math.min((before.refusals ?? 1) + 1, 99);
       if (index >= 0) next[index] = clean;
       else next.push(clean);
     }
@@ -474,9 +480,9 @@ export type TellVerdict = "told" | "already_told" | "not_told";
 
 /** A text and a WhatsApp message are never handed twice. A push may be tried once more. */
 function retryPushOnly(answers: readonly ChannelAnswer[]): boolean {
-  const pushFails = answers.filter((answer) => answer.channel === "push" && !answer.ok).length;
+  const pushFails = answers.filter((answer) => answer.channel === "push" && !answer.ok);
   const money = answers.some((answer) => answer.channel === "sms" || answer.channel === "whatsapp");
-  return !money && pushFails === 1 && answers.every((answer) => answer.channel === "push");
+  return !money && pushFails.length === 1 && (pushFails[0]!.refusals ?? 1) < 2 && answers.every((answer) => answer.channel === "push");
 }
 
 /** #4250: the one way a proactive item reaches `notify`. Rings once per key

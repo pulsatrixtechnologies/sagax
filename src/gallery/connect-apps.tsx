@@ -319,8 +319,10 @@ if (params.has("products")) {
     const harbor = mark("#1d4ed8", '<path d="M32 12v26M20 24h24M14 38c3 10 11 14 18 14s15-4 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="14" r="4" fill="#fff"/>');
     const beacon = mark("#be185d", '<path d="M32 12l16 28H16z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="48" r="4" fill="#fff"/>');
     const tile = (fill: string, body: string) => mark(fill, body);
-    const vendorHarbor = { id: "harbor", name: "Harbor Suite", description: { en: "Service desk, monitoring, quoting and dashboards in one place.", fr: "Service desk, supervision, soumissions et tableaux de bord au même endroit." }, icon: { url: harbor }, logo: harbor };
-    const vendorBeacon = { id: "beacon", name: "Beacon Security", description: { en: "Endpoint protection and backup.", fr: "Protection des postes et sauvegarde." }, icon: { url: beacon }, logo: beacon };
+    // the console's wide `logo` is a wordmark (the banner must never draw it): an invented horizontal one
+    const wordmark = (fill: string, label: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64"><rect width="240" height="64" rx="12" fill="#fff"/><circle cx="30" cy="32" r="12" fill="${fill}"/><text x="52" y="40" font-family="Arial" font-weight="700" font-size="22" fill="#111">${label}</text></svg>`)}`;
+    const vendorHarbor = { id: "harbor", name: "Harbor Suite", description: { en: "Service desk, monitoring, quoting and dashboards in one place.", fr: "Service desk, supervision, soumissions et tableaux de bord au même endroit." }, icon: { url: harbor }, logo: wordmark("#1d4ed8", "HARBOR") };
+    const vendorBeacon = { id: "beacon", name: "Beacon Security", description: { en: "Endpoint protection and backup.", fr: "Protection des postes et sauvegarde." }, icon: { url: beacon }, logo: wordmark("#be185d", "BEACON") };
     const filed: Record<string, { group: typeof vendorHarbor; endpoints?: string[]; icon?: { url: string }; description?: string }> = {
       "prod-psa": { group: vendorHarbor, icon: { url: tile("#0f766e", '<path d="M18 20h28v24H18zM18 28h28" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, description: "Tickets, time and agreements for the service desk", endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
       "prod-more-0": { group: vendorHarbor, icon: { url: tile("#7c3aed", '<rect x="16" y="18" width="32" height="20" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M26 46h12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>') }, endpoints: ["Devices", "Alerts", "Scripts"] },
@@ -330,6 +332,12 @@ if (params.has("products")) {
       "prod-more-1": { group: vendorBeacon },
     };
     for (const product of products as Array<{ id: string }>) Object.assign(product, filed[product.id] ?? {});
+    // &harbor=15: one vendor of fifteen connectors that share a long prefix (the bundle's Overview and Connectors tab)
+    if (params.get("harbor") === "15") {
+      for (const product of products as Array<{ id: string; group?: unknown }>) if (product.group === vendorHarbor) delete product.group;
+      const areas = ["Company", "Configurations", "Expense", "Finance", "Marketing", "Procurement", "Project", "Sales", "Schedule", "Service", "System", "Time", "Reports", "Agreements", "Documents"];
+      areas.forEach((area, index) => (products as unknown[]).push({ id: `prod-harbor-${index}`, name: `Harbor Suite Public Endpoints: ${area}`, auth_state: "ok", setup, state: index === 4 ? "key_expired" : index === 8 ? "key_refused" : "connected", base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "", group: vendorHarbor, endpoints: Array.from({ length: 3 + (index % 5) }, (_, n) => `${area} tool ${n + 1}`) } as never));
+    }
   }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);

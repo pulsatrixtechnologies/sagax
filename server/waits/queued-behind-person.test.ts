@@ -54,6 +54,9 @@ function fixture(options: { organization?: boolean; room?: boolean; cardOwner?: 
       appendMessage: (threadId: string, row: unknown) => messages.push({ threadId, row }),
     },
     reviewHolds: () => false,
+    // a root parked at the computer wait ceiling (#1651, #2204): none here,
+    // so slotUse reaches the slot math and the receipt (#4494)
+    parkedSeats: new Map<string, unknown>(), turnResources: { free: () => true },
     threadBusy: (_id: string, threadId: string) => state.occupied && threadId === cardTask.threadId,
     activeGroupTurnForBot: () => undefined,
     botAtThreadCapacity: () => state.occupied,

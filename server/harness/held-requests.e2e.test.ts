@@ -640,7 +640,9 @@ posixOnly("#3346: server-held requests through the organization server", () => {
     }
   }, 120_000);
 
-  it("an answer after a restart is unavailable", async () => {
+  // #4626: the card stays across a restart; its answer starts one turn in the
+  // same session carrying the verdict
+  it("an answer after a restart starts one turn carrying the verdict (#4626)", async () => {
     const bot = await botOf(member, "Restarted", "ask");
     await startTurn(member, bot);
     const pending = hold(bot, SEND, true).catch(() => null);
@@ -650,7 +652,7 @@ posixOnly("#3346: server-held requests through the organization server", () => {
     await startServer();
     member = await signIn(MEMBER);
     const answered = await respond(member, bot, card.requestId, "allow");
-    expect(answered.text).toMatch(/unavailable|no longer|not delivered|expired/i);
-    expect(answered.body.outcome ?? answered.body.code ?? answered.text).not.toBe("allowed-once");
+    expect(answered.status, answered.text).toBe(200);
+    expect(answered.body.outcome).toBe("late-permission");
   }, 120_000);
 });

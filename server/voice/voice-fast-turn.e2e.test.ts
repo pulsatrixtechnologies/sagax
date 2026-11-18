@@ -13,9 +13,13 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { VOICE_BRIEF_PREAMBLE } from "./voice-turn.ts";
+import { STATIC_CLAUDE_MODELS } from "../drivers/claude/config.ts";
 
 const CALL_ID = "call-fast-0123456";
-const FAST = "claude-haiku-4-5";
+// The fast tier of Claude Code is its newest Haiku (pickVoiceModel, the tiers
+// Auto uses): the first Haiku of the engine's list, newest first. Claude Haiku
+// 5.5 took it from 4.5 when it was listed (#3257, #4386).
+const FAST = STATIC_CLAUDE_MODELS.options.find((option) => /haiku/.test(option.id))!.id;
 
 async function fixture(env: Record<string, string> = {}) {
   const server = await launchVerificationServer();
@@ -113,8 +117,8 @@ it("runs a call on the fast model from a short context in one warm session, and 
       expect(prompt).not.toContain(VOICE_BRIEF_PREAMBLE);
       expect(prompt).not.toContain("[old-4]");
     }
-    expect(t.log()).toMatch(/\[voice-turn\] thread \S+: new call session on claude\/claude-haiku-4-5/);
-    expect(t.log()).toMatch(/\[voice-turn\] thread \S+: call session resumed on claude\/claude-haiku-4-5/);
+    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: new call session on claude/${FAST}`));
+    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: call session resumed on claude/${FAST}`));
     await expect.poll(() => /\[voice-latency\] utt=utt-fast-003 /.test(t.log()), { timeout: 5_000 }).toBe(true);
     console.log(`[voice-fast-turn] fake engine: ${Math.round(perTurnMs)} ms per call turn, send to settled reply\n${t.log().split("\n").filter((line) => line.includes("[voice-latency] utt=utt-fast")).join("\n")}`);
 

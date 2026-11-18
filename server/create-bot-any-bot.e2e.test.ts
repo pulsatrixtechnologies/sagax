@@ -25,9 +25,15 @@ it("a bot that is not the Primary Bot creates a bot for its person, and a bot-ma
   const turn = async (botId: string, threadId?: string) => {
     if (existsSync(gate)) unlinkSync(gate);
     if (existsSync(fixture.fixtureDumpPath)) unlinkSync(fixture.fixtureDumpPath);
-    await api("POST", `/api/bots/${botId}/messages`, { text: "Please add a reviewer bot.", ...(threadId ? { threadId } : {}) }, 202);
-    await expect.poll(() => existsSync(fixture.fixtureDumpPath), { timeout: 15_000 }).toBe(true);
-    return JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).mcpConfig.mcpServers.agents.env as Record<string, string>;
+    const sent = await api("POST", `/api/bots/${botId}/messages`, { text: "Please add a reviewer bot.", ...(threadId ? { threadId } : {}) }, 202);
+    const wanted = threadId ?? sent.threadId ?? (await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === botId).threadId;
+    // the dump of this turn: a turn of another conversation that writes the
+    // same file just after the unlink is not this one (#4495, Ubuntu)
+    const envOf = () => existsSync(fixture.fixtureDumpPath)
+      ? JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).mcpConfig?.mcpServers?.agents?.env as Record<string, string> | undefined
+      : undefined;
+    await expect.poll(() => envOf()?.SAGAX_THREAD_ID, { timeout: 15_000 }).toBe(wanted);
+    return envOf()!;
   };
   const idle = (botId: string) => expect.poll(async () => !(await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === botId).busy, { timeout: 20_000 }).toBe(true);
   const finish = async (botId: string) => { writeFileSync(gate, "finish"); await idle(botId); };

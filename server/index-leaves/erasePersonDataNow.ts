@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** erasePersonDataNow (#1388). Pure move from server/index.ts. */
+import { forgetCallerSendReceipts } from "../commands.ts";
 import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
@@ -20,6 +21,7 @@ async function erasePersonDataNow(principalId: string): Promise<{ bots: number; 
   for (const bot of surfaceBots) for (const task of host.store.tasks(bot.id)) await host.scrubSurfaceThreadDecisions(task.threadId, person);
   // and the durable receipts of their new conversations (person, bot, sendId)
   host.forgetNewThreadReceipts((key: string) => key.startsWith(`${person}|`));
+  forgetCallerSendReceipts(person, new Set(host.store.bots.filter((bot) => host.recordedBotOwner(bot) === person).map((bot) => bot.id)));
   for (const bot of host.store.bots.slice()) { // a copy: deleting changes the list
     if (host.recordedBotOwner(bot) === person) {
       if ((await host.deleteBotWithLifecycle(bot.id)).status === 200) bots++;

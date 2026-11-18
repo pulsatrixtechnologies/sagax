@@ -5,7 +5,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { runCommand, commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
+import { runCommand, commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, forgetCallerSendReceipts, forgetConversationSendReceipts, setCommandReceipt } from "./commands.ts";
 import { DATA_DIR } from "./config.ts";
 import { closeMessageDb, insertMessage, readThread } from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
@@ -152,6 +152,16 @@ describe("lot S1: receipts dropped with what they name", () => {
     closeMessageDb();
     rmSync(DATA_DIR, { recursive: true, force: true });
     mkdirSync(DATA_DIR, { recursive: true });
+  });
+  it("drops sends to a deleted conversation and sends by an erased person or their bots", () => {
+    const kind = "agent.send_prompt";
+    setCommandReceipt(kind, "person:ada|bot|one", { thread_id: "gone", pending: true });
+    setCommandReceipt(kind, "person:ada|bot|two", { thread_id: "other" });
+    setCommandReceipt(kind, "bot:owned|bot|three", { thread_id: "other" });
+    setCommandReceipt(kind, "person:adam|bot|four", { thread_id: "other" });
+    expect(forgetConversationSendReceipts("gone")).toBe(1);
+    expect(forgetCallerSendReceipts("ada", new Set(["owned"]))).toBe(2);
+    expect(commandReceipt(kind, "person:adam|bot|four")?.result).toEqual({ thread_id: "other" });
   });
   it("drops the receipts a key or a result names, and only those", () => {
     setCommandReceipt("member.new_thread", "pr_bob|sb|send-0000000000000001", { threadId: "t1" });

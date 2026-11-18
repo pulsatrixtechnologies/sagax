@@ -34006,7 +34006,11 @@ const agentCardGuard = createAgentCardGuard({
     });
   }
 });
-let sendReceiptsPurgedAt = 0;
+const purgeSendPromptReceipts = () => {
+  try { expireCommandReceipts("agent.send_prompt", SEND_RECEIPT_TTL_MS); } catch (error) { reportBackgroundError(error); }
+};
+purgeSendPromptReceipts();
+setInterval(purgeSendPromptReceipts, 3_600_000).unref();
 
 /** #3515: the time zone a server line says its times in for a text-only
  * reader (the agent API, the organization's connector): the person's own,
@@ -34108,11 +34112,8 @@ const agentApi = createAgentApi({
   sendReceipts: {
     get: (key) => commandReceipt<SendReceipt>("agent.send_prompt", key)?.result ?? null,
     put: (key, receipt) => {
-      if (Date.now() - sendReceiptsPurgedAt > 3_600_000) {
-        sendReceiptsPurgedAt = Date.now();
-        expireCommandReceipts("agent.send_prompt", SEND_RECEIPT_TTL_MS);
-      }
-      setCommandReceipt("agent.send_prompt", key, receipt);
+      // Erasure during the post removed its pending receipt.
+      if (receipt.pending || commandReceipt("agent.send_prompt", key)) setCommandReceipt("agent.send_prompt", key, receipt);
     },
     delete: (key) => dropCommandReceipt("agent.send_prompt", key),
   },

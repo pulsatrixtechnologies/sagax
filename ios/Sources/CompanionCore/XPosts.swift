@@ -17,6 +17,10 @@ public struct XDraftState: Decodable, Equatable, Sendable {
     public var text: String?
     public var url: String?
     public var error: String?
+
+    public init(status: String, text: String? = nil, url: String? = nil, error: String? = nil) {
+        self.status = status; self.text = text; self.url = url; self.error = error
+    }
 }
 
 struct XDraftStateEnvelope: Decodable { var post: XDraftState? }
@@ -56,7 +60,7 @@ public final class XPost: Equatable, Identifiable, @unchecked Sendable {
     public let quoted: XPost?
     public let metrics: XMetrics?
 
-    init(id: String, url: String?, name: String, handle: String, verified: Bool, avatarUrl: String?, createdAt: String?, text: String, media: [XMedia], quoted: XPost?, metrics: XMetrics?) {
+    public init(id: String, url: String?, name: String, handle: String, verified: Bool, avatarUrl: String?, createdAt: String?, text: String, media: [XMedia], quoted: XPost?, metrics: XMetrics?) {
         self.id = id; self.url = url; self.name = name; self.handle = handle; self.verified = verified
         self.avatarUrl = avatarUrl; self.createdAt = createdAt; self.text = text; self.media = media
         self.quoted = quoted; self.metrics = metrics

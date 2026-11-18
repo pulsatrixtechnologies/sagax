@@ -469,7 +469,13 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     expect(filesText(claudeProjects(plain)[0]!)).toContain("ENGINE-ORDINARY first");
     await turnWithoutError(ana, plain, "ENGINE-CONFIDENTIAL third");
 
-    // deleting the confidential thread removes its transcripts and nothing else's
+    // deleting the confidential thread removes its transcripts and nothing else's.
+    // When the secret thread's own last turn ran after the plain thread's and
+    // carried it (its "Recent work"), making plain confidential rightly purged
+    // the secret thread's session too (#4407, makeThreadConfidential carriers):
+    // on a busy build host that order happened in about half the runs. A turn
+    // of its own now gives it a session that carries nothing else.
+    await turnWithoutError(ana, secret, `${SECRET}-ENGINE again`);
     // (its own transcript is written by the engine process: wait for it rather
     // than read it once, a loaded machine wrote it late and failed here)
     await waitFor(async () => claudeProjects(secret).length === 1);

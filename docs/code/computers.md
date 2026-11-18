@@ -501,12 +501,14 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   approval card, which offers Always allow), `never` (out of the Computer
   menu and of the default pick; a request naming it gets 403
   `access_never`). GET `/api/me/desktop-bridge` returns `devices` (this one
-  first); POST `/api/me/desktop-bridge/computers/access` sets the level. The
-  one place for them is Remote sessions > Enrolled hosts and the Computers
-  panel (`src/components/remote-session/MyDevicesList.tsx`); the Computer
-  menu reads the same status (`computerChoices` drops `never`) and Settings >
-  Computer only points there. A member's own computers need no server-wide
-  admin switch. Tests: `server/desktop/desktop-bridge-devices*.test.ts`,
+  first); POST `/api/me/desktop-bridge/computers/access` sets the level. Settings
+  > Computer and Remote sessions use the same device rows and registry.
+  Execution on this computer updates the registration belonging to the current
+  session. Network routing follows the person's synced preference. Turning it
+  off sends new connections directly from the server. The session count comes
+  from connections acknowledged by the desktop tunnel. Organization server
+  mode uses the desktop bridge. Separately paired workspaces can still use
+  their existing folder-sharing grants. Tests: `server/desktop/desktop-bridge-devices*.test.ts`,
   `src/components/remote-session/MyDevicesList.dom.test.ts`,
   `src/lib/desktop-bridge.test.ts`.
 

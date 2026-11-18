@@ -80,11 +80,13 @@ export function createSharedComputersRoutes(deps: SharedComputersRouteDeps): Rou
       return json(res, 200, { computers: deps.sharedComputers.status(deps.sessionLendingPrincipal(auth)) });
     }
 
-    if (method === "POST" && path.startsWith("/api/shared-computers/") && deps.lendingEnabled()) {
+    // Importing a copy is independent of a live desktop registration.
+    const offered = () => path === "/api/shared-computers/copy" ? deps.sharedComputersEnabled() : deps.lendingEnabled();
+    if (method === "POST" && path.startsWith("/api/shared-computers/") && offered()) {
       if (auth.kind !== "session") return json(res, 403, { error: "Pair this desktop first" });
       if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) return json(res, 415, { error: "JSON required" });
       const body = await readBody(req, 4_000_000);
-      if (!deps.lendingEnabled()) return json(res, 404, { error: `no route: ${method} ${path}` });
+      if (!offered()) return json(res, 404, { error: `no route: ${method} ${path}` });
       if (!deps.sessionsIsLive(auth.session.id)) return json(res, 401, { error: "Session ended" });
       const secret = String(req.headers["x-omb-computer-secret"] ?? "");
       if (path === "/api/shared-computers/connect") {

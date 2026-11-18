@@ -19,14 +19,19 @@ export interface BotWorkplace {
   routines: boolean;
   /** Which destinations bots may reach THROUGH this person's computer (the
    * egress tunnel, server/desktop/desktop-egress.ts): "all" (default) or "lan", the
-   * local network only (private addresses; anything else leaves from the
-   * server as it would without the tunnel). */
+   * local network only, or "off" to route directly from the server. */
   network: BotWorkplaceNetwork;
+  /** Registered device chosen for network routing, stable across reconnects. */
+  networkDevice?: string;
 }
 
-export type BotWorkplaceNetwork = "all" | "lan";
+export type BotWorkplaceNetwork = "all" | "lan" | "off";
 
 export const DEFAULT_BOT_WORKPLACE: BotWorkplace = Object.freeze({ place: "computer", routines: false, network: "all" });
+
+function networkMode(value: unknown): BotWorkplaceNetwork {
+  return value === "lan" || value === "off" ? value : "all";
+}
 
 export function parseBotWorkplace(value: string | null | undefined): BotWorkplace {
   if (!value) return { ...DEFAULT_BOT_WORKPLACE };
@@ -35,7 +40,8 @@ export function parseBotWorkplace(value: string | null | undefined): BotWorkplac
     return {
       place: parsed?.place === "server" ? "server" : "computer",
       routines: parsed?.routines === true,
-      network: parsed?.network === "lan" ? "lan" : "all",
+      network: networkMode(parsed?.network),
+      ...(typeof parsed?.networkDevice === "string" && parsed.networkDevice ? { networkDevice: parsed.networkDevice } : {}),
     };
   } catch {
     return { ...DEFAULT_BOT_WORKPLACE };
@@ -43,7 +49,7 @@ export function parseBotWorkplace(value: string | null | undefined): BotWorkplac
 }
 
 export function serializeBotWorkplace(value: BotWorkplace): string {
-  return JSON.stringify({ place: value.place === "server" ? "server" : "computer", routines: value.routines === true, network: value.network === "lan" ? "lan" : "all" });
+  return JSON.stringify({ place: value.place === "server" ? "server" : "computer", routines: value.routines === true, network: networkMode(value.network), ...(value.networkDevice ? { networkDevice: value.networkDevice } : {}) });
 }
 
 /** The MCP server the desktop bridge tools are mounted under. The UI reads it

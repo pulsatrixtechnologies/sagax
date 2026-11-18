@@ -119,7 +119,7 @@ function configStatus() {
       // Maintainer-only escape hatch, not a Settings toggle: the desktop
       // shell and the Settings UI read it so they offer nothing this server
       // would refuse.
-      sharedComputers: sharedComputersEnabled(host.cfg),
+      sharedComputers: host.IDENTITY.kind !== "perspicax" && sharedComputersEnabled(host.cfg),
       // Capabilities > Installed switch: Claude bots also see this machine's
       // own Claude Code MCP servers
       claudeUserMcp: claudeUserMcpEnabled(host.cfg, host.IDENTITY.kind === "perspicax"),

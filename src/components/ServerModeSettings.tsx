@@ -8,8 +8,7 @@ import { useEffect, useState } from "react";
 import { Building2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { serverModeBridge } from "@/lib/launch";
-import { ComputerSharingSettings } from "./ComputerSharingSettings";
-import { Card, DescribedRow, PILL } from "./SettingsPrimitives";
+import { Card } from "./SettingsPrimitives";
 
 export type ServerModeState = { active: false; personal?: boolean } | { active: true; id: string; name: string; origin: string; label?: string; orgName?: string };
 
@@ -37,31 +36,5 @@ export function ManagedByOrganization({ cardId, title }: { cardId: string; title
         {t("settings.serverMode.managedShort")}
       </span>
     </Card>
-  );
-}
-
-/** Settings > Organization in server mode: what THIS computer lends the
- * organization's bots when this person asks (folders, terminal, screen
- * control), set in the desktop app and confirmed in a native dialog. Bots
- * never use the server's own machine. */
-export function ServerModeComputerAccess() {
-  const serverMode = useServerMode();
-  const [open, setOpen] = useState(false);
-  if (!serverMode?.active || !window.ogb?.computerSharing) return null;
-  // 2026-11-07: the person's own computers are theirs to lend; no
-  // server-wide admin switch gates them (Remote sessions > My devices).
-  return (
-    <div data-settings-card="organization.serverModeComputer">
-      <DescribedRow
-        label={t("settings.serverMode.computerTitle")}
-        rowId="serverModeComputer"
-        description={t("settings.serverMode.computerShort")}
-        below={open && <div className="mt-2"><ComputerSharingSettings key={serverMode.id} workspace={serverMode} onClose={() => setOpen(false)} /></div>}
-      >
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={PILL}>
-          {t("settings.serverMode.computerOpen")}
-        </button>
-      </DescribedRow>
-    </div>
   );
 }

@@ -75,7 +75,7 @@ export function ConnectedWorkspacesSettings() {
   };
   if (!bridge) return <p className="text-[13px] text-ink-secondary">{t("settings.servers.desktopOnly")}</p>;
   const connected = saved?.environments.find(entry => entry.id === computerId);
-  const computerWorkspace = connected?.origin ? { id: connected.id, name: connected.name, origin: connected.origin } : undefined;
+  const computerWorkspace = connected?.origin && !connected.org ? { id: connected.id, name: connected.name, origin: connected.origin } : undefined;
   const locals = saved?.environments.filter(entry => entry.kind === "local") ?? [];
   const forgetEntry = locals.find(entry => entry.id === envForget);
   return <>
@@ -168,7 +168,7 @@ export function ConnectedWorkspacesSettings() {
             {active ? <span className="flex items-center gap-1 px-2.5 text-[13px] text-ink-secondary"><Check size={13} aria-hidden="true" />{t("settings.servers.current")}</span> :
               <button type="button" disabled={busy} aria-label={t("settings.servers.switchTo", { name: entry.name })} onClick={() => void perform(async () => { await bridge.switch(entry.id); return true; })}
                 className={PILL}>{t("settings.servers.switch")}</button>}
-            {entry.id !== "local" && sharingOffered && <button type="button" disabled={busy} aria-label={t("settings.servers.accessFor", { name: entry.name })} onClick={() => setComputerId(entry.id)} className={PILL}>{t("settings.servers.access")}</button>}
+            {entry.id !== "local" && !entry.org && sharingOffered && <button type="button" disabled={busy} aria-label={t("settings.servers.accessFor", { name: entry.name })} onClick={() => setComputerId(entry.id)} className={PILL}>{t("settings.servers.access")}</button>}
             {entry.id !== "local" && <button type="button" disabled={busy} aria-label={t("settings.servers.forget", { name: entry.name })}
               onClick={() => void perform(async () => {
                 if (!(await confirm({

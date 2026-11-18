@@ -128,6 +128,8 @@ describe("the egress proxy", () => {
     const answer = await viaProxy(adaProxy, "http://intranet.test/report");
     expect(answer).toEqual({ status: 200, body: "intranet says hi to /report" });
     expect(opened).toContain("intranet.test:80");
+    expect(tunnels.routedThisSession(ADA, "ada-session")).toBe(1);
+    expect(tunnels.routedThisSession(BOB, "ada-session")).toBe(0);
     expect(audit.at(-1)).toMatchObject({ person: ADA, host: "intranet.test", port: 80, via: "desktop", ok: true });
   });
 
@@ -204,6 +206,8 @@ describe("pieces", () => {
   it("knows the LAN and the routes", () => {
     for (const address of ["10.1.2.3", "172.20.0.1", "192.168.1.10", "100.100.1.1", "fd12:3456::1"]) expect(isLanAddress(address)).toBe(true);
     for (const address of ["8.8.8.8", "127.0.0.1", "169.254.169.254", "172.32.0.1", "::1"]) expect(isLanAddress(address)).toBe(false);
+    expect(egressRoute("intranet.local", "off")).toBe("direct");
+    expect(egressRoute("10.0.0.5", "off")).toBe("direct");
     expect(egressRoute("intranet.local", "all")).toBe("desktop");
     expect(egressRoute("10.0.0.5", "lan")).toBe("desktop");
     expect(egressRoute("8.8.8.8", "lan")).toBe("direct");

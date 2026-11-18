@@ -9,7 +9,7 @@
 //      the desktop's attachments folder, the path the bot is told), and the
 //      engine's own HTTP reaches a "LAN" host only this desktop can resolve,
 //      through the egress tunnel;
-//   2. the desktop disconnects; the same request runs in the person's server
+//   2. the desktop disconnects; a Cloud turn runs in the person's server
 //      environment (the mock provisioner), the file copied to
 //      /workspace/attachments.
 //
@@ -58,6 +58,14 @@ await new Promise<void>((resolve) => lan.listen(0, "127.0.0.1", resolve));
 const lanPort = (lan.address() as AddressInfo).port;
 
 const docker = new FakeDocker();
+// read_file resolves its path in the environment first (user-sandbox-tools.ts
+// resolveInSandbox): answer as an environment without links would.
+docker.execResult = (exec) => {
+  const at = exec.Cmd.indexOf("python3");
+  const path = at >= 0 && exec.Cmd[at + 3]?.includes("sagaxResolved") ? exec.Cmd[at + 4] : undefined;
+  const stdout = path === undefined ? "ok" : JSON.stringify({ sagaxResolved: 1, real: path.startsWith("/") ? path : `/workspace/${path}`, links: [] });
+  return { exitCode: 0, stdout: Buffer.from(stdout), stderr: Buffer.alloc(0), truncated: false };
+};
 const service = new SandboxService(docker, sandboxdConfigFromEnv({ SAGAX_SANDBOX_IMAGE: "sagax-sandbox:test", SAGAX_SANDBOX_INSTANCE: INSTANCE }));
 await service.installEgressPolicy();
 const provisioner = createServer(createSandboxdHandler(service, new SandboxdVerifier(SANDBOXD_KEY)));
@@ -84,9 +92,13 @@ writeFileSync(join(data, "config.json"), JSON.stringify({
   organization: { memberBotsUseOrgKey: true },
   instances: {
     claude: {
-      driver: "claudeAgent",
+      driver: "claudeAgent", access: "api",
       environment: {
+        FAKE_CLAUDE_TOOL_CALLS: "[]",
         FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
+          { server: "sagax-computer", tool: "computer_select", arguments: {}, when: "inspect fixture computer" },
+          { server: "sagax-computer", tool: "computer_select", arguments: { target: "this_computer", reason: "Read the desktop fixture" }, when: "inspect fixture computer" },
+          { server: "sagax-desktop", tool: "read_file", arguments: { path: "~/bridge.txt" }, when: "inspect fixture computer" },
           { server: "sagax-desktop", tool: "read_file", arguments: { path: "$ATTACHED_FILE" }, when: "read the attachment" },
           { server: "sagax-environment", tool: "read_file", arguments: { path: "$ATTACHED_FILE" }, when: "read the attachment" },
         ]),
@@ -94,7 +106,7 @@ writeFileSync(join(data, "config.json"), JSON.stringify({
         FAKE_CLAUDE_PROMPTS: prompts,
         FAKE_CLAUDE_PROXY_FETCH: "http://intranet.sagax.test/hello",
       },
-      config: { cli: FAKE_CLAUDE, fullAuto: true },
+      config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
     },
   },
 }));
@@ -102,6 +114,7 @@ let serverLog = "";
 const server: ChildProcess = spawn(process.execPath, ["--experimental-strip-types", join(ROOT, "server", "index.ts")], {
   cwd: ROOT,
   env: {
+    SAGAX_TEST_FIXED_WORKSPACE: "1", SAGAX_TEST_SEAMS: "1",
     PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1),
     SAGAX_IDENTITY: "perspicax", SAGAX_PERSPICAX_ISSUER: idp.issuer, SAGAX_PUBLIC_URL: origin,
     SAGAX_PERSPICAX_LINK_FILE: join(home, "link", "pulsabot.json"), SAGAX_ANTHROPIC_API_KEY: "sk-ant-test-org-key-000000", SAGAX_ORG_NAME: "Acme",
@@ -137,9 +150,17 @@ const code = await new Promise<number>((resolve) => {
       ...process.env, VERIFY_ORIGIN: origin, VERIFY_COOKIE: cookie, VERIFY_LAN_PORT: String(lanPort),
       VERIFY_MCP_DUMP: mcpDump, VERIFY_PROMPTS: prompts, VERIFY_ATTACHMENTS: attachmentsDir, VERIFY_HOME: join(home, "desktop-home"),
     },
-    stdio: ["ignore", "inherit", "inherit"],
+    stdio: ["ignore", "inherit", "inherit", "ipc"],
   });
-  child.on("exit", (status) => resolve(status ?? 1));
+  let reported: number | undefined;
+  child.once("message", (message) => {
+    if (message !== "passed" && message !== "failed") return;
+    reported = message === "passed" ? 0 : 1;
+    // The checks have finished. Electron can wait on a native network service at exit.
+    const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
+    child.once("exit", () => clearTimeout(timer));
+  });
+  child.once("exit", (status) => resolve(reported ?? status ?? 1));
 });
 check("the Electron side passed its checks", code === 0, `exit ${code}`);
 const copied = docker.execs.some((entry) => entry.exec.Env.some((value) => /^SAGAX_PATH=\/workspace\/attachments\/[0-9a-f]{8}-later\.md$/.test(value)));

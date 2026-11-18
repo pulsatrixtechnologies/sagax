@@ -24,7 +24,25 @@ function moveMonth(date: Date, offset: number) {
 export interface MiniMonthProps {
   anchor: number;
   onSelect: (at: number) => void;
+  /** The shown month, held by the sidebar when its header sits in the rail's fold row (MiniMonthHeader). */
+  month?: Date;
 }
+
+/** The month title with its previous and next buttons: the rail's first row, beside the fold button. */
+export function MiniMonthHeader({ month, onMove }: { month: Date; onMove: (offset: number) => void }) {
+  const button = "flex size-7 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-between pl-2" data-mini-month-header="">
+      <div className="truncate text-[13px] font-semibold text-ink">{cachedDateFormat(MONTH_OPTIONS).format(month)}</div>
+      <div className="flex items-center gap-0.5">
+        <button type="button" onClick={() => onMove(-1)} className={button} aria-label={t("routineCalendar.prevMonth")}><ChevronLeft size={15} aria-hidden="true" /></button>
+        <button type="button" onClick={() => onMove(1)} className={button} aria-label={t("routineCalendar.nextMonth")}><ChevronRight size={15} aria-hidden="true" /></button>
+      </div>
+    </div>
+  );
+}
+
+export { moveMonth, startOfMonth };
 
 const MONTH_OPTIONS: Intl.DateTimeFormatOptions = { month: "long", year: "numeric" };
 const DAY_OPTIONS: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric", year: "numeric" };
@@ -32,8 +50,9 @@ const DAY_OPTIONS: Intl.DateTimeFormatOptions = { weekday: "long", month: "long"
 /** A compact, Monday-first month picker for the calendar sidebar. Memoized:
  * it renders when the anchor or the shown month changes, never on a live
  * run frame (2026-11-02). */
-export const MiniMonth = memo(function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
-  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(anchor));
+export const MiniMonth = memo(function MiniMonth({ anchor, onSelect, month }: MiniMonthProps) {
+  const [ownMonth, setVisibleMonth] = useState(() => startOfMonth(anchor));
+  const visibleMonth = month ?? ownMonth;
 
   useEffect(() => {
     setVisibleMonth(startOfMonth(anchor));
@@ -58,7 +77,8 @@ export const MiniMonth = memo(function MiniMonth({ anchor, onSelect }: MiniMonth
   const dayLabel = cachedDateFormat(DAY_OPTIONS);
 
   return (
-    <section aria-label={t("routineCalendar.mini")} className="select-none py-3 pl-3 pr-6">
+    <section aria-label={t("routineCalendar.mini")} className={month ? "select-none pb-3 pl-3 pr-6 pt-1" : "select-none py-3 pl-3 pr-6"}>
+      {!month && (
       <div className="mb-2 flex items-center justify-between px-1">
         <div className="text-[13px] font-semibold text-ink">{monthLabel}</div>
         <div className="flex items-center gap-0.5">
@@ -80,6 +100,7 @@ export const MiniMonth = memo(function MiniMonth({ anchor, onSelect }: MiniMonth
           </button>
         </div>
       </div>
+      )}
 
       <div className="grid grid-cols-7" aria-hidden="true">
         {WEEKDAY_LABELS.map((label, index) => (

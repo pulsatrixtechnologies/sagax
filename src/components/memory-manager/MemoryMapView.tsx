@@ -9,7 +9,7 @@
 // lib/memory-graph.ts. `scope` is the rail's selection: the map shows the
 // notes it keeps, in all three layouts.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Columns3, Network, Orbit, Pause, Play, Search, SlidersHorizontal, Waypoints } from "lucide-react";
+import { Columns3, Network, Orbit, Pause, Play, Search, SlidersHorizontal, Tag, Waypoints } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
@@ -87,7 +87,7 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
   const color = useMemo(() => new Map(tiers.map((tier) => [tier.key, tier.color])), [tiers]);
   const tierOf = useMemo(() => new Map(rows.map((entry) => [entry.key, entry.tier])), [rows]);
   const tags = useMemo(() => [...new Set(shown.flatMap((entry) => entry.row.tags ?? []))].sort(), [shown]);
-  const tagOptions = useMemo<PillOption<string>[]>(() => [{ value: "", label: t("memoryManager.map.allTags") }, ...tags.map((value) => ({ value, label: value }))], [tags]);
+  const tagOptions = useMemo<PillOption<string>[]>(() => [{ value: "", label: t("memoryManager.map.allTags"), triggerLabel: t("memoryManager.tags") }, ...tags.map((value) => ({ value, label: value }))], [tags]);
 
   // The console's radial brain of the rows shown.
   const wholeBrain = useMemo(() => buildBrain(pageTree(rows, tiers), pageGraph(rows, bodies), {
@@ -173,7 +173,7 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
       <div className="@container" data-memory-map-bar-host="">
         {/* one row of 36px controls, one 8px gap; nothing is cut: the search gives way first, and a very narrow page wraps (never scrolls) */}
         <div className="flex flex-wrap items-center gap-2" data-memory-map-bar="">
-          <label className="flex h-9 min-w-[180px] flex-1 basis-[180px] @max-[640px]:min-w-[130px] @max-[640px]:basis-[130px] items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
+          <label className="flex h-9 min-w-[180px] flex-1 basis-[180px] @max-[640px]:min-w-[106px] @max-[640px]:basis-[106px] items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
             <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} placeholder={t("memoryManager.map.search")} aria-label={t("memoryManager.map.search")} className="min-w-0 flex-1 overflow-hidden text-ellipsis bg-transparent text-[13px] outline-none placeholder:text-ink-tertiary" data-memory-map-search="" />
           </label>
@@ -190,10 +190,11 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
             />
           </div>
           {tags.length > 0 && (
-            <div className="flex min-w-0 max-w-[150px] shrink @max-[640px]:w-[96px] @max-[640px]:max-w-[96px]" data-memory-map-tags="">
+            <div className="flex min-w-0 max-w-[150px] shrink @max-[640px]:w-[120px] @max-[640px]:max-w-[120px]" data-memory-map-tags="">
               <PillSelect
                 value={tag}
                 onChange={setTag}
+                leading={<Tag size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />}
                 ariaLabel={t("memoryManager.map.tags")}
                 searchAbove={8}
                 searchLabel={t("memoryManager.map.tags")}

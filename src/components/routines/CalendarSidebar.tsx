@@ -1,10 +1,10 @@
 import { CalendarClock } from "lucide-react";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { RightRailPanel } from "@/components/RightRail";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { Bot } from "@/state/store";
-import { MiniMonth } from "./MiniMonth";
+import { MiniMonth, MiniMonthHeader, moveMonth, startOfMonth } from "./MiniMonth";
 import { RoutineList } from "./RoutineList";
 
 export { BOT_CALENDAR_DRAG_TYPE } from "@/lib/bot-drag";
@@ -39,11 +39,13 @@ export interface CalendarSidebarProps {
  * next. Bots are scheduled by dragging them from the left sidebar, which
  * already lists them, so this panel no longer repeats them. */
 export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false }: CalendarSidebarProps) {
+  const [month, setMonth] = useState(() => startOfMonth(anchor));
+  useEffect(() => setMonth(startOfMonth(anchor)), [anchor]);
   return (
     // The shared right rail (RightRail.tsx), the same as the Memory explorer's. Its content below keeps a 24 px right
     // margin, so it ends on the page header's right edge (the close X); the rail itself reaches the window's edge.
-    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")}>
-      <MiniMonth anchor={anchor} onSelect={onSelectDate} />
+    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")} lead={onCollapse ? <MiniMonthHeader month={month} onMove={(offset) => setMonth((current) => moveMonth(current, offset))} /> : undefined}>
+      <MiniMonth anchor={anchor} onSelect={onSelectDate} month={onCollapse ? month : undefined} />
 
       <div className="ml-4 mr-6 border-t border-hairline/40" />
 

@@ -44,7 +44,7 @@ function PairRow({ pair, bots, bars, maxCount, onSelect }: {
         <button type="button" onClick={() => onSelect(target)} className="truncate font-medium text-ink hover:underline">{target.name}</button>
         <span className="ml-auto shrink-0 text-[11px] text-ink-tertiary">{at ? agoLabel(at) : pair.live === "running" ? t("teamMap.org.live.running") : pair.live === "queued" ? t("teamMap.org.live.queued") : ""}</span>
         <button type="button" aria-label={t("teamMap.org.openHandoff", { from: source.name, to: target.name })} onClick={open}
-          className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-md bg-panel text-ink-secondary opacity-0 hover:bg-control hover:text-ink focus-visible:opacity-100 group-hover:opacity-100">
+          className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-md bg-panel text-ink-secondary opacity-0 hover:bg-control hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100">
           <ExternalLink size={12} />
         </button>
       </div>

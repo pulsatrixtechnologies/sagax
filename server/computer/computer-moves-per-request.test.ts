@@ -11,7 +11,6 @@ import { createInternalEnvironmentsRoutes } from "../routes/internal-environment
 
 const stateFor = createAutoComputerStateFor(() => ({
   IDENTITY: { kind: "perspicax" },
-  workplacePreference: () => ({ routines: false }),
   desktopBridges: { connected: () => true },
   userSandbox: {},
 }));
@@ -66,6 +65,7 @@ describe("computer moves per request (#2763)", () => {
     let switches = 1;
     const selected: string[] = [];
     const deps = {
+      isPerspicax: () => false,
       bot: () => ({ id: "b1", threadId: "b1-t", computer: "auto" }),
       projectBotForTask: () => ({ id: "b1", threadId: "b1-t", computer: "auto" }),
       requireActive: () => undefined,

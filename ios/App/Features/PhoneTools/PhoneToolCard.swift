@@ -151,6 +151,7 @@ enum PhoneToolWords {
         case .alarms: "alarm"
         case .photos: "photo.on.rectangle"
         case .photoLibrary: "photo.stack"
+        case .music: "music.note"
         case .shortcut: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
         case .status: "battery.75percent"
@@ -169,6 +170,7 @@ enum PhoneToolWords {
         case .alarms: String(localized: "Alarms")
         case .photos: String(localized: "Photos")
         case .photoLibrary: String(localized: "Photo library")
+        case .music: String(localized: "Apple Music")
         case .shortcut: String(localized: "Shortcuts")
         case .clipboard: String(localized: "Clipboard")
         case .status: String(localized: "Battery, network and Focus")
@@ -210,6 +212,16 @@ enum PhoneToolWords {
             case "read": return String(localized: "Send the details of \(count) photos (date, size, place).")
             case "export": return String(localized: "Send \(count) photos from your library.")
             default: return String(localized: "Find photos in your library and send their details (date, size, place).")
+            }
+        case .music:
+            switch request.action {
+            case "now_playing": return String(localized: "See what plays in Sagax.")
+            case "search": return String(localized: "Search Apple Music for “\(request.string("query") ?? "")”.")
+            case "play": return String(localized: "Play music in Sagax.")
+            case "pause": return String(localized: "Pause the music.")
+            case "resume": return String(localized: "Resume the music.")
+            case "next": return String(localized: "Skip to the next song.")
+            default: return String(localized: "Go back to the previous song.")
             }
         case .shortcut:
             return String(localized: "Run your shortcut “\(request.string("name") ?? "")”.")

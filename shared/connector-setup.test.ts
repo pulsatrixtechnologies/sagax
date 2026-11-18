@@ -264,6 +264,7 @@ describe("the other expired connections of the proactive report (#2690)", () => 
     const failure = connectorReauthFailure("mcp__messages__mac_mail_search", said);
     expect(failure).toMatchObject({ label: "Mail", connector: "mail", provider: "mac", url: MAC_AUTOMATION_URL });
     expect(connectorReauthFailure("messages__mac_calendar_list", "Not authorized to send Apple events to Calendar. (-1743)")).toMatchObject({ label: "Calendar", url: MAC_AUTOMATION_URL });
+    expect(connectorReauthFailure("messages__mac_music_play", "Not authorized to send Apple events to Music. (-1743)")).toMatchObject({ label: "Music", connector: "music", url: MAC_AUTOMATION_URL });
     expect(connectorReauthFailure("mcp__messages__mac_photos_export", "macOS has not allowed Sagax to control Photos. Open System Settings > Privacy & Security > Automation and turn on Photos under Sagax.")).toMatchObject({ label: "Photos", connector: "photos", url: MAC_AUTOMATION_URL });
     expect(connectorReauthText(failure!, "fr")).toContain("Automatisation");
     expect(connectorReauthText(failure!, "en")).not.toContain("Full Disk Access");

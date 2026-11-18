@@ -206,4 +206,23 @@ final class PhoneToolsTests: XCTestCase {
         XCTAssertFalse(PhoneToolShaping.fitsLibraryImage(Data(count: 1_500_000)))
         XCTAssertEqual(PhoneToolShaping.libraryExportSide(original: false), 2_048)
     }
+
+    // 2026-11-17: Apple Music (MusicKit) through the same phone tool path.
+    func testMusicIsOfferedAndShapedForTheWire() throws {
+        let play = try wire(tool: "music", args: #"{"action":"play","id":"1440833098","kind":"album"}"#)
+        XCTAssertEqual(play.tool, .music)
+        XCTAssertEqual(play.action, "play")
+        XCTAssertFalse(PhoneTool.music.onceOnly)
+        XCTAssertTrue(PhoneTool.allCases.contains(.music))
+        let rows = (0..<30).map { PhoneMusicItem(id: "\($0)", kind: "song", title: "T\($0)", artist: "A", duration: 201.4) }
+        guard case let .object(found) = PhoneToolShaping.music(results: rows, limit: 99) else { return XCTFail("object") }
+        XCTAssertEqual(found["results"]?.array?.count, 25)
+        guard case let .object(first) = found["results"]?.array?.first else { return XCTFail("row") }
+        XCTAssertEqual(first["duration"]?.number, 201)
+        guard case let .object(now) = PhoneToolShaping.music(state: "weird", nowPlaying: PhoneMusicItem(id: "", kind: "song", title: "River", artist: "Joni"), position: 12.34) else { return XCTFail("object") }
+        XCTAssertEqual(now["state"]?.string, "stopped")
+        XCTAssertEqual(now["position"]?.number, 12.3)
+        guard case let .object(played) = PhoneToolShaping.music(played: PhoneMusicItem(id: "1", kind: "album", title: "Blue")) else { return XCTFail("object") }
+        XCTAssertEqual(played["state"]?.string, "playing")
+    }
 }

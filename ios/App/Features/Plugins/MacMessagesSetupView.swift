@@ -519,7 +519,7 @@ struct PhoneIntegrationsSection: View {
     @State private var disabled = PhoneToolCenter.disabled
 
     private var tools: [PhoneTool] {
-        let preferred: [PhoneTool] = [.calendar, .reminders, .contacts, .photos, .photoLibrary, .shortcut, .alarms, .home, .location, .clipboard, .status]
+        let preferred: [PhoneTool] = [.calendar, .reminders, .contacts, .photos, .photoLibrary, .music, .shortcut, .alarms, .home, .location, .clipboard, .status]
         let have = Set(preferred.map(\.rawValue))
         let rest = PhoneTool.allCases.filter { !$0.fromComputer && !have.contains($0.rawValue) }
         return preferred + rest

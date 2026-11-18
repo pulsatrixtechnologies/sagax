@@ -10,6 +10,7 @@ import CoreLocation
 import EventKit
 import HomeKit
 import Intents
+import MusicKit
 import Network
 import Photos
 import UIKit
@@ -44,6 +45,7 @@ enum PhoneToolRunner {
             guard let photos else { throw PhoneToolError.invalid("No photo was picked.") }
             return PhoneToolShaping.photos(photos, max: request.int("max"))
         case .photoLibrary: return try await photoLibrary(request)
+        case .music: return try await music(request)
         case .shortcut: return try await shortcut(request)
         case .clipboard: return PhoneToolShaping.clipboard(UIPasteboard.general.hasStrings ? UIPasteboard.general.string : nil)
         case .status: return await status()
@@ -382,6 +384,138 @@ enum PhoneToolRunner {
             current = UIGraphicsImageRenderer(size: next, format: format).image { _ in source.draw(in: CGRect(origin: .zero, size: next)) }
         }
         return nil
+    }
+
+    // MARK: Apple Music (MusicKit): what plays in Sagax, a search, playback
+
+    private static func music(_ request: PhoneToolRequest) async throws -> WidgetJSON {
+        let status = await MusicAuthorization.request()
+        guard status == .authorized else { throw PhoneToolError.permission("Apple Music (Settings > Sagax > Media and Apple Music)") }
+        let player = ApplicationMusicPlayer.shared
+        switch request.action {
+        case "search": return try await musicSearch(request)
+        case "play":
+            guard let id = request.string("id") else { throw PhoneToolError.invalid("music play needs id (from search).") }
+            let catalog = request.string("scope") == "catalog"
+            let kind = request.string("kind") ?? "song"
+            let played: PhoneMusicItem
+            switch kind {
+            case "album":
+                let album = try await musicAlbum(id, catalog: catalog)
+                player.queue = ApplicationMusicPlayer.Queue(for: [album])
+                played = PhoneMusicItem(id: id, kind: "album", title: album.title, artist: album.artistName)
+            case "playlist":
+                let playlist = try await musicPlaylist(id, catalog: catalog)
+                player.queue = ApplicationMusicPlayer.Queue(for: [playlist])
+                played = PhoneMusicItem(id: id, kind: "playlist", title: playlist.name, artist: playlist.curatorName)
+            default:
+                let song = try await musicSong(id, catalog: catalog)
+                player.queue = ApplicationMusicPlayer.Queue(for: [song])
+                played = PhoneMusicItem(id: id, kind: "song", title: song.title, artist: song.artistName, album: song.albumTitle, duration: song.duration)
+            }
+            if let shuffle = request.args["shuffle"]?.bool { player.state.shuffleMode = shuffle ? .songs : .off }
+            do { try await player.play() } catch {
+                throw PhoneToolError.unavailable(catalog ? "Apple Music could not play it: a catalog item needs an Apple Music subscription on this phone." : "Apple Music could not play it: \(error.localizedDescription)")
+            }
+            return PhoneToolShaping.music(played: played)
+        case "pause": player.pause()
+        case "resume": try await player.play()
+        case "next": try await player.skipToNextEntry()
+        case "previous": try await player.skipToPreviousEntry()
+        default: break
+        }
+        return musicNow(player)
+    }
+
+    private static func musicNow(_ player: ApplicationMusicPlayer) -> WidgetJSON {
+        let state: String = switch player.state.playbackStatus {
+        case .playing: "playing"
+        case .paused: "paused"
+        case .interrupted: "interrupted"
+        case .seekingForward, .seekingBackward: "seeking"
+        default: "stopped"
+        }
+        let entry = player.queue.currentEntry
+        let item = entry.map { PhoneMusicItem(id: "", kind: "song", title: $0.title, artist: $0.subtitle) }
+        return PhoneToolShaping.music(state: state, nowPlaying: item, position: entry == nil ? nil : player.playbackTime)
+    }
+
+    private static func musicMissing(_ catalog: Bool) -> PhoneToolError {
+        .unavailable("Apple Music has no item with that id \(catalog ? "in the catalog" : "in this phone's library"). Search again.")
+    }
+
+    private static func musicSong(_ id: String, catalog: Bool) async throws -> Song {
+        let itemId = MusicItemID(id)
+        if catalog, let found = try await MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: itemId).response().items.first { return found }
+        if !catalog {
+            var library = MusicLibraryRequest<Song>()
+            library.filter(matching: \.id, equalTo: itemId)
+            if let found = try await library.response().items.first { return found }
+        }
+        throw musicMissing(catalog)
+    }
+
+    private static func musicAlbum(_ id: String, catalog: Bool) async throws -> Album {
+        let itemId = MusicItemID(id)
+        if catalog, let found = try await MusicCatalogResourceRequest<Album>(matching: \.id, equalTo: itemId).response().items.first { return found }
+        if !catalog {
+            var library = MusicLibraryRequest<Album>()
+            library.filter(matching: \.id, equalTo: itemId)
+            if let found = try await library.response().items.first { return found }
+        }
+        throw musicMissing(catalog)
+    }
+
+    private static func musicPlaylist(_ id: String, catalog: Bool) async throws -> Playlist {
+        let itemId = MusicItemID(id)
+        if catalog, let found = try await MusicCatalogResourceRequest<Playlist>(matching: \.id, equalTo: itemId).response().items.first { return found }
+        if !catalog {
+            var library = MusicLibraryRequest<Playlist>()
+            library.filter(matching: \.id, equalTo: itemId)
+            if let found = try await library.response().items.first { return found }
+        }
+        throw musicMissing(catalog)
+    }
+
+    private static func musicSearch(_ request: PhoneToolRequest) async throws -> WidgetJSON {
+        guard let query = request.string("query") else { throw PhoneToolError.invalid("music search needs query.") }
+        let limit = min(max(request.int("limit") ?? 10, 1), 25)
+        let kind = request.string("kind") ?? "songs"
+        var rows: [PhoneMusicItem] = []
+        if request.string("scope") == "catalog" {
+            var search = MusicCatalogSearchRequest(term: query, types: kind == "albums" ? [Album.self] : kind == "playlists" ? [Playlist.self] : [Song.self])
+            search.limit = limit
+            let response = try await search.response()
+            rows = kind == "albums" ? response.albums.map(albumRow) : kind == "playlists" ? response.playlists.map(playlistRow) : response.songs.map(songRow)
+        } else if kind == "albums" {
+            var library = MusicLibraryRequest<Album>()
+            library.filter(text: query)
+            library.limit = limit
+            rows = try await library.response().items.map(albumRow)
+        } else if kind == "playlists" {
+            var library = MusicLibraryRequest<Playlist>()
+            library.filter(text: query)
+            library.limit = limit
+            rows = try await library.response().items.map(playlistRow)
+        } else {
+            var library = MusicLibraryRequest<Song>()
+            library.filter(text: query)
+            library.limit = limit
+            rows = try await library.response().items.map(songRow)
+        }
+        return PhoneToolShaping.music(results: rows, limit: limit)
+    }
+
+    private static func songRow(_ song: Song) -> PhoneMusicItem {
+        PhoneMusicItem(id: song.id.rawValue, kind: "song", title: song.title, artist: song.artistName, album: song.albumTitle, duration: song.duration)
+    }
+
+    private static func albumRow(_ album: Album) -> PhoneMusicItem {
+        PhoneMusicItem(id: album.id.rawValue, kind: "album", title: album.title, artist: album.artistName)
+    }
+
+    private static func playlistRow(_ playlist: Playlist) -> PhoneMusicItem {
+        PhoneMusicItem(id: playlist.id.rawValue, kind: "playlist", title: playlist.name, artist: playlist.curatorName)
     }
 
     // MARK: Shortcuts: opens the Shortcuts app on that shortcut

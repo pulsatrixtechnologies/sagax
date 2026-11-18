@@ -17,7 +17,7 @@ import { z } from "zod";
 
 import { isSealedCard } from "./phone-card-seal.ts";
 
-export const PHONE_TOOLS = ["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "photo_library", "shortcut", "clipboard", "status"] as const;
+export const PHONE_TOOLS = ["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "photo_library", "music", "shortcut", "clipboard", "status"] as const;
 export type PhoneToolId = typeof PHONE_TOOLS[number];
 
 export function isPhoneTool(value: unknown): value is PhoneToolId {
@@ -157,6 +157,29 @@ export const phoneToolArgsSchemas = {
     z.object({ action: z.literal("read"), reason, ids: z.array(photoId).min(1).max(50) }).strict(),
     z.object({ action: z.literal("export"), reason, ids: z.array(photoId).min(1).max(PHOTO_LIBRARY_EXPORT_MAX), original: z.boolean().optional() }).strict(),
   ]),
+  // 2026-11-17: Apple Music on the phone (MusicKit), with the person's own
+  // Apple Music permission: what plays in Sagax, a search of the library or
+  // the catalog, and playback.
+  music: z.discriminatedUnion("action", [
+    z.object({ action: z.literal("now_playing"), reason }).strict(),
+    z.object({
+      action: z.literal("search"),
+      reason,
+      query: z.string().trim().min(1).max(200),
+      scope: z.enum(["library", "catalog"]).optional(),
+      kind: z.enum(["songs", "albums", "playlists"]).optional(),
+      limit: z.number().int().min(1).max(25).optional(),
+    }).strict(),
+    z.object({
+      action: z.literal("play"),
+      reason,
+      id: z.string().trim().min(1).max(200),
+      kind: z.enum(["song", "album", "playlist"]).optional(),
+      scope: z.enum(["library", "catalog"]).optional(),
+      shuffle: z.boolean().optional(),
+    }).strict(),
+    z.object({ action: z.enum(["pause", "resume", "next", "previous"]), reason }).strict(),
+  ]),
   shortcut: z.object({ reason, name: z.string().trim().min(1).max(120), input: z.string().max(1_000).optional() }).strict(),
   clipboard: z.object({ reason }).strict(),
   status: z.object({ reason }).strict(),
@@ -219,6 +242,7 @@ export function phoneToolAccess(tool: PhoneRequestKind, args: Record<string, unk
   if ((tool === "reminders" || tool === "calendar" || tool === "alarms") && args.action === "create") return "write";
   if (tool === "home" && args.action === "run") return "write";
   if (tool === "shortcut") return "write";
+  if (tool === "music" && args.action !== "now_playing" && args.action !== "search") return "write";
   return "read";
 }
 
@@ -234,6 +258,7 @@ export function phoneToolGrantKey(tool: PhoneRequestKind, args: Record<string, u
   if (PHONE_TOOLS_ONCE_ONLY.has(tool) || isHealthTool(tool)) return null;
   if ((tool === "reminders" || tool === "calendar" || tool === "alarms") && phoneToolAccess(tool, args) === "write") return `${tool}:write:create`;
   if (tool === "home" && phoneToolAccess(tool, args) === "write") return "home:write:run";
+  if (tool === "music" && phoneToolAccess(tool, args) === "write") return "music:write:playback";
   if (phoneToolAccess(tool, args) === "write") return null;
   if (tool === "location") return args.precise === true ? "location:read:precise" : "location:read:approximate";
   if (tool === "contacts") {
@@ -317,6 +342,14 @@ const libraryPhotoSchema = z.object({
   duration: z.number().min(0).max(1_000_000).optional(),
   location: z.object({ latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180) }).optional(),
 });
+const musicItemSchema = z.object({
+  id: text(200),
+  kind: z.enum(["song", "album", "playlist"]),
+  title: short,
+  artist: short.optional(),
+  album: short.optional(),
+  duration: z.number().min(0).max(100_000).optional(),
+});
 const libraryAlbumSchema = z.object({ id: text(300), name: short, count: z.number().int().min(0).optional(), smart: z.boolean().optional() });
 
 const healthDay = z.object({ date: text(10).regex(/^\d{4}-\d{2}-\d{2}$/), value: z.number().finite(), samples: z.number().int().min(0).max(1_000_000).optional() });
@@ -356,6 +389,13 @@ export const phoneToolResultSchemas = {
     total: z.number().int().min(0).optional(),
     next: text(12).optional(),
     limited: z.boolean().optional(),
+  }),
+  music: z.object({
+    state: z.enum(["playing", "paused", "stopped", "interrupted", "seeking"]).optional(),
+    nowPlaying: musicItemSchema.partial({ id: true, kind: true }).optional(),
+    position: z.number().min(0).max(100_000).optional(),
+    results: list(musicItemSchema, 25).optional(),
+    played: musicItemSchema.optional(),
   }),
   shortcut: z.object({ started: z.boolean() }),
   health_read: z.object({
@@ -445,6 +485,10 @@ export function checkPhoneToolResult(tool: PhoneRequestKind, args: Record<string
   if (tool === "alarms" && args.action === "list" && Array.isArray(result.alarms)) {
     const limit = typeof args.limit === "number" ? args.limit : 20;
     return { ok: true, result: { alarms: result.alarms.slice(0, limit) } };
+  }
+  if (tool === "music" && Array.isArray(result.results)) {
+    const limit = typeof args.limit === "number" ? args.limit : 10;
+    return { ok: true, result: { ...result, results: result.results.slice(0, limit) } };
   }
   if (tool === "photo_library") {
     const limit = typeof args.limit === "number" ? args.limit : args.action === "list_albums" ? 100 : 30;

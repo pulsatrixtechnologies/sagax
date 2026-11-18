@@ -1,4 +1,4 @@
-export type MacAppId = "messages" | "mail" | "calendar" | "contacts" | "reminders" | "notes" | "photos";
+export type MacAppId = "messages" | "mail" | "calendar" | "contacts" | "reminders" | "notes" | "photos" | "music";
 export type MacAppPermission = "granted" | "denied" | "unknown" | "notAsked" | "unsupported";
 
 export interface MacAppInfo {
@@ -87,6 +87,7 @@ export function calendarOccurrenceId(uid: string, start: string | Date): string;
 export function occurrences(rule: string, start: Date | string, from: Date | string, to: Date | string, max: number, excluded?: Array<Date | string>): Date[] | null;
 export const MAC_APP_SCRIPTS: Record<string, string>;
 export const MAC_APP_BUDGET_MS: number;
+export const MUSIC_QUEUE_PLAYLIST: string;
 export const PHOTO_EXPORT_MAX_SIZE: number;
 export const PHOTOS_EXPORT_TIMEOUT_MS: number;
 export function exportPhotos(op: Record<string, unknown>, deps?: MacAppRunDeps): Promise<{ files: Array<{ id: string; path: string; name: string; mime: string; bytes: number }>; failed: Array<{ id: string; name?: string; error: string }>; next?: string }>;

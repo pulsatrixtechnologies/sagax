@@ -164,6 +164,34 @@ describe("health tools", () => {
     const checked = checkPhoneToolResult("health_read", {}, { category: "steps", unit: "count", aggregation: "daily_sum", days: [{ date: "2026-11-01", value: 8123, samples: 12 }], secret: "x" });
     expect(checked).toEqual({ ok: true, result: { category: "steps", unit: "count", aggregation: "daily_sum", days: [{ date: "2026-11-01", value: 8123, samples: 12 }] } });
     expect(checkPhoneToolResult("health_read", {}, { category: "steps", unit: "count", days: [{ date: "yesterday", value: 1 }] }).ok).toBe(false);
+
+  });
+});
+
+// 2026-11-17: Apple Music on the phone (MusicKit) as one more phone tool.
+describe("music", () => {
+  it("reads now playing and searches, plays and controls as a write with one playback grant", () => {
+    expect(parsePhoneToolArgs("music", { action: "search", query: "river", scope: "catalog", kind: "albums", limit: 5 }).ok).toBe(true);
+    expect(parsePhoneToolArgs("music", { action: "search" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("music", { action: "play", id: "1440833098", kind: "album", scope: "catalog", shuffle: true }).ok).toBe(true);
+    expect(parsePhoneToolArgs("music", { action: "volume", level: 3 }).ok).toBe(false);
+    expect(phoneToolAccess("music", { action: "now_playing" })).toBe("read");
+    expect(phoneToolAccess("music", { action: "search" })).toBe("read");
+    for (const action of ["play", "pause", "resume", "next", "previous"]) {
+      expect(parsePhoneToolArgs("music", action === "play" ? { action, id: "1" } : { action }).ok).toBe(true);
+      expect(phoneToolAccess("music", { action })).toBe("write");
+      expect(phoneToolGrantKey("music", { action })).toBe("music:write:playback");
+    }
+    expect(phoneToolGrantKey("music", { action: "search" })).toBe("music:read");
+  });
+
+  it("keeps a search to its limit and drops what the answer should not carry", () => {
+    const results = Array.from({ length: 20 }, (_, index) => ({ id: String(index), kind: "song", title: `T${index}` }));
+    const found = checkPhoneToolResult("music", { action: "search", limit: 3 }, { results, extra: 1 });
+    expect(found.ok && (found.result.results as unknown[]).length).toBe(3);
+    expect(found.ok && found.result.extra).toBeUndefined();
+    expect(checkPhoneToolResult("music", { action: "now_playing" }, { state: "playing", nowPlaying: { title: "River" }, position: 12.5 }).ok).toBe(true);
+    expect(checkPhoneToolResult("music", { action: "now_playing" }, { state: "dancing" }).ok).toBe(false);
   });
 });
 

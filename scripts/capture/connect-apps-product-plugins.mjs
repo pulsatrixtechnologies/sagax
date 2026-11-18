@@ -4,7 +4,8 @@
  * (#4696): Plugins > Yours (the group's card with the plugin's skills, and
  * "Added by you" without it), the card's "..." menu, the group's page
  * (Overview with the plugin's row, Skills) and the plugin's own page with the
- * product's logo. The real panel in the gallery, invented names.
+ * product's logo, "Updates first", and the plugin turned off. The real panel
+ * in the gallery, invented names.
  * Usage: node scripts/capture/connect-apps-product-plugins.mjs [--out DIR] [--port N] [--lang en|fr] [--scheme dark|light]
  */
 import { spawn } from "node:child_process";
@@ -32,8 +33,8 @@ try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, colorScheme: scheme })).newPage();
   page.setDefaultTimeout(120_000);
   const shot = async (name) => { await page.waitForTimeout(800); const file = join(outDir, `${name}-${tag}.png`); await page.screenshot({ path: file }); console.log("shot", file); };
-  const open = async () => {
-    await page.goto(`${base}?view=manage&role=member&products=many&harbor=15&productPlugin=1&updates=1&skin=${skin}&lang=${lang}`, { waitUntil: "networkidle", timeout: 240_000 });
+  const open = async (plugin = "1") => {
+    await page.goto(`${base}?view=manage&role=member&products=many&harbor=15&productPlugin=${plugin}&updates=1&skin=${skin}&lang=${lang}`, { waitUntil: "networkidle", timeout: 240_000 });
     await page.waitForSelector("[data-plugins-main]", { timeout: 240_000 });
     await page.click('[data-plugins-kind-tab="plugins"]');
     await page.waitForTimeout(800);
@@ -72,6 +73,14 @@ try {
   }
   await page.waitForTimeout(800);
   await shot("55-plugin-page");
+  // "Updates first": the group whose plugin has an update comes first
+  await open();
+  await page.click("[data-plugins-sort-button]");
+  await page.click('[data-plugins-sort-option="update"]');
+  await shot("56-plugins-yours-updates-first");
+  // the plugin turned off: the card says "plugin off"
+  await open("off");
+  await shot("57-plugins-yours-plugin-off");
 } finally {
   await browser?.close();
   vite.kill("SIGTERM");

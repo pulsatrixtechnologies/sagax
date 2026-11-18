@@ -16,10 +16,10 @@ import { inLanguage, type ProductVendor } from "@/lib/capability-kinds";
 import type { PersonProduct } from "@/lib/person-products";
 import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
-import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, type ProductRowsContext } from "./ProductRows";
+import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, worseState, type ProductRowsContext } from "./ProductRows";
 import { PluginPageHeader } from "./PluginParts";
 import { DetailHeader, DetailLabel, DetailsBlock, OverviewColumns, SkillCards, sourceLine, DETAIL_BODY } from "./DetailParts";
-import { StateIcon } from "./StateIcon";
+import { StateIcon, type RowState } from "./StateIcon";
 import { distinguishingNames } from "@/lib/product-short-names";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
@@ -37,12 +37,14 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
   trail?: readonly Crumb[];
   /** the console the vendor comes from ("Perspicax · <organization>"), for the grey line */
   consoleName?: string;
-  /** the skills the console offers that go with this vendor; none: no tab */
+  /** the group's skills: the ones the console offers with this vendor and
+   * the ones its plugins bring; none: no tab. Their count is the one the
+   * header line, the tab and Details say. */
   skills?: ReadonlyArray<{ name: string; description: string; onOpen?: () => void }>;
   /** the marketplace plugins installed for this product: their rows (the
-   * plugin's own row, with its switch, Update and menu) and how many skills
-   * they bring (already in `skills`); absent: none */
-  plugins?: { rows: ReadonlyArray<{ key: string; node: ReactNode }>; skills: number };
+   * plugin's own row, with its switch, Update and menu), whether one is
+   * turned off, their state rolled up with the products'; absent: none */
+  plugins?: { rows: ReadonlyArray<{ key: string; node: ReactNode }>; off?: boolean; state?: RowState | null };
 }) {
   const [tab, setTab] = useState<VendorTab>("overview");
   const [allChips, setAllChips] = useState(false);
@@ -67,8 +69,8 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
           attrs={{ "data-vendor-head": "" }}
           icon={<ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}
           name={vendor.name}
-          line={sourceLine([consoleName && t("connectApps.detail.lineFrom", { source: consoleName }), vendorLine(vendor.products.length, on, plugins?.skills ?? 0)])}
-          actions={productTrailer(ctx, vendor.name, ids, {}, productRowState(worst))}
+          line={sourceLine([consoleName && t("connectApps.detail.lineFrom", { source: consoleName }), vendorLine(vendor.products.length, on, skills.length, plugins?.off ?? false)])}
+          actions={productTrailer(ctx, vendor.name, ids, {}, worseState(productRowState(worst), plugins?.state))}
         />
         <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={vendor.name} idPrefix="vendor"
           label={tabLabel}
@@ -119,7 +121,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
             <DetailsBlock rows={[
               ...(consoleName ? [{ label: t("connectApps.detail.source"), value: consoleName }] : []),
               { label: t("connectApps.plugin.connectors"), value: String(vendor.products.length) },
-              ...(plugins && plugins.skills > 0 ? [{ label: t("connectApps.detail.tab.skills"), value: String(plugins.skills) }] : []),
+              ...(skills.length > 0 ? [{ label: t("connectApps.detail.tab.skills"), value: String(skills.length) }] : []),
             ]} />
           </div>
         ) : tab === "skills" ? (

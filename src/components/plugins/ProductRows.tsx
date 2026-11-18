@@ -188,8 +188,12 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
 /** The marketplace plugins installed for a product group (lib/product-plugins):
  * what its card and its page add to the group's connectors. */
 export interface VendorPlugins {
-  /** the skills they bring, counted on the card ("15 connectors · 4 skills") */
+  /** the group's skills, the one count its card, its page header, its Skills tab and its Details say ("15 connectors · 4 skills") */
   skills: number;
+  /** one of its plugins is turned off: the line says so ("· plugin off") */
+  off?: boolean;
+  /** its plugins' state (a sign-in to finish, an error), rolled up with the products' (the worst wins) */
+  state?: RowState | null;
   /** their lines in the card's "..." menu: Update, their page, Uninstall */
   actions: ItemMenuActions;
   /** an update waiting: the card's "Update" mark, as on the plugin's own card */
@@ -203,6 +207,7 @@ export interface VendorPlugins {
 export function VendorBundleRow({ vendor, ctx, onOpen, plugins }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext; onOpen: () => void; plugins?: VendorPlugins }) {
   const ids = vendor.products.map((product) => product.id);
   const worst = worstState(vendor.products);
+  const state = worseState(productRowState(worst, onOpen), plugins?.state);
   const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
   return (
     <div className={cn("group", CARD_BOX)} data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
@@ -211,28 +216,37 @@ export function VendorBundleRow({ vendor, ctx, onOpen, plugins }: { vendor: Prod
         <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           <span className={PLUGINS.rowName}>{vendor.name}</span>
-          <span className={PLUGINS.rowSub} data-vendor-line="">{vendorLine(vendor.products.length, on, plugins?.skills ?? 0)}</span>
+          <span className={PLUGINS.rowSub} data-vendor-line="">{vendorLine(vendor.products.length, on, plugins?.skills ?? 0, plugins?.off ?? false)}</span>
         </span>
       </button>
-      <CardTrail>{productTrailer(ctx, vendor.name, ids, { detail: onOpen, ...plugins?.actions }, productRowState(worst, onOpen), plugins?.update)}</CardTrail>
+      <CardTrail>{productTrailer(ctx, vendor.name, ids, { detail: onOpen, ...plugins?.actions }, state, plugins?.update)}</CardTrail>
     </div>
   );
 }
 
-/** "N connectors · M on", or "N connectors · K skills · M on" when installed plugins bring skills to the product */
-export function vendorLine(connectors: number, on: number, skills = 0): string {
+/** "N connectors · M on", or "N connectors · K skills · M on" when the group has skills, then "· plugin off" when one of its plugins is turned off */
+export function vendorLine(connectors: number, on: number, skills = 0, pluginOff = false): string {
   const counts = {
     connectors: connectors === 1 ? t("connectApps.count.connectorOne") : t("connectApps.count.connectorMany", { count: connectors }),
     on: on === 1 ? t("connectApps.vendor.onOne") : t("connectApps.vendor.onMany", { count: on }),
   };
-  if (skills <= 0) return t("connectApps.vendor.line", counts);
-  return t("connectApps.vendor.lineSkills", { ...counts, skills: skills === 1 ? t("connectApps.count.skillOne") : t("connectApps.count.skillMany", { count: skills }) });
+  const line = skills <= 0 ? t("connectApps.vendor.line", counts)
+    : t("connectApps.vendor.lineSkills", { ...counts, skills: skills === 1 ? t("connectApps.count.skillOne") : t("connectApps.count.skillMany", { count: skills }) });
+  return pluginOff ? `${line} \u00b7 ${t("connectApps.vendor.pluginOff")}` : line;
+}
+
+const STATE_RANK = { fix: 0, info: 1, ok: 2 } as const;
+/** Of two row states, the worse (a warning before an info before "on"); none counts as nothing to say. */
+export function worseState(a: RowState | null | undefined, b: RowState | null | undefined): RowState | undefined {
+  if (!a) return b ?? undefined;
+  if (!b) return a;
+  return STATE_RANK[b.tone] < STATE_RANK[a.tone] ? b : a;
 }
 
 /** The rows of the console's section for one kind (its heading already says they come from the organization, so no row does). Under Connectors every
  * product is its own row (marked "in <vendor>" when it is part of a bundle,
  * the chip opening it); under Plugins a vendor is one bundle row. */
-export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void; /** the installed plugins of a bundle (lib/product-plugins) */ plugins?: (vendorKey: string) => VendorPlugins | undefined }): Array<{ key: string; node: ReactNode }> {
+export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void; /** the installed plugins of a bundle (lib/product-plugins) */ plugins?: (vendorKey: string) => VendorPlugins | undefined }, /** "Updates first": the bundles this says have an update waiting come first, in their order */ updateFirst?: (vendorKey: string) => boolean): Array<{ key: string; node: ReactNode }> {
   if (bundles?.mode === "connectors") {
     return products.map((product) => ({
       key: `product:${product.id}`,
@@ -240,7 +254,9 @@ export function productRows(products: readonly PersonProduct[], ctx: ProductRows
     }));
   }
   if (bundles?.mode === "plugins") {
-    return groupByVendor(products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
+    const bundled = groupByVendor(products).filter((vendor) => vendor.products.some((product) => product.group));
+    const ordered = updateFirst ? [...bundled.filter((vendor) => updateFirst(vendor.key)), ...bundled.filter((vendor) => !updateFirst(vendor.key))] : bundled;
+    return ordered.map((vendor) => ({
       key: vendor.key,
       node: <VendorBundleRow vendor={vendor} ctx={ctx} onOpen={() => bundles.onOpenVendor(vendor.key)} plugins={bundles.plugins?.(vendor.key)} />,
     }));

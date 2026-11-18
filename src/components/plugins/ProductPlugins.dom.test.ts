@@ -18,7 +18,7 @@ import { parsePersonProduct } from "../../../shared/person-products";
 
 vi.mock("@/state/store", () => ({ api: vi.fn(), useStore: () => ({ state: {}, dispatch: vi.fn() }) }));
 
-const { productRows } = await import("./ProductRows");
+const { productRows, worseState } = await import("./ProductRows");
 const { VendorPage } = await import("./VendorPage");
 const { InstalledView } = await import("./InstalledView");
 type RowsContext = import("./ProductRows").ProductRowsContext;
@@ -26,9 +26,14 @@ type RowsContext = import("./ProductRows").ProductRowsContext;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const suite = { id: "acme", name: "AcmeDesk", icon: { url: "https://cdn.example.test/acme.svg" } };
+const other = { id: "zeta", name: "Zeta Cloud" };
 const products: PersonProduct[] = [
   parsePersonProduct({ id: "desk", name: "AcmeDesk Service", state: "connected", group: suite })!,
   parsePersonProduct({ id: "time", name: "AcmeDesk Time", state: "connected", group: suite })!,
+];
+const twoGroups: PersonProduct[] = [
+  parsePersonProduct({ id: "zeta-a", name: "Zeta Storage", state: "connected", group: other })!,
+  ...products,
 ];
 const ctx = (): RowsContext => ({ bots: [{ id: "bot-a", name: "Rocket" }], setProducts: vi.fn(), onOpen: vi.fn() });
 const items = buildPluginItems({
@@ -89,13 +94,48 @@ describe("a plugin named for a product group", () => {
     const view = await render(createElement(VendorPage, {
       vendor, ctx: ctx(), onBack: vi.fn(),
       skills: [{ name: "init", description: "Set up" }, { name: "time", description: "Log time" }],
-      plugins: { skills: 2, rows: [{ key: acme.key, node: createElement("div", { "data-test-plugin-row": "" }, "AcmeDesk plugin row") }] },
+      plugins: { rows: [{ key: acme.key, node: createElement("div", { "data-test-plugin-row": "" }, "AcmeDesk plugin row") }] },
     }));
     expect(view.querySelector("[data-vendor-plugins] [data-test-plugin-row]")).not.toBeNull();
     expect(view.querySelector("[data-vendor-head]")?.textContent).toContain("2 connectors · 2 skills · 2 on");
     await click(view.querySelector("[data-vendor-tab='skills']"));
     expect(view.textContent).toContain("/init");
     expect(view.textContent).toContain("/time");
+  });
+
+  it("says ONE skills count on the page: the header, the Skills tab and Details count the same list (the console's skill and the plugin's)", async () => {
+    const vendor = groupByVendor(products)[0]!;
+    const view = await render(createElement(VendorPage, {
+      vendor, ctx: ctx(), onBack: vi.fn(),
+      skills: [{ name: "macros", description: "From the console" }, { name: "init", description: "Set up" }, { name: "time", description: "Log time" }],
+      plugins: { rows: [{ key: acme.key, node: createElement("div", null, "row") }] },
+    }));
+    expect(view.querySelector("[data-vendor-head]")?.textContent).toContain("3 skills");
+    expect(view.querySelector("[data-vendor-tab='skills']")?.textContent).toContain("3");
+    const details = [...view.querySelectorAll("[data-plugin-details] dt")].find((node) => node.textContent === "Skills");
+    expect(details?.nextElementSibling?.textContent).toBe("3");
+  });
+
+  it("keeps the plugin's state on the group's card: a plugin turned off says so on the line, a sign-in to finish is the card's warning", async () => {
+    const rows = productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), plugins: () => ({
+      skills: 2, off: true, state: { tone: "fix", text: "Needs sign-in" }, actions: {},
+    }) });
+    const view = await render(createElement("div", null, rows[0]!.node));
+    expect(view.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 2 skills · 2 on · plugin off");
+    // every product is on: the warning is the plugin's
+    expect(view.querySelector("[data-row-state='fix']")).not.toBeNull();
+  });
+
+  it("puts a group whose plugin has an update first when sorted by Updates first", () => {
+    const keys = (first?: (key: string) => boolean) => productRows(twoGroups, ctx(), { mode: "plugins", onOpenVendor: vi.fn() }, first).map((row) => row.key);
+    expect(keys()).toEqual(["vendor:zeta", "vendor:acme"]);
+    expect(keys((key) => key === "vendor:acme")).toEqual(["vendor:acme", "vendor:zeta"]);
+  });
+
+  it("rolls two states up to the worse one", () => {
+    expect(worseState({ tone: "ok", text: "on" }, { tone: "fix", text: "sign in" })?.tone).toBe("fix");
+    expect(worseState({ tone: "info", text: "i" }, null)?.tone).toBe("info");
+    expect(worseState(undefined, undefined)).toBeUndefined();
   });
 
   it("is not listed again under Added by you, and no 'first plugin' banner shows; an unmatched plugin stays", async () => {

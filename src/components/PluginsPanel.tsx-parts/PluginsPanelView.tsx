@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, ChevronRight, ClipboardPaste, Compass, KeyRound, Link2, Loader2, Puzzle, Store, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardPaste, Compass, KeyRound, Link2, Loader2, Power, Puzzle, Store, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
@@ -26,11 +26,11 @@ import {
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { MyGithubSummary } from "../settings/MyConnectionsSettings";
 import { usePersonalMcp } from "../plugins/PersonalServers";
-import { productRows, VendorArt, vendorLine, vendorOnCount, type ProductRowsContext, type VendorPlugins } from "../plugins/ProductRows";
+import { productRows, VendorArt, vendorLine, vendorOnCount, worseState, type ProductRowsContext, type VendorPlugins } from "../plugins/ProductRows";
 import { productPlugins } from "@/lib/product-plugins";
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
-import { statusState } from "../plugins/StateIcon";
+import { statusState, type RowState } from "../plugins/StateIcon";
 import { UpdateNotice } from "../plugins/UpdateNotice";
 import { updateKindOf, updateOf, useCapabilityUpdates, type UpdateKind } from "@/lib/capability-updates";
 import { usePersonProducts } from "@/lib/person-products";
@@ -244,12 +244,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         return { from: info.installedVersion, to: info.availableVersion, notes: info.updateNotes, running: row?.running ?? false, onUpdate: row?.onUpdate };
       }}
       consoleName={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
-      vendorSkills={(vendorKey) => [...vendorSkillsOf(orgMine, vendorKey), ...pluginSkillsOf(vendorKey)]}
+      vendorSkills={(vendorKey) => groupSkills(vendorKey)}
       vendorPlugins={(vendorKey) => {
-        const plugins = entries.filter((entry) => grouping.groupOf.get(entry.key) === vendorKey);
+        const plugins = pluginsOfGroup(vendorKey);
         if (plugins.length === 0) return undefined;
+        const card = vendorPlugins(vendorKey);
         return {
-          skills: pluginSkillsOf(vendorKey).length,
+          off: card?.off ?? false,
+          state: card?.state ?? null,
           rows: plugins.map((entry) => ({ key: entry.key, node: <InstalledRow entry={entry} onOpen={() => openItem(entry.primary)} actions={entryActions(entry)} trailer={entryTrailer(entry)} /> })),
         };
       }}
@@ -360,21 +362,39 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         ...held.map((name) => ({ name, description: "", onOpen: () => openItem(entry.primary) })),
       ];
     });
-  /** what a product group's card carries of its plugins: their skills on its line, their Update, page and Uninstall in its menu */
+  const pluginsOfGroup = (vendorKey: string) => entries.filter((entry) => grouping.groupOf.get(entry.key) === vendorKey);
+  /** the skills of a product group: the console's for its vendor, then its plugins'; the ONE list its card line, its page header, its Skills tab and its Details count */
+  const groupSkills = (vendorKey: string) => [...vendorSkillsOf(orgMine, vendorKey), ...pluginSkillsOf(vendorKey)];
+  /** whether a grouped plugin is on, as its own row's switch says (the person's or the bot's install); unknown reads as on */
+  const pluginOn = (entry: InstalledEntry) => {
+    const plugin = entry.members.find((member) => member.kind === "plugin");
+    if (!plugin || !scopedPluginView) return true;
+    return Boolean(botPluginState(scopedPluginView, plugin.id)?.installed?.enabled);
+  };
+  /** what a product group's card carries of its plugins: the group's skills and "plugin off" on its line, their state in its icon, their Update, page, switch and Uninstall in its menu */
   const vendorPlugins = (vendorKey: string): VendorPlugins | undefined => {
-    const plugins = entries.filter((entry) => grouping.groupOf.get(entry.key) === vendorKey);
+    const plugins = pluginsOfGroup(vendorKey);
     if (plugins.length === 0) return undefined;
-    const menus = plugins.map((entry) => ({ entry, ...entryMenu(entry) }));
+    const menus = plugins.map((entry) => ({ entry, on: pluginOn(entry), ...entryMenu(entry) }));
     const updating = menus.find((menu) => menu.update);
     const updater = menus.find((menu) => menu.base.update);
     const one = menus.length === 1;
+    const change = scopedPluginView?.canChange ? toggleForBot : undefined;
     return {
-      skills: pluginSkillsOf(vendorKey).length,
+      skills: groupSkills(vendorKey).length,
+      off: menus.some((menu) => !menu.on),
+      state: menus.reduce<RowState | undefined>((worst, menu) => worseState(worst, statusState(menu.entry.status, () => openItem(menu.entry.primary))), undefined) ?? null,
       update: updating?.update ?? null,
       actions: {
         ...(updater?.base.update ? { update: updater.base.update, updateWaiting: menus.some((menu) => menu.entry.updateAvailable) } : {}),
         links: menus.flatMap((menu) => [
           { id: `plugin-page:${menu.entry.key}`, label: t("connectApps.vendor.pluginPage", { name: menu.entry.name }), icon: <Puzzle size={14} />, run: () => openItem(menu.entry.primary) },
+          ...(change && menu.entry.members.some((member) => member.kind === "plugin") ? [{
+            id: `plugin-toggle:${menu.entry.key}`,
+            label: t(menu.on ? "connectApps.vendor.pluginTurnOff" : "connectApps.vendor.pluginTurnOn", { name: menu.entry.name }),
+            icon: <Power size={14} />,
+            run: () => change(menu.entry.members.find((member) => member.kind === "plugin")!.id, !menu.on),
+          }] : []),
           ...(menu.base.links ?? []).map((link) => ({ ...link, id: `${link.id}:${menu.entry.key}` })),
           ...(!one && menu.base.remove ? [{ id: `plugin-remove:${menu.entry.key}`, label: t("connectApps.vendor.pluginRemove", { name: menu.entry.name }), icon: <Trash2 size={14} />, run: menu.base.remove }] : []),
         ]),
@@ -568,7 +588,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               personal={personalHere ? personal.rows : undefined}
               // #4453: the console's section: one row per vendor, its products under it
               products={(scope === "me" || scope === "bot") && perspicaxOrg !== null
-                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }), plugins: vendorPlugins })
+                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }), plugins: vendorPlugins }, sort === "update" ? (key) => Boolean(vendorPlugins(key)?.update || vendorPlugins(key)?.actions.updateWaiting) : undefined)
                 : undefined}
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}

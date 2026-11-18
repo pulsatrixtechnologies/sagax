@@ -242,6 +242,16 @@ describe("a skin paints the engine's body (#4145 regression: no flat Epic or Leg
     expect(frame.paths.find((path) => path[1] === face!.d)?.[3]).toBe(largest);
     expect(face!.transform).toMatch(/^matrix\(/);
   });
+
+  it("gives a body of several parts one face, so a skin outlines the whole shape once (#4585)", () => {
+    const parts = (shape: string) => skinFace(moodFrame(readStill(bakeStill(shapeDefinition(shape as never))), "idle"))!.parts.length;
+    // the hat, its brim and the head are three parts of the front plane; a plain body stays one
+    expect(parts("witch-hat")).toBe(3);
+    expect(parts("cat")).toBeGreaterThan(1);
+    expect(parts("hexagon")).toBe(1);
+    const hat = skinFace(moodFrame(readStill(bakeStill(shapeDefinition("witch-hat"))), "idle"))!;
+    expect(hat.union).toBe(hat.parts.join(""));
+  });
 });
 
 describe("the fourteen moves play over the engine (#4145 regression: no move drawn as a mood)", () => {

@@ -21,7 +21,7 @@
 //   move adds beside it (thought dots, a mark, a badge, rings, ribbons,
 //   specks), all from the moves' own timelines (shape-moves.ts).
 import "./shape-mascot.css";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { cloneElement, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { avatarFrame, createAnimator, pointerGaze, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom";
 import { MAUS_COLORS } from "@/lib/mascot";
@@ -107,9 +107,12 @@ const matrixAttr = (m: Matrix) => `matrix(${m.map((v, i) => (i < 4 ? Math.round(
 /**
  * The face a skin paints: the frame's largest cross-section facing the
  * viewer (the body's full outline), placed with its projection and the
- * frame's root motion. Null when the body is turned side on.
+ * frame's root motion. A body of several parts (a hat, its brim and the
+ * head) draws them all in that same front plane: `parts` holds each one's
+ * outline and `union` all of them as one path, so a skin outlines the whole
+ * shape once (#4585). Null when the body is turned side on.
  */
-export function skinFace(frame: StillFrame): { d: string; transform: string } | null {
+export function skinFace(frame: StillFrame): { d: string; transform: string; parts: string[]; union: string } | null {
   const area = new Map<string, StillPath>(frame.paths.map((path) => [path[0], path]));
   let best: { path: StillPath; matrix: Matrix } | null = null;
   for (const shape of frame.shapes) {
@@ -117,7 +120,27 @@ export function skinFace(frame: StillFrame): { d: string; transform: string } | 
     const path = area.get(shape.path);
     if (path && (!best || path[3] >= best.path[3])) best = { path, matrix: shape.matrix };
   }
-  return best ? { d: best.path[1], transform: matrixAttr(mul(frame.root, best.matrix)) } : null;
+  if (!best) return null;
+  const front = best.matrix;
+  const parts: string[] = [];
+  for (const shape of frame.shapes) {
+    if (shape.kind !== "slice" || /^\d+x\d+$/.test(shape.key) || !shape.matrix.every((v, i) => Math.abs(v - front[i]!) < 1e-6)) continue;
+    const path = area.get(shape.path);
+    if (path && !parts.includes(path[1])) parts.push(path[1]);
+  }
+  if (!parts.includes(best.path[1])) parts.push(best.path[1]);
+  return { d: best.path[1], transform: matrixAttr(mul(frame.root, front)), parts, union: parts.join("") };
+}
+
+/** A layer with every stroke widened: the outline drawn under the fills shows only its outer half, so it is drawn twice as wide. */
+function widenStrokes(node: ReactNode, factor: number): ReactNode {
+  if (Array.isArray(node)) return node.map((child, i) => <Fragment key={i}>{widenStrokes(child, factor)}</Fragment>);
+  if (!isValidElement<{ strokeWidth?: number | string; children?: ReactNode }>(node)) return node;
+  const { strokeWidth, children } = node.props;
+  const next: { strokeWidth?: number; children?: ReactNode } = {};
+  if (typeof strokeWidth === "number") next.strokeWidth = strokeWidth * factor;
+  if (children !== undefined) next.children = widenStrokes(children, factor);
+  return cloneElement(node, next);
 }
 
 /** The eyes of a frame alone, over a skin (each in its own plane, the root motion applied). */
@@ -125,14 +148,37 @@ function eyesMarkup(frame: StillFrame, ink: string): string {
   return frame.shapes.map((shape) => (shape.kind === "eye" ? `<g transform="${matrixAttr(mul(frame.root, shape.matrix))}">${eyeMarkup(shape.mark, ink)}</g>` : "")).join("");
 }
 
-/** The skin's layers on the face, under the eyes (inner layers clipped to the face). */
-function SkinFace({ uid, d, layers, paint }: { uid: string; d: string; layers: ShapeSkinLayers; paint: ShapeSkinBase }) {
+/**
+ * The skin's layers on the face, under the eyes (inner layers clipped to the face).
+ * A body of several parts is outlined once: the outline of every part is drawn
+ * first, twice as wide, and the parts' fills over it hide what lies inside the
+ * shape (where two parts meet), leaving one continuous line around the union.
+ */
+function SkinFace({ uid, d, parts, layers, paint }: { uid: string; d: string; parts: readonly string[]; layers: ShapeSkinLayers; paint: ShapeSkinBase }) {
+  const stroke = !layers.ownEdge && paint.stroke ? paint.stroke : undefined;
+  const strokeWidth = stroke ? paint.strokeWidth : undefined;
+  if (parts.length < 2) {
+    return (
+      <>
+        <path d={d} fill={layers.fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" data-skin-face="" />
+        {paint.shine && <path d={d} fill={`url(#${uid}-shine)`} />}
+        {layers.inner && <g clipPath={`url(#${uid}-face)`}>{layers.inner}</g>}
+        {layers.edge}
+      </>
+    );
+  }
   return (
     <>
-      <path d={d} fill={layers.fill} stroke={!layers.ownEdge && paint.stroke ? paint.stroke : undefined} strokeWidth={!layers.ownEdge && paint.stroke ? paint.strokeWidth : undefined} strokeLinejoin="round" data-skin-face="" />
-      {paint.shine && <path d={d} fill={`url(#${uid}-shine)`} />}
+      <g data-skin-outline="">
+        {stroke && <path d={d} fill="none" stroke={stroke} strokeWidth={(strokeWidth ?? 0) * 2} strokeLinejoin="round" />}
+        {widenStrokes(layers.edge, 2)}
+      </g>
+      {/* one rectangle clipped to every part: a gradient fill runs across the whole shape, not once per part */}
+      <g clipPath={`url(#${uid}-face)`} data-skin-face="">
+        <rect x={0} y={0} width={100} height={100} fill={layers.fill} />
+        {paint.shine && <rect x={0} y={0} width={100} height={100} fill={`url(#${uid}-shine)`} />}
+      </g>
       {layers.inner && <g clipPath={`url(#${uid}-face)`}>{layers.inner}</g>}
-      {layers.edge}
     </>
   );
 }
@@ -163,7 +209,7 @@ function ShapeSvg({ uid, frame, color, ink, layers, paint, faceD, refs, live }: 
       {layers && faceD && (
         <defs>
           <clipPath id={`${uid}-face`}>
-            <path d={faceD} />
+            {(face?.parts.length ?? 0) > 1 ? face!.parts.map((part, i) => <path key={i} d={part} />) : <path d={faceD} />}
           </clipPath>
           {paint.shine && (
             <radialGradient id={`${uid}-shine`} cx="0.32" cy="0.26" r="0.75">
@@ -186,7 +232,7 @@ function ShapeSvg({ uid, frame, color, ink, layers, paint, faceD, refs, live }: 
         {layers && faceD && (
           <>
             <g ref={refs.face} transform={at} style={at ? undefined : { display: "none" }} data-shape-skin-face="">
-              <SkinFace uid={uid} d={faceD} layers={layers} paint={paint} />
+              <SkinFace uid={uid} d={faceD} parts={face?.parts ?? []} layers={layers} paint={paint} />
             </g>
             <g ref={refs.eyes} dangerouslySetInnerHTML={{ __html: eyesMarkup(frame, ink) }} />
             {layers.around && (
@@ -463,7 +509,7 @@ export function ShapeMascot({
   const live = !reduced && (shapeIsLive(size, animated, detail, reduced) || playing !== null);
   // the skin's full look (filters, its moving layers) when large or asked for; it moves only while live
   const full = fxDetail(size, animated, detail) === "full";
-  const faceD = frame ? skinFace(frame)?.d ?? null : null;
+  const faceD = frame ? skinFace(frame)?.union ?? null : null;
   const layers = useMemo(() => (faceD ? shapeSkinLayers(knownSkin, faceD, hex, uid, full) : null), [knownSkin, faceD, hex, uid, full]);
   const flatSkin = layers ? skinIsFlat(layers, paint) : knownSkin === "plain";
 

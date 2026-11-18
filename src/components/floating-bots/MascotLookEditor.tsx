@@ -641,7 +641,7 @@ export default function MascotLookEditor({
       disabled={disabled}
       previewOnly={shownLock.locked}
       onPreview={(skin) => setPreviewSkin(String(skin))}
-      onSelect={(skin) => onPatch({ mascotSkin: skin })}
+      onSelect={(skin) => { setPreviewSkin(null); onPatch({ mascotSkin: skin }); }}
       lockOf={(skin) => (skin === owlSkin ? { locked: false } : skinLock(unlocks, "owl", skin))}
       preview={(skin) => skinPreview("owl", skin, look, bot.color, 52)}
     />
@@ -657,7 +657,7 @@ export default function MascotLookEditor({
       disabled={disabled}
       previewOnly={shownLock.locked}
       onPreview={(skin) => setPreviewSkin(String(skin))}
-      onSelect={(skin) => setLook({ skins: { ...look.skins, [shown]: skin } })}
+      onSelect={(skin) => { setPreviewSkin(null); setLook({ skins: { ...look.skins, [shown]: skin } }); }}
       lockOf={(skin) => skinLock(unlocks, shown, skin)}
       preview={(skin) => skinPreview(shown, skin, look, bot.color, 52)}
     />

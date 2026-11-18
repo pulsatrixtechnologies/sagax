@@ -230,7 +230,7 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
               <button type="button" data-page-selection-send="" aria-label={t("chat.send")} title={t("chat.send")}
                 disabled={!text.trim()}
                 onClick={send}
-                className={cn("flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-white hover:brightness-110 disabled:opacity-40")}>
+                className={cn("flex size-7 shrink-0 items-center justify-center rounded-full bg-accent !text-white hover:brightness-110 disabled:opacity-40")}>
                 <ArrowUp size={17} aria-hidden="true" />
               </button>
             </>

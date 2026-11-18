@@ -139,7 +139,7 @@ struct PageSelectionAskView: View {
                 Button(action: onSend) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.accentInk)
+                        .foregroundStyle(Color.white)
                         .frame(width: 28, height: 28)
                         .background(Theme.accent, in: Circle())
                 }

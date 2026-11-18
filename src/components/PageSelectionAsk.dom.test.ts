@@ -117,7 +117,11 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     const input = composer.querySelector<HTMLTextAreaElement>("textarea")!;
     expect(input.getAttribute("placeholder")).toBe(t("pages.selection.placeholder"));
     expect(document.activeElement).toBe(input);
-    expect(composer.querySelector<HTMLButtonElement>("[data-page-selection-send]")!.disabled).toBe(true);
+    const send = composer.querySelector<HTMLButtonElement>("[data-page-selection-send]")!;
+    expect(send.disabled).toBe(true);
+    // white arrow on the accent in every skin, as the reference draws it (the skin's accent ink would make it dark)
+    expect(send.className).toContain("bg-accent");
+    expect(send.className).toContain("!text-white");
   });
 
   it("Send is the person's message about the page and the passage; the working line shows while the bot works; a new version is asked to find the passage again", async () => {

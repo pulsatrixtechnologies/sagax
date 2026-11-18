@@ -476,6 +476,14 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     // on a busy build host that order happened in about half the runs. A turn
     // of its own now gives it a session that carries nothing else.
     await turnWithoutError(ana, secret, `${SECRET}-ENGINE again`);
+    // the same purge took the secret thread's Codex rollout and state row
+    // (found by its folder): put them back, as its Codex would write them
+    mkdirSync(join(codex, "sessions", "2026", "10", "18"), { recursive: true });
+    if (!existsSync(rollout(codexSecret))) writeFileSync(rollout(codexSecret), `${SECRET}-ENGINE rollout\n`);
+    const again = new DatabaseSync(join(codex, "state_5.sqlite"), { timeout: 5_000 });
+    try {
+      again.prepare("INSERT OR IGNORE INTO threads VALUES (?, ?, ?)").run(codexSecret, join(data, "task-workspaces", botId, secret), `${SECRET}-ENGINE title`);
+    } finally { again.close(); }
     // (its own transcript is written by the engine process: wait for it rather
     // than read it once, a loaded machine wrote it late and failed here)
     await waitFor(async () => claudeProjects(secret).length === 1);

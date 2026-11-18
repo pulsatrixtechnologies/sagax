@@ -40,11 +40,12 @@
 import type { SignalLevel } from "../../shared/signal-levels.ts";
 import { runFailureIsProviderLimit } from "../peers/ops-incidents.ts";
 import { SignalLedger } from "./signal-ledger.ts";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 import { writeFileAtomic } from "../atomic.ts";
+import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot } from "../encryption/content-at-rest.ts";
 import { isEngineReconnectCondition } from "../engines/engine-reconnect-ahead.ts";
 import { ProactiveBudget, type ProactiveBudgetOptions } from "./proactive.ts";
 import { ROUTINE_REPORT_CONTRACT } from "../routines/routine-report.ts";
@@ -341,8 +342,9 @@ export interface ProactiveWakerDeps {
   /** 2026-11-03 (audit S-2): the person an event without runAs runs as (the
    * bot owner). Events gather per (bot, person). */
   owner?: (botId: string) => string | undefined;
-  /** Start the background wake run (proactive on). */
-  wake(batch: ProactiveWakeBatch): void;
+  /** Start the background wake run (proactive on). `false`: no run was
+   * started (no bot, routines not ready), so the wake's events settle now. */
+  wake(batch: ProactiveWakeBatch): boolean | void;
   /** One line in the bot conversation's Events tab. */
   log(botId: string, line: string): void;
   /**
@@ -568,6 +570,16 @@ export class ProactiveWaker {
     return [...this.running.entries()].filter(([key]) => key.startsWith(prefix)).flatMap(([, events]) => events);
   }
 
+  /** #4621 review: a proactive run of this bot ended neither completed nor
+   * failed (cancelled, blocked at pre-flight, missed, nothing to report, or
+   * cut by a restart). Its started events leave the inbox, with no backoff.
+   * The disk copy is rewritten even when this process started nothing, so
+   * rows a previous process left running and their sealed files go too. */
+  noteWakeEnded(botId: string): void {
+    this.clearRunning(botId);
+    this.changed(botId);
+  }
+
   /** A wake of this bot finished: the streak of failures ends, and its
    * events leave the inbox. */
   noteWakeSucceeded(botId: string): void {
@@ -643,14 +655,22 @@ export class ProactiveWaker {
     this.running.set(held, pending.events.map((event) => ({ ...event })));
     this.pending.delete(held);
     this.changed(botId);
+    let started: boolean | void;
     try {
       this.deps.log(botId, wakeLine(batch));
-      this.deps.wake(batch);
+      started = this.deps.wake(batch);
     } catch (error) {
       this.running.delete(held);
       this.pending.set(held, pending);
       this.changed(botId);
       this.deps.log(botId, `Proactive wake could not start: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
+      return null;
+    }
+    // #4621 review: a wake that started no run has nothing that would settle
+    // its rows later; they leave now
+    if (started === false) {
+      this.running.delete(held);
+      this.changed(botId);
       return null;
     }
     return batch;
@@ -1053,6 +1073,14 @@ export function proposalCardWords(botName: string, events: readonly ProactiveEve
     };
 }
 
+/** #4621 review: a proactive run's end other than completed or a counted
+ * failure: cancelled, blocked, missed, nothing to report, or a failure a
+ * restart caused. Its wake's events settle (ProactiveWaker.noteWakeEnded). */
+export function proactiveWakeEndedOtherwise(run: { status: string; error?: string }): boolean {
+  if (run.status === "failed") return run.error === ROUTINE_RESTARTED;
+  return run.status === "cancelled" || run.status === "blocked" || run.status === "missed" || run.status === "nothing_to_report";
+}
+
 /** One inbox row. `status` missing means pending, so a file written before
  * running rows existed still replays. The words of a sealed row live in
  * proactive-sealed/, never here. */
@@ -1076,6 +1104,16 @@ export class ProactivePendingFile {
   constructor(file: string | null) {
     this.file = file;
     if (!file) return;
+    // The words of a sealed row are content at rest, sealed under the bot's
+    // key like held-steers (server/turns/held-steers.ts): written plain, then
+    // sealed once idle, and read through readAtRestTextSync.
+    const sealedDir = join(dirname(file), "proactive-sealed");
+    registerAtRestRoot({
+      id: "proactive-sealed",
+      dir: sealedDir,
+      context: (relativePath) => `proactive-sealed/${relativePath}`,
+      files: () => this.sealedFiles(),
+    });
     try {
       const parsed = JSON.parse(readFileSync(file, "utf8")) as { pending?: unknown };
       if (parsed.pending && typeof parsed.pending === "object") {
@@ -1092,17 +1130,20 @@ export class ProactivePendingFile {
   /** What a bot has gathered or started now (empty clears it). An event
    * with no replay ref is sealed here. `inbox: "running"` is a started wake. */
   set(botId: string, events: readonly ProactiveEvent[]): void {
+    const previous = this.items[botId] ?? [];
+    // a row already sealed keeps its file: only a new event is written
+    const sealedBefore = new Set(previous.flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : [])));
     const next: InboxRow[] = [];
     for (const event of events) {
       let ref = event.replay;
       if (!ref) {
-        const sealed = this.seal(event);
+        const id = sealedIdOf(event);
+        const sealed = sealedBefore.has(id) && existsSync(this.sealedPath(id)) ? { kind: "sealed" as const, id } : this.seal(event);
         if (!sealed) continue;
         ref = sealed;
       }
       next.push({ key: event.key, ref, status: event.inbox === "running" ? "running" : "pending" });
     }
-    const previous = this.items[botId] ?? [];
     if (next.length) this.items[botId] = next;
     else delete this.items[botId];
     if (JSON.stringify(previous) !== JSON.stringify(next)) this.save();
@@ -1139,7 +1180,7 @@ export class ProactivePendingFile {
   readSealed(id: string): ProactiveEvent | null {
     if (!this.file || !/^[0-9a-f]{32}$/.test(id)) return null;
     try {
-      const parsed = JSON.parse(readFileSync(this.sealedPath(id), "utf8")) as unknown;
+      const parsed = JSON.parse(readAtRestTextSync(this.sealedPath(id))) as unknown;
       return eventFromSealed(parsed);
     } catch {
       return null;
@@ -1148,7 +1189,7 @@ export class ProactivePendingFile {
 
   private seal(event: ProactiveEvent): { kind: "sealed"; id: string } | null {
     if (!this.file) return null;
-    const id = createHash("sha256").update(`${event.botId}\0${event.key}`).digest("hex").slice(0, 32);
+    const id = sealedIdOf(event);
     const body: Record<string, unknown> = {};
     for (const name of SEALED_FIELDS) {
       const value = event[name];
@@ -1158,10 +1199,27 @@ export class ProactivePendingFile {
       const path = this.sealedPath(id);
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       writeFileAtomic(path, JSON.stringify(body), { mode: 0o600 });
+      noteAtRestWrite(path, { bot: event.botId });
       return { kind: "sealed", id };
     } catch {
       return null;
     }
+  }
+
+  /** The sealed files the at-rest migration looks after, each under its
+   * bot's key. */
+  private sealedFiles(): Array<{ path: string; scope: { bot: string } }> {
+    const out: Array<{ path: string; scope: { bot: string } }> = [];
+    const seen = new Set<string>();
+    for (const [botId, rows] of Object.entries(this.items)) {
+      for (const row of rows) {
+        if (row.ref.kind !== "sealed" || seen.has(row.ref.id)) continue;
+        seen.add(row.ref.id);
+        const path = this.sealedPath(row.ref.id);
+        if (existsSync(path)) out.push({ path, scope: { bot: botId } });
+      }
+    }
+    return out;
   }
 
   private forgetSealed(id: string): void {
@@ -1188,6 +1246,11 @@ export class ProactivePendingFile {
       // kept in memory: the wake still runs, a restart may lose it
     }
   }
+}
+
+/** The id of an event's sealed file: its bot and key, never its words. */
+function sealedIdOf(event: Pick<ProactiveEvent, "botId" | "key">): string {
+  return createHash("sha256").update(`${event.botId}\0${event.key}`).digest("hex").slice(0, 32);
 }
 
 function normalizeRow(row: { key: string; ref: ProactiveReplayRef; status?: "pending" | "running" }): InboxRow {

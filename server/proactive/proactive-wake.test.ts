@@ -2,7 +2,7 @@
 // engine (the deps record what would have started): off vs proactive, a bot
 // never wakes on its own work or past the hop limit, a burst of events makes
 // one wake, and an event that cannot concern the bot calls no model at all.
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,7 @@ import {
   peerNoticeEvent,
   DM_WAKE_RULES,
   ProactivePendingFile,
+  proactiveWakeEndedOtherwise,
   wakeAlwaysReports,
   runFailureWakesBot,
   proposalCardWords,
@@ -35,7 +36,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger; pendingFile?: string } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger; pendingFile?: string; wake?: (batch: ProactiveWakeBatch) => boolean | void } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
@@ -45,7 +46,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
   const disk = opts.pendingFile ? new ProactivePendingFile(opts.pendingFile) : null;
   const waker = new ProactiveWaker({
     bot: (botId) => (botId in modes ? { proactiveMode: modes[botId] } : undefined),
-    wake: (batch) => woken.push(batch),
+    wake: (batch) => { woken.push(batch); return opts.wake?.(batch); },
     log: (botId, line) => lines.push({ botId, line }),
     dropped: (botId, events) => dropped.push({ botId, events }),
     pendingChanged: (botId, events) => {
@@ -743,6 +744,103 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
 
 // perspicax#880: a wave of failed routines woke a bot again and again, each
 // wake failed the same way and each failure was its own notification.
+describe("#4621 review: every end of a wake settles its events", () => {
+  const rowsOf = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as { pending: Record<string, Array<{ status: string }>> }).pending;
+  const sealedFiles = (dir: string) => (existsSync(join(dir, "proactive-sealed")) ? readdirSync(join(dir, "proactive-sealed")).filter((name) => name.endsWith(".json")) : []);
+
+  it.each([
+    { status: "cancelled" },
+    { status: "blocked" },
+    { status: "missed" },
+    { status: "nothing_to_report" },
+    { status: "failed", error: ROUTINE_RESTARTED },
+  ])("a wake that ends $status clears its running rows and their sealed files", (run) => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-end-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const h = harness({ wren: "proactive" }, { pendingFile: file });
+      h.waker.offer(mail("wren", 1));
+      h.advance(30_000);
+      expect(h.woken).toHaveLength(1);
+      expect(rowsOf(file).wren?.map((row) => row.status)).toEqual(["running"]);
+      expect(sealedFiles(dir)).toHaveLength(1);
+      expect(proactiveWakeEndedOtherwise(run)).toBe(true);
+      h.waker.noteWakeEnded("wren");
+      expect(rowsOf(file)).toEqual({});
+      expect(sealedFiles(dir)).toEqual([]);
+      // no backoff: the next event wakes as usual
+      h.waker.offer(mail("wren", 2));
+      h.advance(30_000);
+      expect(h.woken).toHaveLength(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("completed and a counted failure keep their own paths", () => {
+    expect(proactiveWakeEndedOtherwise({ status: "completed" })).toBe(false);
+    expect(proactiveWakeEndedOtherwise({ status: "failed", error: "engine said no" })).toBe(false);
+    expect(proactiveWakeEndedOtherwise({ status: "running" })).toBe(false);
+  });
+
+  it("rows a previous process left running leave at the next end of that bot's wake", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-end-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const before = harness({ wren: "proactive" }, { pendingFile: file });
+      before.waker.offer(mail("wren", 1));
+      before.advance(30_000);
+      expect(rowsOf(file).wren?.map((row) => row.status)).toEqual(["running"]);
+      // a restart: the new process knows nothing of that wake; it ends cancelled
+      const after = harness({ wren: "proactive" }, { pendingFile: file });
+      after.waker.noteWakeEnded("wren");
+      expect(rowsOf(file)).toEqual({});
+      expect(sealedFiles(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a wake that starts no run settles its rows at once", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-end-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const h = harness({ wren: "proactive" }, { pendingFile: file, wake: () => false });
+      h.waker.offer(mail("wren", 1));
+      h.advance(30_000);
+      expect(h.woken).toHaveLength(1);
+      expect(rowsOf(file)).toEqual({});
+      expect(sealedFiles(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a burst writes each sealed file once, not once per change", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-end-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const disk = new ProactivePendingFile(file);
+      const events: ProactiveEvent[] = [];
+      const writes = new Map<string, number>();
+      for (let n = 1; n <= 5; n += 1) {
+        events.push(mail("wren", n));
+        disk.set("wren", events);
+        for (const name of sealedFiles(dir)) {
+          // a rewrite is a new file (written aside, then renamed)
+          const at = statSync(join(dir, "proactive-sealed", name)).ino;
+          const seen = writes.get(name);
+          if (seen === undefined) writes.set(name, at);
+          else expect(at, name).toBe(seen);
+        }
+      }
+      expect(writes.size).toBe(5);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("failed wakes back off and are told once (2026-11-05)", () => {
   const failed = (n: number): ProactiveEvent => ({
     botId: "nova", source: "run", key: `run-${n}`, failed: true,

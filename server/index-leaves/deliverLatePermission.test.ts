@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { ANSWER_NOT_DELIVERED } from "../../shared/restart-words.ts";
 import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
 import { createAnswerRequest } from "./answerRequest.ts";
+import { createDeliverLateQuestionAnswer } from "./deliverLateQuestionAnswer.ts";
 import { createCloseOpenApprovals } from "./closeOpenApprovals.ts";
 import { createInterruptDirectThread } from "./interruptDirectThread.ts";
 import { allowSavedPermission } from "../turns/saved-permission-pass.ts";
 
 type Row = { id: string; card: Record<string, unknown> };
+
+/** The person who answers the card. */
+const ANN = { kind: "session", session: { id: "s-ann", principalId: "pr_ann" } };
 
 function card(extra: Record<string, unknown> = {}): Row {
   return {
@@ -52,8 +56,15 @@ function hostFor(rows: Row[], over: Record<string, any> = {}) {
       started.push(text);
       return { ok: true, queued: false };
     }),
+    sendSequencer: { run: (_key: string, _print: unknown, work: () => unknown) => work() },
+    messageSender: (auth: { session?: { principalId?: string } }) => ({ id: auth.session?.principalId, name: "Ann" }),
+    usageTriggerFor: () => "chat",
+    cfg: {},
     ...over,
   };
+  host.store.taskByThread ??= () => ({ threadId: "t1" });
+  host.store.groupByThread ??= () => undefined;
+  host.deliverLateCardTurn ??= createDeliverLateQuestionAnswer(() => host).cardTurn;
   return { host, started, appended };
 }
 
@@ -63,7 +74,7 @@ describe("a permission card answered after a restart (#4528)", () => {
     const { host, started, appended } = hostFor(rows);
     const answer = createAnswerRequest(() => host);
 
-    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" })).toBe("late-permission");
+    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("late-permission");
     expect(started).toHaveLength(1);
     expect(started[0]).toContain("Bash");
     expect(started[0]).toContain("ls memory");
@@ -75,7 +86,7 @@ describe("a permission card answered after a restart (#4528)", () => {
       threadId: "t1", tools: ["Bash"], summary: "ls memory", safety: "ok", alreadyApproved: false, canRespond: true,
     })).toBe("allow");
 
-    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" })).toBe("unavailable");
+    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("unavailable");
     expect(started).toHaveLength(1);
     expect(rows[0]!.card.answered).toBe("allow");
     expect(appended).toEqual([]);
@@ -105,11 +116,63 @@ describe("a permission card answered after a restart (#4528)", () => {
     const rows = [card()];
     const { host, started } = hostFor(rows);
     const answer = createAnswerRequest(() => host);
-    expect(await answer("t1", "gone", "r1", "deny", "not this")).toBe("late-permission");
+    expect(await answer("t1", "gone", "r1", "deny", "not this", undefined, false, false, ANN)).toBe("late-permission");
     expect(started).toHaveLength(1);
     expect(started[0]).toContain("Do not do it.");
     expect(started[0]).toContain("not this");
     expect(rows[0]!.card.answered).toBe("deny");
+    expect(allowSavedPermission(host, {
+      threadId: "t1", tools: ["Bash"], summary: "ls memory", safety: "ok", alreadyApproved: false, canRespond: true,
+    })).toBe("keep");
+  });
+});
+
+describe("a permission card answered while a later turn runs (#4528 review)", () => {
+  it("a safe-point cut keeps the card; Allow during the next turn is queued as one late turn, the card answered", async () => {
+    const rows = [card()];
+    // the engine of the person's new turn: it never saw r1
+    const respond = vi.fn(async () => "unavailable");
+    const queuedTurn = vi.fn(async (_botId: string, _threadId: string, _text: string) => ({ ok: true, queued: true }));
+    const { host, appended } = hostFor(rows, {
+      runningTurnEngines: new Map([["t1", { adapter: { respondToRequest: respond } }]]),
+      startOrQueueDirectMessage: queuedTurn,
+    });
+    createCloseOpenApprovals(() => host)("t1", { keepPermissions: true });
+    expect(rows[0]!.card.answered).toBeUndefined();
+
+    const answer = createAnswerRequest(() => host);
+    expect(await answer("t1", "inst", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("late-permission");
+    expect(respond).toHaveBeenCalledOnce();
+    expect(queuedTurn).toHaveBeenCalledOnce();
+    expect(rows[0]!.card).toMatchObject({ answered: "allow", dismissed: false });
+    expect(appended).toEqual([]);
+    expect(host.appendDecision).toHaveBeenCalledWith(host.DATA_DIR, expect.objectContaining({ requestId: "r1", decision: "user-approved", source: "user" }));
+
+    // a second Allow is not a second turn
+    expect(await answer("t1", "inst", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("unavailable");
+    expect(queuedTurn).toHaveBeenCalledOnce();
+  });
+
+  it("the late turn speaks for who answered: sender, trigger and speaker, through the late answer's own delivery", async () => {
+    const rows = [card()];
+    const { host } = hostFor(rows);
+    const answer = createAnswerRequest(() => host);
+    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("late-permission");
+    const args = host.startOrQueueDirectMessage.mock.calls[0]!;
+    expect(args[5]).toEqual({ id: "pr_ann", name: "Ann" });
+    expect(args[6]).toBe("chat");
+    expect(args[7]).toEqual({ origin: "person", principalId: "pr_ann" });
+  });
+
+  it("a conversation that no longer exists starts nothing and keeps the old not-delivered path", async () => {
+    const rows = [card()];
+    const { host, appended } = hostFor(rows, {});
+    host.store.taskByThread = () => null;
+    const answer = createAnswerRequest(() => host);
+    expect(await answer("t1", "gone", "r1", "allow", undefined, { id: "b1", name: "Helper" }, false, false, ANN)).toBe("unavailable");
+    expect(host.startOrQueueDirectMessage).not.toHaveBeenCalled();
+    expect(rows[0]!.card).toMatchObject({ answered: "unavailable", dismissed: true });
+    expect(appended).toEqual([{ role: "bot", kind: "activity", tool: { name: ANSWER_NOT_DELIVERED, ok: false } }]);
     expect(allowSavedPermission(host, {
       threadId: "t1", tools: ["Bash"], summary: "ls memory", safety: "ok", alreadyApproved: false, canRespond: true,
     })).toBe("keep");

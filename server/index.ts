@@ -175,7 +175,6 @@ import { claudeAccountInfo } from "./engines/claude-accounts.ts";
 import { BrowserCleanupCoordinator, BrowserSweep, browserIdleMs, engineBrowsers } from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
-import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
@@ -4856,7 +4855,6 @@ bindLeafHost({
   get expandSetupTurnText() { return expandSetupTurnText; },
   get expandSkillCommandTurnText() { return expandSkillCommandTurnText; },
   get experimentalOnlyConfigViolation() { return experimentalOnlyConfigViolation; },
-  get expireApprovalsAfterRestart() { return expireApprovalsAfterRestart; },
   get expireWorkers() { return expireWorkers; },
   get explainPick() { return explainPick; },
   get externalRuntimeIsActive() { return externalRuntimeIsActive; },
@@ -6865,6 +6863,7 @@ bindLeafHost({
   get confirmHeldCard() { return confirmHeldCard; },
   get acceptDirectSend() { return acceptDirectSend; },
   get deliverLateQuestionAnswer() { return deliverLateQuestionAnswer; },
+  get deliverLateCardTurn() { return deliverLateQuestionAnswer.cardTurn; },
   get hostComputers() { return hostComputers; },
   get startOrQueueOpenedThread() { return startOrQueueOpenedThread; },
   get screenPollers() { return screenPollers; },
@@ -37736,22 +37735,13 @@ console.log(describeBrand(loadBrand()));
 // attachment quota cache off the same scan. This used to happen implicitly on
 // every reservation, which is exactly what made uploads quadratic in
 // directory size; do the initial sweep before accepting requests.
-// Approval cards whose live request died with the previous process: they
-// read Expired instead of staying pending forever (server/approvals/approval-restart.ts).
+// #4528: an approval card whose live request died with the previous process
+// stays open: its answer starts one turn (server/index-leaves/deliverLatePermission.ts).
 try {
-  // Restore the durable links before startup expiry settles their sources.
+  // Restore the durable links of the open cards.
   for (const { threadId, message } of openPendingInboxCards()) {
     originApprovals.observe({ type: "message.patch", threadId, message });
   }
-  const closed = expireApprovalsAfterRestart({
-    open: openApprovalCardMessages,
-    patch: (threadId, messageId, card) => { store.patchMessage(threadId, messageId, { card }); },
-    decide: ({ threadId, requestId, tool, summary }) => {
-      const bot = store.botByThread(threadId);
-      appendDecision(DATA_DIR, { threadId, requestId, botId: bot?.id, botName: bot?.name, tool, summary, decision: "auto-denied", source: "restart" });
-    }
-  });
-  if (closed > 0) console.log(`[approval] expired ${closed} approval card(s) left open by the previous run`);
   // #1940: age-based expiry of every inbox kind (permission, question, request).
   // #3517: the waiting rows' part runs once the server listens (onListening).
   const aged = runPendingApprovalExpirySweep({ waitingRows: false });

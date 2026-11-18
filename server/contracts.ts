@@ -126,8 +126,9 @@ export type InstanceConfigMap = Record<InstanceId, InstanceConfig>;
 /** What became of an answer to an ask. `allowed-once` grants only the
  * asked-about action — broadening ("always allow") stays a separate,
  * explicit step. `unavailable` is the fail-closed default: no answerer,
- * no action. */
-export type RequestOutcome = "allowed-once" | "rejected" | "answered" | "unavailable";
+ * no action. `late-permission`: the engine that asked is gone or does not
+ * know the request; the card's verdict starts or queues one turn (#4528). */
+export type RequestOutcome = "allowed-once" | "rejected" | "answered" | "unavailable" | "late-permission";
 
 // ── adapter contract (upstream ProviderAdapterShape, promise-flavored) ──
 // The conversation runtime every provider is flattened into. streamEvents

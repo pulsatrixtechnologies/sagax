@@ -6,7 +6,7 @@ import { deliverLatePermission } from "./deliverLatePermission.ts";
 export type Host = Record<string, any>;
 
 export function createAnswerRequest(getHost: () => Host): any {
-async function answerRequest(   threadId: string,   instanceId: string,   requestId: string,   behavior: "allow" | "deny" | "answer",   message?: string,   decidedFor?: { id: string; name: string },   /** "Always allow this session": the provider keeps the allow, not the app */   always?: boolean,   rememberCommand?: boolean, ) {
+async function answerRequest(   threadId: string,   instanceId: string,   requestId: string,   behavior: "allow" | "deny" | "answer",   message?: string,   decidedFor?: { id: string; name: string },   /** "Always allow this session": the provider keeps the allow, not the app */   always?: boolean,   rememberCommand?: boolean,   /** Who answers: the late turn a permission card starts speaks for them (#4528). */   auth?: RequestAuth, ) {
   const host = getHost();
   const { DATA_DIR, appendDecision } = host;
 
@@ -53,6 +53,7 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
   // settings. The live turn owns this question, just as it owns Stop/steer.
   const instance = host.runningTurnEngines.get(threadId) ?? host.registry.get(instanceId);
   let outcome: RequestOutcome = "unavailable";
+  let engineThrew = false;
   if (instance) {
     try {
       // Only a card that offered "Always allow this session" can keep one:
@@ -60,6 +61,7 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
       outcome = await instance.adapter.respondToRequest(threadId, requestId, { behavior, message, always: always && behavior === "allow" && card?.allowSession === true });
     } catch {
       outcome = "unavailable";
+      engineThrew = true;
     }
   }
   // a remote_session_exec that does more than read: the route runs it once
@@ -115,19 +117,24 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
       : thread.find((m) => m.card?.requestId === requestId);
     const persistentQuestion = host.isPersistentQuestionCard(existing?.card);
     // #4528: the engine that asked is gone (a restart, or the turn already
-    // ended). The card is the saved ask. One new turn carries the verdict.
-    // A live engine that threw keeps the old "not delivered" row, so a
+    // ended), or the live engine is a later turn that does not know this
+    // request (the person wrote, the safe-point cut kept the card). The card
+    // is the saved ask. One turn carries the verdict, queued behind a busy
+    // turn. A live engine that threw keeps the old "not delivered" row, so a
     // second turn is not started beside a turn that may still be running.
     const openPermission = existing?.card?.requestType === "permission"
       && existing.card.requestId && !existing.card.answered && !existing.card.dismissed
       && !existing.card.routineRequest && !existing.card.skillRequest
       && !persistentQuestion;
-    const liveEngine = host.runningTurnEngines.get(threadId);
-    if (openPermission && !liveEngine && (behavior === "allow" || behavior === "deny")) {
+    if (openPermission && !(engineThrew && host.runningTurnEngines.get(threadId)) && (behavior === "allow" || behavior === "deny")) {
       const owner = (decidedFor && host.store.bot(decidedFor.id)) || host.store.botByThread(threadId);
-      if (owner && await deliverLatePermission(host, { threadId, requestId, behavior, message, cardMessage: existing, owner })) {
-        return "late-permission";
+      let delivered = false;
+      try {
+        delivered = Boolean(owner) && await deliverLatePermission(host, { auth, threadId, requestId, behavior, message, cardMessage: existing, owner });
+      } catch (error) {
+        console.warn(`late permission answer: ${error instanceof Error ? error.message : String(error)}`);
       }
+      if (delivered) return "late-permission";
     }
     if (existing?.card && !existing.card.answered && !persistentQuestion) {
       host.store.patchMessage(threadId, existing.id, { card: { ...existing.card, answered: "unavailable", dismissed: true } });

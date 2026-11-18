@@ -4,8 +4,7 @@
  * the verdict. A second answer does not start a second turn. */
 import { createHash } from "node:crypto";
 import { personLanguageCode, personWord } from "../people/person-words.ts";
-import { queueChannelMessage } from "../rooms/channel-queue.ts";
-import { savePermissionPass } from "../turns/saved-permission-pass.ts";
+import { savePermissionPass, takeMatchingPermissionPass } from "../turns/saved-permission-pass.ts";
 
 export type Host = Record<string, any>;
 
@@ -17,9 +16,13 @@ function verdictText(host: Host, owner: { id: string }, behavior: "allow" | "den
   return personWord(language, key, { tool, detail });
 }
 
-/** Starts the one turn. Returns false when this answer cannot (no owner
- * thread to speak in), so the caller keeps today's unavailable path. */
+/** Starts or queues the one turn through the late answer's own delivery
+ * (deliverLateQuestionAnswer.ts `deliverLateCardTurn`: the sequenced send,
+ * the budget, who speaks, the room checks, the card put back on a failed
+ * start). Returns false when this answer cannot (no auth, no delivery), so
+ * the caller keeps today's unavailable path. */
 export async function deliverLatePermission(host: Host, input: {
+  auth?: RequestAuth;
   threadId: string;
   requestId: string;
   behavior: "allow" | "deny";
@@ -27,25 +30,30 @@ export async function deliverLatePermission(host: Host, input: {
   cardMessage: { id: string; card: Record<string, any> };
   owner: { id: string; name: string };
 }): Promise<boolean> {
-  const { threadId, requestId, behavior, message, cardMessage, owner } = input;
+  const { auth, threadId, requestId, behavior, message, cardMessage, owner } = input;
   const card = cardMessage.card;
   if (!card || card.answered || card.dismissed) return true;
-  if (typeof host.startOrQueueDirectMessage !== "function" && typeof host.startGroupTurn !== "function") return false;
+  if (!auth || typeof host.deliverLateCardTurn !== "function") return false;
 
   const namedTool = typeof card.tool === "string" ? card.tool.trim() : "";
   const tool = namedTool || "this step";
   const noted = [card.subtitle, message].map((part) => (typeof part === "string" ? part.trim() : "")).filter(Boolean).join(" ");
   const detail = noted || tool;
-  const text = verdictText(host, owner, behavior, tool, detail);
+  const verdict = verdictText(host, owner, behavior, tool, detail);
+  const text = host.store.groupByThread?.(threadId) ? `@${owner.name}: ${verdict}` : verdict;
   const sendId = `late-permission-${createHash("sha256").update(`${threadId}:${requestId}`).digest("hex").slice(0, 32)}`;
-  const group = host.store.groupByThread?.(threadId) ?? null;
 
-  const already = host.store.messagesFor(threadId).some((row) => row.sendId === sendId);
-  if (already) return true;
-
-  host.store.patchMessage(threadId, cardMessage.id, {
-    card: { ...card, answered: behavior, ...(message ? { answeredText: message } : {}), dismissed: false },
-  });
+  // the pass is there before the turn it starts asks again
+  const pass = behavior === "allow" && namedTool
+    ? { threadId, tool: namedTool, summary: typeof card.subtitle === "string" ? card.subtitle : "" }
+    : null;
+  if (pass) savePermissionPass(host, pass);
+  try {
+    await host.deliverLateCardTurn(auth, { threadId, requestId, text, cardMessage, owner, sendId, answered: behavior, ...(message ? { answeredText: message } : {}) });
+  } catch (error) {
+    if (pass) takeMatchingPermissionPass(host, pass.threadId, [pass.tool], pass.summary);
+    throw error;
+  }
   host.askMessageByRequest?.delete(`${threadId}:${requestId}`);
   try {
     host.appendDecision?.(host.DATA_DIR, {
@@ -61,36 +69,5 @@ export async function deliverLatePermission(host: Host, input: {
   } catch {
     // The turn still carries the verdict. The audit row is the record of it.
   }
-
-  const reopen = () => {
-    const now = host.store.messagesFor(threadId).find((row) => row.id === cardMessage.id)?.card;
-    if (now && now.answered === behavior) {
-      const { answered: _answered, answeredText: _text, ...rest } = now;
-      host.store.patchMessage(threadId, cardMessage.id, { card: rest });
-    }
-  };
-
-  try {
-    if (group && typeof host.startGroupTurn === "function") {
-      const spoken = `@${owner.name}: ${text}`;
-      if (host.groupThreadIsWorking?.(group.id, threadId)) {
-        queueChannelMessage(group.id, threadId, spoken, { replyToId: cardMessage.id, sendId, mode: "chat" });
-      } else {
-        host.startGroupTurn(group.id, spoken, cardMessage, sendId, "chat", undefined, { threadId });
-      }
-    } else if (typeof host.startOrQueueDirectMessage === "function") {
-      await host.startOrQueueDirectMessage(owner.id, threadId, text, cardMessage, sendId);
-    } else {
-      reopen();
-      return false;
-    }
-  } catch (error) {
-    reopen();
-    throw error;
-  }
-  if (behavior === "allow" && namedTool) {
-    savePermissionPass(host, { threadId, tool: namedTool, summary: typeof card.subtitle === "string" ? card.subtitle : "" });
-  }
-  host.cardTurnSettled?.(threadId, cardMessage.id);
   return true;
 }

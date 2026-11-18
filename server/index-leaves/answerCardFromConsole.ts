@@ -58,7 +58,7 @@ async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, r
     ? (group.busyBotId ? host.store.bot(group.busyBotId) : undefined) ?? (message.from ? host.store.bot(message.from.botId) : undefined)
     : host.store.botByThread(threadId);
   const requestOwner = owner ? host.botForThread(owner.id, threadId) : null;
-  await withDecisionActor(actor, () => host.answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, decision, undefined, owner ? { id: owner.id, name: owner.name } : undefined, false, false));
+  await withDecisionActor(actor, () => host.answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, decision, undefined, owner ? { id: owner.id, name: owner.name } : undefined, false, false, host.consoleRuleAuth(viewer)));
   const settled = host.store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
   if (settled?.card && !settled.card.answeredBy && settled.card.answered !== "unavailable" && (settled.card.answered || settled.card.dismissed)) {
     host.store.patchMessage(threadId, settled.id, { card: { ...settled.card, answeredBy: { kind: "session", name: answerer } } });

@@ -6,6 +6,7 @@
 // approval card, a working goal, the stored file names it points at).
 // Everything else, the text and the full message included, is in `sealed`.
 import type { WireMessage as Message } from "../../shared/wire.ts";
+import { namedStagedPaths, stagedFileRef } from "../messages/staged-file-refs.ts";
 import { BlindTokenizer, PREFIX_LETTERS, bloomOf, foldWord, gramCodesOf, wordsOf } from "./content-crypto.ts";
 
 /** Stored file names (an opaque id and an extension) a message points at,
@@ -46,7 +47,8 @@ export function skeletonOf(message: Message, full: string): string {
   if (attention && typeof attention === "object") {
     out.attention = { handledAt: flag((attention as Record<string, unknown>).handledAt) };
   }
-  const refs = [...new Set(full.match(STORED_NAME) ?? [])];
+  // #4632: a staged file the line names, as an opaque ref (no name in clear)
+  const refs = [...new Set([...(full.match(STORED_NAME) ?? []), ...namedStagedPaths(typeof message.text === "string" ? message.text : undefined).map(stagedFileRef)])];
   if (refs.length) out.refs = refs;
   return JSON.stringify(out);
 }

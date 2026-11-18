@@ -409,7 +409,9 @@ the bytes (`{path, content_base64}`), and the request can be up to 64 MiB.
 The files are copied to the target's workspace under `inbox/<sender>/`, and
 the prompt names them. They belong to the conversation the prompt lands in:
 deleting that conversation, or erasing the person whose conversation it is,
-removes them (#4632). The member API's `POST bots/{id}/messages` takes the
+removes them (#4632): the server records them on the conversation when it
+stages them and erases only those, but a file another conversation still
+names. The member API's `POST bots/{id}/messages` takes the
 same `files`, through the same parser and staging
 (`docs/org-member-api.md`).
 

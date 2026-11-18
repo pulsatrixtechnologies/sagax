@@ -85,8 +85,11 @@ any other shape, so the plan's `clients.bots.read` is written
 ### `GET capabilities`
 
 ```json
-{ "api": 1, "version": "0.4.16", "routes": ["GET bots", "GET capabilities", "POST bots/{id}/messages"] }
+{ "api": 1, "version": "0.4.16", "routes": ["GET bots", "GET capabilities", "POST bots/{id}/messages", "POST bots/{id}/messages:files"] }
 ```
+
+A `METHOD path:feature` entry says the route takes more than its first
+contract: `POST bots/{id}/messages:files` (#4632), its `files`.
 
 ### `GET bots`
 
@@ -188,12 +191,18 @@ any other shape, so the plan's `clients.bots.read` is written
     theirs, for one) removes what it staged.
   - Deleted with its conversation (`DELETE threads/{id}` and the app's
     delete) and with the person when they are erased; deleting the bot
-    deletes its workspace.
+    deletes its workspace. The server records on the conversation the
+    files it staged itself and erases only those, never a path read from a
+    message's text; a file another conversation that stays still names is
+    kept (the stored attachments' rule); a link is never followed. What the
+    bot moved out of `inbox/` stays.
   - A retry with the same `sendId` in the same conversation reuses the
     first line and stages nothing again (no second copy).
   - Discovery: `GET capabilities` lists `POST bots/{id}/messages:files`
     in `routes` when this server takes files with a message; a host product
-    reads it there (no other signal).
+    reads it there (no other signal). A route announces what it takes
+    beyond its first contract as `METHOD path:feature`; `api` stays 1 (an
+    added field or route never changed it).
   - Errors (send_prompt's own): `400 bad_request` (`files` not a list or
     more than 8, an entry that is not a `path`, a path with a leading `/`
     or `..`, a file without `content_base64`), `413 file_too_large` (one file

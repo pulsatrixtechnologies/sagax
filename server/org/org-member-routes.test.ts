@@ -1678,10 +1678,13 @@ describe("#4632: files with a message, on send_prompt's path", () => {
   let staged: Array<{ botId: string; text: string; files: unknown }> = [];
   let removed: Array<{ botId: string; paths: readonly string[] }> = [];
   let sent: Map<string, string> = new Map();
+  let kept: Array<{ botId: string; threadId: string; paths: readonly string[] }> = [];
   beforeEach(() => {
     staged = [];
     removed = [];
+    kept = [];
     sent = new Map();
+    deps.recordStagedFiles = (botId, threadId, paths) => { kept.push({ botId, threadId, paths }); };
     deps.stageSendFiles = async (_person, botId, text, files) => {
       if (botId === "other") return { status: 404, code: "not_found", message: "No such bot." };
       staged.push({ botId, text, files });
@@ -1697,6 +1700,7 @@ describe("#4632: files with a message, on send_prompt's path", () => {
   afterEach(() => {
     deps.stageSendFiles = undefined;
     deps.removeStagedFiles = undefined;
+    deps.recordStagedFiles = undefined;
     deps.sentText = undefined;
   });
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
@@ -1709,6 +1713,8 @@ describe("#4632: files with a message, on send_prompt's path", () => {
     const post = performed.find((p) => p.request.method === "POST")!;
     expect(post.request.body).toEqual({ text: note("read these", ["inbox/bob/photo.png", "inbox/bob/report.pdf"]), threadId: "t1", busyMode: "after", aiClient: true });
     expect(recorded.at(-1)?.after).toMatchObject({ files: 2 });
+    // the conversation keeps what the server staged (never read from a line's text)
+    expect(kept).toEqual([{ botId: "b1", threadId: "t1", paths: ["inbox/bob/photo.png", "inbox/bob/report.pdf"] }]);
     // the audit row names no file and carries no byte
     expect(JSON.stringify(recorded)).not.toContain("photo.png");
   });
@@ -1750,6 +1756,7 @@ describe("#4632: files with a message, on send_prompt's path", () => {
     const got = await call("POST", "bots/b1/messages", token("bob"), { text: "x", threadId: "t9", files: [{ path: "a.png", content_base64: png }] });
     expect(got.status).toBe(403);
     expect(removed).toEqual([{ botId: "b1", paths: ["inbox/bob/a.png"] }]);
+    expect(kept).toEqual([]);
   });
 
   it("a retry with the same sendId reuses the first line and stages nothing twice", async () => {
@@ -1761,5 +1768,6 @@ describe("#4632: files with a message, on send_prompt's path", () => {
     await call("POST", "bots/b1/messages", token("bob"), { text: "look", sendId: "send-file-000001", files });
     expect(staged).toHaveLength(1);
     expect((performed.find((p) => p.request.method === "POST")!.request.body as { text: string }).text).toBe(first.text);
+    expect(kept).toHaveLength(1);
   });
 });

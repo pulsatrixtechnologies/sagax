@@ -442,13 +442,6 @@ export function queuedSteeredMessage(
   return item ? { id: item.messageId, text: item.text, replyToId: item.replyToId, ...(item.reason ? { reason: item.reason } : {}) } : null;
 }
 
-/** The texts still waiting in one thread's queue (the files they name go
- * with the thread, server/threads/staged-files.ts). */
-export function queuedSteeredTexts(botId: string, threadId: string): string[] {
-  const entry = queues.get(threadId);
-  return entry && entry.botId === botId ? entry.items.map((item) => item.text) : [];
-}
-
 /** Drop one waiting send owned by this bot so it never drains. The queue id
  * is stable even if the bot switches away from the task while the request is
  * in flight. Returns false when it was already drained, belongs to another

@@ -1,4 +1,5 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
+import { FILES_NOTE } from "./messages/staged-file-refs.ts";
 import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { restartCauseNotResumed, restartPendingRow } from "./turns/restart-line-words.ts";
@@ -163,24 +164,10 @@ export const SEND_FILE_MAX_BYTES = 25 * 1024 * 1024;
  * for the bot's file tools (a read of its own workspace is the owner's card,
  * answered at the bot's level). Never "host file tools": an organization
  * server withholds them. */
-const FILES_NOTE = "\n\n[Files sent with this message, now in your Sagax workspace folder: ";
 export function agentPromptWithFiles(prompt: string, staged: readonly string[], workspaceRoot: string): string {
   if (!staged.length) return prompt;
   const full = staged.map((rel) => join(workspaceRoot, rel));
   return `${prompt}${FILES_NOTE}${staged.join(", ")}. Read them with workspace_read using those paths (relative to your workspace; it reads text), or with your file tools at the full paths: ${full.join(", ")}. If you work on a VM or cloud computer, they are not there until you copy them over (read here, then write them there).]`;
-}
-/** The workspace-relative paths agentPromptWithFiles named in a line (each
- * under inbox/<sender>/), so they go when the conversation goes. A name never
- * holds a "/", so ", inbox/" only ever starts the next path. */
-const FILES_NOTE_END = ". Read them with workspace_read using those paths";
-export function stagedPathsIn(text: string | undefined): string[] {
-  if (!text) return [];
-  const start = text.lastIndexOf(FILES_NOTE);
-  if (start < 0) return [];
-  const from = start + FILES_NOTE.length;
-  const end = text.indexOf(FILES_NOTE_END, from);
-  if (end < 0) return [];
-  return text.slice(from, end).split(/, (?=inbox\/)/).filter((path) => /^inbox\/[^/]+\/[^/]+$/.test(path));
 }
 /** sha256 of a prompt as it lands in the conversation, without the staged
  * files note (#2858): what a pending send_prompt receipt is matched on. */

@@ -86,10 +86,6 @@ export const ORG_MEMBER_ASSERTION_ACTORS: readonly ConsoleAssertion["actor"][] =
 export const ORG_MEMBER_API_VERSION = 1;
 export const MEMBER_WAIT_MAX_SECONDS = 120;
 export const MEMBER_TEXT_MAX = 32_000;
-/** #4632: listed in `GET capabilities` routes when `POST bots/{id}/messages`
- * takes `files` (send_prompt's path): a host product reads it to know the
- * engine reads an attached image or PDF. */
-export const MEMBER_SEND_FILES_CAPABILITY = "POST bots/{id}/messages:files";
 export const MEMBER_THREAD_LIMIT_MAX = 200;
 export const MEMBER_THREAD_LIMIT_DEFAULT = 50;
 /** How often a wait looks at the thread. */
@@ -234,6 +230,9 @@ export interface OrgMemberRouteDeps {
   stageSendFiles?(person: MemberPerson, botId: string, text: string, files: FileInput[]): Promise<{ text: string; staged: string[] } | { status: number; code: string; message: string }>;
   /** #4632: remove files staged for a send that was then refused. */
   removeStagedFiles?(botId: string, paths: readonly string[]): void;
+  /** #4632: the conversation keeps the files the server staged for its send
+   * (server-owned, never read from a line's text); they go with it. */
+  recordStagedFiles?(botId: string, threadId: string, paths: readonly string[]): void;
   /** #4632: the text a send with this sendId already put in this
    * conversation (a stored line, or one waiting in its queue), else null: a
    * retry reuses it and stages nothing twice. */
@@ -320,6 +319,9 @@ interface MemberRoute {
   path: string;
   /** The permission the route needs; none for capabilities. */
   permission?: PermissionKey;
+  /** What the route takes beyond its first contract, announced by `GET
+   * capabilities` as `METHOD path:feature` (#4632: `files`). */
+  features?(): readonly string[];
   handle(ctx: MemberContext): Promise<Answer | StreamAnswer>;
 }
 
@@ -1682,7 +1684,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
     {
       method: "GET", path: "capabilities",
       async handle() {
-        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: [...allRoutes().map((route) => `${route.method} ${route.path}`), ...(deps.stageSendFiles ? [MEMBER_SEND_FILES_CAPABILITY] : [])].sort() });
+        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: allRoutes().flatMap((route) => [`${route.method} ${route.path}`, ...(route.features?.() ?? []).map((feature) => `${route.method} ${route.path}:${feature}`)]).sort() });
       },
     },
     {
@@ -1731,6 +1733,8 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
     },
     {
       method: "POST", path: "bots/{id}/messages", permission: "clients.botsMessage",
+      // #4632: `files`, on send_prompt's path, where the server stages them
+      features: () => (deps.stageSendFiles ? ["files"] : []),
       async handle({ person, params, body }) {
         const input = objectOf(body);
         if (!input) return fail(400, "bad_request", "Send { \"text\": \"...\" }.");
@@ -1793,7 +1797,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // its session) first waits, within its own `wait`, for the turns
         // before it, running or queued, to finish on their own model: two
         // models never cross in one conversation.
-        const posted = await inOrder(threadId, async (): Promise<{ refused: Answer } | { sent: MemberReply }> => {
+        const posted = await inOrder(threadId, async (): Promise<{ refused: Answer } | { sent: MemberReply; staged: string[] }> => {
           if (model && threadId && !sameMemberModel(model, deps.threadModel?.(botId, threadId) ?? null)) {
             const until = now() + wait * 1000;
             for (;;) {
@@ -1832,7 +1836,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
           });
           // a refused send leaves no file behind
           if (!okStatus(reply) && staged.length) deps.removeStagedFiles?.(botId, staged);
-          return { sent: reply };
+          return { sent: reply, staged };
         });
         if ("refused" in posted) return posted.refused;
         const sent = posted.sent;
@@ -1841,6 +1845,8 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         const finalThread = str(receipt.threadId) ?? threadId ?? null;
         const messageId = str(objectOf(receipt.message)?.id);
         const queueId = messageId ? null : str(receipt.queueId);
+        const recordIn = finalThread ?? threadId;
+        if (posted.staged.length && recordIn) deps.recordStagedFiles?.(botId, recordIn, posted.staged);
         if (hidden && finalThread && messageId) deps.markAiClientLine?.(finalThread, messageId);
         deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}), ...(model ? { model: model.model } : {}), ...(surface ? { surface: true } : {}), ...(files.length ? { files: files.length } : {}) } });
         if (!finalThread) return answer({ botId, threadId: null, messageId, status: "working", pending: true, reply: null, approvals: [], cursor: null, summary: null });

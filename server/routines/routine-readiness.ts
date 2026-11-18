@@ -46,7 +46,7 @@ export function soloRoutineTriggers(webhooks: ReadonlyArray<{ name: string; rout
     return { name: webhook.name, source: typed ? TRIGGER_SOURCES[typed].label : "Webhook", reachable: !typed || !isRelaySource(typed) };
   });
 }
-export interface ReadinessFlow { step?: string; error?: string; live?: boolean }
+export interface ReadinessFlow { step?: string; error?: string; live?: boolean; catalogOnly?: boolean }
 interface ReadinessFlowSkills { installation: string }
 /** A held local install does not disable the pack's remote product documents (#1945). */
 export function routineFlowSkills(organization: boolean, declaration: FlowPluginsDeclaration | undefined, status: OrgFlowPluginsStatus): ReadinessFlowSkills | undefined {
@@ -246,7 +246,8 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
           const step = clean(result.step ?? "plan");
           const error = clean(result.error);
           checks.push({ kind, ok: false, code: "flow_plan", params: { step, error }, line: `The Flow shadow check failed at ${step}: ${error}` });
-        } else if (result?.live) checks.push({ ...ready(kind, "A run is live, plan not checked."), params: { kind, live: "true" } });
+        } else if (result?.catalogOnly) checks.push(ready(kind, "The account catalog is reachable. It lists no Flow runner, so no shadow plan ran."));
+        else if (result?.live) checks.push({ ...ready(kind, "A run is live, plan not checked."), params: { kind, live: "true" } });
       } else {
         const computers = probe.value as ReadinessComputer[] | undefined;
         const prompt = (run.prompt ?? routine.prompt).toLowerCase();

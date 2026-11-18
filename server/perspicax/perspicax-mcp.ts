@@ -986,9 +986,22 @@ export class PerspicaxMcp {
     try {
       await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax Flow check (${botId}; ${input.routine ?? "catalogue"}; ${randomUUID()})`, version: this.options.version } });
       await rpc("notifications/initialized", {});
-      const listed = await rpc("tools/list", {});
-      if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
-      if (!listed.result.tools.some(tool => isObject(tool) && tool.name === "flow_run")) {
+      const served = new Set<string>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const listed = await rpc("tools/list", cursor ? { cursor } : {});
+        if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
+        for (const tool of listed.result.tools) if (isObject(tool) && typeof tool.name === "string") served.add(tool.name);
+        cursor = typeof listed.result.nextCursor === "string" ? listed.result.nextCursor : undefined;
+        if (cursor && cursors.has(cursor)) throw new Error("Perspicax returned a repeated tool catalog cursor.");
+        if (cursor) cursors.add(cursor);
+      } while (cursor && !served.has("flow_run"));
+      if (served.size && !served.has("flow_run") && !served.has("flow") && !served.has("flow_action")) {
+        // #4432: Flow is retired and the connection serves none of its tools:
+        // there is nothing to shadow. Report precisely what was checked.
+        result = { catalogOnly: true };
+      } else if (!served.has("flow_run")) {
         result = { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
       } else if (!input.routine) {
         // The model may choose a recipe during the real turn. With no

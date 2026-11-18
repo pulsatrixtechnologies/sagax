@@ -335,7 +335,7 @@ describe("bot profile page shell", () => {
       expect(tag, section).toContain('aria-modal="true"');
       for (const cls of ["rounded-[20px]", "border-[0.5px]"]) expect(tag, section).toContain(cls);
       // large (an editor, a list) or medium (a few fields): BOT_PAGE_MODAL.size
-      expect(tag, section).toMatch(/w-\[min\((1100|720)px,calc\(100vw-32px\)\)\]/);
+      expect(tag, section).toMatch(/w-\[min\((900|720)px,calc\(100vw-40px\)\)\]/);
       expect(html.slice(modal), section).toMatch(/data-bot-page-modal-header=""[^>]*text-center[^>]*><h2 [^>]*text-\[22px\] font-medium leading-7/);
       expect(html.slice(modal), section).toContain(`data-bot-profile-subpage="${page}"`);
       // no link back left in the top bar; the X stays last, after Share (#4420)

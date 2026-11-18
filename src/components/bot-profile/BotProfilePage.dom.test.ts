@@ -219,7 +219,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     for (const view of VIEWS) {
       const node = await column(view);
       // #4420: the reference's reading width; #4470: a sub-page is a modal, large or medium (BOT_PAGE_MODAL.size)
-      expect(node.className, viewName(view)).toMatch("tab" in view ? /max-w-\[920px\]/ : /w-\[min\((1100|720)px,calc\(100vw-32px\)\)\]/);
+      expect(node.className, viewName(view)).toMatch("tab" in view ? /max-w-\[920px\]/ : /w-\[min\((900|720)px,calc\(100vw-40px\)\)\]/);
       expect(node.querySelector("[data-bot-profile-column-side]")).toBeNull();
       expect(scope(node, view), viewName(view)).not.toBeNull();
       for (const panel of Array.from(node.querySelectorAll("[role='tabpanel']"))) expect(panel.className).not.toMatch(/grid-cols-2/);

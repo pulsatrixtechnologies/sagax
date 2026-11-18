@@ -4,8 +4,7 @@
 // bundle: 560px over 700px, its large dialog 880px wide and at most 640px
 // tall, its modal body 24px in). Two sizes here, set once for every row of
 // the page (the owner found 560px too small to edit in): "large" for a
-// surface that holds an editor, a list or a table, 1100px wide and the room's
-// height less 48px above and below; "medium" for a few fields, 720px wide
+// surface that holds an editor, a list or a table, as large as the Settings window and no larger; "medium" for a few fields, 720px wide
 // and as tall as its content (never a tall half-empty box). Both take the
 // room's width less 16px each side on a phone. The look is the reference's:
 // 20px corners, a half-pixel hairline, the scrim at half black; the title
@@ -25,6 +24,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
 import { DialogCloseButton, DialogLayer } from "../SettingsPrimitives";
+import { ModalTitleContext } from "./modal-title";
 
 /** The reference's measures (chunk team-bot-setup-dialog-shell and the
  * Dialog root's form variant). */
@@ -32,14 +32,15 @@ export const BOT_PAGE_MODAL = {
   // DIALOG.frame's entrance; the reference's radius and hairline
   frame: "relative flex flex-col overflow-hidden rounded-[20px] border-[0.5px] border-border bg-app text-ink outline-none transition-[opacity,scale] duration-base ease-out-quint starting:scale-98 starting:opacity-0 motion-reduce:transition-none",
   size: {
-    /** an editor, a list or a table: most of the window; the editors inside
-     * grow with it through --bot-modal-fill: the window less the modal's header, the
-     * rows above the editor, its counter line and the Save row, so Save shows unscrolled (MarkdownEditor's fillModal) */
-    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-540px)]",
-    /** a list that may be short (Folder, Routines): as wide as large, as tall as its content up to the window */
-    wide: "max-h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-540px)]",
-    /** a few fields: wider than the reference's 560px, as tall as its content */
-    medium: "max-h-[calc(100dvh-96px)] w-[min(720px,calc(100vw-32px))]",
+    /** an editor, a list or a table: the Settings window's own size (SettingsModal: 900px by 700px,
+     * 40px of room each side and 96px over and under); never larger than it. The editors inside
+     * grow with it through --bot-modal-fill: the modal's height less its header, the rows above
+     * the editor, its counter line and the Save row, so Save shows unscrolled (MarkdownEditor's fillModal) */
+    large: "h-[min(700px,calc(100dvh-96px))] w-[min(900px,calc(100vw-40px))] [--bot-modal-fill:min(256px,calc(100dvh-540px))]",
+    /** a list that may be short (Folder, Routines): the Settings window's width, as tall as its content up to its height */
+    wide: "max-h-[min(700px,calc(100dvh-96px))] w-[min(900px,calc(100vw-40px))] [--bot-modal-fill:min(256px,calc(100dvh-540px))]",
+    /** a few fields: smaller than the Settings window, as tall as its content */
+    medium: "max-h-[min(700px,calc(100dvh-96px))] w-[min(720px,calc(100vw-40px))]",
   },
   header: "relative flex shrink-0 flex-col items-center gap-1 px-6 pb-3 pt-10 text-center",
   title: "w-full min-w-0 text-[22px] font-medium leading-7 tracking-[-0.012em] text-ink",
@@ -104,7 +105,9 @@ export function BotPageModal({ id, title, description, size = "medium", footer, 
             {description && <p id={descriptionId} className={BOT_PAGE_MODAL.description}>{description}</p>}
           </div>
         )}
+        <ModalTitleContext.Provider value={typeof title === "string" ? title : null}>
         <div ref={bodyRef} data-bot-page-modal-body="" data-more-below={more ? "" : undefined} className={bare ? "relative flex min-h-0 flex-1 flex-col" : cn(BOT_PAGE_MODAL.body, more && BOT_PAGE_MODAL.bodyFade)}>{children}</div>
+        </ModalTitleContext.Provider>
         {footer && <div data-bot-page-modal-footer="" className={BOT_PAGE_MODAL.footer}>{footer}</div>}
       </div>
     </DialogLayer>

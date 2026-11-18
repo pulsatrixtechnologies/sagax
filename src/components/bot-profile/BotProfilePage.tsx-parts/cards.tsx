@@ -32,6 +32,7 @@ import { BotEmailAddress } from "../../bot-settings/BotEmailAddress";
 import { BotReachMe } from "../../bot-settings/BotReachMe";
 import { AddMenu } from "./AddMenu";
 import { BotPageModal } from "../BotPageModal";
+import { useRepeatsModalTitle } from "../modal-title";
 
 const ENTRY = new Map(BOT_SECTIONS.map((entry) => [entry.id, entry]));
 
@@ -124,13 +125,18 @@ export function ProfileCard({ title, groupId, accessory, children }: {
   children: ReactNode;
 }) {
   const headingId = useId();
+  const repeated = useRepeatsModalTitle(title);
   return (
     <section aria-labelledby={headingId} data-settings-group={groupId} className="flex flex-col gap-2">
-      {/* the grey label on the page's left edge, 12px in, with the name and the tabs (#4420) */}
+      {/* the grey label on the page's left edge, 12px in, with the name and the tabs (#4420);
+          a label that repeats the modal's title is kept for screen readers only */}
+      {(!repeated || accessory) && (
       <div className="flex min-w-0 items-center gap-1.5 px-3">
-        <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
+        <h3 id={headingId} className={cn("shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary", repeated && "sr-only")}>{title}</h3>
         {accessory}
       </div>
+      )}
+      {repeated && !accessory && <h3 id={headingId} className="sr-only">{title}</h3>}
       <div className="flex flex-col rounded-2xl bg-card py-1">{children}</div>
     </section>
   );

@@ -8,8 +8,12 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { setLocale } from "@/lib/i18n";
 import { BOT_PAGE_MODAL, BotPageModal } from "./BotPageModal";
+import { repeatsModalTitle } from "./modal-title";
 import { SUBPAGE_META, SUBPAGE_SIZE } from "./BotProfilePage.tsx-parts/subpages";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -63,15 +67,33 @@ afterEach(() => {
   host.remove();
 });
 
+describe("owner: no bot page modal is larger than the Settings window", () => {
+  it("the large size is the Settings modal's own width, height and margins", () => {
+    const settings = readFileSync(resolve(process.cwd(), "src/components/SettingsModal.tsx"), "utf8");
+    for (const token of ["h-[min(700px,calc(100dvh-96px))]", "w-[min(900px,calc(100vw-40px))]"]) {
+      expect(settings, token).toContain(token);
+      expect(BOT_PAGE_MODAL.size.large, token).toContain(token);
+    }
+  });
+
+  it("a section whose heading repeats the modal's title does not draw it again, in any case; other headings stay", () => {
+    expect(repeatsModalTitle("Shared with", "Shared with")).toBe(true);
+    expect(repeatsModalTitle("Shared with", " shared WITH ")).toBe(true);
+    expect(repeatsModalTitle("Shared with", "People and groups")).toBe(false);
+    expect(repeatsModalTitle(null, "Shared with")).toBe(false);
+    expect(repeatsModalTitle("Rules", undefined)).toBe(false);
+  });
+});
+
 describe("bot page modals are larger (owner: we barely see anything)", () => {
   it("the large size is most of the window, the medium one wider than 560px and sized to its content, on one shared grid", () => {
-    expect(BOT_PAGE_MODAL.size.large).toContain("w-[min(1100px,calc(100vw-32px))]");
-    expect(BOT_PAGE_MODAL.size.large).toContain("h-[calc(100dvh-96px)]");
+    expect(BOT_PAGE_MODAL.size.large).toContain("w-[min(900px,calc(100vw-40px))]");
+    expect(BOT_PAGE_MODAL.size.large).toContain("h-[min(700px,calc(100dvh-96px))]");
     expect(BOT_PAGE_MODAL.size.large).toContain("--bot-modal-fill");
-    expect(BOT_PAGE_MODAL.size.medium).toContain("w-[min(720px,calc(100vw-32px))]");
-    expect(BOT_PAGE_MODAL.size.wide, "a short list is sized to its content").toContain("w-[min(1100px,calc(100vw-32px))]");
+    expect(BOT_PAGE_MODAL.size.medium).toContain("w-[min(720px,calc(100vw-40px))]");
+    expect(BOT_PAGE_MODAL.size.wide, "a short list is sized to its content").toContain("w-[min(900px,calc(100vw-40px))]");
     expect(BOT_PAGE_MODAL.size.wide).not.toMatch(/(^| )h-\[/);
-    expect(BOT_PAGE_MODAL.size.large, "the editor leaves its counters and Save visible").toContain("--bot-modal-fill:calc(100dvh-540px)");
+    expect(BOT_PAGE_MODAL.size.large, "the editor leaves its counters and Save visible").toContain("--bot-modal-fill:min(256px,calc(100dvh-540px))");
     expect(BOT_PAGE_MODAL.bodyFade, "the body's bottom edge fades while more is below").toContain("mask-image");
     expect(BOT_PAGE_MODAL.size.medium, "content height, never a fixed tall box").not.toMatch(/(^| )h-\[/);
     // header, body and footer share the 24px side edge
@@ -96,7 +118,7 @@ describe("regression #4470: the bot page's modal shell", () => {
     expect(host.contains(frame)).toBe(false);
     expect(frame.getAttribute("role")).toBe("dialog");
     expect(frame.getAttribute("aria-modal")).toBe("true");
-    for (const cls of ["w-[min(720px,calc(100vw-32px))]", "max-h-[calc(100dvh-96px)]", "rounded-[20px]", "border-[0.5px]", "bg-app"]) expect(frame.className).toContain(cls);
+    for (const cls of ["w-[min(720px,calc(100vw-40px))]", "max-h-[min(700px,calc(100dvh-96px))]", "rounded-[20px]", "border-[0.5px]", "bg-app"]) expect(frame.className).toContain(cls);
     // the scrim at half black, the window centred in it
     const layer = frame.parentElement!;
     expect(layer.hasAttribute("data-dialog-layer")).toBe(true);
@@ -149,7 +171,7 @@ describe("regression #4470: the bot page's modal shell", () => {
     // a page drawn in a modal: the Settings window's size, no title row, no
     // second close over the page's own header, named for readers
     const second = modal("second")!;
-    expect(second.className).toContain("w-[min(1100px,calc(100vw-32px))]");
+    expect(second.className).toContain("w-[min(900px,calc(100vw-40px))]");
     expect(second.querySelector("[data-bot-page-modal-header]")).toBeNull();
     expect(second.getAttribute("aria-label")).toBe("Memory");
     expect(second.querySelector("[data-dialog-close]")).toBeNull();

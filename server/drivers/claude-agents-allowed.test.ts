@@ -30,4 +30,12 @@ describe("agents MCP pre-allow", () => {
     expect(allowed).toContain("mcp__agents__list_bots");
     expect(allowed.every((name) => name.startsWith("mcp__agents__"))).toBe(true);
   });
+
+  it("leaves remote_session_exec to the permission prompt so its card shows (#4575)", () => {
+    const allowed = agentsAllowedTools({ SAGAX_BOT_ID: "b1", SAGAX_PERSPICAX_TOOLS: "1" });
+    expect(allowed).not.toContain("mcp__agents");
+    expect(allowed).not.toContain("mcp__agents__remote_session_exec");
+    expect(allowed).toContain("mcp__agents__remote_session_snapshot");
+    expect(allowed).toContain("mcp__agents__list_bots");
+  });
 });

@@ -10,10 +10,11 @@ import {
 } from "./approvals.ts";
 import type { CodexSession } from "./session-types.ts";
 import { newId } from "../../contracts.ts";
-import { commandSummary } from "../../tools/tool-summary.ts";
+import { askInputDetail, commandSummary } from "../../tools/tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { classifyError, needsReconnect, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
+import { readBridgeCall } from "../../../shared/searched-tool-call.ts";
 import { boundedLabel } from "./plain.ts";
 import { codexQuestionReply } from "./questions.ts";
 
@@ -97,6 +98,13 @@ s.handleServerRequest = (msg: any) => {
     return;
   }
   const runs = searchedServer && asksAbout(CALL_TOOL) ? directoryCallTarget(CALL_TOOL, params._meta?.tool_params) : undefined;
+  const bridge = isLegacyMcpPermission && params.serverName === "agents" && mcpTool === "use_tool"
+    ? readBridgeCall(mcpTool, params._meta?.tool_params) : null;
+  const remoteArgs = isLegacyMcpPermission && params.serverName === "agents"
+    ? runs === "remote_session_exec" ? params._meta?.tool_params?.arguments
+      : mcpTool === "remote_session_exec" ? params._meta?.tool_params
+      : bridge?.kind === "call" && bridge.tool === "remote_session_exec" ? bridge.arguments : undefined
+    : undefined;
   const tool =
     mcpAppApproval
       ? mcpAppApproval.tool
@@ -189,7 +197,8 @@ s.handleServerRequest = (msg: any) => {
     // grants must never see the directory wrapper instead of that target.
     ...(isLegacyMcpPermission && (runs ?? mcpTool) && typeof params.serverName === "string" && /^[\w-]{1,64}$/.test(params.serverName)
       ? { mcpTool: `${params.serverName}__${runs ?? mcpTool}` } : {}),
-    ...(runs ? { input: JSON.stringify(params._meta?.tool_params?.arguments ?? {}) } : {}),
+    ...(remoteArgs ? { mcpTool: "agents__remote_session_exec", input: askInputDetail(remoteArgs, 50_000) }
+      : runs ? { input: JSON.stringify(params._meta?.tool_params?.arguments ?? {}) } : {}),
     command: method === "execCommandApproval" || method === "item/commandExecution/requestApproval"
       ? permissionCommand(params.command, params.cwd ?? (
         // Helpers may have a different workspace from their parent.

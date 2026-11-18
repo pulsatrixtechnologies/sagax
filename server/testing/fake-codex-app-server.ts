@@ -219,6 +219,13 @@ let connectorAsked: (() => void) | undefined;
 // Opt-in config resolution for scope tests; mirror the native -c precedence.
 const mcpOverrides: Record<string, Record<string, unknown>> = {};
 for (let index = 0; process.env.FAKE_CODEX_MCP_OVERRIDES === "1" && index < process.argv.length; index++) {
+  const approval = process.argv[index - 1] === "-c" && /^mcp_servers\.([^.]+)\.tools\.([^.]+)\.approval_mode=(.*)$/.exec(process.argv[index]!);
+  if (approval) {
+    const server = mcpOverrides[approval[1]!] ??= {};
+    const tools = (server.tools ??= {}) as Record<string, unknown>;
+    tools[approval[2]!] = { approval_mode: JSON.parse(approval[3]!) };
+    continue;
+  }
   const match = process.argv[index - 1] === "-c" ? /^mcp_servers\.([^.]+)\.([^.=]+)=(.*)$/.exec(process.argv[index]!) : null;
   // an inline table (`{ "K" = "V" }`) becomes an object, as in mcpMounts
   const raw = match?.[3];

@@ -394,7 +394,7 @@ if(m.method==='tools/call'){appendFileSync(process.env.RECEIPT,process.env.IDENT
 process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`);
     await create({ mode: "resume", environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_OVERRIDES: "1" } });
     const turn = { threadId: "multi-scope", text: "Fixture", toolScope: { allow: ["native:*", "mcp:agents:list_bots", "mcp:notes:read_notes"] }, integrations: {
-      agents: { command: process.execPath, args: [upstream], env: { IDENTITY: "agents", TOOL: "list_bots", RECEIPT: receipt } },
+      agents: { command: process.execPath, args: [upstream], env: { IDENTITY: "agents", TOOL: "list_bots", RECEIPT: receipt, SAGAX_PERSPICAX_TOOLS: "1" } },
       custom: { notes: { command: process.execPath, args: [upstream], env: { IDENTITY: "notes", TOOL: "read_notes", RECEIPT: receipt } } },
     } };
     for (const resumeCursor of [undefined, "old-session"]) {
@@ -406,6 +406,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       const config = seen.calls.find((call: { method: string }) => call.method === (resumeCursor ? "thread/resume" : "thread/start")).params.config.mcp_servers;
       // Sagax's own coordination tools never ask; a person's own server still does.
       expect(config.agents.default_tools_approval_mode).toBe("approve");
+      expect(config.agents.tools.remote_session_exec).toEqual({ approval_mode: "prompt" });
       expect(config.notes.default_tools_approval_mode).toBe("prompt");
       for (const [name, tool] of [["agents", "list_bots"], ["notes", "read_notes"]]) {
         const spec = config[name!];
@@ -1612,6 +1613,22 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await recorder.until((event) => event.type === "turn.completed");
     expect(recorder.events.some((event) => event.type === "request.opened")).toBe(false);
     expect(JSON.parse(readFileSync(dump, "utf8")).decision).toEqual({ decision: "accept" });
+  });
+
+  it("sends the remote command to the approval gate before answering Codex", async () => {
+    const command = "Get-Process";
+    process.env.FAKE_CODEX_APPROVAL_REQUEST = JSON.stringify({ method: "mcpServer/elicitation/request", params: {
+      serverName: "agents", mode: "form", message: 'Allow the agents MCP server to run tool "remote_session_exec"?',
+      _meta: { codex_approval_kind: "mcp_tool_call", tool_params: { command } }, requestedSchema: { type: "object", properties: {} },
+    } });
+    await create({ mode: "approval" });
+    await instance.adapter.sendTurn({ threadId: "remote-command", text: "go", approvalMode: "auto" });
+    const opened = await recorder.until(event => event.type === "request.opened");
+    if (opened.type !== "request.opened") throw new Error("expected a permission request");
+    expect(opened.mcpTool).toBe("agents__remote_session_exec");
+    expect(JSON.parse(opened.input!)).toEqual({ command });
+    await instance.adapter.respondToRequest("remote-command", opened.requestId!, { behavior: "deny" });
+    await recorder.until(event => event.type === "turn.completed");
   });
 
   it("reads an MCP tool's name to the closing quote, so a lookalike is not auto-approved as web search", async () => {

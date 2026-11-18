@@ -4,10 +4,10 @@
 // - macOS and Linux (OS known): a command that only reads
 //   (shared/read-only-command.ts, the same strict test as on the person's
 //   own computer, #875) runs without a card;
-// - Windows, and a computer whose OS is not known yet: EVERY command asks.
-//   That classifier is POSIX: PowerShell quoting (`"a\"; Remove-Item x"`),
-//   its drives (env:) and providers would pass it. Until a PowerShell
-//   classifier with a cmdlet allowlist exists, nothing there is read-only;
+// - Windows: a command that is a pipeline of allowlisted read cmdlets
+//   (shared/read-only-powershell.ts, #4575) runs without a card; the POSIX
+//   classifier is never used there (PowerShell quoting and drives);
+// - a computer whose OS is not known yet: EVERY command asks;
 // - any other command is the person's call every time: a card no level,
 //   rule or Always allow answers;
 // - the fixed snapshot only reads.
@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 
 import type { RemoteSessionOs } from "../../shared/remote-session.ts";
 import { isReadOnlyCommand, runCommandOf } from "../../shared/read-only-command.ts";
+import { isReadOnlyPowerShell } from "../../shared/read-only-powershell.ts";
 import { builtinAgentToolName } from "../people/member-tool-scope.ts";
 
 export interface RemoteSessionToolCall {
@@ -33,8 +34,8 @@ export type RemoteOsLookup = (session: string | undefined) => { os: RemoteSessio
 
 /** Whether a command on the session only reads, by its OS. */
 export function remoteCommandReadOnly(command: string | undefined, os: { os: RemoteSessionOs; known: boolean } | null): boolean {
-  if (!os || !os.known || os.os === "windows") return false;
-  return isReadOnlyCommand(command);
+  if (!os || !os.known) return false;
+  return os.os === "windows" ? isReadOnlyPowerShell(command) : isReadOnlyCommand(command);
 }
 
 function argsOf(input: string | undefined): Record<string, unknown> {

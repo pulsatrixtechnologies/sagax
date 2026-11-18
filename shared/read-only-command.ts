@@ -120,6 +120,16 @@ function readerOnly(words: string[]): boolean {
   return READERS.has(program);
 }
 
+/** The checks both classifiers share: a line with a control character, a
+ * lookalike, a UNC path, a credential location or a provider drive never
+ * counts as a read (any shell). */
+export function lineFitsReadClassifier(line: string): boolean {
+  if (!line || line.length > 4000) return false;
+  if (line.includes("\r") || CONTROL_CHAR.test(line) || LOOKALIKE.test(line)) return false;
+  if (/\\\\/.test(line)) return false;
+  return !SENSITIVE_PATH.test(line) && !PROVIDER_PATH.test(line);
+}
+
 /** Whether a command line only reads: every program in it is a known reader
  * used without an option that writes or runs something else. */
 export function isReadOnlyCommand(command: string | undefined): boolean {

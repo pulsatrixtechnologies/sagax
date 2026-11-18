@@ -11,7 +11,7 @@
 //         be refused
 //   OA-3  writing the ordinary hidden files of his bot's workspace
 //         (.gitignore, .github, .vscode) is his card; .git, .claude and
-//         .mcp.json still wait for an admin
+//         .mcp.json are refused on the shared host without a card (#4449)
 //   OA-4  Bob turns Full on for his own bot; Uma cannot on his
 import { spawn, type ChildProcess } from "node:child_process";
 import { connect, type Socket } from "node:net";
@@ -284,7 +284,7 @@ posixOnly("organization server: a member's own act, hidden files and Full access
     }
   }, 90_000);
 
-  it("OA-3: ordinary hidden files of his bot's workspace are his card; .git, .claude and .mcp.json stay an admin's", async () => {
+  it("OA-3: ordinary hidden files get the owner's card and sensitive writes on the shared host are refused without a card", async () => {
     const mine = await botOf(bob, "Bob Repo");
     const workspace = join(realpathSync(join(home, ".sagax")), "task-workspaces", mine.id, "repo");
     mkdirSync(workspace, { recursive: true });
@@ -296,7 +296,16 @@ posixOnly("organization server: a member's own act, hidden files and Full access
       }
       for (const name of [join(".git", "hooks", "pre-commit"), join(".claude", "settings.json"), ".mcp.json"]) {
         const write = await turn.ask("Write", { file_path: join(workspace, name), content: "x" });
-        expect((await turn.cardOf(write.id)).adminApproval, name).toBe(true);
+        // #4449, shipped in #4506: this member has no connected computer or server environment.
+        const answer = await waitFor(async () => write.answer());
+        expect(answer.behavior, name).toBe("deny");
+        expect(answer.message, name).toContain("no server environment for the person");
+        expect(answer.message, name).toContain("no admin is asked");
+        const messages = await api("GET", `/api/threads/${mine.threadId}/messages?limit=200`, bob);
+        expect(messages.status).toBe(200);
+        expect(messages.body.messages, name).not.toContainEqual(expect.objectContaining({
+          card: expect.objectContaining({ requestId: write.id }),
+        }));
       }
     } finally {
       await turn.end();

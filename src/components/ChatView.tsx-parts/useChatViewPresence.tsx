@@ -246,6 +246,6 @@ export function useChatViewPresence({
     lastUserMessage, lastUserMessageHasAttachments,
     lastMessage, activity, waiting, onCall, liveShown, popping, presenceVisible,
     announcement, busySince, regenerate, currentLink, threadLink, latestPageVersion,
-    botPill, chatHeader, chatWindow, bubbleStyle, Root,
+    botPill, chatHeader, chatWindow, bubbleStyle, Root, togglePanelFromPill,
   };
 }

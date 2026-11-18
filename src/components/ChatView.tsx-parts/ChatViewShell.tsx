@@ -51,7 +51,7 @@ export function ChatViewShell(m: Record<string, any>) {
     backgroundEffect, canWrite, computerStarting, findOpen, setFindOpen,
     replyTo, clearReply, consumeReply, restoreReply, selectReply,
     autoPauseSettled, resumeAutoPaused,
-    headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser, panelOpen, dataItem,
+    headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser, panelOpen, pillPanelOpen, togglePanelFromPill, dataItem,
     messages, lookups, seenRow, recordedRun, canSaveRun, setRunDismissed, lastRunStep,
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
@@ -109,6 +109,8 @@ export function ChatViewShell(m: Record<string, any>) {
         macInset={macInset}
         browser={browser}
         panelOpen={panelOpen}
+        pillPanelOpen={pillPanelOpen}
+        onTogglePanel={togglePanelFromPill}
         showInspector={showInspector}
         advanced={advanced}
         remoteClient={remoteClient}

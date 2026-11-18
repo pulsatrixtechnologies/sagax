@@ -40,7 +40,7 @@
 import type { SignalLevel } from "../../shared/signal-levels.ts";
 import { runFailureIsProviderLimit } from "../peers/ops-incidents.ts";
 import { SignalLedger } from "./signal-ledger.ts";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -1220,6 +1220,22 @@ export class ProactivePendingFile {
       }
     }
     return out;
+  }
+
+  /** After a replay: a sealed file no row points at (its event was not
+   * gathered again: a duplicate, turned off, the bot gone) is removed, so
+   * no words outlive their row. */
+  sweepSealed(): void {
+    if (!this.file) return;
+    const dir = join(dirname(this.file), "proactive-sealed");
+    let names: string[];
+    try { names = readdirSync(dir); } catch { return; }
+    const kept = new Set(Object.values(this.items).flatMap((rows) => rows.flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : []))));
+    for (const name of names) {
+      const match = /^([0-9a-f]{32})\.json$/.exec(name);
+      if (!match || kept.has(match[1]!)) continue;
+      try { rmSync(join(dir, name), { force: true }); } catch { /* already gone */ }
+    }
   }
 
   private forgetSealed(id: string): void {

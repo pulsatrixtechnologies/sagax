@@ -36,6 +36,8 @@ function replayPendingProactive() {
     }
   }
   });
+  // #4621 review: words of a row its replay did not gather again go now
+  host.proactivePending.sweepSealed?.();
 
 }
   return replayPendingProactive;

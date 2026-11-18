@@ -60,4 +60,22 @@ describe("proactive sealed rows at rest (#4621 review)", () => {
     second.set("wren", []);
     expect(existsSync(path)).toBe(false);
   });
+
+  it("after a replay, a sealed file no row points at is removed", () => {
+    const file = join(DATA_DIR, "proactive-pending.json");
+    const first = new ProactivePendingFile(file);
+    first.set("wren", [
+      { botId: "wren", source: "mail", key: "mail-1", label: "Email", detail: "kept words" },
+      { botId: "wren", source: "sms", key: "sms-1", label: "Text", detail: "dropped words" },
+    ]);
+    const dir = join(DATA_DIR, "proactive-sealed");
+    expect(readdirSync(dir)).toHaveLength(2);
+    const second = new ProactivePendingFile(file);
+    const rows = second.take();
+    // only the mail is gathered again (the text was judged a duplicate)
+    const mailRow = rows.find((row) => row.key === "mail-1")!;
+    second.set("wren", [second.readSealed((mailRow.ref as { id: string }).id)!]);
+    second.sweepSealed();
+    expect(readdirSync(dir)).toEqual([`${(mailRow.ref as { id: string }).id}.json`]);
+  });
 });

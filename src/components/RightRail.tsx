@@ -8,7 +8,7 @@
 // right edge (the close button's edge), on both pages. It opens from 1280px and starts
 // folded below, the state living with the page for the session.
 import { ChevronRight } from "lucide-react";
-import { useState, type HTMLAttributes, type ReactNode } from "react";
+import { useCallback, useSyncExternalStore, useState, type HTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -20,13 +20,25 @@ export function rightRailStartsOpen(): boolean {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(`(min-width: ${RIGHT_RAIL_OPEN_FROM}px)`).matches;
 }
 
-/** The rail's open state, as both pages keep it: from the breakpoint at
- * first, then whatever the person chose. */
-export function useRightRailOpen() {
-  return useState(rightRailStartsOpen);
+/** Whether the window is wide enough for the list and the rail side by side. */
+function subscribeWide(notify: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(`(min-width: ${RIGHT_RAIL_OPEN_FROM}px)`);
+  query.addEventListener?.("change", notify);
+  return () => query.removeEventListener?.("change", notify);
 }
 
-const NARROW_HIDDEN = "hidden lg:flex";
+/** The rail's open state, as both pages keep it. From the breakpoint it sits beside the list, open at first, then
+ * whatever the person chose. Below it the list and the rail cannot both fit (a phone showed "Toutes les notes"
+ * one letter per line), so the rail is an overlay sheet over the list: closed at first, with its own choice that
+ * never carries over from the wide window, and never side by side. */
+export function useRightRailOpen(): [boolean, (open: boolean | ((was: boolean) => boolean)) => void] {
+  const wide = useSyncExternalStore(subscribeWide, rightRailStartsOpen, () => false);
+  const [wideOpen, setWideOpen] = useState(rightRailStartsOpen);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const setOpen = useCallback((next: boolean | ((was: boolean) => boolean)) => (wide ? setWideOpen : setSheetOpen)(next), [wide]);
+  return [wide ? wideOpen : sheetOpen, setOpen];
+}
 
 type DataAttributes = { [key: `data-${string}`]: string | undefined };
 
@@ -37,18 +49,19 @@ export interface RightRailPanelProps extends Omit<HTMLAttributes<HTMLElement>, "
   onCollapse?: () => void;
   /** The fold button's name ("Hide upcoming routines"). */
   hideLabel?: string;
-  /** Automations hides the rail under 1024px; Memory keeps it. */
-  hideNarrow?: boolean;
   children: ReactNode;
 }
 
-export function RightRailPanel({ label, onCollapse, hideLabel, hideNarrow = false, className, children, ...rest }: RightRailPanelProps) {
+export function RightRailPanel({ label, onCollapse, hideLabel, className, children, ...rest }: RightRailPanelProps) {
   return (
+    <>
+      {/* below 1280px the rail is a sheet over the list: a press on the list behind closes it */}
+      {onCollapse && <button type="button" tabIndex={-1} aria-hidden="true" data-right-rail-scrim="" onClick={onCollapse} className="absolute inset-0 z-30 cursor-default bg-black/40 min-[1280px]:hidden" />}
     <aside
       {...rest}
       aria-label={label}
       data-right-rail=""
-      className={cn("h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel pr-4", hideNarrow ? NARROW_HIDDEN : "flex", className)}
+      className={cn("flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel pr-4 max-[1279px]:absolute max-[1279px]:inset-y-0 max-[1279px]:right-0 max-[1279px]:z-40 max-[1279px]:max-w-[calc(100%-48px)] max-[1279px]:shadow-xl", className)}
     >
       {onCollapse && (
         <div className="flex shrink-0 px-2 pt-2">
@@ -59,6 +72,7 @@ export function RightRailPanel({ label, onCollapse, hideLabel, hideNarrow = fals
       )}
       {children}
     </aside>
+    </>
   );
 }
 
@@ -71,10 +85,9 @@ export interface RightRailStripProps extends DataAttributes {
   icon: ReactNode;
   /** The vertical label under the icon. */
   text: string;
-  hideNarrow?: boolean;
 }
 
-export function RightRailStrip({ onOpen, showLabel, title, icon, text, hideNarrow = false, ...rest }: RightRailStripProps) {
+export function RightRailStrip({ onOpen, showLabel, title, icon, text, ...rest }: RightRailStripProps) {
   return (
     <button
       {...rest}
@@ -83,7 +96,7 @@ export function RightRailStrip({ onOpen, showLabel, title, icon, text, hideNarro
       aria-label={showLabel}
       title={title ?? showLabel}
       data-right-rail-strip=""
-      className={cn("w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink", hideNarrow ? NARROW_HIDDEN : "flex")}
+      className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink"
     >
       {icon}
       <span className="[writing-mode:vertical-rl]">{text}</span>

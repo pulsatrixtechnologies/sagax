@@ -1,4 +1,5 @@
 /** Headless gallery for Tools > Memory (2026-11-02, the Perspicax console's shape). Synthetic data only.
+ * ?rail=closed keeps a narrow window's rail folded (it is opened otherwise)
  * ?skin=<id>&lang=<code>&view=notes|preview|map|columns|tags|quality|note|folder|collections|trash&width=&height=
  * notes: All notes; preview: a row clicked (the preview panel); note: a row
  * double-clicked (the note's page); folder: a Perspicax folder in Manual order;
@@ -348,8 +349,9 @@ function Shell() {
     const segment = (label: RegExp) => [...document.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")].find((button) => label.test(button.getAttribute("title") ?? button.textContent ?? ""))?.click();
     void (async () => {
       // A narrow window starts with the explorer folded into its strip: open it.
-      if (await waitFor("[data-memory-explorer-show]", 1_500)) click("[data-memory-explorer-show]");
-      await waitFor("[data-memory-tiers]");
+      // ?rail=closed keeps the strip (a phone's start), for the captures of the rail as a sheet
+      if (params.get("rail") !== "closed" && await waitFor("[data-memory-explorer-show]", 1_500)) click("[data-memory-explorer-show]");
+      if (params.get("rail") !== "closed") await waitFor("[data-memory-tiers]");
       await waitFor('[data-memory-note-row="o1"]');
       // let the bodies arrive (excerpts, links)
       await new Promise((done) => setTimeout(done, 700));

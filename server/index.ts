@@ -33749,8 +33749,8 @@ function stagedFilesOfThread(botId: string, threadId: string): string[] {
  * attachments' attachmentStillShown rule). */
 function removeBotStagedFiles(botId: string, paths: readonly string[]): void {
   if (!paths.length) return;
-  removeStagedFiles(workspaceDir(botId), paths, (path) =>
-    store.tasks(botId).some((task) => task.stagedFiles?.includes(path)) || threadsReferencing(path).length > 0 || threadsReferencing(stagedFileRef(path)).length > 0);
+  removeStagedFiles(workspaceDir(botId), paths, (file) =>
+    store.tasks(botId).some((task) => task.stagedFiles?.includes(file)) || threadsReferencing(file).length > 0 || threadsReferencing(stagedFileRef(file)).length > 0);
 }
 /** One workspace-relative file of a bot caller, resolved inside one of its roots. */
 /** Puts the files in the agent's workspace (inbox/<sender>/) and answers

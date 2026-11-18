@@ -6,7 +6,7 @@ import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
 import { namedByToolScope, ruleTextsFor, toolKeepNamedText } from "../tools/tool-keep.ts";
-import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
+import { keptConnectors, offerAgentsCatalog, offerConnectorCatalogs, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
@@ -332,8 +332,12 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   const roomAgentsKnownUse = !roomCompactPrompt && roomNeedsAgentsUse && roomCompactForBot.agents.core === "used" ? roomCompactForBot.agents : undefined;
   // lot C: the agents tools this session leaves out wait behind search_tools
   // on an engine with no tool search of its own (server/tools/tool-keep-listing.ts)
-  if (integrations.agents) integrations.agents = withKeptAgentsListing(integrations.agents, roomLeftOut ?? [], { driverKind: instance.driverKind, compactPrompt: Boolean(roomCompactPrompt) });
+  const roomListingEngine = { driverKind: instance.driverKind, compactPrompt: Boolean(roomCompactPrompt) };
+  if (integrations.agents) integrations.agents = withKeptAgentsListing(integrations.agents, roomLeftOut ?? [], roomListingEngine);
+  // lot D: the connectors too, each through its own gate
+  if (integrations.custom) integrations.connectorsKept = keptConnectors(readyBot.id, roomToolKeepPerson, Object.keys(integrations.custom), roomLeftOut ?? [], roomListingEngine);
   offerAgentsCatalog(readyBot.id, roomToolKeepPerson, threadId, integrations.agents);
+  offerConnectorCatalogs(readyBot.id, roomToolKeepPerson, threadId, integrations.connectorsKept);
     ctx.text = text;
     ctx.cwd = cwd;
     ctx.roomCompactPrompt = roomCompactPrompt;

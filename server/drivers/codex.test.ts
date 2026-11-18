@@ -1904,6 +1904,35 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(argv).not.toContain("SAGAX_PERSPICAX_PROFILE");
   });
 
+  it("#4527 lot D: mounts a connector behind a gate that leaves out the session's unused tools and notes what it offered", async () => {
+    await create();
+    const dump = join(scratch, "kept-connector.json");
+    process.env.FAKE_CODEX_DUMP = dump;
+    const crm = { command: process.execPath, args: ["crm-server.js"], env: { CRM_HOME: "/srv/crm" } };
+    await instance.adapter.sendTurn({
+      threadId: "t-kept-crm",
+      text: "go",
+      integrations: {
+        custom: { crm, mail: { command: process.execPath, args: ["mail-server.js"], env: {} } },
+        connectorsKept: {
+          crm: { leftOut: ["crm/old_report", "mail/old"], offered: "/data/tool-keep/b/offered/crm.json" },
+          mail: { leftOut: [], offered: "/data/tool-keep/b/offered/mail.json" },
+        },
+      },
+    });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const gateOf = (name: string) => JSON.parse(seen.env[`SAGAX_GATE_CONFIG_${createHash("sha256").update(name).digest("hex")}`]);
+    const gate = gateOf("crm");
+    expect(JSON.parse(gate.SAGAX_GATE_SEARCH)).toEqual({ pinned: [], leftOut: ["old_report"] });
+    expect(gate.SAGAX_GATE_OFFERED).toBe("/data/tool-keep/b/offered/crm.json");
+    expect(JSON.parse(gate.SAGAX_GATE_UPSTREAM)).toMatchObject({ args: ["crm-server.js"], env: { CRM_HOME: "/srv/crm" } });
+    // nothing left out: listed whole, through a gate that notes what it offered
+    expect(JSON.parse(gateOf("mail").SAGAX_GATE_SEARCH)).toEqual({ pinned: [], leftOut: [] });
+    expect(gateOf("mail").SAGAX_GATE_OFFERED).toBe("/data/tool-keep/b/offered/mail.json");
+    expect(seen.argv.join(" ")).not.toContain("old_report");
+  });
+
   it("still refuses a server that only resembles the Perspicax bridge", async () => {
     await create();
     const almost = {

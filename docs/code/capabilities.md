@@ -169,8 +169,24 @@ the session; the other left out tools stay as the session froze them.
   as unused. A room turn passes its conversation's compaction record. Pi's
   own compaction ends a session (`contextRenewed`), as a context renewal
   does on Claude Code, Codex and the ACP engines.
-- Connector servers are lot D (the gate's search with the kept tools).
-- The saving is pinned by `server/drivers/agents-catalog-kept.test.ts`.
+- Lot D, connector servers (a server the person added, the Perspicax
+  account): on the same engines the turn carries
+  `integrations.connectorsKept` (`keptConnectors`), and each connector's MCP
+  gate gets a kept listing (`SAGAX_GATE_SEARCH` with `leftOut`,
+  `server/mcp/mcp-gate-search.ts`): every tool listed whole but the left out
+  ones, which stay behind the gate's own `search_tools` / `call_tool`. A
+  catalog under the floor (12 tools, 14,000 characters) and a URL catalog
+  the remote proxy already searches stay as they were; the Codex account
+  bridge keeps its pins. A connector's call_tool is read as the tool it runs
+  on every engine (`searchedServerCall`; ACP and Muse Code allow it for the
+  session for that tool only). Grok keeps its own tool search for
+  connectors. Each gate notes the names its server offered
+  (`SAGAX_GATE_OFFERED`, a file in the bot's tool keep folder), and the next
+  turn records them as offered (`offerConnectorCatalogs`), so a connector
+  tool the bot never calls is counted as unused. A searched gate starts
+  from its kept tool list (#4394) as a relayed one does.
+- The saving is pinned by `server/drivers/agents-catalog-kept.test.ts`
+  (agents) and `server/mcp-gate.test.ts` (connectors).
 
 ### Lot E: the person's side
 

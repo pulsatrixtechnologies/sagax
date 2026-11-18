@@ -9,7 +9,7 @@ import { onDemandPromptParts, promptReferencesAvailable } from "../context/promp
 import { compactBotLast } from "../context/compact-prompt.ts";
 import { memoryExcerptBytes } from "../workspace/workspace.ts";
 import { namedByToolScope, ruleTextsFor, toolKeepNamedText } from "../tools/tool-keep.ts";
-import { offerAgentsCatalog, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
+import { keptConnectors, offerAgentsCatalog, offerConnectorCatalogs, withKeptAgentsListing } from "../tools/tool-keep-listing.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -287,8 +287,15 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // #4527 lot C: an engine with no tool search of its own lists the agents
     // tools but the ones this session leaves out (server/tools/tool-keep-listing.ts);
     // what the turn offers is recorded in the session
-    if (state.integrations.agents) state.integrations.agents = withKeptAgentsListing(state.integrations.agents, sessionLeftOut ?? [], { driverKind: state.instance.driverKind, compactPrompt: Boolean(state.compactPrompt) });
-    if (!state.warmOnly) offerAgentsCatalog(state.bot.id, state.toolKeepPerson, state.threadId, state.integrations.agents);
+    const listingEngine = { driverKind: state.instance.driverKind, compactPrompt: Boolean(state.compactPrompt) };
+    if (state.integrations.agents) state.integrations.agents = withKeptAgentsListing(state.integrations.agents, sessionLeftOut ?? [], listingEngine);
+    // lot D: each connector's gate lists every tool but the ones this
+    // session leaves out, and notes what it offered for the next count
+    if (state.integrations.custom) state.integrations.connectorsKept = keptConnectors(state.bot.id, state.toolKeepPerson, Object.keys(state.integrations.custom), sessionLeftOut ?? [], listingEngine);
+    if (!state.warmOnly) {
+      offerAgentsCatalog(state.bot.id, state.toolKeepPerson, state.threadId, state.integrations.agents);
+      offerConnectorCatalogs(state.bot.id, state.toolKeepPerson, state.threadId, state.integrations.connectorsKept);
+    }
     turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(state.prompt.stable), volatile: Buffer.byteLength(state.prompt.volatile) });
     const catalogBytes = toolDefinitionBytes(state.integrations.agents?.env);
     const buckets = measureContextBuckets({

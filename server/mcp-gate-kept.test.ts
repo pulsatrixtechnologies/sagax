@@ -64,7 +64,7 @@ afterEach(async () => {
 const keptFile = () => join(scratch, "kept", "notes.json");
 
 /** One gate in front of the slow server, as one engine start would mount it. */
-function startGate(env: Record<string, string> = {}) {
+function startGate(env: Record<string, string> = {}, gateEnv: Record<string, string | undefined> = {}) {
   const gate = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", GATE], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
@@ -80,6 +80,7 @@ function startGate(env: Record<string, string> = {}) {
         args: [join(scratch, "upstream.cjs")],
         env: { LOG: join(scratch, "upstream.log"), TOOLS: join(scratch, "tools.json"), INIT_MS: "2500", LIST_MS: "2500", ...env },
       }),
+      ...gateEnv,
     },
   }) as ChildProcessWithoutNullStreams;
   gates.push(gate);
@@ -188,3 +189,24 @@ it("drops what was kept of a mount no start used for a month, and renews its own
   expect(existsSync(stale)).toBe(false);
   expect(existsSync(keptFile())).toBe(true);
 }, 40_000);
+
+it("#4527 lot D: a kept listing starts as fast from what was kept, and leaves out its tools", async () => {
+  writeFileSync(join(scratch, "tools.json"), JSON.stringify(Array.from({ length: 15 }, (_, i) => `notes_tool_${String(i).padStart(2, "0")}`)));
+  // no admissible-name aliases: a gate with them never searches
+  const search = { SAGAX_GATE_TOOL_NAMES: undefined, SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], leftOut: ["notes_tool_07"] }) };
+  const first = startGate({}, search);
+  const cold = await first.handshake();
+  const names = (list: any) => list.answer.result.tools.map((tool: { name: string }) => tool.name);
+  expect(names(cold.list)).not.toContain("notes_tool_07");
+  expect(names(cold.list)).toContain("call_tool");
+  await first.stop();
+  expect(existsSync(keptFile())).toBe(true);
+
+  const second = startGate({}, search);
+  const warm = await second.handshake();
+  expect(warm.list.ms).toBeLessThan(1_500);
+  expect(names(warm.list)).toEqual(names(cold.list));
+  // the left out tool still runs through call_tool, after the server's own initialize
+  expect((await second.ask(3, "tools/call", { name: "call_tool", arguments: { name: "notes_tool_07", arguments: {} } })).answer.result.content[0].text).toBe("ran notes_tool_07");
+  await second.stop();
+}, 30_000);

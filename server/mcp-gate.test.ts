@@ -492,6 +492,49 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect((await callWith("call_tool", { name: "cw_psa_find_thing_3", arguments: {} }, 3)).result.content[0].text).toBe("ran cw_psa_find_thing_3");
   });
 
+  it("#4527 lot D: a kept listing lists every tool but the left out ones, runs a left out one through call_tool and notes what it offered", async () => {
+    const offered = join(scratch, "offered", "crm.json");
+    start({}, { SAGAX_GATE_BUDGET: "0", SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], leftOut: ["cw_psa_find_thing_3", "cw_psa_find_thing_4"] }), SAGAX_GATE_OFFERED: offered }, PROFILE_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
+    expect(listed).toHaveLength(25 - 2 + 3);
+    expect(listed).toEqual(expect.arrayContaining(["api_search", "cw_psa_find_thing_0", "cw_psa_find_thing_13", "search_tools", "describe_tool", "call_tool"]));
+    expect(listed).not.toContain("cw_psa_find_thing_3");
+    expect(listed).not.toContain("cw_psa_find_thing_4");
+    // a listed tool runs by its own name, a left out one through call_tool, as itself
+    expect((await callWith("cw_psa_find_thing_0", {}, 2)).result.content[0].text).toBe("ran cw_psa_find_thing_0");
+    expect((await callWith("call_tool", { name: "cw_psa_find_thing_3", arguments: {} }, 3)).result.content[0].text).toBe("ran cw_psa_find_thing_3");
+    // the names it offered, for the bot's count: names only, every tool of the catalog
+    const noted = JSON.parse(readFileSync(offered, "utf8"));
+    expect(noted.tools).toHaveLength(25);
+    expect(noted.tools).toContain("cw_psa_find_thing_3");
+    expect(JSON.stringify(noted)).not.toMatch(/inputSchema|description/);
+  });
+
+  it("#4527 lot D: a kept listing that leaves out none of this catalog lists it whole, with no directory tools", async () => {
+    start({}, { SAGAX_GATE_BUDGET: "0", SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], leftOut: [] }) }, PROFILE_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
+    expect(listed).toHaveLength(25);
+    expect(listed).not.toContain("search_tools");
+  });
+
+  it("#4527 lot D: a relayed list is noted as offered too, after the tool selection", async () => {
+    const offered = join(scratch, "offered", "shop.json");
+    start({}, { SAGAX_GATE_BUDGET: "0", SAGAX_GATE_OFFERED: offered, SAGAX_GATE_TOOL_SCOPE: JSON.stringify({ deny: ["mcp:shop:cw_psa_find_thing_5"] }) }, PROFILE_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools).toHaveLength(24);
+    const noted = JSON.parse(readFileSync(offered, "utf8")).tools;
+    expect(noted).toHaveLength(24);
+    expect(noted).not.toContain("cw_psa_find_thing_5");
+  });
+
+  it("#4527 lot D: an unreadable left out list stops the gate rather than widening", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], leftOut: "cw_psa_find_thing_3" }) }, PROFILE_UPSTREAM);
+    const [code] = await once(gate!, "exit");
+    expect(code).not.toBe(0);
+  });
+
   it("#1935: an unreadable pinned suffix stops the gate rather than widening", async () => {
     start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], pinnedSuffixes: ["*"] }) }, PROFILE_UPSTREAM);
     const [code] = await once(gate!, "exit");

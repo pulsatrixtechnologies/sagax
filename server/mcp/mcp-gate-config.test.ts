@@ -54,6 +54,20 @@ describe("tool directory configuration", () => {
     expect(searched.args.join(" ")).not.toContain("disposable-test-token");
   });
 
+  it("#4527 lot D: a kept listing keeps the proxy's directory over a big URL catalog, and the offered note rides the gate", () => {
+    const kept = gateServer({ ...input, server: remote, name: "whop", search: { leftOut: ["old_report"] }, directory: true, offered: "/data/offered/whop.json" })!;
+    expect(JSON.parse(kept.env.SAGAX_GATE_SEARCH!)).toEqual({ pinned: [], leftOut: ["old_report"] });
+    expect(kept.env.SAGAX_GATE_OFFERED).toBe("/data/offered/whop.json");
+    expect(kept.env.SAGAX_GATE_DIRECTORY).toBe("1");
+    expect(JSON.parse(kept.env.SAGAX_GATE_UPSTREAM!).env.SAGAX_REMOTE_MCP_DIRECTORY).toBeDefined();
+    // a compact search replaces the proxy's directory, as before
+    const compact = gateServer({ ...input, server: remote, name: "whop", search: { pinned: ["read"] }, directory: true })!;
+    expect(compact.env.SAGAX_GATE_DIRECTORY).toBeUndefined();
+    expect(JSON.parse(compact.env.SAGAX_GATE_UPSTREAM!).env.SAGAX_REMOTE_MCP_DIRECTORY).toBeUndefined();
+    // an offered note alone never mounts a gate
+    expect(gateServer({ ...input, budget: 0, offered: "/data/offered/notes.json" })).toBeNull();
+  });
+
   it("asks the remote proxy for a directory only when the caller does", () => {
     expect(mcpStdioServer(remote)!.env).not.toHaveProperty("SAGAX_REMOTE_MCP_DIRECTORY");
     const scope = { allow: ["mcp:whop:*"], deny: ["mcp:whop:payments_create"] };

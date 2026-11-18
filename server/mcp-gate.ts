@@ -31,7 +31,7 @@ import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../
 import { startGateUpstream } from "./mcp/gate-upstream.ts";
 import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
-import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
+import { listedToolNames, parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, UPSTREAM_QUERY_TOOL_NAME, answerQuery, describeShape, exampleQuery, isNamedHandle, isUpstreamHandle } from "./mcp/mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
@@ -67,7 +67,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
   }
 }
 /** The gate's own settings never reach the upstream server's environment. */
-const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD", "SAGAX_GATE_KEPT"];
+const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD", "SAGAX_GATE_KEPT", "SAGAX_GATE_OFFERED"];
 const gateEnv = gateEnvironment();
 /** Where this gate runs from: Sagax's own relays lie beside it. */
 const GATE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -420,6 +420,29 @@ let searchGeneration = 0;
 /** Once searched, always searched in this process: the engine was handed
  * call_tool, and a tool it found must stay reachable through it. */
 let searchedOnce = false;
+
+// ── #4527 lot D: what this server offered the bot (SAGAX_GATE_OFFERED) ──
+// The names of the tools the engine got from this server (after the tool
+// selection and the agents withhold), written for Sagax to count as offered
+// in the bot's session (server/tools/tool-keep-listing.ts): a tool the bot
+// never calls then counts as unused. Names only, never a schema or a result.
+const OFFERED_FILE = gateEnv.SAGAX_GATE_OFFERED || "";
+let offeredText = "";
+function noteOffered(tools: readonly unknown[]): void {
+  if (!OFFERED_FILE) return;
+  const names = [...new Set(tools.flatMap((tool) => isRecord(tool) && typeof tool.name === "string" && tool.name && tool.name.length <= 200 && !isDirectoryTool(tool.name) && tool.name !== QUERY_TOOL_NAME ? [tool.name] : []))].sort();
+  const text = JSON.stringify({ tools: names.slice(0, 2_000) });
+  if (text === offeredText) return;
+  offeredText = text;
+  try {
+    mkdirSync(dirname(OFFERED_FILE), { recursive: true, mode: 0o700 });
+    const next = `${OFFERED_FILE}.${process.pid}.tmp`;
+    writeFileSync(next, text, { mode: 0o600 });
+    renameSync(next, OFFERED_FILE);
+  } catch (error) {
+    process.stderr.write(`mcp-gate(${NAME}): could not note the offered tools: ${String(error)}\n`);
+  }
+}
 let internalSeq = 0;
 /** The gate's own requests to the upstream (its catalog), by request key. */
 const internal = new Map<string, (message: Json) => void>();
@@ -523,6 +546,13 @@ function answerListKept(message: Json, id: string): boolean {
   if (!kept.list) return false;
   pending.set(id, { kind: "list" });
   relayUpstream({ jsonrpc: "2.0", id: message.id, result: structuredClone(kept.list) });
+  relistKept();
+  return true;
+}
+
+/** The server listed again beside the turn, once per gate: a list that
+ * changed is kept and the engine is told. */
+function relistKept(): void {
   if (!keptRelisting) {
     keptRelisting = true;
     upstreamRequest("tools/list", {}).then((reply) => {
@@ -537,7 +567,21 @@ function answerListKept(message: Json, id: string): boolean {
       relayUpstream({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
     }, () => undefined);
   }
-  return true;
+}
+
+/** #4527 lot D: a searched gate's catalog from what was kept, so a kept
+ * listing starts as fast as a relayed one (the server is listed again
+ * beside the turn); else the server's own, kept for the next start. */
+function searchUpstreamCatalog(): Promise<CatalogTool[]> {
+  if (KEPT_FILE && kept.list && Array.isArray(kept.list.tools)) {
+    const tools = kept.list.tools.filter((tool): tool is CatalogTool => isRecord(tool) && typeof tool.name === "string" && tool.name.trim().length > 0);
+    relistKept();
+    return Promise.resolve(structuredClone(tools));
+  }
+  return readUpstreamCatalog().then((tools) => {
+    if (KEPT_FILE) { kept.list = { tools: structuredClone(tools) }; saveKept(); }
+    return tools;
+  });
 }
 
 async function readUpstreamCatalog(): Promise<CatalogTool[]> {
@@ -574,13 +618,14 @@ function loadSearch(): Promise<SearchCatalog> {
   if (searchCatalog) return Promise.resolve(searchCatalog);
   if (!searchLoading) {
     const started = searchGeneration;
-    const read = readUpstreamCatalog().then((upstream) => {
+    const read = searchUpstreamCatalog().then((upstream) => {
       const allowed = (name: string) => !WITHHOLD.has(name) && (!scope || allowsTool(scope, { kind: "mcp", server: NAME, name }));
       const directory = new ToolDirectory(upstream.filter((tool) => allowed(tool.name)), {
         withheld: upstream.filter((tool) => !allowed(tool.name)).map((tool) => tool.name),
         check: argumentProblems,
       });
       searchedOnce ||= searchedCatalog(directory.tools, SEARCH!);
+      noteOffered(directory.tools);
       const built = { directory, searched: searchedOnce };
       if (searchGeneration === started) searchCatalog = built;
       return built;
@@ -605,7 +650,7 @@ async function searchRoute(line: string, message: Json): Promise<void> {
       if (!id) return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
       if (params?.cursor !== undefined) return rejectRequest(message.id, -32602, "Invalid cursor");
       const { directory, searched } = await loadSearch();
-      let tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
+      let tools: Json[] = searched ? [...directory.pinned(listedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
       if (SCHEMA_PROFILE) tools = fitToolList(tools, SCHEMA_PROFILE, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`)) as Json[];
       return reply(message.id, { tools: BUDGET > 0 ? [...withoutOutputSchema(tools.filter((tool) => tool.name !== QUERY_TOOL_NAME)), QUERY_TOOL] : tools });
     }
@@ -809,7 +854,7 @@ function forward(line: string, message: Json | undefined, id: string | undefined
       const target = callTarget(name, params?.arguments);
       pending.set(id, { kind: "call", tool: target ?? name, trim: target !== undefined });
       process.stderr.write(resolvedServerLog(NAME, target ?? name));
-    } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0 || SCHEMA_PROFILE) && message.method === "tools/list")) {
+    } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0 || SCHEMA_PROFILE || OFFERED_FILE) && message.method === "tools/list")) {
       pending.set(id, { kind: message.method === "tools/list" ? "list" : "other" });
     }
   }
@@ -891,6 +936,8 @@ function relayUpstream(message: Json, line = JSON.stringify(message)): void {
   if (WITHHOLD.size && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
     result.tools = result.tools.filter((tool: unknown) => !isRecord(tool) || typeof tool.name !== "string" || !WITHHOLD.has(tool.name));
   }
+  // #4527 lot D: a whole list, as the engine gets it (a page alone is not)
+  if (OFFERED_FILE && request?.kind === "list" && message.error === undefined && wholeToolList(result) && !DIRECTORY) noteOffered(result.tools);
   if (ALIASES && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
     const tools = result.tools.filter((tool: unknown): tool is Json & { name: string } => isRecord(tool) && typeof tool.name === "string" && tool.name.length > 0);
     const outcome = ALIASES.catalog(tools);

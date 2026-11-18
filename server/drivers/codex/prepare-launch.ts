@@ -5,7 +5,7 @@ import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
-import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
+import { compactGateSearch, connectorKeptGate, gateMaySearch } from "../../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
 import { codexHomeOf, learnedAmbientMcp } from "./ambient-mcp.ts";
@@ -117,7 +117,13 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     // MCP catalog. Keep the account controls deterministic and every held
     // role's vendor tools reachable through search_tools/call_tool. The
     // gate invalidates that directory when identity_switch changes tools.
-    const search = isSagaxPerspicaxBridge(server) ? compactGateSearch([], true) : undefined;
+    // #4527 lot D: every other connector rides a gate that lists every tool
+    // but the ones the bot's session leaves out (the rest one search away),
+    // and notes what the server offered, for the count
+    const bridge = isSagaxPerspicaxBridge(server);
+    const kept = connectorKeptGate(turn.integrations?.connectorsKept, name, { mount: true });
+    // the account bridge keeps its own short list (pins, the rest searched)
+    const search = bridge ? compactGateSearch([], true) : kept.search;
     const withhold = withholdForConnector(name, agentsPreferred);
     // Every URL server is reached through Sagax's remote proxy,
     // on every Codex login, never by Codex's own MCP client: the proxy
@@ -140,11 +146,11 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     const proxy = turn.toolScope === undefined
       ? search || withhold.length
         ? gateServer({ name, server, threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-          configEnvName: `SAGAX_GATE_CONFIG_${hash}`, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), sourceEnv: env })
+          configEnvName: `SAGAX_GATE_CONFIG_${hash}`, ...(kept.search ? { directory } : {}), ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...(kept.offered ? { offered: kept.offered } : {}), sourceEnv: env })
         : mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(directory ? { directory: { name } } : {}), configEnvName: `SAGAX_REMOTE_MCP_CONFIG_${hash}`, sourceEnv: env })
       : gateServer({ name, server, threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), sourceEnv: env });
-    if (proxy && (directory || search)) directoryMounts.add(mountName);
+        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...(kept.offered ? { offered: kept.offered } : {}), sourceEnv: env });
+    if (proxy && (directory || gateMaySearch(search))) directoryMounts.add(mountName);
     if (!proxy) return null;
     // The proxy's own network switches go in its env table, so the
     // shell keeps the person's NO_PROXY and never gets the switch. A

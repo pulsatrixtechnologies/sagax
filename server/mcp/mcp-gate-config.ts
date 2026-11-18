@@ -10,7 +10,7 @@ import { agentsSearchedFromEnv } from "../../shared/searched-tool-call.ts";
 
 import { DATA_DIR } from "../config.ts";
 import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
-import { gateSearchEnv } from "./mcp-gate-search.ts";
+import { gateSearchEnv, isKeptSearch } from "./mcp-gate-search.ts";
 import { REMOTE_MCP_CONFIG_ENV, remoteMcpSpec } from "./mcp-http.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { COMPILE_CACHE_ENV } from "./gate-upstream.ts";
@@ -237,7 +237,11 @@ export function gateServer(input: {
   gateRemote?: boolean;
   /** #1276: the gate searches a big catalog itself (mcp-gate-search.ts) and
    * lists whole only `pinned`. Mounts the gate always, stdio or URL. */
-  search?: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number };
+  search?: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; leftOut?: readonly string[]; maxTools?: number; maxChars?: number };
+  /** #4527 lot D: the file this gate writes the names of the tools it
+   * offered the engine into (tool-keep-listing.ts connectorOfferedFile).
+   * Never mounts the gate by itself. */
+  offered?: string;
   /** #2189: bare tool names the agents server already owns. The gate leaves
    * them out of tools/list and refuses a call, so the model uses agents. */
   withhold?: readonly string[];
@@ -264,7 +268,9 @@ export function gateServer(input: {
   // The directory is the remote proxy's; it sits inside the gate, which
   // knows to look through call_tool at the tool underneath.
   // The gate's own search replaces the remote proxy's directory.
-  const directory = input.directory === true && !search && remoteMcpSpec(server) !== undefined;
+  // #4527 lot D: a kept listing keeps the proxy's directory over a big
+  // catalog, and leaves out tools only from a catalog listed whole
+  const directory = input.directory === true && (!search || isKeptSearch(input.search)) && remoteMcpSpec(server) !== undefined;
   // #4527 lot C: Sagax's agents server with a kept listing serves the tools
   // its session leaves out through call_tool: the gate reads that call as
   // the tool it runs, for the tool selection, as for a directory
@@ -297,6 +303,7 @@ export function gateServer(input: {
     ...(search ? { SAGAX_GATE_SEARCH: search } : {}),
     ...(withhold.length ? { SAGAX_GATE_WITHHOLD: JSON.stringify(withhold) } : {}),
     ...(input.kept ? { SAGAX_GATE_KEPT: gateKeptFile(input.kept) } : {}),
+    ...(input.offered ? { SAGAX_GATE_OFFERED: input.offered } : {}),
   };
   if (input.configEnvName && ((!scoped && !search && !withhold.length) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");

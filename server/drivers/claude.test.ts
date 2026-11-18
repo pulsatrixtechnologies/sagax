@@ -2221,6 +2221,23 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS)).toEqual({ core: "default", pinned: [] });
   });
 
+  it("#4527 lot D: Claude Code's own tool search leaves a connector's tools out; its gate only notes what the server offered", async () => {
+    await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
+    const dump = join(scratch, "kept-connector-dump.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-kept-crm", text: "hi",
+      integrations: {
+        custom: { crm: { command: process.execPath, args: ["/fake/crm.js"], env: {} } },
+        connectorsKept: { crm: { leftOut: [], offered: "/data/tool-keep/b/offered/crm.json" } },
+      },
+    } as Parameters<typeof instance.adapter.sendTurn>[0]);
+    await recorder.until((e) => e.type === "turn.completed");
+    const crm = JSON.parse(readFileSync(dump, "utf8")).mcpConfig.mcpServers.crm;
+    expect(crm.env.SAGAX_GATE_OFFERED).toBe("/data/tool-keep/b/offered/crm.json");
+    expect(crm.env.SAGAX_GATE_SEARCH).toBeUndefined();
+  });
+
   it("#1935: on a compact prompt the Perspicax account bridge lists its core tools whole", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
     const dump = join(scratch, "compact-px-dump.json");

@@ -1,7 +1,7 @@
 // #4527 lot A: one id per tool, whatever name the engine gave the call.
 import { describe, expect, it } from "vitest";
 
-import { mcpCallToolId, stepToolId, toolIdOf, toolIdParts } from "./searched-tool-call.ts";
+import { mcpCallToolId, searchedCallToolServer, searchedServerCall, stepToolId, toolIdOf, toolIdParts } from "./searched-tool-call.ts";
 
 describe("toolIdOf", () => {
   it("reads every engine's spelling of a Sagax tool as one id", () => {
@@ -47,5 +47,27 @@ describe("the id an engine writes on the step", () => {
     expect(stepToolId({ title: "ask_bot" })).toBeNull();
     expect(toolIdParts("crm/get_ticket")).toEqual({ server: "crm", tool: "get_ticket" });
     expect(toolIdParts("crm")).toBeNull();
+  });
+});
+
+// #4527 lot D: a connector whose gate leaves tools out is read like agents.
+describe("a searched server's call_tool, any server", () => {
+  const searched = new Set(["agents", "crm", "crm_v2"]);
+  it("names the server in every engine's spelling", () => {
+    for (const title of ["mcp__crm__call_tool", "crm__call_tool", "crm_call_tool"]) expect(searchedCallToolServer(title, searched)).toBe("crm");
+    expect(searchedCallToolServer("crm_v2_call_tool", searched)).toBe("crm_v2");
+    expect(searchedCallToolServer("agents_call_tool", searched)).toBe("agents");
+    expect(searchedCallToolServer("mail__call_tool", searched)).toBeNull();
+    expect(searchedCallToolServer("crm__list_deals", searched)).toBeNull();
+    expect(searchedCallToolServer("crm__call_tool", new Set())).toBeNull();
+  });
+
+  it("reads it as the tool it runs, with that tool's arguments; one naming nothing runs nothing", () => {
+    expect(searchedServerCall("crm__call_tool", { name: "old_report", arguments: { id: 1 } }, searched))
+      .toEqual({ mcpTool: "crm__old_report", id: "crm/old_report", input: { id: 1 } });
+    expect(searchedServerCall("agents_call_tool", { name: "list_rooms", arguments: {} }, searched)).toMatchObject({ mcpTool: "agents__list_rooms" });
+    expect(searchedServerCall("crm__call_tool", { arguments: {} }, searched)).toBeNull();
+    expect(searchedServerCall("crm__call_tool", { name: "search_tools" }, searched)).toBeNull();
+    expect(searchedServerCall("mail__call_tool", { name: "send" }, searched)).toBeNull();
   });
 });

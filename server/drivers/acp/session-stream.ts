@@ -2,7 +2,8 @@
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
 import { isMailboxTool } from "../../../shared/mailbox-user.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
-import { agentsSearchedCall, agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
+import { searchedServerCall } from "../../../shared/searched-tool-call.ts";
+import { keptSearchedServers } from "../../mcp/mcp-gate-search.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
 import { acpLateToolInput, acpToolEndEvents } from "./tool-items.ts";
@@ -152,8 +153,9 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               }
               // Grok's use_tool reads as the MCP tool it runs, not "Use Tool"
               const useTool = readUseToolCall(u.rawInput, { title: u.title, meta: u._meta });
-              // #4527 lot C: the agents server's call_tool reads as the tool it runs
-              const searched = !useTool && agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? agentsSearchedCall(u.title, u.rawInput) : null;
+              // #4527 lot C: the agents server's call_tool reads as the tool it
+              // runs; lot D: a connector's whose gate leaves tools out too
+              const searched = !useTool ? searchedServerCall(u.title, u.rawInput, keptSearchedServers(current.turn?.integrations)) : null;
               const toolTitle = useTool?.id ?? searched?.mcpTool ?? (typeof u.title === "string" ? u.title : undefined);
               if (typeof u.toolCallId === "string" && toolTitle && isCwTool(toolTitle)) {
                 (current.cwToolNames ??= new Map()).set(u.toolCallId, toolTitle);

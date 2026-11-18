@@ -2,7 +2,8 @@
 import { MAX_QUESTION_TEXT, parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../../shared/ask-question.ts";
 import type { RequestOutcome } from "../../contracts.ts";
 import { newId } from "../../contracts.ts";
-import { agentsSearchedCall, agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
+import { searchedCallToolServer, searchedServerCall } from "../../../shared/searched-tool-call.ts";
+import { keptSearchedServers } from "../../mcp/mcp-gate-search.ts";
 import { acpPermissionCommand } from "../permission-command.ts";
 import { acpHostToolRequest } from "../host-tools.ts";
 import { acpReadPaths } from "../../own-file-reads.ts";
@@ -116,14 +117,19 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
           // tool it runs, so every rule and grant reads that tool: a Refuse
           // or Ask first rule on it applies, and "Always allow this session"
           // covers that one tool, as it did when the tool was listed
-          const searchedAgents = isQuestion || !agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? null : agentsSearchedCall(mcpTitle, toolCall.rawInput);
+          // #4527 lot D: a connector whose gate leaves tools out alike. A
+          // call_tool whose target cannot be read runs nothing: allowed once
+          // at most, never for the session
+          const searchedSet = isQuestion ? new Set<string>() : keptSearchedServers(current.turn?.integrations);
+          const searchedCallTool = isQuestion ? null : searchedCallToolServer(mcpTitle, searchedSet);
+          const searchedAgents = searchedCallTool ? searchedServerCall(mcpTitle, toolCall.rawInput, searchedSet) : null;
           // an earlier "Always allow this session" on this exact operation.
           // On the person's own computer the key carries that scope, so a
           // grant made in the sandbox never answers a call on the computer
           // (or the reverse); it stays this thread's only. A call_tool's
           // operation is the tool it runs, whatever its arguments, as the
           // engine's own allow_always on that tool listed would have been.
-          const exactOperation = isQuestion ? null : searchedAgents ? `searched-tool:${searchedAgents.mcpTool}` : sessionOperationKey(toolCall);
+          const exactOperation = isQuestion ? null : searchedAgents ? `searched-tool:${searchedAgents.mcpTool}` : searchedCallTool ? null : sessionOperationKey(toolCall);
           const operationKey = exactOperation && current.controlsHost ? `local-computer:${exactOperation}` : exactOperation;
           if (operationKey && sessionAllows.get(threadId)?.has(operationKey)) {
             const allow = optionFor("allow");
@@ -198,7 +204,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
                   // driver keeps the exact operation instead. #4527: the
                   // same for a call_tool, whose allow_always would cover
                   // every left out tool: the driver keeps its target
-                  ? (current.controlsHost || searchedAgents ? null : optionAlways) ?? optionFor("allow")
+                  ? (current.controlsHost || searchedCallTool ? null : optionAlways) ?? optionFor("allow")
                   // an outward call is allowed once, never Grok's allow_always
                   : connector.outward && want === "allow"
                     ? options.find((o) => o.kind === "allow_once" && typeof o.optionId === "string")?.optionId ?? null
@@ -206,7 +212,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             // the agent keeps its own allow_always; when it offered none (or on
             // the person's computer), the driver keeps the exact operation
             // for the session instead
-            if (forSession && (current.controlsHost || searchedAgents || !optionAlways) && optionId && operationKey) {
+            if (forSession && (current.controlsHost || searchedCallTool || !optionAlways) && optionId && operationKey) {
               const remembered = sessionAllows.get(threadId) ?? new Set<string>();
               remembered.add(operationKey);
               sessionAllows.set(threadId, remembered);

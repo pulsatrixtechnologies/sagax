@@ -24,6 +24,7 @@ import {
   type PreviewImage,
 } from "./AttachmentPreview";
 import { MemeImage } from "./MemeImage";
+import { foldMoreLabel } from "./ShowMoreFold";
 
 export interface GalleryFile extends TranscriptFileAttachment {
   /** The file came from a rendered Markdown link rather than a user upload. */
@@ -554,7 +555,7 @@ function MoreTile({ count, onClick, className }: { count: number; onClick: () =>
       type="button"
       onClick={onClick}
       aria-expanded={false}
-      aria-label={t("attach.showMore", { count })}
+      aria-label={foldMoreLabel(count)}
       className={cn("flex aspect-[4/3] min-w-0 items-center justify-center rounded-2xl bg-inset px-2 text-[13px] font-semibold text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", className)}
     >
       {t("attach.moreCount", { count })}
@@ -737,7 +738,7 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
       {hidden > 0 && !moreTile && (
         <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="flex min-h-8 items-center gap-1 rounded-lg px-1 py-1 text-[11px] text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {expanded ? t("attach.showLess") : t("attach.showMore", { count: hidden })}
+          {expanded ? t("attach.showLess") : foldMoreLabel(hidden)}
         </button>
       )}
       {dialog}

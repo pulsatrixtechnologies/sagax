@@ -22,6 +22,7 @@ import { CARD_GRID, ConnectedMark, DiscoverCard, SectionHead, filterLabel, secti
 import { PluginIcon } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
+import { foldMoreLabel } from "../ShowMoreFold";
 
 const PAGE = 60;
 /** How many curated picks the featured set holds (a few, not all). */
@@ -214,7 +215,7 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
             {single && section.items.length > shown.length && (
               <div className="mt-3 flex justify-center">
                 <button type="button" onClick={() => setLimit((current) => current + PAGE)} className={PLUGINS.fillPill}>
-                  {t("connectApps.showMore", { count: section.items.length - shown.length })}
+                  {foldMoreLabel(section.items.length - shown.length)}
                 </button>
               </div>
             )}

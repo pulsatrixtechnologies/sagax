@@ -31,6 +31,7 @@ import { cachedDateFormat, niceTime } from "@/lib/schedule-label";
 import { utf8Bytes } from "@/lib/soul";
 import type { LocaleKey } from "@/locales";
 import { botVersions, versionComparison, versionRestorePlan, type BotVersion } from "../../../shared/bot-versions";
+import { foldMoreLabel } from "../ShowMoreFold";
 
 const ACTOR: Record<string, LocaleKey> = {
   user: "botPanel.history.actor.user",
@@ -450,7 +451,7 @@ export function HistorySection({
               onClick={() => setPages(Math.ceil(limit / PAGE) + 1)}
               className={PILL}
             >
-              {t("botPanel.history.showMore", { count: hidden })}
+              {foldMoreLabel(hidden)}
             </button>
           </div>
         )}

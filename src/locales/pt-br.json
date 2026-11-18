@@ -914,7 +914,6 @@
   "connectApps.section.other": "Outros",
   "connectApps.section.recommended": "Recomendados para você",
   "connectApps.section.results": "Resultados",
-  "connectApps.showMore": "Mostrar mais {count}",
   "connectApps.skill.createdLocally": "Criada localmente",
   "connectApps.skill.delete": "Excluir habilidade",
   "connectApps.skill.deleteConfirm": "Excluir a habilidade {name}? Os bots aos quais ela está atribuída deixam de usá-la.",

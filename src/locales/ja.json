@@ -3158,7 +3158,6 @@
   "attach.gallery": "添付ファイル",
   "attach.gallerySingle": "添付ファイル 1 件",
   "attach.galleryCount": "添付ファイル {count} 件",
-  "attach.showMore": "さらに {count} 件表示",
   "attach.moreCount": "ほか {count} 件",
   "attach.showLess": "表示を減らす",
   "attach.video": "動画",

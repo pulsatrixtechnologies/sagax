@@ -17,6 +17,7 @@ import type { LocaleKey } from "@/locales";
 import { PLUGINS } from "./plugins-style";
 import { CatalogMascot, itemLook, nameColor } from "../bot-catalog/BotCatalogView";
 import { PluginIcon } from "./PluginParts";
+import { foldMoreLabel } from "../ShowMoreFold";
 
 const GROUP_KEY: Record<SearchGroupId, LocaleKey> = {
   plugins: "connectApps.search.group.plugins",
@@ -141,7 +142,7 @@ export function ConnectAppsSearchResults({ query, groups, opened, onOpenGroup, a
               <h3 id={`connect-apps-group-${group.id}`} className={PLUGINS.sectionTitle}>{searchGroupTitle(group.id)}</h3>
               {group.results.length > shown.length && (
                 <button type="button" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => onOpenGroup(group.id)} className={PLUGINS.sectionLink} data-plugins-search-more={group.id}>
-                  {t("connectApps.showMore", { count: group.results.length - shown.length })}
+                  {foldMoreLabel(group.results.length - shown.length)}
                 </button>
               )}
             </div>

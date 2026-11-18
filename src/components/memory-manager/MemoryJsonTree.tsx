@@ -14,6 +14,7 @@ import {
   jsonKind,
   parseJsonText,
 } from "@/lib/json-tree";
+import { foldMoreLabel } from "../ShowMoreFold";
 
 const SCALAR_TONE = {
   string: "text-success",
@@ -80,7 +81,7 @@ function Node({ label, value, path, open, toggle, depth }: {
           ))}
           {children.length > shown && (
             <button type="button" className="ps-5 text-xs text-accent hover:underline" onClick={() => setShown(shown + JSON_PAGE)}>
-              {t("memoryManager.json.showMore", { count: children.length - shown })}
+              {foldMoreLabel(children.length - shown)}
             </button>
           )}
         </div>

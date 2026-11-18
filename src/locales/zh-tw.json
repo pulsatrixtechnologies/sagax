@@ -1558,7 +1558,6 @@
   "attach.gallery": "附件",
   "attach.gallerySingle": "1 個附件",
   "attach.galleryCount": "{count} 個附件",
-  "attach.showMore": "再顯示 {count} 個",
   "attach.showLess": "顯示較少",
   "attach.video": "影片",
   "attach.image": "圖片",

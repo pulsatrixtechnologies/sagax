@@ -1090,7 +1090,6 @@
   "attach.gallery": "附件",
   "attach.gallerySingle": "1 个附件",
   "attach.galleryCount": "{count} 个附件",
-  "attach.showMore": "再显示 {count} 个",
   "attach.showLess": "显示较少",
   "attach.video": "视频",
   "attach.image": "图片",

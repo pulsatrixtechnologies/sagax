@@ -30,7 +30,7 @@ export const DEVICE_CHIP = "inline-flex h-5 min-w-0 shrink items-center gap-1 ov
 
 const PHONE = "grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1";
 /** The columns, shared by the head and every row. */
-export const COMPUTER_COLUMNS = `${PHONE} @[44rem]/remote:grid-cols-[minmax(0,1.4fr)_minmax(0,0.55fr)_minmax(0,1.25fr)_minmax(0,1.2fr)_10.5rem_28px] @[44rem]/remote:gap-x-4`;
+export const COMPUTER_COLUMNS = `${PHONE} @[44rem]/remote:grid-cols-[minmax(0,1.8fr)_minmax(0,0.55fr)_minmax(0,1.1fr)_minmax(0,1fr)_13.5rem_28px] @[44rem]/remote:gap-x-4`;
 const HEAD_CELL = "text-[12px] leading-4 text-ink-secondary";
 const WIDE = "hidden @[44rem]/remote:block";
 
@@ -109,9 +109,9 @@ export function ComputerTableRow({ kind, icon: Icon, title, sub, type, presence,
         <div role="cell" data-computer-folded="" title={foldedTitle ?? folded} className="min-w-0 truncate pl-[2.625rem] text-[12px] leading-4 text-ink-secondary [grid-area:2/1] @[44rem]/remote:hidden" {...data(kind, "line")}>{folded}</div>
         <div role="cell" data-computer-type="" className={cn(WIDE, "min-w-0 truncate text-[12px] leading-4 text-ink-secondary")}>{type}</div>
         <div role="cell" data-computer-status="" className={cn(WIDE, "min-w-0 text-[12px] leading-4 text-ink-secondary")}>
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn("size-1.5 shrink-0 rounded-full", online ? "bg-success" : "bg-ink-secondary/50")} aria-hidden="true" />
-            <span className={cn("truncate", online && "text-success")} title={presence}>{presence}</span>
+          <span className="flex min-w-0 items-start gap-1.5">
+            <span className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", online ? "bg-success" : "bg-ink-secondary/50")} aria-hidden="true" />
+            <span className={cn("min-w-0", online && "text-success")} title={presence}>{presence}</span>
           </span>
         </div>
         <div role="cell" className={cn(WIDE, "min-w-0")}>

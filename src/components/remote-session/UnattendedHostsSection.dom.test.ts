@@ -97,14 +97,14 @@ describe("enrolled hosts as device rows", () => {
   it("puts the unattended computers apart from the other devices (#3134)", async () => {
     await mount([offline, linux], [mac, iphone, ipad]);
     const hostsSection = el.querySelector("[data-unattended-hosts]")!;
-    expect(hostsSection.querySelector("h2")?.textContent).toBe("Unattended computers2");
-    const hostRows = [...hostsSection.querySelector("[data-unattended-hosts-list]")!.children];
+    expect(hostsSection.querySelector('[data-computers-group="unattended"]')?.textContent).toContain("Unattended");
+    expect(hostsSection.querySelector('[data-computers-group="unattended"]')?.textContent).toContain("2 computers");
+    const hostRows = [...hostsSection.querySelectorAll("[data-unattended-host]")];
     expect(hostRows.map((row) => row.textContent?.includes("srv-linux") ? "srv-linux" : row.textContent?.includes("old-pc") ? "old-pc" : "?")).toEqual(["srv-linux", "old-pc"]);
     expect(hostRows.every((row) => row.hasAttribute("data-unattended-host"))).toBe(true);
-    expect(hostsSection.querySelector("[data-my-device]")).toBeNull();
-    const devicesSection = el.querySelector("[data-my-devices-section]")!;
-    expect(devicesSection.querySelector("h2")?.textContent).toBe("My devices3");
-    const deviceRows = [...devicesSection.querySelector("[data-my-devices]")!.children];
+    expect(el.querySelector('[data-computers-group="devices"]')?.textContent).toContain("3 devices");
+    const devicesSection = el.querySelector("[data-my-devices]")!;
+    const deviceRows = [...devicesSection.querySelectorAll("[data-my-device]")];
     expect(deviceRows.map((row) => row.getAttribute("data-online"))).toEqual(["yes", "yes", "no"]);
     expect(devicesSection.querySelector("[data-unattended-host]")).toBeNull();
     expect(el.textContent).not.toContain(LINUX);
@@ -112,19 +112,18 @@ describe("enrolled hosts as device rows", () => {
 
   it("hides My devices when there is none, keeps the hosts' empty state apart", async () => {
     await mount([linux]);
-    expect(el.querySelector("[data-my-devices-section]")).toBeNull();
+    expect(el.querySelector("[data-my-devices]")).toBeNull();
     await mount([], [iphone]);
-    expect(el.querySelector("[data-unattended-hosts-empty]")).not.toBeNull();
-    expect(el.querySelector("[data-my-devices-section] [data-my-device]")).not.toBeNull();
+    expect(el.querySelector("[data-computers-group=\"unattended\"]")).toBeNull();
+    expect(el.querySelector("[data-my-devices] [data-my-device]")).not.toBeNull();
   });
 
-  it("keeps the facts behind Details and the actions behind ⋯", async () => {
+  it("shows the facts in the row, never folded, and the actions behind ...", async () => {
     await mount([linux]);
-    expect(el.querySelector("[data-unattended-host-facts]")).toBeNull();
-    await click(el.querySelector("[data-unattended-host-details]"));
-    expect(el.querySelector("[data-unattended-host-facts]")?.textContent).toContain("Acme");
-    // #3134: the chips of the line, in full under Details.
-    expect(el.querySelector("[data-unattended-host-facts]")?.textContent).toContain("All bots");
+    expect(el.querySelector("[data-unattended-host-details]")).toBeNull();
+    expect(el.querySelector("[data-unattended-host-sub]")?.textContent).toContain("Acme");
+    expect(el.querySelector("[data-unattended-host-sub]")?.textContent).toContain("Full control");
+    expect(el.querySelector("[data-unattended-host-meta]")?.textContent).toContain("All bots");
     await click(el.querySelector("[data-unattended-host-more]"));
     expect(el.querySelector("[data-unattended-host-open]")).not.toBeNull();
     expect(el.querySelector("[data-unattended-host-revoke]")).not.toBeNull();
@@ -158,9 +157,9 @@ describe("bot scope and sharing on a host row (#2957)", () => {
     await mount([linux, scoped, shared].map((row, index) => ({ ...row, hostId: index === 0 ? `h_${"11".repeat(16)}` : row.hostId })));
     const labels = [...el.querySelectorAll("[data-unattended-host-bots]")].map((span) => span.textContent);
     expect(labels).toEqual(["All bots", "Nova"]);
-    // #3134: on the card's own line, not on a row of their own below it.
-    expect(el.querySelectorAll("[data-unattended-host-line] [data-unattended-host-bots]")).toHaveLength(2);
-    expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-line] [data-unattended-host-shared-by]")).not.toBeNull();
+    // in the "who can use it" cell of the row
+    expect(el.querySelectorAll("[data-unattended-host-meta] [data-unattended-host-bots]")).toHaveLength(2);
+    expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-meta] [data-unattended-host-shared-by]")).not.toBeNull();
     expect(el.querySelector("[data-unattended-host-shares]")?.textContent).toContain("1");
     expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-shared-by]")?.textContent).toContain("Marie Tremblay");
     expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-bots]")).toBeNull();

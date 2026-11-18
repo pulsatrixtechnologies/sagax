@@ -131,7 +131,7 @@ describe("the rows' and cards' three dots menus", () => {
     "src/components/LimitResetContinue.tsx",
     "src/components/RolePicker.tsx",
     "src/components/ApprovalModeSelector.tsx",
-    "src/components/remote-session/DeviceCardRow.tsx",
+    "src/components/remote-session/ComputerTableRow.tsx",
   ];
 
   it.each(ROW_MENUS)("%s takes the shared menu look", (file) => {

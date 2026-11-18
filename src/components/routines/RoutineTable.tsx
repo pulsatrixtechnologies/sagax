@@ -195,10 +195,12 @@ export function RoutineTableHead({ columns = "both" }: { columns?: ColumnsMode }
 /** A group's header band, a table row of its own: one header cell that spans every column, holding a filled band
  * (a bot's mascot or a folder's icon, the name, the count, how many are running, one problem figure when there is one)
  * that folds or opens its block; its "..." is the group's menu. */
-export function GroupBand({ lead, name, count, running, failing, collapsed, onToggle, menuLabel, onMenu, columnCount = 6, children, ...rest }: {
+export function GroupBand({ lead, name, count, countLabel, running, failing, collapsed, onToggle, menuLabel, onMenu, columnCount = 6, children, ...rest }: {
   lead: ReactNode;
   name: ReactNode;
   count: number;
+  /** The count in words when the group is not routines ("2 computers"). */
+  countLabel?: string;
   /** Routines of the group with a run in progress: shown only above zero. */
   running?: number;
   /** Routines with a problem in the group: one compact figure, only when above zero. */
@@ -218,7 +220,7 @@ export function GroupBand({ lead, name, count, running, failing, collapsed, onTo
         <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", !collapsed && "rotate-90")} />
         <span aria-hidden="true" className="flex shrink-0 items-center text-ink-secondary">{lead}</span>
         <span className="min-w-0 break-words text-[13px] font-medium leading-[18px] text-ink">{name}</span>
-        <span data-group-count={count} className="shrink-0 text-[12px] leading-4 tabular-nums text-ink-secondary">{count === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count })}</span>
+        <span data-group-count={count} className="shrink-0 text-[12px] leading-4 tabular-nums text-ink-secondary">{countLabel ?? (count === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count }))}</span>
         {running ? <span data-group-running={running} title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className="flex shrink-0 items-center gap-1 text-[12px] leading-4 tabular-nums text-accent"><Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />{running}</span> : null}
         {failing ? <span data-group-failing={failing} title={t("routines.group.failing", { count: failing })} aria-label={t("routines.group.failing", { count: failing })} className="shrink-0 rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{failing}</span> : null}
       </button>

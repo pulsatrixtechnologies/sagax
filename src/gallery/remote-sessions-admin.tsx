@@ -26,7 +26,8 @@ await loadLocale(params.get("lang") ?? "fr");
 const width = Number(params.get("width") ?? 1100);
 const height = Number(params.get("height") ?? 640);
 const DAY = "2026-10-22T";
-const rows: RemoteSessionAdminRow[] = [
+const wide = params.get("fixture") === "wide";
+const rows: RemoteSessionAdminRow[] = wide ? wideSessions() : [
   {
     id: "a1b2c3d4e5f6", code: "UD6HFH", host: "POSTE-RECEPTION", user: "marie", os: "windows", osKnown: true,
     startedAt: `${DAY}13:02:00Z`, endAt: `${DAY}18:00:00Z`, status: "connected", elevated: true,
@@ -51,6 +52,54 @@ const rows: RemoteSessionAdminRow[] = [
   },
 ];
 
+// ?fixture=wide (the Remote sessions page redesign): 12 sessions (2 live) over
+// 3 bots, 2 unattended computers, 6 devices (the same Mac under two names, a
+// phone not opened for a month). Invented names only.
+function wideSessions(): RemoteSessionAdminRow[] {
+  const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const row = (n: number, host: string, user: string, os: RemoteSessionAdminRow["os"], bot: [string, string], ago: number, over: Partial<RemoteSessionAdminRow> = {}): RemoteSessionAdminRow => ({
+    id: `s${n}${"0".repeat(10)}`, code: `C${n}XQ7${n}`, host, user, os, osKnown: true, startedAt: at(ago), endAt: at(ago - 480), status: "ended", elevated: false,
+    botId: bot[0], botLabel: bot[1], openedBy: "Ada Lovelace", reachable: false, unattended: false, ...over,
+  });
+  const atlas: [string, string] = ["bot-atlas", "Atlas"];
+  const nova: [string, string] = ["bot-nova", "Nova"];
+  const pixel: [string, string] = ["bot-pixel", "Pixel"];
+  return [
+    row(1, "build-box-01", "root", "linux", atlas, 42, { status: "connected", reachable: true, unattended: true, unattendedSince: "2026-09-30T09:00:00Z", unattendedExpiresAt: "2027-02-28T09:00:00Z", bannerVisible: true, signed: true, unattendedMine: true }),
+    row(2, "lab-win-02", "svc-deploy", "windows", nova, 12, { status: "connected", reachable: true, elevated: true, unattended: true, unattendedSince: "2026-10-12T14:00:00Z", unattendedExpiresAt: "2027-01-10T14:00:00Z", bannerVisible: false, signed: false, unattendedMine: true }),
+    row(3, "build-box-01", "root", "linux", atlas, 60 * 5),
+    row(4, "Studio-Mac.local", "ada", "macos", pixel, 60 * 9, { elevated: true }),
+    row(5, "lab-win-02", "svc-deploy", "windows", nova, 60 * 26),
+    row(6, "Laptop-Windows", "grace", "windows", atlas, 60 * 30, { status: "failed", osKnown: false }),
+    row(7, "build-box-01", "root", "linux", pixel, 60 * 50),
+    row(8, "Studio-Mac.local", "ada", "macos", atlas, 60 * 72),
+    row(9, "lab-win-02", "svc-deploy", "windows", atlas, 60 * 24 * 4, { elevated: true }),
+    row(10, "build-box-01", "ops", "linux", nova, 60 * 24 * 6),
+    row(11, "Laptop-Windows", "grace", "windows", pixel, 60 * 24 * 12),
+    row(12, "Studio-Mac.local", "ada", "macos", nova, 60 * 24 * 20),
+  ];
+}
+function wideHosts(): UnattendedHostRow[] {
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  return [
+    { hostId: `h_${"ab".repeat(16)}`, hostname: "build-box-01", org: "Acme Labs", scope: "full-control", installedBy: null, enrolledAt: "2026-09-30T09:00:00Z", expiresAt: "2027-02-28T09:00:00Z", lastSeenAt: ago(20_000), revokedAt: null, state: "enrolled", os: "linux",
+      bots: null, shares: [] },
+    { hostId: `h_${"cd".repeat(16)}`, hostname: "lab-win-02", org: "Acme Labs", scope: "view-only", installedBy: null, enrolledAt: "2026-10-12T14:00:00Z", expiresAt: "2027-01-10T14:00:00Z", lastSeenAt: ago(3 * 86_400_000), revokedAt: null, state: "enrolled", os: "windows",
+      bots: ["bot-atlas", "bot-nova"], shares: [], access: "ask" },
+  ];
+}
+function wideDevices() {
+  const ago = (ms: number) => Date.now() - ms;
+  return [
+    { key: "k-studio", name: "Studio-Mac.local", kind: "computer", platform: "darwin", online: true, lastSeenAt: Date.now(), access: "always", current: true, desktopId: "d-studio" },
+    { key: "k-studio-old", name: "Studio-Mac.localdomain", kind: "computer", platform: "darwin", online: false, lastSeenAt: ago(20 * 86_400_000), access: "always", current: false, desktopId: "d-studio-old" },
+    { key: "k-laptop", name: "Laptop-Windows", kind: "computer", platform: "win32", online: false, lastSeenAt: ago(2 * 86_400_000), access: "ask", current: false, desktopId: "d-laptop" },
+    { key: "k-phone", name: "Ada phone", kind: "phone", platform: "ios", online: true, lastSeenAt: ago(60_000), access: null, current: false, desktopId: null },
+    { key: "k-phone-old", name: "Spare phone", kind: "phone", platform: "ios", online: false, lastSeenAt: ago(31 * 86_400_000), access: null, current: false, desktopId: null },
+    { key: "k-tablet", name: "Studio tablet", kind: "phone", platform: "ipados", online: false, lastSeenAt: ago(26 * 3_600_000), access: null, current: false, desktopId: null },
+  ];
+}
+
 const log: RemoteSessionLogEntry[] = [
   { at: `${DAY}13:02:04Z`, kind: "start" },
   { at: `${DAY}13:02:20Z`, kind: "exec", command: "Get-Service -Name Spooler", readOnly: true },
@@ -67,7 +116,7 @@ const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 // #2957: the first host is limited to one bot and shared with a group; the
 // third one reaches this person through a colleague's share (&shared=0 hides it).
-const hosts: UnattendedHostRow[] = params.get("hosts") === "0" ? [] : [
+const hosts: UnattendedHostRow[] = params.get("hosts") === "0" ? [] : wide ? wideHosts() : [
   { hostId: `h_${"ab".repeat(16)}`, hostname: "srv-linux", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-09-30T09:00:00Z", expiresAt: "2026-12-29T09:00:00Z", lastSeenAt: iso(now - 20_000), revokedAt: null, state: "enrolled",
     bots: ["bot-atlas"], shares: [{ kind: "team", id: "team-support", name: "Support" }] },
   { hostId: `h_${"cd".repeat(16)}`, hostname: "POSTE-COMPTA", org: "Clinique Nord", scope: "view-only", installedBy: null, enrolledAt: "2026-10-10T14:00:00Z", expiresAt: "2027-01-08T14:00:00Z", lastSeenAt: iso(now - 3 * 86_400_000), revokedAt: null, state: "enrolled", bots: null, shares: [] },
@@ -94,7 +143,7 @@ const directory = {
 };
 
 // My devices: this Mac first, an iPhone online, an iPad offline.
-const devices = params.get("devices") === "0" ? [] : [
+const devices = params.get("devices") === "0" ? [] : wide ? wideDevices() : [
   { key: "k-mbp", name: "MacBook Pro", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, access: "always", current: true, desktopId: "d-mbp" },
   { key: "k-iphone", name: "iPhone", kind: "phone", platform: "ios", online: true, lastSeenAt: now - 60_000, access: null, current: false, desktopId: null },
   { key: "k-ipad", name: "iPad", kind: "phone", platform: "ios", online: false, lastSeenAt: now - 26 * 3_600_000, access: null, current: false, desktopId: null },

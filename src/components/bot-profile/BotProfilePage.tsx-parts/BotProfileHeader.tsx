@@ -1,6 +1,5 @@
 // The page's header (#2313, split from BotProfilePage for #1383): the
-// mascot on the left of the column over the banner's lower edge in a 3px ring
-// of the page colour (the reference, the owner 2026-11-17), the bot's name and
+// mascot on the left of the column outlined over the banner's lower edge, the bot's name and
 // label on ONE line "Name · Label", then who sees it and who owns it, all
 // aligned left and tight. No description line: the bot changes its own
 // description when asked (update_agent_settings). The mascot editor
@@ -96,7 +95,7 @@ export function useBotProfileHero({ bot, derived }: {
     target: heroTarget,
     claim: claimHero,
     heading: heroTitle,
-    ringed: true,
+    outlined: true,
     state: derived.activeState,
     motion: derived.mascotMotion,
   };
@@ -120,7 +119,7 @@ export function useBotProfileHero({ bot, derived }: {
       onPlay={() => {}}
       onPlayNext={() => {}}
       heading={heroTitle}
-      ringed
+      outlined
       picture={heroPicture}
       liveState={derived.activeState}
       liveMotion={derived.mascotMotion}
@@ -156,7 +155,7 @@ export function useBotProfileHero({ bot, derived }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        // the ringed mascot's middle (70px plate) on the banner's lower edge (#4420)
+        // the outlined mascot's middle (70px plate) on the banner's lower edge (#4420)
         className={cn("relative -mt-[35px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
@@ -180,7 +179,7 @@ export function useBotProfileHero({ bot, derived }: {
   return { heroSlot, hero };
 }
 
-/** The header: the ringed mascot with the bot's name and label on one line,
+/** The header: the outlined mascot with the bot's name and label on one line,
  * then who sees it, all aligned left on the column. */
 export function BotProfileHeader({ bot, hero }: {
   bot: Bot;

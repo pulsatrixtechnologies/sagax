@@ -1,6 +1,5 @@
 // Bot profile page, the desktop's BotProfilePage (#2127, #2313, #3030) on
-// iPhone and iPad: the mascot's colour wash, the mascot at 64 in a 3 pt ring
-// of the page colour on its lower edge (a tap plays a move), the name and
+// iPhone and iPad: the mascot's colour wash, the outlined 64 pt mascot on its lower edge (a tap plays a move), the name and
 // title on one line "Name · Title" (#4602), who sees it, the owner and the
 // Primary badge, name and title edited in place; no description line. A top bar that condenses on scroll
 // (mascot 26, name 14), Private / Shared as a label, Share and the "…"
@@ -158,9 +157,9 @@ struct BotProfilePage: View {
         actions.openSection(context.sections.contains(.sharing) ? .sharing : .visibility)
     }
 
-    /// The reference's 64 mascot inside a 3 pt ring of the page colour (a 70 plate).
+    /// Keep the artwork centred on the banner edge.
     private let mascotSize: CGFloat = 64
-    private let ringWidth: CGFloat = 3
+    private let heroFrameSize: CGFloat = 70
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -279,11 +278,18 @@ struct BotProfilePage: View {
         .accessibilityHidden(true)
     }
 
-    /// The desktop's header (#4602): the mascot at 64 in a thin 3 pt soft white ring
-    /// (no filled disc behind it), its middle on the banner's lower edge, then "Name · Label"
-    /// on one line and the facts, all aligned left.
+    /// Some shape skins already draw their own silhouette.
+    private var heroContour: Color {
+        let look = current.resolvedMascotLook
+        let picture = (current.avatarCrop ?? .mascot) != .mascot && current.avatarUrl != nil
+        if !picture && look.character == .shape && [.night, .neon, .circuit, .outline].contains(look.shapeSkin) {
+            return .clear
+        }
+        return ink.opacity(0.8)
+    }
+
     private var hero: some View {
-        let plate = mascotSize + ringWidth * 2
+        let edge = heroContour
         return VStack(alignment: .leading, spacing: 8) {
             BotMascotView(
                 bot: current,
@@ -292,15 +298,20 @@ struct BotProfilePage: View {
                 animated: true,
                 owlHandle: owlHandle
             )
-            .frame(width: plate, height: plate)
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.8), lineWidth: ringWidth))
+            .environment(\.mascotShadow, nil)
+            .compositingGroup()
+            .shadow(color: edge, radius: 0, x: 1, y: 0)
+            .shadow(color: edge, radius: 0, x: -1, y: 0)
+            .shadow(color: edge, radius: 0, x: 0, y: 1)
+            .shadow(color: edge, radius: 0, x: 0, y: -1)
+            .frame(width: heroFrameSize, height: heroFrameSize)
             .contentShape(Circle())
             .onTapGesture { playMove() }
             .accessibilityElement()
             .accessibilityLabel(Text("Play a move"))
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("bot-profile-mascot")
-            .padding(.top, -(plate / 2))
+            .padding(.top, -(heroFrameSize / 2))
             VStack(alignment: .leading, spacing: 4) {
                 BotProfileHeroIdentity(bot: current)
                     .background(

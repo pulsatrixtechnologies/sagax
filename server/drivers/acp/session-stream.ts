@@ -2,7 +2,7 @@
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
 import { isMailboxTool } from "../../../shared/mailbox-user.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
-import { searchedServerCall } from "../../../shared/searched-tool-call.ts";
+import { searchedServerCall, toolIdOf } from "../../../shared/searched-tool-call.ts";
 import { keptSearchedServers } from "../../mcp/mcp-gate-search.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
@@ -177,6 +177,8 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
                 itemId,
                 title: String(useTool?.id ?? searched?.mcpTool ?? u.rawInput?.command ?? u.title ?? "tool").slice(0, 80),
                 ...(searched ? { tool: searched.id } : {}),
+                // #4720: the whole id, which the 80-character title may cut (a long gateway name)
+                ...(!searched && useTool && useTool.id.length > 80 && toolIdOf(useTool.id) ? { tool: toolIdOf(useTool.id)! } : {}),
                 summary: commandSummary(useTool ? useTool.args : searched ? searched.input : u.rawInput),
                 input: startInput,
                 ...filesField(acpWrittenFiles(u)),

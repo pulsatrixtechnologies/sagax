@@ -11,7 +11,7 @@ import {
   engineReconnectAheadDetail,
   isEngineReconnectCondition,
 } from "../engines/engine-reconnect-ahead.ts";
-import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
+import { classifyError, needsReconnect, USAGE_LIMIT } from "../drivers/retry.ts";
 import { limitResetFromText } from "../usage/limit-reset-time.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import {
@@ -117,7 +117,7 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
     const resetsAt = facts.limitResetsAt ?? limitResetFromText(failure, Date.now());
     return { kind: "owner", cause: "usage_limit", ...(resetsAt ? { resetsAt } : {}) };
   }
-  if (isEngineReconnectCondition(failure) || facts.stopReason === "auth_required" || reason === "auth") return { kind: "owner", cause: "signed_out" };
+  if (isEngineReconnectCondition(failure) || facts.stopReason === "auth_required" || needsReconnect(reason)) return { kind: "owner", cause: "signed_out" };
   if (reason === "quota") return { kind: "owner", cause: "credits" };
   if (facts.setup || facts.stopReason === "update_required" || facts.stopReason === "setup_required") return { kind: "owner", cause: "setup" };
   if (reason === "rate_limited") return { kind: "retry", cause: "rate_limited" };

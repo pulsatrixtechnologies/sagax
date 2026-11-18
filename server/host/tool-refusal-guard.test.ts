@@ -8,7 +8,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
-import { classifyError } from "../drivers/retry.ts";
+import { classifyError, needsReconnect } from "../drivers/retry.ts";
+import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
+import { createTurnReachPrompt } from "../index-leaves/turnReachPrompt.ts";
+import { connectorPrincipalFor } from "../harness-connectors.ts";
 import { grokCatalogSection, readGrokCatalog } from "../drivers/acp/grok-tool-catalog.ts";
 import { noteTurnReach, reachContributions, registerReachProvider, resetReachProviders, turnPersonFor, turnReachFor } from "../turns/turn-reach.ts";
 import { createToolRefusalMemory, permissionRefusalOf, refusalLines, refusalReason, refusalTarget, REFUSAL_TTL_MS } from "../tools/tool-refusals.ts";
@@ -150,10 +153,10 @@ describe("what the model is told", () => {
     registerReachProvider("tool-refusals", ({ speakerPrincipalId, room }) => {
       if (room || !speakerPrincipalId) return null;
       const refused = memory.list(speakerPrincipalId);
-      return refused.length ? { line: refusalLines(refused).join(" "), refused: refused.map((row) => `${row.connector}/${row.tool}`) } : null;
+      return refused.length ? { lines: refusalLines(refused), refused: refused.map((row) => `${row.connector}/${row.tool}`) } : null;
     });
     const reach = reachContributions({ speakerPrincipalId: "ada@example.com" });
-    expect(reach.lines[0]).toContain("never call or retry: get_users_by_username");
+    expect(reach.lines[1]).toContain("never call or retry: get_users_by_username");
     expect(reach.lines[0]).toContain("github refused for this person");
     expect(reach.refused).toEqual(["github/create_issue", "x/get_users_by_username"]);
     expect(reachContributions({ speakerPrincipalId: "zed@example.com" }).lines).toEqual([]);
@@ -204,5 +207,58 @@ describe("what the model is told", () => {
     expect(steers).toHaveLength(1);
     expect(steers[0]).toContain("was already refused for this person: X answered billing-scope-missing, needs developer.billing.write");
     expect(steers[0]).toContain("Instead: search_users with the handle, then get_users_posts with its id.");
+  });
+});
+
+describe("second review (#4720)", () => {
+  it("a permission refusal still invites the owner to connect again, as a sign-in refusal did", () => {
+    for (const text of [GITHUB_SCOPE, "403 Resource not accessible by integration", X_BILLING]) {
+      expect(classifyRoutineFailure(text)).toEqual({ kind: "owner", cause: "signed_out" });
+    }
+    expect(needsReconnect("permission")).toBe(true);
+    expect(needsReconnect("auth")).toBe(true);
+    expect(needsReconnect("rate_limited")).toBe(false);
+  });
+
+  it("keeps every connector's line whole: five X tools and a GitHub refusal, the way around included", () => {
+    const memory = createToolRefusalMemory({ now: () => 10 });
+    for (const tool of ["get_users_by_username", "get_users_by_usernames", "get_users_by_id", "search_posts_all", "get_usage_credits"]) {
+      memory.record("ada@example.com", "X", tool, permissionRefusalOf(X_BILLING, 10)!);
+    }
+    memory.record("ada@example.com", "github", "create_issue", permissionRefusalOf(GITHUB_SCOPE, 10)!);
+    registerReachProvider("tool-refusals", ({ connectorPrincipalId }) => {
+      const refused = connectorPrincipalId ? memory.list(connectorPrincipalId) : [];
+      return refused.length ? { lines: refusalLines(refused) } : null;
+    });
+    const { lines } = reachContributions({ connectorPrincipalId: "ada@example.com" });
+    expect(lines).toEqual(refusalLines(memory.list("ada@example.com")));
+    expect(lines[1]).toBe("X refused for this person (billing-scope-missing), never call or retry: get_usage_credits, get_users_by_id, get_users_by_username, get_users_by_usernames, search_posts_all. Instead: search_users with the handle, then get_users_posts with its id");
+  });
+
+  it("is kept for whoever's connections the turn uses: a routine run as B on A's bot uses A's", () => {
+    const host = {
+      connectorPlanForTurn: () => ({}),
+      effectiveBotOwner: () => "a@example.com",
+      IDENTITY: { kind: "perspicax" },
+      autoPayerKey: () => "a@example.com",
+      connectorPrincipalFor,
+      localPrincipalId: () => "",
+    };
+    const reachPrompt = createTurnReachPrompt(() => host);
+    reachPrompt({ id: "bot-a" }, { instanceId: "i" }, { origin: "owner-routine", principalId: "b@example.com" }, "run-1", {}, false, { claudeAi: false, grokCloudOnTurn: false });
+    expect(turnPersonFor("run-1")).toBe("a@example.com");
+    reachPrompt({ id: "bot-a" }, { instanceId: "i" }, { origin: "person", principalId: "b@example.com" }, "chat-b", {}, false, { claudeAi: false, grokCloudOnTurn: false });
+    expect(turnPersonFor("chat-b")).toBe("b@example.com");
+  });
+
+  it("one person's refusals never push out another's, and a long tool id is read whole", () => {
+    const memory = createToolRefusalMemory({ now: () => 10 });
+    memory.record("zed@example.com", "github", "create_issue", permissionRefusalOf(GITHUB_SCOPE, 10)!);
+    for (let i = 0; i < 150; i += 1) memory.record("ada@example.com", "github", `tool_${i}`, permissionRefusalOf(GITHUB_SCOPE, 10)!);
+    expect(memory.list("ada@example.com")).toHaveLength(100);
+    expect(memory.list("zed@example.com")).toHaveLength(1);
+    const long = "mcp__cursor__user-Outlook-calendar-respond_5fto_5fcalendar_5fevent_5fwith_5fa_5fvery_5flong_5fname___21";
+    expect(refusalTarget({ title: long.slice(0, 80), tool: "cursor/user-Outlook-calendar-respond_5fto_5fcalendar_5fevent_5fwith_5fa_5fvery_5flong_5fname___21" }))
+      .toEqual({ connector: "Outlook-calendar", tool: "respond_to_calendar_event_with_a_very_long_name" });
   });
 });

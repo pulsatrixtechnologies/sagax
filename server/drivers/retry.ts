@@ -81,6 +81,14 @@ export function isPermissionRefusal(text: string): boolean {
   return PERMISSION_REFUSAL.test(text) && !NOT_PERMISSION.test(text);
 }
 
+/** A reason only the person can fix by connecting again: signed out
+ * (`auth`), or signed in without the access the call needs (`permission`:
+ * a new sign-in can grant it). The one test every reader of a sign-in
+ * refusal uses, so `permission` never drops the reconnect invitation. */
+export function needsReconnect(reason: string): boolean {
+  return reason === "auth" || reason === "permission";
+}
+
 const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
   {
     pattern: /\b(?:40[13]|unauthorized|forbidden|invalid api key|missing bearer|authentication required|not logged in|logged out)\b/i,

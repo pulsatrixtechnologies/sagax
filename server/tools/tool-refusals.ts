@@ -26,7 +26,8 @@ import { toolFailureText } from "../../shared/tool-failure-text.ts";
 
 /** A refusal is forgotten after this long without a new one. */
 export const REFUSAL_TTL_MS = 24 * 60 * 60_000;
-const ENTRIES_MAX = 500;
+/** Per person: one person's refusals never push out another's. */
+const ENTRIES_PER_PERSON_MAX = 100;
 const DETAIL_MAX = 240;
 const REASON_MAX = 60;
 
@@ -205,7 +206,9 @@ export function createToolRefusalMemory(deps: { dataDir?: string; now?: () => nu
       const first = !refusals.has(k);
       refusals.delete(k);
       refusals.set(k, { person: norm(person), connector, tool, ...refusal });
-      while (refusals.size > ENTRIES_MAX) refusals.delete(refusals.keys().next().value!);
+      // oldest first (insertion order): only this person's own entries go
+      const mine = [...refusals].filter(([, row]) => row.person === norm(person));
+      for (const [old] of mine.slice(0, Math.max(0, mine.length - ENTRIES_PER_PERSON_MAX))) refusals.delete(old);
       const t = toldKey(person, connector);
       const tell = !told.has(t);
       if (tell) told.set(t, refusal.at);

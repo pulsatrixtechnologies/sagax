@@ -12,7 +12,7 @@ import {
 } from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
 import { claudeSignInExpired } from "../claude-errors.ts";
-import { classifyError, computeBackoff, interruptibleDelay, mayResendTurn } from "../retry.ts";
+import { classifyError, computeBackoff, interruptibleDelay, mayResendTurn, needsReconnect } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";
 import { sumTurnModels } from "./session-types.ts";
 import { removePrivateTempDir } from "./helpers.ts";
@@ -169,7 +169,7 @@ const finalizeClose = async (code: number | null) => {
     const verdict = classifyError({ exitCode: code, stderr: message });
     // A refused sign-in cannot heal by launching again. It is not a
     // warm-process death, and it does not get the one free resume.
-    const signInRefusal = verdict.reason === "auth";
+    const signInRefusal = needsReconnect(verdict.reason);
     // A process kept warm from an earlier turn ended before it
     // announced this one: it never took the prompt. That is a session
     // ending between turns, not a failed turn, so the same turn

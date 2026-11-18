@@ -1,5 +1,5 @@
 import { TurnAuthenticationRefusedError, type RuntimeEvent, type SendTurnInput } from "../contracts.ts";
-import { classifyError } from "./retry.ts";
+import { classifyError, needsReconnect } from "./retry.ts";
 import { isPlanAccessRefusal } from "./engine-errors.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -23,7 +23,7 @@ type Pending = {
 export function claudeAuthFailure(frame: { error?: unknown; is_api_error_message?: unknown }, text: string): boolean {
   if (frame.is_api_error_message !== true && typeof frame.error !== "string") return false;
   if (frame.error !== "authentication_failed" && isPlanAccessRefusal(text)) return false;
-  return frame.error === "authentication_failed" || classifyError({ text }).reason === "auth";
+  return frame.error === "authentication_failed" || needsReconnect(classifyError({ text }).reason);
 }
 
 function syntheticRefusal(frame: Frame): string | undefined {

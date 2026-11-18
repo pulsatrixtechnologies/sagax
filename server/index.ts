@@ -15620,11 +15620,11 @@ process.once("exit", () => resourceUsage.close());
 registerReachProvider("tailcat-remote-session", remoteSessionReach((input) => remoteSessions.reachFor(input)));
 // #4720: a connector's tool refused for this person's access, on any engine:
 // said once per turn, with the provider's reason, until it answers again
-registerReachProvider("tool-refusals", ({ speakerPrincipalId, room }) => {
-  if (room || !speakerPrincipalId) return null;
-  const refused = toolRefusals.list(speakerPrincipalId);
+registerReachProvider("tool-refusals", ({ connectorPrincipalId, room }) => {
+  if (room || !connectorPrincipalId) return null;
+  const refused = toolRefusals.list(connectorPrincipalId);
   if (!refused.length) return null;
-  return { line: refusalLines(refused).join(" "), refused: refused.map((row) => `${row.connector}/${row.tool}`) };
+  return { lines: refusalLines(refused), refused: refused.map((row) => `${row.connector}/${row.tool}`) };
 });
 // #1499: from remote_support_open on, Sagax asks for the session's state by
 // itself, in the opener's name, on the conversation it was opened in. When

@@ -12,7 +12,7 @@ import type { CodexSession } from "./session-types.ts";
 import { newId } from "../../contracts.ts";
 import { commandSummary } from "../../tools/tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
-import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
+import { classifyError, needsReconnect, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
 import { boundedLabel } from "./plain.ts";
 import { codexQuestionReply } from "./questions.ts";
@@ -263,7 +263,7 @@ s.turnError = (error: { message?: unknown; codexErrorInfo?: unknown }) => {
     s.state.contextFullStop = true;
   }
   const message = refused ? codexSignInExpired(raw) : codexUserError(raw, s.route, error.codexErrorInfo);
-  const setup = refused || classifyError({ text: raw }).reason === "auth";
+  const setup = refused || needsReconnect(classifyError({ text: raw }).reason);
   if (message === s.state.lastError && (s.state.lastErrorSetup || !setup)) return;
   s.state.lastError = message;
   s.state.lastErrorSetup ||= setup;

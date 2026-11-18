@@ -31,6 +31,9 @@ export interface ReachContext {
   speakerPrincipalId?: string;
   /** whose account pays for this turn's engine */
   payerPrincipalId?: string;
+  /** whose connections this turn uses (server/harness-connectors.ts
+   * connectorPrincipalFor): a routine uses its bot owner's */
+  connectorPrincipalId?: string;
   /** a room (group) turn: several people read the reply */
   room?: boolean;
 }
@@ -39,6 +42,8 @@ export interface ReachContext {
 export interface ReachContribution {
   /** one short line for the summary ("Remote session open on MAC-01") */
   line?: string;
+  /** several lines, one per thing (#4720: one per connector), each bounded alone */
+  lines?: string[];
   /** tools that come with it, as `<server>__<tool>` */
   tools?: string[];
   /** tools refused for the speaker (server/tools/tool-refusals.ts), as
@@ -58,7 +63,7 @@ export function registerReachProvider(id: string, provider: ReachProvider): () =
   };
 }
 
-/** #4720: a tool refusal line names its connector, the reason, the way around and the tools. */
+/** #4720: a tool refusal line names its connector, the reason, its tools and the way around. */
 const LINE_MAX = 280;
 const LINES_MAX = 6;
 const TOOLS_MAX = 24;
@@ -84,7 +89,9 @@ export function reachContributions(context: ReachContext): TurnReach {
       continue;
     }
     if (!contribution) continue;
-    if (typeof contribution.line === "string" && contribution.line.trim() && lines.length < LINES_MAX) lines.push(oneLine(contribution.line));
+    for (const line of [contribution.line, ...(contribution.lines ?? [])]) {
+      if (typeof line === "string" && line.trim() && lines.length < LINES_MAX) lines.push(oneLine(line));
+    }
     for (const name of contribution.tools ?? []) {
       if (typeof name === "string" && TOOL_NAME.test(name.trim()) && tools.size < TOOLS_MAX) tools.add(name.trim());
     }
@@ -140,7 +147,7 @@ export function reachSummaryPrompt(input: ReachSummaryInput): string {
 // providers itself: it would not know who speaks. A room turn forgets them.
 const TURNS_MAX = 512;
 const byThread = new Map<string, TurnReach>();
-/** The person the thread's last direct turn spoke for (#4720: whose tool
+/** Whose connections the thread's last direct turn used (#4720: whose tool
  * refusals its failures are). */
 const personByThread = new Map<string, string>();
 

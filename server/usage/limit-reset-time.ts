@@ -3,7 +3,7 @@
 // reset reading: codexLimitResetsAt, the Claude CLI's rate_limit_info).
 // Pure: the clock is passed in (#3120: the reset is always read against the
 // injected clock, never Date.now() behind the caller's back).
-import { classifyError, PROVIDER_NOT_CONFIGURED } from "../drivers/retry.ts";
+import { classifyError, needsReconnect, PROVIDER_NOT_CONFIGURED } from "../drivers/retry.ts";
 
 export type LimitKind = "quota" | "rate_limited";
 
@@ -28,9 +28,9 @@ export function limitKindOf(cause: string | undefined, stopReason?: string | nul
   // a 429, a stop token or a word like "subscription" there is the server
   // being busy, unreachable or misconfigured, never hours to wait. Only a
   // provider that says plainly that a quota is spent counts.
-  if (options.local) return LOCAL_QUOTA.test(text) && classifyError({ text }).reason !== "auth" ? "quota" : null;
+  if (options.local) return LOCAL_QUOTA.test(text) && !needsReconnect(classifyError({ text }).reason) ? "quota" : null;
   const reason = classifyError({ text }).reason;
-  if (reason === "auth" || reason === "provider_safety" || reason === "interrupted") return null;
+  if (needsReconnect(reason) || reason === "provider_safety" || reason === "interrupted") return null;
   if (reason === "quota" || SPENT.test(text)) return "quota";
   if (stopReason && LIMIT_STOPS.has(stopReason)) return stopReason === "rate_limit" ? "rate_limited" : "quota";
   if (reason === "rate_limited") return "rate_limited";

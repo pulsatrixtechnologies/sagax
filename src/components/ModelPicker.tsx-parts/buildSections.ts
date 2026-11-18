@@ -11,6 +11,7 @@ import type { MyEngine } from "@/lib/perspicax-org";
 import { favoriteKey } from "@/lib/model-favorites";
 import { engineRuns, modelUsable } from "@/lib/model-health";
 import { effortLabel } from "@/lib/effort-label";
+import { formatTokens } from "@/lib/usage";
 import { effortForModel, fastBaseOf, fastTwinOf, modelDefaultEffort } from "../../../shared/model-capabilities";
 import type { InstanceInfo, ModelSelection, Bot } from "@/state/store";
 import type { ModelSwitches } from "../../../shared/offered-models";
@@ -143,6 +144,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       label: option.label,
       detail,
       subtext: local ? localModelSubtext(option) : undefined,
+      description: option.contextWindow ? `${t("model.settings.context")} ${formatTokens(option.contextWindow)}` : undefined,
       title: [option.label, detail, runs.id].filter(Boolean).join(" · "),
       tags: [
         option.id === instance.models.default ? t("model.defaultTag") : undefined,

@@ -58,7 +58,9 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     },
     "/api/instances": { instances: params.get("empty") ? [] : [
       // #4417: the sizes Claude Code runs a 1M model at (server/drivers/claude/config.ts)
-      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "sonnet", label: "Claude Sonnet 4.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
+      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "sonnet", label: "Claude Sonnet 4.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "haiku", label: "Claude Haiku 4.5" },
+        // ?models=many: sixteen Claude models in all, the long list a provider can have
+        ...(params.get("models") === "many" ? Array.from({ length: 13 }, (_, index) => ({ id: `claude-extra-${index}`, label: `Claude Model ${index + 1}` })) : [])] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // &noxai=1 (#4329 lot 2): no xAI account here, for the bots link alone under its provider
       { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // ?providers=1 (#2080): several accounts per provider (emails stay inside

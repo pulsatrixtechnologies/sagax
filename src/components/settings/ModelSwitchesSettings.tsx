@@ -27,6 +27,7 @@ import { providerOfInstance } from "../../../shared/model-provider";
 import { modelKeys, modelOffer, modelOfferAcross, switchedModelKeys, type ModelSwitches } from "../../../shared/offered-models";
 import { providerCatalog, type CatalogEngine, type CatalogProviderKind } from "../../../shared/provider-catalog";
 import { engineReady } from "../EngineLibrary";
+import { ShowMoreFold } from "../ShowMoreFold";
 import { InstanceProviderMark } from "../ProviderIcons";
 import { FIELD, FoldRow, HelpTip, SettingsGroup, SettingsIconTile, Switch } from "../SettingsPrimitives";
 
@@ -90,6 +91,8 @@ export function activeModelProviders(instances: readonly InstanceInfo[], place: 
 }
 
 const SEARCH_FROM = 12;
+/** The rows a provider's list shows folded; the rest sit under "Show N more". A search lists every match. */
+export const MODELS_SHOWN = 3;
 
 /** One provider's models, one switch each, folded under its count. Active
  * models draws one per provider; a provider's page draws its own in place
@@ -109,6 +112,7 @@ export function ProviderModels({ provider, instance, switches, mayEdit, onToggle
   const { models } = provider;
   const [query, setQuery] = useState("");
   const shown = query.trim() ? models.filter((model) => `${model.label} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) : models;
+  const searching = query.trim() !== "";
   const on = models.filter((model) => modelOfferAcross(switches, model.engines) === "on").length;
   const count = t("modelSwitches.count", { on, total: models.length });
   return (
@@ -127,7 +131,7 @@ export function ProviderModels({ provider, instance, switches, mayEdit, onToggle
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("modelSwitches.search")} aria-label={t("modelSwitches.search")} className={cn(FIELD, "pl-8")} />
           </label>
         )}
-        {shown.map((model) => {
+        <ShowMoreFold items={shown} shown={searching ? shown.length : MODELS_SHOWN} toggleAttr="data-model-switches-fold" render={(model) => {
           const offer = modelOfferAcross(switches, model.engines);
           return (
             <div key={model.id} data-model-switch={model.id} data-model-offer={offer} className="flex min-h-[36px] items-center justify-between gap-3">
@@ -143,7 +147,7 @@ export function ProviderModels({ provider, instance, switches, mayEdit, onToggle
               />
             </div>
           );
-        })}
+        }} />
       </div>
     </FoldRow>
   );

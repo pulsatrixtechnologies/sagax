@@ -95,9 +95,8 @@ vi.mock("@/state/store", async (importOriginal) => ({
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 
 const { ModelPicker } = await import("./ModelPicker");
-const { ModelSearchList } = await import("./ModelMenu");
+const { ModelPanel } = await import("./ModelPanel");
 const indicatorModule = await import("./LimitResetContinue");
-const { ModelMenuSettings } = await import("./ModelMenuSettings");
 type ModelMenuSettingsProps = import("./ModelMenuSettings").ModelMenuSettingsProps;
 type MenuRow = import("@/lib/model-menu").ModelMenuRow;
 type MenuSection = import("@/lib/model-menu").ModelMenuSection;
@@ -111,8 +110,10 @@ function nodes(value: ReactNode): Node[] {
     const node = child as Node;
     // #2228: the picker's shell and menu became function components of their
     // own (hook-free); expand them so their output is searched like the rest.
-    if (typeof node.type === "function" && ["ModelPickerShell", "ModelPickerMenu"].includes(node.type.name)) {
-      return nodes((node.type as (props: unknown) => ReactNode)(node.props));
+    if (typeof node.type === "function" && ["ModelPickerShell", "ModelPickerMenu", "ModelPanel"].includes(node.type.name)) {
+      const expanded = nodes((node.type as (props: unknown) => ReactNode)(node.props));
+      // the panel stays in the list itself (its props are what a test reads), with its output after it
+      return node.type.name === "ModelPanel" ? [node, ...expanded] : expanded;
     }
     // #2181: the menu footer (Effort, Provider) is passed as `after` and drawn
     // outside the scrolling list.
@@ -187,7 +188,7 @@ const openMenu = open;
 
 /** The model lists drawn (the window's, the composer menu's). */
 const lists = (rendered: ReturnType<typeof render>) =>
-  rendered.nodes.filter((node) => node.type === ModelSearchList) as unknown as ReactElement<{ sections: MenuSection[]; onPick: (row: MenuRow) => void; variant: string }>[];
+  rendered.nodes.filter((node) => node.type === ModelPanel) as unknown as ReactElement<{ sections: MenuSection[]; onPick: (row: MenuRow) => void }>[];
 
 /** A row of a model list, by model id (or "auto", "follow"), with a way to
  * pick it; undefined (typed as found, like a lookup the test asserts) when
@@ -204,7 +205,7 @@ function row(rendered: ReturnType<typeof render>, id: string): { props: MenuRow 
 
 /** The composer menu's settings of the model in use. */
 function settings(rendered: ReturnType<typeof render>) {
-  return rendered.nodes.find((node) => node.type === ModelMenuSettings) as unknown as ReactElement<ModelMenuSettingsProps> | undefined;
+  return rendered.nodes.find((node) => node.type === ModelPanel) as unknown as ReactElement<ModelMenuSettingsProps> | undefined;
 }
 
 function listed(rendered: ReturnType<typeof render>) {
@@ -243,7 +244,7 @@ describe("the picker opens as a menu (lot 7)", () => {
     expect(opened.html).toContain("data-model-menu");
     expect(opened.html).not.toContain("data-model-picker-content");
     expect(opened.html).not.toContain("data-model-picker-backdrop");
-    expect(lists(opened)[0]!.props.variant).toBe("popover");
+    expect(lists(opened)).toHaveLength(1);
   });
 });
 
@@ -383,7 +384,7 @@ describe("the composer's model menu (2026-10-12)", () => {
     menuControl.current!.toggle(null, done);
     const opened = render(forBot, options);
     expect(opened.html).toContain("data-model-menu");
-    expect(lists(opened)[0]!.props.variant).toBe("popover");
+    expect(lists(opened)).toHaveLength(1);
     row(opened, "auto").props.onPick();
     expect(done).toHaveBeenCalledTimes(1);
     expect(render(forBot, options).html).not.toContain("data-model-menu");
@@ -396,11 +397,11 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(opened.html).toContain("data-model-menu");
     expect(opened.html).not.toContain("data-model-picker-content");
     const list = lists(opened)[0]!;
-    expect(list.props.variant).toBe("popover");
     expect(list.props.sections.map((section) => section.label ?? section.key)).toEqual(["top", "Claude", "OpenAI"]);
     // Auto first (a thread that follows its bot adds the bot's model below it).
     expect(list.props.sections[0]!.rows.map((candidate) => candidate.key)).toEqual(["auto"]);
-    expect(opened.html).toContain('placeholder="Search models"');
+    // two models: no search field (it shows from nine models in a provider)
+    expect(opened.html).not.toContain('placeholder="Search models"');
     // #2963: one footer row opens the models window
     expect(opened.html).toContain("data-model-manage");
     expect(opened.html).toContain(">Manage models<");
@@ -791,7 +792,8 @@ describe("the flat model picker", () => {
     expect(opened.html).toContain("data-model-menu");
     expect(opened.html).not.toContain("data-model-scope");
     expect(opened.html).not.toContain("Switch it too");
-    (lists(opened)[0]!.props as { onEscape?: () => void }).onEscape?.();
+    const frame = opened.nodes.find((node) => node.props["data-model-menu"] !== undefined)!;
+    (frame.props.onKeyDown as (event: unknown) => void)({ key: "Escape", defaultPrevented: false, preventDefault: () => {} });
     expect(render(forBot).html).not.toContain("data-model-menu");
   });
 

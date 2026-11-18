@@ -54,7 +54,7 @@ describe("single model menu", () => {
 
   it("only ModelPicker builds a model menu", () => {
     const builders = files
-      .filter(({ text }) => /<ModelPickerMenu\b|<ModelSearchList\b/.test(text))
+      .filter(({ text }) => /<ModelPickerMenu\b|<ModelSearchList\b|<ModelPanel\b/.test(text))
       .map(({ path }) => path)
       .sort();
     expect(builders).toEqual(["components/ModelPicker.tsx-parts/ModelPickerMenu.tsx", "gallery/composer-edge.tsx", "gallery/model-menu-preview.tsx", "gallery/model-menu.tsx"]);

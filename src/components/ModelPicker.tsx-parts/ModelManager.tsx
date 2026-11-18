@@ -19,9 +19,10 @@ import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../.
 import type { EffortLevel } from "../../../shared/wire";
 import { ActivityWindow, activityChip } from "../bot-settings/ActivityWindow";
 import { FIELD, Switch } from "../SettingsPrimitives";
+import { ShowMoreFold } from "../ShowMoreFold";
 import { EffortSegments } from "../ModelMenuSettings";
 import { engineSections } from "../ModelMenu";
-import { switchableModels, toggledList } from "../settings/ModelSwitchesSettings";
+import { MODELS_SHOWN, switchableModels, toggledList } from "../settings/ModelSwitchesSettings";
 import { providerOfModel } from "../../../shared/model-provider";
 import { EffortRow } from "./EffortControls";
 
@@ -208,7 +209,8 @@ export function ModelManager({
                 {section.note && <span className="truncate font-normal text-ink-tertiary">{section.note}</span>}
               </div>
               <div className="overflow-hidden rounded-xl border border-border">
-                {section.rows.map((row) => {
+                <ShowMoreFold items={section.rows} shown={query.trim() ? section.rows.length : MODELS_SHOWN} keep={(row) => row.current}
+                  toggleAttr="data-model-manager-fold" render={(row) => {
                   const offer = row.instanceId && row.modelId ? modelOffer(switches, row.instanceId, row.modelId) : "on";
                   const on = offer === "on";
                   const starred = favoriteKeys.includes(row.key);
@@ -232,7 +234,7 @@ export function ModelManager({
                       {row.current && <span className="w-8 shrink-0" aria-hidden="true" />}
                     </div>
                   );
-                })}
+                }} />
               </div>
             </div>
           ))}

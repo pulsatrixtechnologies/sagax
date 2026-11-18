@@ -1,21 +1,21 @@
 // Composer model menu (extracted from ModelPicker.tsx, #1383).
 import { type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
-import { Check, ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
-import { ModelMenuItem, ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../ModelMenu";
+import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
+import { ModelPanel } from "../ModelPanel";
 import { cn } from "@/lib/cn";
 import { COMPOSER_POPOVER_RISE_CLASS, MENU_BOX } from "../menu-look";
 import { t } from "@/lib/i18n";
-import { ModelMenuSettings, type ContextSizeChoice, type RunsWithChoice } from "../ModelMenuSettings";
+import type { ContextSizeChoice, RunsWithChoice } from "../ModelMenuSettings";
 import { ModelNoEngineNotice } from "../ModelNoEngineNotice";
 import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_MAX_HEIGHT, MENU_WIDTH, menuListMinHeight } from "./helpers";
+import { MENU_MAX_HEIGHT, MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
-import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
+import { autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
 function menuViewportHeight(fallback = 800): number {
   if (typeof window === "undefined") return fallback;
@@ -64,8 +64,6 @@ export function ModelPickerMenu({
   autoOn,
   setEffort,
   setAutoOptimize,
-  autoEditOpen = false,
-  setAutoEditOpen,
   pick,
   effortTitle,
   anchorRef,
@@ -97,10 +95,6 @@ export function ModelPickerMenu({
   setEffort: (effort: EffortLevel | undefined) => void;
   /** #2106: Auto Edit submenu (Intelligence / Balance / Cost). */
   setAutoOptimize?: (value: AutoOptimize) => void;
-  /** #2106: Auto Edit panel open state lives on ModelPicker (no hooks here:
-   * the interaction harness calls this menu as a function). */
-  autoEditOpen?: boolean;
-  setAutoEditOpen?: (open: boolean | ((prev: boolean) => boolean)) => void;
   pick: (instance: InstanceInfo, model: string, keepOpen?: boolean) => void;
   effortTitle: string;
   /** Hang the menu off this chip (Settings > Models list): under it or over
@@ -139,27 +133,12 @@ export function ModelPickerMenu({
   const fastTwin = active && !autoOn ? fastTwinOf(activeOptions, selection.model) : undefined;
   const engineEfforts = active?.capabilities?.effortLevels;
   const menuEfforts = active?.capabilities?.modelVariants ? [] : modelEffortLevels(activeOption, engineEfforts);
-  const settingsPanel = active ? (
-    <ModelMenuSettings
-      disabled={Boolean(bot.busy)}
-      fast={active && (fastBase || fastTwin) ? { on: Boolean(fastBase), onToggle: () => pick(active, (fastBase ?? fastTwin)!, true) } : undefined}
-      variantRow={active.capabilities?.modelVariants ? (
-        <div data-model-menu-effort className="px-2 py-1.5">
-          <EffortRow bot={bot} threadId={threadId} updateBotDefault={Boolean(threadId)} compact
-            label={<span className="shrink-0 text-[12.5px] text-popover-ink-secondary">{effortTitle}</span>} />
-        </div>
-      ) : undefined}
-      effort={menuEfforts.length ? {
-        title: effortTitle,
-        levels: menuEfforts,
-        value: selection.effort && menuEfforts.includes(selection.effort) ? selection.effort : undefined,
-        modelDefault: modelDefaultEffort(activeOption, engineEfforts),
-        onPick: setEffort,
-      } : undefined}
-      runsWith={autoOn ? undefined : runsWith}
-      contextSize={autoOn ? undefined : contextSize}
-    />
-  ) : null;
+  const variantRow = active?.capabilities?.modelVariants ? (
+    <div data-model-menu-effort>
+      <EffortRow bot={bot} threadId={threadId} updateBotDefault={Boolean(threadId)} compact
+        label={<span className="sr-only">{effortTitle}</span>} />
+    </div>
+  ) : undefined;
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // a submenu of the + menu: its keys stay here (the + menu moves its own focus)
@@ -175,70 +154,6 @@ export function ModelPickerMenu({
     event.preventDefault();
     closeMenu(true);
   };
-  // #2106: Auto's Optimize choices sit right under the Auto row.
-  // #2181: the model's settings and the Provider link sit in a fixed footer
-  // under the scrolling list.
-  const autoPanel = (
-    <>
-      {autoEditOpen && setAutoOptimize && setAutoEditOpen && (
-        <div role="group" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
-          className="py-1 pb-0.5">
-          <div className="px-2 pb-1 pt-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
-          {AUTO_OPTIMIZE_VALUES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              data-model-auto-optimize-option={value}
-              aria-checked={currentOptimize === value}
-              role="menuitemradio"
-              disabled={Boolean(bot.busy)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setAutoOptimize(value);
-                setAutoEditOpen(false);
-              }}
-              className={cn(
-                "flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-popover-ink outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
-              )}
-            >
-              <span>{t(`model.auto.optimize.${value}`)}</span>
-              {currentOptimize === value && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
-  );
-  const below = (
-    <>
-      {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
-      {advanced && settingsPanel}
-      <div className="border-t border-popover-hairline px-1.5 pt-1">
-        {onManage ? (
-          <ModelMenuItem variant="popover" data-model-manage onClick={onManage}>
-            <span>{t("model.manage")}</span>
-            <span className="flex items-center gap-1.5 text-[12px] text-popover-ink-secondary">
-              {turnedOff > 0 && <span data-model-manage-off>{t("model.manageOff", { count: turnedOff })}</span>}
-              <ChevronRight size={14} aria-hidden="true" />
-            </span>
-          </ModelMenuItem>
-        ) : (
-          <>
-            {openActiveModels && (
-              <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
-                <span>{turnedOff > 0 ? t("model.activeModelsLink", { count: turnedOff }) : t("model.activeModels")}</span>
-                <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
-              </ModelMenuItem>
-            )}
-            <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
-              <span>{t("settings.section.providers")}</span>
-              <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
-            </ModelMenuItem>
-          </>
-        )}
-      </div>
-    </>
-  );
   const menuMaxHeight = menuAt
     ? menuAt.top != null
       ? menuRoomBelow(menuAt.top)
@@ -248,15 +163,30 @@ export function ModelPickerMenu({
     : undefined;
   const content = (
     <>
-      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
+      <ModelPanel
+        sections={menuSections}
+        onPick={onRow}
+        disabled={Boolean(bot.busy)}
         favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
-        onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined}
-        after={below}
+        mark={(key) => engineMark?.(key) ?? null}
+        autoOn={autoOn}
+        optimize={setAutoOptimize && !viewerLocal ? { value: currentOptimize, onPick: setAutoOptimize } : undefined}
+        effort={menuEfforts.length ? {
+          title: effortTitle,
+          levels: menuEfforts,
+          value: selection.effort && menuEfforts.includes(selection.effort) ? selection.effort : undefined,
+          modelDefault: modelDefaultEffort(activeOption, engineEfforts),
+          onPick: setEffort,
+        } : undefined}
+        variantRow={variantRow}
+        fast={active && (fastBase || fastTwin) ? { on: Boolean(fastBase), onToggle: () => pick(active, (fastBase ?? fastTwin)!, true) } : undefined}
+        contextSize={contextSize}
+        runsWith={runsWith}
+        manage={{ onManage, turnedOff, openActiveModels, openProviders }}
         custom={customModel}
-        showAll
-        steps={{ mark: engineMark }}
-        listMinHeight={menuListMinHeight(menuMaxHeight ?? MENU_MAX_HEIGHT)}
-        autoPanel={autoPanel} />
+        showSettings={advanced}
+      />
+      {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
     </>
   );
 

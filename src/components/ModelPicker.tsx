@@ -22,7 +22,7 @@ import { useMyEngineModels, useMyEngines, usePerspicaxOrg } from "@/lib/perspica
 import { orgRefusesEngine } from "./OrgHostToolsNote";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { ModelNoEngineNotice } from "./ModelNoEngineNotice";
-import { InstanceProviderMark, PresetProviderMark } from "./ProviderIcons";
+import { InstanceProviderMark, PresetProviderMark, ProviderMonogram, hasOwnProviderMark } from "./ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../shared/provider-icon";
 import { COMPUTER_PROVIDER_ID } from "../../shared/model-provider";
 import { openModelWindow } from "@/lib/model-window";
@@ -191,9 +191,6 @@ export function ModelPicker({
   // #2050: the stars follow the person through /api/me/models
   useModelFavoritesServerSync();
   const [menu, setMenu] = useState(windowOnly);
-  /** #2106: Auto Edit panel (Intelligence / Balance / Cost); owned here so
-   * ModelPickerMenu stays hook-free for the function-call interaction harness. */
-  const [autoEditOpen, setAutoEditOpen] = useState(false);
   // While the bot works the menu still opens to its reasoning level, which
   // applies from the next turn; the model stays locked.
   const locked = lockedWhileBusy(state, bot, contained, threadId);
@@ -257,7 +254,6 @@ export function ModelPicker({
   const displayedInstanceId = active?.instanceId;
   const closeMenu = (refocus = false) => {
     setMenu(false);
-    setAutoEditOpen(false);
     if (windowOnly) onWindowClose?.();
     if (refocus) (anchorRef.current?.isConnected ? anchorRef.current : triggerRef.current ?? (headless ? fallbackAnchor?.() : null))?.focus();
   };
@@ -389,6 +385,8 @@ export function ModelPicker({
     const section = menuSections.find((candidate) => candidate.key === key);
     const instanceId = section?.rows.find((row) => row.instanceId)?.instanceId ?? key;
     const instance = key === COMPUTER_PROVIDER_ID ? undefined : state.instances.find((candidate) => candidate.instanceId === instanceId);
+    // a server with no logo of its own gets its letters, never a glyph another provider shares
+    if (instance && !hasOwnProviderMark(instance)) return <ProviderMonogram label={section?.label ?? instance.displayName} size={14} />;
     return instance ? <InstanceProviderMark instance={instance} size={14} /> : <Monitor size={14} aria-hidden="true" />;
   };
   // #2963: the chat bar menu's footer opens the models window for this bot.
@@ -455,8 +453,6 @@ export function ModelPicker({
       autoOn={autoOn}
       setEffort={setEffort}
       setAutoOptimize={setAutoOptimize}
-      autoEditOpen={autoEditOpen}
-      setAutoEditOpen={setAutoEditOpen}
       pick={pick}
       effortTitle={effortTitle}
       headless={headless}
@@ -502,8 +498,6 @@ function ModelPickerShell({
   autoOn,
   setEffort,
   setAutoOptimize,
-  autoEditOpen,
-  setAutoEditOpen,
   pick,
   effortTitle,
   headless,
@@ -546,8 +540,6 @@ function ModelPickerShell({
   autoOn: boolean;
   setEffort: (effort: ModelSelection["effort"]) => void;
   setAutoOptimize: (optimize: NonNullable<ModelSelection["autoOptimize"]>) => void;
-  autoEditOpen: boolean;
-  setAutoEditOpen: React.Dispatch<React.SetStateAction<boolean>>;
   pick: (instance: NonNullable<typeof active>, modelId: string, keepOpen?: boolean) => void;
   effortTitle: string;
   headless: boolean;
@@ -647,8 +639,6 @@ function ModelPickerShell({
         autoOn,
         setEffort,
         setAutoOptimize,
-        autoEditOpen,
-        setAutoEditOpen,
         pick,
         effortTitle,
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,

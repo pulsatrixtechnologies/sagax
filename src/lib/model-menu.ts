@@ -18,6 +18,8 @@ export interface ModelMenuRow {
   /** A quiet second line under the name (who shares a local model, its server
    * when two share a name). It wraps, never truncates. */
   subtext?: string;
+  /** One line under the name in the model panel: what the app knows (its context size). */
+  description?: string;
   /** Short markers after the detail (Default, Loaded, the bot's model). */
   tags?: string[];
   /** The choice in effect: checked. */

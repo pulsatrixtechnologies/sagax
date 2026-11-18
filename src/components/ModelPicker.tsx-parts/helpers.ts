@@ -122,7 +122,7 @@ export const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled])
 
 /** The composer's model menu: a popover above the chip, never wider than the window. */
 /** #2963: larger, flat menu (engines, then their models, all open). */
-export const MENU_WIDTH = 420;
+export const MENU_WIDTH = 360;
 export const MENU_MAX_HEIGHT = 520;
 
 /** #3116: the list of a chat-bar menu never shows fewer than about seven

@@ -121,6 +121,30 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
     public var liveEvents: [LiveEvent]?
     /// Sagax proxy path for the recording player after the call ends.
     public var recordingUrl: String?
+    /// Live conversation call: the person's own number a take over rings,
+    /// masked ("+1 514 ••• •• 77"). Nil: no Take over (hidden, never greyed).
+    public var takeOverTo: String?
+    /// The take over under way: "transferring" (their phone rings) or
+    /// "answered" (they are on the call). Nil once the bot resumed.
+    public var takeOver: TakeOver?
+
+    /// A take over of the live call (live call card lot 4).
+    public struct TakeOver: Codable, Hashable, Sendable {
+        public var state: String
+        public var at: Double
+        public var isTransferring: Bool { state == "transferring" }
+        public var isAnswered: Bool { state == "answered" }
+        public init(state: String, at: Double) {
+            self.state = state
+            self.at = at
+        }
+    }
+
+    /// Take over is offered: a number of the person's own to ring, the bot in
+    /// call with the other party, no take over under way.
+    public var canTakeOver: Bool {
+        isLiveConversation && status == "done" && phase == "in_call" && takeOver == nil && !(takeOverTo ?? "").isEmpty
+    }
 
     /// A streaming line on the live conversation card.
     public struct LiveLine: Codable, Hashable, Sendable {
@@ -188,6 +212,7 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         case mode, objective, instructions, maxMinutes, voicemail, result
         case merchant, amount, currency, cardLabel, items, flights, orderRef, declared, mismatchTotal, via, tracking, error
         case calleeName, phase, liveStartedAt, liveAnsweredAt, liveTranscript, liveEvents, recordingUrl
+        case takeOverTo, takeOver
     }
 
     /// Lenient: a field this phone does not know the shape of is left out
@@ -230,6 +255,8 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         liveTranscript = try? row.decodeIfPresent([LiveLine].self, forKey: .liveTranscript)
         liveEvents = try? row.decodeIfPresent([LiveEvent].self, forKey: .liveEvents)
         recordingUrl = try? row.decodeIfPresent(String.self, forKey: .recordingUrl)
+        takeOverTo = try? row.decodeIfPresent(String.self, forKey: .takeOverTo)
+        takeOver = try? row.decodeIfPresent(TakeOver.self, forKey: .takeOver)
     }
 }
 
@@ -238,7 +265,7 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
 /// `.unknown` instead of losing the message it arrived on.
 public struct OutboundCallResult: Codable, Hashable, Sendable {
     public enum Outcome: String, Codable, Sendable { case completed, voicemail, noAnswer = "no-answer", busy, failed, unknown }
-    public enum EndedBy: String, Codable, Sendable { case goal, callee, stopRequest = "stop-request", timeLimit = "time-limit", hangUp = "hang-up", unknown }
+    public enum EndedBy: String, Codable, Sendable { case goal, callee, stopRequest = "stop-request", timeLimit = "time-limit", hangUp = "hang-up", transfer, unknown }
 
     public struct Line: Codable, Hashable, Sendable {
         /// "bot" or "callee" (anything else is drawn as the other party).
@@ -409,6 +436,12 @@ public enum OutboundCardRules {
         return "/api/me/phone-calls/\(id)/hangup"
     }
 
+    /// Live call card lot 4: the person takes the call over (their own phone rings).
+    public static func takeoverPath(_ card: OutboundCardData) -> String {
+        let id = card.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? card.id
+        return "/api/me/phone-calls/\(id)/takeover"
+    }
+
     /// Sagax recording proxy path on the card (`GET /api/me/phone-calls/:id/recording`).
     public static func recordingPath(_ card: OutboundCardData) -> String? {
         guard let raw = card.recordingUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
@@ -441,6 +474,13 @@ extension CompanionClient {
     public func hangUpOutbound(_ card: OutboundCardData) async throws {
         guard card.kind == .call else { throw APIError.badURL }
         try await send(try makeRequest("POST", OutboundCardRules.hangupPath(card), body: [:]))
+    }
+
+    /// Take a live conversation call over from the card's Take over button:
+    /// the person's own verified phone rings at once.
+    public func takeOverOutbound(_ card: OutboundCardData) async throws {
+        guard card.kind == .call else { throw APIError.badURL }
+        try await send(try makeRequest("POST", OutboundCardRules.takeoverPath(card), body: [:]))
     }
 
     /// Recording bytes for the ended-card player (bearer-authenticated proxy).

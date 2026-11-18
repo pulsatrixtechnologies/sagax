@@ -159,7 +159,7 @@ const callResultSchema = z.object({
   ref: z.string().regex(/^call_[0-9a-f]{16}$/),
   callSid: z.string().regex(/^CA[0-9a-f]{32}$/),
   outcome: z.enum(["completed", "voicemail", "no-answer", "busy", "failed"]),
-  endedBy: z.enum(["goal", "callee", "stop-request", "time-limit", "hang-up"]).optional(),
+  endedBy: z.enum(["goal", "callee", "stop-request", "time-limit", "hang-up", "transfer"]).optional(),
   durationSec: z.number().int().min(0).max(24 * 60 * 60),
   points: z.array(resultText(600)).max(8),
   commitments: z.array(resultText(600)).max(8),

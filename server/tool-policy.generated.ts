@@ -744,6 +744,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/me\\/phone-calls\\/(call_[a-f0-9]{16})\\/answer$","tier":"admin","readOnly":false,"scope":"me:admin","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/me\\/phone-calls\\/(call_[a-f0-9]{16})\\/hangup$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/me\\/phone-calls\\/(call_[a-f0-9]{16})\\/recording$","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/me\\/phone-calls\\/(call_[a-f0-9]{16})\\/takeover$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/me\\/phone-tools\\/card-scan\\/([\\w-]{1,64})(\\/wait)?$","tier":"admin","readOnly":false,"scope":"me:admin","defaultEnabled":false},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/me\\/phone-tools\\/requests\\/([\\w-]{1,64})$","tier":"admin","readOnly":false,"scope":"me:admin","defaultEnabled":false},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/me\\/pi-model-servers(?:\\/(sx-[a-f0-9]{10})(\\/test)?)?$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true,"destructive":true},

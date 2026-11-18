@@ -2073,7 +2073,7 @@ export interface PurchaseFlight {
 export interface OutboundCallResult {
   outcome: "completed" | "voicemail" | "no-answer" | "busy" | "failed";
   /** Why a call that was answered ended. */
-  endedBy?: "goal" | "callee" | "stop-request" | "time-limit" | "hang-up";
+  endedBy?: "goal" | "callee" | "stop-request" | "time-limit" | "hang-up" | "transfer";
   /** The callee asked not to be called again: the bot never calls this
    * number again for the person. */
   doNotCallAgain?: boolean;
@@ -2141,6 +2141,13 @@ export interface OutboundCard {
   liveEvents?: PhoneCallLiveEvent[];
   /** Sagax proxy path for the recording player after the call ends. */
   recordingUrl?: string;
+  /** Live conversation call: the person can take it over (Perspicax
+   * `take_over_number`), masked as "+1 514 ••• •• 42". Absent: no Take over. */
+  takeOverTo?: string;
+  /** Live conversation call being handed to the person: their phone rings
+   * (`transferring`), then they are on the call (`answered`). Cleared when
+   * nobody answered and the bot resumed. */
+  takeOver?: { state: "transferring" | "answered"; at: number };
   /** A purchase: the shop, the amount, the card's brand and last four
    * digits, what it buys, and once done, the receipt. */
   merchant?: string;

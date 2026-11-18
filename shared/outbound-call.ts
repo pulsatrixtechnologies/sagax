@@ -197,7 +197,7 @@ export function callGuidance(instructions: string | undefined, language: CallLan
 /** `botId` is the bot that places the call, pinned by the harness: the call
  * speaks as that bot, with its own name, voice and persona, never as the
  * line's own bot (Perspicax #2022). */
-export function voiceCallArgs(request: OutboundCallRequest, input: { botName: string; ref: string; dryRun: boolean; botId?: string }): Record<string, unknown> {
+export function voiceCallArgs(request: OutboundCallRequest, input: { botName: string; ref: string; dryRun: boolean; botId?: string; takeOverTo?: string }): Record<string, unknown> {
   const instructions = callGuidance(request.instructions, request.language);
   return {
     to: request.to,
@@ -210,6 +210,9 @@ export function voiceCallArgs(request: OutboundCallRequest, input: { botName: st
     ref: input.ref,
     ...(request.voicemail ? { voicemail: request.voicemail } : {}),
     ...(request.calleeName ? { callee_name: request.calleeName } : {}),
+    // the person's "Reach me" number: what a take over rings when it is
+    // verified on their line (Perspicax picks their first verified one else)
+    ...(input.takeOverTo ? { take_over_to: input.takeOverTo } : {}),
     confirm: true,
     ...(input.botId ? { bot: `sagax:${input.botId}` } : {}),
     ...(input.dryRun ? { dry_run: true } : {}),

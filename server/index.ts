@@ -12111,6 +12111,17 @@ const outbound = outboundWiring({
     }
     return { ok: false as const, code: "unreachable" as const, error: "the person's Perspicax access could not be reached" };
   },
+  // live call card lot 4: the person's Take over (and a bot's transfer once
+  // its turn ended) reaches voice_call on their own access, like End call
+  personVoice: async (principalId, botId, args) => {
+    const mcp = perspicaxMcp;
+    if (!mcp) return { ok: false as const, code: "profile_not_mounted" as const, error: "Perspicax is not linked on this server" };
+    for (const via of ["session", "delegation"] as const) {
+      const answer = await mcp.withRoutineSession(principalId, botId, AbortSignal.timeout(20_000), (session) => session.call("voice_call", args), via).catch(() => null);
+      if (answer) return answer;
+    }
+    return { ok: false as const, code: "unreachable" as const, error: "the person's Perspicax access could not be reached" };
+  },
   log: (line) => console.log(line),
   // 2026-10-28: a conversation call, from the person's own Perspicax Voice
   // line and Twilio key (the turn's speaker, never another member's key)

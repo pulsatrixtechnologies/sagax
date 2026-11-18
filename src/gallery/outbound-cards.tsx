@@ -4,6 +4,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { OutboundCard } from "../components/OutboundCard";
+import { ConfirmProvider } from "../components/ConfirmProvider";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { Message } from "../state/store";
@@ -84,6 +85,49 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
     ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
     liveEvents: [{ kind: "transfer", detail: "+1 514 555 0199", at: liveStartedAt + 40_000 }],
   }) },
+  // live call card lot 4: Take over (the person's own number, masked), its
+  // transfer ringing, the person on the call, nobody answered, and the end
+  { message: row(21, {
+    ...conversation, id: "call_0000000000000021", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", takeOverTo: "+1 514 ••• •• 77",
+    liveTranscript: [
+      { speaker: "bot", text: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex.", at: liveStartedAt + 5_000 },
+      { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
+    ],
+  }) },
+  { message: row(22, {
+    ...conversation, id: "call_0000000000000022", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", takeOverTo: "+1 514 ••• •• 77",
+    takeOver: { state: "transferring", at: liveStartedAt + 20_000 },
+    liveTranscript: [
+      { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
+      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
+    ],
+  }) },
+  { message: row(23, {
+    ...conversation, id: "call_0000000000000023", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", takeOverTo: "+1 514 ••• •• 77",
+    takeOver: { state: "answered", at: liveStartedAt + 20_000 },
+    liveTranscript: [
+      { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
+      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
+      { speaker: "system", text: "Vous êtes sur l'appel.", at: liveStartedAt + 45_000 },
+    ],
+  }) },
+  { message: row(24, {
+    ...conversation, id: "call_0000000000000024", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", takeOverTo: "+1 514 ••• •• 77",
+    liveTranscript: [
+      { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
+      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
+      { speaker: "system", text: "Transfert sans réponse, Rocket a repris l'appel.", at: liveStartedAt + 38_000 },
+      { speaker: "bot", text: "Je suis toujours là. Alex n'est pas disponible pour le moment; puis-je prendre un message?", at: liveStartedAt + 40_000 },
+    ],
+  }) },
+  { message: row(25, { ...conversation, id: "call_0000000000000025", status: "done", calleeName: "Marie Tremblay", phase: "ended", result: {
+    outcome: "completed", endedBy: "transfer", durationSec: 95, endedAt: 1798000000000,
+    points: ["Marie a demandé à parler à Alex directement.", "L'appel a été transféré à Alex."], commitments: [],
+    transcript: [
+      { speaker: "bot", text: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex." },
+      { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?" },
+    ],
+  } }) },
   { message: row(13, { ...conversation, id: "call_0000000000000013", status: "done", calleeName: "Thermopompes Québec", phase: "ended", recordingUrl: SILENT_WAV, result: {
     outcome: "completed", endedBy: "goal", durationSec: 247, endedAt: 1798000000000,
     points: ["Rendez-vous fixé mardi 4 novembre à 9 h.", "Le technicien prévoit environ une heure sur place.", "Le prix de l'entretien annuel est de 149 $ avant taxes."],
@@ -117,8 +161,10 @@ const shown = [
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <main className="min-h-screen bg-canvas p-6 text-ink" data-gallery-panel>
-      {shown.map(({ message, transcriptOpen }) => <OutboundCard key={message.id} message={message} transcriptOpen={transcriptOpen} />)}
-    </main>
+    <ConfirmProvider>
+      <main className="min-h-screen bg-canvas p-6 text-ink" data-gallery-panel>
+        {shown.map(({ message, transcriptOpen }) => <OutboundCard key={message.id} message={message} transcriptOpen={transcriptOpen} />)}
+      </main>
+    </ConfirmProvider>
   </StrictMode>,
 );

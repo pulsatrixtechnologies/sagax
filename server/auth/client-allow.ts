@@ -874,8 +874,9 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["GET"], path: /^\/api\/me\/providers\/catalog$/ },
   { methods: ["GET"], path: /^\/api\/me\/engines\/[\w.-]+\/models$/, feature: "orgDirectory" },
   { methods: ["GET", "POST", "PATCH", "DELETE"], path: /^\/api\/me\/pi-model-servers(?:\/sx-[a-f0-9]{10}(?:\/test)?)?$/ },
-  // Their own phone call: hang up, hear the recording.
+  // Their own phone call: hang up, take it over, hear the recording.
   { methods: ["POST"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/hangup$/ },
+  { methods: ["POST"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/takeover$/ },
   { methods: ["GET"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/recording$/ },
   // Their own enrolled computers as bot computers (server/routes/host-computers.ts:
   // that person's hosts on bots they own), what bots may do on one, and the

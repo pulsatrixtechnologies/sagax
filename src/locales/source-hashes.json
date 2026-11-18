@@ -18990,7 +18990,18 @@
       "teamMap.org.live.queued": "661ff40a07e037bbd5f7d4ec97a4df1503096ca910e7c9e2d7a4e9abd4e4e1a0",
       "teamMap.org.linkAria": "11dc9b3face145fd0e7a1811132f7f78f17cbe75ac7b1bff61e920b17f5f79ac",
       "teamMap.org.moreBotsOne": "10cf5bbbbd6cb8ff4db7bcacdc6418f3da54e4bb8a49211cb753aa366c334d39",
-      "teamMap.org.seeHandoffs": "dfbdfc106ef7734973200d5e9644ac1ee1e7b8aa567fc8c210291190ea6b529b"
+      "teamMap.org.seeHandoffs": "dfbdfc106ef7734973200d5e9644ac1ee1e7b8aa567fc8c210291190ea6b529b",
+      "outbound.call.endedBy.transfer": "c3111b59ca51715c3be01a8bf57a4a034272d2b12263c6038c4184c5d4b48443",
+      "outbound.call.takeOver.action": "66abfef02cd8305f244c2d1a9540c31a2ab8f0e9b5f7c8cac521aa0a1cee7358",
+      "outbound.call.takeOver.title": "5297bff33f1a253dad15932e1dc7b8474bc192acc94c6b0d47ec1e698bbe3038",
+      "outbound.call.takeOver.body": "5b4d326afc3babe014a2d89b9f61aa9da846c12a4247a1df2d09df6738c67461",
+      "outbound.call.takeOver.confirm": "e618fbbf0eaab4edf2105408f8a76770ff15a64c575301142cdc34c5516582ec",
+      "outbound.call.takeOver.transferring": "930c3f4bfd66613491e4718059da16994e487fa1a96722cba469224aa729c8f3",
+      "outbound.call.takeOver.transferred": "c3111b59ca51715c3be01a8bf57a4a034272d2b12263c6038c4184c5d4b48443",
+      "outbound.call.takeOver.failed": "54731de30f0231e667a346b3942599cd4077fb348a5459bd987708d19c4b8ecb",
+      "outbound.call.takeOver.noNumber": "807b5dd01efced8640f1ffdf5a8eb09794959e95fa6608f956b0f74b87987c12",
+      "outbound.call.takeOver.already": "b537281bc76838d17ae5cb0cccb8d97563454d69e620e191bd8efa8b2794cc64",
+      "outbound.call.takeOver.notLive": "6a59f5573af15bd4d676af82bf67058cd651aba826c2798e5de717bd5cf7aafa"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

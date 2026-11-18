@@ -17,7 +17,7 @@ import { dispatchRoutes } from "./table.ts";
 const cleanups: Array<() => unknown> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
-async function serve(options: { principal?: string | null; gate?: { status: number; body: unknown } | null; stepUp?: { status: number; body: unknown } | null; via?: string; admin?: boolean } = {}) {
+async function serve(options: { principal?: string | null; gate?: { status: number; body: unknown } | null; stepUp?: { status: number; body: unknown } | null; via?: string; admin?: boolean; takeOver?: (principalId: string, callId: string) => Promise<{ ok: true } | { error: string; status: number; code: string }> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-call-routes-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const calls = new OutboundCalls(dir);
@@ -33,6 +33,7 @@ async function serve(options: { principal?: string | null; gate?: { status: numb
     isAdmin: () => options.admin === true,
     answered: (row) => { answered.push(row); },
     audit: (_auth, _action, detail) => { audits.push(detail); },
+    ...(options.takeOver ? { takeOver: options.takeOver } : {}),
   })];
   const auth: RequestAuth = { kind: "loopback", scopes: ["admin", "client"] };
   const server = createServer(async (req, res) => {
@@ -121,8 +122,27 @@ describe("phone call routes", () => {
       expect(policyFor("POST", path)).toMatchObject({ matched: true, tier: "admin", defaultEnabled: false });
     }
     expect(policyFor("POST", `${call}/hangup`)).toMatchObject({ matched: true, tier: "write", defaultEnabled: true });
+    expect(policyFor("POST", `${call}/takeover`)).toMatchObject({ matched: true, tier: "write", defaultEnabled: true });
     expect(policyFor("GET", `${call}/recording`)).toMatchObject({ matched: true, tier: "read", defaultEnabled: true });
     expect(policyFor("GET", "/api/org/phone-calls")).toMatchObject({ matched: true, tier: "admin", defaultEnabled: false });
+  });
+
+  it("live call card lot 4: Take over reaches only the signed-in person's own call; the owner gate and a refusal answer as they are", async () => {
+    const asked: Array<[string, string]> = [];
+    const takeOver = async (principalId: string, callId: string) => {
+      asked.push([principalId, callId]);
+      return principalId === "jean" ? { ok: true as const } : { error: "No such call", status: 404, code: "unknown_call" };
+    };
+    const own = await serve({ takeOver });
+    expect(await own.call(`/api/me/phone-calls/${own.id}/takeover`, {})).toMatchObject({ status: 200, body: { ok: true } });
+    expect(own.audits.at(-1)).toEqual({ callId: own.id });
+    expect(await own.call(`/api/me/phone-calls/${own.id}/takeover`, undefined, "GET")).toMatchObject({ status: 405 });
+    const other = await serve({ principal: "alex", takeOver });
+    expect(await other.call(`/api/me/phone-calls/${other.id}/takeover`, {})).toMatchObject({ status: 404, body: { code: "unknown_call" } });
+    expect(asked.map(([who]) => who)).toEqual(["jean", "alex"]);
+    const gated = await serve({ gate: { status: 403, body: { code: "owner_only" } }, takeOver });
+    expect(await gated.call(`/api/me/phone-calls/${gated.id}/takeover`, {})).toMatchObject({ status: 403 });
+    expect(asked).toHaveLength(2);
   });
 
   it("needs the number confirmed on the card before Call", async () => {

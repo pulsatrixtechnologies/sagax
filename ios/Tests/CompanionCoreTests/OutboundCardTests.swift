@@ -107,6 +107,34 @@ final class OutboundCardTests: XCTestCase {
         XCTAssertNil(OutboundCardRules.status(card))
     }
 
+    /// Live call card lot 4: Take over with the person's own number, its
+    /// states, and the transfer ending.
+    func testTakeOverDecodesAndShowsOnlyInCall() throws {
+        func card(_ extra: String) throws -> OutboundCardData {
+            let message = try JSONDecoder().decode(Message.self, from: Data(("""
+            {"id":"m","role":"bot","kind":"text","at":1,"text":"x",
+             "outbound":{"kind":"call","id":"call_0123456789abcdef","status":"done","botName":"Rocket","destination":"+1 514 555 0142",
+                         "mode":"conversation","liveStartedAt":1700000000000\(extra)}}
+            """).utf8))
+            return try XCTUnwrap(message.outbound)
+        }
+        let offered = try card(#","phase":"in_call","takeOverTo":"+1 514 ••• •• 77""#)
+        XCTAssertEqual(offered.takeOverTo, "+1 514 ••• •• 77")
+        XCTAssertTrue(offered.canTakeOver)
+        XCTAssertEqual(OutboundCardRules.takeoverPath(offered), "/api/me/phone-calls/call_0123456789abcdef/takeover")
+        XCTAssertFalse(try card(#","phase":"in_call""#).canTakeOver, "no number of their own: hidden")
+        XCTAssertFalse(try card(#","phase":"ringing","takeOverTo":"+1 514 ••• •• 77""#).canTakeOver)
+        let ringing = try card(#","phase":"transferred","takeOverTo":"+1 514 ••• •• 77","takeOver":{"state":"transferring","at":1700000005000}"#)
+        XCTAssertEqual(ringing.takeOver?.isTransferring, true)
+        XCTAssertFalse(ringing.canTakeOver)
+        XCTAssertTrue(ringing.isLiveConversation)
+        let onCall = try card(#","phase":"transferred","takeOver":{"state":"answered","at":1700000005000}"#)
+        XCTAssertEqual(onCall.takeOver?.isAnswered, true)
+        let ended = try card(#","phase":"ended","result":{"outcome":"completed","endedBy":"transfer","durationSec":95,"points":[],"commitments":[]}"#)
+        XCTAssertEqual(ended.result?.endedBy, .transfer)
+        XCTAssertFalse(ended.isLiveConversation)
+    }
+
     func testTimerStartsAtThePickupAndResentLinesShowOnce() throws {
         let message = try JSONDecoder().decode(Message.self, from: Data(#"""
         {"id":"m","role":"bot","kind":"text","at":1,"text":"x",

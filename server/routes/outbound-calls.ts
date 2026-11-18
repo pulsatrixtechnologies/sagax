@@ -3,6 +3,7 @@
 //   POST /api/me/phone-calls                  the calls waiting on this person
 //   POST /api/me/phone-calls/:id/answer       {decision: "call" | "deny", stepUp?}
 //   POST /api/me/phone-calls/:id/hangup       End a live conversation call
+//   POST /api/me/phone-calls/:id/takeover     Take a live conversation call over
 //   GET  /api/me/phone-calls/:id/recording   Recording proxy (30-day retention)
 //
 // Only the person, or their Primary Bot when they asked in this turn
@@ -29,15 +30,18 @@ export interface OutboundCallRouteDeps {
   isAdmin?(auth: RequestAuth): boolean;
   /** The card is updated and the bot told. */
   answered?(row: OutboundCallRecord): void;
-  audit?(auth: RequestAuth, action: "phone.call.answer" | "phone.call.settings" | "phone.call.hangup", detail: Record<string, unknown>): void;
+  audit?(auth: RequestAuth, action: "phone.call.answer" | "phone.call.settings" | "phone.call.hangup" | "phone.call.takeover", detail: Record<string, unknown>): void;
   /** Person End call on the live card. */
   hangUp?(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }>;
+  /** Person Take over on the live card: their own phone rings at once. */
+  takeOver?(principalId: string, callId: string): Promise<{ ok: true; to?: string } | { error: string; status: number; code: string }>;
   /** Fetch the call's recording bytes for the person (Twilio via Perspicax). */
   recording?(principalId: string, callId: string): Promise<{ ok: true; body: Buffer; contentType: string } | { error: string; status: number; code: string }>;
 }
 
 const ANSWER = /^\/api\/me\/phone-calls\/(call_[a-f0-9]{16})\/answer$/;
 const HANGUP = /^\/api\/me\/phone-calls\/(call_[a-f0-9]{16})\/hangup$/;
+const TAKEOVER = /^\/api\/me\/phone-calls\/(call_[a-f0-9]{16})\/takeover$/;
 const RECORDING = /^\/api\/me\/phone-calls\/(call_[a-f0-9]{16})\/recording$/;
 
 export function createOutboundCallRoutes(deps: OutboundCallRouteDeps): RouteHandler {
@@ -74,6 +78,21 @@ export function createOutboundCallRoutes(deps: OutboundCallRouteDeps): RouteHand
       const outcome = await deps.hangUp(principalId, hangup[1]!);
       if ("error" in outcome) return json(res, outcome.status, { error: outcome.error, code: outcome.code });
       deps.audit?.(auth, "phone.call.hangup", { callId: hangup[1] });
+      return json(res, 200, { ok: true });
+    }
+
+    // live call card lot 4: only the person who asked for the call; anyone
+    // else gets 404, as for End call. No card: it rings their own number.
+    const takeover = TAKEOVER.exec(path);
+    if (takeover) {
+      if (method !== "POST") return json(res, 405, { error: "POST only" });
+      const owned = deps.ownerGate?.(auth);
+      if (owned) return json(res, owned.status, owned.body);
+      if (!deps.takeOver) return json(res, 501, { error: "Take over is not available on this server.", code: "unavailable" });
+      const outcome = await deps.takeOver(principalId, takeover[1]!);
+      if ("error" in outcome) return json(res, outcome.status, { error: outcome.error, code: outcome.code });
+      // the call id only: never the number
+      deps.audit?.(auth, "phone.call.takeover", { callId: takeover[1] });
       return json(res, 200, { ok: true });
     }
 

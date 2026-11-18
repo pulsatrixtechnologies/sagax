@@ -307,3 +307,115 @@ describe("#4304: the live call card's End call and its ended card", () => {
     expect(rows[0]!.outbound).not.toHaveProperty("recordingUrl");
   });
 });
+
+describe("live call card lot 4: the person takes the call over", () => {
+  const OWN = "+15145550177";
+  /** voice_call that places with a take over number and hands the call over. */
+  const takeOverVoice = () => vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (
+    args.control === "take_over"
+      ? { ok: true as const, isError: false, value: JSON.stringify({ taken_over: true, ref: args.ref, to: OWN, status: "dialing" }) }
+      : args.dry_run ? { ok: true as const, isError: false, value: { dry_run: true } }
+        : { ok: true as const, isError: false, value: JSON.stringify({ placed: true, sid: SID, take_over_number: OWN }) }
+  ));
+
+  async function inCall(extra: Partial<OutboundWiringDeps> = {}) {
+    let clock = 1_000;
+    const timers: Array<{ ms: number; fn: () => void }> = [];
+    const voice = takeOverVoice();
+    const made = setup({ extra: {
+      principalSub: () => "sub-jean", voice, now: () => clock,
+      ownerSmsNumber: () => OWN,
+      later: (ms, fn) => { timers.push({ ms, fn }); },
+      ...extra,
+    } });
+    const context = { principalId: "jean", botId: "bot-a", threadId: "t-1", room: false };
+    await made.wiring.placeCall({ ...context, generation: "g1" }, ARGS);
+    const id = made.wiring.primaryPending("jean", false)[0]!.requestId;
+    made.wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
+    await made.wiring.placeCall({ ...context, generation: "g2" }, ARGS);
+    expect(made.wiring.callProgress({ sub: "sub-jean", ref: id, phase: "in_call", lines: [{ speaker: "bot", text: "Bonjour", at: 1_100 }] })).toBe("applied");
+    return { ...made, voice, id, timers, tick: (to: number) => { clock = to; } };
+  }
+
+  it("the placed answer's take_over_number shows masked on the card, and the Reach me number goes with the call", async () => {
+    const { rows, voice, id } = await inCall();
+    expect(voice).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ ref: id, take_over_to: OWN }));
+    expect(rows[0]!.outbound?.takeOverTo).toBe("+1 514 ••• •• 77");
+    expect(JSON.stringify(rows[0]!.outbound)).not.toContain(OWN);
+  });
+
+  it("no take_over_number: the card offers no Take over", async () => {
+    const voice = vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (args.dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }));
+    const { rows } = await inCall({ voice });
+    expect(rows[0]!.outbound).not.toHaveProperty("takeOverTo");
+  });
+
+  it("transferring, then on the call once the ring time passed; the timer keeps the pickup", async () => {
+    const { wiring, rows, voice, id, timers, tick } = await inCall();
+    tick(5_000);
+    expect(await wiring.personTakeOver("jean", id)).toEqual({ ok: true, to: OWN });
+    expect(voice).toHaveBeenLastCalledWith(expect.anything(), { control: "take_over", ref: id, take_over_to: OWN });
+    expect(rows[0]!.outbound).toMatchObject({ phase: "transferred", takeOver: { state: "transferring", at: 5_000 }, liveAnsweredAt: 1_000 });
+    // Perspicax's own progress says the same: nothing doubles
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "transferred", lines: [{ speaker: "system", text: "Transfert de l'appel vers vous.", at: 5_100 }] })).toBe("applied");
+    expect(timers).toHaveLength(1);
+    tick(31_000);
+    timers[0]!.fn();
+    expect(rows[0]!.outbound?.takeOver).toEqual({ state: "answered", at: 5_000 });
+    expect(rows[0]!.outbound?.liveTranscript?.at(-1)).toMatchObject({ speaker: "system", text: "Vous êtes sur l'appel." });
+    wiring.callResult({ sub: "sub-jean", result: { ref: id, callSid: SID, outcome: "completed", endedBy: "transfer", durationSec: 95, points: ["Transféré"], commitments: [], transcript: [{ speaker: "bot", text: "Bonjour" }] } });
+    expect(rows[0]!.outbound?.result).toMatchObject({ outcome: "completed", endedBy: "transfer", durationSec: 95 });
+  });
+
+  it("nobody answered: back in call with Perspicax's line, the take over cleared, the late timer does nothing", async () => {
+    const { wiring, rows, id, timers, tick } = await inCall();
+    expect(await wiring.personTakeOver("jean", id)).toMatchObject({ ok: true });
+    tick(22_000);
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "in_call", lines: [{ speaker: "system", text: "Transfert sans réponse, Rocket a repris l'appel.", at: 22_000 }] })).toBe("applied");
+    expect(rows[0]!.outbound?.phase).toBe("in_call");
+    expect(rows[0]!.outbound).not.toHaveProperty("takeOver");
+    timers[0]!.fn();
+    expect(rows[0]!.outbound).not.toHaveProperty("takeOver");
+    expect(rows[0]!.outbound?.liveTranscript?.map((line) => line.text)).not.toContain("Vous êtes sur l'appel.");
+  });
+
+  it("only the person who asked for the call: anyone else gets 404 and nothing is reached", async () => {
+    const { wiring, voice, id } = await inCall();
+    voice.mockClear();
+    expect(await wiring.personTakeOver("alex", id)).toMatchObject({ status: 404, code: "unknown_call" });
+    expect(await wiring.personTakeOver("jean", "call_ffffffffffffffff")).toMatchObject({ status: 404 });
+    expect(voice).not.toHaveBeenCalled();
+  });
+
+  it("a refused redirect reads as one plain sentence and the card stays in call (the bot keeps talking)", async () => {
+    const { wiring, rows, voice, id } = await inCall();
+    voice.mockResolvedValueOnce({ ok: true as const, isError: true, value: "Twilio answered 502: redirect refused" } as never);
+    const outcome = await wiring.personTakeOver("jean", id);
+    expect(outcome).toMatchObject({ status: 502, code: "takeover_failed" });
+    expect(JSON.stringify(outcome)).not.toMatch(/Twilio|502:/);
+    expect(rows[0]!.outbound?.phase).toBe("in_call");
+    expect(rows[0]!.outbound).not.toHaveProperty("takeOver");
+  });
+
+  it("the bot's transfer goes through the same take over, and its failure is said to the bot and shown on the card", async () => {
+    const { wiring, rows, voice, id } = await inCall();
+    voice.mockResolvedValueOnce({ ok: true as const, isError: true, value: "denied: no_take_over_number" } as never);
+    const refused = await wiring.transfer({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g3" }, {});
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/verified number/);
+    expect(rows[0]!.outbound?.liveTranscript?.at(-1)).toMatchObject({ speaker: "system" });
+    const done = await wiring.transfer({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g4" }, {});
+    expect(done.isError).toBeUndefined();
+    expect(voice).toHaveBeenLastCalledWith(expect.anything(), { control: "take_over", ref: id, take_over_to: OWN });
+    expect(rows[0]!.outbound?.takeOver?.state).toBe("transferring");
+  });
+
+  it("a bot's transfer whose turn holds no connection reaches voice_call on the person's access", async () => {
+    const personVoice = vi.fn(async (_p: string, _b: string, args: Record<string, unknown>) => ({ ok: true as const, isError: false, value: { taken_over: true, ref: args.ref, to: OWN } }));
+    const { wiring, voice } = await inCall({ personVoice });
+    voice.mockResolvedValueOnce({ ok: false as const, code: "profile_not_mounted", error: "not mounted" } as never);
+    const answer = await wiring.transfer({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g5" }, {});
+    expect(answer.isError).toBeUndefined();
+    expect(personVoice).toHaveBeenCalledWith("jean", "bot-a", expect.objectContaining({ control: "take_over" }));
+  });
+});

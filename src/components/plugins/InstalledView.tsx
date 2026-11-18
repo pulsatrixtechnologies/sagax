@@ -147,6 +147,10 @@ export interface InstalledViewProps {
   rowNotice?: (keys: ReadonlyArray<string | undefined>) => ReactNode;
   /** whether an item has an update waiting (kind and readable name): "Updates first" */
   hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string, updateKey?: string) => boolean;
+  /** the entries (by key) that joined a product group of the console's
+   * section (lib/product-plugins): listed on the product's card, not again
+   * under "Added by you" */
+  grouped?: ReadonlySet<string>;
 }
 
 export { ScopePill, RowSwitch } from "./ItemTrailer";
@@ -252,12 +256,14 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate, rowNotice }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate, rowNotice, grouped }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   const [allOrganization, setAllOrganization] = useState(false);
   // #4453: one kind at a time; without one, every kind in one list
   const has = (wanted: ConnectAppsKind) => kind === undefined || kind === wanted;
-  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name, entry.primary.updateKey)));
+  // a plugin on its product's card is not listed a second time
+  const ownEntries = grouped && grouped.size > 0 ? entries.filter((entry) => !grouped.has(entry.key)) : entries;
+  const shownEntries = sortRows(kind === undefined ? ownEntries : ownEntries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name, entry.primary.updateKey)));
   const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off", (skill) => Boolean(hasUpdate?.("skill", skill.name, skill.updateKey))) : [];
   const shownPersonal = has("connectors") ? (sort === "name" ? [...personal].sort((a, b) => a.key.localeCompare(b.key)) : personal) : [];
   const shownProducts = kind === "skills" ? [] : products;
@@ -292,7 +298,15 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   // product the vendor rows already list is not listed twice
   const productIds = new Set(shownProducts.length > 0 ? ["*"] : []);
   const resolvedOrganization = kind === undefined ? [] : resolvedRows.filter((item) => fromOrganization(item) && !(productIds.has("*") && item.form === "product"));
-  const resolvedOwn = kind === undefined ? resolvedRows : resolvedRows.filter((item) => !fromOrganization(item));
+  const onProductCard = (item: Capability) => {
+    if (!grouped || grouped.size === 0) return false;
+    const plugin = botPluginKey(item);
+    if (!plugin) return false;
+    return entries.some((entry) => grouped.has(entry.key) && entry.members.some((member) => member.kind === "plugin" && member.id === plugin));
+  };
+  const resolvedOwn = kind === undefined ? resolvedRows : resolvedRows.filter((item) => !fromOrganization(item) && !onProductCard(item));
+  // the person's own plugins of this kind that sit on a product's card: they still have one
+  const ownOnCards = kind !== undefined && Boolean(grouped && entries.some((entry) => grouped.has(entry.key) && entryKind(entry) === kind));
   const lockedReason = (item: Capability): string | undefined => {
     if (readOnlyReason) return readOnlyReason;
     if (item.scope === "organization" || item.scope === "account") return t(`capabilities.detail.where.${item.scope}`);
@@ -351,7 +365,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       }} />
   );
   // none of their own of this kind: the first block says so, with a way to Discover
-  const ownEmpty = kind !== undefined && !loading && (resolved === undefined
+  const ownEmpty = kind !== undefined && !loading && !ownOnCards && (resolved === undefined
     ? lines.filter((line) => line.kind !== "notice").length === 0 && shownSkills.length === 0
     : resolved !== null && resolvedOwn.length === 0);
   // the section's LAST row, under the text of the rows above it: what is folded, counted so the heading's number adds up

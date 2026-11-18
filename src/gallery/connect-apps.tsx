@@ -360,6 +360,19 @@ if (params.has("products") && !admin) {
     offered("oc-5", "skill", "Service desk macros", "Canned replies for the service desk", "offered", true, undefined, "harbor"),
   ] };
 }
+// &productPlugin=1 (#4696; &productPlugin=off: turned off): the person installed, from a marketplace, a plugin
+// of skills named for the Harbor Suite group (invented): it joins that group's
+// card and page instead of standing alone under "Added by you"
+if (params.has("productPlugin")) {
+  const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ name: string; plugins: unknown[] }> };
+  MANAGE_API["/api/me/plugins"] = {
+    ...mine,
+    marketplaces: [...mine.marketplaces, { name: "example-tools", source: "example-org/tools-marketplace", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
+      { name: "harbor-suite", description: "Harbor Suite: every Harbor product in one plugin", installed: true, external: false, category: "productivity", version: "0.31.9", updateKey: "plugin:me:me:harbor-suite@example-tools", contents: { agents: [], commands: [], skills: ["init", "service-dispatch", "service-ticket", "time"] } },
+    ] }],
+    plugins: [...mine.plugins, { key: "harbor-suite@example-tools", name: "harbor-suite", marketplace: "example-tools", enabled: params.get("productPlugin") !== "off", removed: [], declaredMcpServers: [] }],
+  };
+}
 // ?empty=plugins: a person with no plugin of their own (the first-block banner)
 if (params.get("empty") === "plugins") {
   const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ plugins: Array<{ installed: boolean }> }> };
@@ -371,6 +384,7 @@ if (params.get("empty") === "plugins") {
 let galleryUpdates = [
   { key: "plugin:me:me:code-review@claude-plugins-official", kind: "plugin", name: "Code Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, updateNotes: "Reviews now run on the whole branch, and the summary names the files it skipped.", canUpdate: true },
   { key: "plugin:me:me:cursor-team-kit@cursor-plugins", kind: "plugin", name: "Cursor Team Kit", scope: "me", installedVersion: "0.9.1", availableVersion: "0.10.0", updateAvailable: true, canUpdate: true },
+  ...(params.has("productPlugin") ? [{ key: "plugin:me:me:harbor-suite@example-tools", kind: "plugin", name: "Harbor Suite", scope: "me", installedVersion: "0.31.9", availableVersion: "0.32.0", updateAvailable: true, canUpdate: true }] : []),
   { key: "skill:me:me:weekly-summary", kind: "skill", name: "weekly-summary", scope: "me", installedVersion: "a1b2c3d", availableVersion: "e4f5a6b", updateAvailable: true, canUpdate: true },
   { key: "plugin:organization:organization:compliance-pack", kind: "plugin", name: "Compliance Pack", scope: "organization", organization: "required", pinned: "0.9.4", installedVersion: "0.9.4", availableVersion: "0.9.5", updateAvailable: true, canUpdate: false },
 ] as Array<Record<string, unknown> & { key: string; name: string; canUpdate: boolean; installedVersion?: string; availableVersion?: string }>;

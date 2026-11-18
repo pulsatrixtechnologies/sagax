@@ -5,7 +5,10 @@
 // and Connectors (each product with its own icon, state, switch and key
 // action), and Skills only when the console offers skills that go with the
 // vendor. Every product also stays a row of Connectors, marked "in <vendor>".
-import { useState } from "react";
+// The marketplace plugins installed for the product (lib/product-plugins) are
+// part of it: their row (switch, Update, page, Uninstall) in the Overview,
+// their skills in Skills, their count in the grey line.
+import { useState, type ReactNode } from "react";
 import { Info, Search } from "lucide-react";
 
 import { t, activeLocale } from "@/lib/i18n";
@@ -13,10 +16,10 @@ import { inLanguage, type ProductVendor } from "@/lib/capability-kinds";
 import type { PersonProduct } from "@/lib/person-products";
 import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
-import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, type ProductRowsContext } from "./ProductRows";
+import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, worseState, type ProductRowsContext } from "./ProductRows";
 import { PluginPageHeader } from "./PluginParts";
 import { DetailHeader, DetailLabel, DetailsBlock, OverviewColumns, SkillCards, sourceLine, DETAIL_BODY } from "./DetailParts";
-import { StateIcon } from "./StateIcon";
+import { StateIcon, type RowState } from "./StateIcon";
 import { distinguishingNames } from "@/lib/product-short-names";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
@@ -27,15 +30,21 @@ type VendorTab = "overview" | "skills" | "connectors";
 const CHIPS_SHOWN = 8;
 const SEARCH_FROM = 8;
 
-export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [] }: {
+export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [], plugins }: {
   vendor: ProductVendor<PersonProduct>;
   ctx: ProductRowsContext;
   onBack: () => void;
   trail?: readonly Crumb[];
   /** the console the vendor comes from ("Perspicax · <organization>"), for the grey line */
   consoleName?: string;
-  /** the skills the console offers that go with this vendor; none: no tab */
+  /** the group's skills: the ones the console offers with this vendor and
+   * the ones its plugins bring; none: no tab. Their count is the one the
+   * header line, the tab and Details say. */
   skills?: ReadonlyArray<{ name: string; description: string; onOpen?: () => void }>;
+  /** the marketplace plugins installed for this product: their rows (the
+   * plugin's own row, with its switch, Update and menu), whether one is
+   * turned off, their state rolled up with the products'; absent: none */
+  plugins?: { rows: ReadonlyArray<{ key: string; node: ReactNode }>; off?: boolean; state?: RowState | null };
 }) {
   const [tab, setTab] = useState<VendorTab>("overview");
   const [allChips, setAllChips] = useState(false);
@@ -60,8 +69,8 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
           attrs={{ "data-vendor-head": "" }}
           icon={<ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}
           name={vendor.name}
-          line={sourceLine([consoleName && t("connectApps.detail.lineFrom", { source: consoleName }), vendorLine(vendor.products.length, on)])}
-          actions={productTrailer(ctx, vendor.name, ids, {}, productRowState(worst))}
+          line={sourceLine([consoleName && t("connectApps.detail.lineFrom", { source: consoleName }), vendorLine(vendor.products.length, on, skills.length, plugins?.off ?? false)])}
+          actions={productTrailer(ctx, vendor.name, ids, {}, worseState(productRowState(worst), plugins?.state))}
         />
         <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={vendor.name} idPrefix="vendor"
           label={tabLabel}
@@ -95,6 +104,14 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
                 </button>
               )}
             </section>
+            {plugins && plugins.rows.length > 0 && (
+              <section data-vendor-plugins="">
+                <DetailLabel>{t("connectApps.kind.plugins")}</DetailLabel>
+                <ul className="flex flex-col gap-2">
+                  {plugins.rows.map((row) => <li key={row.key}>{row.node}</li>)}
+                </ul>
+              </section>
+            )}
             {network && (
               <p className="flex items-center gap-1.5 text-[13px] leading-5 text-ink" data-detail-network="">
                 {t("connectApps.detail.sendsData")}
@@ -104,6 +121,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
             <DetailsBlock rows={[
               ...(consoleName ? [{ label: t("connectApps.detail.source"), value: consoleName }] : []),
               { label: t("connectApps.plugin.connectors"), value: String(vendor.products.length) },
+              ...(skills.length > 0 ? [{ label: t("connectApps.detail.tab.skills"), value: String(skills.length) }] : []),
             ]} />
           </div>
         ) : tab === "skills" ? (

@@ -3,6 +3,7 @@ import { VendorPage } from "../plugins/VendorPage";
 import type { ProductRowsContext } from "../plugins/ProductRows";
 import { updateKindOf, type CapabilityUpdateItem, type UpdateKind } from "@/lib/capability-updates";
 import { useEffect, type ReactNode } from "react";
+import type { RowState } from "../plugins/StateIcon";
 import { Loader2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
@@ -50,8 +51,11 @@ export function PluginsPanelSubpage({
   orgItems,
   consoleName,
   vendorSkills,
+  vendorPlugins,
   accountRows,
 }: {
+  /** the marketplace plugins installed for a product group (lib/product-plugins): their rows on its page, whether one is off, their state; none: undefined */
+  vendorPlugins?: (vendorKey: string) => { rows: ReadonlyArray<{ key: string; node: ReactNode }>; off?: boolean; state?: RowState | null } | undefined;
   /** #4504: the update a skill has, with its Update (running while it runs), for its page */
   itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
   /** what the organization offers or requires of the person (an item that is on opens its page) */
@@ -60,7 +64,7 @@ export function PluginsPanelSubpage({
   accountRows?: readonly AccountConnectorRow[];
   /** the console's name ("Perspicax · <organization>") for a bundle's grey line */
   consoleName?: string;
-  /** the skills the console offers that go with a vendor (its Skills tab); none: no tab */
+  /** a product group's skills: the console's for the vendor, then its plugins' (its Skills tab and every count of them); none: no tab */
   vendorSkills?: (vendorKey: string) => ReadonlyArray<{ name: string; description: string }>;
   /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
   productCtx?: ProductRowsContext;
@@ -168,7 +172,7 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
-    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} />;
+    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} plugins={vendorPlugins?.(vendor.key)} />;
   }
   if (page.page === "account") {
     const row = accountRows?.find((entry) => entry.key === page.key);

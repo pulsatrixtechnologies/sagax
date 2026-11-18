@@ -23,7 +23,7 @@ struct DesktopPlanUsageCard: View {
     /// why. 2026-10-30 (#1774): signed-out and error rows stay listed with
     /// Connect or Try again.
     var body: some View {
-        let providers = report?.providers ?? []
+        let providers = PlanUsageRules.oneRowPerAccount(report?.providers ?? [])
         DesktopSettingsGroup(Text("Plan"), accessory: AnyView(refresh), identifier: "plan") {
             if providers.isEmpty {
                 DesktopText(loading ? Text("Checking plan usage…")

@@ -314,7 +314,10 @@ describe.skipIf(process.platform !== "linux")("Linux DEB upgrade hook", () => {
   });
 
   it("resolves the test root before applying the temporary-directory boundary", () => {
-    const escaped = path.join(fs.realpathSync(os.tmpdir()), "..", path.relative("/", root));
+    // Starts with /tmp/ as text and resolves outside it. Built by hand: path.join
+    // would fold the "..", and os.tmpdir() is not /tmp on every runner (a
+    // per-user TMPDIR made this path point at nothing, #4581).
+    const escaped = `/tmp/../${path.relative("/", root)}`;
     const result = runHook(escaped);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("must stay under /tmp");

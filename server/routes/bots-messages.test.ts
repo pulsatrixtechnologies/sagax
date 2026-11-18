@@ -145,7 +145,8 @@ describe("createBotsMessagesRoutes", () => {
       expect(deps.approvalAnswerRefusal).toHaveBeenCalledWith(sessionOwner, "work", "request-1");
       expect(deps.saveOwnerRuleFromCard).toHaveBeenCalledWith(sessionOwner, "work", "request-1", "allow", "allow", undefined);
       expect(deps.answerRequest).toHaveBeenCalledOnce();
-      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "allow", undefined, { id: "worker", name: "Ada" }, false, false);
+      // #4626: the answering person rides along, for a card kept across a restart
+      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "allow", undefined, { id: "worker", name: "Ada" }, false, false, sessionOwner);
     });
 
     it("a card in another chat never bypasses the source answerer or security key", async () => {
@@ -183,7 +184,7 @@ describe("createBotsMessagesRoutes", () => {
       });
       const result = await call(deps, { path, body: { threadId: "work", requestId: "request-1", behavior: "answer", message: "The person declined to answer this question from their AI client.", declined: true } });
       expect(result.sent).toEqual({ status: 200, body: { ok: true, outcome: "declined" } });
-      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "answer", "La personne a refusé de répondre.", expect.anything(), false, false);
+      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "answer", "La personne a refusé de répondre.", expect.anything(), false, false, sessionOwner);
       // never a message under the person's name, never a new turn
       expect(deps.deliverLateQuestionAnswer).not.toHaveBeenCalled();
       expect(patched).toEqual([expect.objectContaining({ id: "q1", answered: "deny", dismissed: true })]);

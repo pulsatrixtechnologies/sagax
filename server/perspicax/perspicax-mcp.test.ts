@@ -27,6 +27,7 @@ function harness(options: {
   records?: PerspicaxMcpOptions["onRecords"];
   botProductsOff?: PerspicaxMcpOptions["botProductsOff"];
   askGo?: PerspicaxMcpOptions["askGo"];
+  judge?: PerspicaxMcpOptions["judgeResolved"];
 } = {}) {
   let clock = 1_000_000;
   const timers: Array<{ at: number; fn: () => void | Promise<void>; cancelled: boolean }> = [];
@@ -116,6 +117,7 @@ function harness(options: {
     ...(options.records ? { onRecords: options.records } : {}),
     ...(options.botProductsOff ? { botProductsOff: options.botProductsOff } : {}),
     ...(options.askGo ? { askGo: options.askGo } : {}),
+    ...(options.judge ? { judgeResolved: options.judge } : {}),
     fetch: fetcher,
     now: () => clock,
     log: (line) => logs.push(line),
@@ -955,6 +957,130 @@ describe("PerspicaxMcp permissions and callTool", () => {
       ["cw_psa_query", "api:query", "allowed", "cw_psa:companies.read"],
       ["cw_psa_write", "api:write", "denied", "cw_psa:companies.update"],
     ]);
+  });
+
+  // #4837: an unknown tool reads the whole catalog once, resolves, retries once
+  type Fake = { pages: string[][]; stale?: Set<string>; lists: number; cursors: Array<string | undefined>; callOverride?: (name: string) => Response | undefined; loop?: boolean };
+  const fake = (pages: string[][]): Fake => ({ pages, lists: 0, cursors: [] });
+  const served = (state: Fake) => ({ mcp: ({ body }: { body: any }) => {
+    const json = (payload: object) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, ...payload }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } });
+    if (body.method === "tools/list") {
+      state.lists += 1;
+      const cursor = body.params?.cursor as string | undefined;
+      state.cursors.push(cursor);
+      const index = cursor ? Number(cursor.replace("p", "")) : 0;
+      const names = state.pages[index] ?? [];
+      const more = state.loop ? "p0" : index + 1 < state.pages.length ? `p${index + 1}` : undefined;
+      return json({ result: { tools: names.map((name) => ({ name, annotations: { readOnlyHint: name.includes("query") } })), ...(more ? { nextCursor: more } : {}) } });
+    }
+    if (body.method !== "tools/call") return json({ result: {} });
+    const name = body.params.name as string;
+    const over = state.callOverride?.(name);
+    if (over) return over;
+    return state.stale?.has(name) || !state.pages.flat().includes(name)
+      ? json({ error: { code: -32602, message: `Unknown tool: ${name}` } })
+      : json({ result: { content: [{ type: "text", text: `ran ${name}` }] } });
+  } });
+  const callNames = (h: ReturnType<typeof harness>) => relayed(h);
+
+  it("an unknown namespaced tool reads the catalog once and runs the one served name once", async () => {
+    const state = fake([["cw_psa_query", "cw_psa_write"]]);
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("mcp__perspicax__cw_psa_query", { resource: "companies" }, 41) });
+    expect(answer.body).toMatchObject({ id: 41, result: { content: [{ text: "ran cw_psa_query" }] } });
+    expect(callNames(h)).toEqual(["mcp__perspicax__cw_psa_query", "cw_psa_query"]);
+    expect(state.lists).toBe(1);
+  });
+
+  it("an unknown tool that the refreshed catalog serves under the exact same name is sent once more", async () => {
+    const state = fake([["cw_psa_query"]]);
+    state.stale = new Set(["cw_psa_query"]);
+    let sent = 0;
+    state.callOverride = (name) => (name === "cw_psa_query" && ++sent === 2 ? new Response(JSON.stringify({ jsonrpc: "2.0", id: 44, result: { content: [{ type: "text", text: "ran again" }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } }) : undefined);
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("cw_psa_query", {}, 44) });
+    expect(answer.body).toMatchObject({ result: { content: [{ text: "ran again" }] } });
+    expect(callNames(h)).toEqual(["cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("a retry that fails again answers with the close served names, resolved or not", async () => {
+    const state = fake([["cw_psa_query", "cw_psa_query_list"]]);
+    state.stale = new Set(["cw_psa_query"]);
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("cw_psa_query", {}, 45) });
+    expect(JSON.stringify(answer.body)).toContain("Unknown tool: cw_psa_query");
+    expect(JSON.stringify(answer.body)).toContain("Close served names: cw_psa_query");
+    expect(callNames(h)).toEqual(["cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("an unknown name that fits no served tool answers with the close served names and does not retry", async () => {
+    const state = fake([["cw_psa_find_tickets", "cw_psa_find_companies", "cw_psa_write"]]);
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("cw_psa_list_tickets", {}, 42) });
+    expect(JSON.stringify(answer.body)).toContain("Close served names: cw_psa_find_tickets");
+    expect(callNames(h)).toEqual(["cw_psa_list_tickets"]);
+  });
+
+  it("an ambiguous name never falls through to a shorter suffix", async () => {
+    const state = fake([["ns__query", "ns-query", "query"]]);
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("ns_query", {}, 46) });
+    expect(JSON.stringify(answer.body)).toContain("Unknown tool");
+    expect(callNames(h)).toEqual(["ns_query"]);
+  });
+
+  it("reads page two of the catalog and stops on a repeated cursor", async () => {
+    const paged = fake([["cw_psa_find_tickets"], ["cw_psa_write", "cw_psa_query"]]);
+    const h = harness(served(paged));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("mcp__x__cw_psa_query", {}, 47) });
+    expect(answer.body).toMatchObject({ result: { content: [{ text: "ran cw_psa_query" }] } });
+    expect(paged.cursors).toEqual([undefined, "p1"]);
+
+    const loop = fake([["cw_psa_query"]]);
+    loop.loop = true;
+    const g = harness(served(loop));
+    await g.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const stuck = await g.mcp.relay({ ...turn, botId: "x", frame: toolsCall("mcp__x__cw_psa_query", {}, 48) });
+    expect(JSON.stringify(stuck.body)).toContain("Unknown tool");
+    expect(callNames(g)).toEqual(["mcp__x__cw_psa_query"]);
+    expect(loop.lists).toBeLessThanOrEqual(3);
+  });
+
+  it("a resolved name the outer judge, the permissions or an off product refuse is never sent", async () => {
+    const judged: string[] = [];
+    const state = fake([["cw_psa_query", "cw_psa_write"]]);
+    const judge = harness({ ...served(state), judge: async ({ asked, resolved }) => { judged.push(`${asked}>${resolved}`); return "Refused by the outer judge"; } });
+    await judge.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const refused = await judge.mcp.relay({ ...turn, botId: "x", frame: toolsCall("mcp__x__cw_psa_query", {}, 49) });
+    expect(JSON.stringify(refused.body)).toContain("Refused by the outer judge");
+    expect(judged).toEqual(["mcp__x__cw_psa_query>cw_psa_query"]);
+    expect(callNames(judge)).toEqual(["mcp__x__cw_psa_query"]);
+
+    const rows: McpAuditRecord[] = [];
+    const guarded = harness({ ...served(fake([["cw_psa_query", "cw_psa_write"]])), guard: ({ botId }) => ({ principal: { id: "p", role: "viewer" }, mode: "enforce", ownBotId: botId, audit: (r) => rows.push(r), deniedResources: [] }) });
+    await guarded.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const denied = await guarded.mcp.relay({ ...turn, botId: "x", frame: toolsCall("mcp__x__cw_psa_write", { resource: "companies", action: "update", id: 1, set: {} }, 50) });
+    expect(JSON.stringify(denied.body)).toContain("Permission denied");
+    expect(relayed(guarded)).not.toContain("cw_psa_write");
+  });
+
+  it("never retries a failure that only mentions an unknown tool inside a longer or structured answer", async () => {
+    const state = fake([["flow_run", "cw_psa_query"]]);
+    state.callOverride = (name) => name === "flow_run"
+      ? new Response(JSON.stringify({ jsonrpc: "2.0", id: 51, result: { isError: true, content: [{ type: "text", text: "step 2 failed: Unknown tool: flow_run after the write ran" }], structuredContent: { steps: [] } } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } })
+      : undefined;
+    const h = harness(served(state));
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("flow_run", {}, 51) });
+    expect(JSON.stringify(answer.body)).toContain("after the write ran");
+    expect(callNames(h)).toEqual(["flow_run"]);
+    expect(state.lists).toBe(0);
   });
 
   it("enforce passes the meta-tools of Perspicax 1.8.28 by their real names", async () => {

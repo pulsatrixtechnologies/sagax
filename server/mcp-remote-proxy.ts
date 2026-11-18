@@ -22,7 +22,7 @@ import {
   INSTRUCTIONS_CHARS,
   SEARCH_TOOL,
   SELECTION_EXCLUDES,
-  ToolDirectory,
+  isDirectoryTool, ToolDirectory,
   bounded,
   searchesCatalog,
   type CatalogTool,
@@ -39,6 +39,7 @@ import {
 } from "./mcp/mcp-http.ts";
 // #3515: the refusal's words, read back in the reader's language (shared/connector-refusal.ts)
 import { MCP_CREDENTIALS_REFUSED } from "../shared/connector-refusal.ts";
+import { resolutionProposal, closeNamesSentence, closeServedNames, isUnknownToolText, resolveServedTool, unknownToolResultText } from "./mcp/mcp-tool-resolve.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { fitToolListResult } from "./mcp/mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
@@ -251,17 +252,21 @@ function raced<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+function buildCatalog(upstream: CatalogTool[]): Catalog {
+  const tools = new ToolDirectory(upstream.filter((tool) => allowed(tool.name)), {
+    withheld: upstream.filter((tool) => !allowed(tool.name)).map((tool) => tool.name),
+    check: argumentProblems,
+  });
+  searching ||= searchesCatalog(tools.tools);
+  return { tools, searched: searching };
+}
+
 function currentCatalog(signal: AbortSignal): Promise<Catalog> {
   if (catalog) return Promise.resolve(catalog);
   if (!loading) {
     const started = generation;
     const read = readCatalog().then((upstream) => {
-      const tools = new ToolDirectory(upstream.filter((tool) => allowed(tool.name)), {
-        withheld: upstream.filter((tool) => !allowed(tool.name)).map((tool) => tool.name),
-        check: argumentProblems,
-      });
-      searching ||= searchesCatalog(tools.tools);
-      const built = { tools, searched: searching };
+      const built = buildCatalog(upstream);
       if (generation === started) catalog = built;
       return built;
     });
@@ -289,6 +294,73 @@ async function callTool(params: unknown, signal: AbortSignal): Promise<unknown> 
   // A tool listed while the catalog was small stays callable by its name.
   if (!allowed(params.name)) throw new Refusal(-32602, SELECTION_EXCLUDES);
   return client.request("tools/call", params, signal);
+}
+
+/** #4837: a call answered only by "unknown tool" ran nothing, so one more try
+ * is safe for any tool. The whole catalog (every page) is read again once; an
+ * exact name now served is sent once more as it is; another name it resolves
+ * to (folded, namespaced, unique suffix) is sent once, after the bot's tool
+ * selection judged the RESOLVED name (a resolved tool the selection excludes
+ * is never sent). A failed retry, like a name that fits nothing, lists the
+ * close served names. Any other failure, one that mentions an unknown tool
+ * inside a longer text or a structured result included, is never retried,
+ * and a catalog that cannot be read whole decides nothing. */
+async function resolvingCall(message: Json, signal: AbortSignal, run: () => Promise<unknown>): Promise<unknown> {
+  const params = message.params;
+  if (!isRecord(params) || typeof params.name !== "string") return run();
+  const wrapped = directory && params.name === CALL_TOOL && isRecord(params.arguments) ? params.arguments : undefined;
+  const asked = wrapped ? wrapped.name : params.name;
+  if (typeof asked !== "string" || !asked || (directory && isDirectoryTool(asked))) return run();
+  if (!allowed(asked)) return run();
+  const unknownOf = unknownToolResultText;
+  let first: unknown;
+  let unknown: string | undefined;
+  try { first = await run(); unknown = unknownOf(first, asked);
+  }
+  catch (failure) {
+    if (!(failure instanceof McpRpcError) || !isUnknownToolText(failure.detail, asked)) throw failure;
+    unknown = failure.detail;
+  }
+  if (unknown === undefined) return first;
+  generation += 1;
+  catalog = undefined;
+  loading = undefined;
+  let served: string[];
+  try {
+    const revision = generation;
+    const upstream = await raced(readCatalog(), signal);
+    if (directory && revision === generation) catalog = buildCatalog(upstream);
+    served = upstream.map(tool => tool.name);
+  }
+  catch { return reportUnknown(first, unknown, []); }
+  const close = closeServedNames(asked, served.filter(allowed));
+  // all served names decide the match: a tool the selection excludes is
+  // refused below, never replaced by a weaker match among the allowed ones
+  const found = resolveServedTool(asked, served);
+  if (found.kind === "none") return reportUnknown(first, unknown, close);
+  if (!allowed(found.name)) throw new Refusal(-32602, SELECTION_EXCLUDES);
+  if (typeof message.sagaxToolResolution === "string" && found.name !== asked) {
+    return resolutionProposal(message.sagaxToolResolution, found.name, close);
+  }
+  const next = wrapped ? { ...params, arguments: { ...wrapped, name: found.name } } : { ...params, name: found.name };
+  let again: unknown;
+  try { again = directory ? await callTool(next, signal) : await client.request("tools/call", next, signal); }
+  catch (failure) {
+    if (failure instanceof McpRpcError) throw new Refusal(failure.code ?? -32603, `${remoteErrorText(failure.detail)}${closeNamesSentence(close)}`);
+    throw failure;
+  }
+  if (isRecord(again) && again.isError === true && close.length && Array.isArray(again.content)) {
+    return { ...again, content: [...again.content, { type: "text", text: closeNamesSentence(close).trim() }] };
+  }
+  return again;
+}
+
+/** The unknown tool answer again, with the close served names: an error
+ * result stays one, a JSON-RPC error becomes a refusal with the same code. */
+function reportUnknown(answer: unknown, text: string, close: string[]): unknown {
+  const said = `${remoteErrorText(text)}${closeNamesSentence(close)}`;
+  if (isRecord(answer) && Array.isArray(answer.content)) return { ...answer, content: [{ type: "text", text: said }] };
+  throw new Refusal(-32602, said);
 }
 
 async function directed(message: Json, signal: AbortSignal): Promise<unknown> {
@@ -340,11 +412,12 @@ async function handle(message: Json): Promise<void> {
   const deadline = message.method !== "tools/call" ? 30_000 : directory ? 120_000 : undefined;
   const signal = deadline === undefined ? controller.signal : AbortSignal.any([controller.signal, AbortSignal.timeout(deadline)]);
   try {
-    const attempt = () => directory
+    const run = () => directory
       ? directed(message, signal)
       : message.method === "initialize"
         ? client.initialize("Sagax tool proxy", signal)
         : client.request(message.method as string, message.params, signal);
+    const attempt = () => (message.method === "tools/call" && message.sagaxToolResolution !== false ? resolvingCall(message, signal, run) : run());
     // A 429 refused the request before anything ran (R1): wait the server's
     // own Retry-After, say so, and ask again, a few times at most.
     let result: unknown;

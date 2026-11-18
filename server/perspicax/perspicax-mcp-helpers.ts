@@ -1,6 +1,7 @@
 // Pure helpers of the Perspicax MCP relay (tool spelling, api_list answers,
 // body parsing, approval forms), split out of perspicax-mcp.ts.
 import { toolFailureText } from "../../shared/tool-failure-text.ts";
+import { closeNamesSentence, isUnknownToolText, resolveServedTool, unknownToolResultText } from "../mcp/mcp-tool-resolve.ts";
 
 type Json = Record<string, unknown>;
 
@@ -14,9 +15,35 @@ function isObject(value: unknown): value is Json {
  * Perspicax: `twilio_api__write`). */
 export function servedSpelling(name: string, served: ReadonlySet<string> | undefined): string {
   if (!served || served.has(name)) return name;
-  const folded = name.replace(/_{2,}/g, "_");
-  for (const candidate of served) if (candidate.replace(/_{2,}/g, "_") === folded) return candidate;
-  return name;
+  const found = resolveServedTool(name, served);
+  return found.kind === "folded" ? found.name : name;
+}
+
+/** The message of a tools/call answer that is only an unknown tool answer
+ * for `asked` (a JSON-RPC error, or an error result that holds nothing else),
+ * else undefined. Any other failure, even one that mentions an unknown tool
+ * inside a longer text or a structured result, may belong to a call that ran. */
+export function unknownToolText(body: unknown, asked: string): string | undefined {
+  if (!isObject(body)) return undefined;
+  if (isObject(body.error)) {
+    const message = typeof body.error.message === "string" ? body.error.message : "";
+    return isUnknownToolText(message, asked) ? message : undefined;
+  }
+  return unknownToolResultText(body.result, asked);
+}
+
+/** The same unknown tool answer with the close served names added. */
+export function withCloseNames(body: unknown, close: readonly string[]): unknown {
+  const add = closeNamesSentence(close);
+  if (!add || !isObject(body)) return body;
+  if (isObject(body.error)) return { ...body, error: { ...body.error, message: `${String(body.error.message ?? "")}${add}` } };
+  const result = isObject(body.result) ? body.result : null;
+  if (!result || result.isError !== true || !Array.isArray(result.content)) return body;
+  const content = [...result.content];
+  const at = content.findIndex((block) => isObject(block) && block.type === "text");
+  if (at < 0) content.push({ type: "text", text: add.trim() });
+  else content[at] = { ...(content[at] as Json), text: `${String((content[at] as Json).text ?? "")}${add}` };
+  return { ...body, result: { ...result, content } };
 }
 
 /** The tools of a tools/list answer that target Twilio under another name:

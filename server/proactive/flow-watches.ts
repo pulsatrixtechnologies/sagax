@@ -47,6 +47,7 @@ import type { RoutineRunProactive } from "../routines/routine-run-types.ts";
 import type { BuiltWatchPrecheck } from "../routines/routine-watch.ts";
 import type { Routine, RoutineInput } from "../routines/routines.ts";
 import { classifyProactiveActionKind } from "./proactive.ts";
+import { closeNamesSentence, resolveServedTool } from "../mcp/mcp-tool-resolve.ts";
 import type { WatchPauseCause } from "./proactive-choices.ts";
 import { factsOfReference, factTopics, resolveWatchTokens, type WatchTokenContext } from "./watch-tokens.ts";
 
@@ -241,11 +242,19 @@ export function declaredTools(watch: Pick<FlowWatch, "tools" | "observe">): stri
 }
 
 /** #3431 (decision 3): the tools a watch declares that the person's
- * connection marks read-only: what their yes to its domain covers. */
-export function watchReadTools(watches: readonly FlowWatch[], readOnly: ReadonlySet<string>): string[] {
+ * connection marks read-only: what their yes to its domain covers. #4837: a
+ * declared name is read the way a call reads it (resolveServedTool over the
+ * served tools, then the read-only mark of the resolved name), so the yes
+ * covers exactly the tool `observeCall` sends. Without the served tools it
+ * is the exact name. */
+export function watchReadTools(watches: readonly FlowWatch[], readOnly: ReadonlySet<string>, tools?: ReadonlySet<string>): string[] {
   const out = new Set<string>();
   for (const watch of watches) {
-    for (const tool of declaredTools(watch)) if (readOnly.has(tool)) out.add(tool);
+    for (const tool of declaredTools(watch)) {
+      const found = tools ? resolveServedTool(tool, tools) : undefined;
+      const name = found === undefined ? tool : found.kind === "none" ? undefined : found.name;
+      if (name !== undefined && readOnly.has(name)) out.add(name);
+    }
   }
   return [...out].sort();
 }
@@ -256,8 +265,8 @@ export function watchReadTools(watches: readonly FlowWatch[], readOnly: Readonly
  * covers. Its card keeps « Arrêter cette veille » (#3457), its reads pass
  * without a card (#3431), and an old mute of the bot's wakes never quiets
  * it (#3423). */
-export function watchWakeIdentity(watch: Pick<FlowWatch, "id" | "domain" | "tools" | "observe">, readOnly: ReadonlySet<string>): RoutineRunProactive {
-  const reads = watchReadTools([watch as FlowWatch], readOnly);
+export function watchWakeIdentity(watch: Pick<FlowWatch, "id" | "domain" | "tools" | "observe">, readOnly: ReadonlySet<string>, tools?: ReadonlySet<string>): RoutineRunProactive {
+  const reads = watchReadTools([watch as FlowWatch], readOnly, tools);
   return {
     mode: "proactive",
     hops: 0,
@@ -393,9 +402,11 @@ export interface ObserveSession {
 /** The read call of an observe, or why it cannot run as a read. */
 export function observeCall(observe: WatchObserve, session: Pick<ObserveSession, "tools" | "readOnly">): { name: string; args: Json } | { refused: string } {
   if ("tool" in observe) {
-    if (!session.tools.has(observe.tool)) return { refused: `${observe.tool} is not served to this person` };
-    const read = session.readOnly.has(observe.tool) || classifyProactiveActionKind({ tool: observe.tool }) === "read";
-    return read ? { name: observe.tool, args: observe.args } : { refused: `${observe.tool} is not a read` };
+    // #4837: the relay's resolver; the read check is on the name that runs
+    const found = resolveServedTool(observe.tool, session.tools);
+    if (found.kind === "none") return { refused: `${observe.tool} is not served to this person.${closeNamesSentence(found.close)}` };
+    const read = session.readOnly.has(found.name) || classifyProactiveActionKind({ tool: found.name }) === "read";
+    return read ? { name: found.name, args: observe.args } : { refused: `${found.name} is not a read` };
   }
   if ("recipe" in observe) {
     const tool = session.tools.has("flow_run") ? "flow_run" : session.tools.has("flow") ? "flow" : undefined;
@@ -1077,7 +1088,7 @@ export class FlowWatches {
     this.deps.memory.observed(person, watch.id);
     if (verdict.wake) this.deps.memory.alerted(person, watch.id, this.now());
     this.deps.memory.save();
-    return verdict.wake ? { ...verdict, proactive: watchWakeIdentity(watch, reads!.readOnly) } : verdict;
+    return verdict.wake ? { ...verdict, proactive: watchWakeIdentity(watch, reads!.readOnly, reads!.tools) } : verdict;
   }
 
   /** #3140: a skip posts its line once per cause; the same cause stays

@@ -3,13 +3,16 @@
 export type Host = Record<string, any>;
 
 export function createOrgBotAttachments(getHost: () => Host): any {
-async function orgBotAttachments(bot: BotRecord) {
+/** `viewerId` (#4625, the member API): only the conversations this person
+ * may read (botThreadReadable, the private threads rule). */
+async function orgBotAttachments(bot: BotRecord, viewerId?: string) {
   const host = getHost();
   const { listThreadFiles, statMessageFile, store, threadFileRefs } = host;
   // A confidential thread's uploads and outputs are never listed, and a file
   // it shares with an ordinary thread is left out too.
   const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
-  const threads = [...new Set([bot.threadId, ...store.tasks(bot.id).map((task) => task.threadId)])].filter((threadId) => !confidential.has(threadId));
+  const threads = [...new Set([bot.threadId, ...store.tasks(bot.id).map((task) => task.threadId)])].filter((threadId) => !confidential.has(threadId))
+    .filter((threadId) => viewerId === undefined || (typeof threadId === "string" && threadId !== "" && host.botThreadReadable(bot, threadId, viewerId, "thread.read")));
   const confidentialFiles = new Set<string>();
   for (const threadId of confidential) {
     for (const ref of threadFileRefs(host.store.messagesFor(threadId), bot.id)) if (ref.source === "upload" || ref.source === "attachment") confidentialFiles.add(ref.path);

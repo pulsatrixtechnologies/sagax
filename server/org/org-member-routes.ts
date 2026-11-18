@@ -15,6 +15,10 @@
 //   GET  /api/org/member/bots/{id}/docs        the owner's documents
 //   GET  /api/org/member/bots/{id}/memory      the owner's memory
 //   GET  /api/org/member/bots/{id}/connectors  connector names of an owned bot
+//   GET  /api/org/member/bots/{id}/files/roots|list|stat|read|download
+//                                               every file of an owned bot,
+//                                               the admin file browser's code
+//                                               (server/org/org-admin-files.ts)
 //   GET  /api/org/member/approvals?status=pending  what waits on the person
 //                                               (#3512: every kind, the one
 //                                               source of shared/waiting-items.ts)
@@ -74,6 +78,8 @@ import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 import { readRouteRefusal } from "../route-refusal.ts";
 import { isRefusal, parseSendFiles, type FileInput } from "../agent-api.ts";
+import { sensitiveEnvironmentPath } from "../safety/sensitive-path.ts";
+import { answerBotFiles, type BotAttachment, type BotFileRoot, type FilesView } from "./org-admin-files.ts";
 import { isEffortLevel, type ModelSelection } from "../../shared/model-selection.ts";
 
 export const ORG_MEMBER_PREFIX = "/api/org/member/";
@@ -239,6 +245,16 @@ export interface OrgMemberRouteDeps {
   sentText?(botId: string, threadId: string, sendId: string): string | null;
   /** Lot S1: the model a conversation runs on now (its own, else its bot's). */
   threadModel?(botId: string, threadId: string): ModelSelection | null;
+  /** #4625: the files of a bot the person owns, as this person may read
+   * them (server/org/org-admin-files.ts): a conversation folder or an
+   * attachment only from a conversation they may read (the private threads
+   * rule). Null when there is no such bot. */
+  botFiles?: {
+    files(botId: string, principalId: string): { name: string; roots: BotFileRoot[] } | null;
+    attachments(botId: string, principalId: string): Promise<BotAttachment[]>;
+    /** The person a surface bot (lot S1) is, else null. */
+    surfaceOwner(botId: string): string | null;
+  };
   /** One admin activity row, category `client`, actor the person. */
   record(person: MemberPerson, entry: { action: string; target: { kind: string; id?: string; name?: string }; after?: Record<string, unknown> }): void;
   /** The agent-to-agent API (server/agent-api.ts) for this person: the
@@ -305,6 +321,11 @@ interface StreamAnswer {
   headers?: Record<string, string>;
 }
 
+/** An answer the route writes itself (a file download). */
+interface RawAnswer {
+  raw: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+}
+
 interface MemberContext {
   person: MemberPerson;
   params: Record<string, string>;
@@ -322,7 +343,7 @@ interface MemberRoute {
   /** What the route takes beyond its first contract, announced by `GET
    * capabilities` as `METHOD path:feature` (#4632: `files`). */
   features?(): readonly string[];
-  handle(ctx: MemberContext): Promise<Answer | StreamAnswer>;
+  handle(ctx: MemberContext): Promise<Answer | StreamAnswer | RawAnswer>;
 }
 
 /** Caps for a member routine PATCH (match Sagax / agents catalog). */
@@ -376,6 +397,21 @@ function scrubValue(value: unknown, depth = 0): unknown {
   }
   return out;
 }
+
+/** #4625: how a person sees the files of their own bot. Never listed nor
+ * served: a name of the central sensitive rule (server/safety/
+ * sensitive-path.ts sensitiveEnvironmentPath) anywhere in the path: a
+ * dotfile or dot folder (`.env`, `.mcp.json`, `.claude/`, `.git/`, `.ssh/`),
+ * a credential or key file name (`credentials.json`, `secrets.yaml`,
+ * `token.txt`, `*.pem`, `*.key`, `id_rsa`, `kubeconfig`), or a
+ * percent-encoded name. A text read goes through the member API's secret
+ * mask; a download is the file as it is. */
+export const MEMBER_FILES_VIEW: FilesView = {
+  withheld: (path) => sensitiveEnvironmentPath(path),
+  text: (text) => scrubText(text),
+  marker: "x-sagax-member-api",
+  recursive: true,
+};
 
 /** A document path (`docs/<name>.md`) or null. Anything else, including a
  * traversal, is refused before a file is opened. */
@@ -1238,6 +1274,10 @@ export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingM
       const reply = await route.handle({ person, params: hit.params, url, body, signal: aborted.signal });
       if ("stream" in reply) {
         await streamAnswer(res, reply);
+        return true;
+      }
+      if ("raw" in reply) {
+        await reply.raw(req, res);
         return true;
       }
       send(res, reply.status, reply.body);
@@ -2115,6 +2155,37 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         return answer({ connectors });
       },
     },
+    ...(["roots", "list", "stat", "read", "download"] as const).map((action): MemberRoute => ({
+      method: "GET", path: `bots/{id}/files/${action}`, permission: "clients.botsRead",
+      async handle({ person, params, url }) {
+        const files = deps.botFiles;
+        const botId = params.id!;
+        if (!files) return fail(404, "not_found", "No such bot.");
+        // Lot S1: a surface bot is its person's alone (no catalogue lists
+        // it); any other bot only when the catalogue says the person owns it.
+        const surfaceOwner = files.surfaceOwner(botId);
+        if (surfaceOwner !== null) {
+          if (surfaceOwner.trim().toLowerCase() !== person.principalId.trim().toLowerCase()) return fail(404, "not_found", "No such bot.");
+        } else {
+          const owned = await ownedBot(person, botId);
+          if ("status" in owned) return owned;
+        }
+        const principalId = person.principalId;
+        return {
+          raw: (req, res) => answerBotFiles({
+            req, res, url, botId, action, principalId,
+            deps: {
+              botFiles: (id) => files.files(id, principalId),
+              attachments: (id) => files.attachments(id, principalId),
+              // reads of the member API are not audited
+              record: () => undefined,
+            },
+            send,
+            view: MEMBER_FILES_VIEW,
+          }),
+        };
+      },
+    })),
     {
       method: "GET", path: "approvals/{id}", permission: "clients.botsRead",
       async handle({ person, params, url }) {

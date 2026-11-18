@@ -33,12 +33,20 @@
 // real path must stay inside the root's real path. Reads open with
 // O_NOFOLLOW. A read answers at most 128 KiB, a download at most 100 MiB.
 // Reads and downloads go to the admin activity log (category bot).
+//
+// The member API (server/org/org-member-routes.ts, `bots/{id}/files/...`)
+// answers through this same code for the bots a person owns, with a
+// FilesView: names it never lists nor serves (server/safety/sensitive-path.ts),
+// only the conversations the person may read, the member API's secret mask on
+// a text read, and a recursive, paged listing for a host product's Library.
 import { constants, lstatSync, realpathSync, readdirSync, type Stats } from "node:fs";
 import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
 
-import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
+import { atRestStream, describeHandle, plainSizeFor } from "../encryption/content-at-rest.ts";
+import { ContentSealError } from "../encryption/content-crypto.ts";
+import { ContentKeyUnavailable } from "../encryption/content-keys.ts";
 
 export const ADMIN_FILES_ROUTE = /^files\/([A-Za-z0-9_-]{1,128})\/(roots|list|stat|read|download)$/;
 export const FILES_MAX_ENTRIES = 1_000;
@@ -46,15 +54,30 @@ export const FILES_MAX_READ_BYTES = 128 * 1024;
 export const FILES_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 export const FILES_MAX_PATH_BYTES = 1_024;
 const MAX_SEGMENT_BYTES = 255;
+/** A recursive page: entries answered by default, and at most. */
+export const FILES_PAGE_DEFAULT = 200;
+export const FILES_PAGE_MAX = 1_000;
+/** The entries one recursive page looks at before it answers with a cursor
+ * where it stopped (a name search over a large tree goes on next page). */
+export const FILES_WALK_BUDGET = 20_000;
 
 export type FileRootId = "workspace" | "tasks" | "project" | "attachments" | "sandbox" | "desktop";
 export const FILE_ROOT_IDS: readonly FileRootId[] = ["workspace", "tasks", "project", "attachments", "sandbox", "desktop"];
 
 /** Why a root is listed but cannot be opened. */
-export type RootUnavailable = "not_created" | "outside_server_data" | "person_environment" | "own_computer" | "not_set";
+export type RootUnavailable = "not_created" | "outside_server_data" | "outside_bot_folders" | "person_environment" | "own_computer" | "not_set";
 
 export type BotFileRoot =
-  | { id: "workspace" | "tasks" | "project"; kind: "folder"; dir: string; /** First-level names left out (confidential threads' folders). */ hidden?: ReadonlySet<string> }
+  | {
+    id: "workspace" | "tasks" | "project";
+    kind: "folder";
+    dir: string;
+    /** First-level names left out (confidential threads' folders). */
+    hidden?: ReadonlySet<string>;
+    /** The only first-level names shown, when set (the member API: the
+     * folders of the conversations its person may read). */
+    shown?: ReadonlySet<string>;
+  }
   | { id: "attachments"; kind: "attachments"; dir: string }
   | { id: FileRootId; kind: "unavailable"; reason: RootUnavailable };
 
@@ -87,6 +110,23 @@ export interface OrgAdminFilesDeps {
 }
 
 export type FileEntryType = "file" | "dir" | "link" | "other";
+
+/** What a file is, for a grid's type filter (from its name, never its bytes). */
+export type FileKind = "image" | "pdf" | "text" | "document" | "spreadsheet" | "presentation" | "archive" | "other";
+export const FILE_KINDS: readonly FileKind[] = ["image", "pdf", "text", "document", "spreadsheet", "presentation", "archive", "other"];
+
+/** How one caller sees a bot's files. The admin API passes none. */
+export interface FilesView {
+  /** True for a name that is never listed nor served (it reads as missing):
+   * `path` is the wire path under a folder root, an attachment's name. */
+  withheld?(path: string): boolean;
+  /** The text a read answers (a secret mask). */
+  text?(text: string): string;
+  /** The marker header of a download. */
+  marker?: "x-sagax-admin-api" | "x-sagax-member-api";
+  /** `list?recursive=1` walks a root, or every root, paged. */
+  recursive?: boolean;
+}
 
 export interface WireFileEntry {
   name: string;
@@ -244,7 +284,7 @@ export function listFolder(dir: string, segments: readonly string[], max = FILES
       continue;
     }
     const type = entryType(entry);
-    entries.push({ name, path: `${prefix}${name}`, type, size: type === "file" ? entry.size : null, modifiedAt: Math.round(entry.mtimeMs) });
+    entries.push({ name, path: `${prefix}${name}`, type, size: type === "file" ? plainSizeFor(join(path, name), entry) : null, modifiedAt: Math.round(entry.mtimeMs) });
   }
   entries.sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.toLocaleLowerCase().localeCompare(b.name.toLocaleLowerCase()) || a.name.localeCompare(b.name));
   return { entries: entries.slice(0, max), truncated: entries.length > max };
@@ -267,6 +307,19 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 /** The type a name suggests; the console decides what it previews. */
 export function mimeOf(name: string): string {
   return MIME_BY_EXTENSION[extname(name).toLowerCase()] ?? "application/octet-stream";
+}
+
+/** What a file is, from its name (mimeOf). */
+export function kindOf(name: string): FileKind {
+  const mime = mimeOf(name);
+  if (mime.startsWith("image/")) return "image";
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "text/csv" || mime === "text/tab-separated-values" || mime.endsWith(".spreadsheetml.sheet")) return "spreadsheet";
+  if (mime.endsWith(".wordprocessingml.document")) return "document";
+  if (mime.endsWith(".presentationml.presentation")) return "presentation";
+  if (mime === "application/zip" || mime === "application/gzip" || mime === "application/x-tar") return "archive";
+  if (mime.startsWith("text/") || ["application/json", "application/x-ndjson", "application/yaml", "application/toml", "application/xml", "application/sql"].includes(mime)) return "text";
+  return "other";
 }
 
 /** Whether these bytes read as text: no NUL and valid UTF-8 (a character
@@ -304,6 +357,13 @@ export function attachmentDisposition(name: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
+/** A first-level name of a folder root that is not shown (a confidential
+ * thread's folder; for the member API, any conversation folder its person
+ * may not read). */
+function firstLevelOut(root: Extract<BotFileRoot, { kind: "folder" }>, name: string): boolean {
+  return Boolean(root.hidden?.has(name) || (root.shown && !root.shown.has(name)));
+}
+
 interface Located {
   root: FileRootId;
   /** The wire path. */
@@ -317,7 +377,7 @@ interface Located {
 }
 
 /** The file or folder a request names, through its root. */
-async function locate(deps: OrgAdminFilesDeps, botId: string, roots: BotFileRoot[], rootRaw: string | null, pathRaw: string | null): Promise<Located> {
+async function locate(deps: OrgAdminFilesDeps, botId: string, roots: BotFileRoot[], rootRaw: string | null, pathRaw: string | null, view: FilesView): Promise<Located> {
   if (!rootRaw || !FILE_ROOT_IDS.includes(rootRaw as FileRootId)) throw new FileRefusal(400, "bad_root", `root is one of ${FILE_ROOT_IDS.join(", ")}.`);
   const root = roots.find((r) => r.id === rootRaw);
   if (!root) throw new FileRefusal(404, "root_missing", "This bot has no such folder.");
@@ -330,7 +390,7 @@ async function locate(deps: OrgAdminFilesDeps, botId: string, roots: BotFileRoot
     }
     if (segments.length !== 1) throw notFound();
     const found = (await deps.attachments(botId)).find((a) => a.id === segments[0]);
-    if (!found) throw notFound();
+    if (!found || view.withheld?.(found.name)) throw notFound();
     let rootReal: string;
     let real: string;
     let stat: Stats;
@@ -355,9 +415,196 @@ async function locate(deps: OrgAdminFilesDeps, botId: string, roots: BotFileRoot
   } catch {
     throw new FileRefusal(404, "root_missing", "This folder does not exist yet.");
   }
-  if (segments.length && root.hidden?.has(segments[0]!)) throw notFound();
+  if (segments.length && (firstLevelOut(root, segments[0]!) || view.withheld?.(segments.join("/")))) throw notFound();
   const { path, stat } = resolveInRoot(root.dir, segments);
   return { root: root.id, path: segments.join("/"), name: segments.at(-1) ?? "", real: path, stat, rootDir, segments };
+}
+
+/** One file of a recursive listing. */
+export interface WireLibraryEntry {
+  root: FileRootId;
+  name: string;
+  /** Relative to its root; for an attachment its id. */
+  path: string;
+  type: "file";
+  size: number;
+  modifiedAt: number | null;
+  mime: string;
+  kind: FileKind;
+}
+
+/** Where a recursive page stopped: a root and the last entry looked at
+ * (segments under a folder root, the id of an attachment). */
+interface WalkCursor {
+  root: FileRootId;
+  at: string[];
+}
+
+function encodeCursor(cursor: WalkCursor): string {
+  return Buffer.from(JSON.stringify({ r: cursor.root, p: cursor.at }), "utf8").toString("base64url");
+}
+
+function decodeCursor(raw: string | null): WalkCursor | null {
+  if (raw === null || raw === "") return null;
+  const refused = () => new FileRefusal(400, "bad_cursor", "cursor is the nextCursor of an earlier page.");
+  if (raw.length > 4 * FILES_MAX_PATH_BYTES) throw refused();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    throw refused();
+  }
+  const value = parsed as { r?: unknown; p?: unknown } | null;
+  if (!value || !FILE_ROOT_IDS.includes(value.r as FileRootId) || !Array.isArray(value.p) || !value.p.every((part) => typeof part === "string")) throw refused();
+  // the same rules as a path: never `..`, a NUL or a slash inside a name
+  const at = value.p as string[];
+  if (at.length) parseRelativePath(at.join("/"));
+  return { root: value.r as FileRootId, at };
+}
+
+/** Plain code unit order: the same on every call, so a cursor holds. */
+const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+interface Walk {
+  limit: number;
+  budget: number;
+  query: string;
+  kinds: ReadonlySet<FileKind> | null;
+  view: FilesView;
+  entries: WireLibraryEntry[];
+  /** The last entry looked at: the cursor when the page stops. */
+  last: WalkCursor | null;
+  stopped: boolean;
+}
+
+function wanted(walk: Walk, name: string): boolean {
+  if (walk.query && !name.toLocaleLowerCase().includes(walk.query)) return false;
+  return !walk.kinds || walk.kinds.has(kindOf(name));
+}
+
+/** Walk one folder of a root in name order, after `after` (segments below
+ * this folder's own, null when the whole folder comes after the cursor).
+ * A symbolic link or a special file is neither listed nor followed. */
+function walkFolder(walk: Walk, root: Extract<BotFileRoot, { kind: "folder" }>, real: string, segments: string[], after: string[] | null): void {
+  let names: string[];
+  try {
+    names = readdirSync(real).sort(byName);
+  } catch {
+    return;
+  }
+  const depth = segments.length;
+  for (const name of names) {
+    if (walk.stopped) return;
+    if (depth === 0 && firstLevelOut(root, name)) continue;
+    let below: string[] | null = null;
+    let emit = true;
+    if (after && after.length > depth) {
+      const mark = after[depth]!;
+      if (name < mark) continue;
+      if (name === mark) {
+        // the cursor itself (done) or one of its folders (partly done)
+        emit = false;
+        below = after.length > depth + 1 ? after : null;
+      }
+    }
+    const at = [...segments, name];
+    const path = at.join("/");
+    if (walk.view.withheld?.(path)) continue;
+    if (walk.budget <= 0) {
+      walk.stopped = true;
+      return;
+    }
+    walk.budget -= 1;
+    let stat: Stats;
+    try {
+      stat = lstatSync(join(real, name));
+    } catch {
+      continue;
+    }
+    // a folder holding the cursor is not done yet: the cursor stays below it
+    if (emit || below === null) walk.last = { root: root.id, at };
+    if (stat.isDirectory()) {
+      walkFolder(walk, root, join(real, name), at, below);
+      continue;
+    }
+    if (!emit || !stat.isFile() || !wanted(walk, name)) continue;
+    walk.entries.push({ root: root.id, name, path, type: "file", size: plainSizeFor(join(real, name), stat), modifiedAt: Math.round(stat.mtimeMs), mime: mimeOf(name), kind: kindOf(name) });
+    if (walk.entries.length >= walk.limit) walk.stopped = true;
+  }
+}
+
+/** `list?recursive=1`: every file of one root, or of every root, in a
+ * stable order, a page at a time (`limit`, `cursor`), with a name search
+ * (`q`) and a type filter (`type`, kinds separated by commas). */
+async function listRecursive(deps: OrgAdminFilesDeps, botId: string, roots: BotFileRoot[], params: URLSearchParams, view: FilesView): Promise<{ root: FileRootId | null; entries: WireLibraryEntry[]; nextCursor: string | null }> {
+  const rootRaw = params.get("root");
+  if (rootRaw !== null && rootRaw !== "" && !FILE_ROOT_IDS.includes(rootRaw as FileRootId)) throw new FileRefusal(400, "bad_root", `root is one of ${FILE_ROOT_IDS.join(", ")}.`);
+  const only = rootRaw ? rootRaw as FileRootId : null;
+  if (params.get("path")) throw new FileRefusal(400, "bad_path", "A recursive listing walks a whole root: leave path out.");
+  const limitRaw = params.get("limit");
+  if (limitRaw !== null && !/^\d{1,4}$/.test(limitRaw)) throw new FileRefusal(400, "bad_limit", `limit is 1 to ${FILES_PAGE_MAX}.`);
+  const limit = limitRaw === null ? FILES_PAGE_DEFAULT : Number(limitRaw);
+  if (limit < 1 || limit > FILES_PAGE_MAX) throw new FileRefusal(400, "bad_limit", `limit is 1 to ${FILES_PAGE_MAX}.`);
+  const typeRaw = params.get("type");
+  let kinds: Set<FileKind> | null = null;
+  if (typeRaw) {
+    const asked = typeRaw.split(",").map((part) => part.trim()).filter(Boolean);
+    if (!asked.length || asked.some((kind) => !FILE_KINDS.includes(kind as FileKind))) throw new FileRefusal(400, "bad_type", `type is one or more of ${FILE_KINDS.join(", ")}.`);
+    kinds = new Set(asked as FileKind[]);
+  }
+  const query = (params.get("q") ?? "").trim().toLocaleLowerCase().slice(0, 200);
+  const cursor = decodeCursor(params.get("cursor"));
+  const order = roots.filter((root) => (root.kind === "folder" || root.kind === "attachments") && (!only || root.id === only));
+  if (only && !roots.some((root) => root.id === only)) throw new FileRefusal(404, "root_missing", "This bot has no such folder.");
+  const cursorAt = cursor ? order.findIndex((root) => root.id === cursor.root) : 0;
+  if (cursor && cursorAt < 0) throw new FileRefusal(400, "bad_cursor", "cursor is the nextCursor of an earlier page.");
+  const walk: Walk = { limit, budget: FILES_WALK_BUDGET, query, kinds, view, entries: [], last: cursor, stopped: false };
+  for (let index = cursorAt; index < order.length && !walk.stopped; index += 1) {
+    const root = order[index]!;
+    const after = cursor && index === cursorAt ? cursor.at : null;
+    if (root.kind === "attachments") {
+      const mark = after?.[0] ?? null;
+      const listed = (await deps.attachments(botId)).filter((a) => !view.withheld?.(a.name)).sort((a, b) => byName(a.id, b.id));
+      for (const a of listed) {
+        if (walk.stopped) break;
+        if (mark !== null && a.id <= mark) continue;
+        if (walk.budget <= 0) {
+          walk.stopped = true;
+          break;
+        }
+        walk.budget -= 1;
+        let stat: Stats;
+        try {
+          stat = lstatSync(a.localPath);
+        } catch {
+          continue;
+        }
+        walk.last = { root: root.id, at: [a.id] };
+        if (!stat.isFile() || !wanted(walk, a.name)) continue;
+        walk.entries.push({ root: root.id, name: a.name, path: a.id, type: "file", size: plainSizeFor(a.localPath, stat), modifiedAt: a.at, mime: mimeOf(a.name), kind: kindOf(a.name) });
+        if (walk.entries.length >= walk.limit) walk.stopped = true;
+      }
+      continue;
+    }
+    if (root.kind !== "folder") continue;
+    let real: string;
+    try {
+      real = realpathSync(root.dir);
+    } catch {
+      continue;
+    }
+    // a root that is itself a link is not walked
+    try {
+      if (lstatSync(root.dir).isSymbolicLink()) continue;
+    } catch {
+      continue;
+    }
+    walkFolder(walk, root, real, [], after);
+  }
+  // A stop at the very end of the last root still answers a cursor; the
+  // next page is then empty with no cursor.
+  const nextCursor = walk.stopped && walk.last ? encodeCursor(walk.last) : null;
+  return { root: only, entries: walk.entries, nextCursor };
 }
 
 export type FilesSend = (res: ServerResponse, status: number, body: unknown) => void;
@@ -372,8 +619,11 @@ export async function answerBotFiles(input: {
   principalId: string;
   deps: OrgAdminFilesDeps;
   send: FilesSend;
+  /** The member API's view; none for the admin API. */
+  view?: FilesView;
 }): Promise<void> {
   const { res, url, botId, action, deps, send } = input;
+  const view = input.view ?? {};
   const bot = deps.botFiles(botId);
   if (!bot) return send(res, 404, { code: "not_found", message: "No such bot.", error: "No such bot." });
   const params = url.searchParams;
@@ -386,7 +636,11 @@ export async function answerBotFiles(input: {
           : { id: root.id, available: true }),
       });
     }
-    const target = await locate(deps, botId, bot.roots, params.get("root"), params.get("path"));
+    if (action === "list" && view.recursive && params.get("recursive") === "1") {
+      const page = await listRecursive(deps, botId, bot.roots, params, view);
+      return send(res, 200, { bot: { id: botId, name: bot.name }, recursive: true, ...page });
+    }
+    const target = await locate(deps, botId, bot.roots, params.get("root"), params.get("path"), view);
     if (action === "list") {
       if (target.root === "attachments" && target.path === "") {
         const listed = await deps.attachments(botId);
@@ -398,8 +652,8 @@ export async function answerBotFiles(input: {
           } catch {
             continue;
           }
-          if (!stat.isFile()) continue;
-          entries.push({ name: a.name, path: a.id, type: "file", size: stat.size, modifiedAt: a.at });
+          if (!stat.isFile() || view.withheld?.(a.name)) continue;
+          entries.push({ name: a.name, path: a.id, type: "file", size: plainSizeFor(a.localPath, stat), modifiedAt: a.at });
         }
         entries.sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0) || a.name.localeCompare(b.name));
         return send(res, 200, { root: target.root, path: "", entries: entries.slice(0, FILES_MAX_ENTRIES), truncated: entries.length > FILES_MAX_ENTRIES });
@@ -407,7 +661,7 @@ export async function answerBotFiles(input: {
       if (target.root === "attachments") throw new FileRefusal(400, "not_a_folder", "This is a file, not a folder.");
       const root = bot.roots.find((r) => r.id === target.root) as Extract<BotFileRoot, { kind: "folder" }>;
       const listed = listFolder(root.dir, parseRelativePath(params.get("path")));
-      const entries = target.path === "" && root.hidden?.size ? listed.entries.filter((entry) => !root.hidden!.has(entry.name)) : listed.entries;
+      const entries = listed.entries.filter((entry) => !(target.path === "" && firstLevelOut(root, entry.name)) && !view.withheld?.(entry.path));
       return send(res, 200, { root: target.root, path: target.path, entries, truncated: listed.truncated });
     }
     const type = entryType(target.stat);
@@ -417,7 +671,7 @@ export async function answerBotFiles(input: {
         path: target.path,
         name: target.name,
         type,
-        size: type === "file" ? target.stat.size : null,
+        size: type === "file" ? plainSizeFor(target.real, target.stat) : null,
         modifiedAt: Math.round(target.stat.mtimeMs),
         mime: type === "file" ? mimeOf(target.name) : null,
       });
@@ -429,26 +683,38 @@ export async function answerBotFiles(input: {
       try {
         const stat = await handle.stat();
         if (!stat.isFile()) throw new FileRefusal(400, "not_a_file", "This is not a file.");
-        const start = Math.min(offset, stat.size);
-        const want = Math.min(length, stat.size - start);
-        const buffer = Buffer.alloc(want);
-        const { bytesRead } = want > 0 ? await handle.read(buffer, 0, want, start) : { bytesRead: 0 };
-        const bytes = buffer.subarray(0, bytesRead);
-        const eof = start + bytesRead >= stat.size;
+        // a file sealed at rest (a bot's memory) reads as its plaintext, as
+        // its download does (server/encryption/content-at-rest.ts)
+        const content = await describeHandle(handle, join(target.rootDir, ...target.segments));
+        const start = Math.min(offset, content.size);
+        const want = Math.min(length, content.size - start);
+        let bytes: Buffer;
+        if (want <= 0) bytes = Buffer.alloc(0);
+        else if (!content.sealed) {
+          const buffer = Buffer.alloc(want);
+          const { bytesRead: got } = await handle.read(buffer, 0, want, start);
+          bytes = buffer.subarray(0, got);
+        } else {
+          const chunks: Buffer[] = [];
+          for await (const chunk of atRestStream(handle, content, start, start + want - 1, false)) chunks.push(chunk as Buffer);
+          bytes = Buffer.concat(chunks).subarray(0, want);
+        }
+        const bytesRead = bytes.length;
+        const eof = start + bytesRead >= content.size;
         const text = looksLikeText(bytes, !eof);
         deps.record(input.principalId, { action: "bot.files.read", botId, botName: bot.name, root: target.root, path: target.path, bytes: bytesRead });
         return send(res, 200, {
           root: target.root,
           path: target.path,
           name: target.name,
-          size: stat.size,
+          size: content.size,
           modifiedAt: Math.round(stat.mtimeMs),
           mime: mimeOf(target.name),
           offset: start,
           length: bytesRead,
           eof,
           binary: !text,
-          ...(text ? { text: bytes.toString("utf8") } : {}),
+          ...(text ? { text: view.text ? view.text(bytes.toString("utf8")) : bytes.toString("utf8") } : {}),
         });
       } finally {
         await handle.close();
@@ -484,7 +750,7 @@ export async function answerBotFiles(input: {
       "content-type": "application/octet-stream",
       "content-length": String(content.size),
       "content-disposition": attachmentDisposition(target.name),
-      "x-sagax-admin-api": "1",
+      [view.marker ?? "x-sagax-admin-api"]: "1",
       "x-sagax-file-type": mimeOf(target.name),
       "x-content-type-options": "nosniff",
       "cache-control": "no-store",
@@ -509,6 +775,16 @@ export async function answerBotFiles(input: {
     return;
   } catch (error) {
     if (error instanceof FileRefusal) return send(res, error.status, { code: error.code, message: error.message, error: error.message });
+    // a file sealed at rest whose key is not unlocked yet, or that does not
+    // open here: a clear refusal, never a server error nor an empty file
+    if (error instanceof ContentKeyUnavailable) {
+      const message = "This file is sealed at rest and its key is not unlocked on this server yet. Try again later.";
+      return send(res, 503, { code: "content_locked", message, error: message });
+    }
+    if (error instanceof ContentSealError) {
+      const message = "This file is sealed at rest and does not open on this server.";
+      return send(res, 422, { code: "content_unreadable", message, error: message });
+    }
     const code = (error as NodeJS.ErrnoException)?.code;
     if (code === "ELOOP" || code === "EMLINK") return send(res, 403, { code: "link_refused", message: "Links are not followed here.", error: "Links are not followed here." });
     if (code === "ENOENT" || code === "ENOTDIR") return send(res, 404, { code: "not_found", message: "No such file or folder.", error: "No such file or folder." });

@@ -286,6 +286,22 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
     await waitFor(async () => (await fetch(`${BASE}/api/attachments/${name}`, { headers: { cookie: alice.cookie! } })).status === 404, 70_000);
     expect((await fetch(`${BASE}/api/attachments/${name}`, { headers: { cookie: dave.cookie! } })).status).toBe(404);
     expect((await fetch(`${BASE}/api/attachments/${name}`, { headers: { cookie: bob.cookie! } })).status).toBe(200);
+    // #4625: the member API's files of alice's own bot hold her
+    // conversations only, never bob's private one nor its upload; bob gets
+    // nothing of a bot he does not own
+    const memberFiles = async (user: FakeOidcUser, sub: string) => {
+      const res = await fetch(`${BASE}/api/org/member/bots/${botId}/files/${sub}`, { headers: { authorization: `Bearer ${idp.consoleAssertion({ sub: user.sub, aud: BASE, role: user.role === "admin" ? "admin" : "employee", teams: [] })}` } });
+      return { status: res.status, text: await res.text() };
+    };
+    const aliceTasks = await memberFiles(ALICE, "list?root=tasks");
+    expect(aliceTasks.status, aliceTasks.text).toBe(200);
+    expect(aliceTasks.text).not.toContain(bobThread);
+    const aliceWalk = await memberFiles(ALICE, "list?recursive=1&limit=1000");
+    expect(aliceWalk.status, aliceWalk.text).toBe(200);
+    expect(aliceWalk.text).not.toContain(bobThread);
+    expect(aliceWalk.text).not.toContain(name);
+    expect((await memberFiles(ALICE, `list?root=tasks&path=${bobThread}`)).status).toBe(404);
+    expect((await memberFiles(BOB, "roots")).status).toBe(404);
 
     // live frames: each stream carries its own thread only
     await sleep(500);

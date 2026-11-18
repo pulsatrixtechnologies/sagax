@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 
 import type { InboxApproval, InboxDestination } from "../../../shared/approvals-inbox";
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "@/components/PendingApproval";
+import { XHeldDraft, heldXDraftOf } from "@/components/XHeldDraft";
 import { AttentionCard } from "@/components/AttentionCard";
 import { QuestionCard } from "@/components/QuestionCard";
 import { SuggestionFeedback } from "@/components/SuggestionFeedback";
@@ -149,6 +150,18 @@ export function ApprovalDetail({
         ) : entry.kind === "question" && message ? (
           <div className="px-5 py-4" data-inbox-question="">
             <QuestionCard threadId={entry.threadId} bot={{ name: entry.botName }} message={message} onAnswered={() => onDecided("answer")} onAnswerFailed={onDecideFailed} />
+          </div>
+        ) : pending && !ownCard && heldXDraftOf(pending.message) ? (
+          // #4638: the same X draft card as the chat's pinned card, one card, one state
+          <div className="px-5 py-4" data-inbox-x-post="">
+            <XHeldDraft
+              key={pending.requestId}
+              message={pending.message}
+              threadId={pending.threadId ?? entry.threadId}
+              requestId={pending.message.card?.approvalOrigin?.requestId ?? pending.requestId}
+              onDecided={onDecided}
+              onDecideFailed={onDecideFailed}
+            />
           </div>
         ) : pending && !ownCard ? (
           <>

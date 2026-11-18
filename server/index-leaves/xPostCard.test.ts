@@ -87,4 +87,18 @@ describe("the X draft card's Post (#4638)", () => {
     expect(card.finish("t1", TOOL, false, "no", JSON.stringify({ text: "Direct" }))).toBe(false);
     expect(card.finish("t1", "mcp__x__get_posts", true, "{}", JSON.stringify({ text: "Direct" }))).toBe(false);
   });
+
+  it("in a group chat the bot that posted speaks for the published-post card", () => {
+    const { card, messages, host } = setup();
+    const appended: any[] = [];
+    host.store.appendMessage = (_t: string, row: any) => { appended.push(row); messages.push({ id: `g${appended.length}`, ...row }); return row; };
+    host.store.groupByThread = () => ({ id: "g1" });
+    host.store.botByThread = () => undefined;
+    const speaker = { botId: "b7", name: "Poster", color: "green" };
+    expect(card.finish("t1", TOOL, true, '{"url":"https://x.com/sample/status/1234567890123"}', JSON.stringify({ text: "In a room" }), speaker)).toBe(true);
+    expect(appended[0].from).toEqual(speaker);
+    expect(appended[0].text).toContain("```x-post");
+    // nobody to speak for: nothing is invented
+    expect(card.finish("t1", TOOL, true, "{}", JSON.stringify({ text: "In a room" }))).toBe(false);
+  });
 });

@@ -133,7 +133,7 @@ export function createXPostCard(getHost: () => Host): any {
 
   /** The X tool call ended: posted with its link, or failed with why. A call the person answered
    * on the held draft card (no state yet) gets its published-post card here. */
-  function finish(threadId: string, tool: string, ok: boolean, output: string | undefined, input: string | undefined) {
+  function finish(threadId: string, tool: string, ok: boolean, output: string | undefined, input: string | undefined, speaker?: { botId: string; name: string; color?: string }) {
     const host = getHost();
     for (const row of host.store.messagesFor(threadId)) {
       for (const request of Object.values(row.xPosts ?? {}) as XPostRequest[]) {
@@ -147,9 +147,11 @@ export function createXPostCard(getHost: () => Host): any {
       }
     }
     const text = ok && isXPostTool(tool) ? xPostTextOfInput(input) : undefined;
-    const bot = text ? host.store.botByThread(threadId) : undefined;
-    if (text && bot && !host.store.groupByThread(threadId)) {
-      showPosted(host, threadId, { botId: bot.id, name: bot.name, color: bot.color }, text, xPostUrlFromResult(output));
+    // in a group the bot that made the call speaks for the card; in a 1:1 thread its bot does
+    const owner = text && !speaker ? host.store.botByThread(threadId) : undefined;
+    const from = speaker ?? (owner ? { botId: owner.id, name: owner.name, color: owner.color } : undefined);
+    if (text && from) {
+      showPosted(host, threadId, from, text, xPostUrlFromResult(output));
       return true;
     }
     return false;

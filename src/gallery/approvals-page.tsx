@@ -4,6 +4,7 @@
 // /src/gallery/approvals-page.html; not part of the packaged app.
 // ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards) &today=1 (a "needs you" card and a proactive proposal, #2689)
 // &routine=1 (2026-11-04: the oldest card is a routine run's, named by its routine)
+// &xpost=1 (#4638: the oldest card is a bot's own X post call, shown as the X draft card)
 // &held=1 (#4233: what waited while the person was quiet, the "While you were quiet" group)
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -24,6 +25,7 @@ const ORG = params.get("scope") === "org";
 const ROUTINE = params.get("routine") === "1";
 const TODAY = params.get("today") === "1";
 const HELD = params.get("held") === "1";
+const XPOST = params.get("xpost") === "1";
 const NOW = Date.now();
 const MIN = 60_000;
 
@@ -76,7 +78,9 @@ function question(i: number, botIndex: number, ageMin: number): InboxApproval {
 function fixtures(n: number): InboxApproval[] {
   const out: InboxApproval[] = [];
   const base = [
-    () => permission(0, 0, 4, "Bash", { command: "rm -rf build/ && pnpm build" }, { risk: "execute" }),
+    () => XPOST
+      ? permission(0, 0, 4, "mcp__x__create_post", { text: "A sample build is live.\n\nIt shows how a draft looks before it is posted.\n\nTell us what you think." }, { risk: "write" })
+      : permission(0, 0, 4, "Bash", { command: "rm -rf build/ && pnpm build" }, { risk: "execute" }),
     () => question(1, 1, 75),
     () => permission(2, 2, 26 * 60, "mcp__linear__create_issue", { title: "Corriger la page de connexion", team: "Web" }, { risk: "write", needsKey: true, bulk: "needs-key" }),
   ];

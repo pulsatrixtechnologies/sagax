@@ -124,6 +124,10 @@ describe("computerSelectValue / options / title", () => {
     expect(options.find((option) => option.value === "local")?.label).toContain("MacBook");
     expect(computerCardTitle("local", bridge, true)).toContain("MacBook");
     expect(computerCardTitle("cloud", bridge, true).length).toBeGreaterThan(0);
+    // one name for the cloud computer, on the card and in its menu row
+    for (const org of [false, true]) {
+      expect(computerCardTitle("cloud", bridge, org)).toBe(computerSelectOptions(bridge, org).find((o) => o.value === "cloud")!.label);
+    }
   });
 });
 
@@ -216,6 +220,18 @@ describe("ComputerCard", () => {
     expect(host!.querySelector("[data-computer-card]")!.parentElement!.contains(more)).toBe(false);
     expect(more.className).toContain("ui-icon-button");
     expect(more.className).not.toMatch(/hidden|group-hover/);
+  });
+
+  it("opens by pointer without focusing a row (no ring), by keyboard on the first row", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!;
+    act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    expect(document.activeElement?.hasAttribute("data-computer-card-option")).toBe(false);
+    act(() => more.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    const menu = document.querySelector("[data-computer-card-menu]")!;
+    act(() => menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })));
+    expect(document.activeElement?.getAttribute("data-computer-card-option")).toBe("auto");
   });
 
   it("has no Computer details row, and no ... at all when the viewer cannot change the computer", () => {

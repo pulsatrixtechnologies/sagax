@@ -114,14 +114,18 @@ export function computerSelectOptions(
   const choices = computerChoices(bridge);
   const localChoices = choices.filter((choice): choice is Extract<ComputerChoice, { source: "local" }> => choice.source === "local");
   const auto: ComputerMenuOption = { value: "auto", label: t("place.auto"), detail: t("computerMenu.autoDetail"), lead: "auto" };
-  const cloud: ComputerMenuOption = organization
-    ? { value: "cloud", label: placeLabel("server", t("orgComputer.choice.cloud")), detail: t("computerMenu.cloudOrgDetail"), lead: "cloud" }
-    : { value: "cloud", label: t("place.cloud"), detail: t("computerMenu.cloudDetail"), lead: "cloud" };
+  const cloud: ComputerMenuOption = { value: "cloud", label: cloudComputerLabel(organization), lead: "cloud",
+    detail: t(organization ? "computerMenu.cloudOrgDetail" : "computerMenu.cloudDetail") };
   const only = localChoices.length === 1 ? localChoices[0]! : null;
   const local: ComputerMenuOption = only
     ? { value: "local", label: placeLabel(only.key, only.name), detail: desktopDetail(only.platform), lead: "online" }
     : { value: "local", label: t(placeLabelKey("local", organization)), detail: t("computerMenu.localDetail"), lead: "computer" };
   return [auto, local, cloud];
+}
+
+/** The cloud computer's one name, on the card and in its menu row. */
+function cloudComputerLabel(organization: boolean): string {
+  return organization ? placeLabel("server", t("orgComputer.choice.cloud")) : t("place.cloud");
 }
 
 /** Card title for the current Works on (named local PC when the bridge knows one). */
@@ -131,7 +135,7 @@ export function computerCardTitle(
   organization: boolean,
 ): string {
   const mode = worksOnMode(computer);
-  if (mode === "cloud") return placeLabel("server", t("orgComputer.choice.cloud"));
+  if (mode === "cloud") return cloudComputerLabel(organization);
   if (mode === "local") {
     const desktop = currentDesktop(bridge);
     if (desktop) return placeLabel(`desktop:${desktop.id}`, desktop.name.trim() || t("computerScreen.computer"));
@@ -330,14 +334,22 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
   const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
   const moreLabel = t("botPanel.computerCard.choose");
-  const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number; right: boolean } | null>(null);
+  const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number; right: boolean; keyboard: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useMenuInWindow(menuRef, menu && { left: menu.x, top: menu.y, right: menu.right });
-  const openMenu = (trigger: HTMLElement, at?: { x: number; y: number }) => {
+  const openMenu = (trigger: HTMLElement, at?: { x: number; y: number }, keyboard = false) => {
     const rect = trigger.getBoundingClientRect();
     // under the "...", its right edge on the trigger's; at the pointer, from it
-    setMenu({ trigger, x: at?.x ?? rect.right, y: at?.y ?? rect.bottom + 4, right: !at });
+    setMenu({ trigger, x: at?.x ?? rect.right, y: at?.y ?? rect.bottom + 4, right: !at, keyboard });
   };
+  // Opened by pointer, no row is focused (no ring): Escape still closes it.
+  const menuOpen = menu !== null;
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   const closeMenu = (focusTrigger = true) => {
     const trigger = menu?.trigger;
     setMenu(null);
@@ -353,7 +365,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
         {/* JC 2026-11-06: the same bare "..." as Upcoming, on the section header row, always visible. */}
         {/* Only for whoever may change the Works on choice: nothing else is in the menu. */}
         {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={moreLabel} title={moreLabel}
-          onClick={(event) => openMenu(event.currentTarget)}
+          onClick={(event) => openMenu(event.currentTarget, undefined, event.detail === 0)}
           className="ui-icon-button"><MoreHorizontal size={15} /></button>}
       </div>
       <div className={PANEL_CARD}>
@@ -367,7 +379,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
           onClick={openLive}
           onContextMenu={menuEnabled ? (event) => { event.preventDefault(); openMenu(event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
           onKeyDown={menuEnabled ? (event) => {
-            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMenu(event.currentTarget); }
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMenu(event.currentTarget, undefined, true); }
           } : undefined}
           aria-haspopup={menuEnabled ? "menu" : undefined}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 aria-disabled:cursor-default"
@@ -409,7 +421,8 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
       </div>
       {menu && createPortal(
         <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
-          <div ref={menuRef} role="menu" data-computer-card-menu="" aria-label={moreLabel}
+          <div role="menu" data-computer-card-menu="" aria-label={moreLabel}
+            ref={menuRef}
             style={{ left: menu.x, top: menu.y }}
             className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute")}
             onMouseDown={(event) => event.stopPropagation()}
@@ -419,7 +432,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
             }}>
             {menuEnabled && options.map((option, index) => (
               <ComputerMenuRow key={option.value} lead={option.lead} label={option.label} detail={option.detail}
-                checked={option.value === selectValue} data-computer-card-option={option.value} autoFocus={index === 0}
+                checked={option.value === selectValue} data-computer-card-option={option.value} autoFocus={index === 0 && menu.keyboard}
                 onPick={() => {
                   closeMenu();
                   if (chosenHost) void hostComputer.select(null);

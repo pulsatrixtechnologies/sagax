@@ -152,7 +152,8 @@ function ComputerSection() {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      box.current?.querySelector<HTMLButtonElement>("[data-computer-card-more]")?.click();
+      // a pointer click (detail 1), like a person's: no row is focused
+      box.current?.querySelector<HTMLButtonElement>("[data-computer-card-more]")?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     }, 150);
     return () => window.clearTimeout(timer);
   }, []);

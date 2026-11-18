@@ -76,6 +76,7 @@ any other shape, so the plan's `clients.bots.read` is written
 | `GET bots/{id}/docs` | `clients.botsRead` | documents of a bot the person owns |
 | `GET bots/{id}/memory` | `clients.botsRead` | memory of a bot the person owns |
 | `GET bots/{id}/connectors` | `clients.botsRead` | connector names of a bot the person owns |
+| `GET bots/{id}/files/roots\|list\|stat\|read\|download` | `clients.botsRead` | every file of a bot the person owns, for a host product's Library (#4625) |
 | `GET approvals?status=pending` | `clients.botsRead` | the cards waiting on the person, across their conversations (2026-10-17) |
 | `GET approvals/{id}?threadId` | `clients.botsRead` | may the person answer this card (lot C.3) |
 | `POST approvals/{id}` | `clients.approvalsAnswer`, or owning the bot | allow, deny or pick an option |
@@ -424,6 +425,78 @@ audited.
 
 Text on every one of these routes is passed through the same secret mask as
 a routine's instructions.
+
+### `GET bots/{id}/files/...` (#4625)
+
+Every file of a bot the person owns, read only, for a host product's
+Library. The answers are the admin file browser's
+(`server/org/org-admin-files.ts`, `docs/org-admin-api.md`), through the
+same code, with the member view below.
+
+Who: the bots the catalogue says the person owns (`source` `mine`, the
+owner is the caller), and the person's own surface bot (lot S1), which no
+catalogue lists. A shared bot, a published bot, another person's bot, a
+surface bot that is not theirs and an unknown id are all `404`
+`not_found` before any folder is opened, an organization admin's
+assertion included: an admin reads another person's bot only through the
+admin API. Without `clients.botsRead` the answer is `403`. Reads are not
+audited.
+
+Roots, never a host path on the wire: `workspace` (the bot's folder:
+`MEMORY.md`, `memory/`, `docs/`, its own files), `tasks` (one folder per
+conversation), `project` (the bot's working folder when it lies inside
+the server's data folder), `attachments` (uploads and attached outputs of
+its conversations, by opaque id); `sandbox` and `desktop` are listed as
+unavailable. In `tasks` and `attachments` only the conversations the
+person may read are there (the private threads rule: another person's
+conversation with their bot is not), never a confidential one.
+
+- `roots`: `{bot: {id, name}, roots: [{id, available, reason?}]}`.
+- `list?root&path`: one folder, `{root, path, entries: [{name, path,
+  type, size, modifiedAt}], truncated}`; `type` is `file`, `dir`, `link`
+  or `other`.
+- `list?recursive=1&root?&q?&type?&limit?&cursor?`: every file of one
+  root, or of every readable root when `root` is left out, a page at a
+  time, in a stable order: `{bot: {id, name}, recursive: true, root,
+  entries: [{root, name, path, type: "file", size, modifiedAt, mime,
+  kind}], nextCursor}`. `q` keeps the names that contain it (any case).
+  `type` keeps one or more kinds, separated by commas: `image`, `pdf`,
+  `text`, `document`, `spreadsheet`, `presentation`, `archive`, `other`
+  (from the name, never the bytes). `limit` is 1 to 1,000 (200 by
+  default). Pass the `nextCursor` of a page to get the next one; `null`
+  is the end. A page also stops after looking at 20,000 entries, with a
+  cursor, so a search over a large folder goes on over several pages. A
+  link and a special file are neither listed nor followed; `path` is not
+  taken here (`400`).
+- `stat?root&path`: `{root, path, name, type, size, modifiedAt, mime}`.
+- `read?root&path&offset&length`: at most 128 KiB, `{..., offset, length,
+  eof, binary, text?}`. A file sealed at rest reads as its plaintext.
+  `text` goes through the same secret mask as a routine's instructions;
+  `length` counts the bytes read.
+- `download?root&path`: the file as it is, at most 100 MiB, always
+  `application/octet-stream` with `content-disposition: attachment`,
+  `x-content-type-options: nosniff`, `x-sagax-file-type` (the type its
+  name suggests) and `x-sagax-member-api: 1`.
+
+Paths: relative to the root, `/` between names, at most 1,024 bytes; a
+`..` or `.` segment, a leading `/`, a backslash, a NUL or an empty
+segment is `400` `bad_path`. Every segment is walked without following a
+link: a symbolic link anywhere is `403` `link_refused`, a real path
+outside the root `403` `outside_root`. Reads open the file without
+following a link.
+
+Never listed nor served (they read as missing, `404`), whatever the
+root: a path with a sensitive name anywhere in it, by the server's
+central rule (`server/safety/sensitive-path.ts`): a dotfile or dot folder
+(`.env`, `.mcp.json`, `.claude/`, `.git/`, `.ssh/`, `.npmrc`...), a
+credential or key file name (`credentials.json`, `secrets.yaml` and a
+`secrets/` folder, `token.txt`, `*.pem`, `*.key`, `*.p12`, `id_rsa`,
+`known_hosts`, `kubeconfig`...), and a percent-encoded name. An
+attachment is judged by its name.
+
+Other refusals: `400` `bad_root`, `bad_range`, `bad_limit`, `bad_type`,
+`bad_cursor`, `not_a_folder`, `not_a_file`; `404` `root_missing`;
+`409` `root_<reason>` for an unavailable root; `413` `too_large`.
 
 ### `PATCH routines/{id}`
 

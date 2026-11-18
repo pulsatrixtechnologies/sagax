@@ -34823,6 +34823,22 @@ const orgMember = createOrgMemberRoutes({
   // lot S1: the person's surface bot and their hidden conversations
   ensureSurfaceBot: (person, input) => ensureSurfaceBot(person, input.name),
   surfaceBot: (botId) => isSurfaceBot(store.bot(botId)),
+  // #4625: the files of the person's own bots (the admin file browser's
+  // roots and attachments, scoped to the conversations the person reads)
+  botFiles: {
+    files: (botId, principalId) => {
+      const bot = store.bot(botId);
+      return bot ? { name: bot.name, roots: orgBotFileRoots(bot, principalId) } : null;
+    },
+    attachments: async (botId, principalId) => {
+      const bot = store.bot(botId);
+      return bot ? orgBotAttachments(bot, principalId) : [];
+    },
+    surfaceOwner: (botId) => {
+      const bot = store.bot(botId);
+      return bot && isSurfaceBot(bot) ? bot.temporary!.ownerPrincipalId ?? "" : null;
+    },
+  },
   // a send that will still start (an interrupted one left behind never keeps it busy)
   threadQueued: (threadId) => queuedSendWillStart(chatFollowups("bot"), threadId),
   newThreadReceipt: {

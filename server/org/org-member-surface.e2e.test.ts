@@ -323,6 +323,32 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     expect(today.text).not.toContain(surface);
   }, 60_000);
 
+  it("S3b (#4625): the files of a person's own bots, their surface bot included, and nobody else's", async () => {
+    for (const botId of [surface, orion]) {
+      const ws = join(home, ".sagax", "workspaces", botId);
+      mkdirSync(ws, { recursive: true });
+      writeFileSync(join(ws, "library-note.txt"), `note of ${botId}`);
+      writeFileSync(join(ws, ".env"), "PLANTED=1");
+    }
+    for (const botId of [surface, orion]) {
+      const roots = await member("GET", `bots/${botId}/files/roots`, BOB);
+      expect(roots.status, roots.text).toBe(200);
+      const walked = await member("GET", `bots/${botId}/files/list?recursive=1&root=workspace`, BOB);
+      expect(walked.status, walked.text).toBe(200);
+      expect((walked.body.entries as Array<any>).map((entry) => entry.path)).toContain("library-note.txt");
+      expect(walked.text).not.toContain(".env");
+      const read = await member("GET", `bots/${botId}/files/read?root=workspace&path=library-note.txt`, BOB);
+      expect(read.body.text).toBe(`note of ${botId}`);
+      expect((await member("GET", `bots/${botId}/files/read?root=workspace&path=.env`, BOB)).status).toBe(404);
+      // an organization admin, through the member API: nobody's but their own
+      for (const action of ["roots", "list?recursive=1", "read?root=workspace&path=library-note.txt"]) {
+        const peek = await member("GET", `bots/${botId}/files/${action}`, ALICE);
+        expect(peek.status, `${botId} ${action}`).toBe(404);
+        expect(peek.text).not.toContain("note of");
+      }
+    }
+  });
+
   it("S4: deleting a hidden conversation; another person's is unknown", async () => {
     expect((await member("DELETE", `threads/${chats[1]}`, ALICE)).status).toBe(404);
     // a visible conversation is not this route's

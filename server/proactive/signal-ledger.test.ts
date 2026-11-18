@@ -87,7 +87,7 @@ describe("tellPerson", () => {
     const dir = tempDir();
     const rung: string[] = [];
     const lines: string[] = [];
-    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({ ledger, notify: (note) => rung.push(note), log: (line) => lines.push(line) });
+    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({ ledger, notify: (note) => { rung.push(note); }, log: (line) => lines.push(line) });
     const first = ledgerOn(dir);
     const tell = tellOn(first);
     expect(tell("pr_a", { key: "run-problem:run-1", kind: "routine-run", bot: "b1", notification: "failed" })).toBe("told");
@@ -358,7 +358,7 @@ describe("review of #4250: the next occurrence rings again", () => {
   function teller(dir: string) {
     const rung: string[] = [];
     const ledger = ledgerOn(dir);
-    const tell = createTellPerson<string>({ ledger, notify: (note) => rung.push(note), log: () => {} });
+    const tell = createTellPerson<string>({ ledger, notify: (note) => { rung.push(note); }, log: () => {} });
     return { ledger, tell, rung };
   }
 
@@ -446,7 +446,7 @@ describe("review 2 of #4250: every proactive writer tells through tellPerson", (
   it("a daily suggestion is told once per proposal, a restart included", () => {
     const dir = tempDir();
     const rung: string[] = [];
-    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({ ledger, notify: (note) => rung.push(note), log: () => {} });
+    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({ ledger, notify: (note) => { rung.push(note); }, log: () => {} });
     const item = (id: string) => ({ key: signalKeys.proposal(id), kind: "proposal", bot: "b1", notification: id });
     const before = ledgerOn(dir);
     expect(tellOn(before)("pr_a", item("prop-1"))).toBe("told");

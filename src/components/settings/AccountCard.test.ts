@@ -62,7 +62,7 @@ afterEach(async () => {
 });
 
 describe("Settings > General account card", () => {
-  it("organization: the identity row, then Team whose name holds the server and the managed note in its tooltip", async () => {
+  it("organization: one identity row, the person's name holds the server and the managed note in its tooltip, no Team row", async () => {
     vi.stubGlobal("ogb", undefined);
     await mount(LOCKED);
     const card = host.querySelector('[data-settings-card="general.account"]')!;
@@ -72,10 +72,13 @@ describe("Settings > General account card", () => {
     expect(identity.indexOf("Alex Martin")).toBeLessThan(identity.indexOf("owner@example.com"));
     expect(identity).not.toContain("Add a label");
     expect(card.querySelector("[data-my-label]")).toBeNull();
-    // nothing else in the card: the identity row and Team (the owner 2026-11-17)
-    expect([...card.children].filter((node) => node.textContent).map((node) => node.getAttribute("data-testid") ?? (node.hasAttribute("data-account-team") ? "team" : node.outerHTML.slice(0, 60)))).toEqual(["account-identity", "team"]);
-    expect(card.querySelector("[data-account-team]")?.textContent).toBe("TeamPulsatrix");
-    const name = card.querySelector<HTMLButtonElement>("[data-account-team] button")!;
+    // one row: no Team row any more (the owner 2026-11-17)
+    expect([...card.children].filter((node) => node.textContent).map((node) => node.getAttribute("data-testid"))).toEqual(["account-identity"]);
+    expect(card.querySelector("[data-account-team]")).toBeNull();
+    expect(card.textContent).not.toContain("Team");
+    expect(card.textContent).not.toContain("Pulsatrix");
+    const name = card.querySelector<HTMLButtonElement>("[data-account-server]")!;
+    expect(name.textContent).toBe("Alex Martin");
     expect(name.getAttribute("title")).toBe("Connected to bot.example.test · Managed by your organization · Edit in Perspicax");
     expect(card.querySelector("[data-server-connected]")).toBeNull();
     expect(card.textContent).not.toContain("Server");
@@ -86,11 +89,11 @@ describe("Settings > General account card", () => {
     expect(button("Copy email")).toBeDefined();
   });
 
-  it("the organization's name opens the Perspicax profile", async () => {
+  it("the person's name opens the Perspicax profile", async () => {
     const open = vi.fn();
     (window as unknown as { ogb: unknown }).ogb = { openExternal: open };
     await mount(LOCKED);
-    await act(async () => { host.querySelector<HTMLButtonElement>("[data-account-team] button")!.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-account-server]")!.click(); });
     expect(open).toHaveBeenCalledWith("https://px.example.test/console/me");
     delete (window as unknown as { ogb?: unknown }).ogb;
   });
@@ -122,9 +125,9 @@ describe("Settings > General account card", () => {
     setLocale("fr");
     await mount(LOCKED);
     const text = host.textContent ?? "";
-    expect(text).toContain("Équipe");
+    expect(text).not.toContain("Équipe");
     expect(text).not.toContain("Serveur");
     expect(text).toContain("Se déconnecter");
-    expect(host.querySelector("[data-account-team] button")?.getAttribute("title")).toBe("Connecté à bot.example.test · Géré par ton organisation · Modifier dans Perspicax");
+    expect(host.querySelector("[data-account-server]")?.getAttribute("title")).toBe("Connecté à bot.example.test · Géré par ton organisation · Modifier dans Perspicax");
   });
 });

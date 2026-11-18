@@ -29,7 +29,6 @@ import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/compone
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { serverModeBridge } from "@/lib/launch";
-import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { managedProfile } from "@/lib/profile-management";
 import { useStore, type ConfigStatus } from "@/state/store";
 import { InitialsAvatar } from "../Avatar";
@@ -63,11 +62,9 @@ export function accountServerDetails(input: { origin?: string | null; managed?: 
 
 export function AccountCard({ lockedServer }: { lockedServer: LockedServer | null }) {
   const { state } = useStore();
-  const org = usePerspicaxOrg();
   const viewer = state.config?.viewer;
   const managed = managedProfile(viewer);
   const operator = !managed && !(viewer && !viewer.operator);
-  const organization = (org?.org.name || lockedServer?.name || "").trim();
   const [signOutFailed, setSignOutFailed] = useState(false);
   const photoStatus = useOwnAvatarNotice();
   // 2026-10-16: on an organization server the signed-in person changes their
@@ -84,6 +81,7 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
     )
     : null;
   const editUrl = managed?.url || null;
+  const serverHost = lockedServer?.origin ? host(lockedServer.origin) : undefined;
   const details = accountServerDetails({ origin: lockedServer?.origin, managed: Boolean(managed), editable: Boolean(editUrl) });
 
   return (
@@ -93,11 +91,14 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
       data-settings-card="general.account"
     >
       {operator
-        ? <OperatorIdentity action={action} />
+        ? <OperatorIdentity action={action} details={details} serverHost={serverHost} />
         : (
           <ReadOnlyIdentity
             name={managed?.name || viewer?.name || ""}
             email={managed?.email || viewer?.email || ""}
+            details={details}
+            serverHost={serverHost}
+            editUrl={editUrl}
             avatarUrl={managed?.avatarUrl}
             action={action}
             avatar={ownPhotoPrincipal ? (
@@ -110,24 +111,6 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
             ) : undefined}
           />
         )}
-      {organization && (
-        <div data-account-team="" className="flex min-w-0 items-baseline gap-2 px-4 pb-[9px] pt-[19px] text-[13px] leading-[18px]">
-          <span className="shrink-0 text-ink-secondary">{t("settings.account.team")}</span>
-          {editUrl
-            ? (
-              <button
-                type="button"
-                title={details || undefined}
-                data-account-server={lockedServer?.origin ? host(lockedServer.origin) : undefined}
-                onClick={() => void openExternalLink(editUrl)}
-                className="min-w-0 truncate rounded-sm text-left text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-              >
-                {organization}
-              </button>
-            )
-            : <span title={details || undefined} data-account-server={lockedServer?.origin ? host(lockedServer.origin) : undefined} className="min-w-0 truncate text-ink">{organization}</span>}
-        </div>
-      )}
       <div className="px-4"><OwnAvatarStatusLine status={photoStatus} /></div>
       {signOutFailed && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
       {workspace.error && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{workspace.error}</p>}
@@ -165,8 +148,13 @@ function CopyEmailButton({ state, copy }: ReturnType<typeof useCopyFeedback>) {
   );
 }
 
-function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action }: {
+function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, details, serverHost, editUrl }: {
   name: string;
+  /** The tooltip of the name: the server's address, "Managed by your organization", "Edit in Perspicax". */
+  details: string;
+  serverHost?: string;
+  /** The person's profile in Perspicax: the name opens it. */
+  editUrl: string | null;
   email: string;
   avatarUrl?: string;
   /** Replaces the picture (the person's own photo button). */
@@ -181,7 +169,19 @@ function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action }: {
         <InitialsAvatar initials={profileInitials({ name, email })} size={44} />
       ))}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium leading-[18px] text-ink">{profileLabel({ name, email })}</div>
+        {editUrl
+          ? (
+            <button
+              type="button"
+              title={details || undefined}
+              data-account-server={serverHost}
+              onClick={() => void openExternalLink(editUrl)}
+              className="block max-w-full truncate rounded-sm text-left text-[13px] font-medium leading-[18px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+            >
+              {profileLabel({ name, email })}
+            </button>
+          )
+          : <div title={details || undefined} data-account-server={serverHost} className="truncate text-[13px] font-medium leading-[18px] text-ink">{profileLabel({ name, email })}</div>}
         <EmailLine email={email} />
       </div>
       {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
@@ -258,7 +258,7 @@ function profilePhoto(file: File): Promise<string> {
 
 /** The operator of a personal server: name, email and photo are this
  * server's own, saved as they are typed (PUT /api/config). */
-function OperatorIdentity({ action }: { action: React.ReactNode }) {
+function OperatorIdentity({ action, details, serverHost }: { action: React.ReactNode; details: string; serverHost?: string }) {
   const { state, dispatch } = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(state.config?.profile?.name ?? "");
@@ -323,7 +323,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
         <input ref={fileRef} type="file" accept="image/*" className="hidden" aria-label={t("settings.profile.uploadAvatar")} onChange={(event) => { choosePhoto(event.target.files?.[0]); event.target.value = ""; }} />
       </div>
       <div className="min-w-0 flex-1">
-        <input aria-label={t("settings.profile.name")} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.name")} className="w-full bg-transparent text-[13px] font-medium leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none" />
+        <input aria-label={t("settings.profile.name")} title={details || undefined} data-account-server={serverHost} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.name")} className="w-full bg-transparent text-[13px] font-medium leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none" />
         <div className="flex min-w-0 items-center gap-1">
           <input type="email" aria-label={t("phone.signIn.email")} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.emailPlaceholder")} className="min-w-[12ch] max-w-full bg-transparent text-[13px] leading-[18px] text-ink-secondary [field-sizing:content] placeholder:text-ink-secondary focus:outline-none" />
           {email.trim() && <OperatorCopyEmail email={email.trim()} />}

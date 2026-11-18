@@ -11848,7 +11848,6 @@
       "settings.tours.title": "5bb385763e4bf4cc15a1bbd7f225781faa2788885b7f8d686844e9f2b050db2a",
       "settings.account.copyEmail": "1449d5fb47172cac7c38487b7e82c0d3062a3200b2f8e444f70c2f6658d06e15",
       "settings.account.addAccount": "ee7ee5830f091690030fed013c05a7073f6cb971891c3fc6f16e928bd6d69e61",
-      "settings.account.team": "5985039f106df054b43c3529139613bf7c2372937539f344c7c5ee47d00a0d63",
       "settings.account.emailCopied": "28411e5e86b6fea21b490c0d94f2a58fb654a632a5bf2e30603efee6b4f208cb",
       "composer.plus.aria": "308976e54619876766a1f9c07cfb10ffb857b015a8ac9b622a3e5f6f8919b3e4",
       "composer.plus.attach": "e697cc1e45afa5418934fb94f7d9c1bf8e45628cade57a6d31871f5961978d77",
@@ -12010,7 +12009,6 @@
       "pdf.tooLarge": "46ad1b63ab6ace831834e88da8ee3150e687fb5eaead57b66d2c7e3d6832015c",
       "pdf.tooLargeSolo": "fcb661fe7a2d78f98774a361e130a69578aef2bf5cb34f90ee8601d01eaf5548",
       "sidebar.account.usage": "8d59829c1e15afe1a7fae93e8e5e32d8511bec5fd598a09f4fea6033b31e8a66",
-      "sidebar.account.usageFavorite": "f8987f264bf375c23cb713401b7e5eaaaa2912e7ea9fc842f18455d552236c7f",
       "sidebar.account.monthCost": "ed9fa2a8bf519fac5506cc2268b2814f16c1102987dafeb3b19a450a3fbd88aa",
       "sidebar.account.viewUsage": "2e4ae39a4ee5a0280ead9b65a47f3aafa0eddf25382cd52895b97dda7532015d",
       "sidebar.account.mobile": "ac8c5d7dbe7542dcd3c0424934feca475c98874fa621162292a1239ac62cb483",
@@ -19268,7 +19266,12 @@
       "remoteSessions.dur.h": "3348a9c82a658890b67e78352883ad6100e0136bffb283db27dffea340993e06",
       "remoteSessions.dur.hm": "cf8484035b7fa8c13811a16b0f926ad7f56b4161501e105431231873eae43156",
       "remoteSessions.dur.d": "4df7d14c6b1c735bde6cf39ba803979df0bcb7e11c0cccbe57245c7b82076fc7",
-      "remoteSessions.dur.dh": "64a6ac2a25ab8f5577894d09a2f06d15e887cde3ccb65415a86a03258fe4b3a0"
+      "remoteSessions.dur.dh": "64a6ac2a25ab8f5577894d09a2f06d15e887cde3ccb65415a86a03258fe4b3a0",
+      "planUsage.note.rateLimited": "e543f7711735261f4dd7566c3bf5f7849e57c263afce06b6ddb7c599830e886c",
+      "planUsage.asOf": "7941c8b5c613dc940a04ad02ba66bd5e11afb6eebf8347b00d3906357b8f41b9",
+      "usage.personal.included": "3a3912d950b429463372edddadf437292dc9898aed4980104973c93fc83f6cff",
+      "sidebar.account.usageTooltip": "df264814eb476e513d77d7daceaed5661205a24519a86186c0d1168cb48c8b5d",
+      "sidebar.account.usageTooltipBare": "89838f73b4a5ecfe9847fc2083342db7a9453e29e9df19e88727fe4bd6b5f8a8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

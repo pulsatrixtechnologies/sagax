@@ -48,6 +48,9 @@ export interface UsageSummary {
   /** the starred plan's short name ("Grok"), only while it drives the
    * figure; null with the usual rule */
   name: string | null;
+  /** the account the figure belongs to (the starred one, else the highest),
+   * for the row's tooltip; null with no figure */
+  account: string | null;
 }
 
 /** The figure beside Usage (2026-11-03): the starred plan's own figure, with
@@ -58,9 +61,11 @@ export function usageSummary(rows: readonly PlanRow[], favorite: string | null):
   if (favorite) {
     const row = rows.find((candidate) => candidate.id === favorite);
     const percent = row ? planPercent(row) : null;
-    if (row && percent !== null) return { percent, name: row.name };
+    if (row && percent !== null) return { percent, name: row.name, account: row.name };
   }
-  return { percent: usagePercent(rows), name: null };
+  const percent = usagePercent(rows);
+  const top = percent === null ? undefined : rows.find((row) => planPercent(row) === percent);
+  return { percent, name: null, account: top?.name ?? null };
 }
 
 export interface UsageLine {

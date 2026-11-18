@@ -9189,7 +9189,6 @@
   "settings.tours.title": "Visites guidées",
   "settings.account.copyEmail": "Copier le courriel",
   "settings.account.addAccount": "Ajouter un compte",
-  "settings.account.team": "Équipe",
   "settings.account.emailCopied": "Courriel copié",
   "composer.plus.aria": "Actions de la barre de message",
   "composer.plus.attach": "Joindre des fichiers",
@@ -9367,7 +9366,6 @@
   "pdf.tooLarge": "Ce PDF est trop volumineux pour la visionneuse de l'application (25 Mo). Enregistre une copie pour l'ouvrir dans une autre application.",
   "pdf.tooLargeSolo": "Ce PDF est trop volumineux pour la visionneuse de l'application (90 Mo). Enregistre une copie pour l'ouvrir dans une autre application.",
   "sidebar.account.usage": "Utilisation",
-  "sidebar.account.usageFavorite": "{name} {used} %",
   "sidebar.account.monthCost": "Coût ce mois-ci",
   "sidebar.account.viewUsage": "Voir l'utilisation",
   "sidebar.account.mobile": "Obtenir Sagax sur mobile",
@@ -15443,5 +15441,10 @@
   "recordCard.lines.forbidden": "Ton accès n'inclut pas les lignes.",
   "recordCard.lines.unavailable": "Les lignes n'ont pas pu être lues pour le moment.",
   "recordCard.lines.otherOne": "1 autre ligne",
-  "recordCard.lines.other": "{count} autres lignes"
+  "recordCard.lines.other": "{count} autres lignes",
+  "planUsage.note.rateLimited": "{name} limite les requêtes, nouvel essai sous peu",
+  "planUsage.asOf": "à {time}",
+  "usage.personal.included": "Inclus dans le forfait",
+  "sidebar.account.usageTooltip": "Utilisation · {account} · {percent} %",
+  "sidebar.account.usageTooltipBare": "Utilisation · {percent} %"
 }

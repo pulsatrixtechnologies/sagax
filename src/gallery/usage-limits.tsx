@@ -44,11 +44,22 @@ const FAILED: PlanProvider = {
   access: "subscription", instanceId: "backup", failure: { kind: "http", status: 429 }, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [],
 };
 const width = Number(params.get("width")) || 680;
+// ?scenario=owner: two Claude accounts on one login (one rate limited, one
+// with its week used up), a Grok team account, a Codex account whose refresh
+// failed after a good read (figures kept, "as of"). Invented names only.
+const OWNER_EMAIL = "alex.martin@example.test";
+const owner: PlanProvider[] = [
+  { id: "work-a", name: OWNER_EMAIL, driver: "claude", plan: "business", ok: false, error: "Could not reach Claude: rate limited (429), try again in a minute", state: "error", access: "subscription", instanceId: "work-a", failure: { kind: "http", status: 429 }, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
+  account("work-b", OWNER_EMAIL, "claude", "business", open(64, 3, 5), open(100, 52)),
+  account("grok-team", "Studio Grok team", "grok", "SuperGrok Heavy", CLOSED, open(57, 120)),
+  { ...account("codex-lab", "sam.lee@example.test", "codex", "plus", open(12, 3, 5), open(41, 18)), ok: true, error: "Could not reach Codex: network error", failure: { kind: "network" }, staleSince: iso(NOW - 20 * 60_000) },
+];
+const scenario = params.get("scenario") === "owner";
 const report: PlanUsageReport = {
   fetchedAt: iso(NOW),
   providers: [
-    ...ALL.slice(0, count),
-    ...(params.get("failed") === "1" ? [FAILED] : []),
+    ...(scenario ? owner : ALL.slice(0, count)),
+    ...(params.get("failed") === "1" && !scenario ? [FAILED] : []),
     // must draw nothing on Usage (#4418): connecting and keys live in Providers
     { id: "grok-2", name: "Grok", driver: "grok", plan: null, ok: false, error: "Not signed in", state: "signed-out", access: "subscription", instanceId: "grok-2", failure: null, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
     { id: "claudeApi", name: "Claude (API key)", driver: "claude", plan: null, ok: true, error: null, state: "no-windows", access: "api-key", instanceId: "claudeApi", failure: null, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
@@ -68,6 +79,17 @@ const usage: PersonalUsage = {
   byBot: summary([["a", "Assistant", 120, 18.2], ["b", "Research bot", 64, 9.7], ["c", "Reviewer", 22, 3.1]]),
   byModel: summary([["m1", "Model one", 140, 21.5], ["m2", "Model two", 66, 9.5]]),
 };
+const engineGroups: Array<{ key: string; label: string; turns: number; costUsd: number | null }> = [
+  { key: "engine:claudeAgent", label: "claudeAgent", turns: 1525, costUsd: 839.9 },
+  { key: "engine:grokAgent", label: "grokAgent", turns: 212, costUsd: 41.3 },
+  { key: "engine:codex", label: "codex", turns: 96, costUsd: 12.07 },
+  { key: "engine:xai-voice", label: "xai-voice", turns: 38, costUsd: null },
+  { key: "engine:grok", label: "grok", turns: 540, costUsd: null },
+  { key: "engine:openai-compat", label: "openai-compat", turns: 20, costUsd: null },
+  { key: "engine:piAgent", label: "piAgent", turns: 7, costUsd: null },
+];
+const byEngine: PersonalUsageSummary = { groups: engineGroups, total: { key: "total", label: "Total", turns: 2438, costUsd: 893.27 } };
+const ENGINE_NAMES: Record<string, string> = { claudeAgent: "Claude Code", grokAgent: "Grok Build", codex: "Codex", grok: "Grok API" };
 const cap = { supported: true, minUsd: 1, cap: { month: "2026-11", monthlyUsd: 60, spentUsd: 31, percent: 52, warn: false, exceeded: false } };
 
 function Gallery() {
@@ -75,8 +97,8 @@ function Gallery() {
     <div className={width < 500 ? "min-h-screen bg-app px-4 py-8 text-ink" : "min-h-screen bg-app p-8 text-ink"}>
       <div data-gallery-sample="usage" style={{ width }}>
         <div className="flex min-w-0 flex-col gap-6">
-          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} favorite={{ id: "claude", onToggle: () => {} }} leading={<SpendCapRow data={cap} now={NOW} />} />
-          <UsageBreakdown usage={usage} />
+          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} favorite={{ id: scenario ? "work-a" : "claude", onToggle: () => {} }} leading={<SpendCapRow data={cap} now={NOW} />} />
+          <UsageBreakdown usage={usage} initialSegment="source" detail={{ total: usage.month, byBot: usage.byBot, byModel: usage.byModel, byEngine }} engineName={(driver) => ENGINE_NAMES[driver] ?? null} />
         </div>
       </div>
     </div>

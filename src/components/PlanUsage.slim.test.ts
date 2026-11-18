@@ -102,8 +102,8 @@ describe("Usage limits: one slim row per account (#4445)", () => {
     expect(failed.closest("[data-plan-line]")).toBe(row);
     expect(row.querySelector("[data-plan-name]")?.closest("[data-plan-line]")).toBe(row);
     expect(row.querySelectorAll("[data-plan-line]")).toHaveLength(0);
-    expect(failed.textContent).toContain("429");
-    expect(failed.querySelector("[data-plan-reason]")?.getAttribute("title")).toContain("429");
+    expect(failed.textContent).toContain("limiting requests");
+    expect(failed.querySelector("[data-plan-reason]")?.getAttribute("title")).toContain("retrying shortly");
     act(() => (row.querySelector("[data-plan-retry]") as HTMLButtonElement).click());
     expect(retry).toHaveBeenCalledTimes(1);
   });

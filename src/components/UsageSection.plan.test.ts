@@ -154,8 +154,8 @@ describe("Réglages > Utilisation : Limites d'utilisation en tête de page", () 
     const page = await mount();
     const row = page.querySelector('[data-plan-row="claude"]');
     expect(row).not.toBeNull();
-    expect(row!.querySelector('[data-plan-state="error"]')?.textContent).toMatch(/429/);
-    expect(row!.textContent).toContain("Réessayer");
+    expect(row!.querySelector('[data-plan-state="error"]')?.textContent).toMatch(/limite les requêtes/);
+    expect(row!.querySelector("[data-plan-retry]")?.getAttribute("aria-label")).toBe("Réessayer");
     expect(page.querySelector('[data-plan-status]')).toBeNull();
   });
 });

@@ -32,7 +32,12 @@ const snapshot: AchievementSnapshot = {
   streak: 6,
   rewards: [],
   recent: [...unlocked].slice(-4),
-  items: ACHIEVEMENTS.map((item) => ({ id: item.id, current: unlocked.has(item.id) ? 1 : 0, target: 1, ...(unlocked.has(item.id) ? { unlockedAt: Date.UTC(2026, 9, 20) } : {}) })),
+  // a few locked ones with progress (3 of 5), a share of people on some
+  items: ACHIEVEMENTS.map((item, index) => {
+    const done = unlocked.has(item.id);
+    const partial = !done && !item.hidden && index % 4 === 0;
+    return { id: item.id, current: done ? 1 : partial ? 3 : 0, target: partial ? 5 : 1, ...(index % 3 === 0 ? { percent: 12 + ((index * 7) % 80) } : {}), ...(done ? { unlockedAt: Date.UTC(2026, 9, 20) } : {}) };
+  }),
   settings: { showPoints: true, showTitle: true, toasts: true, native: false, public: false },
 };
 

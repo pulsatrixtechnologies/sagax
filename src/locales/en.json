@@ -9220,7 +9220,6 @@
   "settings.tours.title": "Guided tours",
   "settings.account.copyEmail": "Copy email",
   "settings.account.addAccount": "Add account",
-  "settings.account.team": "Team",
   "settings.account.emailCopied": "Email copied",
   "composer.plus.aria": "Composer actions",
   "composer.plus.attach": "Attach files",
@@ -9398,7 +9397,6 @@
   "pdf.tooLarge": "This PDF is too large for the in-app viewer (25 MB). Save a copy to open it in another app.",
   "pdf.tooLargeSolo": "This PDF is too large for the in-app viewer (90 MB). Save a copy to open it in another app.",
   "sidebar.account.usage": "Usage",
-  "sidebar.account.usageFavorite": "{name} {used}%",
   "sidebar.account.monthCost": "Cost this month",
   "sidebar.account.viewUsage": "View usage",
   "sidebar.account.mobile": "Get Sagax on mobile",
@@ -15443,5 +15441,10 @@
   "recordCard.lines.forbidden": "Your access does not include the lines.",
   "recordCard.lines.unavailable": "The lines could not be read right now.",
   "recordCard.lines.otherOne": "1 other line",
-  "recordCard.lines.other": "{count} other lines"
+  "recordCard.lines.other": "{count} other lines",
+  "planUsage.note.rateLimited": "{name} is limiting requests, retrying shortly",
+  "planUsage.asOf": "as of {time}",
+  "usage.personal.included": "Included in the plan",
+  "sidebar.account.usageTooltip": "Usage · {account} · {percent}%",
+  "sidebar.account.usageTooltipBare": "Usage · {percent}%"
 }

@@ -292,6 +292,8 @@ export function profileMenuItems(input: {
   /** the starred plan's short name while its figure is the one shown
    * ("Grok 87%"); null or absent: the usual figure ("100% used") */
   usageName?: string | null;
+  /** the account the percent is read from (its tooltip) */
+  usageAccount?: string | null;
   usageLines: UsageLine[];
   /** the starred plan's id, and how a star is toggled; absent: no stars */
   usageFavorite?: { id: string | null; onToggle: (planId: string) => void };
@@ -481,11 +483,15 @@ export function profileMenuItems(input: {
       key: "usage",
       label: t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
-      value: input.usagePercent === null
+      // the gauge, the percent and the chevron only (the owner 2026-11-17);
+      // the account the figure belongs to is in the tooltip and the label
+      value: input.usagePercent === null ? undefined : t("usage.limits.figure", { percent: input.usagePercent }),
+      valueOnly: true,
+      tooltip: input.usagePercent === null
         ? undefined
-        : input.usageName
-          ? t("sidebar.account.usageFavorite", { name: input.usageName, used: input.usagePercent })
-          : t("planUsage.used", { used: input.usagePercent }),
+        : input.usageAccount
+          ? t("sidebar.account.usageTooltip", { account: input.usageAccount, percent: input.usagePercent })
+          : t("sidebar.account.usageTooltipBare", { percent: input.usagePercent }),
       submenu: [
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, foot: true, onSelect: input.handlers.onViewUsage },
@@ -534,6 +540,7 @@ interface AccountMenuData {
   percent: number | null;
   /** the starred plan's short name while it drives the percent */
   percentName: string | null;
+  percentAccount: string | null;
   lines: UsageLine[];
   monthCost: string | null;
   targets: SwitchTarget[];
@@ -572,6 +579,7 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
   return {
     percent: summary.percent,
     percentName: summary.name,
+    percentAccount: summary.account,
     lines: planUsageLines(rows, {
       weekly: t("planUsage.weekly"),
       fiveHour: t("planUsage.fiveHour"),
@@ -688,6 +696,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const profileItems = profileMenuItems({
     usagePercent: account.percent,
     usageName: account.percentName,
+    usageAccount: account.percentAccount,
     usageLines: account.lines,
     usageFavorite: { id: usageFavorite, onToggle: toggleUsageFavorite },
     monthCost: account.monthCost,

@@ -44,6 +44,8 @@ import { ConfirmPill, FIELD, FoldRow, PILL, PRIMARY_PILL, SettingsGroup } from "
 import { PageSegment } from "./content-page";
 import { formatTileShare, seriesColor, UsageChartCard } from "./usage-chart/UsageChartCard";
 import { readableError } from "@/lib/plain-error";
+import { engineLabel } from "@/lib/human-label";
+import { KNOWN_ACCOUNT } from "./bot-settings/BotUsageBreakdown";
 
 export interface PersonalUsage {
   month: PersonalUsageSummary;
@@ -150,6 +152,12 @@ export function planUsageShown(input: { organization: boolean; viewUsage: boolea
 const readSpendCap = () => api<PersonalSpendCap>("/api/me/spend-cap");
 const writeSpendCap = (monthlyUsd: number | null) => api<PersonalSpendCap>("/api/me/spend-cap", { method: "PUT", body: JSON.stringify({ monthlyUsd }) });
 
+/** An engine's name as the engine picker shows it: its default instance, else the first of that driver. */
+function engineDisplayName(instances: ReadonlyArray<{ instanceId: string; driverKind: string; displayName: string }>, driver: string): string | null {
+  const ofDriver = instances.filter((instance) => instance.driverKind === driver);
+  return (ofDriver.find((instance) => instance.instanceId === driver) ?? ofDriver[0])?.displayName ?? null;
+}
+
 /** Every member sees this page (2026-10-15): it shows their own usage only. */
 export function UsageSection() {
   const { state, dispatch } = useStore();
@@ -198,7 +206,7 @@ export function UsageSection() {
         onRetry={() => { setReload((count) => count + 1); plan.onRefresh(); }}
       />
       <PlanUsageView {...plan} leading={cap?.supported ? <SpendCapRow data={cap} onChange={setCap} now={plan.now} /> : null} />
-      {usage && <UsageBreakdown usage={usage} cycle={cycle} onCycle={setCycle} detail={detail?.cycle === cycle ? detail.data : null} />}
+      {usage && <UsageBreakdown usage={usage} engineName={(driver) => engineDisplayName(state.instances, driver)} cycle={cycle} onCycle={setCycle} detail={detail?.cycle === cycle ? detail.data : null} />}
       <UsageDetail
         planHistory={planShown && !plan.unavailable ? <PlanUsageHistoryView history={planHistory.history} failed={planHistory.failed} now={plan.now} /> : null}
         onOpenTraces={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage", subPage: "usage.traces" })}
@@ -365,13 +373,34 @@ function rangeDays(range: { from: string; to: string }): string[] {
   return days;
 }
 
+/** The engine a by-source group stands for: the name the app gives it (the
+ * instance's display name, as the engine picker shows it), the known fixed
+ * ones, else a readable word; never the raw driver id. */
+export function engineGroupLabel(group: PersonalUsageGroup, engineName?: (driverKind: string) => string | null): string {
+  const driver = group.key.replace(/^engine:/, "") || group.label;
+  if (driver === "openai-compat") return t("providerKeys.openaiCompat");
+  const named = KNOWN_ACCOUNT[driver] ?? engineName?.(driver) ?? null;
+  return engineLabel(named, named ? driver : plainWords(group.label || driver));
+}
+
+/** "kimiAgent" -> "Kimi", "some-engine" -> "Some engine"; a label that already has spaces is kept. */
+function plainWords(raw: string): string {
+  if (/\s/.test(raw)) return raw;
+  const words = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/[\s_-]+/).filter(Boolean);
+  if (words.length > 1 && words[words.length - 1]!.toLowerCase() === "agent") words.pop();
+  const text = words.join(" ");
+  return text ? text[0]!.toUpperCase() + text.slice(1) : raw;
+}
+
 /** The reference's "<app> usage" group (#4095): one card. Its head is the
  * shown cycle's cost in large figures with the turns and the trend under it,
  * and the segmented control at the right (by source, by bot, by model); then
  * the coloured share bar, its legend (each group's cost, share and turns),
  * and the daily cost chart, whose arrows step between this cycle and the
  * previous one. Figures and lists are the ones the page always read. */
-export function UsageBreakdown({ usage, cycle = "current", onCycle, detail = null, initialSegment = "source" }: {
+export function UsageBreakdown({ usage, cycle = "current", onCycle, detail = null, initialSegment = "source", engineName }: {
+  /** The name the app gives an engine (its driver kind in): the instance's display name. */
+  engineName?: (driverKind: string) => string | null;
   usage: PersonalUsage;
   cycle?: UsageCycle;
   onCycle?: (next: UsageCycle) => void;
@@ -394,7 +423,7 @@ export function UsageBreakdown({ usage, cycle = "current", onCycle, detail = nul
   };
   const offered = (["source", "bot", "model"] as const).filter((id) => lists[id] !== null);
   const active: UsageSegment = lists[segment] ? segment : "bot";
-  const groups = lists[active] ?? [];
+  const groups = (lists[active] ?? []).map((group) => active === "source" ? { ...group, label: engineGroupLabel(group, engineName) } : group);
   const range = previousCycle ? previousCyclePeriod() : personalUsagePeriods().days30;
   const values = dailyCosts(previousCycle ? detail?.total : usage.days30, range);
   const days = rangeDays(range);
@@ -448,8 +477,8 @@ export function UsageBreakdown({ usage, cycle = "current", onCycle, detail = nul
                         <span className="min-w-0 truncate text-[12px] leading-4 text-ink-secondary" title={group.label}>{group.label}</span>
                       </span>
                       <span className="text-[12px] leading-4 tabular-nums text-ink">
-                        {typeof group.costUsd === "number" ? formatCost(group.costUsd) : "·"}
-                        {sum > 0 && <> · {formatTileShare(groupCost(group) / sum)}</>}
+                        {typeof group.costUsd === "number" ? formatCost(group.costUsd) : t("usage.personal.included")}
+                        {typeof group.costUsd === "number" && sum > 0 && <> · {formatTileShare(groupCost(group) / sum)}</>}
                       </span>
                       <span className="text-[11px] leading-4 tabular-nums text-ink-tertiary">{t("usage.personal.turns", { turns: group.turns })}</span>
                     </li>

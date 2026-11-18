@@ -180,10 +180,10 @@ describe("achievements page body", () => {
     resetAchievementsForTests({ status: "ready", snapshot: snapshot() });
     const html = renderToStaticMarkup(createElement(AchievementsPage, { category: "all" }));
     expect(html).toContain("data-achievements-page");
-    // the heading: the category, its unlocked count, then the level, its bar and what is left
-    expect(html).toMatch(/<h2[^>]*>All achievements<\/h2>/);
-    expect(html).toContain(`2 of ${ACHIEVEMENTS.length} unlocked`);
-    expect(html).toContain("Level 7");
+    // no second title and no repeated count: the header carries them; the level, its bar and what is left sit once, in the strip
+    expect(html).not.toContain("All achievements");
+    expect(html).not.toContain(`2 of ${ACHIEVEMENTS.length} unlocked`);
+    expect(html.match(/Level 7/g)).toHaveLength(1);
     expect(html).toContain('aria-valuenow="190"');
     expect(html).toContain("160 to the next level");
     // recent unlocks, a section of its own, as rows
@@ -195,11 +195,13 @@ describe("achievements page body", () => {
     expect(sections).toEqual(["onboarding", "productivity", "power", "voice", "claude", "collaboration", "streaks", "mastery", "tiers", "secrets"]);
     const onboarding = ACHIEVEMENTS.filter((item) => item.category === "onboarding").length;
     expect(html).toContain(`>2/${onboarding}</span>`);
-    // rows, not cards: the shared row of the Automations list
-    expect(html).not.toContain("achievement-card");
+    // each group is a block with a title band and its own progress bar, over a responsive grid of compact cards
+    expect(slice(html, 'data-achievement-section="onboarding"')).toContain('role="progressbar"');
+    expect(html).toContain("grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))]");
     const row = /<li class="([^"]*)" data-tier="[a-z]+" data-unlocked="" data-achievement="hello-bot"/.exec(html)?.[1] ?? "";
-    // 2dfc4b2a0 put shared rows on the closed spacing scale: 8px gap/padding.
-    for (const name of ["achievement-row", "flex", "gap-2", "rounded-lg", "px-2", "py-2", "items-start", "hover:bg-hover"]) expect(row.split(" "), name).toContain(name);
+    for (const name of ["achievement-row", "flex", "flex-col", "rounded-lg", "border-[0.5px]", "bg-panel", "hover:bg-hover"]) expect(row.split(" "), name).toContain(name);
+    // recent unlocks are one row of compact cards, not a wrapping list
+    expect(slice(html, 'data-achievement-recent=""')).toContain("overflow-x-auto");
     const hello = slice(html, 'data-achievement="hello-bot"');
     expect(hello).toContain("achievement-row-badge");
     expect(hello).toMatch(/data-achievement-row-points=""[^>]*>10<\/span>/);
@@ -225,14 +227,14 @@ describe("achievements page body", () => {
     expect(slice(html, 'data-achievement="hello-bot"')).toContain("42% of people");
   });
 
-  it("shows one category's rows under its heading, without the recent unlocks", () => {
+  it("shows one category's group block, without the recent unlocks", () => {
     resetAchievementsForTests({ status: "ready", snapshot: snapshot() });
     const html = renderToStaticMarkup(createElement(AchievementsPage, { category: "voice" }));
     expect(html).toMatch(/<h2[^>]*>Voice<\/h2>/);
     expect(html).toContain("Level 7");
     expect(html).not.toContain("data-recent-achievement");
-    // the heading names it once: no section heading repeats it
-    expect(html).not.toContain("data-achievement-section");
+    // the group block names it once, with its progress
+    expect(html.match(/data-achievement-section="/g)).toHaveLength(1);
     for (const item of ACHIEVEMENTS) expect(html.includes(`data-achievement="${item.id}"`), item.id).toBe(item.category === "voice");
   });
 
@@ -318,8 +320,9 @@ describe("achievements page, a sister of Automations", () => {
     expect(actions).toContain('aria-label="Achievements menu"');
     // the body: the frame's card and the Automations column
     expect(html).toContain("content-card-body");
-    // 2dfc4b2a0 keeps the centred 4xl column with 16px section spacing.
-    expect(html).toContain("mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6");
+    // the full width of the frame, the header's side margins (as Routines and Memory)
+    expect(html).toContain("w-full space-y-8 px-6 py-6 max-sm:px-4");
+    expect(html).not.toContain("max-w-4xl");
   });
 
   it("puts the categories in Filters, each with its unlocked count, and the reward beside them", () => {

@@ -51,6 +51,10 @@ export interface SidebarMenuItem {
   /** a value in grey at the trailing edge, before the chevron (the reference design's
    * "Weekly usage · 100% used") */
   value?: string;
+  /** the row shows its icon, its value and the chevron only: the label stays
+   * for screen readers, with `tooltip` as the hover text (Usage: "72%") */
+  valueOnly?: boolean;
+  tooltip?: string;
   /** a second level, opened to the right on hover, click or the right arrow
    * (the reference design's Usage ›, Support ›, Switch account ›); onSelect is unused */
   submenu?: SidebarSubmenuEntry[];
@@ -505,6 +509,8 @@ export function SidebarPopoverMenu({
             role="menuitem"
             data-tour={item.tourId}
             data-menu-key={item.key}
+            title={item.valueOnly && item.value ? item.tooltip : undefined}
+            aria-label={item.valueOnly && item.value ? item.tooltip : undefined}
             disabled={item.disabled}
             aria-haspopup={item.submenu ? "menu" : undefined}
             aria-expanded={item.submenu ? sub === item.key : undefined}
@@ -530,7 +536,12 @@ export function SidebarPopoverMenu({
             )}
           >
             {item.icon && <MenuGlyph>{item.icon}</MenuGlyph>}
-            {item.subtitle || item.note ? (
+            {item.valueOnly && item.value ? (
+              <>
+                <span className="sr-only">{item.label}</span>
+                <span data-menu-value="" className="min-w-0 flex-1 truncate text-left tabular-nums text-ink">{item.value}</span>
+              </>
+            ) : item.subtitle || item.note ? (
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{item.label}</span>
                 {item.subtitle && <span className="truncate text-[12px] text-ink-secondary">{item.subtitle}</span>}
@@ -539,7 +550,7 @@ export function SidebarPopoverMenu({
             ) : (
               <span className="flex-1 truncate">{item.label}</span>
             )}
-            {item.value && <span data-menu-value="" className="shrink-0 tabular-nums text-ink-tertiary">{item.value}</span>}
+            {item.value && !item.valueOnly && <span data-menu-value="" className="shrink-0 tabular-nums text-ink-tertiary">{item.value}</span>}
             {item.trailing}
             {item.attention && (
               <span

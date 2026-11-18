@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { createRedirectLedger, isAppServerRequest, targetsAppServer } from "./desktop-owner-request.mjs";
+import { createRedirectLedger, createRequestEndHub, isAppServerRequest, targetsAppServer } from "./desktop-owner-request.mjs";
 
 const PORT = 8799;
 const APP = `http://127.0.0.1:${PORT}`;
@@ -69,17 +69,47 @@ test("Origin: null is never made up for by the app's Referer", () => {
   assert.equal(isAppServerRequest(req({ referrer: "", requestHeaders: { Origin: APP } }), PORT), true);
 });
 
-test("the ledger forgets the oldest ids past its limit", () => {
-  const ledger = createRedirectLedger(2);
-  for (const id of [1, 2, 3]) ledger.noteRedirect({ id, url: "https://x.example/a" }, PORT);
+// #4810: a long video keeps its id marked however many other requests
+// redirect meanwhile; the id goes only when its own request ends.
+test("a redirected request stays marked until it ends, with no size limit", () => {
+  const ledger = createRedirectLedger();
+  ledger.noteRedirect({ id: 1, url: "https://media.example.test/clip.mp4" }, PORT);
+  for (let id = 2; id < 10_002; id++) ledger.noteRedirect({ id, url: "https://x.example/a" }, PORT);
+  assert.equal(ledger.startedElsewhere({ id: 1 }), true, "the long video's id is still marked");
+  assert.equal(isAppServerRequest(req({ id: 1, resourceType: "media" }), PORT, ledger), false);
+  const hub = createRequestEndHub();
+  hub.subscribe((_kind, details) => ledger.forget(details));
+  hub.dispatch("completed", { id: 1 });
+  hub.dispatch("error", { id: 2 });
   assert.equal(ledger.startedElsewhere({ id: 1 }), false);
-  assert.equal(ledger.startedElsewhere({ id: 3 }), true);
+  assert.equal(ledger.startedElsewhere({ id: 2 }), false);
+  assert.equal(ledger.size, 9_999);
+});
+
+test("the end-of-request hub feeds every subscriber, one failing or leaving never stops the others", () => {
+  const hub = createRequestEndHub();
+  const seen = [];
+  hub.subscribe(() => { throw new Error("boom"); });
+  const leave = hub.subscribe((kind, details) => seen.push(`a:${kind}:${details.id}`));
+  hub.subscribe((kind, details) => seen.push(`b:${kind}:${details.id}`));
+  hub.dispatch("completed", { id: 5 });
+  leave();
+  hub.dispatch("error", { id: 6 });
+  assert.deepEqual(seen, ["a:completed:5", "b:completed:5", "b:error:6"]);
 });
 
 test("the header rule of main.mjs goes through this check", () => {
   const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
-  const rule = main.slice(main.indexOf("function installRequestHeaderRules"), main.indexOf("function installRequestHeaderRules") + 2000);
+  const rule = main.slice(main.indexOf("function installRequestHeaderRules"), main.indexOf("function installRequestHeaderRules") + 2600);
   assert.match(rule, /webRequest\.onBeforeRedirect\(\(details\) => redirects\.noteRedirect\(details, SERVER_PORT\)\)/);
+  // forgotten at the end of each request, through the shared hub
+  assert.match(rule, /requestEndHub\.subscribe\(\(_kind, details\) => redirects\.forget\(details\)\)/);
+  assert.match(rule, /webRequest\.onCompleted\(\(details\) => requestEndHub\.dispatch\("completed", details\)\)/);
+  assert.match(rule, /webRequest\.onErrorOccurred\(\(details\) => requestEndHub\.dispatch\("error", details\)\)/);
+  // no other code replaces the default session's end-of-request listeners
+  assert.doesNotMatch(main, /defaultSession\.webRequest\.onCompleted\(null\)/);
+  const redeem = main.slice(main.indexOf("function watchSignInRedeem"), main.indexOf("function watchSignInRedeem") + 2600);
+  assert.match(redeem, /requestEndHub\.subscribe\(/);
   assert.match(rule, /isAppServerRequest\(details, SERVER_PORT, redirects\)/);
   assert.doesNotMatch(rule, /target\.hostname === "127\.0\.0\.1"/);
 });

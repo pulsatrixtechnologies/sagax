@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, FastForward, PictureInPicture2, Rewind } from "lucide-react";
 
 import type { WireVideoWidget } from "../../../shared/video-widget.ts";
 import { t } from "@/lib/i18n";
@@ -38,8 +39,15 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
   showcase,
   showcaseState,
   onRequestRefresh,
+  resolveSource,
 }: {
   video: WireVideoWidget;
+  /**
+   * Nothing loads before the person presses Play: then this gives the source
+   * to play (the server's verdict for a chat link), null when it cannot.
+   * Without it, the card loads its source when it mounts.
+   */
+  resolveSource?: () => Promise<WireVideoWidget | null>;
   /** Static poster + chrome for screenshots (no media decode). */
   showcase?: boolean;
   showcaseState?: VideoShowcaseState;
@@ -54,6 +62,12 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
   const cardRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<MediaChromeActions | null>(null);
   const lastSaved = useRef(0);
+  const playOnLoad = useRef(false);
+  const [resolved, setResolved] = useState<WireVideoWidget | null>(null);
+  const [starting, setStarting] = useState(false);
+  const deferred = Boolean(resolveSource) && !resolved && !showcase;
+  // what plays: the resolved source once Play was pressed, else the card's own
+  const source = resolved ?? video;
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -94,8 +108,8 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     setLoading(false);
   }, []);
   const { src, directUrl, failSource, expireOrFallBack, resetSource } = useSourceFallback({
-    playbackUrl: video.playbackUrl,
-    directUrl: video.directUrl,
+    playbackUrl: source.playbackUrl,
+    directUrl: source.directUrl,
     onFail: showError,
     onExpired: markExpired,
   });
@@ -103,14 +117,15 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
   const { hlsRef, resumeApplied, loadMedia, onNativeError } = useMediaLoader({
     videoRef,
     src,
-    playbackUrl: video.playbackUrl,
-    format: video.format,
-    expiresAt: video.expiresAt,
+    playbackUrl: source.playbackUrl,
+    format: source.format,
+    expiresAt: source.expiresAt,
     isLive,
     clearRetry,
     scheduleRetry,
     markExpired,
     failSource,
+    failNow: showError,
     expireOrFallBack,
     setExpired,
     setLoading,
@@ -118,10 +133,40 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     setLevels,
   });
 
+  /** Play on a card that loads nothing before the gesture: ask for the
+   * source, then load and play it. */
+  const startPlayback = useCallback(async () => {
+    if (!resolveSource || starting) return;
+    if (isExpiredAt(video.expiresAt)) {
+      markExpired();
+      return;
+    }
+    setStarting(true);
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await resolveSource();
+      if (!next) {
+        showError();
+        return;
+      }
+      playOnLoad.current = true;
+      setResolved(next);
+    } catch {
+      showError();
+    } finally {
+      setStarting(false);
+    }
+  }, [resolveSource, starting, video.expiresAt, markExpired, showError]);
+
   /** Retry button: start over from the proxied source. */
   const retry = useCallback(() => {
+    if (deferred) {
+      void startPlayback();
+      return;
+    }
     if (!resetSource()) loadMedia();
-  }, [resetSource, loadMedia]);
+  }, [deferred, startPlayback, resetSource, loadMedia]);
 
   useEffect(() => {
     if (showcase) {
@@ -134,10 +179,14 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
       }
       return;
     }
+    if (deferred) {
+      setLoading(false);
+      return;
+    }
     return loadMedia();
-  }, [loadMedia, showcase, isLive, video.durationMs]);
+  }, [loadMedia, showcase, deferred, isLive, video.durationMs]);
 
-  const now = useVideoClocks({ videoRef, isLive, startedAt: video.startedAt, expiresAt: video.expiresAt, expired, showcase, markExpired });
+  const now = useVideoClocks({ videoRef, isLive, startedAt: video.startedAt, expiresAt: source.expiresAt, expired, showcase, markExpired });
 
   const seekTo = useCallback((target: number) => {
     const el = videoRef.current;
@@ -162,11 +211,15 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
       setPlaying((p) => !p);
       return;
     }
+    if (deferred) {
+      void startPlayback();
+      return;
+    }
     const el = videoRef.current;
     if (!el) return;
     if (el.paused) void el.play().catch(() => setError(t("video.playbackError")));
     else el.pause();
-  }, [showcase]);
+  }, [showcase, deferred, startPlayback]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     runStageKey(e, {
@@ -205,6 +258,22 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     <ExpiredLinkPanel canRequest={Boolean(onRequestRefresh)} refreshAsked={refreshAsked} onRequest={requestRefresh} onRetry={retry} />
   ) : undefined;
 
+  // what a narrow card's bar has no room for, in its "…" menu
+  const popOutUrl = directUrl ?? video.playbackUrl;
+  const canSeek = !isLive || hasDvr(liveWindow);
+  const narrowItems = [
+    ...(canSeek ? [
+      { key: "back", label: t("video.seekBack", { seconds: SEEK_STEP_SECONDS }), icon: <Rewind size={14} aria-hidden />, onSelect: () => seekTo(current - SEEK_STEP_SECONDS) },
+      { key: "forward", label: t("video.seekForward", { seconds: SEEK_STEP_SECONDS }), icon: <FastForward size={14} aria-hidden />, onSelect: () => seekTo(current + SEEK_STEP_SECONDS) },
+    ] : []),
+    ...(typeof document !== "undefined" && document.pictureInPictureEnabled
+      ? [{ key: "pip", label: t("video.pip"), icon: <PictureInPicture2 size={14} aria-hidden />, onSelect: () => actionsRef.current?.togglePiP() }]
+      : []),
+    ...(/^https?:\/\//i.test(popOutUrl) || popOutUrl.startsWith("/")
+      ? [{ key: "popout", label: t("video.popOut"), icon: <ExternalLink size={14} aria-hidden />, onSelect: () => { window.open(new URL(popOutUrl, window.location.origin).href, "_blank", "noopener,noreferrer"); } }]
+      : []),
+  ];
+
   const extraControls = (
     <VideoExtraControls
       menuOpen={menuOpen}
@@ -220,6 +289,7 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
       setZoomTo={setZoomTo}
       expanded={expanded}
       setExpand={setExpand}
+      narrowItems={narrowItems}
     />
   );
 
@@ -299,6 +369,11 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
             onPlaying={() => { setLoading(false); setError(null); }}
             onLoadedData={() => setLoading(false)}
             onLoadedMetadata={(e) => {
+              // the person pressed Play before the source existed
+              if (playOnLoad.current) {
+                playOnLoad.current = false;
+                void e.currentTarget.play().catch(() => {});
+              }
               if (isLive || resumeApplied.current) return;
               resumeApplied.current = true;
               const at = loadResumePosition(key);

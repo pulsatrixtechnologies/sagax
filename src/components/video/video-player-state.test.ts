@@ -66,6 +66,18 @@ describe("recovery and expiry", () => {
     expect(planHlsError({ fatal: true, type: "networkError" }, { network: RELOAD_MAX_ATTEMPTS, media: 0 })).toBe("fail");
     expect(planHlsError({ fatal: true, type: "mediaError" }, fresh)).toBe("recover-media");
     expect(planHlsError({ fatal: true, type: "mediaError" }, { network: 0, media: 2 })).toBe("fail");
+   });
+
+  it("says a missing segment at once instead of reloading a black card", () => {
+    const fresh = { network: 0, media: 0 };
+    expect(planHlsError({ fatal: true, type: "networkError", details: "fragLoadError", response: { code: 404 } }, fresh)).toBe("unplayable");
+    expect(planHlsError({ fatal: true, type: "networkError", details: "manifestLoadError", response: { code: 400 } }, fresh)).toBe("unplayable");
+    expect(planHlsError({ fatal: true, type: "networkError", response: { code: 429 } }, fresh)).toBe("reload");
+    expect(planHlsError({ fatal: true, type: "networkError", response: { code: 502 } }, fresh)).toBe("reload");
+    expect(planHlsError({ fatal: false, type: "networkError", response: { code: 404 } }, fresh)).toBe("ignore");
+    // hls.js keeps a single-level stream's missing segment non-fatal
+    expect(planHlsError({ fatal: false, type: "networkError", details: "fragLoadError", response: { code: 404 } }, fresh)).toBe("unplayable");
+    expect(planHlsError({ fatal: false, type: "networkError", details: "fragLoadError", response: { code: 404 } }, fresh, { fragmentLoaded: true })).toBe("ignore");
   });
 
   it("knows an expired status or time", () => {

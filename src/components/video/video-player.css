@@ -2,6 +2,8 @@
    missed content scan cannot drop overlays back into the document flow. */
 
 .vpc-card {
+  /* the controls fit the card's own width (a phone's chat bubble), not the window's */
+  container-type: inline-size;
   position: relative;
   margin: 0.75rem 0;
   width: 100%;
@@ -257,6 +259,7 @@
 .vpc-time {
   min-width: 4.5rem;
   padding: 0 6px;
+  white-space: nowrap;
   color: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -850,5 +853,39 @@ button.vpc-live {
   .vpc-zoom,
   .vpc-scrub {
     transition: none;
+  }
+}
+
+/* The bar's buttons a narrow card lists in its "…" menu instead. */
+.vpc-menu-narrow {
+  display: none;
+}
+
+/* A narrow card (a chat bubble on a phone): the time stays on one line and
+   the bar keeps Play, time, sound, menu and full screen; seek, picture in
+   picture and open in a new tab move to the "…" menu. */
+@container (max-width: 440px) {
+  .vpc-card .vpc-optional,
+  .vpc-card .vpc-volume {
+    display: none;
+  }
+  .vpc-card .vpc-menu-narrow {
+    display: block;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .vpc-card .vpc-error {
+    gap: 8px;
+    padding: 12px;
+    font-size: 13px;
+  }
+  .vpc-card .vpc-error > svg {
+    display: none;
+  }
+  .vpc-card .vpc-time {
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 11.5px;
   }
 }

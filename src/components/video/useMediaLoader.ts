@@ -4,6 +4,9 @@ import { isHlsVideo, type WireVideoWidget } from "../../../shared/video-widget.t
 import { HLS_MANIFEST_LOAD_POLICY, probeExpiry, qualityLevelsOf, type QualityLevel } from "./VideoPlayerParts";
 import { isExpiredAt, planHlsError, reloadBackoffMs, RELOAD_MAX_ATTEMPTS } from "./video-player-state";
 
+/** How long a natively played HLS stream may take to show its first frame. */
+export const NATIVE_HLS_START_MS = 12_000;
+
 export type HlsLike = {
   levels: { height?: number; bitrate?: number }[];
   currentLevel: number;
@@ -43,6 +46,7 @@ export function useMediaLoader({
   scheduleRetry,
   markExpired,
   failSource,
+  failNow,
   expireOrFallBack,
   setExpired,
   setLoading,
@@ -60,6 +64,8 @@ export function useMediaLoader({
   scheduleRetry: (run: () => void, ms: number) => void;
   markExpired: () => void;
   failSource: () => void;
+  /** The source answered for good (a 404): the error, no other source. */
+  failNow: () => void;
   expireOrFallBack: () => void;
   setExpired: (v: boolean) => void;
   setLoading: (v: boolean) => void;
@@ -68,6 +74,7 @@ export function useMediaLoader({
 }) {
   const hlsRef = useRef<HlsLike | null>(null);
   const attempts = useRef({ network: 0, media: 0 });
+  const fragmentLoaded = useRef(false);
   const resumeApplied = useRef(false);
 
   const loadMedia = useCallback(() => {
@@ -78,6 +85,7 @@ export function useMediaLoader({
     hlsRef.current?.destroy();
     hlsRef.current = null;
     attempts.current = { network: 0, media: 0 };
+    fragmentLoaded.current = false;
     resumeApplied.current = false;
     if (isExpiredAt(expiresAt)) {
       markExpired();
@@ -87,6 +95,7 @@ export function useMediaLoader({
     setLoading(true);
     setError(null);
     let disposed = false;
+    let stopWatchdog = () => {};
     // Decided from the source before the media proxy hid its extension.
     const isHls = isHlsVideo({ format, playbackUrl: src });
     if (isHls && !el.canPlayType("application/vnd.apple.mpegurl")) {
@@ -109,10 +118,11 @@ export function useMediaLoader({
           setLevels(qualityLevelsOf(instance.levels));
         });
         instance.on(Hls.Events.FRAG_LOADED, () => {
+          fragmentLoaded.current = true;
           attempts.current = { network: 0, media: 0 };
         });
         instance.on(Hls.Events.ERROR, (_event: unknown, data: Parameters<typeof planHlsError>[0]) => {
-          const plan = planHlsError(data, attempts.current);
+          const plan = planHlsError(data, attempts.current, { fragmentLoaded: fragmentLoaded.current });
           if (plan === "ignore") return;
           if (plan === "expired") {
             if (data.fatal || data.details === "manifestLoadError" || data.details === "levelLoadError") {
@@ -120,6 +130,12 @@ export function useMediaLoader({
               if (hlsRef.current === (instance as unknown as HlsLike)) hlsRef.current = null;
               expireOrFallBack();
             }
+            return;
+          }
+          if (plan === "unplayable") {
+            instance.destroy();
+            if (hlsRef.current === (instance as unknown as HlsLike)) hlsRef.current = null;
+            if (!disposed) failNow();
             return;
           }
           if (plan === "reload") {
@@ -142,14 +158,36 @@ export function useMediaLoader({
       });
     } else {
       el.src = src;
+      // Native HLS (Safari, recent Chrome) reports a stream whose segments
+      // are missing by never starting, without an error event: a stream
+      // that shows no frame in time is checked, then said unplayable.
+      if (isHls && !isLive) {
+        const started = () => clearTimeout(watchdog);
+        const watchdog = setTimeout(() => {
+          el.removeEventListener("canplay", started);
+          // nothing parsed, or asked to play and still no frame to show
+          if (disposed || (el.readyState >= 1 && (el.paused || el.readyState >= 3))) return;
+          void probeExpiry(src).then((expired) => {
+            if (disposed) return;
+            if (expired) expireOrFallBack();
+            else failNow();
+          });
+        }, NATIVE_HLS_START_MS);
+        el.addEventListener("canplay", started, { once: true });
+        stopWatchdog = () => {
+          clearTimeout(watchdog);
+          el.removeEventListener("canplay", started);
+        };
+      }
     }
     return () => {
       disposed = true;
+      stopWatchdog();
       clearRetry();
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [videoRef, src, playbackUrl, format, expiresAt, isLive, clearRetry, scheduleRetry, markExpired, failSource, expireOrFallBack, setExpired, setLoading, setError, setLevels]);
+  }, [videoRef, src, playbackUrl, format, expiresAt, isLive, clearRetry, scheduleRetry, markExpired, failSource, failNow, expireOrFallBack, setExpired, setLoading, setError, setLevels]);
 
   /** Native <video> error (direct play or Safari HLS): probe expiry, then reload with backoff. */
   const onNativeError = useCallback((e: SyntheticEvent<HTMLVideoElement>) => {

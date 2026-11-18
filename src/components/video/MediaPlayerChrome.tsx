@@ -409,6 +409,7 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                 {native.seekStep ? (
                   <>
                     <ChromeIconButton
+                      className="vpc-optional"
                       label={t("video.seekBack", { seconds: native.seekStep })}
                       onClick={() => seekBy(native, -native.seekStep!)}
                     >
@@ -416,6 +417,7 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                     </ChromeIconButton>
                     {(!native.isLive || native.behindLive) && (
                       <ChromeIconButton
+                        className="vpc-optional"
                         label={t("video.seekForward", { seconds: native.seekStep })}
                         onClick={() => seekBy(native, native.seekStep!)}
                       >
@@ -429,7 +431,10 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                     ? native.behindLive && native.liveLatency
                       ? `-${formatMediaTime(native.liveLatency * 1000)}`
                       : t("video.live")
-                    : `${formatMediaTime(native.current * 1000)} / ${formatMediaTime((native.duration || 0) * 1000)}`}
+                    // nothing before the length is known (a card not played yet)
+                    : native.duration > 0
+                      ? `${formatMediaTime(native.current * 1000)} / ${formatMediaTime(native.duration * 1000)}`
+                      : ""}
                 </span>
                 {native.isLive && native.behindLive && native.onGoLive && (
                   <button type="button" className="vpc-golive" onClick={native.onGoLive}>
@@ -464,11 +469,11 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                   aria-label={t("video.volume")}
                 />
                 {typeof document !== "undefined" && document.pictureInPictureEnabled && (
-                  <ChromeIconButton label={t("video.pip")} onClick={() => void togglePiP()}>
+                  <ChromeIconButton className="vpc-optional" label={t("video.pip")} onClick={() => void togglePiP()}>
                     <PictureInPicture2 size={18} />
                   </ChromeIconButton>
                 )}
-                <ChromeIconButton label={t("video.popOut")} onClick={popOut}>
+                <ChromeIconButton className="vpc-optional" label={t("video.popOut")} onClick={popOut}>
                   <ExternalLink size={18} />
                 </ChromeIconButton>
               </>

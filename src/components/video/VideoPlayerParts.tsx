@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check, Clock3, Maximize, Minimize, MoreHorizontal, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
 
 import { t } from "@/lib/i18n";
@@ -165,6 +166,7 @@ export function VideoExtraControls({
   setZoomTo,
   expanded,
   setExpand,
+  narrowItems,
 }: {
   menuOpen: boolean;
   setMenuOpen: (update: (open: boolean) => boolean) => void;
@@ -176,6 +178,9 @@ export function VideoExtraControls({
   setZoomTo: (next: number) => void;
   expanded: boolean;
   setExpand: (next: boolean) => void;
+  /** The bar's buttons a narrow card has no room for (seek, picture in
+   * picture, open in a new tab): listed here, shown only on such a card. */
+  narrowItems?: ReadonlyArray<{ key: string; label: string; icon: ReactNode; onSelect: () => void }>;
 }) {
   return (
     <>
@@ -192,6 +197,25 @@ export function VideoExtraControls({
         </button>
         {menuOpen && (
           <div className="vpc-menu" role="menu" aria-label={t("video.moreOptions")}>
+            {narrowItems && narrowItems.length > 0 && (
+              <div className="vpc-menu-narrow">
+                {narrowItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    role="menuitem"
+                    className="vpc-menu-item"
+                    onClick={() => {
+                      item.onSelect();
+                      setMenuOpen(() => false);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {item.icon}
+                  </button>
+                ))}
+              </div>
+            )}
             {levels.length > 0 && (
               <>
                 <p className="vpc-menu-label">{t("video.quality")}</p>

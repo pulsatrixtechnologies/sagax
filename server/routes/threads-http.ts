@@ -5,6 +5,7 @@
  *
  * Registered in ROUTES after the auth gate. Never imports server/index.ts.
  */
+import { messageMediaSource } from "../media/message-media-link.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { deliveredCopy } from "../bots/bot-attachment.ts";
@@ -287,6 +288,21 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
     }
 
     if (await handleThreadMessageFile(deps, { req, res, url, path, method, auth, json, readBody }) !== PASS) return;
+
+    // The source of a media link in a message, asked when the person presses
+    // Play (server/media/message-media-link.ts): the thread gate already ran
+    // on this path, the stored message must carry the address.
+    m = path.match(/^\/api\/threads\/([\w-]+)\/messages\/([\w-]+)\/media$/);
+    if (m && method === "POST") {
+      const threadId = m[1]!;
+      if (!store.botByThread(threadId) && !store.groupByThread(threadId)) return json(res, 404, { error: "no such conversation" });
+      const message = store.messagesFor(threadId).find((candidate: any) => candidate.id === m![2]);
+      if (!message) return json(res, 404, { error: "no such message" });
+      const body = await readBody(req);
+      const answer = messageMediaSource(message, body && typeof body === "object" ? (body as { url?: unknown }).url : undefined, threadId);
+      if (!answer.ok) return json(res, answer.status, { error: answer.error });
+      return json(res, 200, { video: answer.video });
+    }
 
     // The conversation's files for the bot panel's Files tab: every upload,
     // attachment, linked file and tool-written file on the visible branch,

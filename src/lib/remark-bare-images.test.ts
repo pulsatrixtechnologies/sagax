@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bareImageKind, bareImageLines, replaceBareImageUrls } from "../../shared/bare-image-urls";
+import { bareImageKind, bareImageLines, bareMediaKind, replaceBareImageUrls } from "../../shared/bare-image-urls";
 import { plainPreviewText } from "./plain-preview";
 import { remarkBareImages } from "./remark-bare-images";
 import { fromMarkdown, type Options } from "mdast-util-from-markdown";
@@ -72,5 +72,65 @@ describe("remarkBareImages", () => {
   it("leaves a URL inside a sentence and a page link alone", () => {
     expect(run(`voir ${GIF} ici`).children[0]!.children!.some((c) => c.type === "image")).toBe(false);
     expect(run("https://giphy.com/gifs/cat-abc").children[0]!.children![0]!.type).toBe("link");
+  });
+});
+
+const HLS = "https://media.example.test/v1/share/recordings/abc/index.m3u8?u=1&exp=1763300000&t=sig";
+
+describe("bareMediaKind", () => {
+  it.each([
+    [HLS, "hls"],
+    ["https://cdn.example.test/clip.mp4", "video"],
+    ["https://cdn.example.test/clip.MOV?sig=1", "video"],
+    ["https://cdn.example.test/clip.webm", "video"],
+    ["https://cdn.example.test/clip.m4v", "video"],
+    ["https://cdn.example.test/song.mp3", "audio"],
+    ["https://cdn.example.test/song.m4a?exp=1&t=2", "audio"],
+    ["https://cdn.example.test/song.ogg", "audio"],
+    ["https://cdn.example.test/song.wav", "audio"],
+  ])("%s plays as %s", (url, kind) => expect(bareMediaKind(url)).toBe(kind));
+
+  it.each([
+    "http://cdn.example.test/clip.mp4",
+    "https://cdn.example.test/watch?v=clip.mp4",
+    "https://cdn.example.test/page",
+    "https://cdn.example.test/a.gif",
+    "javascript:alert(1)//a.mp4",
+    "https://cdn.example.test/clip.mp4 extra",
+  ])("%s is not playable in place", (url) => expect(bareMediaKind(url)).toBeNull());
+});
+
+type MediaNode = { type: string; data?: { hName?: string; hProperties?: Record<string, unknown> }; children?: Array<{ type: string; value?: string; url?: string }> };
+const mediaNodes = (md: string) =>
+  (run(md).children as MediaNode[]).filter((child) => child.data?.hProperties?.["data-bare-media"]);
+
+describe("remarkBareImages media links", () => {
+  it("turns an own-line media URL into a player that shows the link", () => {
+    const tree = run(`Voici l'enregistrement.\n\n${HLS}`);
+    expect(tree.children).toHaveLength(2);
+    const player = tree.children[1] as MediaNode;
+    expect(player.data?.hName).toBe("div");
+    expect(player.data?.hProperties).toMatchObject({ "data-bare-media": "hls", "data-media-url": HLS, "data-media-link": "show" });
+  });
+  it("keeps a media link inside a sentence and adds the player under its paragraph", () => {
+    const tree = run(`Le lien ${HLS} marche 10 minutes.`);
+    expect(tree.children).toHaveLength(2);
+    expect(tree.children[0]!.children!.some((c) => c.type === "link" && c.url === HLS)).toBe(true);
+    expect((tree.children[1] as MediaNode).data?.hProperties).toMatchObject({ "data-bare-media": "hls", "data-media-link": "hide" });
+  });
+  it("shows the address under the player of a labeled link", () => {
+    const nodes = mediaNodes("[Écouter](https://cdn.example.test/song.mp3) ou **[voir](https://cdn.example.test/clip.mp4)**");
+    expect(nodes.map((n) => [n.data?.hProperties?.["data-bare-media"], n.data?.hProperties?.["data-media-link"]])).toEqual([["audio", "show"], ["video", "show"]]);
+  });
+  it("draws one player per address and none for a page, a picture or plain http", () => {
+    expect(mediaNodes(`${HLS}\n\nencore ${HLS}`)).toHaveLength(1);
+    expect(mediaNodes("https://cdn.example.test/page http://cdn.example.test/clip.mp4")).toHaveLength(0);
+    expect(mediaNodes(GIF)).toHaveLength(0);
+  });
+  it("draws a media link in a list item", () => {
+    expect(mediaNodes(`- ${HLS}`)).toHaveLength(0);
+    const tree = run(`- ${HLS}`) as unknown as { children: Array<{ children: Array<{ children: MediaNode[] }> }> };
+    const item = tree.children[0]!.children[0]!.children;
+    expect(item.some((n) => n.data?.hProperties?.["data-bare-media"] === "hls")).toBe(true);
   });
 });

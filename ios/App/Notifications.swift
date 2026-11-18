@@ -30,21 +30,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     /// launch (NotificationCategories). A question's choices get their own
     /// category when its banner is made. "Always allow" is not an action.
     private func registerCategories() {
-        center.setNotificationCategories(NotificationCategories.fixed(Self.titles))
-    }
-
-    static var titles: NotificationCategories.Titles {
-        NotificationCategories.Titles(
-            allowOnce: String(localized: "Allow once"),
-            deny: String(localized: "Deny"),
-            reply: String(localized: "Reply"),
-            send: String(localized: "Send"),
-            placeholder: String(localized: "Type your answer"),
-            approve: String(localized: "notification.needsYou.approve", defaultValue: "Approve"),
-            doIt: String(localized: "notification.proposal.doIt", defaultValue: "Do it"),
-            notNow: String(localized: "notification.proposal.notNow", defaultValue: "Not now"),
-            open: String(localized: "Open")
-        )
+        center.setNotificationCategories(NotificationCategories.fixed(NotificationCategories.localizedTitles))
     }
 
     func authorizationStatus() async -> UNAuthorizationStatus {

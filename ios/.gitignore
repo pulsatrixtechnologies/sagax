@@ -12,6 +12,10 @@ ShareExtension/SagaxShareExtension.entitlements
 Widgets/SagaxWidgets.entitlements
 NotificationService/Info.plist
 NotificationService/SagaxNotificationService.entitlements
+WatchResources/Info.plist
+WatchResources/SagaxWatch.entitlements
+WatchWidget/Info.plist
+WatchWidget/SagaxWatchWidget.entitlements
 # xcodebuild -derivedDataPath build/dd (CI and local checks)
 build/
 __pycache__/

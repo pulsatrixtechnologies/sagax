@@ -59,6 +59,7 @@ extension MascotCharacterView {
     }
 }
 
+#if !os(watchOS)
 /// A room's face: its members' own mascots in one frame, the three-member
 /// layout of the reference's pinned group (`measure-home.md`): each member at
 /// 0.57 of the frame, the back one up top, then bottom-left, then the front
@@ -125,6 +126,8 @@ private struct CutOut: ViewModifier {
         }
     }
 }
+
+#endif
 
 /// A still mascot for the places that only render snapshots: the widgets and
 /// the Live Activity. A bot's chat draws its own character; anything else

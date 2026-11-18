@@ -638,6 +638,9 @@ public struct CompanionClient: Sendable {
     private let token: String?
     private let session: URLSession
     private let requestTimeout: TimeInterval
+    #if os(watchOS) && DEBUG
+    var watchDemo: DemoServer?
+    #endif
 
     public init(
         connection: Connection,
@@ -737,6 +740,12 @@ public struct CompanionClient: Sendable {
     var streamingSession: URLSession { session }
 
     func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        #if os(watchOS) && DEBUG
+        if let watchDemo {
+            guard let response = DemoURLProtocol.response(for: request, server: watchDemo) else { throw APIError.badURL }
+            return response
+        }
+        #endif
         do {
             return try await session.data(for: request)
         } catch {
@@ -823,8 +832,16 @@ public struct CompanionClient: Sendable {
         // Checked before every stream attempt: a route that drops packets
         // must not hold "Connecting…" for the default 20 s first.
         var request = try makeRequest("GET", "/.well-known/openmausbot/environment")
+        request.setValue(nil, forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 5
         return try await send(request, as: ServerEnvironment.self)
+    }
+
+    /// An unreachable descriptor does not mean the server was replaced.
+    public func serverIdentityChanged() async -> Bool {
+        guard let expected = connection.serverEnvironmentId,
+              let live = try? await environment() else { return false }
+        return live.environmentId != expected
     }
 
     /// End this session on the server (server-paired connections only).

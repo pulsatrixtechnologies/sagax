@@ -147,6 +147,15 @@ describe("iOS stage without Swift (#3639)", () => {
     expect(t.ran).toEqual(["swift"]);
     expect(t.logs).toEqual(["\n== iOS build: skipped, xcodegen or xcodebuild is not installed (swift test ran)"]);
     const full = setup("green", { xcode: true });
+    const run = full.args.run;
+    full.args.run = (label, command) => {
+      if (command[0] === "xcodebuild") {
+        expect(command).toContain("generic/platform=iOS Simulator");
+        // Embedded watch targets select their own SDK.
+        expect(command).not.toContain("-sdk");
+      }
+      return run(label, command);
+    };
     expect(runIosStage(full.args)).toEqual([]);
     expect(full.ran).toEqual(["swift", "xcodegen", "xcodebuild"]);
   });

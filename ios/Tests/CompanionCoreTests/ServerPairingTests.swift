@@ -171,6 +171,21 @@ final class ServerPairingTests: XCTestCase {
         XCTAssertEqual(ServerRequestStub.captured().first?.url?.path, "/.well-known/openmausbot/environment")
     }
 
+    func testPublicDescriptorDetectsReplacedServerWithoutDisclosingBearer() async throws {
+        let body = try fixture("environment")
+        ServerRequestStub.reset { _ in (200, body) }
+        var connection = try XCTUnwrap(Connection.parse("https://fixture.example"))
+        connection.serverEnvironmentId = "previous"
+        let client = CompanionClient(connection: connection, token: "fixture", session: session)
+        let changed = await client.serverIdentityChanged()
+        XCTAssertTrue(changed)
+        let request = try XCTUnwrap(ServerRequestStub.captured().first)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        ServerRequestStub.reset { _ in (503, Data()) }
+        let unavailable = await client.serverIdentityChanged()
+        XCTAssertFalse(unavailable)
+    }
+
     func testConnectionsSavedBeforeServerPairingStillDecodeAsCompanionOnes() throws {
         let legacy = Data(#"{"id":"c1","name":"Ada's computer","host":"192.168.1.9","port":8810}"#.utf8)
         let decoded = try JSONDecoder().decode(Connection.self, from: legacy)

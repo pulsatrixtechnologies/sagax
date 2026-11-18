@@ -100,7 +100,16 @@ public final class DemoServer: @unchecked Sendable {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
+        #if os(watchOS) && DEBUG
+        // The watch's app proxy handles URLSession outside the app and
+        // ignores custom URLProtocol classes. Keep its simulator fixture
+        // in process, through the same responder and wire representation.
+        var client = CompanionClient(connection: connection, token: nil, session: URLSession(configuration: configuration))
+        client.watchDemo = self
+        return client
+        #else
         return CompanionClient(connection: connection, token: "demo", session: URLSession(configuration: configuration))
+        #endif
     }
 
     /// Stop playing replies (leaving the demo).
@@ -567,11 +576,18 @@ public final class DemoURLProtocol: URLProtocol {
         Self.lock.lock()
         let server = Self.server
         Self.lock.unlock()
-        guard let url = request.url, url.host == DemoServer.host, let server else {
+        guard let server, let (data, response) = Self.response(for: request, server: server) else {
             Self.lock.lock(); Self.refusedHosts.append(request.url?.host ?? "?"); Self.lock.unlock()
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    static func response(for request: URLRequest, server: DemoServer) -> (Data, HTTPURLResponse)? {
+        guard let url = request.url, url.host == DemoServer.host else { return nil }
         let body = request.httpBody ?? request.httpBodyStream.map(Self.read)
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let contentType = request.value(forHTTPHeaderField: "Content-Type")
@@ -583,9 +599,7 @@ public final class DemoURLProtocol: URLProtocol {
             url: url, statusCode: answer.status, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": answer.contentType]
         )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: answer.body)
-        client?.urlProtocolDidFinishLoading(self)
+        return (answer.body, response)
     }
 
     override public func stopLoading() {}

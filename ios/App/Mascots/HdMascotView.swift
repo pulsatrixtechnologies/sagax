@@ -16,7 +16,6 @@
 import CompanionCore
 import ImageIO
 import SwiftUI
-import UIKit
 
 /// One decoded asset: its frames and how long each shows (a still is one frame).
 final class HdClip {

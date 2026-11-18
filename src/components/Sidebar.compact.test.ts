@@ -1,6 +1,6 @@
 // The compact sidebar (the reference design's "Activer ou désactiver la barre latérale
 // compacte"): the icons rail, its expand button in the rail's foot, Enter on
-// the edge, its arrow keys. The head leads with "Collapse sidebar" (#4484),
+// the edge, its arrow keys. The head no longer holds Collapse sidebar (#4484 reversed),
 // the reference's button (sidebar panel icon, first in its top button row).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -65,13 +65,11 @@ describe("compact sidebar", () => {
     expect(html).toContain('aria-description="Enter turns the compact sidebar on or off"');
   });
 
-  it.each(["comfortable", "compact"] as const)("leads the head with Collapse sidebar, first, with no rail toggle or rail keys at %s density", (density) => {
+  it.each(["comfortable", "compact"] as const)("has no Collapse sidebar button in the head (the bot panel's ... leads it), no rail toggle or rail keys at %s density", (density) => {
     fixture.density = density;
     const html = render();
-    const collapse = (html.match(/<button[^>]*data-sidebar-collapse[^>]*>/g) ?? [])[0] ?? "";
-    expect(collapse).toContain('aria-label="Collapse sidebar"');
-    expect(collapse).toContain('aria-expanded="true"');
-    expect(html.indexOf("data-sidebar-collapse")).toBeLessThan(html.indexOf("data-sidebar-search"));
+    expect(html).not.toContain("data-sidebar-collapse");
+    expect(html).not.toContain('aria-label="Collapse sidebar"');
     expect(html).not.toContain("data-sidebar-compact-toggle");
     expect(html).not.toContain("data-sidebar-rail");
   });
@@ -82,10 +80,5 @@ describe("compact sidebar", () => {
     const html = render();
     expect(html).toContain('aria-label="Agrandir la barre latérale"');
     expect(html).toContain('aria-description="Entrée active ou désactive la barre latérale compacte"');
-  });
-
-  it("names the head's collapse button in Québec French", () => {
-    setLocale("fr");
-    expect(render()).toContain('aria-label="Réduire la barre latérale"');
   });
 });

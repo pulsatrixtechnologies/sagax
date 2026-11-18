@@ -90,7 +90,8 @@ import { BotRoleTag, PersonLabelTag } from "./LabelTag";
 import { ListeningBadge } from "./ListeningCard";
 import { LiveCallPill } from "./LiveCallPill";
 import { nudgeLineText } from "@/lib/nudge-line";
-import { Layers, LogOut, PanelLeft, UserRound } from "lucide-react";
+import { botPillActions } from "./BotHeaderPill";
+import { Ellipsis, Layers, LogOut, PanelLeft, UserRound } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
@@ -202,9 +203,9 @@ export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, si
 /** The head's round buttons (search, New): the header's 36px circle ("...",
  * gear, close), painted from the sidebar's own tokens (fill, ring, glyph), the
  * glyph at CIRCLE_ICON like every round control (#4163), with the same focus
- * ring as its neighbours. The collapse button leads the row, as in the
- * reference ("Collapse sidebar", the sidebar panel icon); dragging the edge
- * narrower than the snap width collapses it too (see `sidebarDragTarget`). */
+ * ring as its neighbours. The bot panel's "..." leads the row (it replaced the
+ * collapse button); the sidebar collapses by its shortcut or by dragging the
+ * edge narrower than the snap width (see `sidebarDragTarget`). */
 export const SIDEBAR_HEAD_BUTTON = cn(
   SIDEBAR_CIRCLE_BUTTON,
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
@@ -2415,7 +2416,9 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
     pendingQueued: current.pendingQueued,
     sections: current.sections,
     selectedId: current.selectedId,
-  }), (a, b) => Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.pendingQueued, b.pendingQueued) && Object.is(a.sections, b.sections) && Object.is(a.selectedId, b.selectedId));
+    panelOpen: current.settingsOpen || current.computerOpen,
+    panelOwned: current.panelOwner != null,
+  }), (a, b) => Object.is(a.panelOpen, b.panelOpen) && Object.is(a.panelOwned, b.panelOwned) && Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.pendingQueued, b.pendingQueued) && Object.is(a.sections, b.sections) && Object.is(a.selectedId, b.selectedId));
   const listFade = useScrollFade();
   const dispatch: typeof storeDispatch = (action) => {
     storeDispatch(action);
@@ -2426,15 +2429,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const { capabilities } = useDesktopCapabilities();
   const sidebarRef = useRef<HTMLElement>(null);
-  // set by Collapse sidebar: the keyboard's place moves to Expand sidebar on the rail it opens
-  const expandFocus = useRef(false);
   const width = useSidebarWidth({ sidebarRef });
   const { density, viewport, autoRail, sidebarWidth, quietRows, setSidebarCollapsed } = width;
-  useEffect(() => {
-    if (density !== "icons" || !expandFocus.current) return;
-    expandFocus.current = false;
-    sidebarRef.current?.querySelector<HTMLElement>("[data-sidebar-compact-toggle]")?.focus();
-  }, [density]);
   const multi = useSidebarMultiSelect({ state, density });
   const unread = useSidebarUnreadPills({ listRef: listFade.ref, state, selecting: multi.selecting });
   const actions = useSidebarBotActions({ state, dispatch, showThreads, open, onClose, remoteClient });
@@ -2473,21 +2469,28 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   // Search and New ride in the title bar when there is one and no brand row.
   const titleBarHead = (macInset || browser) && !showLogo;
   const { accountPlaces, archivedBots } = roster;
-  // The reference's top button row is collapse, search, New (its collapse
-  // button leads, #4484). The rail draws search and New in its foot (#4093,
+  // The reference's top button row is bot panel, search, New (the panel's "..."
+  // leads, replacing #4484's collapse button). The rail draws search and New in its foot (#4093,
   // the reference's rail keeps its controls at the bottom) beside its own
   // Expand sidebar button, so it takes the last two only.
-  const collapseButton = viewport !== "phone" && (
+  // The bot panel's "..." takes the place the collapse button had (owner's
+  // card 2026-11-17): the same toggle as the chat pill. Only a bot chat has a
+  // panel, so it is hidden everywhere else (rooms, Settings, full pages).
+  const botOnScreen = state.activeView === "chat" && state.bots.some((entry) => entry.id === state.selectedId);
+  const panelButton = botOnScreen && !remoteClient && (
     <button
       type="button"
-      data-sidebar-collapse
-      aria-expanded="true"
-      onClick={() => { expandFocus.current = true; setSidebarCollapsed(true); }}
-      aria-label={t("sidebar.collapse")}
-      title={t("sidebar.collapse")}
-      className={SIDEBAR_HEAD_BUTTON}
+      data-sidebar-bot-panel
+      aria-expanded={state.panelOpen}
+      onClick={() => {
+        if (state.panelOwned) dispatch({ type: "toggleSettings", open: true, owner: null });
+        else for (const action of botPillActions(state.panelOpen)) dispatch(action);
+      }}
+      aria-label={state.panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
+      title={state.panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
+      className={cn(SIDEBAR_HEAD_BUTTON, state.panelOpen && "bg-sidebar-circle-hover")}
     >
-      <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
+      <Ellipsis {...CIRCLE_ICON} aria-hidden="true" />
     </button>
   );
   const searchButton = (
@@ -2516,7 +2519,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       <Plus {...CIRCLE_ICON} aria-hidden="true" />
     </button>
   );
-  const headButtons = <>{collapseButton}{searchButton}{newButton}</>;
+  const headButtons = <>{panelButton}{searchButton}{newButton}</>;
   const railButtons = <>{searchButton}{newButton}</>;
 
   return (

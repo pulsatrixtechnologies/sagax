@@ -1,6 +1,6 @@
 // Density is an occasional preference chosen in Settings > Appearance; the
 // Sagax sidebar head keeps only its frequent controls: the reference's
-// "Collapse sidebar" first (#4484), then search and New. The rail wears
+// the bot panel "..." first (replacing #4484's collapse), then search and New. The rail wears
 // "Expand sidebar" in its foot. Dragging the edge collapses it too: see
 // `sidebarDragTarget` in sidebar-preferences.
 import { readFileSync } from "node:fs";
@@ -69,13 +69,13 @@ afterEach(() => {
 
 describe("sidebar header", () => {
   it.each(["comfortable", "compact", "icons"] as const)(
-    "keeps Collapse sidebar (full widths) or Expand sidebar (rail), search and New, and no density menu at %s density",
+    "keeps Expand sidebar on the rail only, no Collapse button, search and New, and no density menu at %s density",
     (density) => {
       fixture.density = density;
       const html = render();
       expect(html).toContain('aria-label="New"');
-      expect(html.includes("data-sidebar-collapse")).toBe(density !== "icons");
-      expect(html.includes('aria-label="Collapse sidebar"')).toBe(density !== "icons");
+      expect(html).not.toContain("data-sidebar-collapse");
+      expect(html).not.toContain('aria-label="Collapse sidebar"');
       expect(html.includes('aria-label="Expand sidebar"')).toBe(density === "icons");
       expect(html).not.toContain('aria-label="Collapse sidebar to avatars"');
       expect(html).not.toContain("Choose sidebar density");
@@ -212,5 +212,19 @@ describe("sidebar header", () => {
     expect(css).not.toContain("connect-apps-tile-in");
     // the equal-height foot tiles (#980) stay
     expect(css).toContain("--foot-tile-h: 2.5rem");
+  });
+});
+
+describe("sidebar head bot panel button", () => {
+  it("is a round '...' with the panel's name, aria-expanded and the pill's toggle, hidden when no bot is on screen", () => {
+    const src = readFileSync(resolve(__dirname, "Sidebar.tsx"), "utf8");
+    expect(src).toContain("data-sidebar-bot-panel");
+    expect(src).toContain("<Ellipsis");
+    expect(src).toMatch(/aria-expanded=\{state\.panelOpen\}/);
+    expect(src).toContain('t("chat.openPanel")');
+    expect(src).toMatch(/const panelButton = botOnScreen && !remoteClient/);
+    expect(src).toContain("{panelButton}{searchButton}{newButton}");
+    // a fresh render has no bot on screen: no button
+    expect(render()).not.toContain("data-sidebar-bot-panel");
   });
 });

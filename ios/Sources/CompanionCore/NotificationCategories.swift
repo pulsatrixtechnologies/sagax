@@ -46,6 +46,20 @@ public enum NotificationCategories {
         }
     }
 
+    public static var localizedTitles: NotificationCategories.Titles {
+        NotificationCategories.Titles(
+            allowOnce: String(localized: "Allow once"),
+            deny: String(localized: "Deny"),
+            reply: String(localized: "Reply"),
+            send: String(localized: "Send"),
+            placeholder: String(localized: "Type your answer"),
+            approve: String(localized: "notification.needsYou.approve", defaultValue: "Approve"),
+            doIt: String(localized: "notification.proposal.doIt", defaultValue: "Do it"),
+            notNow: String(localized: "notification.proposal.notNow", defaultValue: "Not now"),
+            open: String(localized: "Open")
+        )
+    }
+
     /// Per-choices categories kept at most; past it, others go first.
     public static let choicesKept = 16
 

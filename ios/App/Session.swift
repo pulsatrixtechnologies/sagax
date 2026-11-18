@@ -207,7 +207,9 @@ final class Session: ObservableObject {
     private var rosterFactsSummaries: [ChatSummary] = []
     private var rosterFactsWaiting = Set<String>()
     private lazy var streamFlush = FrameCoalescer(maxRate: 30) { [weak self] in self?.flushStream() }
-    @Published private(set) var connection: Connection?
+    @Published private(set) var connection: Connection? {
+        didSet { watchPublisher.scheduleUpdate() }
+    }
     @Published private(set) var connections: [Connection] = []
     let threadSelection = BotThreadSelection()
     /// Whether the live pairing may administer the workspace — see
@@ -237,7 +239,11 @@ final class Session: ObservableObject {
     /// a command rule: an admin session, or a person an admin gave
     /// host.shell (server `adminApprovalCheck`, `canManageCommandAllowlist`).
     var answersServerCards: Bool { canAdminister || surfaceGate.can("host.shell") }
-    @Published private(set) var status: Status = .unpaired
+    @Published private(set) var status: Status = .unpaired {
+        didSet {
+            if oldValue == .unauthorized || status == .unauthorized { watchPublisher.scheduleUpdate() }
+        }
+    }
     /// Transient, user-facing failures from an action they just took.
     @Published var actionError: String?
     /// Uploads outlive a ChatView and stay bound to the connection captured
@@ -353,7 +359,9 @@ final class Session: ObservableObject {
         case organization
     }
 
-    private var client: CompanionClient?
+    private var client: CompanionClient? {
+        didSet { watchPublisher.scheduleUpdate() }
+    }
     /// #3415, #3471: what waits on the person, per bot id (a room's under
     /// its thread id), as the server's one list says (Session+Waiting.swift).
     @Published var waitingLists: [String: WaitingPayload] = [:]
@@ -376,7 +384,9 @@ final class Session: ObservableObject {
     /// The device token, kept in memory so the client can be rebuilt when the
     /// dial moves to another stored host. The keychain remains the only place
     /// it is persisted.
-    private var token: String?
+    private var token: String? {
+        didSet { watchPublisher.scheduleUpdate() }
+    }
     /// Why the session ended when `status` is `.unauthorized`: the server's
     /// `code` (`session_revoked`, `idp_session_ended`...), `server_changed`,
     /// or nil when every token this phone holds kept being refused.
@@ -477,10 +487,27 @@ final class Session: ObservableObject {
     private var registry = CompanionConnectionRegistry()
     // MARK: - Pairing
 
+    private let watchPublisher = WatchPairingPublisher()
+
+    private func startWatchPairing() {
+        watchPublisher.start { [weak self] in
+            guard let self, !restorePending else { return nil }
+            guard !isDemo, status != .unauthorized,
+                  let connection, registry.activeConnectionID == connection.id,
+                  let token, client?.sends(token: token) == true else {
+                return WatchPairingReply(revision: 0, pairing: nil)
+            }
+            return WatchPairingReply(revision: 0, pairing: WatchPairing(connection: connection, token: token))
+        }
+    }
+
     init() {
         // Writes in an initializer skip `didSet`: hand the live text of a
         // preview fixture (`-chat-reasoning-preview`) to its store here.
-        defer { publishStream() }
+        defer {
+            publishStream()
+            startWatchPairing()
+        }
         Self.removeStaleFilePreviews()
         _ = NotificationCoordinator.shared
         NotificationCoordinator.shared.responseHandler = { [weak self] target in
@@ -1841,15 +1868,13 @@ final class Session: ObservableObject {
             // refused anyway, and a fresh install must not be shown the old
             // one. Unreachable is not "different": the stream attempt below
             // reports that the usual way.
-            if let expected = client.connection.serverEnvironmentId {
-                let live = try? await client.environment()
-                if Task.isCancelled { return }
-                if let live, live.environmentId != expected {
-                    log.error("server identity changed: \(expected, privacy: .public) is now \(live.environmentId, privacy: .public)")
-                    sessionEndCode = SessionEndReason.serverChanged
-                    status = .unauthorized
-                    return
-                }
+            let changed = await client.serverIdentityChanged()
+            if Task.isCancelled { return }
+            if changed {
+                log.error("server identity changed")
+                sessionEndCode = SessionEndReason.serverChanged
+                status = .unauthorized
+                return
             }
             log.info("opening stream, cursor=\(self.state.cursor ?? "none", privacy: .public)")
             do {

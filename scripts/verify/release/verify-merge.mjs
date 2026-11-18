@@ -326,7 +326,7 @@ export function runIosStage({ iosDir, stop, run: runStage = run, spawn = spawnSy
   stop(runStage("swift test (CompanionCore)", ["swift", "test"], { cwd: iosDir }));
   if (spawn("xcodegen", ["--version"], { stdio: "ignore" }).status === 0 && spawn("xcodebuild", ["-version"], { stdio: "ignore" }).status === 0) {
     stop(runStage("xcodegen generate", ["xcodegen", "generate"], { cwd: iosDir }));
-    stop(runStage("iOS build (Sagax scheme, generic simulator)", ["xcodebuild", "-project", "Sagax.xcodeproj", "-scheme", "Sagax", "-sdk", "iphonesimulator",
+    stop(runStage("iOS build (Sagax scheme, generic simulator)", ["xcodebuild", "-project", "Sagax.xcodeproj", "-scheme", "Sagax",
       "-destination", "generic/platform=iOS Simulator", "-quiet", "CODE_SIGNING_ALLOWED=NO", "build"], { cwd: iosDir }));
   } else {
     log("\n== iOS build: skipped, xcodegen or xcodebuild is not installed (swift test ran)");

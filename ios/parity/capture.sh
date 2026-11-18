@@ -84,7 +84,7 @@ if [ "$SKIP_BUILD" -eq 0 ] || [ ! -d "$APP" ]; then
   log "xcodegen + build (Debug, simulator, unsigned)"
   (cd "$IOS" && xcodegen generate >/dev/null)
   xcodebuild -project "$IOS/Sagax.xcodeproj" -scheme Sagax \
-    -configuration Debug -sdk iphonesimulator \
+    -configuration Debug \
     -destination "generic/platform=iOS Simulator" \
     -derivedDataPath "$BUILD" CODE_SIGNING_ALLOWED=NO build \
     > "$OUT/build.log" 2>&1 || { tail -40 "$OUT/build.log"; log "build failed (see $OUT/build.log)"; exit 1; }

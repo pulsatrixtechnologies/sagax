@@ -111,7 +111,7 @@ if [ "$SKIP_BUILD" -eq 0 ] || [ ! -d "$APP" ]; then
   (cd "$IOS" && xcodegen generate >/dev/null)
   # build-for-testing: the app, and the UI-test runner that turns the device.
   xcodebuild -project "$IOS/Sagax.xcodeproj" -scheme Sagax \
-    -configuration Debug -sdk iphonesimulator \
+    -configuration Debug \
     -destination "generic/platform=iOS Simulator" \
     -derivedDataPath "$BUILD" CODE_SIGNING_ALLOWED=NO build-for-testing \
     > "$OUT/build.log" 2>&1 || { tail -40 "$OUT/build.log"; log "build failed (see $OUT/build.log)"; exit 1; }

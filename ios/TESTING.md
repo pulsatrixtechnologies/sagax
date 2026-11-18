@@ -146,7 +146,6 @@ The same gate can run without opening Xcode:
 ```sh
 xcodebuild -project Sagax.xcodeproj \
   -scheme Sagax \
-  -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   CODE_SIGNING_ALLOWED=NO build
 ```
@@ -159,7 +158,7 @@ code is accepted:
 
 ```sh
 xcodebuild -project Sagax.xcodeproj -scheme Sagax \
-  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   DEVELOPMENT_TEAM=<your team id> CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual build
 ```
 
@@ -389,3 +388,9 @@ For Swift errors, the compiler's own output is the most useful thing — file,
 line, and message. For runtime problems, the harness log is usually more
 informative than the phone: it is where the pairing, auth and stream decisions
 are actually made.
+
+## Apple Watch companion
+
+Generate the project from `ios/project.yml`. Build the `SagaxWatch` scheme for a watchOS simulator and the `Sagax` scheme for an iOS simulator. The built iOS app contains `Watch/SagaxWatch.app`, which contains the WidgetKit extension in `PlugIns/`.
+
+For an isolated visual fixture, launch the installed Debug watch app with `-watch-demo roster`, `-watch-demo chat` or `-watch-demo inbox`. Use `xcrun simctl io <watch-udid> screenshot <path>.png` to capture the screen. To test pairing, launch the watch app without the fixture argument and open Sagax on its paired iPhone. Once the roster loads, disconnect the phone and send a reply from the watch over a network that can reach the Sagax server.

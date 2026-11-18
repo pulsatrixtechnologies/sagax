@@ -8,7 +8,7 @@ The app is native Swift and uses XcodeGen; EAS commands do not apply.
 2. Team Pulsatrix Technologies (`PP546MZVHZ`). The bundle IDs `ca.pulsatrix.sagax`, `ca.pulsatrix.sagax.widgets`, `ca.pulsatrix.sagax.share`, and `ca.pulsatrix.sagax.notification` are registered (ASC app id 6818532985). The app ID needs the Push Notifications and Communication Notifications capabilities (`docs/ios-push.md`).
 3. App Group `group.ca.pulsatrix.sagax` on the app and its three extensions (widgets, share, notification service); the shared Keychain group is `$(AppIdentifierPrefix)group.ca.pulsatrix.sagax`, plus the app's own `$(AppIdentifierPrefix)ca.pulsatrix.sagax`. Keychain service names and the credential encryption label keep their `openmausbot` spellings on purpose.
 4. The App Store Connect app is **Sagax**, primary category **Productivity**, and a unique SKU.
-5. Automatic signing (`project.yml`): archive with `-allowProvisioningUpdates` and the App Store Connect API key so profiles exist for the containing app and its three extensions.
+5. Automatic signing (`project.yml`): archive with `-allowProvisioningUpdates` and the App Store Connect API key so profiles exist for the iOS app, its three extensions, the embedded watchOS app and its complication.
 6. Add the review contact details in App Store Connect; do not commit private contact data or App Store Connect keys.
 
 ## Before every upload

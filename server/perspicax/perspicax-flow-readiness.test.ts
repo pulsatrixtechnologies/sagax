@@ -3,9 +3,9 @@ import { PerspicaxMcp } from "./perspicax-mcp.ts";
 import { checkRoutineReadiness, ROUTINE_FLOW_READINESS_TIMEOUT_MS, type RoutineReadinessDeps } from "../routines/routine-readiness.ts";
 import { routineFlowInput } from "../routines/routine-flow-input.ts";
 
-interface Frame { id?: string; method: string; params?: { name?: string; clientInfo?: { name: string }; arguments?: { command?: string; args?: Record<string, unknown> } } }
+interface Frame { id?: string; method: string; params?: { cursor?: string; name?: string; clientInfo?: { name: string }; arguments?: { command?: string; args?: Record<string, unknown> } } }
 interface Call { frame?: Frame; signal?: AbortSignal | null; session: string | null; method?: string }
-function fixture(options: { call?(command: string, signal?: AbortSignal | null, args?: Record<string, unknown>): unknown | Promise<unknown>; tools?: string[]; rpcError?: boolean; text?: boolean } = {}) {
+function fixture(options: { call?(command: string, signal?: AbortSignal | null, args?: Record<string, unknown>): unknown | Promise<unknown>; tools?: string[]; nextTools?: string[]; rpcError?: boolean; text?: boolean } = {}) {
   const calls: Call[] = [];
   const revoke = vi.fn(async () => true);
   const subjectToken = vi.fn(async () => ({ ok: false, error: "no_session" } as const));
@@ -23,7 +23,10 @@ function fixture(options: { call?(command: string, signal?: AbortSignal | null, 
       if (init?.method === "DELETE") return new Response(null, { status: 204 });
       if (frame?.method === "notifications/initialized") return new Response(null, { status: 202 });
       let result: unknown = {};
-      if (frame?.method === "tools/list") result = { tools: (options.tools ?? ["flow_run"]).map(name => ({ name })) };
+      if (frame?.method === "tools/list") {
+        const tools = frame.params?.cursor ? options.nextTools : options.tools;
+        result = { tools: (tools ?? ["flow_run"]).map(name => ({ name })), ...(options.nextTools && !frame.params?.cursor ? { nextCursor: "more" } : {}) };
+      }
       if (frame?.method === "tools/call") {
         const command = frame.params!.arguments!.command;
         const value = await options.call?.(command!, init?.signal, frame.params!.arguments!.args) ?? { status: "ok", run_id: "shadow-1" };
@@ -93,6 +96,11 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
       { command: "run.init", args: { shadow: true, routine: "inbox-review" } },
       { command: "release", args: { routine: "inbox-review", run_id: "shadow-1" } },
     ]);
+  });
+  it("checks the plan when the runner is on the next catalog page", async () => {
+    const h = fixture({ tools: ["api_list"], nextTools: ["flow_run"] });
+    expect((await h.check()).ok).toBe(true);
+    expect(h.commands().map(call => call?.command)).toContain("plan");
   });
   it("is not a problem when the connection serves no Flow tool at all (Flow retired, #4432)", async () => {
     const h = fixture({ tools: ["api_list", "cw_psa_query"] });

@@ -33,7 +33,8 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
     ...(payerPrincipalId && payerPrincipalId !== "unknown" ? { payerPrincipalId } : {}),
     room: false
   });
-  noteTurnReach(threadId, reach);
+  // a room turn speaks for no one person: nothing of its failures is theirs
+  noteTurnReach(threadId, reach, speakerPrincipalId);
   return reachSummaryPrompt({
     servers: Object.keys(integrations.custom ?? {}),
     builtins,

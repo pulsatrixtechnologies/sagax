@@ -41,6 +41,9 @@ export interface ReachContribution {
   line?: string;
   /** tools that come with it, as `<server>__<tool>` */
   tools?: string[];
+  /** tools refused for the speaker (server/tools/tool-refusals.ts), as
+   * `<connector>/<tool>`: an engine that names an example tool skips them */
+  refused?: string[];
 }
 
 export type ReachProvider = (context: ReachContext) => ReachContribution | null | undefined;
@@ -55,9 +58,11 @@ export function registerReachProvider(id: string, provider: ReachProvider): () =
   };
 }
 
-const LINE_MAX = 160;
+/** #4720: a tool refusal line names its connector, the reason, the way around and the tools. */
+const LINE_MAX = 280;
 const LINES_MAX = 6;
 const TOOLS_MAX = 24;
+const REFUSED_MAX = 64;
 const TOOL_NAME = /^[A-Za-z0-9][\w.-]{0,63}__[A-Za-z0-9][\w.-]{0,63}$/;
 
 function oneLine(text: string): string {
@@ -67,9 +72,10 @@ function oneLine(text: string): string {
 
 /** Every provider's contribution for this turn, bounded. A provider that
  * throws or answers nonsense adds nothing. */
-export function reachContributions(context: ReachContext): { lines: string[]; tools: string[] } {
+export function reachContributions(context: ReachContext): TurnReach {
   const lines: string[] = [];
   const tools = new Set<string>();
+  const refused = new Set<string>();
   for (const provider of providers.values()) {
     let contribution: ReachContribution | null | undefined;
     try {
@@ -82,8 +88,18 @@ export function reachContributions(context: ReachContext): { lines: string[]; to
     for (const name of contribution.tools ?? []) {
       if (typeof name === "string" && TOOL_NAME.test(name.trim()) && tools.size < TOOLS_MAX) tools.add(name.trim());
     }
+    for (const id of contribution.refused ?? []) {
+      if (typeof id === "string" && id.includes("/") && refused.size < REFUSED_MAX) refused.add(id.trim().toLowerCase());
+    }
   }
-  return { lines, tools: [...tools].sort((a, b) => a.localeCompare(b)) };
+  return { lines, tools: [...tools].sort((a, b) => a.localeCompare(b)), ...(refused.size ? { refused: [...refused].sort() } : {}) };
+}
+
+export interface TurnReach {
+  lines: string[];
+  tools: string[];
+  /** `<connector>/<tool>`, lower case */
+  refused?: string[];
 }
 
 export interface ReachSummaryInput {
@@ -123,25 +139,39 @@ export function reachSummaryPrompt(input: ReachSummaryInput): string {
 // the tools directly, drivers/acp/grok.ts). A driver never calls the
 // providers itself: it would not know who speaks. A room turn forgets them.
 const TURNS_MAX = 512;
-const byThread = new Map<string, { lines: string[]; tools: string[] }>();
+const byThread = new Map<string, TurnReach>();
+/** The person the thread's last direct turn spoke for (#4720: whose tool
+ * refusals its failures are). */
+const personByThread = new Map<string, string>();
 
-export function noteTurnReach(threadId: string, reach: { lines: string[]; tools: string[] }): void {
+export function noteTurnReach(threadId: string, reach: TurnReach, person?: string): void {
   byThread.delete(threadId);
-  if (!reach.lines.length && !reach.tools.length) return;
-  byThread.set(threadId, { lines: [...reach.lines], tools: [...reach.tools] });
+  personByThread.delete(threadId);
+  if (person?.trim()) {
+    personByThread.set(threadId, person.trim().toLowerCase());
+    while (personByThread.size > TURNS_MAX) personByThread.delete(personByThread.keys().next().value!);
+  }
+  if (!reach.lines.length && !reach.tools.length && !reach.refused?.length) return;
+  byThread.set(threadId, { lines: [...reach.lines], tools: [...reach.tools], ...(reach.refused?.length ? { refused: [...reach.refused] } : {}) });
   while (byThread.size > TURNS_MAX) byThread.delete(byThread.keys().next().value!);
 }
 
-export function turnReachFor(threadId: string | undefined): { lines: string[]; tools: string[] } | undefined {
+export function turnReachFor(threadId: string | undefined): TurnReach | undefined {
   return threadId ? byThread.get(threadId) : undefined;
+}
+
+export function turnPersonFor(threadId: string | undefined): string | undefined {
+  return threadId ? personByThread.get(threadId) : undefined;
 }
 
 export function forgetTurnReach(threadId: string): void {
   byThread.delete(threadId);
+  personByThread.delete(threadId);
 }
 
 /** Test seam. */
 export function resetReachProviders(): void {
   providers.clear();
   byThread.clear();
+  personByThread.clear();
 }

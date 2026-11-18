@@ -104,6 +104,10 @@ export interface LoopGuardDeps {
   steer(threadId: string, note: string): Promise<SteerOutcome>;
   /** The person's Stop, for this cause; it writes its transcript rows before it returns. */
   interrupt(threadId: string, cause: string): Promise<unknown>;
+  /** #4720: why this tool is already known refused for the person the turn
+   * speaks for (server/tools/tool-refusals.ts), read when the call starts;
+   * a call that then fails gets one note with that reason, at once. */
+  knownRefusal?(threadId: string, step: { title?: string; tool?: string }): string | undefined;
   /** Never given the command: its text may hold a credential. */
   log?(line: string): void;
 }
@@ -228,6 +232,11 @@ function loopNote(call: string, streak: number): string {
   return `[Sagax: this exact call has failed the same way ${streak} times in a row: ${call}. Change approach, or stop and report what is blocking.]`;
 }
 
+/** A call the provider already refused for this person, called again. */
+function refusedNote(tool: string, reason: string): string {
+  return `[Sagax: ${quoteInNote(tool, CALL_QUOTE_MAX).replace(/[“”]/g, '"')} was already refused for this person: ${quoteInNote(reason, CALL_QUOTE_MAX * 2).replace(/[“”]/g, '"')}. Calling it again will not help. Use another way, or tell the person in one plain sentence why it is refused and what would change it.]`;
+}
+
 function loopCause(call: string, streak: number): string {
   return `the same call failed the same way ${streak} times in a row: ${call} - the turn was stopped`;
 }
@@ -239,6 +248,8 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const turnOf = new Map<string, string>();
   /** Per thread: the counted call each running item is, and each call's latest error. */
   const callOfItem = new Map<string, Map<string, CountedCall>>();
+  /** Per thread: running calls already known refused, with the tool and why (#4720). */
+  const refusedItems = new Map<string, Map<string, { tool: string; reason: string }>>();
   const lastError = new Map<string, Map<string, string>>();
   const log = (what: string, threadId: string, streak: number) =>
     (deps.log ?? console.info)(`[loop-guard] ${what}: thread=${threadId} failures-in-a-row=${streak}`);
@@ -271,6 +282,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     turnOf.delete(threadId);
     callOfItem.delete(threadId);
     lastError.delete(threadId);
+    refusedItems.delete(threadId);
   };
 
   const steer = (threadId: string, note: string, streak: number) => {
@@ -314,6 +326,32 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     if (turn.steered.has(call.key) || turn.steered.size >= MAX_CALLS_PER_TURN || !deps.canSteer(threadId)) return;
     turn.steered.add(call.key);
     steer(threadId, loopNote(quoted(call), streak), streak);
+  };
+
+  /** A call the provider already refused for this person: one note with the
+   * reason at its first failure in the turn, never a second (#4720). */
+  const refusedCall = (event: RuntimeEvent) => {
+    const { threadId } = event;
+    if (event.type === "item.started" && event.itemType === "tool" && event.itemId) {
+      const reason = deps.knownRefusal?.(threadId, { ...(event.title ? { title: event.title } : {}), ...(event.tool ? { tool: event.tool } : {}) });
+      if (!reason) return;
+      let items = refusedItems.get(threadId);
+      if (!items) refusedItems.set(threadId, (items = new Map()));
+      if (items.size >= MAX_CALLS_PER_TURN) items.delete(items.keys().next().value!);
+      items.set(event.itemId, { tool: oneLine(event.title ?? event.tool ?? "tool"), reason });
+      return;
+    }
+    if (event.type !== "item.completed" || event.itemType !== "tool" || !event.itemId) return;
+    const refused = refusedItems.get(threadId)?.get(event.itemId);
+    if (!refused) return;
+    refusedItems.get(threadId)!.delete(event.itemId);
+    if (event.ok || !deps.settings(threadId).enabled || !deps.live(threadId) || deps.waiting(threadId) || !deps.canSteer(threadId)) return;
+    let turn = acted.get(threadId);
+    if (!turn) acted.set(threadId, (turn = { stopped: false, steered: new Set() }));
+    const key = `refused:${refused.tool}`;
+    if (turn.stopped || turn.steered.has(key) || turn.steered.size >= MAX_CALLS_PER_TURN) return;
+    turn.steered.add(key);
+    steer(threadId, refusedNote(refused.tool, refused.reason), 1);
   };
 
   const onEvent = (event: RuntimeEvent) => {
@@ -371,6 +409,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     }
 
     if ((event.type !== "item.started" && event.type !== "item.completed") || event.itemType !== "tool") return;
+    refusedCall(event);
     const settings = deps.settings(threadId);
     // Nothing is tracked while off, so a streak never spans commands the guard did not see.
     if (!settings.enabled) return streaks.settle(threadId);

@@ -265,6 +265,7 @@ export function grokTurnCatalogSection(input: {
     lines: reach.lines,
     connectable,
     ...(activeProfile ? { activeProfile } : {}),
+    ...(reach.refused?.length ? { refused: reach.refused } : {}),
   });
 }
 

@@ -90,7 +90,7 @@ export function createRequestEndHub() {
       return () => listeners.delete(listener);
     },
     dispatch(kind, details) {
-      for (const listener of [...listeners]) {
+      for (const listener of listeners) {
         try {
           listener(kind, details);
         } catch {

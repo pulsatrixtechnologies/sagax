@@ -25,6 +25,7 @@ import { validRecordRef, type RecordRef } from "../../shared/record-cards.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)?$/;
+const RECORD_DETAIL_WRITE_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)$/;
 
 /** The organization's decision on a person's read of one record. */
 export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: string; text: string } };
@@ -70,8 +71,9 @@ export function recordCardLanguage(asked: string | null, fallback: string): Reco
 
 export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandler {
   return async ({ req, readBody, res, url, path, method, auth, json }) => {
-    const match = RECORD_CARD_ROUTE.exec(path);
-    if (!match || (method !== "GET" && !(method === "POST" && match[4]))) return PASS;
+    const match = method === "GET" ? RECORD_CARD_ROUTE.exec(path)
+      : method === "POST" ? RECORD_DETAIL_WRITE_ROUTE.exec(path) : null;
+    if (!match) return PASS;
     const detail = Boolean(match[4]);
     const send = (status: number, body: unknown) => {
       res.setHeader("cache-control", "private, no-store");

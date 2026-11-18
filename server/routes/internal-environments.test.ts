@@ -363,7 +363,7 @@ describe("createInternalEnvironmentsRoutes", () => {
     const connected = vi.fn((person: string) => person === "speaker");
     const route = createInternalEnvironmentsRoutes(baseDeps({
       isPerspicax: () => true,
-      turnWorkplace: () => ({ generation: "g1", decision: { principal: "speaker" }, auto: { auto: true, selected: "cloud", desktopMounted: true, sandboxConfigured: true, routine: false, routinesAllowed: false } }),
+      turnWorkplace: () => ({ generation: "g1", decision: { principal: "speaker" }, auto: { auto: true, selected: "cloud", desktopMounted: true, sandboxConfigured: true, routine: false } }),
       desktopConnected: connected,
       selectableComputers: async () => { throw new Error("The shared host must not be probed"); },
     }));
@@ -375,7 +375,7 @@ describe("createInternalEnvironmentsRoutes", () => {
   });
 
   it("workplace/mcp counts each move and refuses a third one in the same turn (#2736)", async () => {
-    let auto: Record<string, unknown> = { auto: true, selected: "cloud", routine: false, sandboxConfigured: true, desktopMounted: true, routinesAllowed: false, browserAvailable: true };
+    let auto: Record<string, unknown> = { auto: true, selected: "cloud", routine: false, sandboxConfigured: true, desktopMounted: true, browserAvailable: true };
     const route = createInternalEnvironmentsRoutes(baseDeps({
       isPerspicax: () => true,
       turnWorkplace: () => ({ generation: "g1", decision: { principal: "pr_a" }, auto }) as never,

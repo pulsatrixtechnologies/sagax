@@ -4,7 +4,7 @@ import type { DesktopBridgeStatus } from "./desktop-bridge";
 import { sandboxViewerPath, sandboxViewerProblem, showsSandboxDesktop, takeoverKey } from "./sandbox-desktop";
 
 const bridge = (connected: boolean, place: "computer" | "server"): DesktopBridgeStatus => ({
-  connected, tunnel: false, desktops: [], activity: [], workplace: { place, routines: false, network: "all" },
+  connected, tunnel: false, desktops: [], activity: [], workplace: { place, network: "all" },
 });
 
 describe("server environment desktop in the Computer panel", () => {

@@ -317,7 +317,7 @@ posixOnly("organization server: the desktop bridge", () => {
 
   it("shows the person their own connected desktop", async () => {
     const status = (await api("GET", "/api/me/desktop-bridge", alice)).body;
-    expect(status).toMatchObject({ connected: true, tunnel: true, workplace: { place: "computer", routines: false, network: "all" } });
+    expect(status).toMatchObject({ connected: true, tunnel: true, workplace: { place: "computer", network: "all" } });
     expect(status.desktops.map((entry: { name: string }) => entry.name)).toEqual(["Alice's Mac"]);
     expect((await api("GET", "/api/me/desktop-bridge", bob)).body).toMatchObject({ connected: false, desktops: [] });
   });
@@ -476,7 +476,7 @@ posixOnly("organization server: the desktop bridge", () => {
 
   it("Cloud: the attachment is copied to /workspace/attachments in the server environment", async () => {
     // The old per-person switch says "my computer"; a fixed Cloud stays there.
-    expect((await api("PUT", "/api/me/preferences", alice, { preferences: { "sagax.botWorkplace.v1": JSON.stringify({ place: "computer", routines: false, network: "all" }) } })).status).toBe(200);
+    expect((await api("PUT", "/api/me/preferences", alice, { preferences: { "sagax.botWorkplace.v1": JSON.stringify({ place: "computer", network: "all" }) } })).status).toBe(200);
     expect((await api("PATCH", `/api/bots/${aliceBot.id}`, alice, { computer: "cloud" })).status).toBe(200);
     expect((await api("GET", "/api/me/desktop-bridge", alice)).body.connected).toBe(true);
     const file = await upload(alice, "notes.md", "server side notes\n");

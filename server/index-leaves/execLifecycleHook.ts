@@ -5,7 +5,7 @@ import { commandWithFiles } from "../hooks/lifecycle-hooks.ts";
 export type Host = Record<string, any>;
 
 export function createExecLifecycleHook(getHost: () => Host): any {
-async function execLifecycleHook(botId: string, target: Exclude<HookTarget, { kind: "refuse" }>, run: HookRun) {
+async function execLifecycleHook(botId: string, threadId: string, target: Exclude<HookTarget, { kind: "refuse" }>, run: HookRun) {
   const host = getHost();
   const { DATA_DIR, workspaceDir } = host;
 
@@ -28,7 +28,7 @@ async function execLifecycleHook(botId: string, target: Exclude<HookTarget, { ki
   const line = commandWithFiles(run.command, run.files, run.stdin);
   const result = await host.desktopBridges.request(target.principal, {
     action: "run_command", command: line, timeout_seconds: Math.max(1, Math.ceil(run.timeoutMs / 1000))
-  }, () => true) as { isError?: boolean; content?: Array<{ text?: string }> } | null;
+  }, () => true, undefined, desktop.id, { botId, threadId }) as { isError?: boolean; content?: Array<{ text?: string }> } | null;
   return { stdout: result?.content?.map((part) => part.text ?? "").join("\n") ?? "", code: result?.isError ? 1 : 0 };
 
 }

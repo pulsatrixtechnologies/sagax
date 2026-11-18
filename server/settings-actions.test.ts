@@ -401,15 +401,15 @@ describe("sagax_settings engines and preferences (#1545)", () => {
   it("reads the bot workplace from the person's own preferences, the default when unset, and says where it lives on a personal computer", async () => {
     const set = harness({ organization: () => true, answer: { preferences: { "sagax.botWorkplace.v1": "{\"place\":\"server\",\"routines\":true}" } } });
     const read = await set.call({ action: "get", key: "computer.botWorkplace" });
-    expect(JSON.parse(String(read.body.text))).toEqual({ key: "computer.botWorkplace", value: { place: "server", routines: true, network: "all" } });
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "computer.botWorkplace", value: { place: "server", network: "all" } });
     expect(set.planned).toMatchObject([{ method: "GET", path: "/api/me/preferences" }]);
     const unset = await harness({ organization: () => true, answer: { preferences: {} } }).call({ action: "get", key: "computer.botWorkplace" });
-    expect(JSON.parse(String(unset.body.text))).toMatchObject({ value: { place: "computer", routines: false, network: "all" }, note: expect.stringMatching(/default/) });
+    expect(JSON.parse(String(unset.body.text))).toMatchObject({ value: { place: "computer", network: "all" }, note: expect.stringMatching(/default/) });
     // a personal computer: asked of the person's open app (#1545, 2026-10-28)
     const solo = harness({ organization: () => false, answer: (path: string) => path === "/api/me/device-settings/apply" ? { value: "{\"place\":\"server\"}", device: "desktop" } : {} });
     const local = await solo.call({ action: "get", key: "computer.botWorkplace" });
     expect(local.status).toBe(200);
-    expect(JSON.parse(String(local.body.text))).toEqual({ key: "computer.botWorkplace", value: { place: "server", routines: false, network: "all" }, device: "desktop" });
+    expect(JSON.parse(String(local.body.text))).toEqual({ key: "computer.botWorkplace", value: { place: "server", network: "all" }, device: "desktop" });
     expect(solo.planned).toMatchObject([{ effect: "run", method: "POST", path: "/api/me/device-settings/apply", body: { op: "get", key: "sagax.botWorkplace.v1" } }]);
     // the look of a personal computer is kept by its server
     const skin = harness({ organization: () => false, answer: { preferences: { "omb-skin": "midnight" } } });

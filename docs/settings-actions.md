@@ -490,7 +490,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| Where bots work for you ({place: computer/server, routines: boolean, network: all/lan}; organization server) | Settings > Computer > Bot workplace | `sagax_settings` get, set `computer.botWorkplace` | élargit les droits |
+| Where bots work for you ({place: computer/server, network: all/lan/off}; organization server) | Settings > Computer > Bot workplace | `sagax_settings` get, set `computer.botWorkplace` | élargit les droits |
 | Rename one of your other computers ({computer: its name, name: the new name}) | Settings > Computer > Other computers | `sagax_settings` set `computer.rename` | simple |
 | Remove one of your other computers from the list (its name; refused while it is online) | Settings > Computer > Other computers | `sagax_settings` set `computer.remove` | suppression |
 | Use Messages on this Mac (read and send iMessage or SMS; solo desktop only) | Settings > Computer > Messages | `sagax_settings` get, set `computer.messages` | élargit les droits |

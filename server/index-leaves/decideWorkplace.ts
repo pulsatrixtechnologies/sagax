@@ -14,7 +14,6 @@ function decideWorkplace(input: { desktopTargeted: boolean; routine: boolean; pr
     routine: input.routine,
     principal,
     personAsked: input.personAsked,
-    preference: host.workplacePreference(principal),
     desktopConnected: host.desktopBridges.connected(principal)
   });
 

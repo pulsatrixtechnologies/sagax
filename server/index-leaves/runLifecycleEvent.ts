@@ -25,7 +25,7 @@ async function runLifecycleEvent(botId: string, threadId: string, eventName: str
       payload,
       ...(toolName ? { toolName } : {}),
       files: host.botPlugins.hookFiles(botId),
-      exec: (where, run) => host.execLifecycleHook(botId, where, run)
+      exec: (where, run) => host.execLifecycleHook(botId, threadId, where, run)
     }),
     new Promise<{ blocked: boolean; context: string; ran: boolean; reason: "timeout" }>((resolve) => {
       setTimeout(() => resolve({ blocked: false, context: "", ran: false, reason: "timeout" }), 2_000);

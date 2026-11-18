@@ -30,7 +30,7 @@ import { WorksOnControl, worksOnTip } from "./WorksOnSetting";
 
 const SYSTEM = { os: "macOS 27.0.0", arch: "arm64", cpus: 16, cpuModel: "Apple M3 Max", cpuPercent: 90, memoryGb: 128, memoryUsedGb: 124.5, diskGb: 994, diskFreeGb: 410 };
 const bridge = (connected: boolean, place: "computer" | "server"): DesktopBridgeStatus => ({
-  connected, tunnel: false, activity: [], workplace: { place, routines: false, network: "all" },
+  connected, tunnel: false, activity: [], workplace: { place, network: "all" },
   desktops: connected ? [{ id: "d1", name: "JeanChrophesMBP", platform: "darwin", online: true, busy: false, lastSeenAt: 1, capabilities: { localVm: true }, system: SYSTEM }] : [],
 });
 const runtime = { found: true, runtime: "docker" as const, cli: "docker", product: "Docker Desktop", daemonUp: true, installed: ["Docker Desktop"] };

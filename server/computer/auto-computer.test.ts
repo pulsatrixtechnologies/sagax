@@ -21,7 +21,7 @@ import { PROXIED_TOOL_SERVERS } from "../user-sandbox-proxy.ts";
 import { parseWorkspaceLine, workspaceLineName } from "../../shared/workspace-line.ts";
 
 const auto = (over: Partial<AutoComputerState> = {}): AutoComputerState => ({
-  auto: true, selected: "cloud", routine: false, sandboxConfigured: true, desktopMounted: true, routinesAllowed: false, browserAvailable: true, ...over,
+  auto: true, selected: "cloud", routine: false, sandboxConfigured: true, desktopMounted: true, browserAvailable: true, ...over,
 });
 
 describe("computer_select availability", () => {
@@ -72,9 +72,8 @@ describe("computer_select availability", () => {
   });
 
   it("routines use the owner's computer only when allowed and connected", () => {
-    expect(selectAutoComputer(auto({ routine: true, routinesAllowed: false }), { target: "this_computer" }, true).text).toContain("routine");
-    expect(selectAutoComputer(auto({ routine: true, routinesAllowed: true }), { target: "this_computer" }, true)).toMatchObject({ ok: true, target: "this_computer", changed: true });
-    expect(selectAutoComputer(auto({ routine: true, routinesAllowed: true, desktopMounted: false }), { target: "this_computer" }, false).ok).toBe(false);
+    expect(selectAutoComputer(auto({ routine: true }), { target: "this_computer" }, true)).toMatchObject({ ok: true, target: "this_computer", changed: true });
+    expect(selectAutoComputer(auto({ routine: true, desktopMounted: false }), { target: "this_computer" }, false).ok).toBe(false);
   });
 
   it("refuses a third move in one turn and tells the bot to finish where it is (#2736)", () => {
@@ -173,7 +172,7 @@ describe("Auto guidance (prompt fixture)", () => {
     expect(text).toMatch(/browser: pure web work/);
     expect(text).toMatch(/cloud: work that must keep running while the person is away .*routine.*offline or asleep.*long job/);
     expect(text).toContain("each new message starts over from the default (the place the person picked in the Computer menu; else a person-asked turn: the person's computer when it is connected; a routine: the cloud)");
-    expect(text).toContain("Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer");
+    expect(text).toContain("Routines may call computer_select for this_computer or local_vm using the owner's computer execution access");
     expect(text).toMatch(/Sub-agents: start_thread .* and create_agent take a workspace too/);
   });
 
@@ -247,7 +246,7 @@ describe("the browser as a place (per task)", () => {
 });
 
 describe("where an Auto turn starts (Owner 2026-10-15)", () => {
-  const base = { routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true };
+  const base = { routine: false, personAsked: true, desktopConnected: true, sandboxConfigured: true, browserAvailable: true };
   // a person whose organization server has no environment for them yet
   const noServerEnv = { ...base, sandboxConfigured: false };
 
@@ -283,23 +282,20 @@ describe("where an Auto turn starts (Owner 2026-10-15)", () => {
     expect(autoStartTarget({ ...base, wanted: "browser", browserAvailable: false })).toEqual({ target: "this_computer", wanted: "browser", fallback: "unavailable" });
   });
 
-  it("starts a routine in the cloud by default; routinesAllowed only permits an explicit computer_select", () => {
+  it("starts a routine in the cloud by default; it can explicitly select an available computer", () => {
     const routine = { ...base, routine: true, personAsked: false };
     // default is cloud even when the Mac is online and routines are allowed
     expect(autoStartTarget(routine)).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
-    expect(autoStartTarget({ ...routine, routinesAllowed: true })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
     // offline before the first turn: never try the computer (default is already cloud)
-    expect(autoStartTarget({ ...routine, routinesAllowed: true, desktopConnected: false })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+    expect(autoStartTarget({ ...routine, desktopConnected: false })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
     // explicit this_computer with permission, online
-    expect(autoStartTarget({ ...routine, routinesAllowed: true, wanted: "this_computer" })).toEqual({
+    expect(autoStartTarget({ ...routine, wanted: "this_computer" })).toEqual({
       target: "this_computer", wanted: "this_computer", fallback: null,
     });
     // explicit this_computer with permission, offline: fall back and say so
-    expect(autoStartTarget({ ...routine, routinesAllowed: true, wanted: "this_computer", desktopConnected: false })).toEqual({
+    expect(autoStartTarget({ ...routine, wanted: "this_computer", desktopConnected: false })).toEqual({
       target: "cloud", wanted: "this_computer", fallback: "offline",
     });
-    // a routine sub-agent sent to the computer without that permission
-    expect(autoStartTarget({ ...routine, wanted: "this_computer" })).toEqual({ target: "cloud", wanted: "this_computer", fallback: "routine-not-allowed" });
   });
 
   it("never reaches a computer nobody asked for", () => {
@@ -314,11 +310,11 @@ describe("where an Auto turn starts (Owner 2026-10-15)", () => {
 describe("the thread line", () => {
   it("says the place when it changes, and the fallback once", () => {
     // no server environment: the computer is the default (#2670)
-    const onComputer = autoStartTarget({ routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: false, browserAvailable: true });
+    const onComputer = autoStartTarget({ routine: false, personAsked: true, desktopConnected: true, sandboxConfigured: false, browserAvailable: true });
     expect(autoStartLine(onComputer, null, false)).toEqual({ target: "this_computer" });
     expect(autoStartLine(onComputer, "this_computer", false)).toBeNull();
     // the computer was asked for (pinned) but is offline: the cloud, with the reason
-    const offline = autoStartTarget({ wanted: "this_computer", routine: false, personAsked: true, desktopConnected: false, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true });
+    const offline = autoStartTarget({ wanted: "this_computer", routine: false, personAsked: true, desktopConnected: false, sandboxConfigured: true, browserAvailable: true });
     expect(autoStartLine(offline, "this_computer", false)).toEqual({ target: "cloud", fallback: { wanted: "this_computer", reason: "offline" } });
     // still offline next turn: nothing new to say
     expect(autoStartLine(offline, "cloud", false)).toBeNull();
@@ -345,10 +341,10 @@ describe("a place pinned from the Computer menu (#2576)", () => {
     // starts on their computer and computer_select reaches the cloud.
     const start = autoStartTarget({
       wanted: pinnedWorkspaceStart({ auto: false, fixed: "local" }, false),
-      routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true,
+      routine: false, personAsked: true, desktopConnected: true, sandboxConfigured: true, browserAvailable: true,
     });
     expect(start).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
-    const state = { auto: true, selected: start.target, routine: false, sandboxConfigured: true, desktopMounted: true, routinesAllowed: false, browserAvailable: true };
+    const state = { auto: true, selected: start.target, routine: false, sandboxConfigured: true, desktopMounted: true, browserAvailable: true };
     expect(autoComputerUnavailable(state, "cloud", true)).toBeNull();
   });
 

@@ -56,7 +56,7 @@ function routineWatchPlace(routine: WatchRoutine) {
           if (!desktop || desktop.platform === "win32") return { exitCode: null, stdout: "", truncated: false, timedOut: false };
           const answer = await host.desktopBridges.request(target.principal, {
             action: "run_command", command, timeout_seconds: Math.max(1, Math.floor(options.timeoutMs / 1000))
-          }, () => true) as { isError?: boolean; content?: Array<{ text?: string }> } | null;
+          }, () => !options.signal.aborted, undefined, desktop.id, { botId: bot.id, threadId: host.peerThreadFor(bot) }) as { isError?: boolean; content?: Array<{ text?: string }> } | null;
           const stdout = answer?.content?.map((part) => part.text ?? "").join("\n") ?? "";
           return { exitCode: answer?.isError ? 1 : 0, stdout: stdout.slice(0, options.maxOutputBytes), truncated: stdout.length > options.maxOutputBytes, timedOut: false };
         }

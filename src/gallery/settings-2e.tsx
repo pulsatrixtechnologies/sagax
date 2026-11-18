@@ -23,7 +23,7 @@ const now = Date.now();
 const status: DesktopBridgeStatus = {
   connected: true,
   tunnel: false,
-  workplace: { routines: false, network: "all", place: "computer" },
+  workplace: { network: "all", place: "computer" },
   activity: [],
   routedThisSession: 3,
   devices: [

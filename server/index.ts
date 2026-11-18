@@ -11248,8 +11248,7 @@ function turnWorksOn(plan: { computer: ReturnType<typeof resolveSurface>["comput
  * where autoStartTarget put it (person-asked: their computer when connected,
  * else the cloud; a routine: the cloud by default); the other places stay
  * mounted beside it so the bot can switch (computer_select): the desktop
- * tools only when their app is connected now (and, for a routine, the owner
- * allowed routines on their computer). */
+ * tools only when their computer is connected and available for execution. */
 
 /** Where an Auto turn of this thread wants to start: the workspace it was
  * opened with (start_thread), else its temporary agent's (create_agent). */

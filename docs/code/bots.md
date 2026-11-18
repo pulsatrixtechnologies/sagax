@@ -232,7 +232,7 @@ permission `settings:change`, member scope `own-setup`, deferred on Claude):
   bot's level. A preference kept for the person reads back from
   `/api/me/preferences` (organization server) or `/api/me/appearance` (a
   personal computer's look; `SettingRead.preference`, `decodePreference`);
-  `computer.botWorkplace` reads `{place, routines, network}`. Engines:
+  `computer.botWorkplace` reads `{place, network, networkDevice?}`. Engines:
   `models.engines` and `models.engine` read Settings > Models,
   `models.claudeAccount` / `models.chatgptAccount` add an account,
   `models.engine` / `engineSignOut` / `engineRemove` / `engineInstall` /

@@ -358,17 +358,16 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   environment. The `place` of `sagax.botWorkplace.v1` no longer decides.
   Routines start in the server environment by default. They use the owner's
   desktop only when Works on (or an Auto `computer_select`) targets it, it
-  is connected AND the owner allowed routines on it (off by default). Rooms:
+  is connected, and the device's execution access permits the operation. Rooms:
   the person whose message triggered the turn; a follow-up nobody asked for
   never.
 - Auto picks per step (2026-10-02, routines default 2026-11-01,
   `server/computer/auto-computer.ts`): a person-asked Auto turn prefers the person's
   computer when connected, else the cloud. A routine Auto turn starts in the
-  cloud; `routinesAllowed` only permits an explicit `computer_select` to
+  cloud and may use `computer_select` to move to
   `this_computer` or `local_vm`. It mounts `sagax-computer` (`computer_select`,
   target `cloud`, `this_computer`, `local_vm` or `browser`, plus a reason) and,
-  when the person's app is connected now (a routine: and the owner allowed
-  routines on it), `sagax-desktop` beside `sagax-environment`. The selection
+  when the person's computer is connected and available for execution, `sagax-desktop` beside `sagax-environment`. The selection
   (`TurnWorkplace.auto`) gates every later call of the turn
   (`autoComputerToolRefusal`: Local VM allows only the `local_vm` tool, and
   its `use` action sees and drives that VM's desktop, never the person's own

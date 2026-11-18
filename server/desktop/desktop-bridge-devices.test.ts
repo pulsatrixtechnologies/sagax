@@ -78,6 +78,18 @@ describe("the person's devices", () => {
     await expect(pending).resolves.toEqual({ ok: true });
   });
 
+  it("honors a device revocation while a bot approval is pending", async () => {
+    const { bridges, mini } = setup();
+    bridges.setAccess(ADA, mini.id, "ask");
+    bridges.setAskHook(async () => {
+      bridges.setAccess(ADA, mini.id, "never");
+      return true;
+    });
+    await expect(bridges.request(ADA, shell, () => true, undefined, mini.id, { botId: "b1", threadId: "t1" }))
+      .rejects.toMatchObject({ code: "access_never" });
+    expect(await bridges.poll(mini.id, "ada-2", secret, 0)).toBeNull();
+  });
+
   it("keeps the access and the last presence across a reconnect and a server restart", () => {
     const folder = mkdtempSync(join(tmpdir(), "sagax-devices-")); folders.push(folder);
     const file = join(folder, "devices.json");

@@ -98,7 +98,6 @@ export function createPrepareAdmitStartTurn(
     voiceCalls,
     withTurnClock,
     withWorkplaceNote,
-    workplacePreference,
     workplaceTurnText,
   } = host;
 
@@ -324,7 +323,7 @@ export function createPrepareAdmitStartTurn(
   // Auto (2026-10-15; routines 2026-11-01; #2670): a person-asked turn
   // starts in the person's server environment when they have one, else on
   // their computer when connected, else the cloud. A routine starts
-  // in the cloud; routinesAllowed only permits an explicit computer_select
+  // in the cloud and may use computer_select to move
   // to this_computer. A thread opened with a workspace starts there when
   // allowed (server/computer/auto-computer.ts).
   const turnAutoWanted = turnPinnedStart ?? (turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null);
@@ -333,7 +332,6 @@ export function createPrepareAdmitStartTurn(
     routine: routineLineage(state.speaker),
     personAsked: turnPersonAsked,
     desktopConnected: desktopBridges.connected(state.turnPrincipal.trim().toLowerCase()),
-    routinesAllowed: workplacePreference(state.turnPrincipal.trim().toLowerCase()).routines,
     sandboxConfigured: Boolean(userSandbox),
     browserAvailable: state.plan.browser
   }) : null;

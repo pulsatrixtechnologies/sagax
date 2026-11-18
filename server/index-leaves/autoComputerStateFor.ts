@@ -8,8 +8,7 @@ function autoComputerStateFor(decision: WorkplaceDecision, worksOn: { auto: bool
 
   if (host.IDENTITY.kind !== "perspicax" || !decision.principal) return null;
   if (decision.reason === "no-person" || decision.reason === "unknown") return null;
-  const routinesAllowed = host.workplacePreference(decision.principal).routines;
-  const desktopMounted = worksOn.auto && host.desktopBridges.connected(decision.principal) && (!routine || routinesAllowed);
+  const desktopMounted = worksOn.auto && host.desktopBridges.connected(decision.principal);
   // The start follows the decision: a computer place only when the turn
   // really landed on the person's computer.
   const onDesktop = decision.target === "user-desktop";
@@ -23,7 +22,6 @@ function autoComputerStateFor(decision: WorkplaceDecision, worksOn: { auto: bool
     routine,
     sandboxConfigured: Boolean(host.userSandbox),
     desktopMounted,
-    routinesAllowed,
     browserAvailable
   };
 

@@ -15714,7 +15714,6 @@
       "outbound.call.phase.ended": "7cdc804e6996997d599232fbf8ce066a4f6c0696e7b586fc7b3ee499f35d4559",
       "outbound.call.waitingPickup": "d514ab34a97197e6ede473dfdc32bc19f575b93d5a5f924e696b119584436265",
       "outbound.call.endCall": "2fe13d93a1f4b267698f54cbc4632977bde730eb3f5e9b7a43516fc9936b53e7",
-      "outbound.call.liveTranscript": "20611c3780d1bae0b46d2ce3df95d79a3dcf8099c3a92e1595194d34634bf22c",
       "outbound.call.event.hold": "ebe7db36e4959b9bef09afbdf45036543a3c30cd186c7754b26984ee245f95b6",
       "outbound.call.event.dtmf": "5ec8d0217e8c2f677b199128aaa136aeb00367dd354be1bb904411344491adea",
       "outbound.call.event.transfer": "f33dce27f5562731b81c8ff01764d09aabccac9e5b16932ded1b9ebb48083d3a",

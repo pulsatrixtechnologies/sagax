@@ -11558,7 +11558,6 @@
   "outbound.call.takeOver.noNumber": "No verified number of yours to ring. Verify one on your Perspicax Voice line.",
   "outbound.call.takeOver.already": "This call is already being transferred to you.",
   "outbound.call.takeOver.notLive": "This call cannot be taken over yet. Try again once it is answered.",
-  "outbound.call.liveTranscript": "Live transcript",
   "outbound.call.event.hold": "On hold",
   "outbound.call.event.dtmf": "Pressed {digits}",
   "outbound.call.event.transfer": "Transferred to {destination}",

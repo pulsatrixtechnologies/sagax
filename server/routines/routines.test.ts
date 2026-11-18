@@ -8,7 +8,7 @@ import { isRoutineProblemRun } from "../../shared/routines.ts";
 import { routineRepeatingRule } from "./routine-report.ts";
 
 /** #3695, #3990: a run of a routine that does not post each result reads its rule after the work;
- * `told`: the run of a streak that tells the person (1 for a routine that runs at most once a day). */
+ * `told`: the run of a streak that tells the person (3 whatever the schedule, owner rule 2026-11-18). */
 const repeating = (prompt: string, told = 3) => `${prompt}\n\n${routineRepeatingRule(told)}`;
 import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
 import {
@@ -643,7 +643,7 @@ describe("cron routines use the existing persistent scheduler", () => {
     await h.manager.tick(); expect(h.started).toHaveLength(0);
     h.setNow(routine.nextRunAt!);
     await h.manager.tick(); await h.manager.tick();
-    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: repeating("Write the report", 1) }]);
+    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: repeating("Write the report") }]);
     expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running", triggerSource: "schedule" });
     expect(h.manager.listRoutines()[0].nextRunAt).toBe(Date.parse("2026-11-01T09:00:00Z"));
   });
@@ -1902,7 +1902,7 @@ describe("RoutineManager", () => {
 
     h.setBot("ready");
     await h.manager.tick();
-    expect(h.started).toEqual([{ botId: "maus-2", threadId: "thread-1", prompt: repeating("Review the queue", 1) }]);
+    expect(h.started).toEqual([{ botId: "maus-2", threadId: "thread-1", prompt: repeating("Review the queue") }]);
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", threadId: "thread-1" });
     expect(h.manager.activeRunForBot("maus-2")?.threadId).toBe("thread-1");
     expect(h.manager.isActiveThread("thread-1")).toBe(true);
@@ -1968,7 +1968,7 @@ describe("RoutineManager", () => {
     expect(h.manager.update(routine.id, { name: "Renamed", prompt: "Updated" })?.nextRunAt).toBe(routine.nextRunAt);
     await h.manager.tick();
     expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running" });
-    expect(h.started[0]?.prompt).toBe(repeating("Updated", 1));
+    expect(h.started[0]?.prompt).toBe(repeating("Updated"));
   });
 
   it("keeps delegated work active through its continuation and accumulates turn costs", async () => {
@@ -2666,7 +2666,7 @@ describe("RoutineManager", () => {
     h.setBot("ready");
     await h.manager.tick();
 
-    expect(h.started[0]?.prompt).toBe(repeating("Use the original instructions", 1));
+    expect(h.started[0]?.prompt).toBe(repeating("Use the original instructions"));
     expect(h.manager.listRuns()[0]).toMatchObject({
       routineName: "Original brief",
       prompt: "Use the original instructions",
@@ -2711,7 +2711,7 @@ describe("RoutineManager", () => {
     h.setBot("ready");
     await h.manager.tick();
     expect(h.started[0]?.prompt).toBe(
-      `${repeating("Use the original attachment", 1)}\n\n<attached-file path="/tmp/original.txt" name="original.txt" />`,
+      `${repeating("Use the original attachment")}\n\n<attached-file path="/tmp/original.txt" name="original.txt" />`,
     );
     expect(h.manager.listRuns()[0]?.attachments?.[0]?.path).toBe("/tmp/original.txt");
     expect(h.manager.listRoutines()[0]?.attachments?.[0]?.path).toBe("/tmp/replacement.txt");
@@ -2737,7 +2737,7 @@ describe("RoutineManager", () => {
     await h.manager.tick();
 
     expect(h.started[0]?.prompt).toBe(
-      `${repeating("Inspect it", 1)}\n\n<attached-image path="/tmp/a&quot;&amp;&lt;&gt;&#9;&#10;&#13;.png" name="image.png" />`,
+      `${repeating("Inspect it")}\n\n<attached-image path="/tmp/a&quot;&amp;&lt;&gt;&#9;&#10;&#13;.png" name="image.png" />`,
     );
     expect(h.manager.listRoutines()[0]?.prompt).toBe("Inspect it");
     expect(h.manager.listRoutines()[0]?.attachments?.[0]?.path).toBe(unusualPath);

@@ -479,9 +479,9 @@ describe("an unattended run only its owner can fix", () => {
         told.push([routine.name, h.manager.problemAlert(blocked, alert) !== null]);
       }
     }
-    // the daily brief tells at its first run, the hourly check at its third:
+    // both tell at their third run in a row (owner rule 2026-11-18):
     // a Flow refusal is told by the streak's summary card, never rung
-    expect(h.manager.problemToldAt(h.failed.find(({ run }) => run.routineId === daily.id)!.run)).toBe(1);
+    expect(h.manager.problemToldAt(h.failed.find(({ run }) => run.routineId === daily.id)!.run)).toBe(3);
     expect(h.manager.problemToldAt(h.failed.find(({ run }) => run.routineId === hourly.id)!.run)).toBe(3);
     expect(told).toEqual([["Brief", false], ["Price check", false], ["Price check", false], ["Price check", false]]);
   });
@@ -530,7 +530,8 @@ describe("an unattended run only its owner can fix", () => {
     expect(h.started[1]!.prompt).toContain(retryNote("usage_limit"));
     h.fail("thread-1", limit, { stopReason: "quota", limitResetsAt: START + 5 * 3_600_000 });
     expect(h.run(run.id)).toMatchObject({ status: "blocked", error: limit });
-    expect(h.failed[0]!.alert).toBeNull();
+    // what reaches the person: nothing more (its streak tells at its third run in a row)
+    expect(h.manager.problemAlert(h.failed[0]!.run, h.failed[0]!.alert)).toBeNull();
     expect(h.deferred).toHaveLength(1);
   });
 

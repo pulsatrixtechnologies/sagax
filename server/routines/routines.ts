@@ -22,7 +22,8 @@ import { OwnedFile } from "../atomic.ts";
 import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule } from "./routine-report.ts";
-import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak } from "../../shared/routine-repeat.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak, routineRunsSeveralTimesADay } from "../../shared/routine-repeat.ts";
+import { problemReason } from "../org/org-problem-log.ts";
 import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
@@ -1136,6 +1137,17 @@ const PREWARM_RESERVE_GRACE_MS = 3 * 60_000;
 export { ROUTINE_DEFERRAL_NOTICE_MS };
 /** Why a run still going when the server stopped failed at the next start. */
 export const ROUTINE_RESTARTED = "Sagax restarted while this routine was running";
+
+/** Owner rule (2026-11-18): whether two runs of a streak ended with the same
+ * problem: the same outcome (failed, blocked, completed with problems) and,
+ * for a failure, the same kind of error (problemReason: a rate limit, a
+ * sign-in, a timeout...), so a changing id or time in its words is no new
+ * error. */
+export function sameRoutineProblem(a: Pick<RoutineRun, "status" | "error">, b: Pick<RoutineRun, "status" | "error">): boolean {
+  if (a.status !== b.status) return false;
+  if (a.status === "completed") return true;
+  return problemReason("routine-failed", a.error ?? "") === problemReason("routine-failed", b.error ?? "");
+}
 /** The continuation a run cut by a restart resumes with, in its own thread. */
 export const ROUTINE_RESUME_PROMPT = "Sagax restarted while this routine run was working and cut it off; this turn continues it. First check what the cut turn already did (records written or sent, files, messages) so nothing is done twice, then finish the routine and report as usual. A restart alone is not a blocker.";
 /** How many times one run is resumed after a restart before it fails. */
@@ -2453,7 +2465,19 @@ export class RoutineManager {
    * (problemToldAt). A streak is told once, even when the told count
    * changes in its middle (a schedule edit). */
   private streakTellsAt(run: RoutineRun, earlier: readonly RoutineRun[]): boolean {
-    return earlier.length + 1 >= this.problemToldAt(run) && !this.streakTold(earlier);
+    const toldAt = this.problemToldAt(run);
+    if (earlier.length + 1 < toldAt) return false;
+    // Owner rule (2026-11-18): once told, a streak stays silent until its
+    // error changes; the new error is told once it lasts as long.
+    const told = earlier.find((entry) => this.streakTold([entry]));
+    if (!told) return true;
+    if (sameRoutineProblem(told, run)) return false;
+    const same: RoutineRun[] = [];
+    for (const entry of earlier) {
+      if (!sameRoutineProblem(entry, run)) break;
+      same.push(entry);
+    }
+    return same.length + 1 >= toldAt && !this.streakTold(same);
   }
 
   /** #4050: whether one of a streak's earlier problem runs told the person.
@@ -2508,8 +2532,16 @@ export class RoutineManager {
    * and an approval card hold as before. */
   asksHoldNothing(threadId: string): boolean {
     const run = this.runs.find((candidate) => candidate.threadId === threadId && ["running", "waiting"].includes(candidate.status));
-    // its routine runs several times a day: problemToldAt's own verdict
-    return Boolean(run && routineReportsByStreak(run) && this.problemToldAt(run) === ROUTINE_PROBLEM_STREAK_TOLD);
+    return Boolean(run && routineReportsByStreak(run) && this.runsSeveralTimesADay(run));
+  }
+
+  /** Whether a run's routine can run several times a day (its schedule); a
+   * run in the background without a routine of its own runs on events, so
+   * several times a day. */
+  private runsSeveralTimesADay(run: RoutineRun): boolean {
+    const routine = this.routines.find((candidate) => candidate.id === run.routineId);
+    if (routine) return routineRunsSeveralTimesADay(routine.schedule, this.now(), scheduleZone(undefined));
+    return this.inBackground(run);
   }
 
   /** #3695, #3990: the one rule for what a run that ended with a problem

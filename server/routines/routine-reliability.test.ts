@@ -90,16 +90,16 @@ describe("routine reliability in an isolated journal", () => {
     expect(onRunNotice.mock.calls[1]![1]).toEqual({ threadIds: ["chat-2"], text: `The routine "Inbox review" did not start: ${run.error}` });
     expect(run.error).toBeTruthy();
   });
-  it("a routine that runs once a day says its first pre-flight block as its one summary, never as a line of its own (#3990)", async () => {
+  it("a routine that runs once a day says a pre-flight block by its streak, never as a line of its own (#3990, owner rule 2026-11-18)", async () => {
     const onRunNotice = vi.fn();
     const h = fixture({ onRunNotice, postsEachResult: () => true, resolveResultsThread: () => ({ threadId: "chat-1" }) }, ONCE_A_DAY);
     h.probes.engine = () => ({ engine: `${h.engine}-out`, name: "Claude", signedIn: false });
     h.advance(60 * 60_000); await h.flush();
     const run = h.manager.listRuns()[0]!;
     expect(run.status).toBe("blocked");
-    // the first run of its streak is the one that tells the person (its summary card)
+    // its streak tells the person at its third run in a row, never its first
     expect(run.problemRepeat).toBeUndefined();
-    expect(h.manager.problemToldAt(run)).toBe(1);
+    expect(h.manager.problemToldAt(run)).toBe(3);
     expect(onRunNotice).not.toHaveBeenCalled();
   });
   it("a routine that does not post each result says a pre-flight block by its streak, never a line per run (#3695, #3990)", async () => {

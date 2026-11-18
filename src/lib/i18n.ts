@@ -108,6 +108,32 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat(tag === "fr" ? "fr-CA" : tag).format(value);
 }
 
+/** The locale a date field paints in. The French pack is Quebec French, so
+ * its dates follow fr-CA (year, month, day), the same choice as formatNumber.
+ * A native date control paints the operating system's order instead, which
+ * stays mm/dd/yyyy on an English computer. */
+export function dateFieldLocale(code = activeLocale()): string {
+  const tag = documentLanguage(code);
+  return tag === "fr" ? "fr-CA" : tag;
+}
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** The order an empty date field shows, or the reading of a yyyy-mm-dd value,
+ * in the interface language. */
+export function formatDateField(value: string, locale = dateFieldLocale()): string {
+  const match = ISO_DAY.exec(value.trim());
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(2001, 0, 2);
+  const parts = new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  return parts.map((part) => {
+    if (match) return part.value;
+    if (part.type === "year") return "yyyy";
+    if (part.type === "month") return "mm";
+    if (part.type === "day") return "dd";
+    return part.value;
+  }).join("");
+}
+
 /** The language of the page that holds this one in a frame, when that page is
  * of the same origin and says it (<html lang>, set by applyLocale). A page
  * preview frame or a widget frame carries no ?lang=, and its error screen

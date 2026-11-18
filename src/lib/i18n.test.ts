@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { documentLanguage, elideFrench, resolveLocale, setLocale, t, tFromServer } from "./i18n";
+import { dateFieldLocale, documentLanguage, elideFrench, formatDateField, resolveLocale, setLocale, t, tFromServer } from "./i18n";
 import { en, localeChoices, localeTags, locales } from "@/locales";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +32,19 @@ describe("resolveLocale", () => {
     expect(resolveLocale("fr-FR", available)).toBe("en");
     expect(resolveLocale(undefined, available)).toBe("en");
     expect(resolveLocale("", available)).toBe("en");
+  });
+});
+
+describe("formatDateField", () => {
+  it("follows the interface language, Quebec French included", () => {
+    setLocale("en");
+    expect(dateFieldLocale()).toBe("en");
+    expect(formatDateField("")).toBe("mm/dd/yyyy");
+    expect(formatDateField("2026-11-18")).toBe("11/18/2026");
+    setLocale("fr");
+    expect(dateFieldLocale()).toBe("fr-CA");
+    expect(formatDateField("")).toBe("yyyy-mm-dd");
+    expect(formatDateField("2026-11-18")).toBe("2026-11-18");
   });
 });
 

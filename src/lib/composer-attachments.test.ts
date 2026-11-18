@@ -764,6 +764,8 @@ describe("private document intake", () => {
 
   it("recognises supported documents by declared mime or filename", () => {
     expect(documentMime({ name: "notes.bin", type: "text/markdown; charset=utf-8" })).toBe("text/markdown");
+    expect(documentMime({ name: "system.EVTX", type: "application/octet-stream" })).toBe("application/x-ms-evtx");
+    expect(documentMime({ name: "system.evtx", type: "" })).toBe("application/x-ms-evtx");
     expect(documentMime({ name: "REPORT.PDF", type: "" })).toBe("application/pdf");
     expect(documentMime({ name: "archive.zip", type: "application/zip" })).toBeNull();
   });

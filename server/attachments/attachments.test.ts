@@ -570,6 +570,15 @@ describe("shared files", () => {
     expect(sanitizeSharedFileName("src.tgz", "application/gzip")).toBe("src.tgz");
   });
 
+  it("keeps a Windows event log as a binary attachment", async () => {
+    const bytes = Buffer.alloc(4096);
+    bytes.write("ElfFile\0");
+    const saved = await saveFile((async function* () { yield bytes; })(), "System.evtx", "application/x-ms-evtx");
+    expect(saved.name).toBe("System.evtx");
+    expect(saved.path.endsWith(".evtx")).toBe(true);
+    expect(readFileSync(saved.path)).toEqual(bytes);
+  });
+
   it("streams a file under a generated name with private permissions", async () => {
     async function* chunks() {
       yield Buffer.from("first ");

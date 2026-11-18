@@ -2,7 +2,7 @@
 // follow and "Jump to latest" pill of src/components/ChatView.tsx: the
 // transcript follows new text while the reader is at the end; scrolling up
 // (a drag, never new content pushing the end down) stops the follow, and
-// reaching the end again re-arms it. While it is off, a glass arrow circle
+// reaching the end again re-arms it. While it is off, an accent arrow circle
 // over the transcript takes the reader back to the newest message in one
 // tap, streaming or not. The model watches the transcript's UIScrollView
 // and publishes only when the follow flips, so scrolling does not redraw
@@ -203,9 +203,10 @@ struct BottomFollowProbe: UIViewRepresentable {
     }
 }
 
-/// The glass circle that takes the reader back to the newest message.
+/// The accent circle that takes the reader back to the newest message.
 struct JumpToLatestButton: View {
     @Environment(\.themePalette) var themePalette
+    let paint: (fill: SkinColor, ink: SkinColor)?
     let action: () -> Void
     @State private var taps = 0
 
@@ -216,12 +217,13 @@ struct JumpToLatestButton: View {
         } label: {
             Image(systemName: "arrow.down")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(paint?.ink.color ?? Theme.primaryInk)
                 .frame(width: Theme.Metric.glassLarge, height: Theme.Metric.glassLarge)
+                .background(paint.map { AnyShapeStyle($0.fill.color) } ?? Theme.primaryFillStyle, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .themeGlass(Circle())
+        .hoverEffect(.highlight)
         .chatGlassRim(Circle())
         .accessibilityLabel(Text("Jump to latest messages"))
         .accessibilityIdentifier("jump-to-latest")

@@ -1074,11 +1074,10 @@ struct DesktopFindProbe: UIViewRepresentable {
     }
 }
 
-/// JumpToLatestPill.tsx: `rounded-full border border-hairline/40 bg-raised
-/// px-3 py-1.5 text-[12.5px] shadow-lg`, a 13 pt arrow then the words,
-/// centred over the transcript.
+/// The floating transcript pill, 16 points above the desktop composer.
 struct DesktopJumpToLatestPill: View {
     @Environment(\.desktopTheme) private var theme
+    let paint: (fill: SkinColor, ink: SkinColor)?
     let action: () -> Void
 
     var body: some View {
@@ -1087,10 +1086,10 @@ struct DesktopJumpToLatestPill: View {
                 DesktopLucideGlyph(paths: ["M12 5v14", "m19 12-7 7-7-7"], size: 13)
                 Text("Jump to latest").font(theme.font(12.5))
             }
-            .foregroundStyle(theme.ink)
+            .foregroundStyle(paint?.ink.color ?? theme.accentInk)
             .padding(.horizontal, 12)
             .frame(height: 30)
-            .background(theme.raised, in: Capsule())
+            .background(paint?.fill.color ?? theme.accent, in: Capsule())
             .overlay(Capsule().strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
             .shadow(color: .black.opacity(0.25), radius: 12, y: 8)
             .contentShape(Capsule())

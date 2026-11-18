@@ -6,6 +6,7 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ArrowDown } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { CTA_DEFAULT } from "@/lib/voice-cta";
 import { cn } from "@/lib/cn";
 import { placeJumpPill, type JumpPillPlace } from "@/lib/jump-pill-place";
 
@@ -13,7 +14,9 @@ export function JumpToLatestPill({
   onClick,
   bottom,
   scrollRef,
+  room = false,
 }: {
+  room?: boolean;
   onClick: () => void;
   /** Distance from the pane's bottom (above the composer). */
   bottom: number;
@@ -77,7 +80,10 @@ export function JumpToLatestPill({
       aria-hidden={place.mode === "hidden" || undefined}
       tabIndex={place.mode === "hidden" ? -1 : undefined}
       className={cn(
-        "animate-pop-in absolute z-10 flex items-center gap-1.5 rounded-full border border-hairline/40 bg-raised px-3 py-1.5 text-[12.5px] text-ink shadow-lg hover:bg-raised-hover",
+        "animate-pop-in absolute z-10 flex items-center gap-1.5 rounded-full border border-hairline/40 px-3 py-1.5 text-[12.5px] shadow-lg",
+        room
+          ? `${CTA_DEFAULT} active:brightness-95`
+          : "jump-pill-bot",
         place.mode === "beside" ? "" : "left-1/2 -translate-x-1/2",
         place.mode === "hidden" && "invisible",
       )}

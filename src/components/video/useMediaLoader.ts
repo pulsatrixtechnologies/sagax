@@ -10,7 +10,7 @@ export const NATIVE_HLS_START_MS = 12_000;
 
 /** The hls.js loader class (playlists, segments, keys alike). */
 type LoaderClass = new (config: unknown) => {
-  load: (context: { url: string }, config: unknown, callbacks: { onError: (error: { code: number; text: string }, context: unknown, networkDetails: unknown, stats: unknown) => void }) => void;
+  load(context: { url: string }, config: unknown, callbacks: { onError: (error: { code: number; text: string }, context: unknown, networkDetails: unknown, stats: unknown) => void }): void;
 };
 
 /** hls.js's own loader, except that an address of the app's own origin is

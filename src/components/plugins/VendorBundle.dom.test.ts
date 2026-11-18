@@ -184,6 +184,17 @@ describe("a bundle of many connectors that share a long name prefix (the owner, 
     expect(view.querySelector("[data-vendor-chips-more]")?.textContent).toBe("Show fewer");
   });
 
+  it("never nests a button in a button: a chip with a state mark is one control, the mark an image with its tooltip", async () => {
+    const view = await render(page());
+    const chips = [...view.querySelectorAll("[data-vendor-chip-product]")];
+    expect(chips.length).toBeGreaterThan(0);
+    for (const chip of chips) expect(chip.querySelector("button")).toBeNull();
+    expect(view.querySelector("button button")).toBeNull();
+    const marked = chips.find((chip) => chip.querySelector("[data-row-state]"));
+    expect(marked?.querySelector("[data-row-state] [role='img']")).not.toBeNull();
+    expect(marked?.querySelector("[data-row-state-fix]")).toBeNull();
+  });
+
   it("lists them in the Connectors tab by that name, with a search once there are more than eight", async () => {
     const view = await render(page());
     await click(view.querySelector('[data-vendor-tab="connectors"]'));

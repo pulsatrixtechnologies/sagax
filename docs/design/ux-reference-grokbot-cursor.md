@@ -2675,7 +2675,9 @@ The dev context pods (Environment, Context, Connectors, Changes) and the
 right edge, same card. Both draw with `src/lib/side-card.ts` (`SIDE_CARD`,
 `SIDE_CARD_HEADER`, `SIDE_CARD_ICON_BUTTON`) and take their width from
 `railGeometry` (`src/components/dev-pods/DevPods.tsx`); the run card sits
-in `RailAligned`. No hard-coded width or radius on either side.
+in `RailAligned`. The person enables it in Settings > Developer. When the rail fits
+it sits beside the messages. In a narrow pane the composer reserves its height.
+Closing the card dismisses the current run, including steps that arrive later.
 
 ### 8.5 Réglages
 

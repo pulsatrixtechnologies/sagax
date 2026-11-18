@@ -10,7 +10,7 @@ import path from "node:path";
 import {
   MAC_APP_IDS,
   MAC_APP_SCRIPTS,
-  MAIL_BUDGET_MS,
+  MAC_APP_BUDGET_MS,
   MAC_APP_TEST_SCRIPTS,
   MAC_APP_TOOLS,
   appleDate,
@@ -248,10 +248,10 @@ test("a timeout and a cancelled call say what happened, per app", async () => {
 });
 
 test("Mail's list and search stop at their time budget and say so", () => {
-  assert.ok(MAIL_BUDGET_MS < 60_000 / 2);
-  assert.match(MAC_APP_SCRIPTS.mac_mail_list_mailboxes, new RegExp(`late\\(${MAIL_BUDGET_MS}\\)\\)\\{STOP=true`));
+  assert.ok(MAC_APP_BUDGET_MS < 60_000 / 2);
+  assert.match(MAC_APP_SCRIPTS.mac_mail_list_mailboxes, new RegExp(`late\\(${MAC_APP_BUDGET_MS}\\)\\)\\{STOP=true`));
   assert.match(MAC_APP_SCRIPTS.mac_mail_list_mailboxes, /r\.partial=/);
-  assert.match(MAC_APP_SCRIPTS.mac_mail_search, new RegExp(`if\\(out\\.length&&late\\(${MAIL_BUDGET_MS}\\)\\)\\{end=i;break\\}`));
+  assert.match(MAC_APP_SCRIPTS.mac_mail_search, new RegExp(`if\\(out\\.length&&late\\(${MAC_APP_BUDGET_MS}\\)\\)\\{end=i;break\\}`));
   assert.match(MAC_APP_SCRIPTS.mac_mail_search, /if\(preview\)\{try\{o\.preview=/);
 });
 
@@ -1053,4 +1053,67 @@ test("Calendar: the list gives each occurrence of a repeating event that started
   // A series id with scope this has no occurrence to name.
   const refused = runCal("mac_calendar_delete", { ids: ["W1"], scope: "this" }, app);
   assert.match(refused.failed[0].error, /occurrence id/);
+});
+
+// 2026-11-17: a slow app (one Apple Event per item) took past the script's
+// 60 s and the call failed with nothing. Each list or search answers by
+// MAC_APP_BUDGET_MS with what it read, and a cursor or a partial note.
+// The clock below moves 10 s at each reading, so a budget runs out in a few items.
+const slowClock = (t) => { let now = 0; t.mock.method(Date, "now", () => (now += 10_000)); };
+
+test("every Apple app list answers within its budget, and a cursor resumes it", (t) => {
+  assert.ok(MAC_APP_BUDGET_MS < 60_000 / 2);
+  const { app, work, home } = fakeCalendar();
+  for (let day = 10; day < 14; day += 1) work.add({ uid: `W${day}`, summary: `Work ${day}`, startDate: new Date(2026, 10, day, 9), endDate: new Date(2026, 10, day, 10), alldayEvent: false, recurrence: "" });
+  home.add({ uid: "H1", summary: "Home", startDate: new Date(2026, 10, 12, 18), endDate: new Date(2026, 10, 12, 19), alldayEvent: false, recurrence: "" });
+  const range = { from: new Date(2026, 10, 9).toISOString(), to: new Date(2026, 10, 17).toISOString() };
+  slowClock(t);
+  const seen = [];
+  let cursor;
+  for (let page = 0; page < 10; page += 1) {
+    const listed = runCal("mac_calendar_list", { ...range, ...(cursor ? { cursor } : {}) }, app);
+    seen.push(...listed.events.map((e) => e.id));
+    if (!listed.next) break;
+    assert.match(listed.partial, /Calendar was slow/);
+    cursor = listed.next;
+  }
+  assert.deepEqual(seen.sort(), ["H1", "W10", "W11", "W12", "W13"]);
+
+  const reminder = (id) => ({ id: () => id, name: () => id, dueDate: () => null, alldayDueDate: () => null, remindMeDate: () => null, priority: () => 0, body: () => "", completed: () => false });
+  const items = ["R-1", "R-2", "R-3", "R-4"].map(reminder);
+  const list = { id: () => "L-1", name: () => "Home", reminders: elements(items) };
+  list.reminders.whose = () => elements(items);
+  const rem = { lists: elements([list]), reminders: elements(items) };
+  const got = [];
+  cursor = undefined;
+  for (let page = 0; page < 10; page += 1) {
+    const listed = runApp("mac_reminders_list", { limit: 50, ...(cursor ? { cursor } : {}) }, rem);
+    got.push(...listed.reminders.map((r) => r.id));
+    if (!listed.next) break;
+    cursor = listed.next;
+  }
+  assert.deepEqual(got, ["R-1", "R-2", "R-3", "R-4"]);
+  assert.equal(runApp("mac_reminders_list_lists", {}, { lists: elements([list, list, list, list]) }).partial !== undefined, true);
+});
+
+test("Notes and Contacts searches stop at their budget with a next cursor, extras skipped past half", (t) => {
+  const note = (id) => ({ id: () => id, name: () => id, plaintext: () => `text ${id}`, modificationDate: () => new Date(0), container: () => ({ name: () => "Notes" }), passwordProtected: () => false });
+  const notes = { notes: elements(["N-1", "N-2", "N-3"].map(note)), folders: elements([]) };
+  const people = elements([["P-1", "One"], ["P-2", "Two"], ["P-3", "Three"]].map(([id, org]) => ({ id: () => id, name: () => id, organization: () => org })));
+  people.id = () => ["P-1", "P-2", "P-3"];
+  Object.defineProperty(people, "name", { value: () => ["Ann A", "Ann B", "Ann C"] });
+  people.emails = { value: () => [[], [], []] };
+  people.phones = { value: () => [[], [], []] };
+  slowClock(t);
+  const found = runApp("mac_notes_search", { query: "", limit: 3 }, notes);
+  assert.deepEqual(found.notes.map((n) => [n.id, n.preview !== null]), [["N-1", true], ["N-2", false]]);
+  assert.equal(found.next, "2");
+  const ann = runApp("mac_contacts_search", { query: "ann", limit: 3 }, { people });
+  assert.deepEqual(ann.people.map((p) => [p.id, p.organization]), [["P-1", "One"], ["P-2", null]]);
+  assert.equal(ann.next, "2");
+  const folders = runApp("mac_notes_list_folders", {}, { accounts: () => [{ name: () => "iCloud", folders: () => [1, 2, 3, 4].map((n) => ({ name: () => `F${n}`, notes: [] })) }] });
+  assert.match(folders.partial, /stopped early/);
+  const groups = runApp("mac_contacts_list_groups", {}, { groups: () => [1, 2, 3, 4].map((n) => ({ id: () => `G${n}`, name: () => `G${n}`, people: [] })) });
+  assert.ok(groups.groups.length < 4);
+  assert.match(groups.partial, /stopped early/);
 });

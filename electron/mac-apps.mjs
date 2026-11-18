@@ -94,8 +94,8 @@ export const MAC_APP_TOOLS = [
     inputSchema: obj({ name: { type: "string" }, enabled: { type: "boolean" } }, ["name", "enabled"]) },
   { name: "mac_calendar_list_calendars", app: "calendar", kind: "read", needs: "automation", description: `List the calendars ${where} Calendar, with whether each can be written.`,
     inputSchema: obj({}) },
-  { name: "mac_calendar_list", app: "calendar", kind: "read", needs: "automation", description: `List events ${where} Calendar that start between two dates (default: the next 7 days), with their ids for the other mac_calendar_ tools. A repeating event gives each occurrence in the range, computed from its repeat rule, with an occurrence id; a rule this cannot compute (BYSETPOS, hourly and the like) gives the series once, with occurrences: "unknown". query: words in the title, the place or the notes.`,
-    inputSchema: obj({ from: { type: "string", description: "ISO date or date-time." }, to: { type: "string", description: "ISO date or date-time." }, calendar: { type: "string", description: "One calendar's name (default: all)." }, query: { type: "string", description: "Words in the title, place or notes." }, limit: limit(200) }) },
+  { name: "mac_calendar_list", app: "calendar", kind: "read", needs: "automation", description: `List events ${where} Calendar that start between two dates (default: the next 7 days), with their ids for the other mac_calendar_ tools. A repeating event gives each occurrence in the range, computed from its repeat rule, with an occurrence id; a rule this cannot compute (BYSETPOS, hourly and the like) gives the series once, with occurrences: "unknown". query: words in the title, the place or the notes. A result with next was cut short by a slow Calendar: pass it back as cursor for the rest.`,
+    inputSchema: obj({ from: { type: "string", description: "ISO date or date-time." }, to: { type: "string", description: "ISO date or date-time." }, calendar: { type: "string", description: "One calendar's name (default: all)." }, query: { type: "string", description: "Words in the title, place or notes." }, limit: limit(200), cursor: cursorSchema }) },
   { name: "mac_calendar_read", app: "calendar", kind: "read", needs: "automation", description: `Read one event ${where} Calendar by its id: dates, place, notes, link, repeat rule, alerts, and who is invited with their answer (an invitation is answered in Calendar itself).`,
     inputSchema: obj({ id: idSchema("An event or occurrence id from mac_calendar_list.") }, ["id"]) },
   { name: "mac_calendar_create", app: "calendar", kind: "write", needs: "automation", description: `Create an event ${where} Calendar, with alerts and a repeat rule if wanted.`,
@@ -500,7 +500,7 @@ export function macAppOperation(name, args) {
       const to = date(a.to, "to") ?? new Date(Date.parse(from) + 7 * 86_400_000).toISOString();
       if (Date.parse(to) <= Date.parse(from)) bad("to must be after from");
       if (Date.parse(to) - Date.parse(from) > 366 * 86_400_000) bad("A range is at most one year");
-      return without({ from, to, calendar: str(a.calendar, "calendar", { max: 200 }), query: str(a.query, "query", { max: 200 }), limit: num(a.limit, 50, 200) });
+      return without({ from, to, calendar: str(a.calendar, "calendar", { max: 200 }), query: str(a.query, "query", { max: 200 }), limit: num(a.limit, 50, 200), offset: cursor(a.cursor ?? a.offset) });
     }
     case "mac_calendar_read":
       return { id: idArg(a.id) };
@@ -699,17 +699,26 @@ function mailResult(value) {
 }
 
 // --- JXA. Constant text: the only input is argv[0], a JSON object. ---------
+/** 2026-11-17: an Apple app answers one Apple Event per item, so a large
+ * mailbox, calendar, reminder list, notes folder or address book took past the
+ * script's 60 s and the call failed with nothing. Every list or search stops
+ * collecting at this budget and answers with what it has: a next cursor where
+ * the tool pages, else a partial note; per-item extras (previews, counts) are
+ * skipped past half of it. */
+export const MAC_APP_BUDGET_MS = 25_000;
+const HALF = MAC_APP_BUDGET_MS / 2;
+const PARTIAL = "The app was slow, so this list stopped early: what it shows is right, the rest is missing. Ask again in a moment for the rest.";
 const PRELUDE = "function run(argv){var a=JSON.parse(argv[0]);var out=main(a);return JSON.stringify(out===undefined?null:out);}\n"
+  + "var T0=Date.now();function late(ms){return Date.now()-T0>ms}\n"
   + "function iso(d){try{return d?d.toISOString():null}catch(e){return null}}\n"
   + "function cut(s,n){s=s==null?'':String(s);return s.length>n?s.slice(0,n)+'...':s}\n"
-  + "function eachOf(ids,fn){var done=0,failed=[];for(var i=0;i<ids.length;i++){try{fn(ids[i]);done++}catch(e){failed.push({id:ids[i],error:String(e&&e.message||e)})}}return {done:done,failed:failed}}\n"
-  + "function page(list,a){var end=Math.min(list.length,a.offset+a.limit);var r={items:list.slice(a.offset,end)};if(end<list.length)r.next=String(end);return r}\n";
+  + "function eachOf(ids,fn){var done=0,failed=[];for(var i=0;i<ids.length;i++){try{fn(ids[i]);done++}catch(e){failed.push({id:ids[i],error:String(e&&e.message||e)})}}return {done:done,failed:failed}}\n";
 
 // Mail's dictionary helpers, shared by every Mail script. A mailbox is named
 // by its path (a nested one as Parent/Child) inside an account; the app-level
 // mailboxes (inbox, drafts, sent, trash, junk, outbox) when no account is given.
 const MAIL_LIB = `var Mail=Application('Mail');
-var T0=Date.now();var STOP=false;function late(ms){return Date.now()-T0>ms}
+var STOP=false;
 var SPECIAL={inbox:'inbox',drafts:'draftsMailbox',sent:'sentMailbox',trash:'trashMailbox',junk:'junkMailbox',outbox:'outbox'};
 var KIND={inbox:['inbox','boîte de réception','posteingang','bandeja de entrada','posta in arrivo','caixa de entrada','postvak in','inkorgen','受信','收件箱'],junk:['junk','spam','junk e-mail','junk email','bulk mail','courrier indésirable','indésirables','pourriel','spam-verdacht','junk-e-mail','correo no deseado','posta indesiderata','lixo eletrônico','迷惑メール','垃圾邮件','垃圾郵件'],archive:['archive','archives','all mail','archiv','archivo','archivio','arquivo','arquivar','archief','arkiv','アーカイブ','归档','歸檔','封存']};
 function walk(acct,visit){var seen={};function go(list,prefix,d){for(var i=0;i<list.length;i++){if(STOP)return;var b=list[i];var nm='';try{nm=b.name()}catch(e){continue}
@@ -754,14 +763,8 @@ function replyOf(a,ref){var m=msgFor(ref);var r=Mail.reply(m,{openingWindow:fals
 var quoted='';try{quoted=String(r.content()||'')}catch(e){}r.content=a.body+(quoted?'\\n\\n'+quoted:'');attach(r,a.files);return r}
 `;
 const MAIL = PRELUDE + MAIL_LIB;
-/** 2026-11-17: Mail sends one Apple Event per mailbox and per message, so a
- * large account took past the script's 60 s and the call failed with
- * nothing. A list or a search stops collecting at this budget and answers
- * with what it has (a search with its next cursor, previews skipped past
- * half of it; a mailbox list marked partial, unread counts skipped past half). */
-export const MAIL_BUDGET_MS = 25_000;
 const MAIL_SCRIPTS = {
-  mac_mail_list_mailboxes: MAIL + `function boxes(acct){var out=[];walk(acct,function(p,b){if(out.length>=500)return;if(late(${MAIL_BUDGET_MS})){STOP=true;return}var o={name:p,unread:null};if(!late(${MAIL_BUDGET_MS / 2})){try{o.unread=b.unreadCount()}catch(e){}}out.push(o)});return out}
+  mac_mail_list_mailboxes: MAIL + `function boxes(acct){var out=[];walk(acct,function(p,b){if(out.length>=500)return;if(late(${MAC_APP_BUDGET_MS})){STOP=true;return}var o={name:p,unread:null};if(!late(${HALF})){try{o.unread=b.unreadCount()}catch(e){}}out.push(o)});return out}
 function main(a){var out=[];var l=Mail.accounts();for(var i=0;i<l.length;i++){var x=l[i];var nm=x.name();if(a.account&&nm!==a.account)continue;
 var o={name:nm,enabled:true,emails:[],mailboxes:boxes(x)};try{o.enabled=x.enabled()}catch(e){}try{o.emails=x.emailAddresses()}catch(e){}out.push(o)}
 if(a.account&&!out.length)throw new Error('No Mail account named '+a.account);var r={accounts:out};
@@ -775,7 +778,7 @@ if(a.from)c.push({sender:{_contains:a.from}});if(a.since)c.push({dateReceived:{_
 if(a.unread===true)c.push({readStatus:false});if(a.unread===false)c.push({readStatus:true});if(a.flagged===true)c.push({flaggedStatus:true});if(a.flagged===false)c.push({flaggedStatus:false});
 var list=c.length===0?box.messages:c.length===1?box.messages.whose(c[0]):box.messages.whose({_and:c});
 var total=list.length;var end=Math.min(total,a.offset+a.limit);var out=[];
-for(var i=a.offset;i<end;i++){if(out.length&&late(${MAIL_BUDGET_MS})){end=i;break}out.push(summary(list[i],!late(${MAIL_BUDGET_MS / 2})))}
+for(var i=a.offset;i<end;i++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=i;break}out.push(summary(list[i],!late(${HALF})))}
 var r={messages:out};if(end<total)r.next=end;return r;}`,
   mac_mail_read: MAIL + `function main(a){var m=msgFor(a.ref);var r=refOf(m);var body='';try{body=String(m.content()||'')}catch(e){}
 var att=[];try{var l=m.mailAttachments();for(var i=0;i<l.length;i++){var x=l[i];var o={index:i,name:null,mime:null,bytes:null,downloaded:null};
@@ -974,20 +977,21 @@ if(!who)throw new Error('Messages does not know '+a.to);out(who);return {sent:tr
   // Every event that starts before the end of the range, read in bulk: a
   // plain one when it starts in the range, a repeating one by its occurrences.
   mac_calendar_list: CAL + `function main(a){var from=new Date(a.from),to=new Date(a.to);var q=a.query?a.query.toLowerCase():'';
-var cals=a.calendar?[calNamed(a.calendar)]:Cal.calendars();var out=[];
-for(var i=0;i<cals.length;i++){var ev=cals[i].events.whose({startDate:{_lessThan:to}});var st=[],rec=[];try{st=ev.startDate()}catch(x){}try{rec=ev.recurrence()}catch(x){}
-for(var j=0;j<st.length;j++){var rule=rec[j]||'';if(!rule&&!(st[j]>=from))continue;var e=ev[j];var loc=opt(e,'location');
+var cals=a.calendar?[calNamed(a.calendar)]:Cal.calendars();var out=[];var next=null;var c0=Math.floor(a.offset/100000),j0=a.offset%100000;
+scan:for(var i=c0;i<cals.length;i++){var ev=cals[i].events.whose({startDate:{_lessThan:to}});var st=[],rec=[];try{st=ev.startDate()}catch(x){}try{rec=ev.recurrence()}catch(x){}
+for(var j=i===c0?j0:0;j<st.length;j++){if(late(${MAC_APP_BUDGET_MS})){next=String(i*100000+j);break scan}var rule=rec[j]||'';if(!rule&&!(st[j]>=from))continue;var e=ev[j];var loc=opt(e,'location');
 if(q){var hay=[e.summary(),loc,opt(e,'description')].join(' ').toLowerCase();if(hay.indexOf(q)<0)continue}
 var row={id:e.uid(),calendar:cals[i].name(),title:cut(e.summary(),300),start:iso(st[j]),end:iso(e.endDate()),allDay:e.alldayEvent(),location:loc?cut(loc,300):null,repeats:!!rule};
 if(!rule){out.push(row);continue}var dur=e.endDate()-st[j];var starts=occurrences(rule,st[j],from,to,a.limit,excludedOf(e));
 if(starts===null){row.occurrences='unknown';row.repeat=rule;out.push(row);continue}
 starts.forEach(function(s){var o={};for(var k in row)o[k]=row[k];o.id=row.id+'#'+s.toISOString();o.series=row.id;o.start=iso(s);o.end=iso(new Date(s.getTime()+dur));out.push(o)})}}
-out.sort(function(x,y){return x.start<y.start?-1:1});var r={events:out.slice(0,a.limit)};if(out.length>a.limit)r.more=true;return r;}`,
+out.sort(function(x,y){return x.start<y.start?-1:1});var r={events:out.slice(0,a.limit)};if(out.length>a.limit)r.more=true;
+if(next!==null){r.next=next;r.partial='Calendar was slow: these are the events read so far, in order among themselves. Pass next as cursor for the rest, or narrow the range or the calendar.'}return r;}`,
   mac_calendar_read: CAL + `function main(a){var h=evFor(a.ref.uid);var e=h.e;
 var o={id:e.uid(),calendar:h.cal.name(),title:e.summary(),start:iso(e.startDate()),end:iso(e.endDate()),allDay:e.alldayEvent(),
 location:opt(e,'location'),notes:cut(opt(e,'description')||'',20000)||null,url:opt(e,'url'),repeat:opt(e,'recurrence'),status:opt(e,'status'),alarms:alarmsOf(e),invitees:[]};
 if(a.ref.occurrence&&o.repeat){var dur=e.endDate()-e.startDate();o.id=a.ref.uid+'#'+a.ref.occurrence;o.series=a.ref.uid;o.seriesStart=o.start;o.start=a.ref.occurrence;o.end=new Date(new Date(a.ref.occurrence).getTime()+dur).toISOString()}
-try{e.attendees().forEach(function(x){o.invitees.push({name:opt(x,'displayName'),email:opt(x,'email'),answer:opt(x,'participationStatus')})})}catch(x){}
+try{e.attendees().forEach(function(x){if(late(${MAC_APP_BUDGET_MS})){o.inviteesPartial=true;return}o.invitees.push({name:opt(x,'displayName'),email:opt(x,'email'),answer:opt(x,'participationStatus')})})}catch(x){}
 return o;}`,
   mac_calendar_create: CAL + `function main(a){var cal=null;
 if(a.calendar)cal=calNamed(a.calendar);
@@ -1019,34 +1023,38 @@ var ids=C.people.id(),names=C.people.name(),ems=C.people.emails.value(),phs=C.pe
 for(var i=0;i<ids.length;i++){var hit=String(names[i]||'').toLowerCase().indexOf(q)>=0;
 if(!hit)hit=(ems[i]||[]).some(function(x){return String(x).toLowerCase().indexOf(q)>=0});
 if(!hit&&digits.length>=3)hit=(phs[i]||[]).some(function(x){return String(x).replace(/[^0-9]/g,'').indexOf(digits)>=0});if(hit)hits.push(i)}
-var pg=page(hits,a);var out=pg.items.map(function(i){var o={id:ids[i],name:names[i],organization:null,emails:ems[i]||[],phones:phs[i]||[]};try{o.organization=personFor(ids[i]).organization()}catch(e){}return o});
-var r={people:out};if(pg.next)r.next=pg.next;return r;}`,
+var end=Math.min(hits.length,a.offset+a.limit);var out=[];
+for(var k=a.offset;k<end;k++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=k;break}var i=hits[k];var o={id:ids[i],name:names[i],organization:null,emails:ems[i]||[],phones:phs[i]||[]};
+if(!late(${HALF})){try{o.organization=personFor(ids[i]).organization()}catch(e){}}out.push(o)}
+var r={people:out};if(end<hits.length)r.next=String(end);return r;}`,
   mac_contacts_read: CON + `function main(a){var p=a.me?C.myCard():personFor(a.id);if(!p)throw new Error('There is no card marked as yours in Contacts.');
 var o={id:p.id(),name:p.name(),firstName:opt(p,'firstName'),lastName:opt(p,'lastName'),middleName:opt(p,'middleName'),nickname:opt(p,'nickname'),
 organization:opt(p,'organization'),jobTitle:opt(p,'jobTitle'),department:opt(p,'department'),birthday:iso(opt(p,'birthDate')),note:opt(p,'note'),
 emails:vals(p,'emails'),phones:vals(p,'phones'),urls:vals(p,'urls'),relatedNames:vals(p,'relatedNames'),dates:vals(p,'customDates').map(function(x){return {label:x.label,value:iso(x.value)}}),addresses:[],groups:[]};
 try{p.addresses().forEach(function(x){o.addresses.push({label:opt(x,'label'),street:opt(x,'street'),city:opt(x,'city'),state:opt(x,'state'),zip:opt(x,'zip'),country:opt(x,'country')})})}catch(e){}
-try{C.groups().forEach(function(g){try{if(g.people.whose({id:o.id})().length)o.groups.push({id:g.id(),name:g.name()})}catch(e){}})}catch(e){}
+try{C.groups().forEach(function(g){if(late(${MAC_APP_BUDGET_MS})){o.groupsPartial=true;return}try{if(g.people.whose({id:o.id})().length)o.groups.push({id:g.id(),name:g.name()})}catch(e){}})}catch(e){}
 return o;}`,
   mac_contacts_create: CON + `function main(a){var props={};SCALAR.forEach(function(k){if(a[k]!==undefined)props[k]=a[k]});
 var p=C.Person(props);C.people.push(p);apply(p,{emails:a.emails,phones:a.phones,urls:a.urls,birthday:a.birthday});C.save();return {created:true,id:p.id(),name:p.name()};}`,
   mac_contacts_update: CON + `function main(a){var p=personFor(a.id);apply(p,a);C.save();return {updated:true,id:a.id,name:p.name()};}`,
   mac_contacts_delete: CON + `function main(a){var r=eachOf(a.ids,function(id){C.delete(personFor(id))});C.save();return {deleted:r.done,failed:r.failed};}`,
-  mac_contacts_list_groups: CON + `function main(a){return {groups:C.groups().map(function(g){var n=null;try{n=g.people.length}catch(e){}return {id:g.id(),name:g.name(),people:n}})};}`,
+  mac_contacts_list_groups: CON + `function main(a){var out=[],cut=false;C.groups().forEach(function(g){if(cut||late(${MAC_APP_BUDGET_MS})){cut=true;return}var n=null;if(!late(${HALF})){try{n=g.people.length}catch(e){}}out.push({id:g.id(),name:g.name(),people:n})});
+var r={groups:out};if(cut)r.partial='${PARTIAL}';return r;}`,
   mac_contacts_create_group: CON + `function main(a){var g=C.Group({name:a.name});C.groups.push(g);C.save();return {created:true,id:g.id(),name:a.name};}`,
   mac_contacts_update_group: CON + `function main(a){var g=groupFor(a.id);if(a.name)g.name=a.name;
 var add=eachOf(a.add||[],function(id){C.add(personFor(id),{to:g})});var rem=eachOf(a.remove||[],function(id){C.remove(personFor(id),{from:g})});
 C.save();return {updated:true,added:add.done,removed:rem.done,failed:add.failed.concat(rem.failed)};}`,
   mac_contacts_delete_group: CON + `function main(a){C.delete(groupFor(a.id));C.save();return {deleted:1};}`,
-  mac_reminders_list_lists: REM + `function main(a){return {lists:R.lists().map(function(l){var n=null;try{n=l.reminders.whose({completed:false}).length}catch(e){}return {id:l.id(),name:l.name(),open:n}})};}`,
+  mac_reminders_list_lists: REM + `function main(a){var out=[],cut=false;R.lists().forEach(function(l){if(cut||late(${MAC_APP_BUDGET_MS})){cut=true;return}var n=null;if(!late(${HALF})){try{n=l.reminders.whose({completed:false}).length}catch(e){}}out.push({id:l.id(),name:l.name(),open:n})});
+var r={lists:out};if(cut)r.partial='${PARTIAL}';return r;}`,
   mac_reminders_list: REM + `function main(a){var lists=a.list?[listNamed(a.list)]:R.lists();var out=[];var q=a.query?a.query.toLowerCase():'';
-var from=a.dueFrom?new Date(a.dueFrom):null,to=a.dueTo?new Date(a.dueTo):null;var want=a.offset+a.limit+1;
-for(var i=0;i<lists.length&&out.length<want;i++){var rs=a.includeCompleted?lists[i].reminders():lists[i].reminders.whose({completed:false})();
-for(var j=0;j<rs.length&&out.length<want;j++){var r=rs[j];var due=opt(r,'dueDate')||opt(r,'alldayDueDate');var body=opt(r,'body');
+var from=a.dueFrom?new Date(a.dueFrom):null,to=a.dueTo?new Date(a.dueTo):null;var next=null;var l0=Math.floor(a.offset/100000),j0=a.offset%100000;
+scan:for(var i=l0;i<lists.length;i++){var rs=a.includeCompleted?lists[i].reminders():lists[i].reminders.whose({completed:false})();
+for(var j=i===l0?j0:0;j<rs.length;j++){if(out.length===a.limit||(out.length&&late(${MAC_APP_BUDGET_MS}))){next=String(i*100000+j);break scan}var r=rs[j];var due=opt(r,'dueDate')||opt(r,'alldayDueDate');var body=opt(r,'body');
 if(q&&(String(r.name())+' '+(body||'')).toLowerCase().indexOf(q)<0)continue;
 if((from||to)&&(!due||(from&&due<from)||(to&&due>=to)))continue;
 out.push({id:r.id(),list:lists[i].name(),title:cut(r.name(),300),due:iso(due),remind:iso(opt(r,'remindMeDate')),priority:priName(opt(r,'priority')),completed:r.completed(),notes:body?cut(body,200):null})}}
-var pg=page(out,a);var res={reminders:pg.items};if(pg.next)res.next=pg.next;return res;}`,
+var res={reminders:out};if(next!==null)res.next=next;return res;}`,
   mac_reminders_create: REM + `function main(a){var list=null;
 if(a.list)list=listNamed(a.list);else{try{list=R.defaultList()}catch(e){list=R.lists()[0]}}
 var props={name:a.title};if(a.notes)props.body=a.notes;if(a.priority)props.priority=PRI[a.priority];if(a.remind)props.remindMeDate=new Date(a.remind);
@@ -1060,10 +1068,11 @@ var list=null;if(a.list){list=listNamed(a.list);R.move(r,{to:list})}return {upda
   mac_reminders_create_list: REM + `function main(a){var l=R.List({name:a.name});R.lists.push(l);return {created:true,name:a.name};}`,
   mac_reminders_update_list: REM + `function main(a){listNamed(a.name).name=a.newName;return {updated:true,name:a.newName};}`,
   mac_reminders_delete_list: REM + `function main(a){R.delete(listNamed(a.name));return {deleted:1,name:a.name};}`,
-  mac_notes_list_folders: NOTES + `function main(a){return {accounts:N.accounts().map(function(x){var fs=[];try{x.folders().forEach(function(f){var n=null;try{n=f.notes.length}catch(e){}fs.push({name:f.name(),notes:n})})}catch(e){}return {name:x.name(),folders:fs}})};}`,
+  mac_notes_list_folders: NOTES + `function main(a){var cut=false;var r={accounts:N.accounts().map(function(x){var fs=[];try{x.folders().forEach(function(f){if(cut||late(${MAC_APP_BUDGET_MS})){cut=true;return}var n=null;if(!late(${HALF})){try{n=f.notes.length}catch(e){}}fs.push({name:f.name(),notes:n})})}catch(e){}return {name:x.name(),folders:fs}})};
+if(cut)r.partial='${PARTIAL}';return r;}`,
   mac_notes_search: NOTES + `function main(a){var scope=a.folder?folderNamed(a.folder).notes:N.notes;
 var list=a.query?scope.whose({_or:[{name:{_contains:a.query}},{plaintext:{_contains:a.query}}]}):scope;var total=list.length;var end=Math.min(total,a.offset+a.limit);var out=[];
-for(var i=a.offset;i<end;i++){var n=list[i];var lk=locked(n);out.push({id:n.id(),title:cut(n.name(),300),folder:folderOf(n),modified:iso(n.modificationDate()),locked:lk,preview:lk?null:cut(n.plaintext(),200)})}
+for(var i=a.offset;i<end;i++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=i;break}var n=list[i];var lk=locked(n);out.push({id:n.id(),title:cut(n.name(),300),folder:folderOf(n),modified:iso(n.modificationDate()),locked:lk,preview:lk||late(${HALF})?null:cut(n.plaintext(),200)})}
 var r={notes:out};if(end<total)r.next=String(end);return r;}`,
   mac_notes_read: NOTES + `function main(a){var n=noteFor(a.id);var o={id:n.id(),title:n.name(),folder:folderOf(n),modified:iso(n.modificationDate()),locked:locked(n)};
 if(o.locked)return o;var t=String((a.format==='html'?n.body():n.plaintext())||'');o.format=a.format;o.content=t.slice(a.offset,a.offset+20000);o.offset=a.offset;o.length=t.length;o.truncated=a.offset+20000<t.length;
@@ -1132,7 +1141,7 @@ export function macAppErrorText(appId, error) {
 }
 
 /** How long one Apple app script may run. Mail's own scripts stop collecting
- * at MAIL_BUDGET_MS and answer with what they have, well before this. */
+ * at MAC_APP_BUDGET_MS and answer with what they have, well before this. */
 export const MAC_APP_SCRIPT_TIMEOUT_MS = 60_000;
 
 async function runScript(appId, script, args, { execFile = execFilePromise, signal, timeoutMs = MAC_APP_SCRIPT_TIMEOUT_MS } = {}) {

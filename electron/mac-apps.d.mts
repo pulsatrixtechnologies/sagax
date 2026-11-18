@@ -86,7 +86,7 @@ export function calendarRef(id: string): { uid: string; occurrence?: string };
 export function calendarOccurrenceId(uid: string, start: string | Date): string;
 export function occurrences(rule: string, start: Date | string, from: Date | string, to: Date | string, max: number, excluded?: Array<Date | string>): Date[] | null;
 export const MAC_APP_SCRIPTS: Record<string, string>;
-export const MAIL_BUDGET_MS: number;
+export const MAC_APP_BUDGET_MS: number;
 export const MAC_APP_SCRIPT_TIMEOUT_MS: number;
 export const MAC_APP_TEST_SCRIPTS: Record<MacAppId, string>;
 export function isMacAppTool(name: unknown): boolean;

@@ -80,7 +80,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
                     <li key={product.id} className="min-w-0">
                       <button type="button" data-vendor-chip-product={product.id} title={product.name} onClick={() => ctx.onOpen(product)}
                         aria-label={t("connectApps.openAria", { name: product.name })}
-                        className="flex min-h-9 w-full min-w-0 items-center gap-2 rounded-full border-[0.5px] border-ink/[0.1] px-3 py-1 text-left text-[13px] leading-[18px] text-ink transition-colors hover:bg-ink/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none">
+                        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-full border-[0.5px] border-ink/[0.1] px-3 py-0 text-left text-[13px] leading-[18px] text-ink transition-colors hover:bg-ink/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none">
                         <span className="min-w-0 flex-1 break-words">{short.get(product.id)}</span>
                         {/* the state only when it is not "on": a connector off or broken is marked, a bundle that is all on says so once in its header */}
                         {state.tone !== "ok" && <StateIcon state={state} />}

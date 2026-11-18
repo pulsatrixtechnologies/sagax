@@ -16,6 +16,11 @@ import CompanionCore
 import SwiftUI
 import UIKit
 
+private struct LiveTranscriptHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct OutboundCardView: View {
     @EnvironmentObject private var session: Session
     let card: OutboundCardData
@@ -31,6 +36,7 @@ struct OutboundCardView: View {
     @State private var showTranscript: Bool
     @State private var showLiveTranscript = true
     @State private var hanging = false
+    @State private var liveTranscriptHeight: CGFloat = 0
     @State private var nowMs = Date().timeIntervalSince1970 * 1000
 
     init(card: OutboundCardData, accent: Color, transcriptOpen: Bool = OutboundCardView.previewTranscriptOpen) {
@@ -124,11 +130,14 @@ struct OutboundCardView: View {
             if live {
                 phaseChip(phaseLabel(card.phase ?? "dialing"), tone: ink.accent, fill: ink.accent.opacity(0.12), ink: ink)
                     .accessibilityIdentifier("outbound-phase-chip")
-                Text(verbatim: OutboundCallResult.duration(OutboundCardRules.liveElapsed(startedAt: card.liveStartedAt, now: nowMs)))
-                    .font(ink.font(11.5, .regular))
-                    .foregroundStyle(ink.tertiary)
-                    .monospacedDigit()
-                    .accessibilityIdentifier("outbound-live-timer")
+                // the timer counts from the pickup: none while it dials or rings
+                if let start = OutboundCardRules.timerStart(card) {
+                    Text(verbatim: OutboundCallResult.duration(OutboundCardRules.liveElapsed(startedAt: start, now: nowMs)))
+                        .font(ink.font(11.5, .regular))
+                        .foregroundStyle(ink.tertiary)
+                        .monospacedDigit()
+                        .accessibilityIdentifier("outbound-live-timer")
+                }
             } else if ended, let result = card.result {
                 phaseChip(String(localized: "Ended"), tone: ink.secondary, fill: ink.inset, ink: ink)
                     .accessibilityIdentifier("outbound-phase-chip")
@@ -351,7 +360,7 @@ struct OutboundCardView: View {
 
     private var liveStream: [(id: String, kind: String, text: String, speaker: String?)] {
         var items: [(at: Double, index: Int, kind: String, text: String, speaker: String?)] = []
-        for (index, line) in (card.liveTranscript ?? []).enumerated() {
+        for (index, line) in OutboundCardRules.dedupedLines(card.liveTranscript ?? []).enumerated() {
             items.append((line.at ?? Double(index), index, "line", line.text, line.speaker))
         }
         for (index, event) in (card.liveEvents ?? []).enumerated() {
@@ -400,6 +409,8 @@ struct OutboundCardView: View {
             disclosure(showLiveTranscript ? "Hide live transcript" : "Show live transcript", open: $showLiveTranscript, ink: ink)
                 .accessibilityIdentifier("outbound-live-toggle")
             if showLiveTranscript {
+                ScrollViewReader { proxy in
+                ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     if stream.isEmpty {
                         Text("Call in progress. The result appears here when it ends.")
@@ -413,23 +424,37 @@ struct OutboundCardView: View {
                                 .italic()
                                 .foregroundStyle(ink.tertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(item.id)
                         } else {
                             let speaker = item.speaker ?? "callee"
-                            (Text(verbatim: speakerName(speaker))
-                                .font(ink.font(12.5, .medium))
+                            (Text(verbatim: speakerName(speaker) + ":")
+                                .font(ink.font(12.5, .semibold))
                                 .foregroundColor(speaker == "bot" ? ink.accent : speaker == "system" ? ink.tertiary : ink.secondary)
                              + Text(verbatim: " " + item.text)
                                 .font(ink.font(12.5, .regular))
                                 .foregroundColor(ink.ink))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(item.id)
                         }
                     }
                 }
                 .textSelection(.enabled)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .frame(maxHeight: 280, alignment: .top)
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: LiveTranscriptHeightKey.self, value: geometry.size.height)
+                    }
+                )
+                }
+                // capped at 400 pt with its own scroll, and it follows the newest line
+                .frame(height: min(liveTranscriptHeight, 400))
+                .onPreferenceChange(LiveTranscriptHeightKey.self) { liveTranscriptHeight = $0 }
+                .onChange(of: stream.count) { _ in
+                    if let last = stream.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+                }
                 .background(ink.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityIdentifier("outbound-live-transcript")
             }

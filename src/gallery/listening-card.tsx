@@ -59,7 +59,7 @@ answerEndedTranscript(bot, fr);
 
 const liveStartedAt = Date.now() - 67_000;
 const call = { id: "m-call", role: "bot", kind: "text", text: "", outbound: {
-  kind: "call", id: "call_0000000000000017", status: "done", phase: "in_call", liveStartedAt, calleeName: "Marie Tremblay", botName: "Rocket",
+  kind: "call", id: "call_0000000000000017", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", botName: "Rocket",
   destination: "+1 514 555 0142", mode: "conversation", language: "fr", maxMinutes: 5,
   objective: fr ? "Prendre rendez-vous pour l'entretien." : "Book the yearly service.",
   liveTranscript: [

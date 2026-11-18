@@ -193,6 +193,55 @@ describe("#4304: the live call card's End call and its ended card", () => {
     return { ...made, id };
   }
 
+  it("passes the callee name to voice_call and shows it on the card from the start", async () => {
+    const { wiring, rows, voice } = setup({ extra: { principalSub: () => "sub-jean" } });
+    const context = { principalId: "jean", botId: "bot-a", threadId: "t-1", room: false };
+    const args = { ...ARGS, callee_name: "Marie" };
+    await wiring.placeCall({ ...context, generation: "g1" }, args);
+    expect(rows[0]!.outbound?.calleeName).toBe("Marie");
+    const id = wiring.primaryPending("jean", false)[0]!.requestId;
+    wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
+    await wiring.placeCall({ ...context, generation: "g2" }, args);
+    expect(voice).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ ref: id, callee_name: "Marie" }));
+    expect(rows[0]!.outbound?.calleeName).toBe("Marie");
+  });
+
+  it("a Perspicax that refuses callee_name places the call without it", async () => {
+    const voice = vi.fn(async (_turn: unknown, callArgs: Record<string, unknown>) => (
+      "callee_name" in callArgs
+        ? { ok: true as const, isError: true, value: "unexpected additional property: callee_name" }
+        : callArgs.dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }
+    ));
+    const { wiring, rows } = setup({ extra: { principalSub: () => "sub-jean", voice } });
+    const context = { principalId: "jean", botId: "bot-a", threadId: "t-1", room: false };
+    const args = { ...ARGS, callee_name: "Marie" };
+    await wiring.placeCall({ ...context, generation: "g1" }, args);
+    const id = wiring.primaryPending("jean", false)[0]!.requestId;
+    wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
+    const placed = await wiring.placeCall({ ...context, generation: "g2" }, args);
+    expect(placed.isError).toBeUndefined();
+    expect(rows[0]!.outbound?.status).toBe("done");
+  });
+
+  it("the timer starts at the pickup, resent lines show once, and the final result replaces the streamed lines", async () => {
+    let clock = 1_000;
+    const { wiring, rows, id } = await placedLive({ now: () => clock });
+    clock = 2_000;
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "ringing" })).toBe("applied");
+    expect(rows[0]!.outbound?.liveAnsweredAt).toBeUndefined();
+    clock = 9_000;
+    const lines = [{ speaker: "bot" as const, text: "Hello", at: 9_100 }];
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "in_call", lines })).toBe("applied");
+    clock = 20_000;
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, lines: [...lines, { speaker: "callee" as const, text: "Hi", at: 9_900 }] })).toBe("applied");
+    expect(rows[0]!.outbound?.liveAnsweredAt).toBe(9_000);
+    expect(rows[0]!.outbound?.liveTranscript?.map((line) => line.text)).toEqual(["Hello", "Hi"]);
+    wiring.callResult({ sub: "sub-jean", result: { ref: id, callSid: SID, outcome: "completed", endedBy: "goal", durationSec: 12, points: ["Done"], commitments: [], transcript: [{ speaker: "bot", text: "Hello" }, { speaker: "callee", text: "Hi" }] } });
+    // the result carries the one transcript; the streamed copy leaves the card, so nothing shows twice
+    expect(rows[0]!.outbound?.liveTranscript).toBeUndefined();
+    expect(rows[0]!.outbound?.result?.transcript).toHaveLength(2);
+  });
+
   it("ends the call outside any turn on the person's own access", async () => {
     const personTwilio = vi.fn(async (_principalId: string, _botId: string, _args: Record<string, unknown>) => ({ ok: true as const, isError: false, value: { status: "completed" } }));
     const { wiring, rows, twilio, id } = await placedLive({ personTwilio });

@@ -12,8 +12,8 @@
 // may last and the language, its guidance and voicemail words behind a
 // disclosure; once placed, the live card (phase chip, timer, transcript,
 // End call); once ended, the result with the recording player when present.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Copy, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck, X } from "lucide-react";
 
 import { answerPurchase } from "@/lib/credential-vault";
 import { activeLocale, t } from "@/lib/i18n";
@@ -21,8 +21,10 @@ import type { LocaleKey } from "@/locales";
 import { api, type Message } from "@/state/store";
 import type { OutboundCallResult, OutboundCard as OutboundCardData } from "../../shared/wire";
 import {
+  dedupeLiveLines,
   formatLiveDuration,
   liveCallElapsed,
+  liveTimerStart,
   PHONE_CALL_LIVE_PHASES,
   type PhoneCallLiveEvent,
   type PhoneCallLiveLine,
@@ -78,7 +80,7 @@ type LiveStreamItem =
 
 function mergeLiveStream(lines: PhoneCallLiveLine[] | undefined, events: PhoneCallLiveEvent[] | undefined): LiveStreamItem[] {
   const items: LiveStreamItem[] = [
-    ...(lines ?? []).map((line, index) => ({ kind: "line" as const, at: line.at ?? index, line, index })),
+    ...dedupeLiveLines(lines ?? []).map((line, index) => ({ kind: "line" as const, at: line.at ?? index, line, index })),
     ...(events ?? []).map((event, index) => ({ kind: "event" as const, at: event.at, event, index })),
   ];
   items.sort((a, b) => a.at - b.at || (a.kind === b.kind ? a.index - b.index : a.kind === "event" ? 1 : -1));
@@ -226,6 +228,10 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
         ? t("outbound.call.title")
         : t("outbound.purchase.title");
 
+  if (conversation && (live || ended)) {
+    return <ConversationCallCard card={card} live={live} status={status} error={error} onError={setError} transcriptOpen={transcriptOpen} />;
+  }
+
   return (
     <article
       data-outbound-card={card.kind}
@@ -237,34 +243,11 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
       <header className="flex items-center gap-2 border-b border-hairline/30 bg-raised/30 px-3 py-2 text-[12px] text-ink-secondary">
         <Icon size={14} aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{headerLabel}</span>
-        {live && (
-          <span data-outbound-phase-chip className="shrink-0 rounded-full bg-accent/12 px-2 py-0.5 text-[11.5px] font-medium text-accent">
-            {phaseLabel(card.phase)}
-          </span>
-        )}
-        {live && card.phase !== "ended" && <LiveTimer startedAt={card.liveStartedAt} />}
-        {ended && card.result && (
-          <>
-            {/* #4304: the call's one state, said once: its outcome */}
-            <span data-outbound-phase-chip data-outbound-outcome className={`min-w-0 truncate rounded-full px-2 py-0.5 text-[11.5px] font-medium ${OUTCOME_TONE[card.result.outcome] ?? OUTCOME_TONE.voicemail}`}>
-              {outcomeLabel(card.result)}
-            </span>
-            <span data-outbound-duration className="shrink-0 tabular-nums text-[11.5px] text-ink-tertiary">{formatCallDuration(card.result.durationSec)}</span>
-          </>
-        )}
         <span className="truncate">{card.botName}</span>
       </header>
       <div className="space-y-2 px-3 py-3 text-[13px] text-ink">
         <p className="font-medium">{title}</p>
-        {conversation && !live && !ended && (
-          <ConversationCallBody card={card} status={status} />
-        )}
-        {conversation && live && (
-          <LiveConversationBody card={card} onError={setError} />
-        )}
-        {conversation && ended && card.result && (
-          <EndedConversationBody card={card} result={card.result} transcriptOpen={transcriptOpen} />
-        )}
+        {conversation && <ConversationCallBody card={card} status={status} />}
         {conversation && status === "pending" && (
           <label className="flex items-center gap-2 text-[12.5px]">
             <input type="checkbox" data-outbound-confirm checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
@@ -353,22 +336,75 @@ function LiveTimer({ startedAt }: { startedAt: number | undefined }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!startedAt) return;
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [startedAt]);
   return (
-    <span data-outbound-live-timer className="shrink-0 tabular-nums text-[11.5px] text-ink-tertiary">
+    <span data-outbound-live-timer className="shrink-0 tabular-nums text-[13px] text-ink-secondary">
       {formatLiveDuration(liveCallElapsed(startedAt, now))}
     </span>
   );
 }
 
-function LiveConversationBody({ card, onError }: { card: OutboundCardData; onError: (message: string) => void }) {
-  const [hanging, setHanging] = useState(false);
-  const [open, setOpen] = useState(true);
+/** The transcript of an ended call as the card shows it: the result's, else
+ * the lines that streamed while it was live (never both). */
+function endedTranscript(card: OutboundCardData): { speaker: "bot" | "callee"; text: string }[] {
+  if (card.result?.transcript?.length) return card.result.transcript;
+  return dedupeLiveLines(card.liveTranscript ?? [])
+    .filter((line) => line.speaker !== "system")
+    .map((line) => ({ speaker: line.speaker === "bot" ? "bot" as const : "callee" as const, text: line.text }));
+}
+
+/** The live and the ended conversation call, in one card as the reference
+ * draws it: a head (phone glyph, who is called with the number under, the
+ * timer or the outcome, the ⋮ menu, the close that folds the card), then the
+ * body (the transcript, which follows its tail and scrolls inside a capped
+ * height, or the summary), then the footer with the call's buttons. Closing
+ * folds the card to its head; it never ends the call. */
+function ConversationCallCard({ card, live, status, error, onError, transcriptOpen }: {
+  card: OutboundCardData;
+  live: boolean;
+  status: OutboundCardData["status"];
+  error: string;
+  onError: (message: string) => void;
+  transcriptOpen: boolean;
+}) {
+  const result = card.result;
+  const ended = Boolean(result);
   const phase = card.phase ?? "dialing";
-  const waiting = phase === "dialing" || phase === "ringing";
+  const [open, setOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hanging, setHanging] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const name = card.calleeName?.trim() ?? "";
+  const number = card.destination ?? "";
   const stream = useMemo(() => mergeLiveStream(card.liveTranscript, card.liveEvents), [card.liveTranscript, card.liveEvents]);
+  const lines = ended ? endedTranscript(card) : [];
+  const other = name || t("outbound.call.otherParty");
+  const timerStart = liveTimerStart(card);
+  const canEnd = live && card.status === "done" && phase !== "ended";
+  const hasTranscript = ended ? lines.length > 0 : stream.some((item) => item.kind === "line");
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const away = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [menuOpen]);
+
+  const copyNumber = () => { setMenuOpen(false); void copyText(number); };
+  const copyTranscript = () => {
+    setMenuOpen(false);
+    const rows = ended
+      ? lines.map((line) => `${line.speaker === "bot" ? card.botName : other}: ${line.text}`)
+      : stream.flatMap((item) => item.kind === "line" && item.line.speaker !== "system"
+        ? [`${item.line.speaker === "bot" ? card.botName : other}: ${item.line.text}`]
+        : []);
+    void copyText(rows.join("\n"));
+  };
 
   const hangUp = async () => {
     setHanging(true);
@@ -382,53 +418,170 @@ function LiveConversationBody({ card, onError }: { card: OutboundCardData; onErr
     }
   };
 
+  const state = statusLine({ ...card, status });
+  const title = name || number;
   return (
-    <div data-outbound-live={phase} className="space-y-2">
-      {waiting && <p className="text-[12px] text-ink-secondary">{t("outbound.call.waitingPickup")}</p>}
-      {(stream.length > 0 || !waiting) && (
-        <div>
-          <button type="button" data-outbound-live-toggle aria-expanded={open} onClick={() => setOpen((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-md text-[12px] text-ink-secondary hover:text-ink">
-            {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-            {open ? t("outbound.call.hideLive") : t("outbound.call.showLive")}
-          </button>
-          {open && (
-            <div data-outbound-live-transcript aria-live="polite" className={cn("mt-1.5 max-h-72", TRANSCRIPT_BOX)}>
-              {stream.length === 0 && <p className="text-[12px] text-ink-tertiary">{t("outbound.call.status.inProgress")}</p>}
-              {stream.map((item) => item.kind === "event" ? (
-                <p key={`e-${item.index}-${item.at}`} data-outbound-live-event={item.event.kind} className="text-[12px] italic text-ink-tertiary">
-                  {eventLine(item.event)}
-                </p>
-              ) : (
-                <TranscriptLine
-                  key={`l-${item.index}-${item.at}`}
-                  tone={item.line.speaker === "bot" ? "bot" : item.line.speaker === "system" ? "system" : "other"}
-                  speaker={item.line.speaker === "bot" ? card.botName : item.line.speaker === "system" ? t("outbound.call.liveTranscript") : (card.calleeName?.trim() || t("outbound.call.otherParty"))}
-                >
-                  {item.line.text}
-                </TranscriptLine>
-              ))}
+    <article
+      data-outbound-card="call"
+      data-outbound-status={status}
+      data-outbound-phase={card.phase ?? (live ? "dialing" : undefined)}
+      data-outbound-open={open ? "open" : "folded"}
+      aria-label={t("outbound.call.title")}
+      className="my-2 w-full max-w-[560px] overflow-hidden rounded-xl border border-hairline/40 bg-panel shadow-sm"
+    >
+      <header className="flex items-center gap-1 px-2 py-2">
+        <button type="button" data-outbound-card-toggle aria-expanded={open} onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-0.5 text-start hover:bg-ink/[0.04]">
+          <span aria-hidden="true" className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full", ended ? "bg-inset text-ink-secondary" : "bg-accent/12 text-accent")}>
+            {status === "denied" ? <PhoneOff size={16} /> : <PhoneCall size={16} />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span data-outbound-title className="block truncate text-[13px] font-medium leading-5 text-ink">{title}</span>
+            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-4 text-ink-secondary">
+              {live && (
+                <span data-outbound-phase-chip className="shrink-0 rounded-full bg-accent/12 px-2 py-px text-[11.5px] font-medium text-accent">
+                  {phaseLabel(card.phase)}
+                </span>
+              )}
+              {result && (
+                <span data-outbound-phase-chip data-outbound-outcome className={`rounded-full px-2 py-px text-[11.5px] font-medium ${OUTCOME_TONE[result.outcome] ?? OUTCOME_TONE.voicemail}`}>
+                  {outcomeLabel(result)}
+                </span>
+              )}
+              {name && <span className="min-w-0">{number}</span>}
+              {!name && <span className="min-w-0 truncate">{card.botName}</span>}
+            </span>
+          </span>
+          {live && phase !== "ended" && timerStart && <LiveTimer startedAt={timerStart} />}
+          {result && <span data-outbound-duration className="shrink-0 tabular-nums text-[13px] text-ink-secondary">{formatCallDuration(result.durationSec)}</span>}
+        </button>
+        {open && (
+          <>
+            <div ref={menuRef} className="relative">
+              <button type="button" data-outbound-card-menu aria-haspopup="menu" aria-expanded={menuOpen} aria-label={t("outbound.call.more")}
+                onClick={() => setMenuOpen((value) => !value)}
+                className="inline-flex size-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink">
+                <Ellipsis size={16} aria-hidden="true" />
+              </button>
+              {menuOpen && (
+                <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute end-0 top-9 z-10")}>
+                  <button type="button" role="menuitem" data-outbound-copy-number className={MENU_ROW} onClick={copyNumber}>
+                    <MenuGlyph><Phone size={16} /></MenuGlyph>
+                    {t("outbound.call.copyNumber")}
+                  </button>
+                  {hasTranscript && !result?.transcriptExpired && (
+                    <button type="button" role="menuitem" data-outbound-copy-transcript className={MENU_ROW} onClick={copyTranscript}>
+                      <MenuGlyph><Copy size={16} /></MenuGlyph>
+                      {t("outbound.call.copyTranscript")}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
+            <button type="button" data-outbound-card-close aria-label={t("outbound.call.close")} onClick={() => setOpen(false)}
+              className="inline-flex size-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </>
+        )}
+      </header>
+      {open && (
+        <div className="border-t border-hairline/30 text-[13px] text-ink">
+          {live && <LiveConversationBody card={card} stream={stream} phase={phase} other={other} />}
+          {result && (
+            <div className="px-3 py-3">
+              <EndedConversationBody card={card} result={result} lines={lines} other={other} transcriptOpen={transcriptOpen} />
+            </div>
+          )}
+          {state && <p role="status" className="px-3 pb-2 text-[12px] text-ink-secondary">{state}</p>}
+          {card.via && status !== "pending" && !live && <p className="px-3 pb-2 text-[12px] text-ink-secondary">{t("outbound.via", { name: card.via })}</p>}
+          {/* #4304: a call that is over shows no leftover control error */}
+          {error && !ended && phase !== "ended" && <p role="alert" className="px-3 pb-2 text-[12px] text-danger">{error}</p>}
+          {/* the Take over button takes its place here when it ships (lot 4); hidden until then */}
+          {canEnd && (
+            <footer className="flex flex-wrap justify-end gap-2 border-t border-hairline/30 px-3 py-2.5">
+              <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40">
+                {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}
+                {t("outbound.call.endCall")}
+              </button>
+            </footer>
           )}
         </div>
       )}
-      {/* #4304: End call only while the call can still be ended: placed, not over */}
-      {card.status === "done" && phase !== "ended" && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 text-[12.5px] font-medium text-danger disabled:opacity-40">
-            {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}
-            {t("outbound.call.endCall")}
-          </button>
+    </article>
+  );
+}
+
+/** The transcript pane: a capped height with its own scroll, following the
+ * newest line until the person scrolls up, with a soft fade at an edge that
+ * hides more. */
+function LiveConversationBody({ card, stream, phase, other }: {
+  card: OutboundCardData;
+  stream: LiveStreamItem[];
+  phase: PhoneCallPhase;
+  other: string;
+}) {
+  const waiting = phase === "dialing" || phase === "ringing";
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  const pinned = useRef(true);
+  const [fade, setFade] = useState({ top: false, bottom: false });
+
+  const measure = () => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    const gap = pane.scrollHeight - pane.clientHeight - pane.scrollTop;
+    pinned.current = gap < 24;
+    setFade((prev) => {
+      const next = { top: pane.scrollTop > 4, bottom: gap > 4 };
+      return prev.top === next.top && prev.bottom === next.bottom ? prev : next;
+    });
+  };
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    if (pinned.current) pane.scrollTop = pane.scrollHeight;
+    measure();
+  }, [stream.length]);
+
+  const mask = fade.top || fade.bottom
+    ? `linear-gradient(to bottom, ${fade.top ? "transparent 0, black 24px" : "black 0"}, ${fade.bottom ? "black calc(100% - 24px), transparent 100%" : "black 100%"})`
+    : undefined;
+  return (
+    <div data-outbound-live={phase}>
+      {stream.length === 0 ? (
+        <p data-outbound-live-empty className="px-3 py-3 text-[12.5px] text-ink-tertiary">
+          {waiting ? t("outbound.call.waitingPickup") : t("outbound.call.liveTranscriptWait")}
+        </p>
+      ) : (
+        <div ref={paneRef} data-outbound-live-transcript aria-live="polite" tabIndex={0} onScroll={measure}
+          style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
+          className="max-h-[400px] space-y-1.5 overflow-y-auto px-3 py-2.5">
+          {stream.map((item) => item.kind === "event" ? (
+            <p key={`e-${item.index}-${item.at}`} data-outbound-live-event={item.event.kind} className="text-[12px] italic text-ink-tertiary">
+              {eventLine(item.event)}
+            </p>
+          ) : (
+            <TranscriptLine
+              key={`l-${item.index}-${item.at}`}
+              strong
+              tone={item.line.speaker === "bot" ? "bot" : item.line.speaker === "system" ? "system" : "other"}
+              speaker={`${item.line.speaker === "bot" ? card.botName : item.line.speaker === "system" ? t("outbound.call.liveTranscript") : other}:`}
+            >
+              {item.line.text}
+            </TranscriptLine>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function EndedConversationBody({ card, result, transcriptOpen }: {
+function EndedConversationBody({ card, result, lines, other, transcriptOpen }: {
   card: OutboundCardData;
   result: OutboundCallResult;
+  lines: { speaker: "bot" | "callee"; text: string }[];
+  other: string;
   transcriptOpen: boolean;
 }) {
   // #4304: the number is the title and the state the header chip: neither
@@ -437,7 +590,7 @@ function EndedConversationBody({ card, result, transcriptOpen }: {
   return (
     <div data-outbound-ended className="space-y-2">
       {card.recordingUrl && !recordingFailed && <RecordingPlayer url={card.recordingUrl} onUnavailable={() => setRecordingFailed(true)} />}
-      <CallResult result={result} botName={card.botName} calleeName={card.calleeName} initialOpen={transcriptOpen} liveTranscript={card.liveTranscript} />
+      <CallResult result={result} botName={card.botName} other={other} lines={lines} initialOpen={transcriptOpen} />
     </div>
   );
 }
@@ -551,22 +704,16 @@ function ConversationCallBody({ card, status }: { card: OutboundCardData; status
   );
 }
 
-function CallResult({ result, botName, calleeName, initialOpen, liveTranscript }: {
+function CallResult({ result, botName, other, lines: transcript, initialOpen }: {
   result: OutboundCallResult;
   botName: string;
-  calleeName?: string;
+  other: string;
+  lines: { speaker: "bot" | "callee"; text: string }[];
   initialOpen: boolean;
-  liveTranscript?: PhoneCallLiveLine[];
 }) {
   const [open, setOpen] = useState(initialOpen);
-  const fromResult = Boolean(result.transcript?.length);
-  const transcript = fromResult
-    ? result.transcript!
-    : (liveTranscript ?? []).filter((line) => line.speaker !== "system").map((line) => ({ speaker: line.speaker === "bot" ? "bot" as const : "callee" as const, text: line.text }));
-  const other = (!fromResult && calleeName?.trim()) || t("outbound.call.otherParty");
   const points = result.points.filter((point) => point.trim());
   const commitments = result.commitments.filter((item) => item.trim());
-  const copyTranscript = () => copyText(transcript.map((line) => `${line.speaker === "bot" ? botName : other}: ${line.text}`).join("\n"));
   return (
     <div data-outbound-result={result.outcome} className="space-y-2">
       {result.doNotCallAgain && (
@@ -598,16 +745,11 @@ function CallResult({ result, botName, calleeName, initialOpen, liveTranscript }
               {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
               {open ? t("outbound.call.hideTranscript") : t("outbound.call.showTranscript")}
             </button>
-            <button type="button" data-outbound-copy-transcript aria-label={t("outbound.call.copyTranscript")} title={t("outbound.call.copyTranscript")}
-              onClick={() => void copyTranscript()}
-              className="ms-auto inline-flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink">
-              <Copy size={13} aria-hidden="true" />
-            </button>
           </div>
           {open && (
-            <div data-outbound-transcript className={cn("mt-1.5 max-h-72", TRANSCRIPT_BOX)}>
+            <div data-outbound-transcript className={cn("mt-1.5 max-h-[400px]", TRANSCRIPT_BOX)}>
               {transcript.map((line, index) => (
-                <TranscriptLine key={index} tone={line.speaker === "bot" ? "bot" : "other"} speaker={line.speaker === "bot" ? botName : t("outbound.call.otherParty")}>
+                <TranscriptLine key={index} strong tone={line.speaker === "bot" ? "bot" : "other"} speaker={`${line.speaker === "bot" ? botName : other}:`}>
                   {line.text}
                 </TranscriptLine>
               ))}

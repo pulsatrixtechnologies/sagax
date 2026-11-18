@@ -11,6 +11,7 @@ import { randomBytes } from "node:crypto";
 
 import { formatPhone, ownerCallToPlaceArgs } from "../../shared/outbound-call.ts";
 import { lineVerifies } from "../reach-me/sms.ts";
+import { dedupeLiveLines } from "../../shared/phone-call-live.ts";
 import { PHONE_CALL_CONSENT_APPROVE, PHONE_CALL_CONSENT_DECLINE } from "../../shared/phone-call-consent.ts";
 import { purchaseContents } from "../../shared/payment-vault.ts";
 import { walletName } from "../../shared/single-use-card.ts";
@@ -246,6 +247,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
     const mergedLive: Partial<OutboundCard> = {
       ...(prior?.phase ? { phase: prior.phase } : {}),
       ...(prior?.liveStartedAt ? { liveStartedAt: prior.liveStartedAt } : {}),
+      ...(prior?.liveAnsweredAt ? { liveAnsweredAt: prior.liveAnsweredAt } : {}),
       ...(prior?.liveTranscript ? { liveTranscript: prior.liveTranscript } : {}),
       ...(prior?.liveEvents ? { liveEvents: prior.liveEvents } : {}),
       ...(prior?.calleeName ? { calleeName: prior.calleeName } : {}),
@@ -264,6 +266,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       ...existing.outbound,
       ...(change.phase ? { phase: change.phase } : {}),
       ...(change.liveStartedAt ? { liveStartedAt: change.liveStartedAt } : {}),
+      ...(change.liveAnsweredAt ? { liveAnsweredAt: change.liveAnsweredAt } : {}),
       ...(change.calleeName ? { calleeName: change.calleeName } : {}),
       ...(change.recordingUrl ? { recordingUrl: change.recordingUrl } : {}),
       ...(change.liveTranscript ? { liveTranscript: change.liveTranscript } : {}),
@@ -505,12 +508,16 @@ export function outboundWiring(deps: OutboundWiringDeps) {
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.calleeName ? { calleeName: input.calleeName } : {}),
         ...(input.lines?.length
-          ? { liveTranscript: [...(existing?.liveTranscript ?? []), ...input.lines].slice(-200) }
+          ? { liveTranscript: dedupeLiveLines([...(existing?.liveTranscript ?? []), ...input.lines]).slice(-200) }
           : {}),
         ...(input.events?.length
           ? { liveEvents: [...(existing?.liveEvents ?? []), ...input.events].slice(-50) }
           : {}),
         ...(!existing?.liveStartedAt ? { liveStartedAt: (deps.now ?? Date.now)() } : {}),
+        // the timer counts from the pickup: the first in-call phase, or the
+        // first line spoken when no phase said so
+        ...(!existing?.liveAnsweredAt && (input.phase === "in_call" || (!input.phase && input.lines?.length && (!existing?.phase || existing.phase === "dialing" || existing.phase === "ringing")))
+          ? { liveAnsweredAt: (deps.now ?? Date.now)() } : {}),
       });
       return "applied";
     },

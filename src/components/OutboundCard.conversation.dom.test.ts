@@ -92,7 +92,10 @@ describe("OutboundCard, conversation call", () => {
     });
     expect(host.querySelector("[data-outbound-phase-chip]")?.textContent).toContain("Dialing");
     expect(host.textContent).toContain("Waiting for them to pick up");
-    expect(host.textContent).toContain("Phone call");
+    expect(host.querySelector("article")?.getAttribute("aria-label")).toBe("Phone call");
+    // dialing: no timer yet (it counts from the pickup), Take over is not offered
+    expect(host.querySelector("[data-outbound-live-timer]")).toBeNull();
+    expect(host.textContent).not.toContain("Take over");
     expect(host.querySelector("[data-outbound-hangup]")?.textContent).toContain("End call");
     expect(host.querySelector("[data-outbound-yes]")).toBeNull();
     act(() => host.querySelector<HTMLButtonElement>("[data-outbound-hangup]")!.click());
@@ -128,7 +131,7 @@ describe("OutboundCard, conversation call", () => {
     expect(host.querySelector("[data-outbound-transcript]")).toBeNull();
     act(() => host.querySelector<HTMLButtonElement>("[data-outbound-transcript-toggle]")!.click());
     const transcript = host.querySelector("[data-outbound-transcript]")!;
-    expect(transcript.textContent).toContain("Other party <b>Hi</b> **there**");
+    expect(transcript.textContent).toContain("Other party: <b>Hi</b> **there**");
     expect(transcript.querySelector("b")).toBeNull();
     expect(transcript.textContent).toContain("only the first part is kept");
   });
@@ -169,6 +172,8 @@ describe("OutboundCard, conversation call", () => {
       const host = mount(ended);
       expect(host.querySelector("[data-recording-player]")).toBeNull();
       expect(host.querySelector("audio")).toBeNull();
+      act(() => host.querySelector<HTMLButtonElement>("[data-outbound-card-menu]")!.click());
+      expect(host.querySelector("[data-outbound-copy-number]")).toBeTruthy();
       expect(host.querySelector("[data-outbound-copy-transcript]")).toBeTruthy();
     });
 
@@ -241,5 +246,71 @@ describe("OutboundCard, conversation call", () => {
     act(() => root?.unmount());
     const done = mount({ ...oneWay, status: "done" });
     expect(done.textContent).toContain("Call placed.");
+  });
+});
+
+describe("OutboundCard, live call card look (lot 2)", () => {
+  const started = Date.now() - 80_000;
+  const live = { ...base, status: "done" as const, phase: "in_call" as const, liveStartedAt: started - 20_000, liveAnsweredAt: started, calleeName: "Marie" };
+
+  it("heads the card with the callee, the number under it and a timer that runs from the pickup", () => {
+    const host = mount({ ...live, liveTranscript: [{ speaker: "bot", text: "Hello", at: started + 1_000 }] });
+    expect(host.querySelector("[data-outbound-title]")?.textContent).toBe("Marie");
+    expect(host.querySelector("header")?.textContent).toContain("+1 514 555 0142");
+    expect(host.querySelector("[data-outbound-live-timer]")?.textContent).toBe("1:20");
+    expect(host.textContent).not.toContain("Take over");
+  });
+
+  it("an older in-call card with no pickup instant counts from the start of the dialing", () => {
+    const host = mount({ ...live, liveAnsweredAt: undefined, liveStartedAt: started });
+    expect(host.querySelector("[data-outbound-live-timer]")?.textContent).toBe("1:20");
+  });
+
+  it("says each line as <name>: words, the speaker in bold, and drops a line sent twice", () => {
+    const host = mount({ ...live, liveTranscript: [
+      { speaker: "bot", text: "Hello", at: started + 1_000 },
+      { speaker: "bot", text: "Hello", at: started + 1_000 },
+      { speaker: "callee", text: "Hi", at: started + 2_000 },
+    ] });
+    const rows = host.querySelectorAll("[data-outbound-live-transcript] p");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toBe("Rocket: Hello");
+    expect(rows[1]!.textContent).toBe("Marie: Hi");
+    expect(rows[0]!.querySelector(".font-semibold")?.textContent).toBe("Rocket:");
+  });
+
+  it("caps the transcript's height with its own scroll and follows the newest line", () => {
+    const lines = Array.from({ length: 40 }, (_, index) => ({ speaker: index % 2 ? "callee" as const : "bot" as const, text: `Line ${index}`, at: started + index }));
+    const host = mount({ ...live, liveTranscript: lines });
+    const pane = host.querySelector<HTMLElement>("[data-outbound-live-transcript]")!;
+    expect(pane.className).toContain("max-h-[400px]");
+    expect(pane.className).toContain("overflow-y-auto");
+    Object.defineProperty(pane, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(pane, "clientHeight", { configurable: true, value: 400 });
+    act(() => root!.render(createElement(OutboundCard, { message: { id: "m1", role: "bot", kind: "text", text: "", at: 1, outbound: { ...live, liveTranscript: [...lines, { speaker: "bot", text: "Newest", at: started + 99 }] } } as unknown as Message })));
+    expect(pane.scrollTop).toBe(2000);
+  });
+
+  it("Close folds the card to its head and never ends the call; the head opens it again", () => {
+    const host = mount({ ...live, liveTranscript: [{ speaker: "bot", text: "Hello", at: started + 1_000 }] });
+    act(() => host.querySelector<HTMLButtonElement>("[data-outbound-card-close]")!.click());
+    expect(host.querySelector("article")?.getAttribute("data-outbound-open")).toBe("folded");
+    expect(host.querySelector("[data-outbound-live-transcript]")).toBeNull();
+    expect(host.querySelector("[data-outbound-live-timer]")).toBeTruthy();
+    expect(api).not.toHaveBeenCalled();
+    act(() => host.querySelector<HTMLButtonElement>("[data-outbound-card-toggle]")!.click());
+    expect(host.querySelector("[data-outbound-live-transcript]")).toBeTruthy();
+  });
+
+  it("the ended card shows the duration and the summary, and the final result replaces the streamed lines", () => {
+    const host = mount({ ...live, phase: "ended", liveTranscript: [{ speaker: "bot", text: "Hello", at: started }, { speaker: "bot", text: "Hello", at: started }], result: {
+      outcome: "completed", endedBy: "goal", durationSec: 80, endedAt: 1, points: ["Booked for Tuesday"], commitments: [],
+      transcript: [{ speaker: "bot", text: "Hello" }, { speaker: "callee", text: "Hi" }],
+    } }, true);
+    expect(host.querySelector("[data-outbound-duration]")?.textContent).toBe("1:20");
+    expect(host.textContent).toContain("Booked for Tuesday");
+    expect(host.querySelector("[data-outbound-live-timer]")).toBeNull();
+    const rows = host.querySelectorAll("[data-outbound-transcript] p");
+    expect([...rows].map((row) => row.textContent)).toEqual(["Rocket: Hello", "Marie: Hi"]);
   });
 });

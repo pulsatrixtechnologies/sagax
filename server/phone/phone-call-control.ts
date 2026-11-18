@@ -27,6 +27,7 @@ export interface LiveCallPatch {
   calleeName?: string;
   recordingUrl?: string;
   liveStartedAt?: number;
+  liveAnsweredAt?: number;
 }
 
 function shortError(value: unknown, fallback: string): string {

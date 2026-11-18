@@ -113,6 +113,8 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
     public var phase: String?
     /// epoch ms when dialing started; drives the live timer.
     public var liveStartedAt: Double?
+    /// epoch ms when the callee answered; the live timer counts from it.
+    public var liveAnsweredAt: Double?
     /// Streaming transcript while the call is live (also kept after end).
     public var liveTranscript: [LiveLine]?
     /// Hold, DTMF and transfer events shown in the live stream.
@@ -185,7 +187,7 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         case kind, id, status, botName, destination, from, callback, purpose, script, language
         case mode, objective, instructions, maxMinutes, voicemail, result
         case merchant, amount, currency, cardLabel, items, flights, orderRef, declared, mismatchTotal, via, tracking, error
-        case calleeName, phase, liveStartedAt, liveTranscript, liveEvents, recordingUrl
+        case calleeName, phase, liveStartedAt, liveAnsweredAt, liveTranscript, liveEvents, recordingUrl
     }
 
     /// Lenient: a field this phone does not know the shape of is left out
@@ -224,6 +226,7 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         calleeName = try? row.decodeIfPresent(String.self, forKey: .calleeName)
         phase = try? row.decodeIfPresent(String.self, forKey: .phase)
         liveStartedAt = try? row.decodeIfPresent(Double.self, forKey: .liveStartedAt)
+        liveAnsweredAt = try? row.decodeIfPresent(Double.self, forKey: .liveAnsweredAt)
         liveTranscript = try? row.decodeIfPresent([LiveLine].self, forKey: .liveTranscript)
         liveEvents = try? row.decodeIfPresent([LiveEvent].self, forKey: .liveEvents)
         recordingUrl = try? row.decodeIfPresent(String.self, forKey: .recordingUrl)
@@ -363,6 +366,33 @@ public enum OutboundCardRules {
     public static func liveElapsed(startedAt: Double?, now: Double) -> Int {
         guard let startedAt, startedAt.isFinite, startedAt <= now else { return 0 }
         return min(86_400, max(0, Int((now - startedAt) / 1000)))
+    }
+
+    /// The instant the live timer counts from: the pickup, and for a card from
+    /// before it existed, the start of the dialing once the call is past
+    /// ringing. Nil while it still dials or rings (shared/phone-call-live.ts).
+    public static func timerStart(_ card: OutboundCardData) -> Double? {
+        if let answered = card.liveAnsweredAt, answered > 0 { return answered }
+        switch card.phase {
+        case "in_call", "on_hold", "transferred": return card.liveStartedAt
+        default: return nil
+        }
+    }
+
+    /// A line sent twice shows once: same speaker at the same instant, or the
+    /// same words twice in a row when the line has no instant.
+    public static func dedupedLines(_ lines: [OutboundCardData.LiveLine]) -> [OutboundCardData.LiveLine] {
+        var seen = Set<String>()
+        var out: [OutboundCardData.LiveLine] = []
+        for line in lines {
+            if let at = line.at {
+                if !seen.insert("\(at)|\(line.speaker)").inserted { continue }
+            } else if let last = out.last, last.at == nil, last.speaker == line.speaker, last.text == line.text {
+                continue
+            }
+            out.append(line)
+        }
+        return out
     }
 
     /// The body of the answer (`POST /api/me/phone-calls/:id/answer` or

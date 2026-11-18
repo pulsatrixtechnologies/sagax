@@ -107,6 +107,27 @@ final class OutboundCardTests: XCTestCase {
         XCTAssertNil(OutboundCardRules.status(card))
     }
 
+    func testTimerStartsAtThePickupAndResentLinesShowOnce() throws {
+        let message = try JSONDecoder().decode(Message.self, from: Data(#"""
+        {"id":"m","role":"bot","kind":"text","at":1,"text":"x",
+         "outbound":{"kind":"call","id":"call_0123456789abcdef","status":"done","botName":"Rocket","destination":"+1 514 555 0142",
+                     "mode":"conversation","phase":"in_call","liveStartedAt":1000,"liveAnsweredAt":9000}}
+        """#.utf8))
+        var card = try XCTUnwrap(message.outbound)
+        XCTAssertEqual(card.liveAnsweredAt, 9_000)
+        XCTAssertEqual(OutboundCardRules.timerStart(card), 9_000)
+        card.liveAnsweredAt = nil
+        XCTAssertEqual(OutboundCardRules.timerStart(card), 1_000, "a card from before the pickup instant counts from the dialing")
+        card.phase = "ringing"
+        XCTAssertNil(OutboundCardRules.timerStart(card), "no timer while it rings")
+        let lines = [
+            OutboundCardData.LiveLine(speaker: "bot", text: "Hello", at: 5),
+            OutboundCardData.LiveLine(speaker: "bot", text: "Hello", at: 5),
+            OutboundCardData.LiveLine(speaker: "callee", text: "Hello", at: 5),
+        ]
+        XCTAssertEqual(OutboundCardRules.dedupedLines(lines).map(\.speaker), ["bot", "callee"])
+    }
+
     func testPhoneCallConsentDecodesOnAnOptionsCard() throws {
         let message = try JSONDecoder().decode(Message.self, from: Data(#"""
         {"id":"m","role":"bot","kind":"options","at":1,"text":"Phone calls need your consent once before a bot may place them.",

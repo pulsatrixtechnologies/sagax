@@ -11,17 +11,19 @@ export const TRANSCRIPT_BOX = "space-y-1.5 overflow-auto rounded-lg bg-inset px-
 
 export type TranscriptTone = "bot" | "other" | "system";
 
-export function TranscriptLine({ speaker, tone = "other", live = false, stacked = false, children, ...data }: {
+export function TranscriptLine({ speaker, tone = "other", live = false, stacked = false, strong = false, children, ...data }: {
   speaker: ReactNode;
   tone?: TranscriptTone;
   /** still being spoken: its words in the secondary grey */
   live?: boolean;
   /** the label on its own line, the words under it (the listening card) */
   stacked?: boolean;
+  /** the speaker's name in bold (the phone call card) */
+  strong?: boolean;
   children: ReactNode;
 } & { [key: `data-${string}`]: string | undefined }) {
   const label = (
-    <span className={cn("font-medium", tone === "bot" ? "text-accent" : tone === "system" ? "text-ink-tertiary" : "text-ink-secondary")}>
+    <span className={cn(strong ? "font-semibold" : "font-medium", tone === "bot" ? "text-accent" : tone === "system" ? "text-ink-tertiary" : "text-ink-secondary")}>
       {speaker}
     </span>
   );

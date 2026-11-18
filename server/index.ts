@@ -1342,6 +1342,9 @@ import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
 import { createPresenceRoutes, presenceFrameAllowed } from "./routes/presence.ts";
 import { PresenceTracker } from "./people/presence.ts";
 import { DEFAULT_APNS_BUNDLE_ID, readApnsConfig } from "./push/config.ts";
+import { createPttChannelStore, sendPttReply } from "./push/ptt.ts";
+import { setPttReplySink } from "./push/ptt-sink.ts";
+import { createPttChannelRoutes } from "./routes/ptt-channel.ts";
 import { ApnsRelaySender, readApnsRelayConfig, readApnsRelayTokens } from "./push/relay.ts";
 import { createPushDeviceStore, tokensOfConnectedDevices } from "./push/devices.ts";
 import { PushHub } from "./push/hub.ts";
@@ -30233,6 +30236,26 @@ ROUTES.push(createPushDeviceRoutes({
   store: pushDevices,
   android: { store: androidPushDevices, configured: () => fcmConfig.configured },
   configured: () => pushHub.enabled,
+  defaultEnvironment: () => (apnsConfig.configured ? apnsConfig.config.environment : "production")
+}));
+// Push to Talk: the phone's channel and the bot's spoken answer (server/push/ptt.ts).
+const pttChannels = createPttChannelStore(DATA_DIR);
+setPttReplySink((input) => sendPttReply({
+  store: pttChannels,
+  topic: () => pushHub.topic,
+  send: (device, request) => pushHub.relaySend(device, request),
+  botName: (botId) => store.bot(botId)?.name ?? ""
+}, input));
+ROUTES.push(createPttChannelRoutes({
+  person: (auth) => actorPrincipalId(auth) || undefined,
+  store: pttChannels,
+  mayUseBot: (person, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    if (IDENTITY.kind !== "perspicax") return true;
+    const viewer = authzViewerFromId(person);
+    return Boolean(viewer && canOnBot(viewer, "bot.use", botFacts(bot)));
+  },
   defaultEnvironment: () => (apnsConfig.configured ? apnsConfig.config.environment : "production")
 }));
 ROUTES.push(createPushActivityRoutes({

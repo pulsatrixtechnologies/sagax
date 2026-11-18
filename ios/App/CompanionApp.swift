@@ -414,6 +414,8 @@ final class SagaxAppDelegate: UIResponder, UIApplicationDelegate {
         LiveActivityPrefs.migrateOnce()
         LiveActivityBridge.shared.attach(to: SessionHub.session)
         Task { @MainActor in PushRegistrar.shared.start() }
+        // Push to Talk: the channel manager exists from launch, or the system drops the channel
+        Task { @MainActor in PushToTalkController.shared.start() }
         return true
     }
 

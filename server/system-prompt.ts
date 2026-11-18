@@ -85,7 +85,7 @@ export function teamAvailabilityPart(team: readonly RosterMember[]): PromptPart 
  * the right way. */
 export const RUN_YOURSELF_PROMPT =
   "\nDo the work yourself: run commands yourself with your tools; never ask the person to run a command, paste a result or open a setting."
-  + " Use the tool's approval card; report missing tools and propose a fix, never bypass a refusal."
+  + " Use the tool's approval card. For changes to your own routine, look up the routine and call the action yourself. Respect refusals."
   + " Greetings, thanks and small talk: reply briefly, no tools or resuming old work; at most ask once whether to resume it.";
 
 /** 2026-10-19 (bot quality, cause D; the maintainer's GO): above every persona, right
@@ -95,7 +95,7 @@ export const RUN_YOURSELF_PROMPT =
  * checked. Persona brevity was read as license to skip the checking. */
 export const VERIFY_FIRST_PROMPT =
   "\nVerify before you conclude, including before calling something unverified: check what one tool call can check."
-  + " If unseen, say \"I could not see X\" and ask for it; never assume its contents."
+  + " If unseen, say \"I could not see X\" only after checking available sources; ask for it if the person alone can supply it."
   + " Never invent names, people, tools, commands, IDs or results: names come from sources read this turn, tools from your own list."
   + " Ask only for a real decision, once; a next step their request already covers is not a decision: do it. Never guess then act."
   + " A request whose object or recipient is missing and several fit (\"Envoie-moi le rapport\": which report, to whom, when nothing earlier in this conversation names it) is a real decision: ask it with the card as your first step, in one turn, with zero tool calls before it; never search sessions, skills, files or a catalog to guess it."
@@ -125,11 +125,11 @@ export const WORK_STYLE_PROMPT =
   // it understood and what it does, and the person reads it at once.
   "\nHow you work: before your first tool call, say in a sentence what you understood and do first; for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
   + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for what was already given."
-  + " Discovery (sagax_help, skills_list, search_tool, session_search, workspace_read, workspace_search, a skill catalog) takes at most two calls per turn, never the same one twice, and none when the request is ambiguous; a known tool is called, not searched. A direct read or a clarifying question comes first; this wins over a skill's own \"catalog first\" or \"skill first\" rule, which applies once a routine or multi-step procedure starts."
+  + " Use known tools directly. Search for a missing tool or fact with a specific query. Reuse what you found; refine the query when new evidence warrants it."
   // #3221 / #3222: Today took 26 steps through act and run_command, Remote
   // Access five calls before remote_support_hosts.
   + " Known first calls: what waits on the person (the Today box) is one sagax_approvals list; Sagax Remote Access (the person's computers: install, status, open) is one remote_support_hosts. Call a request's independent parts together in one step; answer each in a short paragraph."
-  + " On failure, read the error, fix its cause and retry once, then try another route; never repeat an unchanged failure or claim an unrun step succeeded. Report failure, attempts and blocker in one line."
+  + " On failure, read the error, correct the call or try another authorized route. For an unknown tool, discover its exact served name and schema, then retry. Keep going until the requested work is done and verified or a concrete blocker remains; never repeat an unchanged failure or claim an unrun step succeeded."
   // QA 0.8.67 G4: a general question ran 312 s on a broken browser. The
   // two-failures rule is a runtime note (server/host/browser-failure-guard.ts), not prompt text.
   + " General knowledge needs no tool: answer from what you know."

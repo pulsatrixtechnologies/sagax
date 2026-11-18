@@ -59,6 +59,11 @@ describe("readGrokCatalog", () => {
 });
 
 describe("grokCatalogSection", () => {
+  it("gives the exact callable names for a hyphenated environment server", () => {
+    const section = grokCatalogSection({ catalog: [{ name: "sagax-environment", status: "ready", tools: ["read_file"] }] });
+    expect(section?.text).toContain("sagax-environment__read_file");
+  });
+
   it("names every ready tool by its use_tool name, with the no-call rule for capability questions", () => {
     const section = grokCatalogSection({ catalog: readGrokCatalog(LIST) })!;
     expect(section.id).toBe(GROK_KNOWN_TOOLS_SECTION);

@@ -370,7 +370,10 @@ export function grokCatalogSection(input: {
   let truncated = false;
   for (const server of ready) {
     if (server.tools.length <= GROK_CATALOG_SERVER_TOOLS_MAX) {
-      rows.push(`- ${server.name}: ${server.tools.join(", ")}`);
+      // A hyphenated server is easy to misread as a single-underscore prefix.
+      // Give use_tool its actual targets from the live catalog.
+      const names = server.name.includes("-") ? server.tools.map(tool => `${server.name}__${tool}`) : server.tools;
+      rows.push(`- ${server.name}: ${names.join(", ")}`);
       continue;
     }
     truncated = true;

@@ -34,8 +34,8 @@ describe("unfinishedTurnKind", () => {
     expect(unfinishedTurnKind([])).toBeNull();
   });
 
-  it("leaves a failure streak to the loop guard", () => {
-    expect(unfinishedTurnKind([text("Let me run it."), tool("run_command", false), tool("run_command", false), tool("run_command", false)])).toBeNull();
+  it("continues a settled turn after failures, including failures separated by a success", () => {
+    expect(unfinishedTurnKind([text("Let me run it."), tool("search_tool", false), tool("list_routines"), tool("read_file", false), tool("use_tool", false)])).toBe("after_tools");
   });
 });
 
@@ -59,7 +59,7 @@ describe("decideUnfinishedTurn", () => {
   });
 
   it("the note asks to act now or say plainly it cannot, without announcing again", () => {
-    expect(unfinishedTurnPrompt("announced")).toMatch(/Do it now.*say so plainly.*Do not announce it again/s);
+    expect(unfinishedTurnPrompt("announced")).toMatch(/verify any change.*exact tool name and schema.*Do not announce it again/s);
     expect(unfinishedTurnPrompt("after_tools")).toContain("without a word to the person");
   });
 });

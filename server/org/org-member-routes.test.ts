@@ -360,7 +360,7 @@ describe("sending", () => {
   });
 
   it("checks its body", async () => {
-    for (const body of [{}, { text: "" }, { text: "x", wait: 121 }, { text: "x", wait: -1 }, { text: "x", extra: 1 }, { text: "x", threadId: "a/b" }, { text: "x", threadId: "t1", newThread: true }, { text: "x", sendId: "short" }]) {
+    for (const body of [{}, { text: "" }, { text: "x", wait: 121 }, { text: "x", wait: -1 }, { text: "x", extra: 1 }, { text: "x", threadId: "a/b" }, { text: "x", threadId: "t1", newThread: true }, { text: "x", sendId: "short" }, { text: "x", sendId: "send-0001-15chr" }]) {
       expect((await call("POST", "bots/b1/messages", token("bob"), body)).status, JSON.stringify(body)).toBe(400);
     }
     expect(performed).toEqual([]);
@@ -1482,22 +1482,22 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     // the durable receipts (server/commands.ts): they outlive the process
     const receipts = new Map<string, string>();
     deps.newThreadReceipt = { get: (key) => receipts.get(key) ?? null, put: (key, threadId) => { receipts.set(key, threadId); } };
-    const first = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
+    const first = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-000000000001" });
     expect(first.body.threadId).toBe("ac_1");
-    const again = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
+    const again = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-000000000001" });
     expect(again.body.threadId).toBe("ac_1");
     expect(opened).toHaveLength(1);
     expect(performed.filter((p) => p.request.path === "/api/bots/sb/messages").map((p) => (p.request.body as { threadId: string; sendId: string }))).toEqual([
-      expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" }), expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" }),
+      expect.objectContaining({ threadId: "ac_1", sendId: "send-000000000001" }), expect.objectContaining({ threadId: "ac_1", sendId: "send-000000000001" }),
     ]);
     // another sendId opens another; another person's same sendId never reaches it
-    expect((await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0002" })).body.threadId).toBe("ac_2");
-    expect((await call("POST", "bots/b1/messages", token("ann", "admin", "console"), { text: "hi", hidden: true, newThread: true, sendId: "send-0001" })).body.threadId).toBe("ac_3");
+    expect((await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-000000000002" })).body.threadId).toBe("ac_2");
+    expect((await call("POST", "bots/b1/messages", token("ann", "admin", "console"), { text: "hi", hidden: true, newThread: true, sendId: "send-000000000001" })).body.threadId).toBe("ac_3");
     // streamed: the header carries it before any event
     const res = await fetch(`${base}/api/org/member/bots/sb/messages`, {
       method: "POST",
       headers: { authorization: `Bearer ${token("bob", "employee", "console")}`, "content-type": "application/json" },
-      body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-0003", stream: true }),
+      body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-000000000003", stream: true }),
     });
     expect(res.headers.get("x-sagax-thread-id")).toBe("ac_4");
     const lines = (await res.text()).trim().split("\n").map((line) => JSON.parse(line) as { event: string; threadId?: string });
@@ -1516,11 +1516,11 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
       const after = await fetch(`http://127.0.0.1:${(second.address() as AddressInfo).port}/api/org/member/bots/sb/messages`, {
         method: "POST",
         headers: { authorization: `Bearer ${token("bob", "employee", "console")}`, "content-type": "application/json" },
-        body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-0001" }),
+        body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-000000000001" }),
       });
       expect(((await after.json()) as { threadId: string }).threadId).toBe("ac_1");
       expect(opened).toHaveLength(4);
-      expect(performed.filter((p) => p.request.path === "/api/bots/sb/messages").map((p) => p.request.body)).toEqual([expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" })]);
+      expect(performed.filter((p) => p.request.path === "/api/bots/sb/messages").map((p) => p.request.body)).toEqual([expect.objectContaining({ threadId: "ac_1", sendId: "send-000000000001" })]);
     } finally {
       await new Promise<void>((resolve) => second.close(() => resolve()));
     }

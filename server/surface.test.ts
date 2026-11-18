@@ -176,7 +176,7 @@ describe("surfacePrompt", () => {
     const text = surfacePrompt({ computer: null, browser: true });
     expect(text).toMatch(/happens in the built-in browser tab/);
     expect(text).toMatch(/no desktop, file or shell computer/);
-    expect(text).toMatch(/Browser tab of the Computer panel/);
+    expect(text).toContain("tell them it is in the built-in browser, in the bot's Computer section.");
     expect(text).toMatch(/say in one short sentence where you are working/);
     expect(text).not.toMatch(/happens on the cloud computer/);
   });
@@ -215,12 +215,15 @@ describe("surfacePrompt", () => {
     expect(text).not.toContain("ask the user to change where this conversation works");
   });
 
-  it("sends the person to the Computer panel, the place control both interface modes show", () => {
+  it("sends the person to the bot's Computer section, the place control both interface modes show, never to the Computer panel #4385 removed (#4407)", () => {
     const text = surfacePrompt({ computer: "cloud", browser: false }, { pinned: "cloud" });
-    expect(text).toContain("explain the mismatch and ask the user to change where this conversation works in the Computer panel");
-    expect(text).toContain("changing places requires the user's choice in the Computer panel, not a different tool name");
+    expect(text).toContain("explain the mismatch and ask the user to change where this conversation works in the bot's Computer section");
+    expect(text).toContain("changing places requires the user's choice in the bot's Computer section, not a different tool name");
     // Simple mode has no composer chip, so no selector the person cannot see.
     expect(text).not.toContain("computer selector");
+    for (const mounted of [{ computer: null, browser: true }, { computer: null, browser: false }, { computer: "cloud", browser: true }] as const) {
+      expect(surfacePrompt(mounted, { pinned: "cloud" })).not.toMatch(/Computer panel/);
+    }
   });
 
   // Every shape of the paragraph a turn can get: each mount, pinned or not,
@@ -327,13 +330,13 @@ describe("placeUnavailable", () => {
     expect(cause("routine")).toBe("Scout's cloud computer didn't start. Change where this routine runs.");
     expect(cause("room")).toBe("Scout's cloud computer didn't start.");
     expect(placeUnavailable("vm", { state: "place-failed", params: { bot: "Scout", cause: "The Local VM is not ready." }, source: "works-on" }))
-      .toMatchObject({ name: "PlaceUnavailableError", place: "vm", message: "The Local VM is not ready. Check it in the Computer panel." });
+      .toMatchObject({ name: "PlaceUnavailableError", place: "vm", message: "The Local VM is not ready. Check it in the bot's Computer section." });
   });
 
   it("keeps the whole cause: no row cuts it", () => {
     const long = `${"x".repeat(400)}.`;
     expect(placeUnavailable("vm", { state: "place-failed", params: { bot: "Scout", cause: long }, source: "works-on" }).message)
-      .toBe(`${long} Check it in the Computer panel.`);
+      .toBe(`${long} Check it in the bot's Computer section.`);
   });
 });
 

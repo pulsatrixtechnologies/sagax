@@ -207,6 +207,12 @@ export const PLACE_EN = {
 } as const;
 export type PlaceKey = keyof typeof PLACE_EN;
 
+/** Where a person picks, checks and changes the place a bot works: the bot's
+ * Computer section (#4385 removed the Computer side panel). The rows below
+ * and the bot's own prompt (server/surface.ts) name it from here, so no bot
+ * sends a person to a control that is gone (#4407). */
+export const PLACE_CONTROL = "the bot's Computer section";
+
 /** A stored row's next action as one English sentence: what a phone, which
  * shows only the row's words, reads instead of a button. English only, like
  * the row it ends. */
@@ -216,18 +222,18 @@ export const PLACE_WORDS: Record<PlaceActionId, string> = {
   "sign-in": "Sign in to {engine} in Settings.",
   start: "Ask {bot} in its chat to start it.",
   wake: "Ask {bot} in its chat to wake it.",
-  watch: "Watch it from the bot's Computer section.",
+  watch: `Watch it from ${PLACE_CONTROL}.`,
   "see-plan": "See your plan on the Plan page.",
   "manage-computers": "Manage your cloud computers in Settings → Local VM.",
   "try-again": "Try again.",
   "open-my-cloud": "Open My Cloud from the menu at the top of the sidebar.",
   "add-boat-key": "Add a Boat key in Settings → API keys.",
-  "turn-on-browser": "Turn on the built-in browser from the bot's Computer section.",
+  "turn-on-browser": `Turn on the built-in browser from ${PLACE_CONTROL}.`,
   "open-team-map": "Open Team map to manage it.",
   "open-vm-settings": "Check it in Settings → Local VM.",
   "clear-pin": "Clear this conversation's place in the composer to continue.",
   "change-routine": "Change where this routine runs.",
-  "open-computer-panel": "Check it in the bot's Computer section.",
+  "open-computer-panel": `Check it in ${PLACE_CONTROL}.`,
 };
 
 /** The words a person reads, in some language: the app passes its t(), the

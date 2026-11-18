@@ -16,7 +16,7 @@ backlink; a late review notifies the original execution instead.
 Run the focused root-chat checks:
 
 ```sh
-pnpm exec vitest run server/approvals/origin-approvals.test.ts server/approvals/inter-bot-approvals.e2e.test.ts server/approvals/approval-restart.test.ts server/approvals/pending-approval-expiry.test.ts server/routes/bots-messages.test.ts server/routes/bots-mutate.test.ts src/components/PendingApproval.owner-rule.test.ts
+pnpm exec vitest run server/approvals/origin-approvals.test.ts server/approvals/inter-bot-approvals.e2e.test.ts server/index-leaves/deliverLatePermission.test.ts server/approvals/pending-approval-expiry.test.ts server/routes/bots-messages.test.ts server/routes/bots-mutate.test.ts src/components/PendingApproval.owner-rule.test.ts
 ```
 
 The isolated HTTP fixture starts two teammate calls. Allow from the root

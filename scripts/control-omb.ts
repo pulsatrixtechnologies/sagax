@@ -4,6 +4,7 @@
 // Old names in the shell (OMB_PORT) become SAGAX_* first.
 import "../electron/legacy-env-boot.mjs";
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, constants, copyFileSync, linkSync, mkdirSync, mkdtempSync, openSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
@@ -343,9 +344,14 @@ export interface VerificationLaunchOptions {
  * the fixture mounts the built-in npx plugin (shared/builtin-plugins.ts),
  * whose package npx fetches from the registry into the empty temporary home
  * on each turn, and each reply then waits on that download or on the MCP
- * startup timeout (#4370). Idempotent: a restarted fixture reuses it. */
-export function fixtureNodeDir(dataDir: string): string {
-  const dir = join(dataDir, "fixture-node");
+ * startup timeout (#4370). Idempotent: a restarted fixture reuses it.
+ *
+ * It lives in the system temporary folder, one per Node binary, never in a
+ * fixture's DATA_DIR: a test that backs up or exports that folder would meet
+ * a link to a binary outside it, which the product rightly refuses
+ * (#4407, #4397, #4398). */
+export function fixtureNodeDir(): string {
+  const dir = join(tmpdir(), "sagax-fixture-node", createHash("sha256").update(process.execPath).digest("hex").slice(0, 16));
   const node = join(dir, basename(process.execPath));
   mkdirSync(dir, { recursive: true });
   const exists = (error: unknown) => (error as NodeJS.ErrnoException)?.code === "EEXIST";
@@ -407,7 +413,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // Keep the environment hermetic while allowing POSIX to resolve the
     // fake CLI's `#!/usr/bin/env node` shebang. Windows resolves that same
     // fixture through spawnCli without a shell. Only node: see fixtureNodeDir.
-    PATH: fixtureNodeDir(dataDir),
+    PATH: fixtureNodeDir(),
     // ...and keep engine discovery to that PATH and this home. Without it the
     // server also scans /opt/homebrew/bin, /usr/local/bin and the login
     // shell's PATH, so a developer's own `codex` (or any engine CLI) becomes

@@ -97,4 +97,35 @@ describe("the model panel", () => {
   it("says one model off in the singular", () => {
     expect(html({ manage: { onManage: vi.fn(), turnedOff: 1, openProviders: vi.fn() } })).toContain("1 off");
   });
+
+  const many = (): ModelMenuSection[] => [
+    { key: "top", rows: [{ key: "auto", kind: "auto", label: "Auto", current: false }] },
+    ...["anthropic", "openai", "xai", "cohere", "other", "computer"].map((key, index) => ({
+      key, label: key[0]!.toUpperCase() + key.slice(1), rows: [row(`${key}-m`, { current: index === 2 })],
+    })),
+  ];
+
+  it("shows at most three providers and a More segment that opens the Models window", () => {
+    const onMore = vi.fn();
+    const markup = html({ sections: many(), onMore });
+    const segments = [...markup.matchAll(/data-model-provider="([a-z]+)"/g)].map((match) => match[1]);
+    expect(segments).toHaveLength(3);
+    // nothing pinned: the bot's own provider first, then the first of the rest
+    expect(segments[0]).toBe("xai");
+    expect(markup).toContain("data-model-panel-more");
+    expect(markup).toContain('aria-label="All providers"');
+  });
+
+  it("shows the pinned providers, in the order pinned", () => {
+    const markup = html({ sections: many(), onMore: vi.fn(), pinnedProviders: ["computer", "cohere"] });
+    const segments = [...markup.matchAll(/data-model-provider="([a-z]+)"/g)].map((match) => match[1]);
+    // the provider in use is not pinned: it shows too while it is the one viewed
+    expect(segments).toEqual(["computer", "cohere", "xai"]);
+  });
+
+  it("shows every provider when the surface has no Models window", () => {
+    const markup = html({ sections: many() });
+    expect([...markup.matchAll(/data-model-provider="/g)]).toHaveLength(6);
+    expect(markup).not.toContain("data-model-panel-more");
+  });
 });

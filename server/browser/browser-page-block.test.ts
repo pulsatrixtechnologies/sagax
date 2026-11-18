@@ -80,7 +80,7 @@ const PAGES: Record<string, { status: number; html: string }> = {
   "/image-challenge": { status: 200, html: "<title>Sign up</title><form><input name=user></form><div style=\"position:absolute;top:10px;left:10px\"><iframe src=\"/recaptcha/api2/bframe\" width=400 height=580></iframe></div>" },
 };
 
-type Browser = { newPage(): Promise<{ goto(url: string): Promise<unknown>; evaluate(script: string): Promise<unknown> }>; close(): Promise<void> };
+type Browser = { newPage(): Promise<{ goto(url: string): Promise<unknown>; evaluate(script: string): Promise<unknown>; close(): Promise<void> }>; close(): Promise<void> };
 
 describe("pageBlock on real pages (#4394)", () => {
   let server: Server;
@@ -108,14 +108,23 @@ describe("pageBlock on real pages (#4394)", () => {
 
   afterAll(async () => {
     await browser?.close();
+    // Chrome's keep-alive sockets are not the server's to wait for.
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     // Closing a real Chrome under load: the same limit as its launch above.
   }, 120_000);
 
   const observe = async (path: string): Promise<PageState> => {
+    // Each tab closes once read: a gate run (2026-11-17) timed out in afterAll
+    // tearing down a Chrome that still held every tab the tests had opened.
     const tab = await browser!.newPage();
-    await tab.goto(`${base}${path}`);
-    const raw = await tab.evaluate(OBSERVE_PAGE_SCRIPT);
+    let raw: unknown;
+    try {
+      await tab.goto(`${base}${path}`);
+      raw = await tab.evaluate(OBSERVE_PAGE_SCRIPT);
+    } finally {
+      await tab.close();
+    }
     const state = parsePageState({ content: [{ type: "text", text: JSON.stringify(raw) }] });
     expect(state).not.toBeNull();
     return state!;

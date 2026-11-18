@@ -523,5 +523,8 @@ if (isMain) {
   const result = checkContrast(css, { verbose: args.includes("--verbose") });
   for (const line of result.lines) console.log(line);
   console.log(result.failed ? `\n${result.failingPairs} pair(s) below target` : "\nall skins clear their targets in every context");
-  process.exit(result.failed ? 1 : 0);
+  // exitCode, not exit(): a pipe's writes are asynchronous on Linux, and exit()
+  // drops what the pipe has not taken yet. A busy build host gives a new pipe
+  // one page (fs.pipe-user-pages-soft), so the report was cut short there.
+  process.exitCode = result.failed ? 1 : 0;
 }

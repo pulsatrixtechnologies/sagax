@@ -89,7 +89,8 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
     await send(bot, "Quel est mon dernier courriel?");
     await replied(bot, `${READ} -> ran (asked)`);
     expect(await cards(bot)).toHaveLength(0);
-    expect((await decisions()).some((row) => row.botId === bot.id && row.source === "connector-read")).toBe(true);
+    // The journal is written after the engine took the answer, off the reply's path (decision-log.ts appendDecision): wait for its row.
+    await expect.poll(async () => (await decisions()).some((row) => row.botId === bot.id && row.source === "connector-read"), { timeout: 30_000 }).toBe(true);
     await idle(bot);
   }, 90_000);
 
@@ -147,7 +148,8 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
     await send(bot, "Envoie le suivi à Ana.");
     await replied(bot, `${SEND} -> ran (asked)`);
     expect(await cards(bot)).toHaveLength(0);
-    expect((await decisions()).some((row) => row.botId === bot.id && row.decision === "auto-approved" && (row.source === "full-access" || row.source === "owner-bypass"))).toBe(true);
+    // The row lands once the engine took the answer, off the reply's path: the reply can come first.
+    await expect.poll(async () => (await decisions()).some((row) => row.botId === bot.id && row.decision === "auto-approved" && (row.source === "full-access" || row.source === "owner-bypass")), { timeout: 30_000 }).toBe(true);
     await idle(bot);
   }, 90_000);
 }

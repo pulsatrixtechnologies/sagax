@@ -4,7 +4,7 @@
 // it shows in memory after a reveal or a regeneration (the same routes the
 // Automations panel uses), and the masked last four characters otherwise.
 // A routine saved without its webhook (made before 0.8.17) gets one here.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { Check, Copy, Eye, EyeOff, Loader2, RotateCw, Terminal, Webhook } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -64,6 +64,17 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
   const [working, setWorking] = useState<"" | "reveal" | "rotate" | "create">("");
   const [copied, setCopied] = useState("");
   const [error, setError] = useState("");
+  // The Copy mark clears itself after a moment; the timer goes with the panel,
+  // so it never sets state after an unmount (a closed panel, a test's teardown).
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearTimeout(copiedTimer.current);
+    };
+  }, []);
   const manage = bot ? canManageBotWebhooks(state.config, bot) : false;
 
   if (!routine) {
@@ -73,8 +84,10 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
   const copy = async (kind: string, text: string) => {
     setError("");
     if (await copyText(text) !== "copied") { setError(t("common.copyFailed")); return; }
+    if (!mounted.current) return;
     setCopied(kind);
-    setTimeout(() => setCopied((current) => (current === kind ? "" : current)), 1_600);
+    clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied((current) => (current === kind ? "" : current)), 1_600);
   };
 
   const fetchKey = async (rotate: boolean): Promise<string | undefined> => {

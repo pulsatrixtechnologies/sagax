@@ -10,7 +10,7 @@
 //     `.popover-surface` inside it, and fails below 4.5:1 for text, 3:1 for
 //     glyphs and field borders. It runs here, so `pnpm test:unit` gates it.
 //   - TaskPicker paints its popover from the popover tokens only.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -47,6 +47,32 @@ describe("skin contrast", () => {
     const { code, out } = runCheck();
     expect(out).toContain("all skins clear their targets in every context");
     expect(code).toBe(0);
+  });
+
+  // Gate flake (2026-11-17): on the busy Linux build host a new pipe holds one
+  // page, and process.exit() dropped the report's tail before the reader took
+  // it ("all skins clear" missing, exit code 0). The report must arrive whole
+  // through a one-page pipe whose reader starts late.
+  it.runIf(process.platform === "linux" && spawnSync("python3", ["-c", "import fcntl"]).status === 0)("prints its whole report through a one-page pipe read late", () => {
+    const relay = [
+      "import fcntl, os, subprocess, sys, time",
+      "r, w = os.pipe()",
+      "fcntl.fcntl(w, 1031, 4096)", // F_SETPIPE_SZ
+      "child = subprocess.Popen([sys.argv[1], sys.argv[2]], stdout=w)",
+      "os.close(w)",
+      "time.sleep(1)",
+      "data = b''",
+      "while True:",
+      "    chunk = os.read(r, 65536)",
+      "    if not chunk: break",
+      "    data += chunk",
+      "sys.stdout.buffer.write(data)",
+      "sys.exit(child.wait())",
+    ].join("\n");
+    const run = spawnSync("python3", ["-c", relay, process.execPath, script], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    expect(run.stdout).toContain("all skins clear their targets in every context");
+    expect(run.stdout).toBe(runCheck().out);
+    expect(run.status).toBe(0);
   });
 
   it("measures popovers inside the Pulsatrix Light navy header", () => {

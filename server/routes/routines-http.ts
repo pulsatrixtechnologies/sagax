@@ -42,6 +42,7 @@ export interface RoutinesHttpDeps {
    * the run's record keeps only its start. */
   fullReport?(run: RoutineRun): string | undefined;
   listFolders(): Record<string, string[]>;
+  normalizeBody?(body: unknown, routine: { id: string; botId: string; runAs?: string }): Promise<unknown>;
   create(
     body: unknown,
     request: undefined,
@@ -97,7 +98,7 @@ export interface RoutinesHttpDeps {
   ): boolean;
   consentActive(principalId: string): boolean;
   principalName(principalId: string): { name?: string; login?: string } | null;
-  patchAs(auth: RequestAuth, req: IncomingMessage, id: string, body: unknown): { status: number; body: unknown };
+  patchAs(auth: RequestAuth, req: IncomingMessage, id: string, body: unknown): { status: number; body: unknown } | Promise<{ status: number; body: unknown }>;
   deleteAs(auth: RequestAuth, id: string): { status: number; body: unknown };
   mayCancel(auth: RequestAuth, run: RoutineRun, routine: Routine | undefined): boolean;
   auditCleared(auth: RequestAuth, count: number): void;
@@ -153,7 +154,7 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
     }
 
     if (path === "/api/routines" && method === "POST") {
-      const body = await readBody(req);
+      let body = await readBody(req);
       const visible = deps.visible(auth, path);
       const hidden = deps.hiddenTarget(body, visible);
       if (hidden) return json(res, 404, { error: hidden });
@@ -171,6 +172,13 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
           code: runAsChoice.refusal.code,
           ...(runAsChoice.refusal.permission ? { permission: runAsChoice.refusal.permission } : {}),
         });
+      }
+      if (deps.normalizeBody && (body as { precheck?: { source?: { type?: string } } })?.precheck?.source?.type === "tool") {
+        try {
+          body = await deps.normalizeBody(body, { id: "", botId: (body as { botId: string }).botId, runAs: runAsChoice.runAs ?? deps.routineActor(auth)?.actorPrincipalId });
+        } catch (error) {
+          return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
       }
       const writer = auth.kind === "session" ? deps.actorKey(auth) : deps.nobodyKey();
       const routine = deps.withWriter(writer, () =>
@@ -293,7 +301,7 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
 
     routineMatch = path.match(/^\/api\/routines\/([\w-]+)$/);
     if (routineMatch && method === "PATCH") {
-      const done = deps.patchAs(auth, req, routineMatch[1]!, await readBody(req));
+      const done = await deps.patchAs(auth, req, routineMatch[1]!, await readBody(req));
       return json(res, done.status, done.body);
     }
     if (routineMatch && method === "DELETE") {

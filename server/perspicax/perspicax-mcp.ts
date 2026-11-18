@@ -20,6 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
+import { wholeToolList } from "../mcp/whole-tool-list.ts";
 import { servedSpelling, twilioToolsOf, apiNamesOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
@@ -843,7 +844,7 @@ export class PerspicaxMcp {
       entry.servedTools = new Set(body.result.tools.filter(isObject).map((tool) => String(tool.name)).slice(0, 2000));
       entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
       entry.twilioTools = new Set(twilioToolsOf(body).slice(0, 500));
-      entry.toolsListBody = body;
+      entry.toolsListBody = wholeToolList(body.result) ? body : undefined;
     }
     return body;
   }
@@ -2056,7 +2057,7 @@ export class PerspicaxMcp {
       // Same MCP session and identity already listed tools (Sagax identity
       // lease or an earlier engine list): serve that body. Invalidation is
       // reopen, identity clear/invalidate, list_changed, retire.
-      if (frame.method === "tools/list" && entry.toolsListBody !== undefined && entry.mcpSessionId) {
+      if (frame.method === "tools/list" && entry.toolsListBody !== undefined && entry.mcpSessionId && !(isObject(frame.params) && frame.params.cursor)) {
         return { status: 200, body: rewriteResponseId(entry.toolsListBody, id) };
       }
     }
@@ -2199,7 +2200,7 @@ export class PerspicaxMcp {
         entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
         const named = twilioToolsOf(body);
         entry.twilioTools = new Set(named.slice(0, 500));
-        entry.toolsListBody = body;
+        entry.toolsListBody = isObject(body) && wholeToolList(body.result) && !(isObject(frame.params) && frame.params.cursor) ? body : undefined;
       }
       if (frame.method === "tools/call") body = withFailureWords(body, isObject(frame.params) ? String(frame.params.name ?? "") : "");
       const answer: PerspicaxRelayAnswer = body === null

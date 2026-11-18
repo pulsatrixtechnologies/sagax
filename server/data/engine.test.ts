@@ -117,7 +117,7 @@ describe("loading the binding", () => {
   // loads it.
   it("finds the binding without loading it, and the first use loads it", async () => {
     const fresh = join(root, "not-loaded-yet");
-    cpSync(nodeApi, join(fresh, "node_modules", "@duckdb", "node-api"), { recursive: true, dereference: true });
+    cpSync(outOfTree, fresh, { recursive: true, dereference: true });
     const loaded = () => Object.keys(createRequire(import.meta.url).cache).filter((file) => file.startsWith(realpathSync(fresh)));
     const e = engine({ env: { ...process.env, SAGAX_DUCKDB_DIR: fresh, SAGAX_RESOURCES_PATH: undefined } });
     expect(e.unavailable()).toBeNull();

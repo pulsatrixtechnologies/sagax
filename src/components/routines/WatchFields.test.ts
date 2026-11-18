@@ -8,6 +8,9 @@ describe("routine watch draft (2026-10-26)", () => {
     expect(watchFromDraft(draftFromWatch(undefined))).toEqual({ watch: null });
     const watches: RoutineWatchPrecheck[] = [
       { kind: "watch", source: { type: "files", path: "reports", recursive: true } },
+      { kind: "watch", source: { type: "files", path: "jobs.json", readBytes: 1024 }, track: { items: "jobs" } },
+      { kind: "watch", source: { type: "files", path: "jobs.json", readBytes: 512 }, track: {} },
+      { kind: "watch", source: { type: "files", path: "reports", recursive: true, pattern: "**/*.csv" } },
       { kind: "watch", source: { type: "command", command: "git status --short" }, wakeOn: "match", condition: { test: "exit_code", op: "ne", value: 0 }, whenAsleep: "wake" },
       { kind: "watch", source: { type: "tool", tool: "tracker__search_issues", args: { state: "open" } }, track: { items: "$.issues", key: "id", fields: ["status", "priority"] }, condition: { test: "json_path", path: "$.issues.length", op: "gt", value: 0 }, firstRun: "wake" },
     ];

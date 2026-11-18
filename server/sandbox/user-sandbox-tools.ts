@@ -448,6 +448,14 @@ function guarded(path: string, resolved: ResolvedEnvironmentPath, command: strin
   return { argv: ["sh", "-c", command, "sh", path, resolved.real, resolved.id ?? "", count, OPEN_GUARD] };
 }
 
+export async function readEnvironmentText(path: string, max: number, exec: ToolExec, folder?: string | null): Promise<{ text: string } | { error: string }> {
+  const where = await resolveInSandbox(path, exec);
+  if ("refused" in where) return { error: where.refused };
+  const result = await exec.exec({ ...guarded(path, where.resolved, READ_SCRIPT, String(max)), timeoutSec: 30, maxOutputBytes: max + 1024 });
+  if (result.exitCode !== 0) return { error: `${result.stderr.trim() || `could not read ${path}`}${relativeHint(path, where.resolved.real, folder)}` };
+  return { text: result.stdout };
+}
+
 const READ_SCRIPT = 'exec python3 -I -c "$5" read "$2" "$3" "$4"';
 const LIST_SCRIPT = 'exec python3 -I -c "$5" list "$2" "$3" ""';
 
@@ -634,11 +642,8 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       const pathRefused = exec.pathRefusal?.(path);
       if (pathRefused) return text(pathRefused, true);
       const max = Math.min(1_000_000, Math.max(1, Math.floor(typeof args.max_bytes === "number" ? args.max_bytes : 200_000)));
-      const where = await resolveInSandbox(path, exec);
-      if ("refused" in where) return text(where.refused, true);
-      const result = await exec.exec({ ...guarded(path, where.resolved, READ_SCRIPT, String(max)), timeoutSec: 30, maxOutputBytes: max + 1024 });
-      if (result.exitCode !== 0) return text(`${result.stderr.trim() || `could not read ${path}`}${relativeHint(path, where.resolved.real, folder)}`, true);
-      return text(wrapUntrusted("file", result.stdout));
+      const read = await readEnvironmentText(path, max, exec, folder);
+      return "error" in read ? text(read.error, true) : text(wrapUntrusted("file", read.text));
     }
     if (name === "write_file") {
       const path = validPath(args.path);

@@ -45,7 +45,7 @@ const jsonPath = z.string().trim().min(1).max(200);
 const relativePath = z.string().trim().max(L.pathMaxChars).refine((path) => !path.includes("\0"), "Choose a valid path");
 
 const watchSource = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("files"), path: relativePath, recursive: z.boolean().optional() }).strict(),
+  z.object({ type: z.literal("files"), path: relativePath, recursive: z.boolean().optional(), readBytes: z.number().int().min(1).max(L.maxOutputBytes).optional(), pattern: z.string().min(1).max(L.pathMaxChars).optional() }).strict(),
   z.object({ type: z.literal("command"), command: z.string().trim().min(1).max(L.commandMaxChars) }).strict(),
   z.object({
     type: z.literal("tool"),
@@ -85,15 +85,18 @@ const watchSchema = z.object({
   if (watch.condition?.test === "exit_code" && watch.source.type !== "command") {
     context.addIssue({ code: "custom", message: "An exit code exists only for a command" });
   }
-  if (watch.track && watch.source.type === "files") {
+  if (watch.track && watch.source.type === "files" && !watch.source.readBytes) {
     context.addIssue({ code: "custom", message: "A file watch already compares file by file" });
   }
-  if (watch.source.type === "files" && watch.condition && watch.condition.test !== "json_path") {
+  if (watch.source.type === "files" && !watch.source.readBytes && watch.condition && watch.condition.test !== "json_path") {
     context.addIssue({ code: "custom", message: "A file watch tests exists, count or bytes" });
   }
   if (watch.source.type === "tool") {
     const refusal = watchToolRefusal(watch.source.tool, watch.source.args);
-    if (refusal) context.addIssue({ code: "custom", message: refusal });
+    if (refusal && !/^(?:mcp__)?(?:sagax[-_]environment|environment)[-_]+glob(?:_files)?$/.test(watch.source.tool)) {
+      const builtin = /^(?:mcp__)?(?:sagax|agents|environment)[-_]/.test(watch.source.tool);
+      context.addIssue({ code: "custom", message: builtin ? refusal + " Use files or command for the bot’s environment." : refusal });
+    }
   }
 });
 

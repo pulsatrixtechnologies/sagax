@@ -32,7 +32,11 @@ import { createHash, randomBytes } from "node:crypto";
 import jmespath from "jmespath";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { openMessageFile } from "../messages/message-file.ts";
+import { readEnvironmentText } from "../sandbox/user-sandbox-tools.ts";
+import { sensitiveEnvironmentPath } from "../safety/sensitive-path.ts";
+import { basename, matchesGlob, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { canonicalJson } from "../../shared/canonical-json.ts";
 import {
@@ -44,6 +48,7 @@ import {
 import { writeFileAtomic } from "../atomic.ts";
 import { pcShell, scrubHookEnv } from "../hooks/lifecycle-hooks.ts";
 import type { RoutinePrecheckVerdict } from "./routine-precheck.ts";
+import { resolveWatchSource, UnmappedWatchBuiltin, watchRepairHint } from "./watch-tool-resolution.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
 import { defang } from "../../shared/defang.ts";
 
@@ -570,6 +575,7 @@ function section(title: string, keys: string[], excerpt: (key: string) => string
 
 function sourceLine(watch: RoutineWatchPrecheck): string {
   const source = watch.source;
+  if (source.type === "files" && source.readBytes) return `Watched file content: ${source.path}`;
   if (source.type === "files") return `Watched: ${source.path.trim() || "the bot's folder"}${source.recursive ? " and its subfolders" : ""} (names, sizes, dates)`;
   if (source.type === "command") return `Watched: the output of \`${clip(source.command, 120)}\``;
   return `Watched: the result of the tool ${source.tool}`;
@@ -721,6 +727,8 @@ export type WatchPlace =
 
 export interface RoutineWatchDeps {
   place(routine: WatchRoutine): Promise<WatchPlace> | WatchPlace;
+  keepSource?(routine: WatchRoutine, before: RoutineWatchPrecheck, after: RoutineWatchPrecheck): void;
+  listTools?(routine: WatchRoutine, requested: string, signal: AbortSignal): Promise<string[]>;
   callTool(routine: WatchRoutine, tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<{ isError: boolean; value: unknown } | { error: string }>;
   states: RoutineWatchStates;
   now(): number;
@@ -728,8 +736,21 @@ export interface RoutineWatchDeps {
   spawnLocal?: typeof spawnLocalWatch;
 }
 
+export async function resolvedWatchSource(deps: Pick<RoutineWatchDeps, "listTools">, routine: WatchRoutine, watch: BuiltWatchPrecheck, signal: AbortSignal) {
+  const source = watch.source;
+  if (source.type !== "tool" || !deps.listTools) return source;
+  const names = await deps.listTools(routine, source.tool, signal);
+  signal.throwIfAborted();
+  return resolveWatchSource(watch, names);
+}
+
 /** One reading, no state change: shared by the scheduler and "Check now". */
-export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, watch: BuiltWatchPrecheck, signal: AbortSignal): Promise<{ probe: WatchProbe } | { skipped: string }> {
+export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, watch: BuiltWatchPrecheck, signal: AbortSignal) {
+  const source = await resolvedWatchSource(deps, routine, watch, signal);
+  return readResolvedWatch(deps, routine, { ...watch, source }, signal);
+}
+
+async function readResolvedWatch(deps: RoutineWatchDeps, routine: WatchRoutine, watch: BuiltWatchPrecheck, signal: AbortSignal): Promise<{ probe: WatchProbe } | { skipped: string }> {
   const source = watch.source;
   const budget = { timeoutMs: L.timeoutMs - 1_000, maxOutputBytes: L.maxOutputBytes, signal };
   if (source.type === "tool") {
@@ -745,8 +766,34 @@ export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, w
   }
   const place = await deps.place(routine);
   if (place.kind === "refuse") throw new RoutineWatchError(place.reason);
+  const files = (probe: WatchProbe) => {
+    if (source.type === "files" && source.pattern && probe.kind === "files") {
+      const pattern = source.pattern;
+      return { probe: { ...probe, entries: probe.entries.filter(entry => matchesGlob(entry.path, pattern)) } };
+    }
+    return { probe };
+  };
+  if (source.type === "files" && source.readBytes && (isAbsolute(source.path) || sensitiveEnvironmentPath(source.path.replace(/^\.\//, "")))) {
+    throw new RoutineWatchError("This file path is sensitive.");
+  }
   if (place.kind === "host") {
-    if (source.type === "files") return { probe: await walkLocalFiles(place.cwd, source.path, { recursive: source.recursive === true, signal }) };
+    if (source.type === "files") {
+      if (!source.readBytes) return files(await walkLocalFiles(place.cwd, source.path, { recursive: source.recursive === true, signal }));
+      const root = await realpath(place.cwd);
+      const path = await realpath(resolve(root, source.path));
+      if (!inside(root, path) || sensitiveEnvironmentPath(relative(root, path))) throw new RoutineWatchError("Choose a file in the bot's folder.");
+      const checked = await lstat(path);
+      const opened = await openMessageFile(pathToFileURL(path).href, [root]);
+      try {
+        const actual = await opened.handle.stat();
+        if (actual.dev !== checked.dev || actual.ino !== checked.ino || actual.nlink !== 1) throw new RoutineWatchError("Choose the original file in the bot's folder.");
+        const parts: Buffer[] = [];
+        if (opened.bytes) for await (const part of opened.stream({ end: Math.min(source.readBytes, opened.bytes) - 1, autoClose: false })) parts.push(Buffer.from(part));
+        return { probe: { kind: "output", text: Buffer.concat(parts).toString("utf8"), truncated: opened.bytes > source.readBytes } };
+      } finally {
+        await opened.handle.close();
+      }
+    }
     const result = await (deps.spawnLocal ?? spawnLocalWatch)(source.command, place.cwd, budget);
     if (result.timedOut) throw new RoutineWatchError(`The command ran past ${Math.round(budget.timeoutMs / 1000)} s`);
     if (result.exitCode === null) throw new RoutineWatchError("The command could not start");
@@ -759,6 +806,20 @@ export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, w
     }
     return { skipped: `${place.label} is asleep: not checked (checked while it is awake)` };
   }
+  if (source.type === "files" && source.readBytes) {
+    const folder = await place.exec("pwd -P", budget);
+    const root = folder.stdout.replace(/\r?\n$/, "");
+    if (folder.exitCode !== 0 || !root.startsWith("/") || root.includes("\n")) throw new RoutineWatchError("Could not locate the bot's folder.");
+    const result = await readEnvironmentText(source.path, source.readBytes, {
+      exec: async ({ argv, maxOutputBytes }) => ({
+        ...await place.exec(argv.map(shQuote).join(" "), { ...budget, maxOutputBytes: maxOutputBytes ?? budget.maxOutputBytes }), stderr: "",
+      }),
+      pathRefusal: path => !inside(root, path) || sensitiveEnvironmentPath(relative(root, path)) ? "Choose a file in the bot's folder." : null,
+      overQuota: async () => false,
+    });
+    if ("error" in result) throw new RoutineWatchError(result.error);
+    return { probe: { kind: "output", text: result.text, truncated: Buffer.byteLength(result.text) >= source.readBytes } };
+  }
   const command = source.type === "files" ? remoteListingCommand(source.path, source.recursive === true) : source.command;
   const result = await place.exec(command, budget);
   if (result.timedOut) throw new RoutineWatchError(`The command ran past ${Math.round(budget.timeoutMs / 1000)} s`);
@@ -770,7 +831,7 @@ export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, w
     if (result.exitCode !== 0 || result.stdout.trim() === "") {
       throw new RoutineWatchError(`The listing did not run in ${place.label}${result.exitCode === null ? "" : ` (exit code ${result.exitCode})`}`);
     }
-    return { probe: parseRemoteListing(result.stdout, source.path) };
+    return files(parseRemoteListing(result.stdout, source.path));
   }
   if (result.exitCode === null) throw new RoutineWatchError("The command could not start");
   return { probe: { kind: "output", text: result.stdout, exitCode: result.exitCode, truncated: result.truncated } };
@@ -788,12 +849,20 @@ export function createRoutineWatchEvaluator(deps: RoutineWatchDeps): (routine: W
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), L.timeoutMs - 500);
     try {
-      const read = await readWatch(deps, routine, watch, controller.signal);
+      const source = await resolvedWatchSource(deps, routine, watch, controller.signal);
+      const normalized = { ...watch, source };
+      if (watchConfigKey(normalized) !== watchConfigKey(watch)) deps.keepSource?.(routine, watch, normalized);
+      const read = await readResolvedWatch(deps, routine, normalized, controller.signal);
       if ("skipped" in read) return { wake: false, reason: read.skipped };
-      const snapshot = snapshotOf(watch, read.probe);
-      const decision = decideWatch(watch, previous, snapshot, deps.now());
+      const snapshot = snapshotOf(normalized, read.probe);
+      const prior = previous && previous.configKey === watchConfigKey(watch) && source.type === "tool"
+        ? { ...previous, configKey: watchConfigKey(normalized) } : previous;
+      const decision = decideWatch(normalized, prior, snapshot, deps.now());
       deps.states.set(routine.id, decision.state);
       return decision.verdict;
+    } catch (error) {
+      if (error instanceof UnmappedWatchBuiltin) return { wake: true, note: `Started without the saved pre-check. ${error.message} ${watchRepairHint}` };
+      throw error;
     } finally {
       clearTimeout(timer);
     }

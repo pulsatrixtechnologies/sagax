@@ -1,4 +1,5 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
+import { FILES_NOTE } from "./messages/staged-file-refs.ts";
 import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { restartCauseNotResumed, restartPendingRow } from "./turns/restart-line-words.ts";
@@ -163,7 +164,6 @@ export const SEND_FILE_MAX_BYTES = 25 * 1024 * 1024;
  * for the bot's file tools (a read of its own workspace is the owner's card,
  * answered at the bot's level). Never "host file tools": an organization
  * server withholds them. */
-const FILES_NOTE = "\n\n[Files sent with this message, now in your Sagax workspace folder: ";
 export function agentPromptWithFiles(prompt: string, staged: readonly string[], workspaceRoot: string): string {
   if (!staged.length) return prompt;
   const full = staged.map((rel) => join(workspaceRoot, rel));
@@ -486,6 +486,48 @@ export interface Refusal {
 
 export const isRefusal = (value: unknown): value is Refusal =>
   Boolean(value) && typeof value === "object" && typeof (value as Refusal).code === "string" && typeof (value as Refusal).status === "number" && typeof (value as Refusal).message === "string";
+
+/** The files of a send (send_prompt's `files`, and the member API's
+ * `POST bots/{id}/messages` `files`, one parser for both): at most
+ * SEND_FILES_MAX, each a workspace-relative path (a bot's own file) or a
+ * name with its bytes in base64 (a person's), at most SEND_FILE_MAX_BYTES.
+ * Any type: the bot reads it with its file tools. */
+export function parseSendFiles(raw: unknown): FileInput[] | Refusal {
+  const files = raw ?? [];
+  if (!Array.isArray(files) || files.length > SEND_FILES_MAX) {
+    return refuse(400, "bad_request", `files is a list of at most ${SEND_FILES_MAX} workspace-relative paths.`, {
+      retryable: false,
+      details: { reason: "invalid_files", max_files: SEND_FILES_MAX },
+    });
+  }
+  const fileInputs: FileInput[] = [];
+  for (const entry of files as unknown[]) {
+    const file: FileInput | null = typeof entry === "string" ? { path: entry } : entry && typeof entry === "object" && typeof (entry as FileInput).path === "string" ? entry as FileInput : null;
+    if (!file) {
+      return refuse(400, "bad_request", "each file is a workspace-relative path.", {
+        retryable: false,
+        details: { reason: "invalid_file_entry" },
+      });
+    }
+    const path = file.path.trim().replace(/\\/g, "/");
+    if (!path || path.length > 512 || path.startsWith("/") || /^[a-zA-Z]:/.test(path) || path.split("/").some((part) => part === ".." || part === "")) {
+      return refuse(400, "bad_request", `${file.path} is not a workspace-relative path (no leading /, no ..).`, {
+        retryable: false,
+        details: { reason: "invalid_file_path" },
+      });
+    }
+    if (file.content_base64 !== undefined) {
+      if (typeof file.content_base64 !== "string" || Math.floor(file.content_base64.length * 3 / 4) > SEND_FILE_MAX_BYTES + 3) {
+        return refuse(413, "file_too_large", `${path} is larger than 25 MiB.`, {
+          retryable: false,
+          details: { reason: "file_too_large", max_bytes: SEND_FILE_MAX_BYTES },
+        });
+      }
+    }
+    fileInputs.push({ path, ...(file.content_base64 !== undefined ? { content_base64: file.content_base64 } : {}) });
+  }
+  return fileInputs;
+}
 
 /** Whether a refusal's code is worth retrying (busy, rate limit, transient). */
 export const isRetryableRefusal = (code: string): boolean => RETRYABLE_REFUSAL_CODES.has(code);
@@ -1555,39 +1597,8 @@ function createAgentApiHandlers(env: {
       }
       const timeoutMs = intArg(args, "timeout_ms", TIMEOUT_MS_MIN, TIMEOUT_MS_MAX, TIMEOUT_MS_DEFAULT);
       if (isRefusal(timeoutMs)) return timeoutMs;
-      const files = args.files ?? [];
-      if (!Array.isArray(files) || files.length > SEND_FILES_MAX) {
-        return refuse(400, "bad_request", `files is a list of at most ${SEND_FILES_MAX} workspace-relative paths.`, {
-          retryable: false,
-          details: { reason: "invalid_files", max_files: SEND_FILES_MAX },
-        });
-      }
-      const fileInputs: FileInput[] = [];
-      for (const raw of files) {
-        const file: FileInput | null = typeof raw === "string" ? { path: raw } : raw && typeof raw === "object" && typeof (raw as FileInput).path === "string" ? raw as FileInput : null;
-        if (!file) {
-          return refuse(400, "bad_request", "each file is a workspace-relative path.", {
-            retryable: false,
-            details: { reason: "invalid_file_entry" },
-          });
-        }
-        const path = file.path.trim().replace(/\\/g, "/");
-        if (!path || path.length > 512 || path.startsWith("/") || /^[a-zA-Z]:/.test(path) || path.split("/").some((part) => part === ".." || part === "")) {
-          return refuse(400, "bad_request", `${file.path} is not a workspace-relative path (no leading /, no ..).`, {
-            retryable: false,
-            details: { reason: "invalid_file_path" },
-          });
-        }
-        if (file.content_base64 !== undefined) {
-          if (typeof file.content_base64 !== "string" || Math.floor(file.content_base64.length * 3 / 4) > SEND_FILE_MAX_BYTES + 3) {
-            return refuse(413, "file_too_large", `${path} is larger than 25 MiB.`, {
-              retryable: false,
-              details: { reason: "file_too_large", max_bytes: SEND_FILE_MAX_BYTES },
-            });
-          }
-        }
-        fileInputs.push({ path, ...(file.content_base64 !== undefined ? { content_base64: file.content_base64 } : {}) });
-      }
+      const fileInputs = parseSendFiles(args.files);
+      if (isRefusal(fileInputs)) return fileInputs;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
       // #1265: a send with an idempotency_key is done once per caller, agent

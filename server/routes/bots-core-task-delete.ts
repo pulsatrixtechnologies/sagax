@@ -25,6 +25,8 @@ export function createBotsCoreTaskDeleteRoutes(deps: BotsCoreRouteDeps): RouteHa
       coordinator,
       cancelTeamSetupResumesForThread,
       confidentialThreadAttachments,
+      stagedFilesOfThread,
+      removeStagedFiles,
       threadEngineKeys,
       wipeConfidentialThread,
       clearTurnDigestState,
@@ -63,8 +65,11 @@ export function createBotsCoreTaskDeleteRoutes(deps: BotsCoreRouteDeps): RouteHa
       const confidentialFiles = store.isConfidentialThread(m[2]) ? confidentialThreadAttachments(m[1], m[2]) : null;
       // and the keys of its engine transcripts, before its record and logs go
       const confidentialEngineKeys = confidentialFiles ? threadEngineKeys(m[1], m[2]) : [];
+      // the files sent with its lines (send_prompt, the member API) go with it
+      const stagedFiles = stagedFilesOfThread(m[1], m[2]);
       const updated = store.deleteTask(m[1], m[2]);
       if (!updated) return json(res, 404, { error: "no such task" });
+      if (stagedFiles.length) removeStagedFiles(m[1], stagedFiles);
       if (confidentialFiles) wipeConfidentialThread(m[1], m[2], confidentialFiles, confidentialEngineKeys);
       clearTurnDigestState(m[2]);
       revokeInternalCapabilitiesForThread(m[2]);

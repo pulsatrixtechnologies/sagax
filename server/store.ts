@@ -133,6 +133,11 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
   handedMessages?: Record<string, HandedState>;
   /** Last compaction represented by a dispatched session on this task. */
   appliedCompactionId?: string;
+  /** #4632: the files the server itself staged in the bot's workspace inbox
+   * for this conversation's sends (send_prompt, the member API's `files`),
+   * workspace-relative. Written only by addStagedFiles, never by a patch or
+   * from a message's text: what goes when the conversation goes. */
+  stagedFiles?: string[];
   /** Summaries Sagax wrote when it folded this thread on its own, newest
    * last (server/context/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
@@ -199,7 +204,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
 /** TaskRecord fields no client may see. Everything else must be on WireTask:
  * the exactness assertion below fails to compile when either side drifts,
  * so a new server field forces a decision — wire-visible or private here. */
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker" | "stagedFiles";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
 export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
@@ -218,7 +223,8 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
   const { resumeCursors: _resumeCursors, lastInstanceId: _lastInstanceId, handedMessages: _handedMessages,
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
-    engineSessions: _engineSessions, carriedThreads: _carriedThreads, forgetSessionsAtNextTurn: _forgetSessionsAtNextTurn, speaker: _speaker, ...stored } = task;
+    engineSessions: _engineSessions, carriedThreads: _carriedThreads, forgetSessionsAtNextTurn: _forgetSessionsAtNextTurn, speaker: _speaker,
+    stagedFiles: _stagedFiles, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
     // only the fact, never when (shared/background-threads.ts)
     ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
@@ -3390,6 +3396,14 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!task || task.lastInstanceId === instanceId) return;
     task.lastInstanceId = instanceId;
     saveBotsFor("which engine has this conversation", () => this.saveBotsSoon());
+  }
+
+  /** #4632: record files the server staged for a send of this conversation. */
+  addStagedFiles(botId: string, threadId: string, paths: readonly string[]): void {
+    const task = this.taskByThread(botId, threadId);
+    if (!task || !paths.length) return;
+    task.stagedFiles = [...new Set([...(task.stagedFiles ?? []), ...paths])];
+    saveBotsFor("the files sent to this conversation", () => this.saveBotsSoon());
   }
 
   setHandedMessages(botId: string, threadId: string, instanceId: string, state: HandedState) {

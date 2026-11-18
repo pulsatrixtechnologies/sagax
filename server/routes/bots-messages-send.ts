@@ -52,7 +52,7 @@ import {
   personKey,
   speakerFor,
 } from "../request-speaker.ts";
-import { SAFE_POINT_NOTE, stopClosesCard } from "../safe-point-preempt.ts";
+import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
 import { safetyHttpRefusal } from "../safety/safety-review.ts";
 import {
   acceptedSendMatch,
@@ -416,13 +416,13 @@ async function runSequencedBotSend(input: {
     // 1:1 turn: a routine run, another person's turn on an
     // organization server, a call or a turn being stopped keep the
     // queue as before.
+    // #4528: an open permission card does not hold the person's next
+    // message. The safe-point cut keeps that card. A sibling question's
+    // answer is a different route and does not preempt here.
     const preempt = !voiceCall && !stoppingThreads.has(threadId)
       && (auth.kind === "session" || DESKTOP_MANAGED || IDENTITY.kind !== "perspicax")
       && !store.taskByThread(bot.id, threadId)?.routineRunId && !store.groupByThread(threadId)
-      && orgJoinsRunningTurn(current, threadId, speakerFor(auth))
-      // #4475: never while the turn waits on a card a Stop would close
-      // unanswered (the answer to a sibling question would take it along)
-      && !store.messagesFor(threadId).some((message: Message) => stopClosesCard(message.card));
+      && orgJoinsRunningTurn(current, threadId, speakerFor(auth));
     const words = promptWithReply(promptWithDataContext(text, dataContext), replyTo, cfg.profile?.name?.trim() || "User");
     const queued = queueSteeredMessage(current.id, threadId, text, {
       replyToId: replyTo?.id,

@@ -54,7 +54,7 @@ async function answerInboxCard(auth: RequestAuth, threadId: string, requestId: s
       : host.store.botByThread(threadId);
     const requestOwner = owner ? host.botForThread(owner.id, threadId) : null;
     const outcome = await host.answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, decision,
-      decision === "deny" ? "Denied by the user." : undefined, owner ? { id: owner.id, name: owner.name } : undefined, false, false);
+      decision === "deny" ? "Denied by the user." : undefined, owner ? { id: owner.id, name: owner.name } : undefined, false, false, auth);
     // nothing ran: never counted as answered
     if (outcome === "unavailable") answer = { ok: false, status: 409, code: "gone", message: "The request is no longer open." };
   });

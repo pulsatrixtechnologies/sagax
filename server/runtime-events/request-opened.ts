@@ -26,6 +26,7 @@ import {
   ruleInputFor,
 } from "../approvals/owner-approval.ts";
 import { appendDecision, decisionCall } from "../decision-log.ts";
+import { allowSavedPermission } from "../turns/saved-permission-pass.ts";
 import { cardStandingGrants, orgServerExecRouting } from "../exec-target.ts";
 import { HOST_RUN_REASONS } from "../engines/engine-access.ts";
 import { providerLabel } from "../memes/providers.ts";
@@ -779,6 +780,30 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
             ok: true
           }
         });
+      }
+      // #4528: the person already allowed this exact step on its card. One
+      // follow-up call of the same tool and summary runs once. A safety stop
+      // or hold does not spend that allow. A call something else already
+      // approved spends it so a later identical call still asks.
+      const answeringInstance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : asker ? host.registry.get(asker.modelSelection.instanceId) : undefined;
+      const permissionPass = permission && event.requestId
+        ? allowSavedPermission(host, {
+          threadId: event.threadId,
+          tools: [event.tool, event.mcpTool],
+          summary: typeof event.summary === "string" ? event.summary : "",
+          safety: safetyEffect?.kind === "stop" ? "stop" : safetyEffect?.kind === "hold" ? "hold" : "ok",
+          alreadyApproved: Boolean(verdict?.approve),
+          canRespond: typeof answeringInstance?.adapter?.respondToRequest === "function",
+        })
+        : "keep";
+      if (permissionPass === "allow" && asker && event.requestId) {
+        void answeringInstance.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "allow" }).catch(host.reportBackgroundError);
+        if (event.requiresExplicitApproval) host.grantRemoteExecApproval?.(event.threadId, event.requestId);
+        appendDecision(host.DATA_DIR, {
+          threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
+          tool: event.tool, summary: event.summary, decision: "user-approved", source: "saved-permission",
+        });
+        return;
       }
       presentRequestOpened(event, ctx, host, { adminApproval, adminReason, asker, cardAnswerer, command, customCall, customDecision, customNotice, customReview, destinationAnswerer, effectiveApprovalMode, emailDraftRequest, foreignDestination, gateAllowKey, gateGrantBlocked, grantsOffered, guestDriven, ownSandboxCall, owner, ownerCall, ownerOriginRefused, ownerRuleCandidate, ownerRuleFolderCandidate, ownerStepUp, permission, safetyEffect, safetyWho, serverCommandHolder, strictCard, toolAllowKey, unattended, verdict });
 }

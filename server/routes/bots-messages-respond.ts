@@ -166,7 +166,7 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
       // and never becomes a message of theirs once its turn is over.
       const declined = isQuestionDecline(body, pending?.card);
       const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
-      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
+      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true, auth);
       if (outcome === "unavailable" && declined && pending) {
         const closed = closeDeclinedQuestion(store, bot.threadId, pending.id);
         // #3514: the turn that posted the card hears it now, not at its end
@@ -404,7 +404,7 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
       // and never becomes a message of theirs once its turn is over.
       const declined = isQuestionDecline(body, pending?.card);
       const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
-      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
+      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true, auth);
       if (outcome === "unavailable" && declined && pending) {
         const closed = closeDeclinedQuestion(store, threadId, pending.id);
         // #3514: the turn that posted the card hears it now, not at its end

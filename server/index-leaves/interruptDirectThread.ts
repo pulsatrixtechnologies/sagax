@@ -57,7 +57,9 @@ async function interruptDirectThread(botId: string, threadId: string, options?: 
   // Main routes Stop to the engine that started the turn; keep this branch's
   // generation fence so a replacement turn's approvals are never closed here.
   await (owner ? host.runningTurnInstance(owner, threadId) : null)?.adapter.interruptTurn(threadId);
-  if (host.directTurnGenerationByThread.get(threadId) === generation) host.closeOpenApprovals(threadId);
+  if (host.directTurnGenerationByThread.get(threadId) === generation) {
+    host.closeOpenApprovals(threadId, options?.cause === "safe-point" ? { keepPermissions: true } : undefined);
+  }
 
 }
   return interruptDirectThread;

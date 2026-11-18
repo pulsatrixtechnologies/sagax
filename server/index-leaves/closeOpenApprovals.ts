@@ -5,7 +5,7 @@ import { openTurnRequestCard, stopClosesCard } from "../safe-point-preempt.ts";
 export type Host = Record<string, any>;
 
 export function createCloseOpenApprovals(getHost: () => Host): any {
-function closeOpenApprovals(threadId: string) {
+function closeOpenApprovals(threadId: string, options?: { keepPermissions?: boolean }) {
   const host = getHost();
 
   for (const key of host.pendingCommandRules.keys()) if (key.startsWith(`${threadId}:`)) host.pendingCommandRules.delete(key);
@@ -15,9 +15,11 @@ function closeOpenApprovals(threadId: string) {
   for (const message of host.store.messagesFor(threadId)) {
     const card = message.card;
     if (!openTurnRequestCard(card)) continue;
-    if (!stopClosesCard(card)) {
-      // Keep the durable card; its in-flight adapter mapping cannot survive
-      // turn cleanup, and the response route can resume it from the transcript.
+    // #4528: a safe-point cut (the person's next message) keeps the permission
+    // card. Stop, reload and the other callers omit the option and still
+    // dismiss it. The in-flight mapping cannot survive the cut; the answer
+    // reads the card from the transcript.
+    if (!stopClosesCard(card) || (options?.keepPermissions && card?.requestType === "permission")) {
       host.askMessageByRequest.delete(`${threadId}:${card.requestId}`);
       continue;
     }

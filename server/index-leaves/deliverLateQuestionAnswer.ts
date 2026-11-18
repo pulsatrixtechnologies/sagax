@@ -15,6 +15,25 @@ import { cardAnsweredBy } from "./answeringCardAs.ts";
 export type Host = Record<string, any>;
 
 export function createDeliverLateQuestionAnswer(getHost: () => Host): any {
+/** The conversation a late answer goes to, still the asking bot's: in a
+ * room, the room's task and the bot still a member; else its own task. */
+function lateCardTarget(threadId: string, owner: BotRecord): { group: any; roomTarget: boolean } {
+  const host = getHost();
+  const group = host.store.groupByThread(threadId);
+  const roomTarget = group
+    ? group.dm
+      ? group.threadId === threadId
+      : Boolean(host.store.groupTaskByThread(group.id, threadId))
+    : false;
+  if (group && (!roomTarget || !group.memberIds.includes(owner.id))) {
+    throw Object.assign(new Error("the bot that asked this question is no longer in this conversation"), { status: 409 });
+  }
+  if (!group && !host.store.taskByThread(owner.id, threadId)) {
+    throw Object.assign(new Error("the question's conversation no longer exists"), { status: 409 });
+  }
+  return { group, roomTarget };
+}
+
 async function deliverLateQuestionAnswer(
   auth: RequestAuth,
   threadId: string,
@@ -33,18 +52,7 @@ async function deliverLateQuestionAnswer(
   // the isolated / as-is question of a bot computer (#2727): remember the
   // answer for that host and bot; the bot still reads it as the next message
   try { host.hostComputers?.answer(requestId, answer); } catch (error) { console.warn(`host computer answer: ${String(error)}`); }
-  const group = host.store.groupByThread(threadId);
-  const roomTarget = group
-    ? group.dm
-      ? group.threadId === threadId
-      : Boolean(host.store.groupTaskByThread(group.id, threadId))
-    : false;
-  if (group && (!roomTarget || !group.memberIds.includes(owner.id))) {
-    throw Object.assign(new Error("the bot that asked this question is no longer in this conversation"), { status: 409 });
-  }
-  if (!group && !host.store.taskByThread(owner.id, threadId)) {
-    throw Object.assign(new Error("the question's conversation no longer exists"), { status: 409 });
-  }
+  const { group } = lateCardTarget(threadId, owner);
 
   // #3007: the person's own words in the chat, never the model-facing
   // English lead-in; the model gets the question from promptWithReply
@@ -79,6 +87,32 @@ async function deliverLateQuestionAnswer(
   }
   const text = group ? `@${owner.name}: ${shown}` : shown;
   const sendId = `late-question-${createHash("sha256").update(`${threadId}:${requestId}`).digest("hex").slice(0, 32)}`;
+  return deliverLateCardTurn(auth, { threadId, requestId, text, cardMessage, owner, sendId, answered: "answer", answeredText: answer, via, callId });
+}
+
+/** One turn that carries a card's answer when the engine that asked is gone
+ * or does not know the request: a late question answer, or a permission
+ * card's verdict (#4528, server/index-leaves/deliverLatePermission.ts). The
+ * one sequenced send (a second answer is a match, never a second turn), the
+ * budget, who speaks (sender, trigger, speaker), the room checks, queued
+ * behind a busy turn, and the card put back when the start fails. */
+async function deliverLateCardTurn(auth: RequestAuth, input: {
+  threadId: string;
+  requestId: string;
+  /** The words of the turn, `@bot: ` already in front in a room. */
+  text: string;
+  cardMessage: Message;
+  owner: BotRecord;
+  sendId: string;
+  answered: "answer" | "allow" | "deny";
+  answeredText?: string;
+  via?: "call";
+  callId?: string;
+}): Promise<{ queued: boolean; queueId?: string }> {
+  const host = getHost();
+  const { threadId, requestId, text, cardMessage, owner, sendId, answered, answeredText, via, callId } = input;
+  const { group, roomTarget } = lateCardTarget(threadId, owner);
+  const answeredFields = { answered, ...(answeredText !== undefined ? { answeredText } : {}), dismissed: false };
   const key = group
     ? `group:${group.id}:${threadId}:${sendId}`
     : `bot:${owner.id}:${threadId}:${sendId}`;
@@ -124,10 +158,10 @@ async function deliverLateQuestionAnswer(
     // conversation): every surface that lists it (the pinned card, Today,
     // another device) drops it at once. A start that fails puts it back.
     const before = host.store.messagesFor(threadId).find((message) => message.id === cardMessage.id)?.card ?? latestCard;
-    host.store.patchMessage(threadId, cardMessage.id, { card: { ...before, answered: "answer", answeredText: answer, dismissed: false } });
+    host.store.patchMessage(threadId, cardMessage.id, { card: { ...before, ...answeredFields } });
     const reopen = () => {
       const now = host.store.messagesFor(threadId).find((message) => message.id === cardMessage.id)?.card;
-      if (now && now.answered === "answer" && now.answeredText === answer) {
+      if (now && now.answered === answered && now.answeredText === answeredText) {
         const { answered: _answered, answeredText: _text, ...rest } = now;
         host.store.patchMessage(threadId, cardMessage.id, { card: { ...rest, ...(before.answered !== undefined ? { answered: before.answered } : {}), ...(before.answeredText !== undefined ? { answeredText: before.answeredText } : {}) } });
       }
@@ -161,12 +195,13 @@ async function deliverLateQuestionAnswer(
 
   const latest = host.store.messagesFor(threadId).find((message) => message.id === cardMessage.id)?.card;
   if (latest && !latest.answered && !latest.dismissed) {
-    host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, answered: "answer", answeredText: answer, dismissed: false } });
+    host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, ...answeredFields } });
   }
   // #3514: queued behind the turn that posted the card, the answer ends that
   // turn at its safe point and starts its own turn at once
   host.cardTurnSettled?.(threadId, cardMessage.id);
   return receipt;
 }
-  return deliverLateQuestionAnswer;
+
+  return Object.assign(deliverLateQuestionAnswer, { cardTurn: deliverLateCardTurn });
 }

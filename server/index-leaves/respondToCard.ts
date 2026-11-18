@@ -77,7 +77,7 @@ async function respondToCard(input: {   auth: RequestAuth;   threadId: string;  
     }
     const outcome = await host.answerRequest(
       threadId, host.botForThread(bot.id, threadId)?.modelSelection.instanceId ?? "", requestId, behavior, message,
-      { id: bot.id, name: bot.name },
+      { id: bot.id, name: bot.name }, false, false, auth,
     );
     if (outcome === "unavailable" && host.isPersistentQuestionCard(card) && behavior === "answer" && cardMessage) {
       const answer = message?.trim() ?? "";

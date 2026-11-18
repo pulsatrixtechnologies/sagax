@@ -94,7 +94,7 @@ export function createSendReceipts(host: SendReceiptsHost) {
 
   /** The send settled: final state, the reply's summary, and the return
    * line when the sender asked to be resumed (once). */
-  function settled(node: SendNode, senderThreadIdHint?: string): void {
+  function settled(node: SendNode, senderThreadIdHint?: string, coordinatedReturn = false): void {
     const opener = host.openerOf(node.botId, node.threadId);
     const senderThreadId = opener?.threadId ?? senderThreadIdHint;
     if (!senderThreadId) return;
@@ -111,6 +111,7 @@ export function createSendReceipts(host: SendReceiptsHost) {
     const senderId = receipt?.senderId ?? opener?.botId;
     if (!senderId) return;
     if (message) patch(senderThreadId, message, { resumed: true });
+    if (coordinatedReturn) return;
     host.resume({
       senderId,
       senderThreadId,

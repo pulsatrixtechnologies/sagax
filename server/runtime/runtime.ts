@@ -76,6 +76,7 @@ const JOIN_WINDOW_MS = 15 * 60_000;
 /** A joined request waits this long at most, then runs on its own: no wait
  * between trees can last (or loop) forever. */
 const JOIN_WAIT_MS = 30 * 60_000;
+const PEER_REPORT_WAIT_MS = 15 * 60_000;
 const RESULT_MAX = 12_000;
 const DETAIL_MAX = 400;
 
@@ -585,6 +586,18 @@ if (!result.ok && !result.needsInput && !result.continue && this.closing) return
     for (const rootId of new Set(live.map(n => n.rootId))) {
       const root = this.store.get(rootId);
       if (!root || isTerminal(root)) continue;
+      // Report a slow batch even if the asking chat is busy. The running
+      // peers keep their slots and their eventual results still resume it.
+      if (this.runner.reportWaiting && !root.partialReported && root.status === "waiting" &&
+        root.reply === "resume" && root.origin.kind === "person" && root.origin.source === "chat" &&
+        !root.assignee.destination.groupId && now - root.createdAt >= PEER_REPORT_WAIT_MS) {
+        const children = awaited(this.store.children(root.id));
+        if (children.some(child => !isTerminal(child) && now - child.createdAt >= PEER_REPORT_WAIT_MS) &&
+          this.safe("partial report", () => this.runner.reportWaiting!(root, children))) {
+          root.partialReported = true;
+          this.store.update(root);
+        }
+      }
       const anchor = Math.max(this.since(root.lastActivityAt), this.rootActivity.get(rootId) ?? 0);
       if (now - anchor <= this.limits.stallMs) continue;
       const tree = this.store.all({ rootId });

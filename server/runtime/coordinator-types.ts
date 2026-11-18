@@ -235,6 +235,8 @@ export interface CoordinatorHost {
    * review holds. Absent, or undefined for a node with no slot (a room turn):
    * canStart falls back to busy alone.
    */
+  peerReport?(root: HandoffView, entries: { name: string; result?: string }[]): boolean;
+  peerConcurrency?(senderId: string): number;
   slotUse?(node: HandoffView): { used: number; max: number; hardBlocked: boolean } | undefined;
   /** Run one turn of the assignee with the composed text; resolves when the
    * engine settles. For a root (no parentId) this is the person's own

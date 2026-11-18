@@ -907,6 +907,10 @@ export class RuntimeCoordinator implements Coordinator {
       // (thread busy, group turn, review hold) still refuse everyone.
       canStart: a => {
         const node = this.project(a);
+        if (a.parentId && a.requester.botId && !node.groupId && host.peerConcurrency && node.executions === 0) {
+          const running = this.store.children(a.parentId).filter(child => !child.assignee.destination.groupId && child.status === "running");
+          if (running.length >= host.peerConcurrency(a.requester.botId)) return "waiting for a teammate slot";
+        }
         const slots = host.slotUse?.(node);
         if (slots) {
           return reservedSlotAdmission({
@@ -923,6 +927,7 @@ export class RuntimeCoordinator implements Coordinator {
       remind: (a, question, waitedMs) => host.remind?.(this.project(a), question, waitedMs),
       parkedGone: a => host.parkedGone?.(this.project(a)) === true,
       unparked: (a, reason, defaulted) => host.unparked?.(this.project(a), reason, defaulted),
+      reportWaiting: (root, children) => this.publishPeerReport(root, children),
       report: (a, parent) => host.report(view(a, parent), parent && this.project(parent)),
       changed: rows => {
         this.forgetSettledConfidential(rows);
@@ -970,7 +975,7 @@ export class RuntimeCoordinator implements Coordinator {
     // the resume as usual.
     // A question resume, or a resume that carries the person's answer, is
     // never a relay: there is something for the requester itself to read.
-    if (resumed && settled.length && !asked.length && a.answer === undefined && this.host.relay && a.assignee.destination.groupId === undefined &&
+    if (resumed && settled.length === 1 && !asked.length && a.answer === undefined && this.host.relay && a.assignee.destination.groupId === undefined &&
       settled.every(child => child.relay && child.status === "completed" && this.readable(child, a, node) === child) &&
       !this.host.validate(node, parent && this.project(parent)) &&
       this.store.children(a.id).every(child => child.reply === "none" || isTerminal(child))) {
@@ -995,6 +1000,10 @@ export class RuntimeCoordinator implements Coordinator {
     if (signal.aborted) return { kind: "failed", outcome: "stopped", text: result.text };
     if (result.cap) return { kind: "continue", text: result.text, note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...evidence(result) };
     if (result.cards) return { kind: "needs_input", question: result.cards.question, cards: result.cards.ids, ...evidence(result) };
+    if ((!result.ok || !result.text.trim()) && resumed && root && settled.length && !asked.length &&
+      !node.groupId && a.origin.kind === "person" && a.origin.source === "chat") {
+      this.publishPeerReport(a, settled);
+    }
     if (!result.ok) return { kind: "failed", outcome: result.stalled ? "stalled" : "provider_error", text: result.text, ...evidence(result) };
     // A root is the person's own conversation: a NEEDS INPUT line there is a
     // question in the chat, answered by a typed line that starts a new root;
@@ -1013,6 +1022,17 @@ export class RuntimeCoordinator implements Coordinator {
   /** The open rows whose turn happens in this thread, still running. */
   private runningRows(threadId: string): Assignment[] {
     return this.store.all({ nonTerminal: true, assigneeThreadId: threadId }).filter(a => a.status === "running");
+  }
+
+  private publishPeerReport(root: Assignment, children: Assignment[]): boolean {
+    const parent = this.project(root);
+    if (!this.host.peerReport || this.isConfidential(parent.threadId) || this.host.validate(parent)) return false;
+    const entries = children.map(child => {
+      const readable = this.readable(child, root, parent);
+      const name = readable === child ? this.host.names(view(child, root), parent).assignee : undefined;
+      return { name: name || "Teammate", result: isTerminal(child) ? readable.result : undefined };
+    });
+    return this.host.peerReport(parent, entries);
   }
 
   /** The assignment in this thread that is parked on the person's answer. */

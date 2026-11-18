@@ -88,6 +88,7 @@ defaultAnswer: z.string().optional(),
   request: z.string().optional(),
   question: z.string().optional(),
   answer: z.string().optional(),
+  partialReported: z.boolean().optional(),
   carrying: z.array(z.string()).optional(),
   budgets: z.object({ since: z.number(), requests: z.number(), executions: z.number(), wakes: z.number() }).optional(),
   // A root parked on the person's cards, and a node that continues in place:

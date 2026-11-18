@@ -445,6 +445,28 @@ it("opens a fresh thread on a teammate with coordinate_bots thread \"new\" and g
   expect((await f.messages(f.chief.activeTaskId)).some((message: any) => message.tool?.name === "Engineering lead replied" && message.tool.output === "NEW_THREAD_RESULT verified")).toBe(true);
 }), 45_000);
 
+it("queues fresh teammate questions past the thread limit and returns one combined chat answer after the asking turn", () => fixture(async f => {
+  await f.api(`/api/bots/${f.chief.id}/runtime-settings`, { turnLimits: { threadsOpened: 1 } }, "PATCH");
+  const gate = join(f.session.info.dataDir, "release-first-answer");
+  const ask = (id: string) => ({ arguments: { bot_ids: [id], message: "List your available checks", thread: "new", consult: true } });
+  const summary = "The checks available are unit and integration.";
+  f.plan[f.chief.id] = { steps: [ask(f.lead.id), { tool: "send_to_bot", arguments: {
+    bot_id: f.specialist.id, title: "Available checks", message: "List your available checks", reply: "resume",
+  } }], reply: "I asked both teammates.", resumeReply: summary };
+  f.plan[f.lead.id] = { gateFile: gate, reply: "Unit checks available" };
+  f.plan[f.specialist.id] = { reply: "Integration checks available" };
+  await f.start();
+  await expect.poll(() => f.nodes().find((n: any) => n.botId === f.chief.id)?.status, { timeout: 15_000 }).toBe("waiting");
+  expect(f.nodes().find((n: any) => n.botId === f.specialist.id)?.status).toBe("queued");
+  writeFileSync(gate, "release");
+  await f.wait();
+  const reviews = f.evidence().filter((turn: any) => turn.botId === f.chief.id && turn.resumed);
+  expect(reviews).toHaveLength(1);
+  expect(told(reviews[0])).toContain("Unit checks available");
+  expect(told(reviews[0])).toContain("Integration checks available");
+  expect((await f.messages(f.chief.activeTaskId)).filter((m: any) => m.kind === "text" && m.text === summary)).toHaveLength(1);
+}), 120_000);
+
 it("lets the opener find and close the completed task", () => fixture(async f => {
   await f.start();
   expect((await f.wait()).status).toBe("settled");

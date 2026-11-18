@@ -176,6 +176,8 @@ export interface Assignment {
    * carries. A restart that cuts that turn reruns it with them once more; no
    * other turn carries them again. */
   carrying?: string[];
+  /** A direct request has already sent its timed progress report. */
+  partialReported?: boolean;
   /** On a root only: the budget window since its last durable progress. */
   budgets?: { since: number; requests: number; executions: number; wakes: number };
   /** While parked on the person's cards (a root): the ids of the cards the
@@ -401,6 +403,7 @@ export interface TurnRunner {
   unparked?(a: Assignment, reason: string, defaulted: boolean): void;
   /** A settled child, into its requester's conversation (a chip, a line), or
    * a root that ended alone, into its own. Called once per settlement. */
+  reportWaiting?(root: Assignment, children: Assignment[]): boolean;
   report(a: Assignment, parent?: Assignment): void;
   /** Rows changed: refresh what shows them. */
   changed(assignments: readonly Assignment[]): void;

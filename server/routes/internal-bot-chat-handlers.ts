@@ -31,7 +31,7 @@ import type { HandedOver } from "../runtime/coordinator-types.ts";
 import { openWorkEcho, workRowsNamed } from "../team-work/team-work.ts";
 import { workEnd, workLabel } from "../team-work/work-label.ts";
 import { TEAM_WORK_WINDOW_MS, type TeamWorkEnded } from "../../shared/team-work.ts";
-import { botTurnLimit, COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
+import { COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
@@ -723,13 +723,9 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     const destination = groupId ? store.group(groupId) : undefined;
     if (groupId && !destination) return json(res, 404, { error: "No such room; use list_room_targets." });
     // A room has its own thread; "new" opens a thread only on a teammate
-    // addressed directly. A standing external runtime has no turn whose
-    // fan-out the opened-threads cap bounds; the runtime's budgets do.
+    // addressed directly. The runtime queues the batch and admits peers
+    // as slots become available.
     const fresh = !destination && parsed.data.thread === "new";
-    const threadLimit = botTurnLimit(internalSender as never, "threadsOpened");
-    if (fresh && !EXTERNAL && (internalCapability.openedThreads ?? 0) >= threadLimit) {
-      return json(res, 429, { error: `You have already opened ${threadLimit} threads this turn, which is the limit. Do not retry — finish your turn and tell the person which threads you still wanted to open, so they can open them or ask you again.` });
-    }
     // A slot may carry a teammate's name instead of its id — the
     // roster shows both, list_bots shows both, and a Primary Bot reading its
     // prompt reaches for the name. A unique reachable name resolves;
@@ -958,6 +954,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       ? "Sent one way. Nothing comes back and nothing resumes you; continue your turn."
       : EXTERNAL
       ? "Handed to the coordinator. Read each result with assignment_status (id: a receipt's requestId, or rootId for the whole call), long-polling with wait_ms."
+      : !destination && origin && typeof origin === "object" && "kind" in origin && origin.kind === "user"
+      ? "End your turn after sending all work. Accepted requests are queued. Their results resume you together; if replies are outstanding after 15 minutes, the chat gets a partial report. Do not poll or wait."
       : "End your turn after sending all work. These actual teammates will reply and resume you automatically. Do not poll or wait.";
     return json(res, ok ? 200 : 409, { receipts,
       ...(ok

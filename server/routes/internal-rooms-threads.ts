@@ -78,8 +78,9 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   if (title.length > 80) return json(res, 400, { error: "title must be at most 80 characters" });
   // the title is quoted into chips and the sidebar, one line each
   if (!fitsOnOneLine(title)) return json(res, 400, { error: "title must fit on one line" });
+  const toBotId = typeof body.toBotId === "string" && body.toBotId.trim() ? body.toBotId.trim() : from.id;
   const threadLimit = botTurnLimitLocal(from, "threadsOpened");
-  if (internalCapability.openedThreads >= threadLimit) {
+  if (toBotId === from.id && internalCapability.openedThreads >= threadLimit) {
     // V4: thread limit is an intended stop (200 non-isError), not a red 429.
     return json(res, 200, {
       applied: false,
@@ -87,7 +88,6 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
       message: `You have already opened ${threadLimit} threads this turn, which is the limit. Do not retry: finish your turn and tell the person which threads you still wanted to open, so they can open them or ask you again.`,
     });
   }
-  const toBotId = typeof body.toBotId === "string" && body.toBotId.trim() ? body.toBotId.trim() : from.id;
   const target = store.bot(toBotId);
   if (!target) return json(res, 404, { error: "no such bot" });
   // workspace: where a thread of this bot on Auto starts (sub-agents,
@@ -103,6 +103,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   // send_to_bot reply "resume" (#3246): the recipient's settled turn wakes
   // the sender here with a short return line. Anything else stays one-way.
   const resumeSender = oneWay && body.reply === "resume";
+  const coordinatedReturn = resumeSender && !owner.group && !pollOnlyCaller(internalCapability);
   const wakeAsked = parseWakePriority(body.priority);
   if (wakeAsked === "invalid") return json(res, 400, { error: "priority is now or normal." });
   if (oneWay && target.id === from.id) {
@@ -295,7 +296,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
         idempotencyKeyOf(body, req.headers["idempotency-key"]), extra).node
       : coordinator.enqueue(address, internalCapability.generation, internalCapability.roomHandoffId, destination, target.id, handed, false, false,
         [...store.messagesFor(fromThreadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "", undefined,
-        turnOrigin(internalCapability), oneWay ? "notify" : "work", joinPerson(fromThreadId), false, undefined,
+        turnOrigin(internalCapability), oneWay && !coordinatedReturn ? "notify" : "work", joinPerson(fromThreadId), false, undefined,
         coordinationRequestId?.(fromThreadId) ?? directRequestOwners.get(fromThreadId)?.messageId, extra).node;
   } catch (error) {
     if (wakePlan.reported === "now") releasePriorityNow(from.id);
@@ -364,6 +365,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     ...(current.status === "running" ? { state: "running" } : position > limit ? { state: "queued", position: position - limit } : { state: "pending" }),
     ...(oneWay ? { handle } : {}),
     ...(resumeSender ? { reply: "resume" } : {}),
+    ...(coordinatedReturn ? { coordinatedReturn: true } : {}),
     ...priorityFields,
     // the names of the open pieces of work, so the next send reuses one
     ...(pollOnlyCaller(internalCapability) ? {} : openWorkEcho(coordinator.handedOutBy?.bind(coordinator), from.id, joinPerson(fromThreadId),

@@ -272,13 +272,13 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     for (const gone of ["browse-bots", "update", "shortcuts", "about"]) expect(keys).not.toContain(gone);
   });
 
-  it("shows only the percent beside the gauge for Usage (no name, no word), and no percent without a plan", () => {
+  it("shows the Usage label with the percent at the right (no account name), and no percent without a plan", () => {
     setLocale("fr");
     try {
       const usage = items().find((entry) => entry.key === "usage")!;
       expect(usage.label).toBe("Utilisation");
       expect(usage.value).toBe("42\u00a0%");
-      expect(usage.valueOnly).toBe(true);
+      expect(usage.label).toBe("Utilisation");
       expect(usage.submenu!.map((entry) => entry.key)).toEqual(["claude:weekly", "month-cost", "view-usage"]);
       expect(usage.submenu!.find((entry) => entry.key === "view-usage")).toMatchObject({ label: "Voir l'utilisation", separatorBefore: true });
       const bare = items({ usagePercent: null, usageLines: [], monthCost: null }).find((entry) => entry.key === "usage")!;
@@ -289,7 +289,7 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     }
   });
 
-  it("shows the starred plan's percent alone, its name in the tooltip, and stars each plan once in Usage ›", () => {
+  it("shows the starred plan's percent without its name, the name in the tooltip, and stars each plan once in Usage ›", () => {
     const toggled: string[] = [];
     const lines = [
       { key: "grok:weekly", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · Weekly", value: "87% used" },
@@ -301,7 +301,7 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
       usageFavorite: { id: "grok", onToggle: (id) => toggled.push(id) },
     }).find((entry) => entry.key === "usage")!;
     expect(usage.value).toBe("87%");
-    expect(usage.valueOnly).toBe(true);
+    expect(usage.label).toBe("Usage");
     expect(usage.tooltip).toBe("Usage · Grok · 87%");
     const stars = usage.submenu!.filter((entry) => entry.favorite);
     expect(stars.map((entry) => [entry.key, entry.favorite!.on])).toEqual([["grok:weekly", true], ["codex:five-hour", false]]);

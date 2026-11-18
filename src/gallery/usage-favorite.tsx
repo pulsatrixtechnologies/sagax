@@ -47,7 +47,6 @@ function Gallery() {
     label: t("sidebar.account.usage"),
     icon: <Gauge size={18} />,
     value: summary.percent === null ? undefined : t("usage.limits.figure", { percent: summary.percent }),
-    valueOnly: true,
     tooltip: summary.percent === null ? undefined : summary.account
       ? t("sidebar.account.usageTooltip", { account: summary.account, percent: summary.percent })
       : t("sidebar.account.usageTooltipBare", { percent: summary.percent }),

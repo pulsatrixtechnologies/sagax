@@ -483,10 +483,9 @@ export function profileMenuItems(input: {
       key: "usage",
       label: t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
-      // the gauge, the percent and the chevron only (the owner 2026-11-17);
-      // the account the figure belongs to is in the tooltip and the label
+      // the label "Usage", the percent at the right, no account name (the owner
+      // 2026-11-17); the account the figure belongs to is in the tooltip
       value: input.usagePercent === null ? undefined : t("usage.limits.figure", { percent: input.usagePercent }),
-      valueOnly: true,
       tooltip: input.usagePercent === null
         ? undefined
         : input.usageAccount

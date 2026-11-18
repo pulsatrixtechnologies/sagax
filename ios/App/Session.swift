@@ -2158,6 +2158,26 @@ final class Session: ObservableObject {
     // is a phone that disagrees with the laptop.
 
     /// The widget's change, as an approval card in this conversation.
+    /// The X draft card's state (XPostCardsView.swift, #4638).
+    func xDraftState(threadId: String, messageId: String, draftKey: String) async -> XDraftState? {
+        guard let client else { return nil }
+        return try? await client.xDraftState(threadId: threadId, messageId: messageId, draftKey: draftKey)
+    }
+
+    /// Post or Discard on an X draft card. Nil on success, else a readable reason.
+    func actOnXDraft(threadId: String, kind: XDraftAction, messageId: String, draftKey: String, text: String, handle: String?) async -> String? {
+        guard let client else { return String(localized: "Not connected") }
+        do {
+            try await client.actOnXDraft(threadId: threadId, kind: kind, messageId: messageId, draftKey: draftKey, text: text, handle: handle)
+            return nil
+        } catch let error as APIError {
+            if error.isUnauthorized { handleUnauthorized() }
+            return error.errorDescription ?? error.localizedDescription
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     func requestCwAction(_ action: CwActionBody, threadId: String, botId: String?) async {
         await perform { client in
             try await client.requestCwAction(threadId: threadId, action: action, botId: botId)

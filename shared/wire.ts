@@ -32,6 +32,7 @@ import type { CommandAllowlistCandidate } from "./command-allowlist.ts";
 import type { CustomRuleCandidate, CustomRuleNotice } from "./custom-rules.ts";
 import type { OrgEngineMove } from "./offered-engines.ts";
 import type { EmailSendRequestCard } from "./email-draft-send.ts";
+import type { XPostRequest } from "./x-post.ts";
 import type { TurnDigest } from "./digest.ts";
 import type { BotAvatarCrop } from "./bot-avatar.ts";
 import type { MascotBodyId } from "./mascot-bodies.ts";
@@ -976,6 +977,9 @@ export interface WireMessage extends WaitLineField {
    * draws them (shared/record-cards.ts recordTextOf). `text` never holds a
    * record address: every other client and surface reads it as plain words. */
   recordText?: string;
+  /** #4638: the state of each ```x-post draft this message holds, by draft key
+   * (server/index-leaves/xPostCard.ts). */
+  xPosts?: Record<string, XPostRequest>;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
    * Each viewer receives only the routines they can see; `text` is the

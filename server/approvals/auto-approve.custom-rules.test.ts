@@ -38,6 +38,15 @@ describe("autoVerdict with a custom rule", () => {
     expect(autoVerdict("ask", "mcp__outlook__send_mail", { emailDraftApproved: true, safetyHold: true }).source).toBe("safety-hold");
   });
 
+  it("Post on an X draft card is the person's go, but an organization Ask-first or Refuse rule still holds it (#4638)", () => {
+    const tool = "mcp__x__create_post";
+    expect(autoVerdict("ask", tool, { xPostApproved: true })).toEqual({ approve: `approved ${tool} (your approved X post)`, source: "x-post-approval" });
+    expect(autoVerdict("ask", tool, { xPostApproved: true, customRule: { behavior: "ask", id: "r" } }).source).toBe("x-post-approval");
+    expect(autoVerdict("ask", tool, { xPostApproved: true, customRule: { behavior: "ask", id: "orule_ask" } }).source).not.toBe("x-post-approval");
+    expect(autoVerdict("ask", tool, { xPostApproved: true, customRule: { behavior: "deny", id: "orule_deny" } })).toEqual({ approve: null, source: "custom-rule-deny" });
+    expect(autoVerdict("ask", tool, { xPostApproved: true, safetyHold: true }).source).toBe("safety-hold");
+  });
+
   it("a card held by an ask rule says so", () => {
     expect(approvalHeldNote({ source: "custom-rule-ask", permission: true })).toBe("approval.held.customRule");
   });

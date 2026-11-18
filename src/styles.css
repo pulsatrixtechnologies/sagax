@@ -5296,3 +5296,22 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 @media (prefers-reduced-motion: reduce) {
   .page-selection-composer { animation: none; }
 }
+
+/* #4638: X posts and the X draft card (src/components/XPostCards.tsx). X's own
+   colors, dark and light by the skin family (no light-dark(): the build rewrites it). */
+.x-post {
+  --x-bg: #000000;
+  --x-ink: #e7e9ea;
+  --x-sub: #71767b;
+  --x-line: #2f3336;
+  --x-quote-line: #2f3336;
+  --x-hover: rgba(231, 233, 234, 0.03);
+}
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) .x-post {
+  --x-bg: #ffffff;
+  --x-ink: #0f1419;
+  --x-sub: #536471;
+  --x-line: #eff3f4;
+  --x-quote-line: #cfd9de;
+  --x-hover: rgba(15, 20, 25, 0.03);
+}

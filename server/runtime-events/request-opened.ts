@@ -140,6 +140,8 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         ? host.takeEmailSendPass(event.threadId, asker.id, event.mcpTool ?? event.tool, event.input)
         : null;
       const emailDraftCall = emailDraftRequest !== null;
+      // #4638: the person's Post on an X draft card answers the bot's own X call carrying exactly that text
+      const xPostCall = Boolean(permission && event.requestId && asker && host.takeXPostPass(event.threadId, asker.id, event.mcpTool ?? event.tool, event.input));
       const safetyWho = permission && event.requestId ? host.safetyPrincipal(event.threadId) : undefined;
       // full-access: safety-review
       const reviewedSafety = safetyWho
@@ -432,7 +434,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           break;
         }
       }
-      decideRequestOpened(event, ctx, host, { adminApproval, adminReason: serverLevelReason, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended });
+      decideRequestOpened(event, ctx, host, { adminApproval, adminReason: serverLevelReason, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, xPostCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended });
       break;
     }
   }
@@ -441,7 +443,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
 /** The verdict half of request.opened: saved commands, custom and owner rules, then the card. */
 function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
   const { pushMessage } = ctx;
-  const { adminApproval, adminReason, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended } = s;
+  const { adminApproval, adminReason, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, xPostCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended } = s;
       const command = permission && asker && event.requestId && !event.requiresExplicitApproval && event.command && !strictCard && !guestDriven
         ? host.commandAllowlistCandidate({ ...event.command, providerInstanceId: event.providerInstanceId ?? asker.modelSelection.instanceId })
         // #1098: a command in the person's own sandbox can be saved too
@@ -538,6 +540,7 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
             host.cwActionPasses.take(event.threadId, event.mcpTool ?? event.tool, event.input) !== null,
           ...(customDecision?.kind === "ask" ? { customRule: { behavior: "ask" as const, id: customDecision.rule.id } } : {}),
           emailDraftApproved: emailDraftCall && !strictCard && !guestDriven && !event.requiresExplicitApproval,
+          xPostApproved: xPostCall && !strictCard && !guestDriven && !event.requiresExplicitApproval,
           // person-asked mail in the owner's turn
           // follows Ask / Auto / Full; routine and other turns force a draft.
           personAskedMail: Boolean(asker) && !guestDriven && host.ownEnvironmentOrigin(asker!, event.threadId) === "owner",
@@ -584,7 +587,7 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
       // a deny rule refuses and an ask rule keeps the card whatever the
       // level. Only the person's own answer on a draft's or a widget's card
       // is never asked again.
-      const personAnswered = baseVerdict?.source === "email-draft-approval" || baseVerdict?.source === "widget-approval";
+      const personAnswered = baseVerdict?.source === "email-draft-approval" || baseVerdict?.source === "x-post-approval" || baseVerdict?.source === "widget-approval";
       // #2091 (decided 2026-11-05): a guest's or botmail turn keeps its owner
       // layer: its card offers Always allow like every other one (situation
       // "origin", so only a rule saved from such a card answers it)

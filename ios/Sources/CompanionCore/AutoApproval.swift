@@ -28,7 +28,7 @@ public enum AutoApprovalReason: String, Hashable, Sendable {
         case "command-allowlist": .command
         case "allowed-recipient", "reach-me": .recipients
         case "safety-read", "perspicax-read", "perspicax-lease", "sagax-internal", "own-read-only", "own-attachment", "own-computer-choice": .trusted
-        case "email-draft-approval", "widget-approval": .answered
+        case "email-draft-approval", "x-post-approval", "widget-approval": .answered
         default: .other
         }
     }

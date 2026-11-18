@@ -289,12 +289,18 @@ struct MarkdownText: View {
         let kind = RichBlocks.fenceKind(lang)
         let email = kind == .email || kind == nil ? RichBlocks.parseEmailBlock(code, lang: lang) : nil
         let csv = kind == .csv && !pending ? MarkdownTable.delimited(code, language: lang) : nil
+        let xDraft = kind == .xPost && !inert ? XPosts.parseDraft(code) : nil
+        let xPosts = kind == .xPosts && !inert && !pending ? XPosts.parsePosts(code) : nil
         if inert, kind == .cw || kind == .widget {
             CodeBlockView(language: language, code: code, pending: pending, caret: caretText(tail), identifier: identifier)
         } else if kind == .cw, let widget = CwWidget.parse(code) {
             CwWidgetCard(widget: widget, threadId: cwThreadId, botId: cwBotId, ask: cwAsk)
         } else if lang.trimmingCharacters(in: .whitespaces).lowercased() == "mermaid" {
             MermaidBlockView(code: code, pending: pending, identifier: identifier)
+        } else if let xDraft {
+            XDraftCardView(draft: xDraft, pending: pending, scope: attachmentScope, identifier: identifier)
+        } else if let xPosts {
+            XPostListView(posts: xPosts, identifier: identifier)
         } else if let email {
             EmailCardView(draft: email, pending: pending, identifier: identifier)
         } else if kind == .widget, let consent = ClaudeArtifacts.parseConsent(code) {

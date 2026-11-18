@@ -85,6 +85,8 @@ import { ArtifactCard } from "./ArtifactCard";
 import { ClaudeArtifactCard, ClaudeArtifactConsentCard } from "./ClaudeArtifactCard";
 import { claudeArtifactUrl, parseArtifactConsent } from "../../shared/claude-chat-blocks";
 import { EmailCard } from "./EmailCard";
+import { XDraftCard, XPostList } from "./XPostCards";
+import { parseXDraftFence, parseXPostsFence } from "../../shared/x-post";
 import { WidgetFrame } from "./WidgetFrame";
 import { ChartBlock } from "./ChartBlock";
 import { RichTable, tableModelFromDelimited, tableModelFromMarkdown } from "./RichTable";
@@ -1308,6 +1310,15 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
               </div>
             );
           }
+        }
+        // #4638: an X draft or the posts a bot read from X
+        if (kind === "x-post" && !inert) {
+          const draft = parseXDraftFence(code);
+          if (draft) return <XDraftCard draft={draft} pending={pending} threadId={threadId} botId={botId} messageId={messageId} />;
+        }
+        if (kind === "x-posts" && !inert && !pending) {
+          const posts = parseXPostsFence(code);
+          if (posts) return <XPostList posts={posts} />;
         }
         const email = kind === "email" || !kind ? parseEmailBlock(code, lang) : null;
         if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} draftsEnabled={emailDrafts} />;

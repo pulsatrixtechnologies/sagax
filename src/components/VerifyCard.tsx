@@ -60,7 +60,7 @@ export function VerifyCard({
       <div className={SIDE_CARD_HEADER}>
         <ListChecks size={14} strokeWidth={1.75} className="shrink-0 text-ink-secondary" aria-hidden="true" />
         <div className="ml-0.5 flex min-w-0 flex-1 flex-col">
-          <span className="text-[13px] font-medium leading-[18px]">{t("chat.verify.title")}</span>
+          <span title={t("chat.verify.about")} className="text-[13px] font-medium leading-[18px]">{t("chat.verify.title")}</span>
           <span role="status" aria-live="polite" aria-atomic="true" className="text-[12px] text-ink-secondary">
             {runSummary(steps).label}
           </span>
@@ -81,10 +81,11 @@ export function VerifyCard({
       </div>
       {!collapsed && (
         <>
+          <p className="border-t border-hairline/25 px-3 pt-2 text-[12px] text-ink-secondary">{t("chat.verify.about")}</p>
           <ol
             tabIndex={0}
             aria-label={t("chat.verify.steps")}
-            className="max-h-56 overflow-y-auto border-t border-hairline/25 px-3 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            className="max-h-56 overflow-y-auto px-3 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             {steps.map((step) => (
               <li key={step.id} className="flex min-w-0 items-center gap-2 py-1">

@@ -47,13 +47,13 @@ afterEach(() => {
 });
 
 describe("local run card visibility", () => {
-  it("defaults on and ignores malformed values without writing anything", async () => {
+  it("opens only after an explicit choice, including after hydration", async () => {
     const preference = await import("./run-card-preferences");
-    expect(preference.useShowRunCard()).toBe(true);
-    expect(hook.serverSnapshot!()).toBe(true);
-    for (const value of ["", "false", "broken", "1"]) {
+    expect(preference.useShowRunCard()).toBe(false);
+    expect(hook.serverSnapshot!()).toBe(false);
+    for (const value of ["", "false", "broken", "0"]) {
       local.setItem(preference.RUN_CARD_KEY, value);
-      expect(preference.useShowRunCard()).toBe(true);
+      expect(preference.useShowRunCard()).toBe(false);
     }
     local.setItem.mockClear();
     preference.useShowRunCard();
@@ -114,7 +114,7 @@ describe("local run card visibility", () => {
     local.clear();
     storageEvent(null);
     expect(listener).toHaveBeenCalledTimes(2);
-    expect(hook.snapshot!()).toBe(true);
+    expect(hook.snapshot!()).toBe(false);
     unsubscribe();
     storageEvent(null);
     expect(listener).toHaveBeenCalledTimes(2);
@@ -130,7 +130,7 @@ describe("local run card visibility", () => {
       if (failure === "read") local.getItem.mockImplementation(() => { throw new Error("blocked"); });
     }
     const preference = await import("./run-card-preferences");
-    expect(preference.useShowRunCard()).toBe(true);
+    expect(preference.useShowRunCard()).toBe(false);
     preference.setShowRunCard(false);
     expect(preference.useShowRunCard()).toBe(false);
     preference.setShowRunCard(true);

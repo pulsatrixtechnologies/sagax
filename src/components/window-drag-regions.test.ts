@@ -145,6 +145,7 @@ describe.each([
     expect(bar).not.toBeNull();
     const buttons = [...bar.querySelectorAll("button")] as unknown as DomNode[];
     expect(buttons.length).toBeGreaterThan(0);
+    if (_name === "chat") expect(bar.querySelector("[data-chat-bot-panel]")).not.toBeNull();
     for (const button of buttons) {
       expect(button.matches(noDragSelector) || region(button) === "no-drag").toBe(true);
     }

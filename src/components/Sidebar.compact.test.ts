@@ -59,13 +59,14 @@ describe("compact sidebar", () => {
     expect(toggle).toContain('aria-label="Expand sidebar"');
     expect(toggle).toContain('title="Expand sidebar"');
     expect(html).not.toContain("data-sidebar-collapse");
+    expect(html).not.toContain("data-sidebar-bot-panel");
     // in the foot, not the head
     expect(html.indexOf("data-sidebar-compact-toggle")).toBeGreaterThan(html.indexOf("data-sidebar-foot"));
     expect(html).toContain("data-sidebar-rail");
     expect(html).toContain('aria-description="Enter turns the compact sidebar on or off"');
   });
 
-  it.each(["comfortable", "compact"] as const)("has no Collapse sidebar button in the head (the bot panel's ... leads it), no rail toggle or rail keys at %s density", (density) => {
+  it.each(["comfortable", "compact"] as const)("has no Collapse sidebar button and no bot panel button in the head, no rail toggle or rail keys at %s density", (density) => {
     fixture.density = density;
     const html = render();
     expect(html).not.toContain("data-sidebar-collapse");

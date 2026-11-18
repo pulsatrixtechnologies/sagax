@@ -1,6 +1,6 @@
 // Density is an occasional preference chosen in Settings > Appearance; the
 // Sagax sidebar head keeps only its frequent controls: the reference's
-// the bot panel "..." first (replacing #4484's collapse), then search and New. The rail wears
+// search then New (no collapse, no panel button). The rail wears
 // "Expand sidebar" in its foot. Dragging the edge collapses it too: see
 // `sidebarDragTarget` in sidebar-preferences.
 import { readFileSync } from "node:fs";
@@ -215,16 +215,28 @@ describe("sidebar header", () => {
   });
 });
 
-describe("sidebar head bot panel button", () => {
-  it("is a round '...' with the panel's name, aria-expanded and the pill's toggle, hidden when no bot is on screen", () => {
+describe("sidebar head has no bot panel button", () => {
+  it("draws only search and New; the panel toggle lives in the chat header", () => {
     const src = readFileSync(resolve(__dirname, "Sidebar.tsx"), "utf8");
-    expect(src).toContain("data-sidebar-bot-panel");
-    expect(src).toContain("<Ellipsis");
-    expect(src).toMatch(/aria-expanded=\{state\.panelOpen\}/);
-    expect(src).toContain('t("chat.openPanel")');
-    expect(src).toMatch(/const panelButton = botOnScreen && !remoteClient/);
-    expect(src).toContain("{panelButton}{searchButton}{newButton}");
-    // a fresh render has no bot on screen: no button
+    expect(src).not.toContain("data-sidebar-bot-panel");
+    expect(src).not.toContain("<Ellipsis");
+    expect(src).not.toContain("<PanelRight");
+    expect(src).toContain("const headButtons = <>{searchButton}{newButton}</>");
     expect(render()).not.toContain("data-sidebar-bot-panel");
+  });
+});
+
+describe("chat header bot panel button", () => {
+  it("is a round panel icon left of the '...', same toggle as the pill, no-drag, hidden for a remote client", () => {
+    const src = readFileSync(resolve(__dirname, "ChatView.tsx-parts/ChatViewHeader.tsx"), "utf8");
+    expect(src).toContain("data-chat-bot-panel");
+    expect(src).toContain("<PanelRight");
+    expect(src).toContain("aria-expanded={pillPanelOpen}");
+    expect(src).toContain('t("chat.openPanel")');
+    expect(src).toContain('t("chat.closePanel")');
+    expect(src).toContain("CIRCLE_BUTTON");
+    expect(src).toContain("onClick={onTogglePanel}");
+    expect(src.indexOf("data-chat-bot-panel")).toBeLessThan(src.indexOf("<ExportTranscriptMenu"));
+    expect(src).toMatch(/\{!remoteClient && <button/);
   });
 });

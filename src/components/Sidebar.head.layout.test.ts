@@ -42,10 +42,10 @@ describe("sidebar head buttons", () => {
 
   it("are what the head's search and New buttons wear, at every density", () => {
     expect(sidebar).toMatch(/const SIDEBAR_HEAD_BUTTON = cn\(\s*SIDEBAR_CIRCLE_BUTTON,/);
-    // the bot panel "...", search and New, drawn in the head at full width; the rail's foot takes search and New (#4093)
-    const buttons = sidebar.slice(sidebar.indexOf("const panelButton ="), sidebar.indexOf("const headButtons ="));
-    expect(buttons.match(/\bSIDEBAR_HEAD_BUTTON\b/g)).toHaveLength(3);
-    expect(buttons).toContain("data-sidebar-bot-panel");
+    // search and New, drawn in the head at full width (the bot panel toggle is at the chat header's right end); the rail's foot takes search and New (#4093)
+    const buttons = sidebar.slice(sidebar.indexOf("const searchButton ="), sidebar.indexOf("const headButtons ="));
+    expect(buttons.match(/\bSIDEBAR_HEAD_BUTTON\b/g)).toHaveLength(2);
+    expect(buttons).not.toContain("data-sidebar-bot-panel");
     expect(sidebar).toContain("const railButtons = <>{searchButton}{newButton}</>");
     expect(buttons).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);
     const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("{/* Bot list."));

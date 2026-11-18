@@ -1,3 +1,7 @@
+import { PanelRight } from "lucide-react";
+import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { cn } from "@/lib/cn";
+import { t } from "@/lib/i18n";
 import type { CSSProperties, Dispatch, HTMLAttributes, ReactNode } from "react";
 import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { splitBesideMain } from "@/lib/split-view";
@@ -24,6 +28,8 @@ export function ChatViewHeader({
   macInset,
   browser,
   panelOpen,
+  pillPanelOpen,
+  onTogglePanel,
   showInspector,
   advanced,
   remoteClient,
@@ -47,6 +53,8 @@ export function ChatViewHeader({
   macInset: boolean;
   browser: boolean;
   panelOpen: boolean;
+  pillPanelOpen: boolean;
+  onTogglePanel: () => void;
   showInspector: boolean;
   advanced: boolean;
   remoteClient: boolean;
@@ -85,6 +93,20 @@ export function ChatViewHeader({
         >
           {/* No Computer button in the header (JC 2026-11-05): Computer
               opens from the bot panel. */}
+          {/* The bot panel toggle (owner 2026-11-17): a round panel icon left of
+              the "...", the same toggle as the bot pill. It stays put while the
+              panel is open (the panel keeps its own gear). */}
+          {!remoteClient && <button
+            type="button"
+            data-chat-bot-panel
+            aria-expanded={pillPanelOpen}
+            onClick={onTogglePanel}
+            aria-label={pillPanelOpen ? t("chat.closePanel") : t("chat.openPanel")}
+            title={pillPanelOpen ? t("chat.closePanel") : t("chat.openPanel")}
+            className={cn(CIRCLE_BUTTON, pillPanelOpen && "bg-circle-hover")}
+          >
+            <PanelRight size={18} strokeWidth={1.75} aria-hidden="true" />
+          </button>}
           {/* One "..." for the conversation: share and export, then the
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries

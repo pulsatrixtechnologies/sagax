@@ -15,6 +15,8 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
     case bots, privacySecurity
     // Settings > Bots > My engines (#1098)
     case myEngines
+    // Settings > Santé (Apple Health for the person's own bots)
+    case health
 
     /// The desktop's section keywords for the same page (SettingsModal.tsx
     /// `SECTIONS`), and words for the phone's own pages.
@@ -51,6 +53,7 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
                              "reach me", "me joindre", "sms", "texto", "text message", "teams", "telegram", "whatsapp", "hours", "heures"]
         case .myEngines: return ["my engines", "mes moteurs", "engines", "moteurs", "models", "subscription", "abonnement", "sign in", "connect",
                                  "claude", "codex", "chatgpt", "grok", "kimi", "gemini"]
+        case .health: return ["health", "santé", "sante", "apple health", "healthkit", "sleep", "sommeil", "steps", "pas", "heart rate", "fréquence cardiaque", "hrv", "weight", "poids", "water", "eau", "mindful", "workout", "entraînement"]
         case .privacySecurity: return ["privacy", "security", "confidentialité", "sécurité", "security keys", "passkey", "vault", "coffre", "presence", "read receipts"]
         }
     }

@@ -50,6 +50,19 @@ describe("phone tool broker", () => {
     expect(broker.availableTools("ann")).toEqual([]);
   });
 
+  it("offers health to a bot without a card or a saved grant, only through that person's phone", () => {
+    const { broker } = setup();
+    broker.registerDevice("ann", "phone-a", { deviceName: "iPhone", tools: ["health_read", "health_write", "card_scan"], transport: "protected" });
+    expect(broker.botTools("ann")).toEqual(["health_read", "health_write"]);
+    expect(broker.botTools("bob")).toEqual([]);
+    const read = broker.request({ ...ask, tool: "health_read", args: { category: "steps", from: "a", to: "b" } });
+    expect(read.preApproved).toBe(true);
+    expect(read.allowAlways).toBe(false);
+    expect(broker.pendingFor("ann")[0]?.preApproved).toBe(true);
+    expect(broker.request({ ...ask, tool: "health_write", args: { category: "water", value: 250 } }).access).toBe("write");
+    expect(() => setup().broker.request({ ...ask, tool: "health_read", args: {} })).toThrow(/phone/);
+  });
+
   it("refuses a tool no phone of the person offers", () => {
     const { broker } = setup();
     broker.registerDevice("ann", "phone-a", { deviceName: "", tools: ["status"], transport: "protected" });

@@ -51,6 +51,7 @@ struct SettingsSearchResults: View {
             case .privacy: return NavigationMenus.showsPrivacy(gate: gate, connected: connected)
             case .experimental: return sections.contains(.experimental)
             case .myEngines: return connected && gate.allows(.myEngines)
+            case .health: return connected && HealthKitStore.isAvailable
             case .plugins, .botComputer, .pages, .usage, .rules, .approvalGrants, .timeZone, .credentials, .securityKeys, .privacySecurity: return connected
             default: return true
             }
@@ -84,6 +85,7 @@ struct SettingsSearchResults: View {
         case .bots: String(localized: "Bots")
         case .privacySecurity: String(localized: "Privacy and security")
         case .myEngines: String(localized: "My engines")
+        case .health: String(localized: "Health")
         }
     }
 
@@ -114,6 +116,7 @@ struct SettingsSearchResults: View {
         case .bots: "cpu"
         case .privacySecurity: "lock.shield"
         case .myEngines: "key.horizontal"
+        case .health: "heart.text.square"
         }
     }
 }

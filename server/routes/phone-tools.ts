@@ -59,7 +59,7 @@ export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
     if (path === `${PREFIX}/device`) {
       if (method !== "POST") return json(res, 405, { error: "POST" });
       const parsed = phoneDeviceSchema.safeParse(await readBody(req));
-      if (!parsed.success) return json(res, 400, { error: "send { deviceName?, tools: [location, contacts, reminders, calendar, home, alarms, photos, shortcut, clipboard, status] }" });
+      if (!parsed.success) return json(res, 400, { error: "send { deviceName?, tools: [location, contacts, reminders, calendar, home, alarms, photos, shortcut, clipboard, status, health_read, health_write] }" });
       if (deps.live && !deps.live(auth)) return json(res, 401, { error: "Session expired" });
       // the transport is the connection's, whatever the body says (review of #960)
       broker.registerDevice(phone.person, phone.deviceId, { deviceName: parsed.data.deviceName, tools: parsed.data.tools, transport: phone.transport });

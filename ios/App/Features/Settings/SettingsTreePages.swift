@@ -8,7 +8,7 @@ import UIKit
 extension Session {
     /// The tree's context for this pairing.
     var settingsContext: SettingsContext {
-        SettingsContext(gate: surfaceGate, connected: connection != nil, ownPhoto: account?.ownPhotoEditable == true)
+        SettingsContext(gate: surfaceGate, connected: connection != nil, ownPhoto: account?.ownPhotoEditable == true, health: HealthKitStore.isAvailable)
     }
 }
 
@@ -85,6 +85,9 @@ struct SettingsTreeRow: View {
             SettingsRow(title: "Usage", accessory: model.usagePercent.map { .valueChevron("\($0)%") } ?? .chevron, identifier: "settings-usage") { navigator.push(.usage) }
         case .organization:
             SettingsRow(title: "Organization", accessory: .chevron, identifier: "settings-organization") { navigator.sheet = .organization }
+        case .health:
+            SettingsRow(title: "Health", subtitle: "health.row.subtitle", accessory: .chevron,
+                        identifier: "settings-health") { navigator.push(.health) }
         case .bots:
             // The reference's Permissions row (#4103): the review mode and
             // how many rules, the approvals one level in

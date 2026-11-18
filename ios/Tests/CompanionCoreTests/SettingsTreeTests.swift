@@ -47,7 +47,7 @@ final class SettingsTreeTests: XCTestCase {
     /// Permissions, the time zone pair and the bots' computer.
     func testTheRootFollowsTheReferenceSheet() {
         let root = SettingsTree.cards(.root, .everything)
-        XCTAssertEqual(root[0], [.profile, .usage, .organization, .vault])
+        XCTAssertEqual(root[0], [.profile, .usage, .organization, .vault, .health])
         XCTAssertEqual(root[1], [.connectApps])
         XCTAssertEqual(Array(root[2].prefix(4)), [.bots, .timeZoneAuto, .timeZone, .botComputer])
         // Permissions opens the approvals, nothing else
@@ -68,7 +68,7 @@ final class SettingsTreeTests: XCTestCase {
         XCTAssertEqual(SettingsTree.path(to: .reachMe), [], "Reach me sits in the Bot card")
         // The reference app's sheet lists the Vault with the profile (2026-11-01)
         XCTAssertEqual(SettingsTree.path(to: .vault), [])
-        XCTAssertEqual(SettingsTree.cards(.root, .everything).first, [.profile, .usage, .organization, .vault])
+        XCTAssertEqual(SettingsTree.cards(.root, .everything).first, [.profile, .usage, .organization, .vault, .health])
         XCTAssertEqual(SettingsTree.path(to: .termsOfService), [.about])
         XCTAssertEqual(SettingsTree.path(to: .switchAccount), [.account])
         XCTAssertEqual(SettingsTree.path(to: .notifications), [])

@@ -15,6 +15,8 @@ public enum SettingsPageID: String, CaseIterable, Hashable, Sendable {
 public enum SettingsItem: String, CaseIterable, Hashable, Sendable {
     // Root
     case profile, usage, organization
+    /// "Santé" (Apple Health for the person's own bots): iPhone and iPad only.
+    case health
     case bots, connectApps, publishedPages
     case notifications, appearance, language, haptics
     case privacySecurity
@@ -63,10 +65,12 @@ public struct SettingsContext: Equatable, Sendable {
     public var ownPhoto: Bool
     /// My engines (#1098): an organization server's person, signed in.
     public var myEngines: Bool
+    /// This device has Apple Health (an iPhone or an iPad, not a Mac).
+    public var health: Bool
 
     public init(connected: Bool, usage: Bool = false, organization: Bool = false, plugins: Bool = false,
                 computer: Bool = false, experimental: Bool = false, privacy: Bool = false, ownPhoto: Bool = false,
-                myEngines: Bool = false) {
+                myEngines: Bool = false, health: Bool = false) {
         self.connected = connected
         self.usage = usage
         self.organization = organization
@@ -76,10 +80,11 @@ public struct SettingsContext: Equatable, Sendable {
         self.privacy = privacy
         self.ownPhoto = ownPhoto
         self.myEngines = myEngines
+        self.health = health
     }
 
     /// The context `NavigationMenus.settings` describes for a pairing.
-    public init(gate: SurfaceGate, connected: Bool, ownPhoto: Bool = false) {
+    public init(gate: SurfaceGate, connected: Bool, ownPhoto: Bool = false, health: Bool = false) {
         let sections = NavigationMenus.settings(gate: gate, connected: connected, achievementsAvailable: false)
         self.init(
             connected: connected,
@@ -90,14 +95,15 @@ public struct SettingsContext: Equatable, Sendable {
             experimental: sections.contains(.experimental),
             privacy: NavigationMenus.showsPrivacy(gate: gate, connected: connected),
             ownPhoto: ownPhoto,
-            myEngines: connected && gate.allows(.myEngines)
+            myEngines: connected && gate.allows(.myEngines),
+            health: health && connected
         )
     }
 
     /// Everything on: the tree at its fullest.
     public static let everything = SettingsContext(
         connected: true, usage: true, organization: true, plugins: true, computer: true,
-        experimental: true, privacy: true, ownPhoto: true, myEngines: true
+        experimental: true, privacy: true, ownPhoto: true, myEngines: true, health: true
     )
 }
 
@@ -110,7 +116,7 @@ public enum SettingsTree {
             all = [
                 // The reference app's account sheet (2026-11-01): the profile with
                 // Usage and the Vault, Connect apps, then the Bot card
-                [(.profile, true), (.usage, c.usage), (.organization, c.organization), (.vault, c.connected)],
+                [(.profile, true), (.usage, c.usage), (.organization, c.organization), (.vault, c.connected), (.health, c.health)],
                 // Connect apps alone, as the reference's card (#4103): the
                 // published pages are its Pages chip, so the root lists them
                 // only where Connect apps is not offered

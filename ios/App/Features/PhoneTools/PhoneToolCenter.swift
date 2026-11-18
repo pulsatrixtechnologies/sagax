@@ -65,9 +65,11 @@ final class PhoneToolCenter: ObservableObject {
     func register() async {
         guard let session else { return }
         let tools = offered
+        // Apple Health: offered only once the person chose a category (Settings > Santé)
+        let health = HealthKitStore.isAvailable ? HealthChoiceStore().load().offered : []
         let protected = session.phoneCredentialTransportIsProtected
         await session.perform(quietly: true) { client in
-            try await client.registerPhoneTools(deviceName: UIDevice.current.name, tools: tools, protectedTransport: protected)
+            try await client.registerPhoneTools(deviceName: UIDevice.current.name, tools: tools, health: health, protectedTransport: protected)
         }
     }
 
@@ -92,6 +94,13 @@ final class PhoneToolCenter: ObservableObject {
         // plain local Wi-Fi: no card, a refusal that says why (owner 2026-10-21)
         if let reason = PhoneToolRules.transportRefusal(protectedTransport: protected) {
             await send(request, PhoneToolAnswer.refused(reason))
+            await next()
+            return
+        }
+        // Apple Health (health_read, health_write): never a card; the person's
+        // choice in Settings > Santé decides, and the phone checks it again
+        if request.healthTool != nil {
+            await runHealth(request, protected: protected)
             await next()
             return
         }
@@ -178,6 +187,24 @@ final class PhoneToolCenter: ObservableObject {
             answer = PhoneToolAnswer(decision: decision, result: result)
         } catch {
             answer = PhoneToolAnswer(decision: decision, error: error.localizedDescription)
+        }
+        await send(request, answer)
+    }
+
+    /// A health request: runs while the app is open on screen when the person
+    /// chose that tool and category; otherwise it says why, plainly. What was
+    /// read goes to the server and is dropped here.
+    private func runHealth(_ request: PhoneToolRequest, protected: Bool) async {
+        let choice = HealthChoiceStore().load()
+        guard PhoneToolRules.runsHealth(request, appActive: UIApplication.shared.applicationState == .active, offered: HealthKitStore.isAvailable ? choice.offered : [], protectedTransport: protected) else {
+            await send(request, PhoneToolAnswer.refused("The person has not turned Apple Health on for their bots on this phone (Settings > Santé)."))
+            return
+        }
+        let answer: PhoneToolAnswer
+        do {
+            answer = PhoneToolAnswer(decision: .once, result: try await HealthKitStore.shared.run(request, choice: choice))
+        } catch {
+            answer = PhoneToolAnswer(decision: .once, error: error.localizedDescription)
         }
         await send(request, answer)
     }

@@ -26,13 +26,13 @@ import { HELP_TOOL_DEFINITIONS } from "./agents-help-tools.ts";
 import { SETTINGS_TOOL_DEFINITIONS } from "./agents-settings-tools.ts";
 import { APPROVALS_TOOL_DEFINITIONS } from "./agents-approvals-tools.ts";
 import { WAIT_TOOL_DEFINITIONS, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
-import { phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
+import { healthToolDefinitions, healthToolsFromEnv, phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
 import { videoToolDefinition } from "./agents-video.ts";
 import { imageToolDefinition } from "./agents-image.ts";
 import { WEB_SEARCH_TOOL_DEFINITION } from "./agents-web-search-tools.ts";
 import { isOpenApiTool, openApiToolDefinition, openApiToolsFromEnv } from "../mcp/openapi-tools.ts";
 import { VAULT_HTTP_TOOL } from "./agents-vault-http-tools.ts";
-import { PHONE_TOOLS, type PhoneToolId } from "../../shared/phone-tools.ts";
+import { PHONE_TOOLS, type HealthToolId, type PhoneToolId } from "../../shared/phone-tools.ts";
 import { CHIEF_PROFILE_TARGET } from "./agents-tools/shared.ts";
 export { WEEKDAYS } from "./agents-tools/shared.ts";
 import { AGENT_API_TOOLS } from "./agents-tools/agent-api.ts";
@@ -135,6 +135,8 @@ export interface CatalogProfile {
   /** The tools a phone of the person speaking offers right now (phone_tool,
    * agents-phone-tools.ts). Absent or empty is off, so the wire goldens stay. */
   phoneTools?: PhoneToolId[];
+  /** health_read and health_write (Apple Health on that phone). Absent is off. */
+  healthTools?: HealthToolId[];
   /** sagax_web_search (agents-web-search-tools.ts): the engine has no web
    * search of its own and the turn's person saved a search provider.
    * Absent is off, so the wire goldens stay. */
@@ -184,6 +186,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     claims: env.SAGAX_CLAIMS === "1",
     grokBridge: !externalRuntime && env.SAGAX_GROK_BRIDGE === "1",
     phoneTools: externalRuntime ? [] : phoneToolsFromEnv(env.SAGAX_PHONE_TOOLS),
+    ...(!externalRuntime && healthToolsFromEnv(env.SAGAX_PHONE_TOOLS).length ? { healthTools: healthToolsFromEnv(env.SAGAX_PHONE_TOOLS) } : {}),
     ...(!externalRuntime && env.SAGAX_WEB_SEARCH === "1" ? { webSearch: true } : {}),
     vaultHttp: !externalRuntime && env.SAGAX_VAULT_HTTP === "1",
     ...(!externalRuntime && openApiToolsFromEnv(env.SAGAX_OPENAPI_TOOLS).length ? { openapiTools: openApiToolsFromEnv(env.SAGAX_OPENAPI_TOOLS) } : {}),
@@ -420,7 +423,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "request_product_key",
   "request_login", "request_sign_in", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
-  "phone_tool",
+  "phone_tool", "health_read", "health_write",
   // A post into a room from a 1:1 chat, or a message to another person: rare.
   "list_rooms", "post_to_room", "message_user", "message_person", "set_reply_notify",
   // #1997: long or occasional in a chat turn (about 7 KB of schema loaded on
@@ -651,6 +654,7 @@ function catalogTools(profile: CatalogProfile) {
     ...(profile.claims && !profile.externalRuntime ? CLAIM_TOOLS : []),
     ...(profile.grokBridge && !profile.externalRuntime ? GROK_BRIDGE_TOOLS : []),
     ...(profile.phoneTools?.length && !profile.externalRuntime ? [phoneToolDefinition(profile.phoneTools)] : []),
+    ...(profile.healthTools?.length && !profile.externalRuntime ? healthToolDefinitions(profile.healthTools) : []),
     ...(profile.webSearch === true && !profile.externalRuntime ? [WEB_SEARCH_TOOL_DEFINITION] : []),
     ...(profile.openapiTools?.length && !profile.externalRuntime ? profile.openapiTools.map(openApiToolDefinition) : []),
     ...(profile.vaultHttp && !profile.externalRuntime ? [VAULT_HTTP_TOOL] : []),

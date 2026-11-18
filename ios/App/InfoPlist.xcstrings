@@ -270,6 +270,42 @@
           }
         }
       }
+    },
+    "NSHealthShareUsageDescription": {
+      "comment": "Apple Health (Settings > Santé): HealthKit permission sheet",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your bots read and record the data you choose, for you only."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots lisent et notent les données que tu choisis, pour toi seulement."
+          }
+        }
+      }
+    },
+    "NSHealthUpdateUsageDescription": {
+      "comment": "Apple Health (Settings > Santé): HealthKit permission sheet",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your bots read and record the data you choose, for you only."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots lisent et notent les données que tu choisis, pour toi seulement."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -119416,6 +119416,420 @@
           }
         }
       }
+    },
+    "health.category.sleep": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleep"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sommeil"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sono"
+          }
+        }
+      }
+    },
+    "health.category.steps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steps"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passos"
+          }
+        }
+      }
+    },
+    "health.category.exercise": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity and exercise"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activité et exercice"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atividade e exercício"
+          }
+        }
+      }
+    },
+    "health.category.heart_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heart rate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fréquence cardiaque"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frequência cardíaca"
+          }
+        }
+      }
+    },
+    "health.category.resting_heart_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resting heart rate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fréquence cardiaque au repos"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frequência cardíaca em repouso"
+          }
+        }
+      }
+    },
+    "health.category.hrv": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heart rate variability"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variabilité de la fréquence cardiaque"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variabilidade da frequência cardíaca"
+          }
+        }
+      }
+    },
+    "health.category.mindful_minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindful minutes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minutes de pleine conscience"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minutos de atenção plena"
+          }
+        }
+      }
+    },
+    "health.category.water": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Water"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eau"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Água"
+          }
+        }
+      }
+    },
+    "health.category.weight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weight"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poids"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peso"
+          }
+        }
+      }
+    },
+    "health.category.workouts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workouts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entraînements"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Treinos"
+          }
+        }
+      }
+    },
+    "health.category.workout_notes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workout notes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes d'entraînement"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notas de treino"
+          }
+        }
+      }
+    },
+    "health.read.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your bots may read"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots peuvent lire"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus bots podem ler"
+          }
+        }
+      }
+    },
+    "health.write.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your bots may record"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots peuvent noter"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus bots podem registrar"
+          }
+        }
+      }
+    },
+    "health.read.footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each switch opens Apple's Health permission sheet. Nothing is read before you allow it, and your bots read only these."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque interrupteur ouvre la fenêtre d'autorisation de Santé d'Apple. Rien n'est lu avant que tu l'autorises, et tes bots lisent seulement ces données."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada chave abre a janela de permissão do app Saúde da Apple. Nada é lido antes de você permitir, e seus bots leem somente esses dados."
+          }
+        }
+      }
+    },
+    "health.write.footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your bots read and record the data you choose, for you only. Your own bots only, never an organization or another person. What a bot reads stays in your conversation, is never sent to a third party, and is never kept as a shared memory. Turn a switch off at any time; to withdraw Apple's permission, open Health > Sharing > Apps > Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots lisent et notent les données que tu choisis, pour toi seulement. Tes propres bots seulement, jamais une organisation ni une autre personne. Ce qu'un bot lit reste dans ta conversation, n'est jamais envoyé à un tiers et n'est jamais gardé dans une mémoire partagée. Tu peux fermer un interrupteur en tout temps; pour retirer l'autorisation d'Apple, ouvre Santé > Partage > Apps > Sagax."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus bots leem e registram os dados que você escolhe, somente para você. Apenas os seus próprios bots, nunca uma organização ou outra pessoa. O que um bot lê fica na sua conversa, nunca é enviado a terceiros e nunca vira memória compartilhada. Desligue uma chave quando quiser; para retirar a permissão da Apple, abra Saúde > Compartilhamento > Apps > Sagax."
+          }
+        }
+      }
+    },
+    "health.error.sheet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Health did not open. Try again, or allow Sagax in Health > Sharing > Apps."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Santé d'Apple ne s'est pas ouverte. Réessaie, ou autorise Sagax dans Santé > Partage > Apps."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O app Saúde não abriu. Tente de novo, ou permita o Sagax em Saúde > Compartilhamento > Apps."
+          }
+        }
+      }
+    },
+    "health.error.writeDenied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Health did not allow recording this. To change it, open Health > Sharing > Apps > Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Santé d'Apple n'a pas permis de noter ceci. Pour changer ça, ouvre Santé > Partage > Apps > Sagax."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O app Saúde não permitiu registrar isso. Para mudar, abra Saúde > Compartilhamento > Apps > Sagax."
+          }
+        }
+      }
+    },
+    "health.row.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What your bots may read and record in Apple Health"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que tes bots peuvent lire et noter dans Santé d'Apple"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O que seus bots podem ler e registrar no app Saúde da Apple"
+          }
+        }
+      }
     }
   }
 }

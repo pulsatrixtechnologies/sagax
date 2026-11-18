@@ -5,7 +5,17 @@
 // lists exactly those. The route re-checks the turn, the person and the
 // phone on every call. Definition and call live here so agents-catalog.ts
 // and agents-call.ts each gain one line.
-import { PHONE_TOOLS, isPhoneTool, type PhoneToolId } from "../../shared/phone-tools.ts";
+import {
+  HEALTH_AGGREGATIONS,
+  HEALTH_CATEGORIES,
+  HEALTH_TOOLS,
+  HEALTH_WRITABLE_CATEGORIES,
+  PHONE_TOOLS,
+  isHealthTool,
+  isPhoneTool,
+  type HealthToolId,
+  type PhoneToolId,
+} from "../../shared/phone-tools.ts";
 
 import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
@@ -15,6 +25,11 @@ export const PHONE_TOOL_NAME = "phone_tool";
 /** The tools a spawned proxy was told the phone offers (comma separated). */
 export function phoneToolsFromEnv(value: string | undefined): PhoneToolId[] {
   return (value ?? "").split(",").map((entry) => entry.trim()).filter(isPhoneTool);
+}
+
+/** The health tools a spawned proxy was told the phone offers (same list as phone_tool's). */
+export function healthToolsFromEnv(value: string | undefined): HealthToolId[] {
+  return (value ?? "").split(",").map((entry) => entry.trim()).filter(isHealthTool);
 }
 
 const WHAT: Record<PhoneToolId, string> = {
@@ -129,4 +144,96 @@ export async function callPhoneTool(args: Json, context: ToolCallContext): Promi
   const { ok, body: answer } = await apiResponse("/api/internal/phone-tools", { method: "POST", body: JSON.stringify(body) });
   if (!ok) return { text: String(answer.error ?? "The phone tool is not available in this turn."), isError: true };
   return phoneOutcomeText(answer);
+}
+
+// health_read and health_write: Apple Health on the person's own iPhone,
+// through the same device link as phone_tool (the route, the owner-only turn
+// and the wait are the same). The person chose the categories in Settings >
+// Santé and granted each through the HealthKit sheet; the phone checks that
+// on every call, so there is no card. What a bot reads is the person's
+// conversation content: never copy it into a memory others read.
+const HEALTH_PRIVACY = "Health data is the person's own and private: use it only to answer them in this conversation, never save it into a shared or team memory and never send it to anyone else unless the person asks. If the phone says the category is not allowed, tell the person they can allow it in Settings > Santé on their iPhone.";
+
+export function healthToolDefinitions(tools: readonly HealthToolId[]) {
+  const offered = HEALTH_TOOLS.filter((tool) => tools.includes(tool));
+  return offered.map((name) => name === "health_read"
+    ? {
+      name,
+      description: [
+        "Read the person's own Apple Health data from their iPhone, for one category and a date range of at most 92 days: sleep (hours asleep per night), steps, exercise (minutes), heart_rate (bpm), resting_heart_rate (bpm), hrv (ms), mindful_minutes, water (ml), weight (kg), workouts (a list). Daily values come back with their unit.",
+        "aggregation is daily_sum (the default for steps, exercise, sleep, mindful_minutes, water) or daily_avg (the default for heart rate, HRV and weight). Say why in reason.",
+        "When the phone has not answered yet you get a request_id: call again with only request_id to keep waiting.",
+        HEALTH_PRIVACY,
+      ].join(" "),
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          category: { type: "string", enum: [...HEALTH_CATEGORIES] },
+          from: { type: "string", description: "ISO 8601 start of the range." },
+          to: { type: "string", description: "ISO 8601 end of the range (at most 92 days after from)." },
+          aggregation: { type: "string", enum: [...HEALTH_AGGREGATIONS] },
+          reason: { type: "string", description: "One short sentence: why you need it." },
+          request_id: { type: "string", description: "Keep waiting on an earlier request (its other fields are ignored)." },
+        },
+        required: [],
+      },
+    }
+    : {
+      name,
+      description: [
+        "Add one entry to the person's own Apple Health on their iPhone, only for a category they allowed to write: mindful_minutes (value in minutes), water (value in ml), weight (value in kg), workouts (workout_type and value in minutes, or start and end, with an optional note). start and end default to now.",
+        "Ask first when the person did not clearly tell you to record it. Say why in reason.",
+        "When the phone has not answered yet you get a request_id: call again with only request_id to keep waiting.",
+        HEALTH_PRIVACY,
+      ].join(" "),
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          category: { type: "string", enum: [...HEALTH_WRITABLE_CATEGORIES] },
+          value: { type: "number", description: "Minutes, millilitres or kilograms, by category." },
+          start: { type: "string" },
+          end: { type: "string" },
+          workout_type: { type: "string", description: "running, walking, cycling, swimming, yoga, strength, hiit or other." },
+          note: { type: "string", description: "A short note kept with a workout." },
+          reason: { type: "string" },
+          request_id: { type: "string", description: "Keep waiting on an earlier request (its other fields are ignored)." },
+        },
+        required: [],
+      },
+    });
+}
+
+const HEALTH_ARG_KEYS: Record<HealthToolId, readonly string[]> = {
+  health_read: ["reason", "category", "from", "to", "aggregation"],
+  health_write: ["reason", "category", "value", "start", "end", "workout_type", "note"],
+};
+
+/** What the bot reads back, in words that name the phone's situation plainly. */
+export function healthOutcomeText(outcome: Outcome): ToolCallResult {
+  switch (outcome.status) {
+    case "done":
+      return { text: JSON.stringify(outcome.result ?? {}) };
+    case "denied":
+      return { text: "The person's phone refused this. Do not ask again unless they ask you to.", isError: true };
+    case "expired":
+      return { text: "The person's phone is not reachable right now (it did not answer in time). Tell the person plainly; they can open Sagax on their iPhone and ask again.", isError: true };
+    default:
+      return phoneOutcomeText(outcome);
+  }
+}
+
+export async function callHealthTool(name: HealthToolId, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  const { apiResponse } = context.client;
+  let body: Json;
+  if (typeof args.request_id === "string" && args.request_id.trim()) {
+    body = { request_id: args.request_id.trim() };
+  } else {
+    const keys = HEALTH_ARG_KEYS[name];
+    body = { tool: name, args: Object.fromEntries(Object.entries(args).filter(([key, value]) => keys.includes(key) && value !== undefined && value !== null)) };
+  }
+  const { ok, body: answer } = await apiResponse("/api/internal/phone-tools", { method: "POST", body: JSON.stringify(body) });
+  if (!ok) return { text: String(answer.error ?? "Health is not available in this turn."), isError: true };
+  return healthOutcomeText(answer);
 }

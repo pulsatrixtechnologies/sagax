@@ -41,9 +41,23 @@ export function productKeyStateOf(body: unknown): ProductKeyState | null {
   return null;
 }
 
-/** The same tools/call answer with one more text block for the bot. */
+/** The key of the structured content that carries Sagax's note. */
+export const TOOL_NOTE_KEY = "_sagax_note";
+
+/** The same tools/call answer with one more text block for the bot. A
+ * result with structured content carries the note there too: Claude Code
+ * hands the model the structured value INSTEAD of the text blocks
+ * (server/mcp-gate.ts, measured 2026-11-05), so a note in a text block
+ * alone never reaches a Claude bot (a record link it never wrote, a key
+ * card it never heard of). The tools' output schemas allow other keys. */
 export function withToolNote(body: unknown, text: string): unknown {
   if (!isObject(body) || !isObject(body.result)) return body;
   const content = Array.isArray(body.result.content) ? body.result.content : [];
-  return { ...body, result: { ...body.result, content: [...content, { type: "text", text }] } };
+  const structured = body.result.structuredContent;
+  const result: Record<string, unknown> = { ...body.result, content: [...content, { type: "text", text }] };
+  if (isObject(structured)) {
+    const before = structured[TOOL_NOTE_KEY];
+    result.structuredContent = { ...structured, [TOOL_NOTE_KEY]: typeof before === "string" && before ? `${before}\n${text}` : text };
+  }
+  return { ...body, result };
 }

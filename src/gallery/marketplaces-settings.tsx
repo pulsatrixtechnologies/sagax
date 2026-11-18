@@ -14,7 +14,7 @@ await loadLocale(params.get("lang") ?? "en");
 const noop = () => {};
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <main className="mx-auto max-w-[720px] bg-panel p-6 text-ink">
+    <main className="mx-auto bg-panel p-6 text-ink" style={{ maxWidth: params.get("w") ? Number(params.get("w")) : 720 }}>
       <MarketplacesSection
         marketplaces={[
           { name: "claude-plugins-official", source: "anthropics/claude-plugins-official", plugins: [{ name: "a", installed: true }, { name: "b", installed: false }], visibility: "private", mine: true },

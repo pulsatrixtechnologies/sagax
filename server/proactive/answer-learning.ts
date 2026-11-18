@@ -241,6 +241,17 @@ const LINK_WORDS = [
 const LINK_PARTICLES = ["を", "の", "は", "が", "に", "と", "で", "も", "的", "和", "或", "给", "給", "到", "在"];
 const ITEM_NUMBER_END = new RegExp(`^(?:\\s*$|\\s*[?!.;,:)»"'…？！。、；，：](?!\\d)|\\s+(?:${LINK_WORDS.join("|")})(?![\\p{L}\\p{N}])|(?:${LINK_PARTICLES.join("|")}))`, "u");
 
+/** #4587: ISO 4217 codes, lower case (what `same` gives). */
+const CURRENCY_CODES: ReadonlySet<string> = new Set(
+  (typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["USD", "CAD", "EUR", "GBP", "JPY", "CNY", "CHF", "AUD", "MXN", "BRL", "INR"])
+    .map((code) => code.toLowerCase()),
+);
+/** #4587: a value that starts with a three-letter currency code and digits
+ * ("usd500") is an amount, never an item's id. */
+function startsWithCurrency(value: string): boolean {
+  return /^\p{L}{3}\d/u.test(value) && CURRENCY_CODES.has(value.slice(0, 3));
+}
+
 /** #4558: a question's words without what names one item, case and spacing
  * ignored. A number is set aside only:
  * - right after an explicit id mark (#1013, n° 1013), in one block;
@@ -261,7 +272,7 @@ export function questionShape(question: string): string {
       (JOINED_DIGITS.test(whole.slice(offset + match.length)) ? match : `${mark.trim()}<id>`))
     .replace(ITEM_NUMBER, (match: string, word: string, space: string, value: string, offset: number, whole: string) => {
       const after = whole.slice(offset + match.length);
-      const id = /^\d/.test(value) || (value.match(/\d/g)?.length ?? 0) >= 3;
+      const id = !startsWithCurrency(value) && (/^\d/.test(value) || (value.match(/\d/g)?.length ?? 0) >= 3);
       return id && !JOINED_DIGITS.test(after) && ITEM_NUMBER_END.test(after) ? `${word}${space}<id>` : match;
     });
 }

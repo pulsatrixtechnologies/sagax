@@ -18,8 +18,10 @@ const flag = (value: unknown): unknown => (value === undefined || value === null
 /** The projection's version. 2 (#3517) added the open flags of the waiting
  * rows (a question in words, a person's attention card, a proposal card), so
  * the age expiry finds them by a query. A sealed row without `v` predates
- * it: its projection is rewritten once (reprojectSealedRows). */
-export const SKELETON_VERSION = 2;
+ * it: its projection is rewritten once (reprojectSealedRows). 3 (#4587) added
+ * the flag of an option card still following a routine check's run
+ * (`card.checkRunId`); only an option card of version 2 is rewritten for it. */
+export const SKELETON_VERSION = 3;
 
 export function skeletonOf(message: Message, full: string): string {
   const out: Record<string, unknown> = { id: message.id, at: message.at, role: message.role, kind: message.kind, sealed: 1, v: SKELETON_VERSION };
@@ -36,6 +38,8 @@ export function skeletonOf(message: Message, full: string): string {
       requestType: card.requestType, requestId: card.requestId,
       answered: flag(card.answered), dismissed: flag(card.dismissed), expired: flag(card.expired),
       proactiveProposal: flag(card.proactiveProposal),
+      // #4587: a flag only, never the run's id
+      checkRunId: typeof card.checkRunId === "string" && card.checkRunId ? 1 : undefined,
     };
   }
   const request = (message as { inputRequest?: unknown }).inputRequest;

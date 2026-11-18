@@ -2206,6 +2206,16 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return this.thread(threadId).messages;
   }
 
+  /** #4587: a thread's option cards still following a routine check's run
+   * (`card.checkRunId`) and no other. A thread already in memory answers
+   * from it; otherwise one indexed read decodes only those rows, the
+   * conversation is not loaded. */
+  checkRunCardsFor(threadId: string): Message[] {
+    const follows = (message: Message): boolean => message.kind === "options" && typeof message.card?.checkRunId === "string";
+    const state = this.threads.get(threadId);
+    return state ? state.messages.filter(follows) : mdb.checkRunCardMessages(threadId).filter(follows);
+  }
+
   /** A bounded page of a thread's newest messages, for callers that only
    * need a display page — the startup/reconnect hydrate and a fresh
    * scrollback view. Reads just `limit` rows at the SQL boundary instead of

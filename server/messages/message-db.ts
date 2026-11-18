@@ -133,7 +133,12 @@ const OPEN_WAITING_ROW =
 
 /** A sealed row whose projection has no version: written before the
  * waiting flags were projected (SKELETON_VERSION). */
-const SEALED_UNPROJECTED = "sealed IS NOT NULL AND json_extract(json, '$.v') IS NULL";
+const SEALED_UNPROJECTED = "sealed IS NOT NULL AND (json_extract(json, '$.v') IS NULL " +
+  "OR (json_extract(json, '$.v') < 3 AND kind = 'options'))";
+
+/** #4587: an option card still following a routine check's run. A sealed
+ * row carries it as a flag in its projection (version 3). */
+const CHECK_RUN_CARD = "json_extract(json, '$.card.checkRunId') IS NOT NULL";
 
 // Content encryption at rest (docs/content-encryption.md): a sealed row has
 // `sealed` (AES-256-GCM of the whole message), `key_id` (its content key),
@@ -183,9 +188,15 @@ function ensureSealedSchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS messages_open_waiting_rows ON messages(thread_id)
       WHERE ${OPEN_WAITING_ROW};
     -- Sealed rows whose projection predates its version 2 (no waiting
-    -- flags): rewritten once by reprojectSealedRows, then this is empty.
-    CREATE INDEX IF NOT EXISTS messages_sealed_unprojected ON messages(thread_id)
+    -- flags), or version 3 for an option card: rewritten once by
+    -- reprojectSealedRows, then this is empty. The index of the earlier
+    -- predicate is replaced (#4587).
+    DROP INDEX IF EXISTS messages_sealed_unprojected;
+    CREATE INDEX IF NOT EXISTS messages_sealed_unprojected_v3 ON messages(thread_id)
       WHERE ${SEALED_UNPROJECTED};
+    -- #4587: the option cards still following a routine check's run.
+    CREATE INDEX IF NOT EXISTS messages_check_run_cards ON messages(thread_id)
+      WHERE ${CHECK_RUN_CARD};
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -1422,6 +1433,22 @@ export function accessCardMessages(): Array<{ threadId: string; message: Message
     if (message) out.push({ threadId: row.thread_id, message });
   }
   return out;
+}
+
+/** #4587: the option cards of one thread that follow a routine check's run,
+ * through messages_check_run_cards: only those rows are decoded, not every
+ * option card. A sealed row from before projection version 3 is read too
+ * until reprojectSealedRows has rewritten it (the start's catch-up runs
+ * before that pass); the caller checks the decoded card. A row whose key is
+ * locked is left out. */
+export function checkRunCardMessages(threadId: string): Message[] {
+  const rows = cached(
+    `SELECT rowid, thread_id, id, json, sealed, key_id FROM messages WHERE thread_id = ? AND ${CHECK_RUN_CARD} ` +
+    "UNION " +
+    `SELECT rowid, thread_id, id, json, sealed, key_id FROM messages WHERE thread_id = ? AND kind = 'options' AND ${SEALED_UNPROJECTED} ` +
+    "ORDER BY rowid",
+  ).all(threadId, threadId) as unknown as Array<StoredRow & { thread_id: string }>;
+  return openableWithThread(rows).map((entry) => entry.message);
 }
 
 /** Persist a new message and the branch head as one crash-safe mutation. */

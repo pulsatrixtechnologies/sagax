@@ -135,7 +135,7 @@ const REDACTED_ROUTINE_FIELDS = ["requires", "prompt", "attachments", "sourceThr
 const REDACTED_RUN_FIELDS = [
   "requires", "readiness", "readinessEngine", "prompt", "attachments", "output", "attention", "denials",
   // the room cards it drew (#4219)
-  "roomCards",
+  "roomCards", "completionNotes",
   "executionThreadId", "sourceThreadId", "resultsThreadId", "threadId", "webhookId", "deliveryId",
   // what the organization memory told the person it runs as
   "memoryHint",

@@ -337,6 +337,8 @@ export interface RoutineRun {
   /** 2026-11-01: completed, but not all of it went right: why ("Completed
    * with problems"). Counts as a problem run. */
   problems?: string;
+  /** Nonfatal notes recorded alongside the report of a completed run. */
+  completionNotes?: string;
   /** #3479: this run ended with the same problem as the routine's previous
    * run (the bot's SAME_PROBLEM line, or the same recorded problems): the
    * row of the first run with it is updated in place, nothing new is posted

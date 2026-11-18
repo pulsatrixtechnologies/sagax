@@ -209,6 +209,6 @@ describe("Clear logs", () => {
 });
 
 it("withholds readiness requirements and account facts from another person's run", () => {
-  const redacted = redactRun({ id: "run", status: "blocked", requires: { skills: ["inbox-review"] }, readiness: [{ code: "mcp_missing" }], readinessEngine: { engine: "grok", account: "person" } });
+  const redacted = redactRun({ id: "run", status: "blocked", completionNotes: "private report", requires: { skills: ["inbox-review"] }, readiness: [{ code: "mcp_missing" }], readinessEngine: { engine: "grok", account: "person" } });
   expect(redacted).toEqual({ id: "run", status: "blocked", redacted: true });
 });

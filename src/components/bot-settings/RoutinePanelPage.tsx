@@ -8,10 +8,11 @@
 // panel and the group panel.
 import { api, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
+import { isRoutineProblemRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { RoutineEditor } from "../RoutinesPage";
 import { ClipboardCheck, CirclePlay, Pause, Trash2 } from "lucide-react";
-import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
+import { ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, RunNowButton } from "../routines/RunNowButton";
 import { clearRoutineRuns, type RoutinePatch, routineHistory, RoutineLastRun, RoutineRunAsRow, RoutineRunsByDay, RoutineStateBadge, RoutineStatusRows } from "../routines/RoutineDetail";
 import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/RoutineReadiness";
@@ -41,9 +42,11 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
   const editable = routine.canEdit !== false;
   const canRun = canRunRoutineNow(state.config, routine, bot);
   const toggle = () => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } });
-  const openRun = (run: RoutineRun) => {
+  const openRun = (run: RoutineRun, group = [run]) => {
     onOpenRun(run);
-    if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id });
+    for (const item of group) {
+      if ((isRoutineProblemRun(item) || item.completionNotes) && !item.seenAt && !item.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.id });
+    }
   };
   const patch = async (change: RoutinePatch) => { const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify(change) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); };
   const remove = async () => {
@@ -86,6 +89,7 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
         routine={routine}
         runs={runs}
         onOpenRun={openRun}
+        retry={<RunNowButton routine={routine} bot={bot} retryLabel className="rounded px-1 py-0.5 text-xs font-medium text-ink-secondary hover:bg-hover aria-disabled:text-ink-tertiary" onStarted={onOpenRun} />}
         onClearRuns={() => void clearRoutineRuns(routine, confirm, dispatch).catch(() => { /* the runs stay listed */ })}
       />,
       actions: <RoutinePanelActions readiness={readiness} routine={routine} bot={bot} onStarted={onOpenRun} onToggle={toggle} onDelete={() => void remove()} />,
@@ -108,9 +112,9 @@ export function RoutinePanelActions({ routine, bot, onStarted, onToggle, onDelet
   const readiness = externalReadiness ?? ownReadiness;
   const { state } = useStore();
   return <ActionBar data-routine-detail-actions="">
-    <RunNowButton routine={routine} bot={bot} className={actionButtonClass("primary", "main")} labelClassName={ACTION_LABEL_MAIN} onStarted={onStarted} />
-    {canRunRoutineNow(state.config, routine, bot) && <ActionButton icon={<ClipboardCheck size={15} />} label={t(readiness.checking ? "routineReadiness.checking" : "routineReadiness.action")} disabled={readiness.checking} onClick={() => void readiness.check()} data-routine-check="" />}
-    <ActionButton icon={routine.enabled ? <Pause size={15} /> : <CirclePlay size={15} />} label={routine.enabled ? t("routines.disable") : t("routines.enable")} onClick={onToggle} data-routine-toggle="" />
-    <ActionButton icon={<Trash2 size={15} />} label={t("common.delete")} danger onClick={onDelete} data-routine-delete="" />
+    <RunNowButton routine={routine} bot={bot} panelLabel className={actionButtonClass("primary", "persistent")} labelClassName="whitespace-nowrap" onStarted={onStarted} />
+    {canRunRoutineNow(state.config, routine, bot) && <ActionButton fold="icon" icon={<ClipboardCheck size={15} />} label={t(readiness.checking ? "routineReadiness.checking" : "routineReadiness.action")} disabled={readiness.checking} onClick={() => void readiness.check()} data-routine-check="" />}
+    <ActionButton fold="icon" icon={routine.enabled ? <Pause size={15} /> : <CirclePlay size={15} />} label={routine.enabled ? t("routines.disable") : t("routines.enable")} onClick={onToggle} data-routine-toggle="" />
+    <ActionButton fold="icon" icon={<Trash2 size={15} />} label={t("common.delete")} danger onClick={onDelete} data-routine-delete="" />
   </ActionBar>;
 }

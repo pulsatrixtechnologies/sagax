@@ -1149,6 +1149,18 @@ describe("PerspicaxMcp records on a tool result (#4507)", () => {
     expect(result.content).toEqual([...content, { type: "text", text: "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516)." }]);
   });
 
+  it("puts the line in the structured result too, the copy a Claude bot reads instead of the text", async () => {
+    const structuredContent = { items: [{ id: 481516, summary: "Imprimante hors ligne" }], next: null };
+    const h = harness({
+      records: async () => "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516).",
+      mcp: answering({ content, structuredContent, _meta: records }),
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: call(8) });
+    const result = (answer.body as { result: { structuredContent: Record<string, unknown> } }).result;
+    expect(result.structuredContent).toEqual({ ...structuredContent, _sagax_note: "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516)." });
+  });
+
   it("sends every console tool's arguments with each record link reduced to its label", async () => {
     const h = harness({ mcp: answering({ content }) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });

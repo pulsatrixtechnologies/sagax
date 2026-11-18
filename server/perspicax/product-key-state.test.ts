@@ -39,4 +39,24 @@ describe("productKeyStateOf (#4185)", () => {
     expect(noted.result.content[1]!.text).toBe("A secure card was shown.");
     expect((body.result.content as unknown[]).length).toBe(1);
   });
+
+  // Claude Code hands the model a result's structuredContent INSTEAD of its
+  // text blocks (server/mcp-gate.ts, measured 2026-11-05): a note only in a
+  // text block never reached a Claude bot, so its replies kept ticket numbers
+  // as plain words (no record chip) while other engines linked them.
+  it("puts the sentence in the structured content too, which is what a Claude bot reads", () => {
+    const body = { jsonrpc: "2.0", id: 3, result: { structuredContent: { items: [{ id: 294793 }], next: null }, content: [{ type: "text", text: "{\"items\":[{\"id\":294793}],\"next\":null}" }] } };
+    const note = "In the chat, mention it as [#294793](sagax://record/cw_psa_service/ticket/294793).";
+    const noted = withToolNote(body, note) as { result: { structuredContent: Record<string, unknown>; content: Array<{ text: string }> } };
+    expect(noted.result.structuredContent.items).toEqual([{ id: 294793 }]);
+    expect(noted.result.structuredContent._sagax_note).toBe(note);
+    expect(noted.result.content.at(-1)!.text).toBe(note);
+    expect("_sagax_note" in body.result.structuredContent).toBe(false);
+    // a second note (a key card and a record link in one answer) keeps both
+    const twice = withToolNote(noted, "A secure card was shown.") as typeof noted;
+    expect(twice.result.structuredContent._sagax_note).toBe(`${note}\nA secure card was shown.`);
+    // a structured value that is not an object stays as it was
+    const listed = { jsonrpc: "2.0", id: 4, result: { structuredContent: [1, 2], content: [] } };
+    expect((withToolNote(listed, note) as typeof listed).result.structuredContent).toEqual([1, 2]);
+  });
 });

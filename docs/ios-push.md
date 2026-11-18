@@ -141,6 +141,39 @@ also sets `com.apple.developer.default-data-protection` to
 `NSFileProtectionCompleteUntilFirstUserAuthentication`, matching the portal's
 Data Protection setting, so CarPlay, Push to Talk and the extensions read their
 files while the phone is locked.
+## Push to Talk
+
+A person holds to talk to one bot from the lock screen or the Dynamic Island
+(`PushToTalk` framework, `ios/App/PushToTalk/PushToTalkController.swift`).
+Settings > Notifications has the switch and the bot of the channel (default:
+the Primary Bot, `PrimaryBotChoice`). The channel can only be joined from the
+foreground, by the person; the system restores it after a restart.
+
+- Talking: while the person holds, the system activates the audio session; the
+  words are recognized on the phone (`CallRecognizer`) and sent as a call turn
+  (`voiceCall.callId` starts with `ptt-`), so the bot answers in its own thread
+  with its phone-call instructions.
+- Hearing: when the turn is done (`server/index-leaves/notify.ts`, kind `done`),
+  `server/push/ptt.ts` sends an incoming PTT push to the channel's ephemeral
+  token (`apns-push-type: pushtotalk`, topic `<bundle>.voip-ptt`, priority 10,
+  expiration 0) through the push hub's own APNs sender. The payload carries
+  `activeSpeaker` (the bot's name), `botId`, `threadId` and the words (3 KB at
+  most). The app answers with the bot as active participant and speaks the words
+  with the bot's voice (`RoutedSpeechSource`, `CallSpeechPlayer`).
+- The phone registers the token with `POST /api/push/ptt` (`DELETE` on leaving,
+  `GET` to read), `server/routes/ptt-channel.ts`. A person only registers a bot
+  they may use.
+- The App ID needs the Push to Talk capability and the app the `push-to-talk`
+  background mode. It needs a real iPhone: the simulator has no PTT.
+
+## Side button (iOS 26.2)
+
+`ios/App/SideButton/SideButtonIntent.swift` is an App Intent with the
+`assistant.activate` schema and the `com.apple.developer.side-button-access.allow`
+entitlement. Holding the side button launches Sagax into a live voice call with
+the Primary Bot (the existing voice mode, `CarCalls.call`). Apple offers this
+only on an iPhone in Japan (the Apple Account's region and the physical
+location); on every other phone the system never shows it and nothing changes.
 
 ## Live Activities (ActivityKit push)
 

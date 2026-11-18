@@ -227,9 +227,9 @@ describe("ComputerCard", () => {
     const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!;
     act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
     expect(document.activeElement?.hasAttribute("data-computer-card-option")).toBe(false);
-    act(() => more.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-    const menu = document.querySelector("[data-computer-card-menu]")!;
-    act(() => menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.querySelector("[data-computer-card-menu]")).toBeTruthy();
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
     act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })));
     expect(document.activeElement?.getAttribute("data-computer-card-option")).toBe("auto");
   });

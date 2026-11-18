@@ -770,11 +770,42 @@ export class PluginMarketplaces {
       if (left.length) throw new BotPluginError(`Uninstall its plugins first: ${left.join(", ")}.`, "has_plugins", 409);
       const bots = this.options.inUse?.(name) ?? [];
       if (bots.length) throw new BotPluginError(`${bots.length === 1 ? "A bot still uses" : `${bots.length} bots still use`} plugins from this marketplace. Uninstall them for each bot first.`, "in_use", 409);
+      const removed = state.marketplaces[name]!;
       delete state.marketplaces[name];
       rmSync(this.repoDir(name), { recursive: true, force: true });
       notePluginFolderChanged(this.repoDir(name));
       this.write(state);
+      // a removed official catalog is not added again by the automatic add
+      const official = officialCatalogFor(removed.manifestUrl ?? removed.source);
+      if (official) this.dismissOfficial(official.id);
     });
+  }
+
+  private get dismissedFile(): string {
+    return join(this.root, "official-dismissed.json");
+  }
+
+  /** The official catalogs (ids) the person removed: never added again by
+   * the automatic add (server/plugins/official-catalogs-auto.ts). */
+  dismissedOfficial(): string[] {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.dismissedFile, "utf8"));
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private dismissOfficial(id: string): void {
+    const ids = new Set(this.dismissedOfficial());
+    ids.add(id);
+    mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    writeFileAtomic(this.dismissedFile, JSON.stringify([...ids].sort(), null, 2));
+  }
+
+  /** The sources (lowercase) of every marketplace in the list. */
+  sources(): Set<string> {
+    return new Set(Object.values(this.read().marketplaces).map((market) => (market.manifestUrl ?? market.source).toLowerCase()));
   }
 
   /** Take in a marketplace a bot had on its own before the two lists were

@@ -3377,6 +3377,7 @@
   "connectApps.market.official.add": "Add",
   "connectApps.market.official.addAria": "Add the {name} catalog",
   "connectApps.market.official.added": "Added",
+  "connectApps.market.official.autoFailed": "Not added yet, Sagax will try again:",
   "connectApps.market.official.hermes": "Nous Research: Hermes Agent skills and optional skills",
   "connectApps.market.official.openclaw": "OpenClaw, formerly clawdbot: bundled skills (more on ClawHub)",
   "connectApps.market.official.cursor": "Cursor: official plugins (skills, rules, agents, MCP), converted for Sagax",

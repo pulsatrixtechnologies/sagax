@@ -74,6 +74,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     renderAction, renderBelow, botBusy, removeSuperseded, toggleForBot, installPlugin, installForBot,
   } = a;
   const marketBusy = s.marketBusy;
+  const officialErrors = s.officialErrors;
   // Me on an organization server: the person's own MCP servers, rows of
   // Installed and the same "+ Add" flows as Organization (2026-11-06)
   const personalHere = scope === "me" && Boolean(organization);
@@ -625,6 +626,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               marketplaces={marketRoute !== null || (marketSummaries?.length ?? 0) > 0 ? (
                 <MarketplacesSection
                   marketplaces={marketSummaries}
+                  officialErrors={marketRoute === "workspace" ? officialErrors : undefined}
                   busy={marketBusy}
                   error={marketError}
                   onAdd={addMarketplace}

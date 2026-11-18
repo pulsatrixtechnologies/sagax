@@ -480,16 +480,15 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     await waitFor(async () => claudeProjects(secret).length === 0 && !existsSync(rollout(codexSecret)));
     expect(claudeHistory()).not.toContain(`${SECRET}-ENGINE`);
     expect(existsSync(rollout(codexSecret))).toBe(false);
-    // The files go first; the same purge then deletes the database rows and
-    // compacts the file (VACUUM), which holds its lock: a read in that window
-    // got "database is locked" on a busy build host (2026-11-17). Wait for
-    // the purge's database step, reading as an engine would, with a busy wait.
-    const rows = () => {
-      const after = new DatabaseSync(join(codex, "state_5.sqlite"), { readOnly: true, timeout: 5_000 });
-      try { return after.prepare("SELECT COUNT(*) AS n FROM threads").get() as { n: number }; } finally { after.close(); }
-    };
-    await waitFor(async () => rows().n === 0);
-    expect(rows()).toEqual({ n: 0 });
+    // One purge, in order: the files, the database rows, the compaction of
+    // the file (VACUUM, which holds its lock), then the record kept for one
+    // more pass. Reading the database between those steps got "database is
+    // locked", and reading the record before it was written got ENOENT, on a
+    // busy build host (2026-11-17): wait for the purge's last step.
+    // (the deletion's record names the deleted thread among its keys)
+    await waitFor(async () => existsSync(join(data, "confidential-engine-purge.json")) && readFileSync(join(data, "confidential-engine-purge.json"), "utf8").includes(secret));
+    const after = new DatabaseSync(join(codex, "state_5.sqlite"), { readOnly: true, timeout: 5_000 });
+    try { expect(after.prepare("SELECT COUNT(*) AS n FROM threads").get()).toEqual({ n: 0 }); } finally { after.close(); }
     expect(claudeProjects(plain)).toHaveLength(1);
     // kept for one more pass at the next start (an engine that outlived the deletion), ids only
     const pending = JSON.parse(readFileSync(join(data, "confidential-engine-purge.json"), "utf8"));

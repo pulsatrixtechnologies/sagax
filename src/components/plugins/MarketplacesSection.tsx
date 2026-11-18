@@ -18,7 +18,7 @@ import { BookOpen, Check, Loader2, Lock, Plus, RefreshCw, Store, Trash2, Users }
 
 import { cn } from "@/lib/cn";
 import { credentialOptions, useGithubCredentials, type MarketplaceCredentialView } from "@/lib/github-credentials";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { OFFICIAL_CATALOGS } from "../../../shared/skill-catalogs";
 
 export type MarketplaceVisibility = "private" | "org";
@@ -67,6 +67,14 @@ function VisibilityChoice({ value, onChange, disabled }: { value: MarketplaceVis
       {option("org", t("connectApps.market.visibility.org"), <Users size={12} aria-hidden="true" />)}
     </div>
   );
+}
+
+/** "2 plugins, 1 installed" with each noun in its own plural form (French
+ * counts 0 and 1 as singular). */
+export function marketCounts(plugins: number, installed: number): string {
+  const rules = new Intl.PluralRules(activeLocale());
+  const form = (n: number) => (rules.select(n) === "one" ? "one" : "other");
+  return `${t(`connectApps.market.pluginCount.${form(plugins)}`, { count: plugins })}, ${t(`connectApps.market.installedCount.${form(installed)}`, { installed })}`;
 }
 
 /** The scope badge shown on each row. Clickable for a marketplace the viewer
@@ -281,7 +289,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
                     <div className="truncate text-[13px] font-medium text-ink">{market.name}</div>
                     <div className="truncate text-[12px] text-ink-secondary">
                       <span className="font-mono">{market.source}{market.ref ? `#${market.ref}` : ""}</span>
-                      {" · "}{t("connectApps.market.pluginCount", { count: market.plugins.length, installed })}
+                      {" · "}{marketCounts(market.plugins.length, installed)}
                     </div>
                     {credentials && credentialUsedText(market.credential) && (
                       <div className="truncate text-[12px] text-ink-secondary" data-marketplace-credential-used={market.credential?.used?.via}>{credentialUsedText(market.credential)}</div>

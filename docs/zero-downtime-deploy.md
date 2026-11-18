@@ -107,13 +107,19 @@ a rendered manifest.
 The drain tells every live client first: one `server.restarting` frame,
 without an SSE id, just before the streams close. The app then shows
 "Server update in progress, back in a moment" instead of "can't reach the
-server", and "Reconnected" once the new process answers. A drop under
-2.5 s shows nothing. While the process drains, `/healthz` and `/api/health`
+server", and "Reconnected" once the new process answers. A restart under
+30 s shows nothing at all, and a drop with no answer at all shows nothing
+under 8 s (#4794). While the process drains, `/healthz` and `/api/health`
 answer 503 with `shuttingDown: true`; past `lb_try_duration`, the Caddyfile's
 `handle_errors` answers 503 with `x-sagax-maintenance`. Both read as an
-update (`src/lib/connection-notice.ts`). A roll that recreates the container
-(`docker compose up -d`) goes through the same SIGTERM drain, so it needs no
-extra step. On an organization server, the Perspicax connector's reach is
+update (`src/lib/connection-notice.ts`), and so does a bare 502, 503 or 504
+from an edge that has no such marker: the edge answers, only the server
+behind it is starting. A roll that recreates the container
+(`docker compose up -d`) goes through the same SIGTERM drain, but a sidecar
+proxy that shares the server's network namespace is stopped by compose
+before the server, which cuts the streams before the announcement: the
+edge's 502 is then the only sign, and the health probe that answers again
+reconnects the stream at once instead of at the end of its backoff. On an organization server, the Perspicax connector's reach is
 tracked from its traffic and a light `/healthz` probe
 (`server/perspicax/perspicax-reachability.ts`, `GET /api/connector-status`,
 `connector.status` frame). Settings > Notifications > Connection notices

@@ -113,6 +113,16 @@ export function publishMissedFrames(): void {
   for (const listener of liveFrameListeners) listener.onMissedFrames?.();
 }
 
+// Each open stream's "retry now" (one in practice: the store's).
+const retryNowListeners = new Set<() => void>();
+
+/** The server answers again (its health probe said so): every stream that
+ * is waiting out its backoff reconnects now. A stream that is open, or
+ * already connecting, is left alone. */
+export function retryLiveEventsNow(): void {
+  for (const retry of retryNowListeners) retry();
+}
+
 export function isLivePing(frame: Pick<LiveFrame, "kind">): boolean {
   return frame.kind === "ping";
 }
@@ -419,6 +429,12 @@ export function openLiveEvents(
     if (source && cursor && !pendingSnapshot && screensWanted() !== sourceScreens) reconnectNow(false);
   });
   screenWishListeners.add(onScreenWish);
+  const onRetryNow = () => {
+    if (stopped || source || retryTimer === null) return;
+    retryAttempt = 0;
+    reconnectNow(false);
+  };
+  retryNowListeners.add(onRetryNow);
   connect();
   const staleTimer = setInterval(recover, staleCheckMs);
   platform.windowTarget?.addEventListener("online", onOnline);
@@ -429,6 +445,7 @@ export function openLiveEvents(
     if (stopped) return;
     stopped = true;
     screenWishListeners.delete(onScreenWish);
+    retryNowListeners.delete(onRetryNow);
     clearInterval(staleTimer);
     clearRetry();
     closeSource();

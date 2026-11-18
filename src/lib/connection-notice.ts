@@ -9,17 +9,33 @@
 // `server.restarting` live frame it sends just before a planned restart (an
 // update rolls the container through the same graceful shutdown), or a
 // health probe answering 503 with `shuttingDown` (the drain) or the edge's
-// `x-sagax-maintenance` marker. Anything else is "unreachable". A drop
-// shorter than CONNECTION_NOTICE_DEBOUNCE_MS shows nothing, and the device
-// being offline has its own line (ChatStaleBanner), not this one.
+// `x-sagax-maintenance` marker. A bare 502/503/504 from the edge in front
+// of the server (#4794) reads as a restart too: the network and the edge
+// answer, only the server behind them is starting again. On a compose host a
+// roll stops the server's own proxy before the server can announce its
+// restart, so this answer is the only sign the app gets of most updates.
+//
+// What shows nothing (the owner's rule: a notice only when there is
+// something to do): a drop with no answer at all shorter than
+// CONNECTION_NOTICE_DEBOUNCE_MS, and a restart (announced, draining, an
+// edge gateway answer, or the server's health already back while the
+// stream reconnects) shorter than RESTART_QUIET_MS. Past that the notice
+// shows once for the occurrence. The device being offline has its own line
+// (ChatStaleBanner), not this one.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { listenLiveFrames } from "@/lib/live-events";
+import { listenLiveFrames, retryLiveEventsNow } from "@/lib/live-events";
 import { connectionNotices, useLocalSwitch } from "@/lib/notification-preferences";
 import { useNetworkOnline } from "@/lib/drafts";
 import { useStoreSelector } from "@/state/store-selector";
 
-export const CONNECTION_NOTICE_DEBOUNCE_MS = 2_500;
+/** A drop with no answer from the server or its edge shows nothing before this. */
+export const CONNECTION_NOTICE_DEBOUNCE_MS = 8_000;
+/** A restart (planned, or an edge saying the server behind it is starting)
+ * shows nothing before this: a roll is over well within it most times. */
+export const RESTART_QUIET_MS = 30_000;
+/** An edge answering 502/503/504 this long reads as unreachable, not an update. */
+export const GATEWAY_RESTART_MAX_MS = 2 * 60_000;
 /** A restart announced this recently explains a drop as an update. */
 export const RESTART_ANNOUNCE_WINDOW_MS = 10 * 60_000;
 /** An update that has not come back after this reads as unreachable. */
@@ -33,6 +49,10 @@ export const HEALTH_PROBE_MS = 5_000;
 
 export type ConnectionNoticeKind = "updating" | "server_unreachable" | "perspicax_unreachable";
 
+/** draining: the server said it restarts on purpose; gateway: the edge
+ * answers but the server behind it does not (yet); down: no answer at all. */
+export type HealthState = "draining" | "gateway" | "down" | "up";
+
 export interface ConnectorStatus { state: "ok" | "unreachable"; since: number }
 
 /** What the app knows about its connections now. */
@@ -43,7 +63,7 @@ export interface ConnectionWatch {
   /** When the server last said it was restarting on purpose. */
   restartAnnouncedAt: number | null;
   /** The last health probe while the live stream was down. */
-  health: "draining" | "down" | "up" | null;
+  health: HealthState | null;
   perspicax: ConnectorStatus | null;
   online: boolean;
 }
@@ -59,12 +79,16 @@ export function connectionNoticeFor(watch: ConnectionWatch, now: number, debounc
   if (!watch.online) return null;
   if (!watch.connected && watch.everConnected && watch.disconnectedAt != null) {
     const away = now - watch.disconnectedAt;
-    if (away < debounceMs) return null;
     // the announcement comes just before the stream closes: one from an
     // earlier restart explains nothing about this drop
     const announced = watch.restartAnnouncedAt != null && now - watch.restartAnnouncedAt < RESTART_ANNOUNCE_WINDOW_MS
       && watch.restartAnnouncedAt >= watch.disconnectedAt - ANNOUNCE_LEAD_MS;
-    const updating = (announced || watch.health === "draining") && away < UPDATING_MAX_MS;
+    const planned = announced || watch.health === "draining";
+    const gateway = watch.health === "gateway";
+    // the health already answers: the stream is on its way back
+    const restarting = planned || gateway || watch.health === "up";
+    if (away < (restarting ? RESTART_QUIET_MS : debounceMs)) return null;
+    const updating = (planned && away < UPDATING_MAX_MS) || (gateway && away < GATEWAY_RESTART_MAX_MS);
     const kind: ConnectionNoticeKind = updating ? "updating" : "server_unreachable";
     return { kind, occurrence: `${kind}:${watch.disconnectedAt}` };
   }
@@ -75,7 +99,7 @@ export function connectionNoticeFor(watch: ConnectionWatch, now: number, debounc
 }
 
 /** What a health answer says about a server that dropped its stream. */
-export async function readHealth(response: Response): Promise<"draining" | "down" | "up"> {
+export async function readHealth(response: Response): Promise<HealthState> {
   if (response.headers.get("x-sagax-maintenance")) return "draining";
   if (response.status === 503) {
     try {
@@ -84,8 +108,9 @@ export async function readHealth(response: Response): Promise<"draining" | "down
     } catch {
       /* not the server's own answer */
     }
-    return "down";
   }
+  // the edge answers for a server that is not there (yet)
+  if (response.status === 502 || response.status === 503 || response.status === 504) return "gateway";
   return response.ok ? "up" : "down";
 }
 
@@ -167,7 +192,13 @@ export function useConnectionNotice(): { kind: ConnectionNoticeKind | "reconnect
     const probe = () => {
       void fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(4_000) })
         .then(readHealth, () => "down" as const)
-        .then((state) => { if (alive) setHealth(state); });
+        .then((state) => {
+          if (!alive) return;
+          setHealth(state);
+          // the server is back: reconnect now instead of at the end of the
+          // stream's backoff, so a restart passes without a notice
+          if (state === "up") retryLiveEventsNow();
+        });
     };
     const first = setTimeout(probe, 1_000);
     const timer = setInterval(probe, HEALTH_PROBE_MS);

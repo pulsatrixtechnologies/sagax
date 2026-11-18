@@ -7,6 +7,7 @@ import {
   liveEventsUrl,
   liveEventsVisible,
   openLiveEvents,
+  retryLiveEventsNow,
   shouldReconnectLiveEvents,
   type LiveEventSourceLike,
   type LiveEventsPlatform,
@@ -199,6 +200,31 @@ describe("live events supervisor", () => {
       { kind: "message", value: "after snapshot" },
     ]);
     stop();
+  });
+
+  it("reconnects at once when the server answers again, not at the end of its backoff (#4794)", () => {
+    const test = harness();
+    const stop = openLiveEvents(
+      { onFrame: vi.fn(), onSnapshotRequired: async () => true, retryMinMs: 10_000, retryMaxMs: 10_000 },
+      test.platform,
+    );
+    test.sources[0].open();
+    // an open stream is left alone
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(1);
+
+    test.sources[0].error();
+    vi.advanceTimersByTime(1_000);
+    expect(test.sources).toHaveLength(1);
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(2);
+    // the attempt under way is not doubled, and the old backoff timer is gone
+    retryLiveEventsNow();
+    vi.advanceTimersByTime(10_000);
+    expect(test.sources).toHaveLength(2);
+    stop();
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(2);
   });
 
   it("caps retry backoff when opening the stream keeps failing", () => {

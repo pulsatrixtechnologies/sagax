@@ -118,10 +118,10 @@ export function productRowState(product: Pick<PersonProduct, "state" | "stateCod
 /** The control at a product's (or a vendor's) right: where it is on, its
  * switch for every bot (or the one bot), the "..." menu, the Choose the bots
  * checklist. */
-export function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions, state?: RowState) {
+export function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions, state?: RowState, update?: { running: boolean; onUpdate: () => void } | null) {
   if (ctx.forBot) {
     const on = ids.every((id) => botProductEnabled(ctx.forBot, id));
-    return <ItemTrailer state={state} name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
+    return <ItemTrailer update={update} state={state} name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
   }
   const reached = reachedBots(ctx, ids);
   const where = whereLabel(reached.length, ctx.bots.length);
@@ -141,7 +141,7 @@ export function productTrailer(ctx: ProductRowsContext, name: string, ids: reado
     } : {}),
     ...extra,
   };
-  return <ItemTrailer state={state} name={name} where={where} whereKind={where.kind} on={where.kind === "all"} onToggle={(next) => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, next)} actions={actions} />;
+  return <ItemTrailer update={update} state={state} name={name} where={where} whereKind={where.kind} on={where.kind === "all"} onToggle={(next) => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, next)} actions={actions} />;
 }
 
 /** The worst state of a vendor's products, for its one line. */
@@ -185,10 +185,22 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
   );
 }
 
+/** The marketplace plugins installed for a product group (lib/product-plugins):
+ * what its card and its page add to the group's connectors. */
+export interface VendorPlugins {
+  /** the skills they bring, counted on the card ("15 connectors · 4 skills") */
+  skills: number;
+  /** their lines in the card's "..." menu: Update, their page, Uninstall */
+  actions: ItemMenuActions;
+  /** an update waiting: the card's "Update" mark, as on the plugin's own card */
+  update?: { running: boolean; onUpdate: () => void } | null;
+}
+
 /** One vendor as ONE plugin-like bundle (#4453): its logo, "N connectors · M on",
  * its state rolled up (the worst wins, one icon), one switch for all of it and
- * the menu. It opens the vendor's page; it never unfolds. */
-export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext; onOpen: () => void }) {
+ * the menu. It opens the vendor's page; it never unfolds. The plugins installed
+ * for the product add their skills to the line and their actions to the menu. */
+export function VendorBundleRow({ vendor, ctx, onOpen, plugins }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext; onOpen: () => void; plugins?: VendorPlugins }) {
   const ids = vendor.products.map((product) => product.id);
   const worst = worstState(vendor.products);
   const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
@@ -199,26 +211,28 @@ export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor
         <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           <span className={PLUGINS.rowName}>{vendor.name}</span>
-          <span className={PLUGINS.rowSub}>{vendorLine(vendor.products.length, on)}</span>
+          <span className={PLUGINS.rowSub} data-vendor-line="">{vendorLine(vendor.products.length, on, plugins?.skills ?? 0)}</span>
         </span>
       </button>
-      <CardTrail>{productTrailer(ctx, vendor.name, ids, { detail: onOpen }, productRowState(worst, onOpen))}</CardTrail>
+      <CardTrail>{productTrailer(ctx, vendor.name, ids, { detail: onOpen, ...plugins?.actions }, productRowState(worst, onOpen), plugins?.update)}</CardTrail>
     </div>
   );
 }
 
-/** "N connectors · M on" */
-export function vendorLine(connectors: number, on: number): string {
-  return t("connectApps.vendor.line", {
+/** "N connectors · M on", or "N connectors · K skills · M on" when installed plugins bring skills to the product */
+export function vendorLine(connectors: number, on: number, skills = 0): string {
+  const counts = {
     connectors: connectors === 1 ? t("connectApps.count.connectorOne") : t("connectApps.count.connectorMany", { count: connectors }),
     on: on === 1 ? t("connectApps.vendor.onOne") : t("connectApps.vendor.onMany", { count: on }),
-  });
+  };
+  if (skills <= 0) return t("connectApps.vendor.line", counts);
+  return t("connectApps.vendor.lineSkills", { ...counts, skills: skills === 1 ? t("connectApps.count.skillOne") : t("connectApps.count.skillMany", { count: skills }) });
 }
 
 /** The rows of the console's section for one kind (its heading already says they come from the organization, so no row does). Under Connectors every
  * product is its own row (marked "in <vendor>" when it is part of a bundle,
  * the chip opening it); under Plugins a vendor is one bundle row. */
-export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void }): Array<{ key: string; node: ReactNode }> {
+export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void; /** the installed plugins of a bundle (lib/product-plugins) */ plugins?: (vendorKey: string) => VendorPlugins | undefined }): Array<{ key: string; node: ReactNode }> {
   if (bundles?.mode === "connectors") {
     return products.map((product) => ({
       key: `product:${product.id}`,
@@ -228,7 +242,7 @@ export function productRows(products: readonly PersonProduct[], ctx: ProductRows
   if (bundles?.mode === "plugins") {
     return groupByVendor(products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
       key: vendor.key,
-      node: <VendorBundleRow vendor={vendor} ctx={ctx} onOpen={() => bundles.onOpenVendor(vendor.key)} />,
+      node: <VendorBundleRow vendor={vendor} ctx={ctx} onOpen={() => bundles.onOpenVendor(vendor.key)} plugins={bundles.plugins?.(vendor.key)} />,
     }));
   }
   // no bundles asked for: every product is its own row

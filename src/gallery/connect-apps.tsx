@@ -360,6 +360,19 @@ if (params.has("products") && !admin) {
     offered("oc-5", "skill", "Service desk macros", "Canned replies for the service desk", "offered", true, undefined, "harbor"),
   ] };
 }
+// &productPlugin=1 (#4696): the person installed, from a marketplace, a plugin
+// of skills named for the Harbor Suite group (invented): it joins that group's
+// card and page instead of standing alone under "Added by you"
+if (params.has("productPlugin")) {
+  const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ name: string; plugins: unknown[] }> };
+  MANAGE_API["/api/me/plugins"] = {
+    ...mine,
+    marketplaces: [...mine.marketplaces, { name: "example-tools", source: "example-org/tools-marketplace", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
+      { name: "harbor-suite", description: "Harbor Suite: every Harbor product in one plugin", installed: true, external: false, category: "productivity", version: "0.31.9", updateKey: "plugin:me:me:harbor-suite@example-tools", contents: { agents: [], commands: [], skills: ["init", "service-dispatch", "service-ticket", "time"] } },
+    ] }],
+    plugins: [...mine.plugins, { key: "harbor-suite@example-tools", name: "harbor-suite", marketplace: "example-tools", enabled: true, removed: [], declaredMcpServers: [] }],
+  };
+}
 // ?empty=plugins: a person with no plugin of their own (the first-block banner)
 if (params.get("empty") === "plugins") {
   const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ plugins: Array<{ installed: boolean }> }> };

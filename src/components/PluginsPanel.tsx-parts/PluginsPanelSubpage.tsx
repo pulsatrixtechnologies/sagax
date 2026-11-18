@@ -50,8 +50,11 @@ export function PluginsPanelSubpage({
   orgItems,
   consoleName,
   vendorSkills,
+  vendorPlugins,
   accountRows,
 }: {
+  /** the marketplace plugins installed for a product group (lib/product-plugins): their rows on its page and their skills count; none: undefined */
+  vendorPlugins?: (vendorKey: string) => { rows: ReadonlyArray<{ key: string; node: ReactNode }>; skills: number } | undefined;
   /** #4504: the update a skill has, with its Update (running while it runs), for its page */
   itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
   /** what the organization offers or requires of the person (an item that is on opens its page) */
@@ -168,7 +171,7 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
-    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} />;
+    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} plugins={vendorPlugins?.(vendor.key)} />;
   }
   if (page.page === "account") {
     const row = accountRows?.find((entry) => entry.key === page.key);

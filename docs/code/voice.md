@@ -396,11 +396,12 @@ the conversation the banner donated (`CarDirectory.route`), and a call in a
 car (`CarRoute`: CarPlay connected or car audio) asks approvals aloud and
 short, a skill waits, nothing says to look at the screen (`DrivingSafety`).
 The app, Siri and the car share one Session (`SessionHub.session`). The
-CarPlay screen (`CarPlaySceneDelegate`: recent bots, then the voice screen
-with mute and hang up) is Apple's voice-based conversational category
-(`com.apple.developer.carplay-voice-based-conversation`, iOS 26.4), added
-only by `ios/project-carplay.yml` (`xcodegen generate --spec project-carplay.yml`)
-once Apple grants it; never put that entitlement in `project.yml`. Never show
+CarPlay screen (`CarPlaySceneDelegate`: tabs Bots, Recent and To answer, then
+the voice screen with mute and hang up) uses Apple's voice-based conversation
+(`com.apple.developer.carplay-voice-based-conversation`, iOS 26.4) and driving
+task (`com.apple.developer.carplay-driving-task`) entitlements, both in
+`ios/project.yml` with the CarPlay scene (assigned to the App ID by Apple).
+Never show
 a message's content on the car's screen. Tests:
 `ios/Tests/CompanionCoreTests/CarAssistTests.swift`. See `docs/ios-carplay.md`.
 

@@ -189,10 +189,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
 
   const { entries, botsForRows, toggleBotServers, toggleBotServerNames, entryActions, botsForEntry, editableBots } = usePluginsInstalledEntries(s, a);
 
+  const groups = connectorGroups(harness.answer, { loading: harness.loading, grokConfigured });
+  // the engine accounts' connectors as rows (#2306): "From <provider>" in
+  // Connectors > Discover, rows of Connectors > Yours, counted on its tab
+  const accountSections = groups.map((group) => ({ group, rows: accountConnectorRows(group, items) }));
   // The breadcrumb: each page under the current one. A page opened from a
   // tab shows in that tab under Connect Apps' title: its first crumb is the
   // tab ("Installed"); Browse Bots too, from Discover (2026-10-28).
-  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products, kind, orgMine.items ?? []), onSelect: () => popTo(depth) }));
+  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products, kind, orgMine.items ?? [], accountSections.flatMap((section) => section.rows)), onSelect: () => popTo(depth) }));
   const skillsOn = skills !== null && skillsLibraryOn;
   // the console's products: the person's bots and the one write they all share
   const productBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "products"));
@@ -228,6 +232,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       }}
       consoleName={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
       vendorSkills={(vendorKey) => vendorSkillsOf(orgMine, vendorKey)}
+      accountRows={accountSections.flatMap((section) => section.rows)}
       orgItems={orgMine.items ?? []}
       productCtx={productCtx}
       trail={trail}
@@ -238,14 +243,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     />
   );
 
-  const groups = connectorGroups(harness.answer, { loading: harness.loading, grokConfigured });
-  // the engine accounts' connectors as rows (#2306): "From <provider>" in
-  // Connectors > Discover, rows of Connectors > Yours, counted on its tab
-  const accountSections = groups.map((group) => ({ group, rows: accountConnectorRows(group, items) }));
   const openAccount = (row: AccountConnectorRow) => {
-    if (row.engine !== "grok" || !row.id) return undefined;
-    const item = items.find((candidate) => candidate.key === `grok:${row.id}`);
-    return item ? () => openItem(item) : undefined;
+    // a Grok connector the catalog knows opens its page; every other account connector opens the account's page
+    const item = row.engine === "grok" && row.id ? items.find((candidate) => candidate.key === `grok:${row.id}`) : undefined;
+    return item ? () => openItem(item) : () => push({ page: "account", key: row.key });
   };
   const setUpEngine = () => {
     close();

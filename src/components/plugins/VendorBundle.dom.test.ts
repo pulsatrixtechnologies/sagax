@@ -127,7 +127,9 @@ describe("the vendor's page", () => {
     expect(view.querySelector("[data-plugins-detail-name]")?.textContent).toBe("Harbor Suite");
     expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("2 connectors · 2 on");
     expect(view.querySelector("[data-detail-description] p")?.textContent).toBe("Service desk, monitoring and quoting in one place.");
-    expect([...view.querySelectorAll("[data-detail-reach] li")].map((item) => item.querySelector("span.truncate")?.textContent)).toEqual(["Service Desk", "Remote Monitoring"]);
+    expect([...view.querySelectorAll("[data-vendor-chip-product]")].map((item) => item.getAttribute("title"))).toEqual(["Service Desk", "Remote Monitoring"]);
+    // the Overview is one column: no side panel next to a lone sentence
+    expect(view.querySelector("[data-detail-reach]")).toBeNull();
     setLocale("fr");
     const french = await render(page());
     expect(french.querySelector("[data-detail-description] p")?.textContent).toBe("Service desk, supervision et soumissions au même endroit.");
@@ -159,5 +161,60 @@ describe("the console's vendor line and marks", () => {
     expect(parsed?.icon?.url).toBe("https://cdn.example.test/desk.svg");
     expect(parsePersonProduct(wire("desk", "Service Desk", { group: { id: "h", name: "Harbor", description: "Plain" } }))?.group?.description).toEqual({ en: "Plain" });
     expect(parsePersonProduct(wire("desk", "Service Desk", { group: { id: "h", name: "Harbor" } }))?.group).not.toHaveProperty("description");
+  });
+});
+
+describe("a bundle of many connectors that share a long name prefix (the owner, 2026-11-17)", () => {
+  const areas = ["Company", "Configurations", "Expense", "Finance", "Marketing", "Procurement", "Project", "Sales", "Schedule", "Service", "System", "Time"];
+  const family = areas.map((area, index) => product(`h${index}`, `Harbor Suite Public Endpoints: ${area}`, index === 3 ? { state: "key_expired" } : {}));
+  const vendor = groupByVendor(family).find((entry) => entry.key === "vendor:harbor")!;
+  const page = () => createElement(VendorPage, { vendor, ctx: ctx(), onBack: vi.fn() });
+
+  it("names each connector by what tells it apart, the full name in its tooltip, about eight chips then Show N more", async () => {
+    const view = await render(page());
+    const chips = [...view.querySelectorAll("[data-vendor-chip-product]")];
+    expect(chips).toHaveLength(8);
+    expect(chips.map((chip) => chip.querySelector("span")?.textContent)).toEqual(["Company", "Configurations", "Expense", "Finance", "Marketing", "Procurement", "Project", "Sales"]);
+    expect(chips[0]!.getAttribute("title")).toBe("Harbor Suite Public Endpoints: Company");
+    // only a connector that is not "on" carries its state
+    expect(chips.filter((chip) => chip.querySelector("[data-row-state]")).map((chip) => chip.querySelector("span")?.textContent)).toEqual(["Finance"]);
+    expect(view.querySelector("[data-vendor-chips-more]")?.textContent).toBe("Show 4 more");
+    await click(view.querySelector("[data-vendor-chips-more]"));
+    expect(view.querySelectorAll("[data-vendor-chip-product]")).toHaveLength(12);
+    expect(view.querySelector("[data-vendor-chips-more]")?.textContent).toBe("Show fewer");
+  });
+
+  it("lists them in the Connectors tab by that name, with a search once there are more than eight", async () => {
+    const view = await render(page());
+    await click(view.querySelector('[data-vendor-tab="connectors"]'));
+    const names = () => [...view.querySelectorAll("[data-vendor-panel='connectors'] li [data-person-product-line] span.block")].map((node) => node.textContent);
+    expect(names()).toHaveLength(12);
+    expect(names()[0]).toBe("Company");
+    const search = view.querySelector<HTMLInputElement>("[data-vendor-search] input")!;
+    expect(search).not.toBeNull();
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => { set.call(search, "fin"); search.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(names()).toEqual(["Finance"]);
+  });
+});
+
+describe("the Featured banner's art", () => {
+  it("is the vendor's square mark, never the console's wide wordmark", async () => {
+    const { VendorArt } = await import("./ProductRows");
+    const vendor = groupByVendor([product("a", "One", { group: { ...suite, logo: "https://cdn.example.test/wordmark-wide.svg" } })]).find((entry) => entry.key === "vendor:harbor")!;
+    const view = await render(createElement(VendorArt, { vendor }));
+    const image = view.querySelector("[data-remote-image]")!;
+    expect(image.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
+    expect(image.getAttribute("src")).not.toContain("wordmark");
+    expect(image.className).toContain("size-20");
+    expect(image.className).toContain("rounded-2xl");
+  });
+  it("falls back to the generic vendor tile when the console serves no square mark", async () => {
+    const { VendorArt } = await import("./ProductRows");
+    const bare = { id: "x", name: "Bare Co", logo: "https://cdn.example.test/wordmark-wide.svg" };
+    const vendor = groupByVendor([product("b", "Two", { group: bare })]).find((entry) => entry.key === "vendor:x")!;
+    const view = await render(createElement(VendorArt, { vendor }));
+    expect(view.querySelector("[data-remote-image]")).toBeNull();
+    expect(view.querySelector("[data-neutral-tile='vendor']")).not.toBeNull();
   });
 });

@@ -23,6 +23,8 @@ import { MacAppSetupView, macAppTitle } from "../plugins/MacAppSetupView";
 import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { ProductDetailView } from "../plugins/ProductDetailView";
 import { OrgItemPage } from "../plugins/OrgItemPage";
+import { AccountConnectorPage } from "../plugins/AccountConnectorPage";
+import type { AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
 import type { MemberOrgCapability } from "@/lib/org-capabilities";
 import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
@@ -48,11 +50,14 @@ export function PluginsPanelSubpage({
   orgItems,
   consoleName,
   vendorSkills,
+  accountRows,
 }: {
   /** #4504: the update a skill has, with its Update (running while it runs), for its page */
   itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
   /** what the organization offers or requires of the person (an item that is on opens its page) */
   orgItems?: readonly MemberOrgCapability[];
+  /** the connectors the engine accounts brought (a card of Discover or Yours opens one's page) */
+  accountRows?: readonly AccountConnectorRow[];
   /** the console's name ("Perspicax · <organization>") for a bundle's grey line */
   consoleName?: string;
   /** the skills the console offers that go with a vendor (its Skills tab); none: no tab */
@@ -165,6 +170,10 @@ export function PluginsPanelSubpage({
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
     if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} />;
   }
+  if (page.page === "account") {
+    const row = accountRows?.find((entry) => entry.key === page.key);
+    if (row) return <AccountConnectorPage key={row.key} row={row} onBack={back} trail={trail} />;
+  }
   if (page.page === "connector") {
     return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
   }
@@ -229,7 +238,7 @@ export function PluginsPanelSubpage({
   return null;
 }
 
-export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind, orgItems: readonly MemberOrgCapability[] = []): string {
+export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind, orgItems: readonly MemberOrgCapability[] = [], accountRows: readonly AccountConnectorRow[] = []): string {
   switch (entry.page) {
     // #4453: a page opened from Yours or Discover names its kind ("Plugins")
     case "main": return kind && (tab === "installed" || tab === "discover") ? connectAppsKindLabel(kind) : connectAppsTabLabel(tab);
@@ -247,5 +256,6 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "product": return products.find((product) => product.id === entry.id)?.name ?? t("connectApps.back");
     case "orgItem": return orgItems.find((item) => item.id === entry.id)?.name ?? t("connectApps.back");
     case "vendor": return groupByVendor(products).find((vendor) => vendor.key === entry.key)?.name ?? t("connectApps.back");
+    case "account": return accountRows.find((row) => row.key === entry.key)?.name ?? t("connectApps.back");
   }
 }

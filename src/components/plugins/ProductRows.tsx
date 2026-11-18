@@ -65,13 +65,13 @@ export function ProductMark({ name, icon, className, kind = "connector" }: { nam
   return <NeutralTile kind={kind} className={className} />;
 }
 
-/** A vendor's artwork at the banner's size: the largest image the console
- * serves (a logo, else the icon), crisp as an image; else its site's mark at
- * the largest size; else the one neutral tile. */
+/** A vendor's artwork at the banner's size: its SQUARE mark, the one its card and its page header show (the icon the
+ * console serves, else its site's mark at the largest size, else the one neutral tile), in the same rounded square.
+ * Never the console's wide `logo` (a wordmark): a banner of squares and one wordmark looked broken (the owner, 2026-11-17). */
 export function VendorArt({ vendor }: { vendor: ProductVendor<PersonProduct> }) {
-  const first = vendor.products.find((product) => product.logo || product.icon);
-  const url = vendor.logo ?? vendor.icon?.url ?? first?.logo ?? first?.icon?.url;
-  if (url) return <RemoteImage src={url} kind="vendor" className="size-20" />;
+  const first = vendor.products.find((product) => product.icon);
+  const url = vendor.icon?.url ?? first?.icon?.url;
+  if (url) return <RemoteImage src={url} kind="vendor" className="size-20 rounded-2xl" />;
   const domain = vendor.icon?.domain ?? first?.icon?.domain;
   if (domain) return <PluginIcon item={{ key: `perspicax-vendor:${vendor.key}`, kind: "app", name: vendor.name, domain }} faviconSize={256} className="size-20 rounded-2xl" />;
   return <NeutralTile kind="vendor" className="size-20 rounded-2xl" />;
@@ -152,21 +152,23 @@ function worstState(products: readonly PersonProduct[]): PersonProduct {
 
 /** One product's row: the mark, the name, one grey line (its endpoints on
  * one line), the state, then its own trailer. The name opens its page. */
-export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = false }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean; /** the page already says where it comes from (inside a bundle): the line starts with what it does */ hideOrigin?: boolean; /** the bundle it belongs to: a small chip after the name, opening it */ partOf?: { name: string; onOpen: () => void } }) {
+export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = false, displayName, line = false }: { product: PersonProduct; ctx: ProductRowsContext; /** what tells it apart from the bundle's other connectors (the full name stays its tooltip) */ displayName?: string; /** a line of a list (name, tools count, state, switch), not a card */ line?: boolean; nested?: boolean; /** the page already says where it comes from (inside a bundle): the line starts with what it does */ hideOrigin?: boolean; /** the bundle it belongs to: a small chip after the name, opening it */ partOf?: { name: string; onOpen: () => void } }) {
   const what = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
   // how it got there, then what it does (a vendor's products sit under its own line)
-  const sub = nested || hideOrigin ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
+  const tools = product.endpoints?.length ?? 0;
+  const sub = line ? (tools > 0 ? (tools === 1 ? t("connectApps.detail.toolsCountOne") : t("connectApps.detail.toolsCount", { count: tools })) : "") : nested || hideOrigin ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
+  const shown = displayName ?? product.name;
   return (
-    <div className={nested ? "group flex min-h-16 items-center gap-3 py-3 pl-[52px]" : cn("group", CARD_BOX)} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
+    <div className={line ? "group flex min-h-12 items-center gap-3 py-2" : nested ? "group flex min-h-16 items-center gap-3 py-3 pl-[52px]" : cn("group", CARD_BOX)} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}
       <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl">
         <button type="button" onClick={() => ctx.onOpen(product)} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
-          aria-label={t("connectApps.openAria", { name: product.name })} />
-        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : CARD_ICON)} />
+          aria-label={t("connectApps.openAria", { name: product.name })} title={product.name} />
+        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested || line ? "size-8" : CARD_ICON)} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="pointer-events-none min-w-0 flex-1" data-person-product-line>
           <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")}>{product.name}</span>
+            <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")} title={product.name}>{shown}</span>
             {partOf && (
               <button type="button" data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
                 onClick={() => partOf.onOpen()}

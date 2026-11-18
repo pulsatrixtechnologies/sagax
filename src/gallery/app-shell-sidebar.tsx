@@ -15,16 +15,20 @@
  * (app-shell-scene.ts, scripts/capture/idle-cost.mjs).
  * #4157: &engines=2|5 (with ?parity=1) fills the usage side card.
  * #4145: ?shapes=N is a sidebar of N bots wearing shapes (one in five in a premium skin).
+ * #4586: ?achievements=1 gives the person a made-up achievements snapshot (945
+ * points), so the trophy and score show under the name in the sidebar's foot.
  * #4639: ?window=chat is a bot's own window (BotChatWindow, "New window" in the
  * bot row menu): the chat view alone, no sidebar; ?select=<id> picks the bot. */
 import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
+import { AchievementsScreen } from "../components/achievements/AchievementsScreen";
 import { AppSidebar } from "../components/AppSidebar";
 import { ChatView } from "../components/ChatView";
 import { BotChatWindow } from "../components/BotChatWindow";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { loadLocale } from "../lib/i18n";
+import { loadAchievements } from "../lib/achievements";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, createStreamDeltaBuffer, initialState, reducer, StreamingPreview, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
 import { foldLiveFrame } from "../state/store/fold-live-frame";
@@ -113,6 +117,10 @@ window.fetch = async (input, init) => {
   // card is seen with many rows in a short window
   if (parity && url.pathname === "/api/plan-usage") return reply({ providers: usageEngines(Number(params.get("engines")) || 1) });
   if (parity && url.pathname === "/api/me/usage") return reply({ groups: [], total: { key: "total", label: "Total", turns: 212, costUsd: 48.27 } });
+  if (params.get("achievements") === "1" && url.pathname === "/api/me/achievements") {
+    return reply({ points: 945, maxPoints: 5000, level: { level: 12, from: 825, to: 975 }, unlockedCount: 31, count: 120, streak: 3, rewards: [], recent: [], items: [],
+      settings: { showPoints: true, showTitle: true, toasts: true, native: false, public: true } });
+  }
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);
 };
@@ -228,6 +236,7 @@ function galleryReducer(state: AppState, action: Action): AppState {
   }
 }
 
+if (params.get("achievements") === "1") void loadAchievements();
 const galleryCommands = { flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
 
 function Gallery() {
@@ -278,13 +287,14 @@ const Shell = memo(function Shell() {
 function ShellRow() {
   const [drawerOpen, setDrawerOpen] = useState(params.get("drawer") === "1");
   const selected = useStoreSelector((current) => current.bots.find((entry) => entry.id === current.selectedId) ?? current.bots[1]!);
+  const achievementsOpen = useStoreSelector((current) => current.activeView === "achievements");
   const settingsOpen = useStoreSelector((current) => current.settingsOpen);
   return (
     <div className="flex h-dvh flex-col" data-app-shell="">
       <div className="app-shell-row relative flex min-h-0 flex-1">
         <AppSidebar drawerOpen={drawerOpen} onDrawerOpenChange={setDrawerOpen} composeOpen={false} onCompose={() => {}} />
         <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
-          <ChatView bot={selected} />
+          {achievementsOpen ? <AchievementsScreen /> : <ChatView bot={selected} />}
         </div>
         {settingsOpen && <BotSettingsDialog bot={selected} />}
       </div>

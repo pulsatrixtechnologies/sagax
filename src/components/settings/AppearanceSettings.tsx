@@ -6,6 +6,7 @@ import { botBubbleAccent, botReplyBubbles } from "@/lib/bot-reply-bubbles";
 // its family, variant and Light, Dark or Auto (2026-10-19; General's Theme
 // menu of #573 is gone, one option in one place).
 import { accountMenuAbove, useAccountMenuAbove } from "@/lib/account-menu-above";
+import { primaryBotStyle } from "@/lib/primary-bot-style";
 import { useState, useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import { FLOATING_LIVELINESS, floatingBotPrefs, HOTKEY_CHOICES, hotkeyLabel, setFloatingBarkSound, setFloatingFlyAway, setFloatingHotkey, setFloatingLiveliness, subscribeFloatingBots, type FloatingLiveliness, type HotkeyChoice } from "@/lib/floating-bots";
@@ -126,6 +127,23 @@ function SidebarDensityRow() {
           value: option,
           label: t(option === "icons" ? "sidebar.density.iconsOnly" : option === "compact" ? "sidebar.density.compact" : "sidebar.density.comfortable"),
         }))}
+      />
+    </CompactRow>
+  );
+}
+
+function PrimaryBotStyleRow() {
+  const style = primaryBotStyle.use();
+  return (
+    <CompactRow label={t("sidebar.primaryStyle.title")} rowId="primaryBotStyle">
+      <PillSelect<"tile" | "row">
+        value={style}
+        ariaLabel={t("sidebar.primaryStyle.chooseAria")}
+        onChange={(next) => primaryBotStyle.set(next === "row" ? "row" : "tile")}
+        options={[
+          { value: "tile", label: t("sidebar.primaryStyle.tile") },
+          { value: "row", label: t("sidebar.primaryStyle.row") },
+        ]}
       />
     </CompactRow>
   );
@@ -544,6 +562,7 @@ export function AppearanceSettings() {
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />
+        <PrimaryBotStyleRow />
         <SwitchLine label={t("settings.accountMenuAbove.title")} ariaLabel={t("settings.accountMenuAbove.show")} checked={menuAbove} onChange={(on) => accountMenuAbove.set(on ? "on" : "off")} rowId="accountMenuAbove" />
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />

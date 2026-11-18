@@ -30,7 +30,7 @@
 // // item in the menu carries no dot (2026-10-18): a failed run not seen
 // yet shows on the Automations page (the problem runs pill in its header,
 // a dot on the run in Logs) and in the routines count's label.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
   ArrowLeftRight,
@@ -627,6 +627,9 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const titleName = snapshot && snapshot.settings.showTitle !== false ? achievementTitleName(snapshot.settings.title) : null;
   const pointsText = snapshot && snapshot.settings.showPoints !== false ? formatPoints(snapshot.points) : null;
   const showLine = Boolean(titleName || pointsText);
+  const [gamertagSlot, setGamertagSlot] = useState<HTMLElement | null>(null);
+  const [footRoot, setFootRoot] = useState<HTMLElement | null>(null);
+  const gamertagLabel = t("achievements.gamertag.label", { points: snapshot?.points ?? 0, level: snapshot?.level.level ?? 1 });
   // Organization admins: the approvals waiting for an admin, live
   // (org.approvals frames); the count opens Settings > Organization.
   const perspicaxOrg = usePerspicaxOrg();
@@ -848,10 +851,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
               <span data-member-line="" className="flex min-w-0 items-center gap-1.5 text-[12px] leading-[16px] text-sidebar-ink-secondary">
                 {titleName && <span data-member-title="" className="min-w-0 truncate">{titleName}</span>}
                 {pointsText && (
-                  <span data-gamertag="" data-footer="" className="achievement-gamertag shrink-0">
-                    <Trophy size={12} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{pointsText}</span>
-                  </span>
+                  <GamertagSlot points={pointsText} size={12} slotRef={setGamertagSlot} />
                 )}
               </span>
             </span>
@@ -911,10 +911,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
               <span data-member-line="" className="flex min-w-0 items-center gap-2 text-[13px] leading-[18px] text-sidebar-ink-secondary">
                 {titleName && <span data-member-title="" className="min-w-0 truncate">{titleName}</span>}
                 {pointsText && (
-                  <span data-gamertag="" data-footer="" className="achievement-gamertag shrink-0">
-                    <Trophy size={13} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{pointsText}</span>
-                  </span>
+                  <GamertagSlot points={pointsText} size={13} slotRef={setGamertagSlot} />
                 )}
               </span>
             )}
@@ -964,7 +961,10 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   ) : null;
 
   return (
-    <div className={cn("relative", avatarOnly && withName && "min-w-[3.5rem] flex-1")} data-foot-profile={avatarOnly && withName ? "" : undefined}>
+    <div ref={setFootRoot} className={cn("relative", avatarOnly && withName && "min-w-[3.5rem] flex-1")} data-foot-profile={avatarOnly && withName ? "" : undefined}>
+      {pointsText && gamertagSlot && (
+        <GamertagButton points={pointsText} label={gamertagLabel} size={avatarOnly ? 12 : 13} slot={gamertagSlot} root={footRoot} onOpen={openAchievements} />
+      )}
       {avatarOnly && approvalsBadge}
       {avatarOnly ? <div className="relative">{accountRow}{approvalsDot}</div> : (
         <div className="flex items-center gap-2">
@@ -1002,6 +1002,55 @@ export function AccountMenuUpdateBanner({ onInstall }: { onInstall: () => void }
         {t("settings.updates.install")}
       </button>
     </div>
+  );
+}
+
+/** The trophy and the points under the person's name (#4586). The account
+ * button cannot hold a second button, so inside it this is only the
+ * invisible slot that keeps the room; the real control is `GamertagButton`,
+ * a native button laid over the slot outside the account button. */
+export function GamertagSlot({ points, size, slotRef }: { points: string; size: number; slotRef: (node: HTMLSpanElement | null) => void }) {
+  return (
+    <span ref={slotRef} data-gamertag-slot="" aria-hidden="true" className="achievement-gamertag invisible shrink-0 hover:!bg-transparent" data-footer="">
+      <Trophy size={size} strokeWidth={2.4} />
+      <span>{points}</span>
+    </span>
+  );
+}
+
+/** Opens Achievements; its own tab stop, name and tooltip. */
+export function GamertagButton({ points, label, size, slot, root, onOpen }: { points: string; label: string; size: number; slot: HTMLElement | null; root: HTMLElement | null; onOpen: () => void }) {
+  const [box, setBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!slot || !root) { setBox(null); return; }
+    const measure = () => {
+      const a = slot.getBoundingClientRect();
+      const b = root.getBoundingClientRect();
+      setBox({ left: a.left - b.left, top: a.top - b.top, width: a.width, height: a.height });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(slot);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [slot, root, points]);
+  if (!box) return null;
+  return (
+    <button
+      type="button"
+      data-gamertag=""
+      data-footer=""
+      data-gamertag-open=""
+      title={label}
+      aria-label={label}
+      onClick={onOpen}
+      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+      className="achievement-gamertag absolute z-10 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      <Trophy size={size} strokeWidth={2.4} aria-hidden="true" />
+      <span>{points}</span>
+    </button>
   );
 }
 

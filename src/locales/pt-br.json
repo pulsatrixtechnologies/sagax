@@ -1000,7 +1000,6 @@
   "connectApps.market.add": "Adicionar marketplace",
   "connectApps.market.introScopes": "Uma única lista para os dois escopos: um plugin é instalado para todos (seus servidores MCP e habilidades) ou para um bot (o plugin inteiro).",
   "connectApps.market.keptForEveryone": "{name} continua na lista de marketplaces: outros o usam.",
-  "connectApps.market.pluginCount": "{count} plugins, {installed} instalados",
   "connectApps.market.refreshAria": "Buscar {name} de novo",
   "connectApps.market.removeAria": "Remover {name}",
   "connectApps.market.removeBlocked": "Desinstale os plugins dele primeiro",

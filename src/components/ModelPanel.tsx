@@ -174,7 +174,7 @@ export function ModelPanel(props: ModelPanelProps) {
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => favorites.onToggle(row)}
             className={cn("flex size-7 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus",
-              starred ? "text-popover-accent" : "text-popover-ink-secondary opacity-0 hover:text-popover-ink focus-visible:opacity-100 group-hover:opacity-100")}>
+              starred ? "text-popover-accent" : "text-popover-ink-secondary opacity-0 hover:text-popover-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100")}>
             <Star size={13} aria-hidden="true" fill={starred ? "currentColor" : "none"} />
           </button>
         )}

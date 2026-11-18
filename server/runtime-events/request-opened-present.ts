@@ -62,7 +62,7 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
             if (outcome !== "unavailable") pushMessage({
               role: "bot", kind: "activity",
               tool: outcome === "rejected"
-                ? { name: `The provider rejected this action despite ${verdict.source === "command-allowlist" ? "the saved command permission" : verdict.source === "widget-approval" ? "your approval in the ConnectWise widget" : verdict.source === "owner-rule" || verdict.source === "custom-rule" ? "your rule" : verdict.source === "admin-rule" ? "an admin's saved rule" : verdict.source === "email-draft-approval" ? "your approval of the email draft" : verdict.source === "owner-auto" ? "automatic approval" : verdict.source === "owner-bypass" ? "bypass" : verdict.source === "own-environment" ? "your own environment" : "Full access"}.`, ok: false }
+                ? { name: `The provider rejected this action despite ${verdict.source === "command-allowlist" ? "the saved command permission" : verdict.source === "widget-approval" ? "your approval in the ConnectWise widget" : verdict.source === "owner-rule" || verdict.source === "custom-rule" ? "your rule" : verdict.source === "admin-rule" ? "an admin's saved rule" : verdict.source === "email-draft-approval" ? "your approval of the email draft" : verdict.source === "x-post-approval" ? "your approval of the X post" : verdict.source === "owner-auto" ? "automatic approval" : verdict.source === "owner-bypass" ? "bypass" : verdict.source === "own-environment" ? "your own environment" : "Full access"}.`, ok: false }
                 : host.failedTurnTool("could not deliver approval to the provider; retry the task after reconnecting.")
             });
             return;

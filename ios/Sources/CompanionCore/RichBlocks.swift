@@ -18,7 +18,7 @@
 import Foundation
 
 public enum RichFenceKind: String, Sendable {
-    case email, widget, chart, csv, cw
+    case email, widget, chart, csv, cw, xPost, xPosts
 }
 
 public enum RichBlocks {
@@ -28,6 +28,8 @@ public enum RichBlocks {
         "chart": .chart,
         "csv": .csv, "tsv": .csv,
         "cw": .cw,
+        // #4638: an X draft and the posts a bot read (XPosts.swift)
+        "x-post": .xPost, "x-draft": .xPost, "x-posts": .xPosts, "x-timeline": .xPosts,
     ]
 
     /// The rich renderer a fence language asks for, if any.

@@ -36,6 +36,7 @@ const BY_SOURCE: Readonly<Record<string, AutoApprovalReason>> = {
   "own-attachment": "trusted",
   "own-computer-choice": "trusted",
   "email-draft-approval": "answered",
+  "x-post-approval": "answered",
   "widget-approval": "answered",
 };
 

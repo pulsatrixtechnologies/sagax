@@ -2288,6 +2288,8 @@ import { createActorPrincipalId } from "./index-leaves/actorPrincipalId.ts";
 import { createPrimaryTurnGate } from "./index-leaves/primaryTurnGate.ts";
 import { createInboxTestRule } from "./index-leaves/inboxTestRule.ts";
 import { createEmailDraftBot } from "./index-leaves/emailDraftBot.ts";
+import { createXPostCard } from "./index-leaves/xPostCard.ts";
+import { createXPostRoutes } from "./routes/x-posts.ts";
 import { createRoomPostEligibility } from "./index-leaves/roomPostEligibility.ts";
 import { createClaudeAccountForPrincipal } from "./index-leaves/claudeAccountForPrincipal.ts";
 import { createRoutineSubagentModelForTurn } from "./index-leaves/routineSubagentModelForTurn.ts";
@@ -19076,6 +19078,8 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get subscriptionExpiredCard() { return subscriptionExpiredCard; },
   get syncRoutineRunToSource() { return syncRoutineRunToSource; },
   get takeEmailSendPass() { return takeEmailSendPass; },
+  get takeXPostPass() { return (...args: [string, string, string, string | undefined]) => xPostCard().takePass(...args); },
+  get finishXPost() { return (...args: [string, string, boolean, string | undefined, string | undefined]) => xPostCard().finish(...args); },
   get toolMessageByItem() { return toolMessageByItem; },
   get toolWorkingStep() { return toolWorkingStep; },
   get toolsRunning() { return toolsRunning; },
@@ -26208,6 +26212,8 @@ ROUTES.push(createSecurityKeyRoutes({
 // 2026-10-16: an email draft's Send: an approval card, then the send on Allow
 // (server/routes/email-drafts.ts, server/mail/email-draft-send.ts).
 ROUTES.push(createEmailDraftRoutes({ ask: requestEmailDraftSend, status: emailDraftStatus }));
+// #4638: the X draft card's Post, Discard and state
+ROUTES.push(createXPostRoutes({ post: (...args) => xPostCard().post(...args), discard: (...args) => xPostCard().discard(...args), status: (...args) => xPostCard().status(...args) }));
 ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
  * send to the thread, a named thread only (an implicit one could open a
@@ -28347,6 +28353,11 @@ function isConfidentialMemoryCard(threadId: string, requestId: string): boolean 
 
 // ── email drafts sent from their card (server/mail/email-draft-send.ts) ──────
 const emailSendPasses = createEmailSendPasses();
+let _xPostCard: ReturnType<typeof createXPostCard> | undefined;
+/** #4638: the X draft card's passes and state (server/index-leaves/xPostCard.ts). */
+function xPostCard() {
+  return (_xPostCard ??= createXPostCard(getLeafHost));
+}
 
 /** The bot a thread's email draft speaks for, and whether the caller may ask
  * to send it (the bot's owner, like a ConnectWise widget change). */

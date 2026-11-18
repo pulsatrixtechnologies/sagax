@@ -189,6 +189,8 @@ export type AutoVerdictSource =
   /** The person allowed this exact email draft on its approval card
    * (server/mail/email-draft-send.ts): one send, these recipients and subject. */
   | "email-draft-approval"
+  /** #4638: the person pressed Post on an X draft card: this one post, exactly that text. */
+  | "x-post-approval"
   /** 2026-10-16: one of Sagax's own person-scoped tools
    * (server/sagax-internal-tools.ts: Data, the agents tools in the bot's own
    * scope), which never ask. */
@@ -257,6 +259,8 @@ export function autoVerdict(
     customRule?: { behavior: "allow" | "ask" | "deny"; id: string };
     /** The person allowed this exact email draft on its own card. */
     emailDraftApproved?: boolean;
+    /** #4638: Post on an X draft card. An organization Ask-first rule still holds it. */
+    xPostApproved?: boolean;
     /** This outbound mail send was asked for by the person in their own
      * turn: usual approval level applies. Absent or false: force a draft
      * card. */
@@ -390,6 +394,9 @@ export function autoVerdict(
   // A send the person approved on the draft's own card is that person's
   // answer, not a rule: it is not held again by an "ask me" rule.
   if (context?.emailDraftApproved) return { approve: `approved ${tool} (your approved email draft)`, source: "email-draft-approval" };
+  // #4638: Post on an X draft card is the person's go, but an organization
+  // Ask-first rule keeps its card like for any tool.
+  if (context?.xPostApproved && !(context.customRule?.behavior === "ask" && context.customRule.id.startsWith("orule_"))) return { approve: `approved ${tool} (your approved X post)`, source: "x-post-approval" };
   // The person's own words win over every grant: a deny refuses, an ask
   // keeps the card even under Full access or a saved command.
   if (context?.customRule?.behavior === "deny") return { approve: null, source: "custom-rule-deny" };

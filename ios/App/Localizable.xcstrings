@@ -120614,6 +120614,230 @@
           }
         }
       }
-    }
+    },
+      "Post": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Post"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Publier"
+            }
+          }
+        }
+      },
+      "Posted": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Posted"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Publié"
+            }
+          }
+        }
+      },
+      "Posting…": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Posting…"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Publication en cours…"
+            }
+          }
+        }
+      },
+      "View on X": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "View on X"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Voir sur X"
+            }
+          }
+        }
+      },
+      "Verified account": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Verified account"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Compte vérifié"
+            }
+          }
+        }
+      },
+      "Your account": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Your account"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Ton compte"
+            }
+          }
+        }
+      },
+      "Post text": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Post text"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Texte de la publication"
+            }
+          }
+        }
+      },
+      "X post draft": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "X post draft"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Brouillon de publication sur X"
+            }
+          }
+        }
+      },
+      "The post did not go out.": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "The post did not go out."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "La publication n'est pas partie."
+            }
+          }
+        }
+      },
+      "The post did not go out: %@": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "The post did not go out: %@"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "La publication n'est pas partie : %@"
+            }
+          }
+        }
+      },
+      "Post by %@ (@%@)": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Post by %@ (@%@)"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Publication de %@ (@%@)"
+            }
+          }
+        }
+      },
+      "%lld characters left": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "%lld characters left"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "%lld caractères restants"
+            }
+          }
+        }
+      },
+      "Image hidden: tap the post to open it": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Image hidden: tap the post to open it"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Image masquée : touche la publication pour l'ouvrir"
+            }
+          }
+        }
+      },
+      "Discarded": {
+        "localizations": {
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Discarded"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Écarté"
+            }
+          }
+        }
+      }
   }
 }

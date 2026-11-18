@@ -16,7 +16,7 @@
 
 import { WIDGET_KIT_CSS, WIDGET_THEME_LISTENER, widgetThemeFromTokens, type WidgetTheme } from "./widget-kit.ts";
 
-export type RichFenceKind = "email" | "widget" | "chart" | "csv" | "cw";
+export type RichFenceKind = "email" | "widget" | "chart" | "csv" | "cw" | "x-post" | "x-posts";
 
 export {
   formatArtifactFence,
@@ -40,6 +40,11 @@ const FENCE_KINDS: Readonly<Record<string, RichFenceKind>> = {
   csv: "csv",
   tsv: "csv",
   cw: "cw",
+  // #4638: an X draft and the posts a bot read (shared/x-post.ts)
+  "x-post": "x-post",
+  "x-draft": "x-post",
+  "x-posts": "x-posts",
+  "x-timeline": "x-posts",
 };
 
 /** The rich renderer a fence language asks for, if any. */

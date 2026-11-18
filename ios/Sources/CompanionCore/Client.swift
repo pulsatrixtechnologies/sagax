@@ -1614,6 +1614,20 @@ public struct CompanionClient: Sendable {
         return try await send(try makeRequest("POST", "/api/threads/\(threadId)/cw-actions", body: body), as: CwActionReceipt.self)
     }
 
+    /// The X draft card's Post or Discard (server/routes/x-posts.ts). Post is the
+    /// person's go: the server hands the bot the exact text.
+    public func actOnXDraft(threadId: String, kind: XDraftAction, messageId: String, draftKey: String, text: String, handle: String?) async throws {
+        var body: [String: Any] = ["messageId": messageId, "draftKey": draftKey]
+        if let handle { body["handle"] = handle }
+        if kind == .post { body["draft"] = ["text": text] } else { body["text"] = text }
+        _ = try await send(try makeRequest("POST", "/api/threads/\(threadId)/x-posts/\(kind.rawValue)", body: body), as: XDraftReceipt.self)
+    }
+
+    /// The state of one X draft as its card shows it.
+    public func xDraftState(threadId: String, messageId: String, draftKey: String) async throws -> XDraftState? {
+        try await send(try makeRequest("GET", "/api/threads/\(threadId)/x-posts/\(messageId)/\(draftKey)"), as: XDraftStateEnvelope.self).post
+    }
+
     @discardableResult
     public func send(text: String, toBot botId: String, threadId: String? = nil) async throws -> SendReceipt {
         var body = ["text": text]

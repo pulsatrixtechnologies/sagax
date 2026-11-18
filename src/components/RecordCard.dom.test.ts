@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { agreementCard, companyCard, contactCard, departmentCard, emailCard, CONTACT_REF, DEPARTMENT_REF, EMAIL_REF, guidCard, GUID_REF, invoiceCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF, INVOICE_REF, AGREEMENT_REF } from "@/lib/record-card-fixtures";
 import { parseRecordCard, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
-import type { RelatedPage, RelatedTab } from "./RecordRelatedTabs";
+import type { RelatedPage } from "./RecordRelatedTabs";
 import { useRecordRelatedTabs } from "./useRecordRelatedTabs";
 import { RecordCard, type RecordCardProps } from "./RecordCard";
 
@@ -601,7 +601,7 @@ it("shows every time entry, expands its note and keeps the ticket actions", () =
       })),
     },
   } });
-  expect(host.querySelectorAll('[role="tab"]')).toHaveLength(5);
+  expect(host.querySelectorAll('[role="tab"]')).toHaveLength(6);
   expect(host.querySelector('[aria-selected="true"]')?.textContent).toBe("Temps12");
   expect(host.querySelectorAll("tbody tr")).toHaveLength(12);
   const last = host.querySelector<HTMLButtonElement>("tbody tr:last-child button")!;
@@ -609,7 +609,7 @@ it("shows every time entry, expands its note and keeps the ticket actions", () =
   expect(last.getAttribute("aria-expanded")).toBe("true");
   expect(last.textContent).toBe(note);
   expect(text()).toContain("Total : 12 h");
-  act(() => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[4]!.click());
+  act(() => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[5]!.click());
   expect(select).toHaveBeenCalledWith("attachments");
   expect(host.querySelector("[data-record-refresh]")).not.toBeNull();
 });
@@ -639,23 +639,23 @@ describe("related record reads", () => {
   it("loads counts once, reads each opened tab on demand and refreshes the active tab", async () => {
     const source = {
       counts: vi.fn(async (_fresh: boolean) => ({ time: 2, expenses: 1 })),
-      page: vi.fn(async (tab: RelatedTab, fresh: boolean): Promise<RelatedPage> => {
+      page: vi.fn(async (tab: RelatedPage["tab"], fresh: boolean): Promise<RelatedPage> => {
         if (tab === "time") return { tab, lines: [], totalHours: fresh ? "3" : "2" };
-        if (tab === "expenses") return { tab, lines: [] };
+        if (tab === "notes" || tab === "schedule" || tab === "expenses") return { tab, lines: [] };
         throw Error("unexpected tab");
       }),
     };
     let view!: ReturnType<typeof useRecordRelatedTabs>;
     function Probe() { view = useRecordRelatedTabs(source); return null; }
     await act(async () => root.render(createElement(Probe)));
-    expect(source.page.mock.calls).toEqual([["time", false]]);
+    expect(source.page.mock.calls).toEqual([["notes", false], ["schedule", false]]);
     await act(async () => view.related!.onTab("expenses"));
     await act(async () => view.related!.onTab("time"));
-    expect(source.page.mock.calls).toEqual([["time", false], ["expenses", false]]);
+    expect(source.page.mock.calls).toEqual([["notes", false], ["schedule", false], ["expenses", false], ["time", false]]);
     expect(source.counts.mock.calls).toHaveLength(1);
     await act(async () => view.refresh());
     expect(source.counts).toHaveBeenLastCalledWith(true);
-    expect(source.page.mock.calls).toEqual([["time", false], ["expenses", false], ["time", true]]);
+    expect(source.page.mock.calls).toEqual([["notes", false], ["schedule", false], ["expenses", false], ["time", false], ["time", true], ["schedule", true]]);
     expect(view.related!.page?.totalHours).toBe("3");
   });
 });

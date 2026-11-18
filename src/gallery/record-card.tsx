@@ -51,6 +51,14 @@ function read(raw: RecordCardAnswer | RecordCardMiss) {
 }
 
 const relatedPages = {
+  schedule: { lines: [
+    { member: "Service desk", date: "2026-11-18 09:00", end: "2026-11-18 10:30", where: "Remote", doneFlag: false },
+    { member: "Dispatch", date: "", where: "On site", doneFlag: true },
+  ] },
+  notes: { lines: [
+    { author: "Support", date: "2026-11-18 08:45", kind: "discussion", text: "The printer stops after the first page. The replacement tray is ready at reception." },
+    { author: "Dispatch", date: "2026-11-17 14:30", kind: "internal", text: "Bring the spare feed roller." },
+  ] },
   time: { tab: "time", totalHours: "3.5 h", lines: [
     { date: "Nov 18", member: "Support", hours: "1.5 h", note: "Reinstalled the printer driver and verified the queue on both workstations." },
     { date: "Nov 17", member: "Service desk", hours: "2 h", note: "Traced the connection and checked the network settings." },

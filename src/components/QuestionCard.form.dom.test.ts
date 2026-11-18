@@ -11,6 +11,7 @@ import { BotEditorStore, type Message, type useStore } from "@/state/store";
 import { formatQuestionAnswers, questionAnswersByQuestion, type AskQuestion } from "../../shared/ask-question";
 import { parseAskChoiceInput } from "../../shared/options-card";
 import { GOOD_DRAFTS_CARD, GOOD_TIME_CARD } from "../../shared/card-rules.fixtures";
+import { setLocale } from "@/lib/i18n";
 import { QuestionCard } from "./QuestionCard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -62,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  setLocale("en");
 });
 
 describe("a form card draws a row per question with its control (#4490)", () => {
@@ -85,6 +87,7 @@ describe("a form card draws a row per question with its control (#4490)", () => 
   });
 
   it("draws time, date, number, long text and multi", () => {
+    setLocale("en");
     mount([
       { question: "Start", kind: "time", options: [] },
       { question: "Day", kind: "date", options: [] },
@@ -94,9 +97,18 @@ describe("a form card draws a row per question with its control (#4490)", () => 
     ]);
     expect(formRow(0).querySelector('input[type="time"]')).not.toBeNull();
     expect(formRow(1).querySelector('input[type="date"]')).not.toBeNull();
+    expect(formRow(1).querySelector("[data-date-shown]")?.textContent).toBe("mm/dd/yyyy");
     expect(formRow(2).querySelector('input[type="number"]')).not.toBeNull();
     expect(formRow(3).querySelector("textarea")).not.toBeNull();
     expect(formRow(4).querySelectorAll('[role="checkbox"]')).toHaveLength(2);
+  });
+
+  it("shows a date in the interface language", () => {
+    setLocale("fr");
+    mount([{ question: "Jour", kind: "date", options: [] }]);
+    expect(formRow(0).querySelector("[data-date-shown]")?.textContent).toBe("yyyy-mm-dd");
+    setValue(formRow(0).querySelector("input")!, "2026-11-18");
+    expect(formRow(0).querySelector("[data-date-shown]")?.textContent).toBe("2026-11-18");
   });
 
   it("sends only once every required row is answered, per row", () => {

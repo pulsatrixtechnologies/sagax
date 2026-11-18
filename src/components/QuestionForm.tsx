@@ -7,9 +7,9 @@
 // list scrolls inside the card. Once answered the card stays, each row with
 // what was answered.
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Calendar, Check } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { dateFieldLocale, formatDateField, t } from "@/lib/i18n";
 import {
   answeredAction,
   formatQuestionAnswers,
@@ -76,6 +76,7 @@ export function durationLabel(value: string): string {
 /** A settled row's answer as the person reads it. */
 function shownAnswer(question: AskQuestion, value: string): string {
   if (question.kind === "duration") return durationLabel(value);
+  if (question.kind === "date" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return formatDateField(value);
   if (CHOICE_ROW(question)) {
     const { picked, rest } = picksInAnswer(value, question.options.map(optionKey));
     const labels = picked.map((key) => optionLabel(question, question.options.find((option) => optionKey(option) === key)!));
@@ -119,6 +120,22 @@ function ChoicePills({ question, picked, onPick }: { question: AskQuestion; pick
   );
 }
 
+/** A date in the interface language. The native control still holds the
+ * yyyy-mm-dd value and opens the calendar. Its own painting follows the
+ * operating system, so the visible text is ours. */
+function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const empty = value.trim() === "";
+  return (
+    <span className="relative inline-flex w-44 focus-within:[&_[data-date-face]]:border-ink/[0.28] focus-within:[&_[data-date-face]]:ring-2 focus-within:[&_[data-date-face]]:ring-accent/60">
+      <span data-date-face="" aria-hidden="true" className={cn(SHEET_FIELD, "flex w-full items-center justify-between gap-2", empty && "text-ink-tertiary")}>
+        <span data-date-shown="" className="tabular-nums">{formatDateField(value)}</span>
+        <Calendar size={14} strokeWidth={1.75} className="shrink-0 text-ink-tertiary" />
+      </span>
+      <input type="date" lang={dateFieldLocale()} value={value} aria-label={label} onChange={(event) => onChange(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
+    </span>
+  );
+}
+
 /** The control one row draws for its kind. */
 function RowControl({ question, draft, onChange, fieldId, canSend, onSend }: { question: AskQuestion; draft: RowDraft; onChange: (next: Partial<RowDraft>) => void; fieldId: string; canSend: boolean; onSend: () => void }) {
   const label = question.question;
@@ -136,7 +153,9 @@ function RowControl({ question, draft, onChange, fieldId, canSend, onSend }: { q
           <span>{t("question.form.minutes")}</span>
         </div>
       );
-    case "time": case "date": case "number":
+    case "date":
+      return <DateField label={label} value={draft.value} onChange={(value) => onChange({ value })} />;
+    case "time": case "number":
       return <input type={question.kind} {...(question.kind === "number" ? { inputMode: "decimal" as const } : {})} value={draft.value} aria-label={label} onChange={(event) => onChange({ value: event.target.value })} className={cn(SHEET_FIELD, question.kind === "number" ? "w-32 tabular-nums" : "w-40")} />;
     default:
       // text and long_text: the answer-in-words field of every question card

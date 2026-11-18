@@ -35,7 +35,9 @@ describe("the right rail shared by Automations and Memory", () => {
       expect(aside.children[0]!.querySelector("[data-right-rail-hide]")).not.toBeNull();
     }
     expect(memory.className).toBe(calendar.className);
-    expect(memory.children[0]!.outerHTML.replace(/aria-label="[^"]*"|title="[^"]*"/g, "")).toBe(calendar.children[0]!.outerHTML.replace(/aria-label="[^"]*"|title="[^"]*"/g, ""));
+    // the fold button is the same piece on both pages; Memory's shares its row with "Open a note" (never alone on a row)
+    expect(memory.querySelector("[data-right-rail-hide] svg")!.outerHTML).toBe(calendar.querySelector("[data-right-rail-hide] svg")!.outerHTML);
+    expect(memory.children[0]!.contains(memory.querySelector("[data-memory-switcher-open]"))).toBe(true);
   });
 
   it("below 1280px the rail is a sheet over the list with its own close, never beside it (a phone squeezed the list)", () => {

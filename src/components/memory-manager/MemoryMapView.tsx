@@ -9,7 +9,7 @@
 // lib/memory-graph.ts. `scope` is the rail's selection: the map shows the
 // notes it keeps, in all three layouts.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Network, Pause, Play, Search } from "lucide-react";
+import { Columns3, Network, Orbit, Pause, Play, Search, SlidersHorizontal, Waypoints } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
@@ -20,8 +20,10 @@ import type { PageRow, PageTier } from "@/lib/memory-page";
 import { BrainEmpty, BrainMap } from "./BrainMap";
 import { MemoryGraph } from "./MemoryGraph";
 import { MemoryMapCanvas } from "./MemoryMapCanvas";
-import { PillSelect } from "../SettingsPrimitives";
-import { excerptLabel, FIELD, MiniSegment, relLabel, Swatch } from "./memory-ui";
+import { readGraphSettings } from "@/lib/memory-graph-settings";
+import { useStoreOptional } from "@/state/store";
+import { PillSelect, type PillOption } from "../SettingsPrimitives";
+import { excerptLabel, MiniSegment, relLabel, Swatch } from "./memory-ui";
 
 type Layout = "graph" | "brain" | "columns";
 
@@ -51,6 +53,8 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
   const [tag, setTag] = useState("");
   const [step, setStep] = useState(STEPS);
   const [playing, setPlaying] = useState(false);
+  const principalId = useStoreOptional()?.state.config?.viewer?.principalId ?? null;
+  const [settingsOpen, setSettingsOpen] = useState(() => readGraphSettings(principalId).open);
 
   const shown = useMemo(() => (focus === "all" ? rows : rows.filter((entry) => entry.tier === focus)), [rows, focus]);
   const graph = useMemo(() => buildMemoryPageGraph(
@@ -74,9 +78,16 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
     .map((tier) => ({ value: tier.key, label: tier.name, color: tier.color, count: tierCount.get(tier.key) ?? 0 }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, activeLocale()))
     .map((option) => ({ ...option, quiet: option.count === 0 })), [teamTiers, tierCount]);
+  // One scope select: every scope with its count (the fixed ones first, then the data-built teams under their heading).
+  const scopeOptions = useMemo<PillOption<string>[]>(() => [
+    { value: "all", label: t("memoryManager.map.all"), count: rows.length },
+    ...fixedTiers.map((tier) => ({ value: tier.key, label: tier.name, color: tier.color, count: tierCount.get(tier.key) ?? 0 })),
+    ...teamOptions.map((option) => ({ ...option, group: t("memoryManager.map.teams") })),
+  ], [rows.length, fixedTiers, tierCount, teamOptions]);
   const color = useMemo(() => new Map(tiers.map((tier) => [tier.key, tier.color])), [tiers]);
   const tierOf = useMemo(() => new Map(rows.map((entry) => [entry.key, entry.tier])), [rows]);
   const tags = useMemo(() => [...new Set(shown.flatMap((entry) => entry.row.tags ?? []))].sort(), [shown]);
+  const tagOptions = useMemo<PillOption<string>[]>(() => [{ value: "", label: t("memoryManager.map.allTags") }, ...tags.map((value) => ({ value, label: value }))], [tags]);
 
   // The console's radial brain of the rows shown.
   const wholeBrain = useMemo(() => buildBrain(pageTree(rows, tiers), pageGraph(rows, bodies), {
@@ -132,13 +143,6 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
       createdAt: entry.row.createdAt ?? entry.row.updatedAt,
     }));
   }, [shown, tiers, bodies]);
-  const tagSelect = tags.length > 0 ? (
-    <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("memoryManager.map.tags")} className={cn(FIELD, "h-8 w-auto bg-panel py-0 text-[12.5px]")} data-memory-map-tag="">
-      <option value="">{t("memoryManager.map.allTags")}</option>
-      {tags.map((value) => <option key={value} value={value}>{value}</option>)}
-    </select>
-  ) : undefined;
-
   const brainAt = step >= STEPS ? null : stops[Math.min(stops.length - 1, Math.round((step / STEPS) * (stops.length - 1)))] ?? null;
   const veil = useMemo(() => veilOf(brain, { at: brainAt, tags: tag ? [tag] : [] }), [brain, brainAt, tag]);
   const hits = useMemo(() => spotlight(brain, search), [brain, search]);
@@ -157,64 +161,73 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
     </>
   );
 
-  const countNumber = layout === "brain" ? (hits ? hits.hits.size : brain.notes) : dimmed ? dimmed.size : shown.length;
   const countText = (layout === "brain"
     ? (hits ? t("memoryManager.map.hits", { n: hits.hits.size }) : t("memoryManager.map.count", { notes: brain.notes, links: brainLinks }))
     : dimmed ? t("memoryManager.map.hits", { n: dimmed.size }) : t("memoryManager.map.count", { notes: shown.length, links }))
     + (!dimmed && review > 0 ? ` · ${t("memoryManager.map.waiting", { n: review })}` : "");
   const whenLabel = step >= STEPS ? t("memoryManager.map.today") : new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium" }).format(new Date(layout === "brain" && brainAt != null ? brainAt : cursor));
-  const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px]";
+  const chip = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px]";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" data-memory-map-view="">
-      <div className="@container -my-1 flex flex-nowrap items-center gap-2 overflow-x-auto py-1 pl-0.5" data-memory-map-bar="">
-        <label className="flex h-8 w-[240px] min-w-[120px] shrink items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
-          <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} placeholder={t("memoryManager.map.search")} aria-label={t("memoryManager.map.search")} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-tertiary" data-memory-map-search="" />
-        </label>
-        <div className="flex shrink-0 items-center gap-1.5" data-memory-map-tiers="">
-          <div role="group" aria-label={t("memoryManager.tiers")} className="flex shrink-0 items-center gap-1.5">
-            <button type="button" aria-pressed={focus === "all"} onClick={() => setFocus("all")} className={cn(chip, "shrink-0", focus === "all" ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink-secondary hover:text-ink")}>
-              {t("memoryManager.map.all")}
-            </button>
-            {fixedTiers.map((tier) => (
-              <button key={tier.key} type="button" aria-pressed={focus === tier.key} onClick={() => setFocus(focus === tier.key ? "all" : tier.key)} className={cn(chip, "shrink-0 whitespace-nowrap", focus === tier.key ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink-secondary hover:text-ink")} data-memory-map-tier={tier.key}>
-                <Swatch color={tier.color} />{tier.name}
-                <span className="tabular-nums text-ink-tertiary">{tierCount.get(tier.key) ?? 0}</span>
-              </button>
-            ))}
+      <div className="@container" data-memory-map-bar-host="">
+        {/* one row of 36px controls, one 8px gap; nothing is cut: the search gives way first, and a very narrow page wraps (never scrolls) */}
+        <div className="flex flex-wrap items-center gap-2" data-memory-map-bar="">
+          <label className="flex h-9 min-w-[180px] flex-1 basis-[180px] @max-[640px]:min-w-[130px] @max-[640px]:basis-[130px] items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
+            <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} placeholder={t("memoryManager.map.search")} aria-label={t("memoryManager.map.search")} className="min-w-0 flex-1 overflow-hidden text-ellipsis bg-transparent text-[13px] outline-none placeholder:text-ink-tertiary" data-memory-map-search="" />
+          </label>
+          <div className="flex min-w-0 max-w-[230px] shrink @max-[640px]:w-[140px] @max-[640px]:max-w-[140px]" data-memory-map-tiers="" data-memory-map-teams="">
+            <PillSelect
+              value={focus}
+              onChange={setFocus}
+              ariaLabel={t("memoryManager.tiers")}
+              searchAbove={8}
+              searchLabel={t("memoryManager.map.teamsSearch")}
+              active={focus !== "all"}
+              triggerClass={cn(chip, "w-full min-w-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent/70", focus !== "all" ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink hover:bg-hover")}
+              options={scopeOptions}
+            />
           </div>
-          {teamTiers.length > 0 && (
-            <div className="shrink-0" data-memory-map-teams="">
+          {tags.length > 0 && (
+            <div className="flex min-w-0 max-w-[150px] shrink @max-[640px]:w-[96px] @max-[640px]:max-w-[96px]" data-memory-map-tags="">
               <PillSelect
-                value={teamTiers.some((tier) => tier.key === focus) ? focus : undefined}
-                onChange={setFocus}
-                ariaLabel={t("memoryManager.map.teams")}
-                placeholder={t("memoryManager.map.teams")}
+                value={tag}
+                onChange={setTag}
+                ariaLabel={t("memoryManager.map.tags")}
                 searchAbove={8}
-                searchLabel={t("memoryManager.map.teamsSearch")}
-                triggerClass={cn(chip, "max-w-[170px] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent/70", teamTiers.some((tier) => tier.key === focus) ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink-secondary hover:text-ink")}
-                options={teamOptions}
+                searchLabel={t("memoryManager.map.tags")}
+                triggerClass={cn(chip, "w-full min-w-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent/70", tag ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink hover:bg-hover")}
+                options={tagOptions}
               />
             </div>
           )}
+          <MiniSegment<Layout>
+            label={t("memoryManager.map.layout")}
+            value={layout}
+            onChange={setLayout}
+            tall
+            options={[
+              { value: "graph", label: t("memoryManager.map.layoutGraph"), icon: <Waypoints size={14} aria-hidden="true" /> },
+              { value: "brain", label: t("memoryManager.map.layoutBrain"), icon: <Orbit size={14} aria-hidden="true" /> },
+              { value: "columns", label: t("memoryManager.map.layoutColumns"), icon: <Columns3 size={14} aria-hidden="true" /> },
+            ]}
+            data-memory-map-layout-switch=""
+          />
+          {layout === "graph" && shown.length > 0 && (
+            <button
+              type="button"
+              className={cn("grid size-9 shrink-0 place-items-center rounded-full border hover:text-ink", settingsOpen ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 bg-panel text-ink-secondary")}
+              aria-label={t("memoryManager.graph.settings")}
+              title={t("memoryManager.graph.settings")}
+              aria-expanded={settingsOpen}
+              onClick={() => setSettingsOpen((open) => !open)}
+              data-testid="memory-graph-settings-open"
+            >
+              <SlidersHorizontal size={16} aria-hidden="true" />
+            </button>
+          )}
         </div>
-        <MiniSegment<Layout>
-          label={t("memoryManager.map.layout")}
-          value={layout}
-          onChange={setLayout}
-          options={[
-            { value: "graph", label: t("memoryManager.map.layoutGraph") },
-            { value: "brain", label: t("memoryManager.map.layoutBrain") },
-            { value: "columns", label: t("memoryManager.map.layoutColumns") },
-          ]}
-          data-memory-map-layout-switch=""
-        />
-        {/* never cut: the whole sentence when the bar is wide, else the number alone (the sentence is its tooltip) */}
-        <p className="ml-auto shrink-0 whitespace-nowrap text-[12.5px] tabular-nums text-ink-secondary" aria-live="polite" title={countText} aria-label={countText} data-memory-map-count="" data-memory-map-count-text={countText}>
-          <span aria-hidden="true" className="@[1100px]:hidden">{countNumber}</span>
-          <span aria-hidden="true" className="hidden @[1100px]:inline">{countText}</span>
-        </p>
       </div>
       {centre && (
         <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-secondary" data-memory-map-neighbourhood="">
@@ -247,7 +260,8 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
               onPreview={onOpen}
               onOpen={onOpenNote ?? onOpen}
               onAnimate={() => { setStep(0); setPlaying(true); }}
-              overlay={tagSelect}
+              settingsOpen={settingsOpen}
+              onSettingsOpenChange={setSettingsOpen}
             />
           )
         ) : layout === "brain" ? (
@@ -268,12 +282,6 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
               }}
               renderCard={card}
               labels={{ zoomIn: t("memoryManager.mapZoomIn"), zoomOut: t("memoryManager.mapZoomOut"), fit: t("memoryManager.mapFit"), graph: t("memoryManager.map.graph"), minimap: t("memoryManager.mapMinimap") }}
-              overlay={tags.length > 0 ? (
-            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("memoryManager.map.tags")} className={cn(FIELD, "h-8 w-auto bg-panel py-0 text-[12.5px]")} data-memory-map-tag="">
-              <option value="">{t("memoryManager.map.allTags")}</option>
-              {tags.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-          ) : undefined}
               testId="memory-brain"
             />
           )
@@ -287,12 +295,6 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
               focusNoteId={focusKey}
               selectedNoteId={focusKey}
               noteColor={(key) => color.get(tierOf.get(key) ?? "")}
-              overlay={tags.length > 0 ? (
-            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("memoryManager.map.tags")} className={cn(FIELD, "h-8 w-auto bg-panel py-0 text-[12.5px]")} data-memory-map-tag="">
-              <option value="">{t("memoryManager.map.allTags")}</option>
-              {tags.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-          ) : undefined}
             />
           </div>
         )}
@@ -312,7 +314,11 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
           <span className="shrink-0 whitespace-nowrap text-[12.5px] tabular-nums text-ink-secondary" data-memory-map-when="">{t("memoryManager.map.when", { when: whenLabel, n: layout === "brain" ? (veil ? veil.notes : brain.notes) : visible })}</span>
         </div>
       )}
-      <p className="text-[12px] text-ink-tertiary">{t("memoryManager.map.help")}</p>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {/* the map's own count: out of the toolbar row, never cut */}
+        <p className="text-[12.5px] tabular-nums text-ink-secondary" aria-live="polite" title={countText} data-memory-map-count="" data-memory-map-count-text={countText}>{countText}</p>
+        <p className="text-[12px] text-ink-tertiary">{t("memoryManager.map.help")}</p>
+      </div>
     </div>
   );
 }

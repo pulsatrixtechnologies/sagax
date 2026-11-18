@@ -2,7 +2,7 @@
 // rail (month, Upcoming) and the Memory page's explorer are this one piece,
 // so their side, width, border, fold and breakpoint cannot drift apart.
 // Open, it is a 280px column with a border on its left and the "›" fold
-// button in its own row at the top-left; folded, it is a 40px strip (icon
+// button at the end of the first row (beside the panel's lead control, else alone at the top-left); folded, it is a 40px strip (icon
 // and vertical label) that opens it again. The rail's own 8px inset plus the
 // aside's 16px right padding put its content on the page header's 24px
 // right edge (the close button's edge), on both pages. It opens from 1280px and starts
@@ -49,10 +49,12 @@ export interface RightRailPanelProps extends Omit<HTMLAttributes<HTMLElement>, "
   onCollapse?: () => void;
   /** The fold button's name ("Hide upcoming routines"). */
   hideLabel?: string;
+  /** The panel's own first control (a search, a title): it shares the fold button's row, so the "›" is never alone. */
+  lead?: ReactNode;
   children: ReactNode;
 }
 
-export function RightRailPanel({ label, onCollapse, hideLabel, className, children, ...rest }: RightRailPanelProps) {
+export function RightRailPanel({ label, onCollapse, hideLabel, lead, className, children, ...rest }: RightRailPanelProps) {
   return (
     <>
       {/* below 1280px the rail is a sheet over the list: a press on the list behind closes it */}
@@ -64,8 +66,9 @@ export function RightRailPanel({ label, onCollapse, hideLabel, className, childr
       className={cn("flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel pr-4 max-[1279px]:absolute max-[1279px]:inset-y-0 max-[1279px]:right-0 max-[1279px]:z-40 max-[1279px]:max-w-[calc(100%-48px)] max-[1279px]:shadow-xl", className)}
     >
       {onCollapse && (
-        <div className="flex shrink-0 px-2 pt-2">
-          <button type="button" onClick={onCollapse} aria-label={hideLabel} title={hideLabel} className="rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink" data-right-rail-hide="">
+        <div className={cn("relative flex shrink-0 items-center gap-1 px-2", lead ? "pt-2.5" : "pt-2")} data-right-rail-head="">
+          {lead ? <div className="flex min-w-0 flex-1 items-center">{lead}</div> : null}
+          <button type="button" onClick={onCollapse} aria-label={hideLabel} title={hideLabel} className={cn("shrink-0 rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink", lead && "grid size-[34px] place-items-center p-0")} data-right-rail-hide="">
             <ChevronRight size={16} aria-hidden="true" />
           </button>
         </div>

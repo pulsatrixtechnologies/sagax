@@ -334,23 +334,26 @@ export function MemorySidebar({ shortcut, onOpenSwitcher, switcher, lists, tiers
   });
   const toggleTier = flip(setFolded);
   const toggleFolder = flip(setOpened);
+  const opener = (
+    <>
+      <button
+        type="button"
+        onClick={onOpenSwitcher}
+        aria-keyshortcuts={shortcut === "⌘O" ? "Meta+O" : "Control+O"}
+        title={`${t("memoryManager.openNote")} (${shortcut})`}
+        className="flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-hairline/60 bg-app px-2.5 text-left text-[13px] text-ink-secondary hover:text-ink"
+        data-memory-switcher-open=""
+      >
+        <Search size={14} className="shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{t("memoryManager.openNote")}</span>
+        <kbd className="shrink-0 rounded border border-hairline/60 px-1 font-sans text-[11px] leading-4 text-ink-tertiary" aria-hidden="true">{shortcut}</kbd>
+      </button>
+      {switcher}
+    </>
+  );
   return (
-    <RightRailPanel label={t("memoryManager.sidebarLabel")} onCollapse={onCollapse} hideLabel={t("memoryManager.explorerHide")} data-memory-sources="">
-      <div className={cn("relative flex shrink-0 items-center gap-1 px-2", onCollapse ? "pt-1" : "pt-2.5")}>
-        <button
-          type="button"
-          onClick={onOpenSwitcher}
-          aria-keyshortcuts={shortcut === "⌘O" ? "Meta+O" : "Control+O"}
-          title={`${t("memoryManager.openNote")} (${shortcut})`}
-          className="flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-hairline/60 bg-app px-2.5 text-left text-[13px] text-ink-secondary hover:text-ink"
-          data-memory-switcher-open=""
-        >
-          <Search size={14} className="shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">{t("memoryManager.openNote")}</span>
-          <kbd className="shrink-0 rounded border border-hairline/60 px-1 font-sans text-[11px] leading-4 text-ink-tertiary" aria-hidden="true">{shortcut}</kbd>
-        </button>
-        {switcher}
-      </div>
+    <RightRailPanel label={t("memoryManager.sidebarLabel")} onCollapse={onCollapse} hideLabel={t("memoryManager.explorerHide")} lead={onCollapse ? opener : undefined} data-memory-sources="">
+      {!onCollapse && <div className="relative flex shrink-0 items-center px-2 pt-2.5">{opener}</div>}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">
         <h3 className={cn(SECTION, "mt-2")}>{t("memoryManager.lists")}</h3>
         <ul className="flex flex-col gap-px" aria-label={t("memoryManager.viewsLabel")} data-memory-nav-list="">

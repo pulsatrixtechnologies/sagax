@@ -429,6 +429,28 @@ describe("the reference's Usage page (#4095)", () => {
     expect(html.indexOf("data-usage-share-bar")).toBeLessThan(html.indexOf("data-usage-chart-card"));
   });
 
+  it("by source: the app's engine names, never a raw id; an unpriced engine says it is included and stays out of the share", () => {
+    const byEngine = summary(30, 9, [
+      { key: "engine:piAgent", label: "piAgent", turns: 7, costUsd: null },
+      { key: "engine:claudeAgent", label: "claudeAgent", turns: 5, costUsd: 30 },
+      { key: "engine:xai-voice", label: "xai-voice", turns: 38, costUsd: null },
+      { key: "engine:openai-compat", label: "openai-compat", turns: 2, costUsd: null },
+    ]);
+    const html = renderToStaticMarkup(createElement(UsageBreakdown, { usage, detail: { ...detail, byEngine }, engineName: (driver) => (driver === "claudeAgent" ? "Claude Code" : null) }));
+    for (const raw of [">claudeAgent<", ">piAgent<", ">xai-voice<", ">openai-compat<", ">·"]) expect(html, raw).not.toContain(raw);
+    expect(html).toContain("Claude Code");
+    expect(html).toContain("xAI Voice");
+    expect(html).toContain(">Pi<");
+    expect(html).toContain("OpenAI-compatible");
+    expect(html).toContain("$30.00 · 100%");
+    // the unpriced ones: their turns and "Included in the plan", no percent
+    expect(html.match(/Included in the plan/g)).toHaveLength(3);
+    expect(html).toContain("38 turns");
+    // by cost, then turns: Claude Code first, then xAI Voice (38), Pi (7), the compatible server (2)
+    const order = ["Claude Code", "xAI Voice", ">Pi<", "OpenAI-compatible"].map((name) => html.indexOf(name));
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it("each segment lists its own groups with cost, share and turns", () => {
     const bots = renderToStaticMarkup(createElement(UsageBreakdown, { usage, detail, initialSegment: "bot" }));
     expect(bots).toContain('data-usage-list="bot"');

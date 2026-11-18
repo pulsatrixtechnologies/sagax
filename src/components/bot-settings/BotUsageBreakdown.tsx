@@ -66,7 +66,7 @@ const PROVIDER: Record<string, string> = {
   grok: "Grok", xai: "xAI", "xai-voice": "xAI", xaiVoice: "xAI", gemini: "Gemini", minimax: "MiniMax", cursor: "Cursor",
 };
 /** Server engines with a fixed id and no display name. */
-const KNOWN_ACCOUNT: Record<string, string> = { xaiVoice: "xAI Voice" };
+export const KNOWN_ACCOUNT: Record<string, string> = { xaiVoice: "xAI Voice", "xai-voice": "xAI Voice", piAgent: "Pi" };
 
 /** The instance id behind an account row: the server keys it `${instanceId}:${access}` and may hide a raw id from the label (#2679). */
 export function instanceOf(group: { key: string; access?: string | null }): string {

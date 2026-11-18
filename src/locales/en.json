@@ -15445,5 +15445,6 @@
   "recordCard.lines.otherOne": "1 other line",
   "recordCard.lines.other": "{count} other lines",
   "planUsage.note.rateLimited": "{name} is limiting requests, retrying shortly",
-  "planUsage.asOf": "as of {time}"
+  "planUsage.asOf": "as of {time}",
+  "usage.personal.included": "Included in the plan"
 }

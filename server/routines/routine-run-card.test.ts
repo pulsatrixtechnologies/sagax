@@ -89,6 +89,9 @@ describe("routineRunCard", () => {
     const cut = whole.slice(0, whole.indexOf("webkit") + 10);
     expect(unclosedFenceOffset(cut)).toBeGreaterThanOrEqual(0);
     expect(pickRoutineFullReport(cut, whole)).toBe(whole);
+    const note = "- Optional calendar unavailable";
+    expect(pickRoutineFullReport(note + "\n\n" + cut, whole, note)).toBe(note + "\n\n" + whole);
+    expect(pickRoutineFullReport(note + "\n\n" + cut, "unrelated ".repeat(500), note)).toBeUndefined();
     expect(pickRoutineFullReport(whole.slice(0, 40), whole)).toBe(whole);
     expect(pickRoutineFullReport(whole, whole)).toBeUndefined();
   });

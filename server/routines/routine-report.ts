@@ -21,9 +21,9 @@
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
 import {
   findStructure, meaningfulLine, routineSaysNothing, withoutRoutineMarkers,
-  QUIET_MARKER_LINE, ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKER, SAME_PROBLEM_LINE,
+  QUIET_MARKER_LINE, ROUTINE_NOTES_STATUS, ROUTINE_QUIET_MARKER, RUN_STATUS_NOTES_LINE, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKER, SAME_PROBLEM_LINE,
 } from "../../shared/routine-result.ts";
-import { personAttention, RUN_STATUS_PROBLEM_LINE } from "../../shared/person-attention.ts";
+import { fencedLines, personAttention, RUN_STATUS_PROBLEM_LINE } from "../../shared/person-attention.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 import { chatPlace, routineRunSignal } from "../../shared/chat-relevance.ts";
 import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat.ts";
@@ -50,7 +50,7 @@ export const ROUTINE_ASK_EACH_ITEM_RULE =
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
-  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. ${ROUTINE_NOTHING_TO_DO_RULE} If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. The person first sees only that last line, on a card; the rest opens behind Details. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing. ${ROUTINE_ASK_EACH_ITEM_RULE}`;
+  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. ${ROUTINE_NOTHING_TO_DO_RULE} If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. When you did the work and only some items or steps were skipped or kept failing (a read that failed again and again, an item left for later) and nothing blocks the person or needs an answer, write the line ${ROUTINE_STATUS_MARKER} ${ROUTINE_NOTES_STATUS} instead, in whatever language you write the report, and list in the report what was skipped and why: such a run is a success with notes, never a failure. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. The person first sees only that last line, on a card; the rest opens behind Details. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing. ${ROUTINE_ASK_EACH_ITEM_RULE}`;
 
 export interface RoutineReportOutcome {
   /** Nothing for the person: post nothing. */
@@ -64,6 +64,9 @@ export interface RoutineReportOutcome {
   /** #3990: the bot ended its run with the nothing-to-report line itself:
    * its own word that the run found nothing to do (ROUTINE_NOTHING_TO_DO_RULE). */
   nothingToDo?: true;
+  /** #4839: the bot's `RUN_STATUS: completed_with_notes` line: it did its work
+   * and left notes (what it skipped, and why). Never a failure. */
+  completedWithNotes?: true;
 }
 
 /** Flow engine refusals that must end a Sagax routine run as blocked, not completed. */
@@ -150,11 +153,27 @@ export function routineReportOutcome(output: string | undefined): RoutineReportO
   // #3479: the same-problem line is a status the server consumes, never part of the report.
   const lines = (output ?? "").split(/\r?\n/);
   const sameProblem = lines.some((line) => SAME_PROBLEM_LINE.test(line.trim()));
-  const outcome = rawReportOutcome(sameProblem ? lines.filter((line) => !SAME_PROBLEM_LINE.test(line.trim())).join("\n") : output);
-  // #3515: a status line the contract does not consume ("RUN_STATUS: complete.",
-  // "RUN_STATUS: skipped") is still a marker, never part of the report.
-  const shaped = outcome.report ? { ...outcome, report: withoutRoutineMarkers(routineReportProse(outcome.report)) } : outcome;
-  return sameProblem ? { ...shaped, sameProblem: true } : shaped;
+  // #4839: the notes status is a token, read as one in any language (outside code blocks)
+  const fenced = fencedLines(lines);
+  let withNotes = false;
+  const kept: string[] = [];
+  for (const [at, line] of lines.entries()) {
+    if (sameProblem && SAME_PROBLEM_LINE.test(line.trim())) continue;
+    const marker = !fenced[at] && RUN_STATUS_NOTES_LINE.exec(line.trim());
+    if (!marker) kept.push(line);
+    else {
+      withNotes = true;
+      if (marker[1]?.trim()) kept.push(marker[1].trim());
+    }
+  }
+  const outcome = rawReportOutcome(withNotes || sameProblem ? kept.join("\n") : output);
+  if (withNotes && !outcome.declared) {
+    outcome.quiet = false;
+    outcome.completedWithNotes = true;
+  }
+  if (outcome.report) outcome.report = withoutRoutineMarkers(routineReportProse(outcome.report));
+  if (sameProblem) outcome.sameProblem = true;
+  return outcome;
 }
 
 /** #3695, #3990: what a run of a routine that does not post each result is

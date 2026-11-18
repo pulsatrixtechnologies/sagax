@@ -387,6 +387,8 @@ interface RunTrouble {
   openAtText?: Set<string>;
   /** #3009: the loop guard stopped the run (its reason, as recorded). */
   loopStop?: string;
+  /** #4839: a tool step completed successfully during this run. */
+  stepSucceeded?: boolean;
 }
 
 /** #3009: the loop guard's stop reason in words a person reads. */
@@ -4651,6 +4653,7 @@ export class RoutineManager {
       // tool; the miss is not a failure that "never succeeded after".
       const key = troubleToolKey(title);
       if (event.ok) {
+        trouble.stepSucceeded = true;
         trouble.unresolved.delete(key);
         // QA 0.8.67 (#2970): Grok refuses `use_tool` aimed at one of its
         // native tools ("search_tool is a native tool, not an MCP
@@ -5049,10 +5052,18 @@ export class RoutineManager {
       queueMicrotask(() => this.tickInBackground());
       return true;
     }
-    // #3218: a flow_run that failed and never succeeded after is a failed
-    // run, never a completed one.
+    // #4839: a run that did its work and leaves notes is completed, never a
+    // problem run: the bot's partial line backed by a tool step that succeeded
+    // (runtime events), or its `completed_with_notes` status. What it skipped,
+    // repeated tool failures included, goes to its report below, not to
+    // run.problems, so no failure streak, counter or alert ever sees it.
+    // A blocker (loop guard, goal, teammate, engine, approval nobody answered,
+    // a sign-in to renew) stays a problem.
+    const withNotes = !noFinalMessage && (outcome.completedWithNotes === true
+      || (outcome.declared?.status === "partial" && trouble?.stepSucceeded));
+    // #3218: an unresolved flow_run failure fails a run that did not report partial success.
     const failedFlow = [...(trouble?.unresolved.values() ?? [])].find((failure) => /flow_run/i.test(failure.title));
-    if (failedFlow) {
+    if (failedFlow && !withNotes) {
       this.failRun(run, `flow_run failed${failedFlow.output ? `: ${failedFlow.output}` : ""}`.slice(0, 500));
       queueMicrotask(() => this.tickInBackground());
       return true;
@@ -5066,9 +5077,10 @@ export class RoutineManager {
       return true;
     }
     const problems: string[] = [];
+    const notes: string[] = [];
     if (trouble?.loopStop) problems.push(routineLoopStopProblem(trouble.loopStop));
     if (goalProblem) problems.push(goalProblem);
-    if (outcome.declared?.status === "partial") problems.push(outcome.declared.reason);
+    if (outcome.declared?.status === "partial") (withNotes ? notes : problems).push(outcome.declared.reason);
     for (const teammate of handed?.failed ?? []) {
       problems.push(`${teammate.name}'s work ${teammate.outcome === "incomplete" ? "was not finished" : teammate.outcome === "expired" ? "expired before it ran" : teammate.outcome === "stopped" ? "was stopped" : "failed"}${teammate.detail ? `: ${teammate.detail}` : ""}`);
     }
@@ -5079,6 +5091,13 @@ export class RoutineManager {
       if (reauth) {
         const line = connectorReauthProblem(reauth);
         if (!problems.includes(line)) problems.push(line);
+        continue;
+      }
+      // #4839: a run with notes lists every step that did not work
+      if (withNotes) {
+        notes.push(failure.count < 2
+          ? `${humanizeToolIds(title)} failed${failure.output ? `: ${failure.output}` : ""}`
+          : `${humanizeToolIds(title)} failed ${failure.count} times${failure.output ? `: ${failure.output}` : ""}`);
         continue;
       }
       // Kept failing: one miss the bot moved past (a search with no match)
@@ -5119,6 +5138,12 @@ export class RoutineManager {
       run.problems = clipReadable(readable, 1_000);
       delete run.quiet;
     } else delete run.problems;
+    if (withNotes && notes.length) {
+      const listed = readableRoutineProblems(redactSecretsInText(notes.map((note) => `- ${note}`).join("\n")));
+      run.completionNotes = clipReadable(listed, 1_000);
+      run.output = [run.completionNotes, run.output].filter(Boolean).join("\n\n");
+    } else delete run.completionNotes;
+    if (withNotes) delete run.quiet;
     this.settleRepeatingStreak(run);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());

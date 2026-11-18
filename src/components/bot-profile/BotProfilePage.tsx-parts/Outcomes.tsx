@@ -223,7 +223,7 @@ function OutcomeRow({ outcome, routines, runs, open, onToggle, actions }: {
           : <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
       </button>
       {open && (
-        <div id={panelId} data-outcome-open="" className="flex min-w-0 flex-col gap-2 px-2 pb-2 pt-1">
+        <div id={panelId} data-outcome-open="" className="flex min-w-0 flex-col gap-2 px-2 pb-3 pt-1">
           {need && <NeedBlock outcome={outcome} need={need} own={own} runs={runs} actions={actions} />}
           <FactRows attrs={{ "data-outcome-lines": "" }}>
             <FactRow label={t("outcomes.results")} attrs={{ "data-outcome-results": "" }}>
@@ -280,7 +280,7 @@ export function OutcomesCard({ outcomes, routines, runs, loadState, actions, def
   else if (outcomes.length === 0) body = <RoutinesAskHint onAsk={actions.onAsk} />;
   else {
     body = (
-      <div data-outcomes-list="" className="flex min-w-0 flex-col">
+      <div data-outcomes-list="" className="flex min-w-0 flex-col divide-y divide-hairline/60">
         <ShowMoreFold items={outcomes} shown={OUTCOMES_SHOWN} keep={(outcome) => Boolean(outcome.needsPerson)} toggleAttr="data-outcomes-fold"
           render={(outcome) => <OutcomeRow key={outcome.id} outcome={outcome} routines={routines} runs={runs} open={opened.has(outcome.id)} onToggle={() => toggle(outcome.id)} actions={actions} />} />
       </div>

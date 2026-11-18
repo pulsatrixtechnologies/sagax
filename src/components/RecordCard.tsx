@@ -185,9 +185,6 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ above: false, below: false });
   const [left, setLeft] = useState<{ count: number; kind: MoreKind } | null>(null);
-  // pinned, the pane also ends on a row boundary; its "N more" line is the one way to scroll through the rest
-  const [expanded, setExpanded] = useState(false);
-  const tab = useContext(TabContext);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -199,8 +196,9 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
     const measureRows = () => {
       // an expanded pinned card shows every row and scrolls; a pane that does not fit leaves the
       // rows alone (the rows of another pane, inside it, are that pane's to hide)
-      if (pinned && expanded) for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
-      if ((pinned && expanded) || !fit) {
+      // a pinned (clicked) card hides nothing: every row shows and the pane scrolls
+      if (pinned) for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
+      if (pinned || !fit) {
         setLeft((current) => (current === null ? current : null));
         return;
       }
@@ -243,7 +241,7 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       mutations?.disconnect();
       el.removeEventListener("scroll", measureScroll);
     };
-  }, [fit, pinned, moreRoom, expanded]);
+  }, [fit, pinned, moreRoom]);
   const label = left ? t(`recordCard.more.${left.kind}${left.count === 1 ? "One" : "Many"}` as Parameters<typeof t>[0], { count: left.count }) : "";
   return (
     <div
@@ -255,9 +253,7 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
-      {left && (pinned ? (
-        <button type="button" tabIndex={tab} data-fit-more className={cn("block w-full shrink-0 text-start text-[12px] leading-4 text-popover-ink-secondary hover:text-popover-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", moreClass)} onClick={() => setExpanded(true)}>{label}</button>
-      ) : <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>)}
+      {left && <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
     </div>
   );
 }
@@ -632,7 +628,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const split = !card || right;
   // wider than tall, never taller than wide: stacked (a narrow space), the
   // card is no taller than it is wide
-  const frame = "flex w-full max-h-[min(20rem,calc(100vh-1rem))] @max-[34rem]:max-h-[min(100cqw,calc(100vh-1rem))] flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)] text-[13px] leading-5 text-popover-ink";
+  const frame = "flex w-full max-h-[min(20rem,var(--hover-card-room,calc(100vh-1rem)))] @max-[34rem]:max-h-[min(100cqw,var(--hover-card-room,calc(100vh-1rem)))] flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)] text-[13px] leading-5 text-popover-ink";
   const width = split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]";
   const data = { "data-record-card-body": "", "data-layout": split ? "split" : "compact", "data-record-state": card ? "card" : miss ? miss.state : "loading" };
   const tab = pinned ? undefined : -1;

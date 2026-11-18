@@ -19,7 +19,7 @@ describe("remote session tool approvals", () => {
     expect(remoteSessionToolCall("mcp__agents__offer_shell_terminal", "{}", mac)).toEqual({ remote: false, readOnly: false });
   });
 
-  it("asks for every command on Windows and on a computer whose OS is not known (no PowerShell classifier yet)", () => {
+  it("asks for non-reads on Windows and for every command on a computer whose OS is not known", () => {
     for (const command of ["dir", "ls", "echo \"a\\\"; Remove-Item x; echo \\\"\"", "Get-ChildItem env:", "type C:\\Users\\bob\\.ssh\\id_rsa"]) {
       expect(remoteSessionToolCall("mcp__agents__remote_session_exec", exec(command), () => ({ os: "windows", known: true })).readOnly).toBe(false);
       expect(remoteSessionToolCall("mcp__agents__remote_session_exec", exec(command), () => ({ os: "windows", known: false })).readOnly).toBe(false);
@@ -28,6 +28,53 @@ describe("remote session tool approvals", () => {
     expect(remoteCommandReadOnly("ls", { os: "macos", known: false })).toBe(false);
     expect(remoteCommandReadOnly("ls", null)).toBe(false);
     expect(remoteCommandReadOnly("ls", { os: "linux", known: true })).toBe(true);
+  });
+
+  it("lets plain PowerShell reads run without a card on Windows (#4575)", () => {
+    const win = () => ({ os: "windows" as const, known: true });
+    for (const command of [
+      "hostname", "query user", "quser", "whoami", "Get-Date", "get-process",
+      "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10",
+      "Get-Process -Name chrome,svchost | Select-Object Name,Id,CPU",
+      "Get-Service -Name Spooler", "Get-WinEvent -LogName System -MaxEvents 20",
+      "Get-WinEvent -LogName 'Microsoft-Windows-TaskScheduler/Operational' -MaxEvents 5 | Format-List",
+      "Get-Counter '\\Processor(_Total)\\% Processor Time' -SampleInterval 1 -MaxSamples 3",
+      "Get-CimInstance Win32_OperatingSystem | Select-Object -Property Caption,LastBootUpTime",
+      "Get-CimInstance -Query 'SELECT Name, LoadPercentage FROM Win32_Processor' | Format-Table -AutoSize",
+      "Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType = 3'",
+    ]) {
+      expect(remoteSessionToolCall("agents__remote_session_exec", exec(command), win), command).toEqual({ remote: true, readOnly: true });
+    }
+  });
+
+  it("sends anything outside the PowerShell read grammar to the card (placeholders only)", () => {
+    const win = () => ({ os: "windows" as const, known: true });
+    for (const command of [
+      // abbreviated, colon-bound and common parameters are not in any table
+      "Get-Process -Na chrome", "Get-Process -Name:chrome", "Get-Process -ErrorAction Stop", "Get-Process -Verbose",
+      "Get-Process -OutVariable v", "Get-Process -PlaceholderOption", "Get-WinEvent -Log System", "Get-Service -Name",
+      // not a listed reader, an alias, a provider, a path
+      "Get-Placeholder", "Get-ChildItem", "Get-Content file.txt", "gps", "ps", "dir", "ls", "Get-Process -Name env:x",
+      "Get-Process -Name C:\\placeholder", "Get-Process -ComputerName placeholder", "Get-CimInstance -CimSession placeholder",
+      // syntax outside the grammar
+      "Get-Process; Get-Service", "Get-Process > out.txt", "Get-Process $x", "Get-Process \"x\"", "Get-Process (placeholder)",
+      "Get-Process | Placeholder-Filter", "Sort-Object CPU", "Get-Process |", "| Get-Process", "Get-Process 'a", "Get-Process & placeholder",
+      "Get-Process @{a=1}", "Get-Process | Select-Object { placeholder }", "Get-Process -Name chrome -Name svchost", "hostname extra",
+      "query user extra", "query placeholder", "Get-CimInstance -Query 'DELETE FROM Win32_Process'", "Get-Counter placeholder",
+      "Get-Process -Id 1.5", "Get-Process -Name 'a''b'", "Get-Process\u00a0x", "constructor",
+    ]) {
+      expect(remoteSessionToolCall("agents__remote_session_exec", exec(command), win).readOnly, command).toBe(false);
+    }
+  });
+
+  it("sends an unknown Windows command to the genuine card, then runs it once on the person's yes", () => {
+    const command = "Get-Placeholder -Thing 1";
+    expect(remoteCommandReadOnly(command, { os: "windows", known: true })).toBe(false);
+    noteRemoteExecRequest("thread-w", "req-w", exec(command), 5_000_000);
+    expect(consumeRemoteExecApproval("thread-w", command, 5_000_001)).toBe(false);
+    grantRemoteExecApproval("thread-w", "req-w", 5_000_002);
+    expect(consumeRemoteExecApproval("thread-w", command, 5_000_003)).toBe(true);
+    expect(consumeRemoteExecApproval("thread-w", command, 5_000_004)).toBe(false);
   });
 
   it("names the session the call is for to the OS lookup", () => {
@@ -101,8 +148,10 @@ describe("POST /api/internal/remote-sessions/exec", () => {
     expect(await call({ os: "macos", known: true }, "rm -rf ~/x", true)).toMatchObject({ status: 200, ran: ["rm -rf ~/x"] });
   });
 
-  it("treats every Windows or unknown-OS command as one that needs the person's yes", async () => {
+  it("treats a Windows command outside the read grammar, and every unknown-OS command, as one that needs the person's yes", async () => {
     expect(await call({ os: "windows", known: true }, "dir", false)).toMatchObject({ status: 403, ran: [], consumed: ["dir"] });
+    expect(await call({ os: "windows", known: true }, "Get-Process -Na chrome", false)).toMatchObject({ status: 403, ran: [] });
+    expect(await call({ os: "windows", known: true }, "Get-Process | Select-Object -First 3", false)).toMatchObject({ status: 200, consumed: [] });
     expect(await call({ os: "macos", known: false }, "ls", false)).toMatchObject({ status: 403, ran: [] });
     expect(await call(null, "ls", false)).toMatchObject({ status: 403, ran: [] });
   });

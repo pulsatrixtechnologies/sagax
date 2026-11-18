@@ -1015,6 +1015,11 @@ export function agentsAllowedTools(env: Record<string, string> | undefined): str
   // levels that prompt) shows a card. A GET stays with the rest of the agents
   // server. The blanket mcp__agents grant would skip that card.
   const writes = new Set((profile.openapiTools ?? []).filter((operation) => operation.method !== "get").map((operation) => `openapi_${operation.name}`));
-  if (!profile.sharedComputers && writes.size === 0) return ["mcp__agents"];
-  return availableTools(profile).map((tool) => tool.name).filter((name) => name !== "shared_computer" && !writes.has(name)).map((name) => `mcp__agents__${name}`);
+  // #4575: a command on a client's Tailcat computer that does more than read
+  // needs the person's card (remote-session-exec.ts). The blanket grant would
+  // skip the permission prompt, so the route refused it with no card shown.
+  const names = availableTools(profile).map((tool) => tool.name);
+  const remoteExec = names.includes("remote_session_exec");
+  if (!profile.sharedComputers && writes.size === 0 && !remoteExec) return ["mcp__agents"];
+  return names.filter((name) => name !== "shared_computer" && name !== "remote_session_exec" && !(remoteExec && (name === "call_tool" || name === "use_tool")) && !writes.has(name)).map((name) => `mcp__agents__${name}`);
 }

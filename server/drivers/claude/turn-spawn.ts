@@ -93,7 +93,7 @@ try {
           requestType: ask.kind,
           tool: ask.tool,
           summary: askSummary(ask),
-          input: ask.kind === "permission" ? askInputDetail(withAbsolutePaths(ask.tool, ask.input, cwd) as typeof ask.input) : undefined,
+          input: ask.kind === "permission" ? askInputDetail(withAbsolutePaths(ask.tool, ask.input, cwd) as typeof ask.input, ask.tool === "mcp__agents__remote_session_exec" ? 50_000 : undefined) : undefined,
           command: ask.kind === "permission" && ask.tool === "Bash"
             ? permissionCommand(ask.input.command, commandCwd) : undefined,
           paths: ask.kind === "permission" ? permissionPaths(ask.tool, ask.input, cwd) : undefined,

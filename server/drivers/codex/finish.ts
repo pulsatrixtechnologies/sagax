@@ -18,6 +18,7 @@ import {
   type CodexApprovalParams,
 } from "./approvals.ts";
 import { CODEX_SHELL_SET, extendShellExclusions } from "./shell-policy.ts";
+import { isDeepStrictEqual } from "node:util";
 import { plainRecord } from "./plain.ts";
 import { CodexRpcError, archivedNativeCodexThread, missingNativeCodexThread } from "./rpc.ts";
 import { codexShellDisabled } from "./launch-args.ts";
@@ -131,12 +132,14 @@ try {
       if (!expected) { ambient.push(name); continue; }
       const actual = entry as { command?: unknown; args?: unknown; env_vars?: unknown; env?: unknown; default_tools_approval_mode?: unknown; tools?: unknown } | null;
       const literal = s.selectedLiterals?.get(name) ?? {};
+      const selectedServers = plainRecord(s.selectionConfig.config?.mcp_servers);
+      const expectedTools = plainRecord(selectedServers?.[name])?.tools ?? {};
       if (actual?.command !== expected.command
         || JSON.stringify(actual?.args ?? []) !== JSON.stringify(expected.args ?? [])
         || !Array.isArray(actual?.env_vars) || JSON.stringify([...actual.env_vars].sort()) !== JSON.stringify(Object.keys(expected.env).sort())
         || actual.default_tools_approval_mode !== (s.selectedApprovals.get(name) ?? "prompt")
         || !sameLiteralEnv(actual.env, literal)
-        || (actual.tools != null && (typeof actual.tools !== "object" || Array.isArray(actual.tools) || Object.keys(actual.tools).length > 0))) {
+        || !isDeepStrictEqual(actual.tools ?? {}, expectedTools)) {
         conflict = true;
       }
     }

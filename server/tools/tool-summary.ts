@@ -138,10 +138,10 @@ export function askInputSummary(input: unknown): string | undefined {
  * details": the same redacted, bounded JSON a tool detail shows, or
  * undefined when there are none or they were too long to stay valid JSON
  * (the card then falls back to its one-line subtitle). */
-export function askInputDetail(input: unknown): string | undefined {
+export function askInputDetail(input: unknown, max?: number): string | undefined {
   const fields = fieldsOf(input);
   if (!fields || Object.keys(fields).length === 0) return undefined;
-  const text = toolDetailPreview(fields);
+  const text = toolDetailPreview(fields, max);
   if (!text || !text.startsWith("{") || text.endsWith("[… preview shortened]")) return undefined;
   return text;
 }

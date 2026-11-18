@@ -99,6 +99,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const baseEnv = new Map(Object.entries(env).filter(([, value]) => value !== undefined));
   const mountedNames = new Set<string>();
   const selectedMcp = new Map<string, StdioMcpSpec>();
+  const agentToolPrompts: Record<string, { approval_mode: "prompt" }> = {};
   const selectedApprovals = new Map<string, McpApprovalMode>();
   /** Mounts whose big catalog is searched (URL directories and the account bridge). */
   const directoryMounts = new Set<string>();
@@ -194,6 +195,16 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     mountSelected("agents", "agents", turn.toolScope === undefined
       ? { ...turn.integrations.agents, env: { ...turn.integrations.agents.env, SAGAX_MERGED_TOOLS: "1" } }
       : turn.integrations.agents, "approve");
+    const agentEnv = turn.integrations.agents.env;
+    if (selectedMcp.has("agents") && agentEnv.SAGAX_PERSPICAX_TOOLS === "1" && agentEnv.SAGAX_EXTERNAL_RUNTIME !== "1") {
+      const names = ["remote_session_exec"];
+      if (agentsSearchedFromEnv(agentEnv) || directoryMounts.has("agents")) names.push("call_tool");
+      if (agentEnv.SAGAX_CATALOG_BRIDGE === "1") names.push("use_tool");
+      for (const tool of names) {
+        agentToolPrompts[tool] = { approval_mode: "prompt" };
+        appServerArgs.push("-c", `mcp_servers.agents.tools.${tool}.approval_mode="prompt"`);
+      }
+    }
     // #4527 lot C: the tools this session leaves out are reached through the
     // agents server's own call_tool, read everywhere as the tool it runs
     if (agentsSearchedFromEnv(turn.integrations.agents.env)) directoryMounts.add("agents");
@@ -311,6 +322,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
 
   const selectionConfig: { config?: Record<string, unknown> } = turn.toolScope === undefined ? {} : { config: { mcp_servers: Object.fromEntries(
     [...selectedMcp].map(([name, server]) => [name, {
+      ...(name === "agents" && Object.keys(agentToolPrompts).length ? { tools: agentToolPrompts } : {}),
       command: server.command, args: server.args, env_vars: Object.keys(server.env), env: selectedLiterals.get(name) ?? {}, default_tools_approval_mode: selectedApprovals.get(name) ?? "prompt",
     }]),
   ) } };

@@ -277,7 +277,7 @@ export function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSu
               size={16}
               aria-label="✓"
               data-menu-check=""
-              className={cn("shrink-0 text-ink", entry.rename && "group-hover/entry:opacity-0 group-focus-within/entry:opacity-0 touch:opacity-100")}
+              className={cn("shrink-0 text-ink", entry.rename && "group-hover/entry:invisible group-focus-within/entry:invisible touch:visible")}
             />
           )}
           {/* The edit icon takes the check's place at the right edge, on hover or focus only. */}

@@ -11,7 +11,7 @@ const html = renderToStaticMarkup(createElement(SubmenuEntryRow, {
 }));
 
 it("keeps the selected row's check at the right edge and hides it while the row is hovered or focused", () => {
-  expect(html.match(/<svg[^>]*data-menu-check[^>]*>/)![0]).toContain("group-hover/entry:opacity-0");
+  expect(html.match(/<svg[^>]*data-menu-check[^>]*>/)![0]).toContain("group-hover/entry:invisible");
   expect(html).not.toContain("pr-14");
 });
 

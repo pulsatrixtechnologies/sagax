@@ -46,6 +46,12 @@ vi.mock("@/state/store/api", () => ({
   }),
 }));
 
+// The store's config: a Boat computer is on, so the cloud computer is offered.
+const storeConfig = vi.hoisted(() => ({ value: { features: { boatComputer: true } } as unknown }));
+vi.mock("@/state/store-selector", () => ({
+  useStoreSelector: (select: (state: { config: unknown }) => unknown) => select({ config: storeConfig.value }),
+}));
+
 vi.mock("../computer/SandboxDesktopModal", () => ({
   SandboxDesktopModal: (props: { title: string; onClose: () => void }) =>
     createElement("div", { "data-sandbox-takeover": "", "data-title": props.title },
@@ -232,6 +238,19 @@ describe("ComputerCard", () => {
     expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
     act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })));
     expect(document.activeElement?.getAttribute("data-computer-card-option")).toBe("auto");
+  });
+
+  it("lists no cloud computer (nor Auto) when this person has none, solo; an organization always has one", () => {
+    expect(computerSelectOptions(null, false, false).map((o) => o.value)).toEqual(["local"]);
+    expect(computerSelectOptions(null, true, true).map((o) => o.value)).toEqual(["auto", "local", "cloud"]);
+    storeConfig.value = {};
+    try {
+      act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+      act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+      expect([...document.querySelectorAll("[data-computer-card-option]")].map((n) => n.getAttribute("data-computer-card-option"))).toEqual(["local"]);
+    } finally {
+      storeConfig.value = { features: { boatComputer: true } };
+    }
   });
 
   it("has no Computer details row, and no ... at all when the viewer cannot change the computer", () => {

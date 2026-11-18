@@ -23,8 +23,9 @@ import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "luci
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
+import { useStoreSelector } from "@/state/store-selector";
 import { cn } from "@/lib/cn";
-import { effectivePlace, placeLabelKey } from "@/lib/place";
+import { effectivePlace, placeLabelKey, placeOffered } from "@/lib/place";
 import { placeLabel } from "@/lib/place-labels";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { isMacPlatform } from "@/lib/is-mac-platform";
@@ -110,6 +111,7 @@ function desktopDetail(platform: string): string {
 export function computerSelectOptions(
   bridge: DesktopBridgeStatus | null,
   organization: boolean,
+  cloudOffered = true,
 ): ComputerMenuOption[] {
   const choices = computerChoices(bridge);
   const localChoices = choices.filter((choice): choice is Extract<ComputerChoice, { source: "local" }> => choice.source === "local");
@@ -120,7 +122,9 @@ export function computerSelectOptions(
   const local: ComputerMenuOption = only
     ? { value: "local", label: placeLabel(only.key, only.name), detail: desktopDetail(only.platform), lead: "online" }
     : { value: "local", label: t(placeLabelKey("local", organization)), detail: t("computerMenu.localDetail"), lead: "computer" };
-  return [auto, local, cloud];
+  // No cloud computer for this person (solo, no Boat or VPS computer): only
+  // This computer, and Auto, which only chooses between the two, goes too.
+  return cloudOffered ? [auto, local, cloud] : [local];
 }
 
 /** The cloud computer's one name, on the card and in its menu row. */
@@ -280,7 +284,9 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
     ? t("botPanel.computerCard.capturedAt", { time: new Date(capturedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) })
     : undefined;
   const selectValue: ComputerSelectValue | null = chosenHost ? null : computerSelectValue(bot.computer);
-  const options = useMemo(() => computerSelectOptions(bridge, organization), [bridge, organization]);
+  const config = useStoreSelector((current) => current.config);
+  const cloudOffered = placeOffered("cloud", config, organization);
+  const options = useMemo(() => computerSelectOptions(bridge, organization, cloudOffered), [bridge, organization, cloudOffered]);
   const title = chosenHost ? chosenHost.name : computerCardTitle(bot.computer, bridge, organization);
   const place = effectivePlace(bot);
   const active = activeComputer(bridge ?? EMPTY_BRIDGE, place);

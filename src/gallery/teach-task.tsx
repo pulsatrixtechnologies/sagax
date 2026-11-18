@@ -7,7 +7,7 @@
  * - steps: Stop leads to the recorded steps, ready to save as a skill;
  * - steps-window: the same steps inside the screen window that recorded
  *   them (#4208), drawn with the detail panel's rows;
- * - computer-menu: the bot panel's Computer section with its "..." menu open;
+ * - computer-menu / computer-menu-cloud: the bot panel's Computer section with its "..." menu open, without and with a cloud computer;
  * - learn-before / learn-after: a /learn the bot cannot settle alone, before
  *   (it guessed in its reply) and after (its question pinned over the box). */
 import { StrictMode, useEffect, useRef, useState } from "react";
@@ -34,6 +34,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "fr";
 await loadLocale(lang);
 const which = params.get("case") ?? "chooser";
+// computer-menu-cloud: a solo person with a Boat computer, so Cloud is listed.
+const cloudOffered = which === "computer-menu-cloud";
 const fr = lang === "fr";
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -41,7 +43,7 @@ window.fetch = async () => json({});
 
 const bot = { id: "bot-orla", name: "Orla", color: "violet", threadId: "thread-main", messages: [], tasks: [], browser: true, modelSelection: { instanceId: "i", model: "m" } } as unknown as Bot;
 const store = {
-  state: { bots: [bot], instances: [], groups: [], routines: [], config: { features: { browser: true }, browserEngine: { kind: "engine" }, browserProfiles: [], box: { configured: true, included: true } }, computerControl: {} },
+  state: { bots: [bot], instances: [], groups: [], routines: [], config: { features: { browser: true, ...(cloudOffered ? { boatComputer: true } : {}) }, browserEngine: { kind: "engine" }, browserProfiles: [], box: { configured: true, included: true } }, computerControl: {} },
   dispatch: () => {},
   flushBotPatches: async () => null,
 } as unknown as ReturnType<typeof useStore>;
@@ -171,7 +173,7 @@ function Gallery() {
       {which === "recording" && <Recording />}
       {which === "steps-window" && <Recording review />}
       {which === "steps" && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={STEPS} recordedAt={new Date(Date.now() - 60_000).toISOString()} onClose={() => {}} />}
-      {which === "computer-menu" && <ComputerSection />}
+      {(which === "computer-menu" || which === "computer-menu-cloud") && <ComputerSection />}
       {(which === "learn-before" || which === "learn-after") && <Learn after={which === "learn-after"} />}
     </div>
   );

@@ -157,12 +157,17 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
     </>
   );
 
+  const countNumber = layout === "brain" ? (hits ? hits.hits.size : brain.notes) : dimmed ? dimmed.size : shown.length;
+  const countText = (layout === "brain"
+    ? (hits ? t("memoryManager.map.hits", { n: hits.hits.size }) : t("memoryManager.map.count", { notes: brain.notes, links: brainLinks }))
+    : dimmed ? t("memoryManager.map.hits", { n: dimmed.size }) : t("memoryManager.map.count", { notes: shown.length, links }))
+    + (!dimmed && review > 0 ? ` · ${t("memoryManager.map.waiting", { n: review })}` : "");
   const whenLabel = step >= STEPS ? t("memoryManager.map.today") : new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium" }).format(new Date(layout === "brain" && brainAt != null ? brainAt : cursor));
   const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px]";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" data-memory-map-view="">
-      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto" data-memory-map-bar="">
+      <div className="@container flex flex-nowrap items-center gap-2 overflow-x-auto" data-memory-map-bar="">
         <label className="flex h-8 w-[240px] shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
           <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} placeholder={t("memoryManager.map.search")} aria-label={t("memoryManager.map.search")} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-tertiary" data-memory-map-search="" />
@@ -206,11 +211,10 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
           ]}
           data-memory-map-layout-switch=""
         />
-        <p className="ml-auto min-w-0 truncate whitespace-nowrap text-[12.5px] tabular-nums text-ink-secondary" aria-live="polite" data-memory-map-count="">
-          {layout === "brain"
-            ? (hits ? t("memoryManager.map.hits", { n: hits.hits.size }) : t("memoryManager.map.count", { notes: brain.notes, links: brainLinks }))
-            : dimmed ? t("memoryManager.map.hits", { n: dimmed.size }) : t("memoryManager.map.count", { notes: shown.length, links })}
-          {!dimmed && review > 0 ? ` · ${t("memoryManager.map.waiting", { n: review })}` : ""}
+        {/* never cut: the whole sentence when the bar is wide, else the number alone (the sentence is its tooltip) */}
+        <p className="ml-auto shrink-0 whitespace-nowrap text-[12.5px] tabular-nums text-ink-secondary" aria-live="polite" title={countText} aria-label={countText} data-memory-map-count="" data-memory-map-count-text={countText}>
+          <span aria-hidden="true" className="@[1100px]:hidden">{countNumber}</span>
+          <span aria-hidden="true" className="hidden @[1100px]:inline">{countText}</span>
         </p>
       </div>
       {centre && (

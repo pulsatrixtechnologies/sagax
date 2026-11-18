@@ -429,7 +429,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
     expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("5");
-    expect(host.querySelector("[data-memory-map-count]")?.textContent).toMatch(/^5 notes, \d+ links/);
+    expect(host.querySelector("[data-memory-map-count]")?.getAttribute("title")).toMatch(/^5 notes, \d+ links/);
     expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 5 notes");
     const columns = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Columns")!;
     await act(async () => { columns.click(); });

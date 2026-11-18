@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** raiseHarnessQuestion (#1388). Pure move from server/index.ts. */
+import { ROUTINE_PROBLEM_KEY_PREFIX } from "../../shared/fix-card-keys.ts";
 export type Host = Record<string, any>;
 
 export function createRaiseHarnessQuestion(getHost: () => Host): any {
@@ -29,7 +30,7 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
       options: questionOptions,
       ...(choice.pageTargetChoice ? { custom: false as const } : {}),
     }],
-    ...(choice.questions?.length && choice.title !== "Your bot has a question" ? { askTitle: choice.title } : {}),
+    ...((choice.questions?.length || choice.card?.askKey?.startsWith(ROUTINE_PROBLEM_KEY_PREFIX)) && choice.title !== "Your bot has a question" ? { askTitle: choice.title } : {}),
     origin, harnessAsk: true,
     // #4238: a card raised quiet shows and waits, without a notification
     ...(choice.quiet ? { quietAsk: true } : {}),

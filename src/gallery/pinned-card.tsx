@@ -174,6 +174,10 @@ const routineFix = (n: number, plain: boolean): Message => {
   const base = ask(`fx${n}`, 60 + n, `${lead}\n\n${said}`, fixChoicesRoutine);
   return { ...base, card: { ...base.card!, askKey: `routine-problem:r${n}`, noHold: true, ...(plain && n === 1 ? { technicalDetails: RAW_HANDLE } : {}) } } as Message;
 };
+const investigated = ask("investigated", 64,
+  fr ? "Le connecteur a refusé la connexion au dossier Archives. J’ai renouvelé la connexion et relancé le tri. Le dossier est encore inaccessible. Comment veux-tu continuer ?" : "The connector refused access to the Archive folder. I refreshed the connection and reran triage. The folder is still inaccessible. How should I continue?",
+  fr ? ["Reconnecter le compte", "Choisir un autre dossier", "Mettre la routine en pause"] : ["Reconnect the account", "Choose another folder", "Pause the routine"]);
+investigated.card = { ...investigated.card!, title: fr ? "Le dossier Archives est inaccessible" : "The Archive folder is inaccessible", askKey: "routine-problem:r1" };
 const fixesBefore = [1, 2, 3, 4, 5].map((n) => routineFix(n, false));
 const fixesAfter = [1, 2, 3, 4, 5].map((n) => routineFix(n, true));
 // #4438: a bot's keyed card about a business object: it says since when its
@@ -236,6 +240,7 @@ const formQuestions = formTime.card!.questionRequest!.questions as AskQuestion[]
 const formAnswered = { ...formTime, id: "fta", card: { ...formTime.card!, answered: "answer", answeredText: formatQuestionAnswers(formQuestions, [[formQuestions[0]!.options[0]!.label], ["90 min"], ["yes"]]) } } as Message;
 
 const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message; org?: boolean }> = {
+  investigation: { approvals: [], questions: [investigated] },
   "approval-only": { approvals: [approval], questions: [] },
   "org-approval": { approvals: [orgApproval], questions: [], org: true },
   "timesheet-closed": { approvals: [], questions: [], inline: timesheetClosed },

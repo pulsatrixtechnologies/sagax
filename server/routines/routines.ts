@@ -2954,6 +2954,17 @@ export class RoutineManager {
     try { this.save(); } catch (error) { reportBackgroundError(error); }
   }
 
+  /** A verified repair belongs to the failed run's history. Updating history does not announce a second run. */
+  noteInvestigationRecovery(runId: string, line: string, verificationId: string): boolean {
+    const run = this.runs.find(entry => entry.id === runId);
+    if (!run || !line || run.verifiedByRunId === verificationId) return false;
+    run.verifiedByRunId = verificationId;
+    run.output = [run.output, line].filter(Boolean).join("\n\n");
+    this.saveLater();
+    this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
+    return true;
+  }
+
   /** Fail this one run, whatever its thread now runs. */
   failRunById(id: string, message: string) {
     const run = this.runs.find((r) => r.id === id && ["running", "waiting"].includes(r.status));
@@ -3365,7 +3376,7 @@ export class RoutineManager {
    * run_routine from their conversation): its card shows from the start.
    * A request's run is the person's unless `startedBy` is null (#4201: a
    * run_now that applied on its own in a turn the person did not start). */
-  runNow(id: string, request?: RoutineRequestCommitFor<"run_now">, startedBy?: "person" | null): RoutineRun | null {
+  runNow(id: string, request?: RoutineRequestCommitFor<"run_now">, startedBy?: "person" | null, verifiesRunId?: string): RoutineRun | null {
     if (request) {
       const receipt = this.matchingRoutineRequestReceipt(request);
       if (receipt) {
@@ -3382,6 +3393,7 @@ export class RoutineManager {
       run = this.newRun(routine, this.now(), true, allocations, request?.threadId ?? routine.sourceThreadId);
       // Preserve the invoking chat as provenance/fallback for this run.
       // The routine's results destination continues to win.
+      if (verifiesRunId) run.verifiesRunId = verifiesRunId;
       if (request) run.sourceThreadId = request.threadId;
       if (startedBy === "person" || (request && startedBy !== null)) run.startedBy = "person";
       if (request) this.rememberRoutineRequest(request, run.id, this.now());

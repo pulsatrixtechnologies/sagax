@@ -43,6 +43,9 @@ export interface RoutineRun {
   id: string;
   routineId: string;
   routineName: string;
+  /** Failed run whose investigation requested this verification. */
+  verifiesRunId?: string;
+  verifiedByRunId?: string;
   /** Snapshot the work so an edited/deleted definition cannot rewrite history. */
   prompt?: string;
   /** Snapshot of the legacy calendar/display length. */

@@ -204,6 +204,7 @@ function recoveredCard(anchorCard: any, run: RoutineRun): any {
 
 export function createSyncRoutineRunToSource(getHost: () => Host): any {
 function syncRoutineRunToSource(run: RoutineRun): string | null{
+  if (run.verifiesRunId) return null;
   const host = getHost();
 
   const known = host.routineSourceOwner(run);

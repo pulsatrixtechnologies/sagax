@@ -59,6 +59,12 @@ describe("a card's facts (#4438)", () => {
     expect(host.querySelector("[data-facts-as-of]")).toBeNull();
   });
 
+  it("shows the investigated problem as the title and keeps the evidence below it", () => {
+    mount({ askKey: "routine-problem:r1", title: "Archive access expired" });
+    expect(host.textContent).toContain("Archive access expired");
+    expect(host.textContent).toContain(QUESTION.split("\n")[0]);
+  });
+
   it("the raw error stays folded under Details", () => {
     mount({ askKey: "routine-problem:r1", technicalDetails: "handle res_0123 is unknown, expired, or not yours (handle_unknown)" });
     expect(host.textContent).not.toContain("handle_unknown");

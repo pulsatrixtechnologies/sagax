@@ -19172,7 +19172,11 @@
       "runHistory.signIns": "c2c95a4dac45fcb7311d599d1e9a9f0b8d4a8679b229da40edee807dcfb72e7f",
       "runHistory.timeout": "a08b7d0241f8881fc39225e92876d5cf0c3b9e39dc40e5d65a4903e1ae36cb63",
       "runHistory.loop": "1a83c6bcc7df9630255831c2870e121dbe95a667df2d4669a30ca71ea156cdb4",
-      "runHistory.work": "a8c78accf1044d8279256e0544f9f8fc5790eb4f273629433ea3fb69261fcb78"
+      "runHistory.work": "a8c78accf1044d8279256e0544f9f8fc5790eb4f273629433ea3fb69261fcb78",
+      "routine.investigation.unavailable": "f753921d086194708e02dcf1ce9b66572bab21fd07000389a8b2deabb5e32eac",
+      "routine.investigation.retry": "85ae78d321b2425c7ab425efe929666ef81c55d29df1c010cff14127d84ce60c",
+      "routine.investigation.recovered": "7baf297de3e965de0a6cad995b71a233322c038daf08089a5255076485374215",
+      "routine.investigation.started": "3ecdec832f7d7535a232e53498ee9d951ada8331e4d83200a898c68de0acac77"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

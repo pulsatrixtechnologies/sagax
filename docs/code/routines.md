@@ -122,32 +122,18 @@ chat's row gate already reads, and rides on the routine as
   run since (a blocked goal is told this way, as its run's problem);
 - `goal`: a goal past its deadline, or stalled.
 
-A `problem` or `paused` need is told to the person as something to fix
-(#4233, `server/routines/routine-problem-card.ts`): the needs watch's pass
-raises one keyed `ask_choice` card (#4205) in the conversation the routine
-reports to, key `routine-problem:<routineId>`, holding nothing, with the
-streak's summary and the failing readiness line, and the choices Run a check,
-Pause the routine (not for a paused routine) and Open the routine. The
-server does each choice at once, with no model turn
-(`server/routines/routine-problem-answer.ts`, #4438): Run a check starts one
-run of the routine now, as Run now does, and when that run (or the one
-already going) ends, the answered card's line says what it did: the routine
-worked (the problem is cleared), the same problem came back, or the run was
-stopped before the end, a run cut by a server restart included
-(`RoutineCheckFollowUps`, #4579). The answered card carries the run it
-follows (`checkRunId`, written with its first line), so a restart during
-the check changes nothing; told once. A run the restart itself failed is
-reported while the routines are still loading, before its card can be
-found: a pass right after they load (`catchUp`) tells every card whose run
-already ended; it reads only the thread's cards still following a run
-(`checkRunCardsFor`, one indexed read of `card.checkRunId`, a flag in a
-sealed row's projection), never the whole conversation (#4587). Words of the person's
-own reach the bot with the card's key, as any keyed card's. It rings once, as a
-question, when raised; later problem runs replace its words in place (the
-count); the first good run retires it; an answered card is not raised again
-for the same streak, a restart included; a restart finds the pending card by
-its key, looked up as any keyed card is: in the conversations of the bot it
-reports to with the same person, never another person's. Still open
+After three consecutive problem runs the routine's own bot investigates in a
+hidden task as the person the routine runs as (#4873). It receives the last
+three receipts and their tool results, diagnoses the live problem, and can
+repair its settings and verify the repair with `run_routine`. A successful
+verification leaves one line in run history. If a decision is needed, the
+bot writes its evidence, attempts and concrete choices with `ask_choice`.
+The question is pinned in the reporting conversation under
+`routine-problem:<routineId>`. A later failure does not replace that advice.
+Recovery retires the card. An engine failure, or an investigation that ends
+twice without a verified repair or a question, gets a localized fallback
+with the recorded cause and the bot's last words. Older cards still support their original answers.
+Still open
 after a day (`INPUT_REMIND_REPEAT_MS`), its question rings once more, marked
 on the card (`remindedAt`) so a restart never rings it again.
 

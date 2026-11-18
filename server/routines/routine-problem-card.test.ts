@@ -13,7 +13,7 @@ import { INPUT_REMIND_REPEAT_MS } from "../runtime/types.ts";
 import type { Message } from "../store.ts";
 import { AskKeyIndex } from "../widgets/ask-choice-keys.ts";
 import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts";
-import { routineNeedsPerson } from "./routine-needs-person.ts";
+import { investigationNeed } from "./routine-investigation.ts";
 import { lastingProblem, routineProblemCardInput, RoutineProblemCards, routineProblemKey, type RoutineProblemCardsDeps } from "./routine-problem-card.ts";
 import type { Routine, RoutineRun } from "./routines.ts";
 
@@ -96,9 +96,13 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
     const deps: RoutineProblemCardsDeps<Routine> = {
       // the one rule, read without cards or items: a 5 minute routine is
       // told at its third problem run
-      need: (target) => routineNeedsPerson(target, {
-        runsOf: () => runs, cardOpen: () => false, problemToldAt: () => 3, now: () => clock,
-      }, new Map()),
+      need: () => investigationNeed(runs),
+      investigate: (_target, _need, ask) => ask({
+        title: "Mailbox sign-in expired",
+        question: "The mailbox refused the sign-in. I refreshed the connection and tried again. Which connection should I use?",
+        options: ["Reconnect the mailbox", "Use the backup mailbox", "Pause the routine"],
+        details: [],
+      }),
       facts: (_target, need) => {
         const last = runs.find((entry) => entry.id === need.runId);
         return { summary: need.text, count: need.failures ?? last?.problemRepeat?.count ?? 1, ...(last?.readiness?.find((check) => !check.ok) ? { readiness: last.readiness.find((check) => !check.ok)!.line } : {}) };
@@ -121,6 +125,7 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
           },
         });
         expect(posted.ok).toBe(true);
+        return posted.ok ? posted.messageId : undefined;
       },
       pending: (_target, key) => index.find(key, scope),
       latest: (_target, key) => {
@@ -144,6 +149,32 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
     later: (ms: number) => { clock += ms; },
   };
 }
+
+describe("investigation outcomes", () => {
+  it("a verified repair clears the episode without a question, even if a late callback arrives", () => {
+    const w = world();
+    const r = routine();
+    let investigations = 0;
+    const cards = w.cardsWith({ investigate: (_routine, _need, _ask, unavailable) => {
+      investigations++;
+      w.run("completed");
+      unavailable("late engine shutdown");
+    } });
+    for (let i = 0; i < 3; i++) { w.run("failed"); cards.sync(r); }
+    cards.sync(r);
+    expect(investigations).toBe(1);
+    expect(w.rows(CONV)).toEqual([]);
+  });
+
+  it("an unavailable engine leaves one question with its reason and the routine failure", () => {
+    const w = world();
+    const cards = w.cardsWith({ investigate: (_routine, _need, _ask, unavailable) => unavailable("Engine offline") });
+    for (let i = 0; i < 4; i++) { w.run("failed", { error: "The mailbox refused the sign-in" }); cards.sync(routine()); }
+    expect(w.open()).toHaveLength(1);
+    expect(w.open()[0]!.card?.subtitle).toContain("Engine offline");
+    expect(w.open()[0]!.card?.subtitle).toContain("The mailbox refused the sign-in");
+  });
+});
 
 describe("one failure, one ring (#4316)", () => {
   it("raises the card quiet when the run it names already rang its own failure, and rings it otherwise", () => {
@@ -176,10 +207,10 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     cards.sync(r);
     expect(w.open()).toHaveLength(1);
     const [card] = w.open();
-    expect(card!.card).toMatchObject({ askKey: routineProblemKey("r1"), noHold: true, options: ["Run a check", "Pause the routine", "Open the routine"] });
-    expect(card!.card!.subtitle).toContain("Mailbox sweep ended with problems on its last 3 runs.");
+    expect(card!.card).toMatchObject({ askKey: routineProblemKey("r1"), noHold: true, options: ["Reconnect the mailbox", "Use the backup mailbox", "Pause the routine"] });
+    expect(card!.card!.title).toBe("Mailbox sign-in expired");
     expect(card!.card!.subtitle).toContain("The mailbox refused the sign-in");
-    expect(card!.card!.subtitle).toContain("Claude is signed out for this bot.");
+    expect(card!.card!.subtitle).toContain("I refreshed the connection");
     expect(w.rings).toEqual([card!.id]);
 
     for (let n = 0; n < 10; n += 1) {
@@ -189,7 +220,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     }
     expect(w.open()).toHaveLength(1);
     expect(w.open()[0]!.id).toBe(card!.id);
-    expect(w.open()[0]!.card!.subtitle).toContain("on its last 13 runs");
+    expect(w.open()[0]!.card!.subtitle).toBe(card!.card!.subtitle);
     // nothing rang again
     expect(w.rings).toEqual([card!.id]);
     expect(w.rows(CONV).filter((row) => row.kind === "options")).toHaveLength(1);
@@ -217,7 +248,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     w.run("failed", { error: "Down" });
     after.sync(r);
     expect(w.open().map((row) => row.id)).toEqual([first]);
-    expect(w.open()[0]!.card!.subtitle).toContain("last 4 runs");
+    expect(w.open()[0]!.card!.subtitle).toContain("I refreshed the connection");
     expect(w.rings).toEqual([first]);
   });
 
@@ -267,7 +298,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     }
   });
 
-  it("a pause after failures: the same card, without a pause choice", () => {
+  it("an automatic pause does not replace the bot's existing question", () => {
     const w = world();
     const cards = w.cardsWith();
     for (let n = 0; n < 3; n += 1) w.run("failed", { error: "Down" });
@@ -275,8 +306,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     const id = w.open()[0]!.id;
     cards.sync(routine({ enabled: false, autoPaused: { at: T0 + 1, failures: 3, runId: "x3" } as Routine["autoPaused"] }));
     expect(w.open().map((row) => row.id)).toEqual([id]);
-    expect(w.open()[0]!.card).toMatchObject({ options: ["Run a check", "Open the routine"] });
-    expect(w.open()[0]!.card!.subtitle).toContain("paused itself after 3 failed runs in a row");
+    expect(w.open()[0]!.card!.title).toBe("Mailbox sign-in expired");
     expect(w.rings).toEqual([id]);
   });
 
@@ -340,7 +370,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     w.run("failed", { error: "Down" });
     cards.sync(r);
     expect(w.open().map((row) => row.id)).toEqual([id]);
-    expect(w.open()[0]!.card!.subtitle).toContain("last 4 runs");
+    expect(w.open()[0]!.card!.subtitle).toContain("I refreshed the connection");
     // still open a day later: its one reminder, never the other person's card
     w.later(INPUT_REMIND_REPEAT_MS);
     cards.remindDue([r]);
@@ -373,6 +403,6 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     expect(lastingProblem(need("paused"))).not.toBeNull();
     for (const kind of ["question", "items", "goal"] as const) expect(lastingProblem(need(kind))).toBeNull();
     const input = routineProblemCardInput({ id: "r1", name: "Sweep" }, need("problem"), { summary: "", count: 0 }, ENGLISH_WORDS);
-    expect(input).toMatchObject({ key: "routine-problem:r1", wait: false, decision: true, title: "Sweep needs a fix", question: "Sweep ended with problems on its last run." });
+    expect(input).toMatchObject({ key: "routine-problem:r1", wait: false, decision: true, title: "I couldn’t investigate Sweep", question: "I couldn’t investigate Sweep" });
   });
 });

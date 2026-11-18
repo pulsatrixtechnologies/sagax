@@ -197,6 +197,7 @@ import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import { insideFolderRoots, MEMBER_FOLDER_REFUSED } from "./people/member-folders.ts";
 import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinutes, roomTurnTimeoutMessage } from "./rooms/room-turn-timeout.ts";
 import { roomTurnEnd } from "./rooms/room-turn-end.ts";
+import { InvestigationTurns, investigationNeed, investigationPrompt } from "./routines/routine-investigation.ts";
 import { ASK_CHOICE_TOOL } from "../shared/options-card.ts";
 import { answererIdentity, isRoom, isRoomAskCard, roomAskAnswer, roomMayPost, roomAskAudience, roomPeople, routineRoomThread, type AnswererIdentity, type RoomPerson } from "./rooms/room-ask-cards.ts";
 import * as boat from "./computer/boat.ts";
@@ -795,7 +796,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
-import { lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
+import { ROUTINE_PROBLEM_KEY_PREFIX, lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
 import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
 import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
@@ -17150,7 +17151,7 @@ function routineProblemPlace(routine: Routine, start: boolean): { bot: BotRecord
   if (known) return known;
   const bot = routine.target === "bot" ? store.bot(routine.botId) : undefined;
   if (!bot || bot.hidden) return null;
-  const personId = privateThreads() ? routine.runAs?.principalId : undefined;
+  const personId = privateThreads() ? effectiveRunAs(routine) : undefined;
   // a read or a retire never starts a conversation
   const threadId = start ? conversationOrStart(bot, personId) : conversationThreadFor(bot, personId);
   return threadId ? { bot, threadId } : null;
@@ -17184,11 +17185,23 @@ function routineFixNeed(routine: Routine): RoutineNeedsPerson | null {
  * answer is words of the person's own, which the bot reads. */
 function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean } = {}): RoutineFixAnswer | null {
   if (!routines) return null;
+  if (key.startsWith(ROUTINE_PROBLEM_KEY_PREFIX)) {
+    const routine = routines.routineById(key.slice(ROUTINE_PROBLEM_KEY_PREFIX.length));
+    if (routine) {
+      const words = serverApprovalWords(languageOfPerson(effectiveRunAs(routine)));
+      if (answer === words.t("routine.investigation.retry")) {
+        if (!mayRunRoutineNow(auth, routine) || routineNeedsRun(auth, routine.botId)) return { note: NEEDS_RUN.error };
+        if (!investigationNeed(investigationRuns(routine))) return { note: words.t("routine.problemCard.alreadyFixed") };
+        setImmediate(() => { const current = routines?.routineById(routine.id); if (current) routineProblemCards.sync(current, true); });
+        return { note: words.t("routine.investigation.started") };
+      }
+    }
+  }
   const done = answerRoutineFix<Routine>(key, answer, {
     opens: where.opens === true,
     routine: (id) => routines!.listRoutines().find((candidate) => candidate.id === id),
-    words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
-    stillWrong: (routine) => Boolean(lastingProblem(routineFixNeed(routine))),
+    words: (routine) => serverApprovalWords(languageOfPerson(effectiveRunAs(routine))),
+    stillWrong: (routine) => Boolean(investigationNeed(investigationRuns(routine)) || lastingProblem(routineFixNeed(routine))),
     runNow: (routine) => {
       if (routineNeedsRun(auth, routine.botId)) return { ok: false, error: NEEDS_RUN.error };
       if (!mayRunRoutineNow(auth, routine)) return { ok: false, error: "Only the bot's owner, the person this routine runs as or an admin can run it now." };
@@ -17219,7 +17232,7 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
 const routineCheckFollowUps = new RoutineCheckFollowUps({
   words: (routineId) => {
     const routine = routines?.routineById(routineId);
-    return serverApprovalWords(languageOfPerson(routine ? routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) : undefined));
+    return serverApprovalWords(languageOfPerson(routine ? effectiveRunAs(routine) : undefined));
   },
   stillWrong: (routineId) => {
     const routine = routines?.routineById(routineId);
@@ -17241,12 +17254,71 @@ const routineCheckFollowUps = new RoutineCheckFollowUps({
   },
 });
 
+const investigationTurns = new InvestigationTurns();
+
+function investigationRuns(routine: Routine): RoutineRun[] {
+  return (routines?.runsOfRoutineAsStored(routine.id) ?? []).filter(run =>
+    run.botId === routine.botId && effectiveRunAs(run) === effectiveRunAs(routine));
+}
+
+/** The investigation owns the notification for an automatic failure in this streak. */
+function investigationReportsFailure(run: RoutineRun): boolean {
+  if (run.verifiesRunId) return true;
+  if (!run.finishedAt || run.startedBy === "person" || !(run.status === "failed" || run.status === "blocked" || run.problems)) return false;
+  const routine = routines?.routineById(run.routineId);
+  if (!routine) return false;
+  const need = investigationNeed(investigationRuns(routine));
+  return Boolean(need && run.finishedAt >= need.since);
+}
+
+function recordInvestigationRecovery(failedId: string, check: RoutineRun): void {
+  const person = effectiveRunAs(check);
+  const line = serverApprovalWords(languageOfPerson(person)).t("routine.investigation.recovered");
+  if (!routines?.noteInvestigationRecovery(failedId, line, check.id)) return;
+  const routine = routines.routineById(check.routineId);
+  if (!routine?.postResults || routine.botId !== check.botId || effectiveRunAs(routine) !== person) return;
+  const place = routineProblemPlace(routine, true);
+  if (place) store.appendMessage(place.threadId, { role: "bot", kind: "text", text: line });
+}
+
 const routineProblemCards = new RoutineProblemCards<Routine>({
-  need: (routine) => routineFixNeed(routine),
+  need: routine => {
+    const need = investigationNeed(investigationRuns(routine));
+    return need && !routine.enabled ? { ...need, kind: "paused" } : need;
+  },
+  investigate: (routine, need, publish, unavailable) => {
+    const bot = store.bot(routine.botId);
+    const runs = investigationRuns(routine).filter(run => run.finishedAt !== undefined && run.finishedAt >= need.since)
+      .sort((a, b) => b.finishedAt! - a.finishedAt! || b.createdAt - a.createdAt).slice(0, 3);
+    const latest = runs[0];
+    if (!bot || !latest) { unavailable(""); return; }
+    const person = effectiveRunAs(routine);
+    const words = serverApprovalWords(languageOfPerson(person));
+    const task = store.createTask(bot.id, routine.name, false, undefined, undefined, undefined, person, runTaskModelFor(bot.id, latest), true);
+    if (!task) { unavailable(""); return; }
+    const threadId = task.threadId;
+    const prompt = investigationPrompt(routine, runs, words.locale, words.t("routine.problemCard.pause"),
+      { selection: bot.computer ?? "auto", hosts: bot.remoteHosts }, run =>
+        run.threadId && !store.isConfidentialThread(run.threadId) && store.taskByThread(bot.id, run.threadId)?.routineRunId === run.id
+          ? store.messagesFor(run.threadId) : []);
+    investigationTurns.start(threadId, { ...latest, access: routine.access, actAs: routine.actAs }, prompt, {
+      ask: publish, unavailable,
+      readRun: id => investigationRuns(routine).find(run => run.id === id),
+      messages: () => store.messagesFor(threadId),
+      stillBroken: () => {
+        const current = routines?.routineById(routine.id);
+        return current?.botId === bot.id && effectiveRunAs(current) === person && investigationNeed(investigationRuns(current))?.since === need.since;
+      },
+      recovered: check => recordInvestigationRecovery(latest.id, check),
+      dispatch: (text, onTurnSettled, onDispatchError) => startTurn(bot.id, text, {
+        threadId, runOn: routine.runOn, speaker: routineRunSpeaker(routine), unattended: true,
+        automationSource: "schedule", cardContinuation: true, onTurnSettled, onDispatchError,
+      }),
+    });
+  },
   facts: (routine, need) => {
     const run = need.runId ? routines?.runsOfRoutineAsStored(routine.id).find((entry) => entry.id === need.runId) : undefined;
-    const said = run && !run.redacted ? routines?.problemStreakTexts(run) ?? [] : [];
-    const summary = said.length ? said.join("\n") : need.text;
+    const summary = run?.error || run?.problems || need.text;
     const readiness = run?.readiness?.find((check) => !check.ok)?.line;
     return {
       summary: clipReadable(redactSecretsInText(summary), 500),
@@ -17254,10 +17326,10 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
       count: need.failures ?? run?.problemRepeat?.count ?? 1,
     };
   },
-  words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
+  words: (routine) => serverApprovalWords(languageOfPerson(effectiveRunAs(routine))),
   ask: (routine, input, options) => {
     const place = routineProblemPlace(routine, !("retire" in input));
-    if (!place) return false;
+    if (!place) return;
     const { bot, threadId, group } = place;
     const posted = createAgentCard({
       store,
@@ -17265,13 +17337,14 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
       threadId,
       input: input as unknown as Record<string, unknown>,
       ...(group ? { room: { people: roomPeopleOf(group), name: group.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
-      personLanguage: languageOfPerson(routine.runAs?.principalId),
+      personLanguage: languageOfPerson(effectiveRunAs(routine)),
       raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, { ...choice, ...(group ? { askerBotId: bot.id } : {}), ...(options?.quiet ? { quiet: true as const } : {}) }),
       askKeys: askKeysFor(bot, threadId, threadId),
     });
     if (!posted.ok) console.warn(`routine ${routine.id} fix card: ${posted.error}`);
     // #4438: the raw words its plain sentence replaced, under Details
     else if ("question" in input) routineFixCardDetails(routine, input.key, input.technical);
+    return posted.ok ? posted.messageId : undefined;
   },
   // #4316: the run's routine-failed notification (onRunFailed, told once per
   // run and status) already told this failure
@@ -17316,7 +17389,7 @@ function routineFixCardDetails(routine: Routine, key: string, technical: string 
 
 /** #4250: whose signal ledger a routine's fix card is in. */
 function routineProblemPerson(routine: Routine): string {
-  return routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) ?? "";
+  return effectiveRunAs(routine) ?? "";
 }
 
 /** #4250 (S6): a routine that keeps ending quiet after the same read is
@@ -17326,7 +17399,7 @@ function routineProblemPerson(routine: Routine): string {
 const routineCheapPathCards = new RoutineCheapPathCards<Routine>({
   runs: (routine) => routines?.runsOfRoutineAsStored(routine.id) ?? [],
   firstStep: (run) => (run.threadId ? firstToolStep(run, store.messagesFor(run.threadId)) : null),
-  words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
+  words: (routine) => serverApprovalWords(languageOfPerson(effectiveRunAs(routine))),
   productTrigger: () => IDENTITY.kind === "perspicax",
   ask: (routine, input) => {
     const place = routineProblemPlace(routine, !("retire" in input));
@@ -17338,7 +17411,7 @@ const routineCheapPathCards = new RoutineCheapPathCards<Routine>({
       threadId,
       input: input as unknown as Record<string, unknown>,
       ...(group ? { room: { people: roomPeopleOf(group), name: group.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
-      personLanguage: languageOfPerson(routine.runAs?.principalId),
+      personLanguage: languageOfPerson(effectiveRunAs(routine)),
       // a saving to take or leave: shown and waiting, never rung
       raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, { ...choice, ...(group ? { askerBotId: bot.id } : {}), quiet: true as const }),
       askKeys: askKeysFor(bot, threadId, threadId),
@@ -19459,8 +19532,9 @@ const PEER_OUTCOME_BACKFILL_MS = 3 * 24 * 60 * 60_000;
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
  * routine's). Chat has no role picker. Undefined: the default surface ("Moi"). */
 function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
-  if (!turn.routine) return undefined;
-  const run = activeRoutineRunForThread(turn.threadId);
+  const investigation = investigationTurns.context(turn.threadId);
+  if (!turn.routine && !investigation) return undefined;
+  const run = investigation ?? activeRoutineRunForThread(turn.threadId);
   if (!run || run.botId !== turn.botId) return undefined;
   const actAs = run.actAs ?? routines?.getRoutine(run.routineId)?.actAs;
   return actAs !== undefined ? { slug: actAs, reason: "routine" } : undefined;
@@ -21310,7 +21384,11 @@ routines = new RoutineManager({
   },
   interruptGoal: interruptRoutineGroupGoal,
   onRunChanged: (run) => {
-    syncRoutineRunToSource(run);
+    if (run.verifiesRunId && !run.problems && (run.status === "completed" || run.status === "nothing_to_report")) {
+      recordInvestigationRecovery(run.verifiesRunId, run);
+    }
+    investigationTurns.changed(run);
+    if (!investigationReportsFailure(run)) syncRoutineRunToSource(run);
     routineCheckFollowUps.runChanged(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
     // #4621 review: every other end of a wake settles its events too
@@ -21326,7 +21404,8 @@ routines = new RoutineManager({
     // already at work reports, and nothing resumes the run it was for.
     if (!run.groupId) coordinator.stopAwaitingDirect(run.threadId, "The routine run starts again");
   },
-  onRunNotice: (_run, notice) => {
+  onRunNotice: (run, notice) => {
+    if (investigationReportsFailure(run)) return;
     // #3130: a run blocked or skipped at pre-flight says why in the bot's chat
     // with the person. The same line already last in that chat is not
     // repeated (a frequent routine signed out for hours stays one line).
@@ -21367,7 +21446,7 @@ routines = new RoutineManager({
     }
     const bot = store.bot(run.botId);
     // null: the owner was already told about this cause for this bot.
-    if (!bot) return;
+    if (!bot || investigationReportsFailure(run)) return;
     // Pre-flight can refuse before an execution thread exists. Keep the
     // payer's actionable card and its audience on the existing results thread.
     if (IDENTITY.kind === "perspicax" && run.status === "blocked" && run.readiness?.some(check => check.code === "engine_signed_out")) {
@@ -21511,7 +21590,7 @@ function routineRunPerson(run: RoutineRun, bot: BotRecord): string {
 // directChatOf is defined just above RoutineManager (wait joinConversation + waits boot).
 const waitDrafted = new Map<string, Set<string>>();
 const readAndDraft = createReadAndDraft({
-  runFor: (threadId) => routines?.runForThread(threadId) ?? null,
+  runFor: (threadId) => investigationTurns.context(threadId) ?? routines?.runForThread(threadId) ?? null,
   adapter: (instanceId) => registry.get(instanceId)?.adapter,
   stale: (event) => shouldIgnoreProviderEvent(event),
   decide: (row) => appendDecision(DATA_DIR, row),
@@ -24266,7 +24345,11 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     inFlightRun: routineInFlightRun,
     // #4201: only a turn the person started with their own words
     personTurn: (threadId) => turnStartFor(threadId) === "person",
-    runNow: (routineId, startedBy) => routines?.runNow(routineId, undefined, startedBy),
+    observed: (threadId, run) => investigationTurns.verifying(threadId, run),
+    runNow: (routineId, startedBy, threadId) => {
+      const investigation = investigationTurns.context(threadId);
+      return routines?.runNow(routineId, undefined, startedBy, investigation?.routineId === routineId ? investigation.id : undefined);
+    },
     standing: (runId) => routines?.runStanding(runId) ?? null,
     describe: (routine, run) => routineRunReceiptFacts(routine, run),
     audit: (routine, run, principalId) => auditRoutineRunNowBy(principalId ? { kind: "person", principalId, via: "sagax" } : { kind: "worker" }, routine, run)
@@ -24466,6 +24549,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       // question card there; a routine run whose source is a room raises
       // it in that room
       const ask = body && typeof body === "object" && (body as { tool?: unknown }).tool === ASK_CHOICE_TOOL ? body as Record<string, unknown> : null;
+      const investigated = ask && investigationTurns.question(bot.id, threadId, ask);
+      if (investigated) return investigated;
       const keyedAsk = Boolean(ask && ((typeof ask.key === "string" && ask.key.trim()) || (typeof ask.to === "string" && ask.to.trim())));
       const runRoom = keyedAsk ? routineRunRoom(threadId, bot.id) : null;
       // #4238: an ask_choice in a teammate's exchange is for the person: it

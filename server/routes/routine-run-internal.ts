@@ -54,7 +54,8 @@ export interface RoutineRunInternalDeps<R extends { id: string; botId: string },
    * person (`speaker`) without the person asking for this run. */
   personTurn(threadId: string): boolean;
   /** `startedBy` "person": the person asked for it in this turn. */
-  runNow(routineId: string, startedBy?: "person"): Run | null | undefined;
+  observed?(threadId: string, run: Run): void;
+  runNow(routineId: string, startedBy: "person" | undefined, threadId: string): Run | null | undefined;
   /** Where the run stands (its place in its bot's queue, why it waits). */
   standing?(runId: string): RoutineRunStandingLike | null;
   /** The bot that runs it, and where its card and report go. */
@@ -141,6 +142,7 @@ export function createRoutineRunInternalRoutes<R extends { id: string; botId: st
       if (!current) return json(res, 409, { error: "A run of this routine is already in progress.", code: "run_in_flight" });
       // Never a second pass of the same routine, and never a refusal the bot
       // turns into a failure: the run already under way is the answer.
+      deps.observed?.(capability.threadId, current);
       const facts = deps.describe?.(target, current);
       const standing = deps.standing?.(current.id) ?? null;
       return json(res, 200, { runId: current.id, alreadyRunning: true, routineName: routineNameOf(target),
@@ -152,8 +154,9 @@ export function createRoutineRunInternalRoutes<R extends { id: string; botId: st
     // A teammate that asked this bot, the bot's own routine or a wake speaks
     // for the person too, but its run reports by its routine's streak.
     const byPerson = deps.personTurn(capability.threadId);
-    const run = deps.runNow(target.id, byPerson ? "person" : undefined);
+    const run = deps.runNow(target.id, byPerson ? "person" : undefined, capability.threadId);
     if (!run) return json(res, 404, { error: "no such routine on this bot" });
+    deps.observed?.(capability.threadId, run);
     deps.audit(target, run, speaker);
     const facts = deps.describe?.(target, run);
     const standing = deps.standing?.(run.id) ?? null;

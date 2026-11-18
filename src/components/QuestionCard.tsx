@@ -28,7 +28,7 @@ import {
 } from "../../shared/ask-question";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { answerWithoutNote } from "../../shared/options-card";
-import { serverCardKind } from "../../shared/fix-card-keys";
+import { ROUTINE_PROBLEM_KEY_PREFIX, serverCardKind } from "../../shared/fix-card-keys";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
 import { TechnicalDetails } from "./ApprovalParts";
 import { ExpandableText } from "./ExpandableText";
@@ -211,6 +211,7 @@ export function QuestionCard({
   // expired (#1940), it is closed too: never a live sheet again
   const settled = Boolean(card.answered) || sent !== null || skipped || card.expired === true;
   const single = questions.length === 1;
+  const problemTitle = card.askKey?.startsWith(ROUTINE_PROBLEM_KEY_PREFIX) ? card.title?.trim() : undefined;
 
   // #4490: a form or a checklist: rows with their controls, then the actions
   if (isFormCard(questions)) {
@@ -246,7 +247,7 @@ export function QuestionCard({
     // #3471: skipped or expired, it says so in one quiet line
     // #4438: a card closed because its matter is settled says why
     const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? card.answerNote || t("waitingCard.expired") : undefined;
-    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} answerNote={closed ? undefined : card.answerNote} technical={card.technicalDetails} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
+    return <SettledQuestion problemTitle={problemTitle} questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} answerNote={closed ? undefined : card.answerNote} technical={card.technicalDetails} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
   }
 
   const currentIndex = Math.min(active, questions.length - 1);
@@ -381,8 +382,8 @@ export function QuestionCard({
   const named = bot ? t("question.card.named", { name: bot.name }) : t("question.card.title");
   // The question is the title, the way a person would ask it. A long one,
   // or a set of them, keeps a short title and shows the text below.
-  const questionIsTitle = single && current.question.length <= TITLE_MAX;
-  const title = questionIsTitle ? current.question : single && current.header ? current.header : named;
+  const questionIsTitle = !problemTitle && single && current.question.length <= TITLE_MAX;
+  const title = problemTitle || (questionIsTitle ? current.question : single && current.header ? current.header : named);
   const meta = !single ? t("question.progress", { answered: answeredCount, count: questions.length }) : undefined;
 
   // a last option the bot wrote as "Other" / "Autre fuseau" becomes the
@@ -526,7 +527,7 @@ export function cardFactsAt(card: Pick<OptionCardData, "askKey" | "factsAt">, at
   return Number.isFinite(read) && read > 0 ? read : undefined;
 }
 
-function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, answerNote, technical, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; answeredBy?: string; answerNote?: string; technical?: string; title: string }) {
+function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, answerNote, technical, title, problemTitle }: { problemTitle?: string; questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; answeredBy?: string; answerNote?: string; technical?: string; title: string }) {
   const byQuestion = answer ? questionAnswersByQuestion(answer, questions) : {};
   const single = questions.length === 1;
   const fallback = answer ? answerWithoutPreamble(answer) : "";
@@ -536,9 +537,9 @@ function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, an
     const keys = question.options.map((option) => option.id ?? option.label);
     return { question, ...picksInAnswer(value, keys) };
   });
-  const firstIsTitle = single && questions[0]!.question.length <= TITLE_MAX;
+  const firstIsTitle = !problemTitle && single && questions[0]!.question.length <= TITLE_MAX;
   return (
-    <QuestionSheet ariaLabel={t("question.aria.card")} settled title={firstIsTitle ? questions[0]!.question : single && questions[0]!.header ? questions[0]!.header : title}>
+    <QuestionSheet ariaLabel={t("question.aria.card")} settled title={problemTitle || (firstIsTitle ? questions[0]!.question : single && questions[0]!.header ? questions[0]!.header : title)}>
       {parts.map(({ question, picked, rest }, index) => (
         <div key={`${index}-${question.question}`} className={cn(index > 0 && "mt-3")}>
           {!firstIsTitle && <ExpandableText text={question.question} className="mb-1.5 text-[13.5px] font-medium leading-relaxed text-ink" />}

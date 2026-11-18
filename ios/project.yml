@@ -130,6 +130,15 @@ targets:
         # portal; automatic signing then puts it in the profile
         # (docs/ios-push.md).
         com.apple.developer.usernotifications.communication: true
+        # Time Sensitive Notifications: an approval card or a direct question
+        # from a bot (server/push/payload.ts sends interruption-level
+        # time-sensitive for those only) breaks through Focus and the
+        # scheduled summary. Routine passes and FYI stay passive or active.
+        com.apple.developer.usernotifications.time-sensitive: true
+        # Files stay readable after the first unlock, so a notification
+        # extension, CarPlay and Push to Talk work while the phone is locked.
+        # Matches the App ID's Data Protection setting in the portal.
+        com.apple.developer.default-data-protection: NSFileProtectionCompleteUntilFirstUserAuthentication
         # Home accessories and scenes (phone tool "home"). The App ID needs
         # the HomeKit capability; automatic signing then puts it in the profile.
         com.apple.developer.homekit: true

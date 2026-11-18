@@ -12917,6 +12917,8 @@
   "widget.booking.failed": "La réservation n'a pas fonctionné : {reason}",
   "widget.booking.failedNoReason": "La réservation n'a pas fonctionné. Choisis une heure pour réessayer.",
   "widget.booking.notBooked": "Rien n'a été réservé. Choisis une heure pour réessayer.",
+  "widget.booking.checkCalendar": "Vérifie ton calendrier : {tool} a roulé",
+  "widget.booking.unconfirmed": "Vérifie ton calendrier : la réservation n'a pas pu être confirmée.",
   "outbound.tracking.title": "Livraison",
   "outbound.tracking.progress": "Progression de la livraison",
   "outbound.tracking.eta": "Prévu {date}",

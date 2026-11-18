@@ -59,9 +59,11 @@ try {
     await (await open("only=bookingCard&booked=2")).screenshot({ path: booked });
     const failed = join(outDir, `booking-failed-${tag}.png`);
     await (await open("only=bookingCard&booked=2&bookstate=failed")).screenshot({ path: failed });
+    const check = join(outDir, `booking-check-calendar-${tag}.png`);
+    await (await open("only=bookingCard&booked=2&bookstate=check")).screenshot({ path: check });
     const neighbour = join(outDir, `neighbour-form-${tag}.png`);
     await (await open("only=bookCall")).screenshot({ path: neighbour });
-    const [a, b, c, d] = await Promise.all([neighbour, pending, booked, failed].map(png));
+    const [a, b, c, d] = await Promise.all([neighbour, pending, failed, check].map(png));
     const flex = width < 600 ? "column" : "row";
     const html = `<body style="margin:0;display:flex;flex-direction:${flex};flex-wrap:wrap;gap:16px;padding:16px;background:#888;align-items:flex-start"><img src="${a}" style="width:${width < 600 ? 358 : 400}px"><img src="${b}" style="width:${width < 600 ? 358 : 400}px"><img src="${c}" style="width:${width < 600 ? 358 : 400}px"><img src="${d}" style="width:${width < 600 ? 358 : 400}px"></body>`;
     const tmp = join(outDir, "_side.html");

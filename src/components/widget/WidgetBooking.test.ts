@@ -148,4 +148,14 @@ describe("the Booking card is honest about the calendar tool", () => {
     mount(row(sample(), { booking: { state: "failed", at: 2, code: "not_booked" } }));
     expect(host.querySelector('[role="alert"]')!.textContent).toBe("Nothing was booked. Pick a time to try again.");
   });
+
+  it("says to check the calendar, with the tool that ran, instead of that nothing was booked", () => {
+    mount(row(sample(), { booking: { state: "failed", at: 2, code: "check_calendar", detail: "outlook_calendar_event_update" } }));
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Check your calendar: outlook_calendar_event_update ran");
+  });
+
+  it("says the booking could not be confirmed when no one knows what became of the press", () => {
+    mount(row(sample(), { booking: { state: "failed", at: 2, code: "unconfirmed" } }));
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Check your calendar: the booking could not be confirmed.");
+  });
 });

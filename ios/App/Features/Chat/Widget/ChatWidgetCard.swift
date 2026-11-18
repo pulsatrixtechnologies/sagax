@@ -340,6 +340,8 @@ struct ChatWidgetCard: View {
     private func bookingProblem(settled: ChatWidgetSettled?) -> String? {
         guard settled == nil, let booking = form.booking, booking.state == "failed" else { return nil }
         if booking.code == "not_booked" { return String(localized: "Nothing was booked. Pick a time to try again.") }
+        if booking.code == "check_calendar", let tool = booking.detail { return String(localized: "Check your calendar: \(tool) ran") }
+        if booking.code == "check_calendar" || booking.code == "unconfirmed" { return String(localized: "Check your calendar: the booking could not be confirmed.") }
         if let detail = booking.detail { return String(localized: "The booking did not go through: \(detail)") }
         return String(localized: "The booking did not go through. Pick a time to try again.")
     }

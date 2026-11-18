@@ -14831,6 +14831,8 @@
       "widget.booking.failed": "1d0728a842a09e51a37d95c55e18ae44097b23d5de3a8bf74769db5f20713e3d",
       "widget.booking.failedNoReason": "69b6c9e1361a565e74b0eece8aeb57bf895a473cb204f790416d9bfd8e1722c3",
       "widget.booking.notBooked": "ac1b447508369d61ab9bd87b5c56b26869d831f02a614f433b131a31de6fac08",
+      "widget.booking.checkCalendar": "3de33e31ff004ba4d1cf5e6dfb8b3c5315a0d392a8d71eb666501395452824ee",
+      "widget.booking.unconfirmed": "d636e46c9b2db1a77434403039d752ce8f091e5cbbd9f17eb3e15eb9e69cd888",
       "outbound.tracking.title": "52bfe584a5fc450539e2aa651b990fa2415060492a243816ab2994292089c6fd",
       "outbound.tracking.progress": "c0bafb893739bc6dd6c67c0c666728d6d7ba7ce54f21a2ece24a62cd660816ca",
       "outbound.tracking.eta": "3258c9ffa13c19c65031ee51e777bb485bb61c6bda7334d238abc90a8805fce8",

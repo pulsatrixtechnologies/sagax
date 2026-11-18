@@ -147,8 +147,10 @@ export interface WidgetPayload {
 export interface WidgetBookingState {
   state: "pending" | "booked" | "failed";
   at: number;
-  /** Why a booking failed: the tool refused (`tool_failed`, `detail` is its own words) or no calendar tool ran. */
-  code?: "tool_failed" | "not_booked";
+  /** Why a booking failed: the tool refused (`tool_failed`, `detail` is its own words), no calendar tool ran
+   * (`not_booked`), a calendar write that is not the booking ran (`check_calendar`, `detail` names the tool), or
+   * what became of the press is not known (`unconfirmed`). */
+  code?: "tool_failed" | "not_booked" | "check_calendar" | "unconfirmed";
   detail?: string;
 }
 

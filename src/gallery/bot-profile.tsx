@@ -249,7 +249,7 @@ const runs = routines.slice(0, 4).flatMap((r, i) => [0, 1, 2].map((k) => ({
 // routine with its goal, or eight routines with and without a goal, one of
 // them waiting on the person, one paused and one goal reached. Absent: the
 // six routines above.
-const OUTCOMES = ((value) => (value === "none" || value === "one" || value === "eight" ? value : null))(params.get("outcomes"));
+const OUTCOMES = ((value) => (value === "none" || value === "one" || value === "eight" || value === "problem" ? value : null))(params.get("outcomes"));
 const OUTCOME_ROUTINES = [
   ["o1", "Briefing board", "Keep the quarterly briefing board current", "1-5", true],
   ["o2", "Inbox triage", null, "1-5", true],
@@ -260,10 +260,11 @@ const OUTCOME_ROUTINES = [
   ["o7", "Meeting notes review", null, "1-5", true],
   ["o8", "Guide publishing", "Publish the onboarding guide", "3", false],
 ] as const;
-const outcomeRoutines = OUTCOME_ROUTINES.slice(0, OUTCOMES === "one" ? 1 : OUTCOMES === "eight" ? 8 : 0).map(([id, name, goal, days, enabled], index) => ({
+const outcomeRoutines = OUTCOME_ROUTINES.slice(0, OUTCOMES === "one" ? 1 : OUTCOMES === "eight" ? 8 : OUTCOMES === "problem" ? 3 : 0).map(([id, name, goal, days, enabled], index) => ({
   id, botId: BOT_ID, name, prompt: name, enabled, target: "bot",
   schedule: { type: "cron", expression: `0 ${7 + index} * * ${days}`, timeZone: "America/Toronto" },
   nextRunAt: enabled ? NOW + (index + 1) * HOUR : null, createdAt: 10 + index, updatedAt: 10 + index,
+  ...(OUTCOMES === "problem" && id === "o1" ? { failureStreak: 2 } : {}),
   ...(goal ? { goal: id === "o8"
     ? { text: goal, status: "achieved", achievedAt: NOW - 3 * DAY, progress: "The guide is live and linked from the welcome page.", lastCheckedAt: NOW - 3 * DAY }
     : { text: goal, status: "active", checks: 4, progress: id === "o1" ? "Q4 numbers are on the board; the hiring slide is still missing." : "Two of three vendors signed; the last one asked for a change.", lastCheckedAt: NOW - 2 * HOUR } } : {}),
@@ -282,7 +283,18 @@ const outcomeRuns = [
   outcomeRun("ro7", "o4", "completed", NOW - 6 * DAY, { output: "The report went out with four projects on track." }),
   outcomeRun("ro8", "o5", "completed", NOW - 3 * HOUR, { quiet: true }),
 ];
-const routinesAnswer = OUTCOMES ? { routines: outcomeRoutines, runs: outcomeRuns.filter((run) => outcomeRoutines.some((routine) => routine.id === run.routineId)) } : { routines, runs };
+// ?outcomes=problem (#4640): the first routine's last runs failed or ended with problems (the raw provider
+// error stays under Details), the second reports a post with a link, the third is waiting.
+const problemRuns = OUTCOMES === "problem" ? [
+  outcomeRun("rp1", "o1", "failed", NOW - 2 * HOUR, { error: "Search posts all failed 2 times and never succeeded after: 429 Too Many Requests, rate limit exceeded for api.example.test/v2/search" }),
+  outcomeRun("rp2", "o1", "completed", NOW - DAY - 2 * HOUR, { problems: "One source was skipped.", output: "Drafted 3 posts." }),
+  outcomeRun("rp3", "o1", "failed", NOW - 2 * DAY, { error: "Search posts all failed: 429 Too Many Requests" }),
+  outcomeRun("rp4", "o1", "completed", NOW - 3 * DAY, { output: "Drafted 4 posts and 2 replies." }),
+  outcomeRun("rp5", "o1", "blocked", NOW - 4 * DAY),
+  outcomeRun("rp6", "o2", "completed", NOW - 5 * HOUR, { output: "Posted the launch note: https://www.example.test/northwind/status/1928374650192837465?s=20 and replied to three comments." }),
+  outcomeRun("rp7", "o3", "waiting", NOW - 40 * MIN, { attention: "The last vendor wants a 60 day payment term. Should I accept it?" }),
+] : [];
+const routinesAnswer = OUTCOMES ? { routines: outcomeRoutines, runs: (OUTCOMES === "problem" ? problemRuns : outcomeRuns).filter((run) => outcomeRoutines.some((routine) => routine.id === run.routineId)) } : { routines, runs };
 
 const overview = {
   who: { name: "Scout", title: "Research", blurb: "Finds sources and summarizes them.", soulLead: "You are Scout, a research assistant for Northwind Studio." },

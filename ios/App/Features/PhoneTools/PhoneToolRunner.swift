@@ -11,6 +11,7 @@ import EventKit
 import HomeKit
 import Intents
 import Network
+import Photos
 import UIKit
 import CompanionCore
 
@@ -42,6 +43,7 @@ enum PhoneToolRunner {
         case .photos:
             guard let photos else { throw PhoneToolError.invalid("No photo was picked.") }
             return PhoneToolShaping.photos(photos, max: request.int("max"))
+        case .photoLibrary: return try await photoLibrary(request)
         case .shortcut: return try await shortcut(request)
         case .clipboard: return PhoneToolShaping.clipboard(UIPasteboard.general.hasStrings ? UIPasteboard.general.string : nil)
         case .status: return await status()
@@ -232,6 +234,154 @@ enum PhoneToolRunner {
             return (try? await (type == .reminder ? store.requestFullAccessToReminders() : store.requestFullAccessToEvents())) ?? false
         }
         return (try? await store.requestAccess(to: type)) ?? false
+    }
+
+    // MARK: Photo library (PhotoKit): albums, a search, details, photos as images
+
+    private static func photoLibrary(_ request: PhoneToolRequest) async throws -> WidgetJSON {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized || status == .limited else { throw PhoneToolError.permission("Photos") }
+        let limited = status == .limited
+        switch request.action {
+        case "list_albums": return libraryAlbums(request, limited: limited)
+        case "read": return libraryRead(request, limited: limited)
+        case "export": return try await libraryExport(request, limited: limited)
+        default: return try librarySearch(request, limited: limited)
+        }
+    }
+
+    private static func allAlbums() -> [(PHAssetCollection, Bool)] {
+        var found: [(PHAssetCollection, Bool)] = []
+        for (type, smart) in [(PHAssetCollectionType.album, false), (PHAssetCollectionType.smartAlbum, true)] {
+            PHAssetCollection.fetchAssetCollections(with: type, subtype: .any, options: nil).enumerateObjects { collection, _, _ in
+                found.append((collection, smart))
+            }
+        }
+        return found
+    }
+
+    private static func libraryAlbums(_ request: PhoneToolRequest, limited: Bool) -> WidgetJSON {
+        let rows: [PhoneLibraryAlbum] = allAlbums().compactMap { collection, smart in
+            let count = PHAsset.fetchAssets(in: collection, options: nil).count
+            if smart && count == 0 { return nil }
+            return PhoneLibraryAlbum(id: collection.localIdentifier, name: collection.localizedTitle ?? "", count: count, smart: smart)
+        }
+        let window = PhoneToolShaping.libraryWindow(request, defaultLimit: 100, max: 200)
+        return PhoneToolShaping.libraryAlbums(rows, offset: window.offset, limit: window.limit, limited: limited)
+    }
+
+    /// An album by its id, else by its name (case and accents ignored).
+    private static func album(_ key: String) -> PHAssetCollection? {
+        if let byId = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [key], options: nil).firstObject { return byId }
+        return allAlbums().first { ($0.0.localizedTitle ?? "").compare(key, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }?.0
+    }
+
+    private static func librarySearch(_ request: PhoneToolRequest, limited: Bool) throws -> WidgetJSON {
+        var parts: [NSPredicate] = []
+        if let from = PhoneToolShaping.date(request.string("from")) { parts.append(NSPredicate(format: "creationDate >= %@", from as NSDate)) }
+        if let to = PhoneToolShaping.date(request.string("to")) { parts.append(NSPredicate(format: "creationDate < %@", to as NSDate)) }
+        if let favorite = request.args["favorite"]?.bool { parts.append(NSPredicate(format: "favorite == %@", NSNumber(value: favorite))) }
+        switch request.string("media") {
+        case "photo": parts.append(NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue))
+        case "video": parts.append(NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue))
+        default: break
+        }
+        let options = PHFetchOptions()
+        if !parts.isEmpty { options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: parts) }
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let found: PHFetchResult<PHAsset>
+        if let name = request.string("album") {
+            guard let collection = album(name) else { throw PhoneToolError.invalid("This phone has no album \(name). photo_library list_albums gives them.") }
+            found = PHAsset.fetchAssets(in: collection, options: options)
+        } else {
+            found = PHAsset.fetchAssets(with: options)
+        }
+        let window = PhoneToolShaping.libraryWindow(request, defaultLimit: 30, max: 100)
+        let end = min(found.count, window.offset + window.limit)
+        let page = window.offset < end ? (window.offset..<end).map { libraryPhoto(found.object(at: $0), filename: false) } : []
+        return PhoneToolShaping.libraryPhotos(page, total: found.count, next: end < found.count ? end : nil, limited: limited)
+    }
+
+    private static func libraryRead(_ request: PhoneToolRequest, limited: Bool) -> WidgetJSON {
+        let ids = PhoneToolShaping.libraryIds(request, max: 50)
+        var byId: [String: PHAsset] = [:]
+        PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in byId[asset.localIdentifier] = asset }
+        let page = ids.compactMap { byId[$0].map { libraryPhoto($0, filename: true) } }
+        let missing = limited ? "Not found among the photos shared with Sagax on this phone." : "No photo with that id on this phone."
+        let failed = ids.filter { byId[$0] == nil }.map { (id: $0, error: missing) }
+        return PhoneToolShaping.libraryPhotos(page, total: page.count, next: nil, limited: limited, failed: failed)
+    }
+
+    private static func libraryPhoto(_ asset: PHAsset, filename: Bool) -> PhoneLibraryPhoto {
+        let media: String = switch asset.mediaType {
+        case .image: "photo"
+        case .video: "video"
+        case .audio: "audio"
+        default: "unknown"
+        }
+        let name = filename ? PHAssetResource.assetResources(for: asset).first?.originalFilename : nil
+        return PhoneLibraryPhoto(
+            id: asset.localIdentifier, date: asset.creationDate, filename: name, width: asset.pixelWidth, height: asset.pixelHeight,
+            favorite: asset.isFavorite, media: media, duration: asset.mediaType == .video ? asset.duration : nil,
+            latitude: asset.location?.coordinate.latitude, longitude: asset.location?.coordinate.longitude
+        )
+    }
+
+    private static func libraryExport(_ request: PhoneToolRequest, limited: Bool) async throws -> WidgetJSON {
+        let ids = PhoneToolShaping.libraryIds(request, max: 3)
+        guard !ids.isEmpty else { throw PhoneToolError.invalid("photo_library export needs ids.") }
+        var byId: [String: PHAsset] = [:]
+        PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in byId[asset.localIdentifier] = asset }
+        var images: [(id: String, jpeg: Data, width: Int, height: Int)] = []
+        var failed: [(id: String, error: String)] = []
+        let side = PhoneToolShaping.libraryExportSide(original: request.flag("original"))
+        for id in ids {
+            guard let asset = byId[id] else { failed.append((id: id, error: "No photo with that id on this phone.")); continue }
+            guard asset.mediaType == .image else { failed.append((id: id, error: "This is a video: only photos are sent as images.")); continue }
+            guard let image = await libraryImage(asset, maxSide: side), let fitted = fittedJPEG(image) else {
+                failed.append((id: id, error: "The phone could not load this photo (an original in iCloud that did not download)."))
+                continue
+            }
+            images.append((id: id, jpeg: fitted.data, width: fitted.width, height: fitted.height))
+        }
+        if images.isEmpty, let first = failed.first { throw PhoneToolError.unavailable(first.error) }
+        return PhoneToolShaping.libraryImages(images, failed: failed, limited: limited)
+    }
+
+    /// The photo at most maxSide on its longest side, downloaded from
+    /// iCloud when the phone keeps only a small copy.
+    private static func libraryImage(_ asset: PHAsset, maxSide: Double) async -> UIImage? {
+        let size = PhoneToolShaping.scaledSize(width: Double(asset.pixelWidth), height: Double(asset.pixelHeight), maxSide: maxSide)
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = .exact
+        options.isNetworkAccessAllowed = true
+        return await withCheckedContinuation { done in
+            let once = Once()
+            PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: size.width, height: size.height), contentMode: .aspectFit, options: options) { image, info in
+                if (info?[PHImageResultIsDegradedKey] as? Bool) == true { return }
+                guard once.claim() else { return }
+                done.resume(returning: image)
+            }
+        }
+    }
+
+    /// A JPEG under the answer's limit: lower quality first, then smaller.
+    private static func fittedJPEG(_ image: UIImage) -> (data: Data, width: Int, height: Int)? {
+        var current = image
+        for _ in 0..<8 {
+            for quality in [0.85, 0.7, 0.55] as [CGFloat] {
+                if let data = current.jpegData(compressionQuality: quality), PhoneToolShaping.fitsLibraryImage(data) {
+                    return (data, Int(current.size.width * current.scale), Int(current.size.height * current.scale))
+                }
+            }
+            let source = current
+            let next = CGSize(width: (source.size.width * source.scale * 0.75).rounded(), height: (source.size.height * source.scale * 0.75).rounded())
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1
+            current = UIGraphicsImageRenderer(size: next, format: format).image { _ in source.draw(in: CGRect(origin: .zero, size: next)) }
+        }
+        return nil
     }
 
     // MARK: Shortcuts: opens the Shortcuts app on that shortcut

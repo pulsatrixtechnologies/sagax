@@ -8,7 +8,7 @@
 // an item with no icon at all gets the one neutral tile (never a coloured one).
 import {
   AtSign, BarChart3, Bug, Calendar, Clapperboard, Cloud, Contact, CreditCard, Database, FileText, FolderTree, HardDrive,
-  Handshake, LayoutGrid, Library, ListChecks, ListTodo, Mail, MessageCircle, MessageSquare, MessagesSquare, Network,
+  Handshake, Images, LayoutGrid, Library, ListChecks, ListTodo, Mail, MessageCircle, MessageSquare, MessagesSquare, Network,
   PenTool, Palette, ScanSearch, ShieldCheck, Smartphone, Smile, StickyNote, Triangle, Wallet, Zap, BookOpen,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +50,7 @@ export const BUILTIN_GLYPHS: Readonly<Record<string, LucideIcon>> = {
   "mac:contacts": Contact,
   "mac:reminders": ListChecks,
   "mac:notes": StickyNote,
+  "mac:photos": Images,
   "skill:create-verification-skill": ShieldCheck,
   "skill:data-dashboards": BarChart3,
   "skill:phone-harness": Smartphone,

@@ -265,6 +265,25 @@ describe("Apple apps on the solo Mac", () => {
     expect(runs).toEqual(["mac_notes_create"]);
   });
 
+  // 2026-11-17: Photos is one more app of the same family: an export is a read
+  // (no card, saved into the conversation's folder), a new album follows the bot's mode.
+  it("Photos: an export runs unasked into the conversation's folder; an album follows Ask mode", async () => {
+    const cards: Array<{ to: string; macApp?: unknown }> = [];
+    const runs: Array<[string, unknown]> = [];
+    const base = deps(false, cards, []);
+    const photos = { ...base, saveDir: "/tmp/sagax-conversation", macApps: { ...base.macApps, enabled: (app: string) => app === "photos", run: async (tool: string, _args: unknown, context?: unknown) => { runs.push([tool, context]); return { content: [{ type: "text" as const, text: "done" }] }; } } };
+    const listed = await handleMessagesMcp({ method: "tools/list" }, photos) as { result: { tools: { name: string }[] } };
+    expect(listed.result.tools.map((tool) => tool.name).filter((name) => name.startsWith("mac_")).sort()).toEqual(MAC_APP_TOOLS.filter((tool) => tool.app === "photos").map((tool) => tool.name).sort());
+    const exported = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_photos_export", arguments: { ids: ["PH-1"] } } }, photos) as { result: { content: { text: string }[] } };
+    expect(exported.result.content[0]!.text).toBe("done");
+    expect(runs).toEqual([["mac_photos_export", { saveDir: "/tmp/sagax-conversation" }]]);
+    const noFolder = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_photos_export", arguments: { ids: ["PH-1"] } } }, { ...photos, saveDir: undefined }) as { result: { content: { text: string }[]; isError?: boolean } };
+    expect(noFolder.result.isError).toBe(true);
+    const asked = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_photos_create_album", arguments: { name: "Picks", ids: ["PH-1"] } } }, photos) as { result: { content: { text: string }[] } };
+    expect(asked.result.content[0]!.text).toContain("approval card");
+    expect(cards[0]!.to).toBe('Photos: create the album "Picks", with 1 photo');
+  });
+
   it("acts without a card when the person kept Always allow for that tool", async () => {
     const cards: Array<{ to: string; macApp?: unknown }> = [];
     const runs: string[] = [];

@@ -1,4 +1,4 @@
-export type MacAppId = "messages" | "mail" | "calendar" | "contacts" | "reminders" | "notes";
+export type MacAppId = "messages" | "mail" | "calendar" | "contacts" | "reminders" | "notes" | "photos";
 export type MacAppPermission = "granted" | "denied" | "unknown" | "notAsked" | "unsupported";
 
 export interface MacAppInfo {
@@ -87,12 +87,17 @@ export function calendarOccurrenceId(uid: string, start: string | Date): string;
 export function occurrences(rule: string, start: Date | string, from: Date | string, to: Date | string, max: number, excluded?: Array<Date | string>): Date[] | null;
 export const MAC_APP_SCRIPTS: Record<string, string>;
 export const MAC_APP_BUDGET_MS: number;
+export const PHOTO_EXPORT_MAX_SIZE: number;
+export const PHOTOS_EXPORT_TIMEOUT_MS: number;
+export function exportPhotos(op: Record<string, unknown>, deps?: MacAppRunDeps): Promise<{ files: Array<{ id: string; path: string; name: string; mime: string; bytes: number }>; failed: Array<{ id: string; name?: string; error: string }>; next?: string }>;
 export const MAC_APP_SCRIPT_TIMEOUT_MS: number;
 export const MAC_APP_TEST_SCRIPTS: Record<MacAppId, string>;
 export function isMacAppTool(name: unknown): boolean;
 export function macAppOfTool(name: string): MacAppId | null;
 export function macAppToolWrites(name: string): boolean;
 export function macAppInfo(id: string): MacAppInfo | null;
+/** A tool that saves files into the conversation's folder (an attachment, exported photos). */
+export function macAppSavesFiles(name: unknown): boolean;
 export function macAppOperation(name: string, args: unknown): Record<string, unknown>;
 export function macAppTarget(name: string, args: Record<string, unknown> | undefined): string;
 export function macAppScriptArgs(name: string, op: Record<string, unknown>): Record<string, unknown>;

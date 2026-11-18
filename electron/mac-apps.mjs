@@ -1,5 +1,5 @@
 // The Apple apps of the person's own Mac (Messages, Mail, Calendar, Contacts,
-// Reminders, Notes) as bot tools. One module for both modes:
+// Reminders, Notes, Photos) as bot tools. One module for both modes:
 // - solo: the Sagax server on this Mac runs them (server/imessage/imessage-mcp.ts);
 // - organization server: the desktop app runs them for the server's bots
 //   through the desktop bridge (action "mac_app", electron/desktop-bridge.mjs).
@@ -23,6 +23,7 @@ export const MAC_APPS = [
   { id: "contacts", name: "Contacts", bundleId: "com.apple.AddressBook", fullDiskAccess: false },
   { id: "reminders", name: "Reminders", bundleId: "com.apple.reminders", fullDiskAccess: false },
   { id: "notes", name: "Notes", bundleId: "com.apple.Notes", fullDiskAccess: false },
+  { id: "photos", name: "Photos", bundleId: "com.apple.Photos", fullDiskAccess: false },
 ];
 export const MAC_APP_IDS = MAC_APPS.map((app) => app.id);
 
@@ -47,6 +48,7 @@ const rruleSchema = { type: "string", description: "Repeat rule in RFC 5545 form
 const alarmsSchema = { type: "array", items: { type: "number" }, description: "Alerts, in minutes before the start (0 = at the start), up to 10." };
 const labeled = (what) => ({ type: "array", items: { anyOf: [{ type: "string" }, { type: "object", properties: { label: { type: "string" }, value: { type: "string" } }, required: ["value"], additionalProperties: false }] }, description: `${what}: a value, or { label, value } (label e.g. home, work, mobile). Replaces the card's list on an update.` });
 const PRIORITIES = ["none", "low", "medium", "high"];
+const photoAlbumSchema = { type: "string", description: "An album id from mac_photos_list_albums, or its name." };
 const filesSchema = { type: "array", items: { type: "string" }, description: "Files to attach: paths in this bot's folder (25 MB each at most)." };
 const scopeSchema = { type: "string", enum: ["this", "future", "all"], description: "For a repeating event: this occurrence only, this one and the ones after it, or the whole series. Default: this, for an occurrence id from mac_calendar_list; all, for a series id." };
 const attachmentIndex = { type: "number", description: "The attachment's index from the read." };
@@ -166,6 +168,18 @@ export const MAC_APP_TOOLS = [
     inputSchema: obj({ name: { type: "string", description: "Its name now." }, newName: { type: "string" } }, ["name", "newName"]) },
   { name: "mac_notes_delete_folder", app: "notes", kind: "delete", needs: "automation", description: `Delete a folder ${where} Notes, with its notes.`,
     inputSchema: obj({ name: { type: "string" } }, ["name"]) },
+  { name: "mac_photos_list_albums", app: "photos", kind: "read", needs: "automation", description: `List the albums ${where} Photos (in folders too), with their ids for the other mac_photos_ tools and how many items each holds.`,
+    inputSchema: obj({ limit: limit(200), cursor: cursorSchema }) },
+  { name: "mac_photos_search", app: "photos", kind: "read", needs: "automation", description: `Find photos and videos ${where} Photos. query, person and place go through Photos' own search (a person's name as named in People, a place, a keyword, a title, words Photos recognizes in the picture). album, a date range (from, to), keyword and favorite narrow it. Without words: the newest first. Returns ids, dates, size, favorite, keywords and the position for mac_photos_read and mac_photos_export; a result with next has more: pass it back as cursor.`,
+    inputSchema: obj({ query: { type: "string", description: "Words for Photos' search." }, person: { type: "string", description: "A person's name as named in Photos' People." }, place: { type: "string", description: "A place name (city, country, venue)." }, album: photoAlbumSchema, from: { type: "string", description: "ISO date: taken on or after." }, to: { type: "string", description: "ISO date: taken before." }, keyword: { type: "string", description: "One keyword the photo carries." }, favorite: { type: "boolean", description: "true: only favorites." }, limit: limit(100), cursor: cursorSchema }) },
+  { name: "mac_photos_read", app: "photos", kind: "read", needs: "automation", description: `Read the details of photos ${where} Photos by their ids: file name, title, caption, keywords, date, size, position and altitude, favorite.`,
+    inputSchema: obj({ ids: idsSchema("photo ids from mac_photos_search"), cursor: cursorSchema }, ["ids"]) },
+  { name: "mac_photos_export", app: "photos", kind: "read", needs: "automation", description: `Save photos ${where} Photos into this conversation's folder, by their ids, so you can look at them or attach them: a JPEG resized to maxSize pixels on its longest side by default (2048), or the original file with original: true (a video stays a video). Returns each saved file's path, name, type and size; a result with next has more: call again with the same ids and that cursor.`,
+    inputSchema: obj({ ids: idsSchema("photo ids from mac_photos_search"), original: { type: "boolean", description: "The original file, as imported (HEIC, RAW, a video), not resized." }, maxSize: { type: "number", description: "Longest side of a resized photo, in pixels (256 to 8192, default 2048)." }, cursor: cursorSchema }, ["ids"]) },
+  { name: "mac_photos_create_album", app: "photos", kind: "write", needs: "automation", description: `Create an album ${where} Photos, in a folder if wanted, and add photos to it by their ids.`,
+    inputSchema: obj({ name: { type: "string" }, folder: { type: "string", description: "A folder's name in Photos." }, ids: idsSchema("photo ids from mac_photos_search to add") }, ["name"]) },
+  { name: "mac_photos_add_to_album", app: "photos", kind: "write", needs: "automation", description: `Add photos ${where} Photos to an album, by their ids.`,
+    inputSchema: obj({ album: photoAlbumSchema, ids: idsSchema("photo ids from mac_photos_search") }, ["album", "ids"]) },
 ];
 
 const TOOL_BY_NAME = new Map(MAC_APP_TOOLS.map((tool) => [tool.name, tool]));
@@ -221,6 +235,9 @@ export const macAppOfTool = (name) => TOOL_BY_NAME.get(name)?.app ?? null;
 /** A write, a delete or a send (anything but a read): what today's gate asks about. */
 export const macAppToolWrites = (name) => { const kind = TOOL_BY_NAME.get(name)?.kind; return Boolean(kind) && kind !== "read"; };
 export const macAppInfo = (id) => MAC_APPS.find((app) => app.id === id) ?? null;
+/** A tool that saves files into the conversation's folder (an attachment, an
+ * exported photo): it needs that folder, and the relay copies them back. */
+export const macAppSavesFiles = (name) => typeof name === "string" && (name.endsWith("_read_attachment") || name === "mac_photos_export");
 
 // oxlint-disable-next-line no-control-regex
 const CONTROL = /[\u0000\u0001-\u0008\u000b\u000c\u000e-\u001f]/;
@@ -602,6 +619,28 @@ export function macAppOperation(name, args) {
       return { ids: idList(a.ids), folder: nameArg(a.folder, "folder") };
     case "mac_notes_create_folder":
       return without({ name: nameArg(a.name), account: str(a.account, "account", { max: 200 }) });
+    case "mac_photos_list_albums":
+      return { limit: num(a.limit, 100, 200), offset: cursor(a.cursor ?? a.offset) };
+    case "mac_photos_search": {
+      const from = date(a.from, "from");
+      const to = date(a.to, "to");
+      if (from && to && Date.parse(to) <= Date.parse(from)) bad("to must be after from");
+      return without({
+        query: str(a.query, "query", { max: 200 }), person: str(a.person, "person", { max: 200 }), place: str(a.place, "place", { max: 200 }),
+        album: str(a.album, "album", { max: 300 }), from, to, keyword: str(a.keyword, "keyword", { max: 200 }), favorite: optBool(a.favorite),
+        limit: num(a.limit, 30, 100), offset: cursor(a.cursor ?? a.offset),
+      });
+    }
+    case "mac_photos_read":
+      return { ids: idList(a.ids), offset: cursor(a.cursor ?? a.offset) };
+    case "mac_photos_export": {
+      if (a.maxSize !== undefined && a.maxSize !== null && (typeof a.maxSize !== "number" || !Number.isFinite(a.maxSize) || a.maxSize < 256 || a.maxSize > 8192)) bad("maxSize is a number of pixels from 256 to 8192");
+      return { ids: idList(a.ids), original: a.original === true, maxSize: typeof a.maxSize === "number" ? Math.round(a.maxSize) : PHOTO_EXPORT_MAX_SIZE, offset: cursor(a.cursor ?? a.offset) };
+    }
+    case "mac_photos_create_album":
+      return without({ name: nameArg(a.name), folder: str(a.folder, "folder", { max: 200 }), ids: idList(a.ids, "ids", { required: false }) });
+    case "mac_photos_add_to_album":
+      return { album: str(a.album, "album", { max: 300, required: true }), ids: idList(a.ids) };
     default:
       return bad(`unknown tool ${name}`);
   }
@@ -649,6 +688,8 @@ export function macAppTarget(name, args) {
     case "mac_notes_create_folder": return `Notes: create the folder "${a.name ?? ""}"`;
     case "mac_notes_update_folder": return `Notes: rename "${a.name ?? ""}" to "${a.newName ?? ""}"`;
     case "mac_notes_delete_folder": return `Notes: delete the folder "${a.name ?? ""}"`;
+    case "mac_photos_create_album": return `Photos: create the album "${a.name ?? ""}"${list(a.ids).length ? `, with ${counted(list(a.ids).length, "photo")}` : ""}`;
+    case "mac_photos_add_to_album": return `Photos: add ${counted(list(a.ids).length, "photo")} to ${typeof a.album === "string" && !PHOTOS_ID.test(a.album) ? `"${a.album}"` : "an album"}`;
     case "mac_mail_send":
       return [`Mail to ${list(a.to).join(", ")}`, ...(list(a.cc).length ? [`cc ${list(a.cc).join(", ")}`] : []), ...(list(a.bcc).length ? [`bcc ${list(a.bcc).join(", ")}`] : [])].join(", ") + withFiles;
     case "mac_mail_reply": return `Mail: reply${a.all === true ? " to all" : ""} on ${emailCount(countOf(a))}${withFiles}`;
@@ -960,6 +1001,59 @@ function locked(n){try{return n.passwordProtected()===true}catch(e){return false
 function folderOf(n){try{return n.container().name()}catch(e){return null}}
 `;
 
+// Photos: items and albums are named by Photos' own ids. Every list stops
+// collecting at MAC_APP_BUDGET_MS and answers with what it has and a cursor.
+/** The longest side of an exported photo unless the bot asks otherwise. */
+export const PHOTO_EXPORT_MAX_SIZE = 2048;
+/** A Photos id (uuid/L0/001): never shown on a card. */
+const PHOTOS_ID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}(?:\/|$)/i;
+const PHOTOS = PRELUDE + `var P=Application('Photos');var T0=Date.now();function late(ms){return Date.now()-T0>ms}
+function opt(e,k){try{var v=e[k]();return v===undefined||v===''?null:v}catch(x){return null}}
+function walkAlbums(){var out=[],seen={};function go(c,path,d){var ids=[],names=[];try{ids=c.albums.id();names=c.albums.name()}catch(e){}
+for(var i=0;i<ids.length;i++){if(!seen[ids[i]]){seen[ids[i]]=1;out.push({id:ids[i],name:names[i],folder:path||null})}}
+if(d<6){var fs=[];try{fs=c.folders()}catch(e){}for(var j=0;j<fs.length;j++){var n='';try{n=fs[j].name()}catch(e){continue}go(fs[j],path?path+'/'+n:n,d+1)}}}
+go(P,'',0);return out}
+function albumFor(x){try{var a=P.albums.byId(x);a.name();return a}catch(e){}var l=[];try{l=P.albums.whose({name:x})()}catch(e){}if(l.length)return l[0];
+var all=walkAlbums();for(var i=0;i<all.length;i++){if(all[i].id===x||all[i].name===x){var b=P.albums.byId(all[i].id);b.name();return b}}
+throw new Error('Photos has no album '+x+'. mac_photos_list_albums gives the albums.')}
+function itemFor(id){var m=P.mediaItems.byId(id);m.id();return m}
+function hasKw(list,k){k=k.toLowerCase();return (list||[]).some(function(x){return String(x).toLowerCase()===k})}
+function where(m){var l=opt(m,'location');return l&&l.length===2&&l[0]!=null&&l[1]!=null?{latitude:l[0],longitude:l[1]}:null}
+function row(m){return {id:m.id(),filename:opt(m,'filename'),title:opt(m,'name'),date:iso(opt(m,'date')),width:opt(m,'width'),height:opt(m,'height'),favorite:opt(m,'favorite')===true,keywords:opt(m,'keywords')||[],location:where(m)}}
+function addTo(al,ids){var items=[],failed=[];ids.forEach(function(id){try{items.push(itemFor(id))}catch(e){failed.push({id:id,error:'Photos has no photo with that id. Search again.'})}});
+if(items.length)P.add(items,{to:al});return {added:items.length,failed:failed}}
+`;
+const PHOTOS_SCRIPTS = {
+  mac_photos_list_albums: PHOTOS + `function main(a){var all=walkAlbums();var end=Math.min(all.length,a.offset+a.limit);var out=[];
+for(var i=a.offset;i<end;i++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=i;break}var o=all[i];o.count=null;if(!late(${HALF})){try{o.count=P.albums.byId(o.id).mediaItems.length}catch(e){}}out.push(o)}
+var r={albums:out,total:all.length};if(end<all.length)r.next=String(end);return r}`,
+  // Words go through Photos' own search (people, places, scenes); without
+  // words the album or the library is read in bulk, filtered and sorted here.
+  mac_photos_search: PHOTOS + `function main(a){var from=a.from?new Date(a.from):null,to=a.to?new Date(a.to):null;var words=[a.query,a.person,a.place].filter(Boolean).join(' ');
+var al=a.album?albumFor(a.album):null;var out=[];var r;
+if(words){var hits=P.search({for:words})||[];var keep=null;if(al){keep={};var ai=al.mediaItems.id();for(var x=0;x<ai.length;x++)keep[ai[x]]=1}
+var i=a.offset;for(;i<hits.length&&out.length<a.limit;i++){if(out.length&&late(${MAC_APP_BUDGET_MS}))break;var m=hits[i];var id=m.id();if(keep&&!keep[id])continue;
+var d=opt(m,'date');if(from&&!(d>=from))continue;if(to&&!(d<to))continue;if(a.favorite!==undefined&&(opt(m,'favorite')===true)!==a.favorite)continue;
+if(a.keyword&&!hasKw(opt(m,'keywords'),a.keyword))continue;out.push(row(m))}
+r={photos:out,total:hits.length};if(i<hits.length)r.next=String(i);return r}
+var coll=al?al.mediaItems:P.mediaItems;var ids=coll.id(),dates=coll.date();var favs=a.favorite!==undefined?coll.favorite():null;var kws=a.keyword?coll.keywords():null;
+var idx=[];for(var k=0;k<ids.length;k++){var dk=dates[k];if(from&&!(dk>=from))continue;if(to&&!(dk<to))continue;if(favs&&(favs[k]===true)!==a.favorite)continue;if(kws&&!hasKw(kws[k],a.keyword))continue;idx.push(k)}
+idx.sort(function(p,q){return (dates[q]?dates[q].getTime():0)-(dates[p]?dates[p].getTime():0)});
+var end=Math.min(idx.length,a.offset+a.limit);for(var n=a.offset;n<end;n++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=n;break}out.push(row(itemFor(ids[idx[n]])))}
+r={photos:out,total:idx.length};if(end<idx.length)r.next=String(end);return r}`,
+  mac_photos_read: PHOTOS + `function main(a){var out=[],failed=[];var i=a.offset;for(;i<a.ids.length;i++){if(out.length&&late(${MAC_APP_BUDGET_MS}))break;
+try{var m=itemFor(a.ids[i]);var o=row(m);o.caption=opt(m,'description');o.altitude=opt(m,'altitude');out.push(o)}catch(e){failed.push({id:a.ids[i],error:'Photos has no photo with that id. Search again.'})}}
+var r={photos:out,failed:failed};if(i<a.ids.length)r.next=String(i);return r}`,
+  // Each item goes to its own folder (dirs[i], made by the caller), so every
+  // file Photos writes is known to come from that id.
+  mac_photos_export: PHOTOS + `function main(a){var out=[],failed=[];var i=a.offset;for(;i<a.ids.length;i++){if((out.length||failed.length)&&late(${MAC_APP_BUDGET_MS}))break;
+try{var m=itemFor(a.ids[i]);P.export([m],{to:Path(a.dirs[i]),usingOriginals:a.original===true});out.push({id:a.ids[i],index:i})}catch(e){failed.push({id:a.ids[i],error:String(e&&e.message||e)})}}
+var r={exported:out,failed:failed};if(i<a.ids.length)r.next=String(i);return r}`,
+  mac_photos_create_album: PHOTOS + `function main(a){var props={new:'album',named:a.name};if(a.folder){var f=[];try{f=P.folders.whose({name:a.folder})()}catch(e){}if(!f.length)throw new Error('Photos has no folder named '+a.folder+'.');props.at=f[0]}
+var al=P.make(props);var r={created:true,id:al.id(),name:al.name(),added:0,failed:[]};if(a.ids&&a.ids.length){var x=addTo(al,a.ids);r.added=x.added;r.failed=x.failed}return r}`,
+  mac_photos_add_to_album: PHOTOS + `function main(a){var al=albumFor(a.album);var x=addTo(al,a.ids);return {added:x.added,failed:x.failed,album:al.name()}}`,
+};
+
 export const MAC_APP_SCRIPTS = {
   mac_messages_send: PRELUDE + `function main(a){var M=Application('Messages');var files=a.files||[];
 function out(target){if(a.text)M.send(a.text,{to:target});files.forEach(function(f){M.send(Path(f),{to:target})})}
@@ -1091,6 +1185,7 @@ else if(a.title)n.name=a.title;return {updated:true,id:a.id,mode:a.mode};}`,
 else{try{acct=N.defaultAccount()}catch(e){acct=N.accounts()[0]}}acct.folders.push(N.Folder({name:a.name}));return {created:true,name:a.name,account:acct.name()};}`,
   mac_notes_update_folder: NOTES + `function main(a){folderNamed(a.name).name=a.newName;return {updated:true,name:a.newName};}`,
   mac_notes_delete_folder: NOTES + `function main(a){N.delete(folderNamed(a.name));return {deleted:1,name:a.name};}`,
+  ...PHOTOS_SCRIPTS,
 };
 
 /** Light reads the setup page's Test button runs (names and counts only). */
@@ -1101,6 +1196,7 @@ export const MAC_APP_TEST_SCRIPTS = {
   reminders: PRELUDE + "function main(a){var R=Application('Reminders');return {names:R.lists().map(function(x){return x.name()})};}",
   notes: PRELUDE + "function main(a){var N=Application('Notes');return {names:N.folders().map(function(x){return x.name()})};}",
   messages: PRELUDE + "function main(a){var M=Application('Messages');var n=0;try{n=M.chats.length}catch(e){}return {names:[],count:n};}",
+  photos: PRELUDE + "function main(a){var P=Application('Photos');return {names:P.albums.name(),count:P.mediaItems.length};}",
 };
 
 /** osascript's argv for one call: constant script, one JSON argument. */
@@ -1134,7 +1230,7 @@ export function macAppErrorText(appId, error) {
     return { denied: false, message: `The call to ${name} was cancelled before ${name} answered (its turn ended or the server stopped waiting). Nothing more was done.` };
   }
   if (error?.killed || /ETIMEDOUT|timed out/i.test(raw)) {
-    return { denied: false, message: `${name} did not answer in time. ${name} is busy (syncing a large account, or a dialog is open in it): try again in a moment${appId === "mail" ? ", or narrow the call (one account, a mailbox, since)" : ""}.` };
+    return { denied: false, message: `${name} did not answer in time. ${name} is busy (syncing a large account or library, or a dialog is open in it): try again in a moment${appId === "mail" ? ", or narrow the call (one account, a mailbox, since)" : appId === "photos" ? ", or narrow the call (an album, a date range, fewer ids)" : ""}.` };
   }
   const line = raw.split("\n").map((part) => part.replace(/^.*execution error:\s*/, "").trim()).find(Boolean) ?? "";
   return { denied: false, message: `${name} returned an error: ${line.slice(0, 300) || "unknown error"}` };
@@ -1470,6 +1566,73 @@ function attachableFile(file, filesDir) {
   return target;
 }
 
+const PHOTO_IMAGE_EXT = new Set([".heic", ".heif", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif", ".webp", ".bmp", ".dng", ".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2"]);
+const MIME_BY_EXT = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".heic": "image/heic", ".heif": "image/heif", ".png": "image/png", ".gif": "image/gif", ".tif": "image/tiff", ".tiff": "image/tiff", ".webp": "image/webp", ".mov": "video/quicktime", ".mp4": "video/mp4", ".m4v": "video/x-m4v", ".dng": "image/x-adobe-dng" };
+const mimeOf = (file) => MIME_BY_EXT[path.extname(file).toLowerCase()] ?? "application/octet-stream";
+/** How long Photos may take to export: an original kept in iCloud downloads first. */
+export const PHOTOS_EXPORT_TIMEOUT_MS = 180_000;
+
+/** sips (built into macOS, no window): the longest side of a photo, then a
+ * JPEG of at most maxSize pixels (never enlarged). */
+async function resizedJpeg(source, target, maxSize, run) {
+  let side = 0;
+  try {
+    const { stdout } = await run("sips", ["-g", "pixelWidth", "-g", "pixelHeight", source], { timeout: 30_000, maxBuffer: 64 * 1024 });
+    side = Math.max(...[...String(stdout).matchAll(/pixel(?:Width|Height):\s*(\d+)/g)].map((hit) => Number(hit[1])), 0);
+  } catch { /* unknown size: resize anyway */ }
+  const resize = side === 0 || side > maxSize ? ["-Z", String(maxSize)] : [];
+  await run("sips", ["-s", "format", "jpeg", "-s", "formatOptions", "85", ...resize, source, "--out", target], { timeout: 60_000, maxBuffer: 256 * 1024 });
+}
+
+/** mac_photos_export: Photos writes each item into its own temporary folder
+ * inside saveDir; each file is then resized to a JPEG (or kept as the
+ * original) and moved into saveDir with a random prefix. */
+export async function exportPhotos(op, deps = {}) {
+  const run = deps.execFile ?? execFilePromise;
+  const work = path.join(deps.saveDir, `.photos-${randomBytes(4).toString("hex")}`);
+  fs.mkdirSync(work, { recursive: true, mode: 0o700 });
+  try {
+    const dirs = op.ids.map((_, index) => path.join(work, String(index)));
+    for (const dir of dirs.slice(op.offset)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const found = await runScript("photos", MAC_APP_SCRIPTS.mac_photos_export, { ...op, dirs }, { ...deps, timeoutMs: deps.timeoutMs ?? PHOTOS_EXPORT_TIMEOUT_MS });
+    const files = [];
+    const failed = Array.isArray(found?.failed) ? found.failed.map((row) => ({ id: row.id, error: `Photos could not export it: ${String(row.error ?? "unknown error").slice(0, 300)}` })) : [];
+    for (const item of Array.isArray(found?.exported) ? found.exported : []) {
+      const dir = dirs[item.index];
+      let names = [];
+      try { names = dir ? fs.readdirSync(dir).filter((entry) => !entry.startsWith(".")) : []; } catch { names = []; }
+      if (!names.length) { failed.push({ id: item.id, error: "Photos wrote no file for it (an original still in iCloud that could not download, or a format it does not export)." }); continue; }
+      // A resized export keeps the still of a Live Photo, not its video.
+      const picked = op.original ? names : [names.find((entry) => PHOTO_IMAGE_EXT.has(path.extname(entry).toLowerCase())) ?? names[0]];
+      for (const entry of picked) {
+        const source = path.join(dir, entry);
+        const image = PHOTO_IMAGE_EXT.has(path.extname(entry).toLowerCase());
+        const target = path.join(deps.saveDir, macAppFileName(!op.original && image ? `${path.basename(entry, path.extname(entry))}.jpg` : entry));
+        try {
+          if (!op.original && image) await resizedJpeg(source, target, op.maxSize, run);
+          else fs.renameSync(source, target);
+        } catch (error) {
+          failed.push({ id: item.id, name: entry, error: `The photo could not be converted on this Mac: ${String(error?.stderr || error?.message || error).split("\n")[0].slice(0, 200)}` });
+          continue;
+        }
+        let bytes = 0;
+        try { bytes = fs.statSync(target).size; } catch { failed.push({ id: item.id, name: entry, error: "The exported file was not found." }); continue; }
+        if (bytes > ATTACHMENT_MAX_BYTES) {
+          fs.rmSync(target, { force: true });
+          failed.push({ id: item.id, name: entry, error: "This file is over 25 MB, the most a file here can be. Export it resized (without original), or a shorter video." });
+          continue;
+        }
+        files.push({ id: item.id, path: target, name: path.basename(target).slice(9), mime: !op.original && image ? "image/jpeg" : mimeOf(target), bytes });
+      }
+    }
+    const out = { files, failed };
+    if (typeof found?.next === "string") out.next = found.next;
+    return out;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 /** Run one tool on this Mac. Returns an MCP tool result, never throws. */
 export async function runMacAppCall(name, args, deps = {}) {
   const platform = deps.platform ?? process.platform;
@@ -1485,8 +1648,12 @@ export async function runMacAppCall(name, args, deps = {}) {
     try { op = { ...op, files: op.files.map((file) => attachableFile(file, deps.filesDir)) }; } catch (error) { return failure(error instanceof Error ? error.message : String(error)); }
   }
   try {
-    if (name === "mac_messages_read_attachment" || name === "mac_mail_read_attachment") {
-      if (!deps.saveDir) return failure("There is no folder to save the attachment in here.");
+    if (macAppSavesFiles(name)) {
+      if (!deps.saveDir) return failure(name === "mac_photos_export" ? "There is no folder to save the photos in here." : "There is no folder to save the attachment in here.");
+    }
+    if (name === "mac_photos_export") {
+      const out = await exportPhotos(op, deps);
+      return !out.files.length && out.failed.length ? { ...text(out), isError: true } : text(out);
     }
     if (name === "mac_messages_read_attachment") {
       const dir = deps.messagesDir ?? messagesDir();

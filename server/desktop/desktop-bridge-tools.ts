@@ -12,7 +12,7 @@ import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import { DESKTOP_BRIDGE_MESSAGES, type DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
-import { MAC_APP_LEGACY_TOOLS, MAC_APP_UPDATE_DESKTOP, isMacAppTool, macAppFileName, macAppOperation } from "../../electron/mac-apps.mjs";
+import { MAC_APP_LEGACY_TOOLS, MAC_APP_UPDATE_DESKTOP, isMacAppTool, macAppFileName, macAppOperation, macAppSavesFiles } from "../../electron/mac-apps.mjs";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 
@@ -410,8 +410,8 @@ export async function relayMacAppCall(
     if (result.isError === true && first?.type === "text" && (first.text === "Invalid request" || first.text === "Unsupported operation")) {
       return text(MAC_APP_UPDATE_DESKTOP, true);
     }
-    if (!result.isError && tool.endsWith("_read_attachment") && files?.save && first?.type === "text") {
-      result = await pullAttachment(request, first.text, files.save);
+    if (!result.isError && macAppSavesFiles(tool) && files?.save && first?.type === "text") {
+      result = await pullSavedFiles(request, first.text, files.save);
     }
     return result;
   } catch (error) {
@@ -423,11 +423,30 @@ export async function relayMacAppCall(
   }
 }
 
-/** Copy an attachment the Mac saved into the conversation's folder here. */
-async function pullAttachment(request: (operation: DesktopBridgeOperation) => Promise<unknown>, answer: string, save: (name: string, data: Buffer) => string): Promise<ToolResult> {
-  let saved: { path?: unknown; name?: unknown; mime?: unknown; bytes?: unknown };
+type SavedOnMac = { path?: unknown; name?: unknown; mime?: unknown; bytes?: unknown; id?: unknown };
+
+/** Copy what the Mac saved into the conversation's folder here: one
+ * attachment ({ path }), or exported photos ({ files: [{ path }] }, each
+ * copied in turn; one that does not copy moves to failed). */
+async function pullSavedFiles(request: (operation: DesktopBridgeOperation) => Promise<unknown>, answer: string, save: (name: string, data: Buffer) => string): Promise<ToolResult> {
+  let saved: SavedOnMac & { files?: unknown; failed?: unknown };
   try { saved = JSON.parse(answer) as typeof saved; } catch { return text("Your Mac answered with something unexpected.", true); }
-  if (typeof saved.path !== "string") return text("Your Mac did not save the attachment.", true);
+  if (!Array.isArray(saved.files)) return pullAttachment(request, saved, save);
+  const files: unknown[] = [];
+  const failed: unknown[] = Array.isArray(saved.failed) ? [...saved.failed] : [];
+  for (const file of saved.files as SavedOnMac[]) {
+    const pulled = await pullAttachment(request, file, save);
+    const body = pulled.content[0]?.type === "text" ? pulled.content[0].text : "";
+    if (pulled.isError) failed.push({ ...(file.id !== undefined ? { id: file.id } : {}), name: file.name, error: body });
+    else files.push({ ...(file.id !== undefined ? { id: file.id } : {}), ...(JSON.parse(body) as Record<string, unknown>) });
+  }
+  const out = { ...saved, files, failed };
+  return text(JSON.stringify(out), !files.length && failed.length > 0);
+}
+
+/** Copy one file the Mac saved into the conversation's folder here. */
+async function pullAttachment(request: (operation: DesktopBridgeOperation) => Promise<unknown>, saved: SavedOnMac, save: (name: string, data: Buffer) => string): Promise<ToolResult> {
+  if (typeof saved.path !== "string") return text("Your Mac did not save the file.", true);
   const parts: Buffer[] = [];
   for (let offset = 0, guard = 0; guard < 64; guard += 1) {
     const read = desktopToolResult(await request({ action: "read_file", path: saved.path, encoding: "base64", offset, max_bytes: PULL_CHUNK }));

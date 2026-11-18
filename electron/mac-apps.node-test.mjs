@@ -40,6 +40,8 @@ import {
   macAppsStatus,
   macAppTarget,
   macAppToolWrites,
+  macAppSavesFiles,
+  exportPhotos,
   readMacAppSettings,
   runMacAppCall,
   testMacApp,
@@ -62,6 +64,7 @@ test("the tools: single underscore names, one script each, a kind and a need on 
     "mac_mail_create_draft", "mac_mail_delete", "mac_mail_forward", "mac_mail_list_mailboxes", "mac_mail_list_rules", "mac_mail_move", "mac_mail_read", "mac_mail_read_attachment", "mac_mail_reply", "mac_mail_search", "mac_mail_send", "mac_mail_update", "mac_mail_update_rule",
     "mac_messages_list_chats", "mac_messages_read", "mac_messages_read_attachment", "mac_messages_send",
     "mac_notes_create", "mac_notes_create_folder", "mac_notes_delete", "mac_notes_delete_folder", "mac_notes_list_folders", "mac_notes_move", "mac_notes_read", "mac_notes_search", "mac_notes_update", "mac_notes_update_folder",
+    "mac_photos_add_to_album", "mac_photos_create_album", "mac_photos_export", "mac_photos_list_albums", "mac_photos_read", "mac_photos_search",
     "mac_reminders_complete", "mac_reminders_create", "mac_reminders_create_list", "mac_reminders_delete", "mac_reminders_delete_list", "mac_reminders_list", "mac_reminders_list_lists", "mac_reminders_update", "mac_reminders_update_list",
   ]);
   assert.equal(new Set(names).size, names.length);
@@ -77,10 +80,12 @@ test("the tools: single underscore names, one script each, a kind and a need on 
     mac_mail_send: "send", mac_mail_reply: "send", mac_mail_forward: "send",
     mac_mail_create_draft: "write", mac_mail_list_rules: "read", mac_mail_update_rule: "write",
   });
-  // The class follows the verb: list, search and read read; delete deletes; send, reply and forward send.
+  // The class follows the verb: list, search, read and export read (an
+  // export copies photos into the conversation, Photos is unchanged); delete
+  // deletes; send, reply and forward send.
   for (const tool of MAC_APP_TOOLS) {
     const verb = tool.name.split("_")[2];
-    const expected = ["list", "search", "read"].includes(verb) ? "read" : verb === "delete" ? "delete" : ["send", "reply", "forward"].includes(verb) ? "send" : "write";
+    const expected = ["list", "search", "read", "export"].includes(verb) ? "read" : verb === "delete" ? "delete" : ["send", "reply", "forward"].includes(verb) ? "send" : "write";
     assert.equal(tool.kind, expected, tool.name);
   }
   assert.equal(MAC_APP_TOOLS.find((tool) => tool.name === "mac_messages_read").needs, "fullDiskAccess");
@@ -598,6 +603,12 @@ const SAMPLES = {
   mac_notes_create_folder: { name: "Projects" },
   mac_notes_update_folder: { name: "Projects", newName: "Work" },
   mac_notes_delete_folder: { name: "Work" },
+  mac_photos_list_albums: { limit: 20, cursor: "20" },
+  mac_photos_search: { person: "Ada", place: "Lisbon", album: "Trips", from: "2026-01-01", to: "2026-12-31", keyword: "beach", favorite: true, cursor: "30" },
+  mac_photos_read: { ids: ["PH-1", "PH-2"] },
+  mac_photos_export: { ids: ["PH-1"], maxSize: 1024 },
+  mac_photos_create_album: { name: "Picks", ids: ["PH-1"] },
+  mac_photos_add_to_album: { album: "Picks", ids: ["PH-1", "PH-2"] },
 };
 
 test("every tool has a bounded operation that validates twice to the same thing (the relay re-checks it)", () => {
@@ -631,7 +642,7 @@ test("every tool has a bounded operation that validates twice to the same thing 
 
 test("every new script is a constant and gets the operation as one JSON argv; the card names the verb and a count, never the content", async () => {
   for (const [name, args] of Object.entries(SAMPLES)) {
-    if (name === "mac_messages_read" || name === "mac_messages_list_chats" || name.endsWith("_read_attachment")) continue;
+    if (name === "mac_messages_read" || name === "mac_messages_list_chats" || macAppSavesFiles(name)) continue;
     const { calls, execFile } = recorder();
     const result = await runMacAppCall(name, args, { platform: "darwin", execFile });
     assert.equal(result.isError, undefined, `${name}: ${result.content[0].text}`);
@@ -1116,4 +1127,156 @@ test("Notes and Contacts searches stop at their budget with a next cursor, extra
   const groups = runApp("mac_contacts_list_groups", {}, { groups: () => [1, 2, 3, 4].map((n) => ({ id: () => `G${n}`, name: () => `G${n}`, people: [] })) });
   assert.ok(groups.groups.length < 4);
   assert.match(groups.partial, /stopped early/);
+});
+
+// --- Photos (2026-11-17): a stand-in for Photos' scripting objects, so the
+// JXA runs here with no Apple Event and no real Photos.
+function fakePhotos() {
+  const item = (id, date, extra = {}) => ({ id: () => id, date: () => (date ? new Date(date) : null), filename: () => `${id}.HEIC`, name: () => extra.title ?? null, description: () => extra.caption ?? null, width: () => 4032, height: () => 3024, favorite: () => extra.favorite === true, keywords: () => extra.keywords ?? [], location: () => extra.location ?? [null, null], altitude: () => null });
+  const items = [
+    item("PH-1", "2026-03-01T10:00:00Z", { keywords: ["Beach"], location: [38.72, -9.14] }),
+    item("PH-2", "2026-07-01T10:00:00Z", { favorite: true }),
+    item("PH-3", "2026-05-01T10:00:00Z", { keywords: ["beach"], favorite: true }),
+    item("PH-4", "2025-12-31T10:00:00Z"),
+  ];
+  const bulk = (list) => {
+    const fn = () => list.slice();
+    Object.defineProperty(fn, "length", { get: () => list.length });
+    list.forEach((entry, index) => { fn[index] = entry; });
+    for (const key of ["id", "date", "favorite", "keywords", "name"]) Object.defineProperty(fn, key, { value: () => list.map((entry) => entry[key]()), writable: true, configurable: true });
+    fn.byId = (id) => { const hit = list.find((entry) => entry.id() === id); if (!hit) return { id: () => { throw new Error("no such item"); }, name: () => { throw new Error("no such item"); } }; return hit; };
+    fn.whose = (filter) => bulk(list.filter((entry) => Object.entries(filter).every(([key, value]) => entry[key]() === value)));
+    return fn;
+  };
+  const albumMembers = { "AL-1": [items[0], items[2]], "AL-2": [items[1]] };
+  const album = (id, name) => ({ id: () => id, name: () => name, mediaItems: bulk(albumMembers[id]) });
+  const albums = [album("AL-1", "Trips")];
+  const nested = album("AL-2", "Kids");
+  const folder = { name: () => "Family", albums: bulk([nested]), folders: () => [] };
+  const log = { added: [], exported: [], made: [] };
+  const photos = {
+    mediaItems: bulk(items),
+    albums: bulk([...albums, nested]),
+    folders: Object.assign(() => [folder], { whose: (filter) => () => (filter.name === "Family" ? [folder] : []) }),
+    search: ({ for: words }) => (words.includes("Lisbon") ? [items[0], items[3]] : []),
+    add: (list, { to }) => log.added.push([to.name(), list.map((entry) => entry.id())]),
+    export: (list, options) => log.exported.push([list.map((entry) => entry.id()), options.to, options.usingOriginals]),
+    make: (props) => { log.made.push(props); albumMembers["AL-9"] = []; return album("AL-9", props.named); },
+  };
+  // The app's own albums list holds the top level only; a folder's albums are reached through it.
+  photos.albums.id = () => albums.map((entry) => entry.id());
+  photos.albums.name = () => albums.map((entry) => entry.name());
+  return { photos, log };
+}
+const runPhotos = (name, op, photos) => JSON.parse(new Function("Application", "Path", `${MAC_APP_SCRIPTS[name]}\nreturn run;`)(() => photos, (p) => `file:${p}`)([JSON.stringify(macAppScriptArgs(name, macAppOperation(name, op)))]));
+
+test("Photos: albums in folders are listed; a search without words is newest first, filtered by dates, favorite and keyword, paged", () => {
+  const { photos } = fakePhotos();
+  const albums = runPhotos("mac_photos_list_albums", {}, photos);
+  assert.deepEqual(albums.albums.map((a) => [a.id, a.name, a.folder, a.count]), [["AL-1", "Trips", null, 2], ["AL-2", "Kids", "Family", 1]]);
+  const all = runPhotos("mac_photos_search", { limit: 2 }, photos);
+  assert.deepEqual(all.photos.map((p) => p.id), ["PH-2", "PH-3"]);
+  assert.equal(all.next, "2");
+  assert.equal(all.total, 4);
+  assert.deepEqual(runPhotos("mac_photos_search", { cursor: "2" }, photos).photos.map((p) => p.id), ["PH-1", "PH-4"]);
+  assert.deepEqual(runPhotos("mac_photos_search", { from: "2026-01-01", to: "2026-06-01" }, photos).photos.map((p) => p.id), ["PH-3", "PH-1"]);
+  assert.deepEqual(runPhotos("mac_photos_search", { favorite: true }, photos).photos.map((p) => p.id), ["PH-2", "PH-3"]);
+  assert.deepEqual(runPhotos("mac_photos_search", { keyword: "BEACH", album: "Trips" }, photos).photos.map((p) => p.id), ["PH-3", "PH-1"]);
+  const first = runPhotos("mac_photos_search", { album: "AL-1", limit: 1 }, photos).photos[0];
+  assert.deepEqual(first.location, null);
+  assert.deepEqual(runPhotos("mac_photos_search", { keyword: "beach", from: "2026-02-01", to: "2026-04-01" }, photos).photos[0].location, { latitude: 38.72, longitude: -9.14 });
+  assert.throws(() => runPhotos("mac_photos_search", { album: "Nope" }, photos), /Photos has no album Nope/);
+});
+
+test("Photos: a person or a place goes through Photos' own search, narrowed by album and dates", () => {
+  const { photos } = fakePhotos();
+  assert.deepEqual(runPhotos("mac_photos_search", { place: "Lisbon" }, photos).photos.map((p) => p.id), ["PH-1", "PH-4"]);
+  assert.deepEqual(runPhotos("mac_photos_search", { place: "Lisbon", album: "Trips" }, photos).photos.map((p) => p.id), ["PH-1"]);
+  assert.deepEqual(runPhotos("mac_photos_search", { place: "Lisbon", to: "2026-01-01" }, photos).photos.map((p) => p.id), ["PH-4"]);
+  const paged = runPhotos("mac_photos_search", { place: "Lisbon", limit: 1 }, photos);
+  assert.equal(paged.next, "1");
+  assert.deepEqual(runPhotos("mac_photos_search", { person: "Nobody" }, photos).photos, []);
+});
+
+test("Photos: read gives details and names a missing id; albums are made and filled by id; the card never shows an id", () => {
+  const { photos, log } = fakePhotos();
+  const read = runPhotos("mac_photos_read", { ids: ["PH-1", "PH-9"] }, photos);
+  assert.deepEqual(read.photos.map((p) => [p.id, p.filename, p.keywords]), [["PH-1", "PH-1.HEIC", ["Beach"]]]);
+  assert.match(read.failed[0].error, /no photo with that id/);
+  const made = runPhotos("mac_photos_create_album", { name: "Picks", folder: "Family", ids: ["PH-1", "PH-9"] }, photos);
+  assert.equal(made.created, true);
+  assert.equal(made.added, 1);
+  assert.equal(log.made[0].named, "Picks");
+  assert.deepEqual(log.added, [["Picks", ["PH-1"]]]);
+  assert.throws(() => runPhotos("mac_photos_create_album", { name: "X", folder: "Nope" }, photos), /no folder named Nope/);
+  assert.deepEqual(runPhotos("mac_photos_add_to_album", { album: "Kids", ids: ["PH-3"] }, photos), { added: 1, failed: [], album: "Kids" });
+  assert.equal(macAppTarget("mac_photos_add_to_album", { album: "Kids", ids: ["a", "b"] }), 'Photos: add 2 photos to "Kids"');
+  assert.equal(macAppTarget("mac_photos_add_to_album", { album: "0A1B2C3D-0000-4000-8000-00000000AAAA/L0/040", ids: ["a"] }), "Photos: add 1 photo to an album");
+  assert.equal(macAppTarget("mac_photos_create_album", { name: "Picks", ids: ["a"] }), 'Photos: create the album "Picks", with 1 photo');
+  assert.equal(macAppToolWrites("mac_photos_export"), false);
+  assert.equal(macAppToolWrites("mac_photos_create_album"), true);
+  assert.throws(() => macAppOperation("mac_photos_export", { ids: ["PH-1"], maxSize: 10 }), /256 to 8192/);
+  assert.equal(macAppOperation("mac_photos_export", { ids: ["PH-1"] }).maxSize, 2048);
+  assert.ok(MAC_APP_SCRIPTS.mac_photos_search.includes("late(25000)"));
+});
+
+test("Photos: export saves a resized JPEG by default, the original on request, names each failure, and leaves no temporary folder", async () => {
+  const saveDir = tempDir();
+  const calls = [];
+  // osascript: Photos writes each item into its own folder; sips: reads the size, then writes the JPEG.
+  const execFile = async (file, args) => {
+    calls.push([file, args]);
+    if (file === "osascript") {
+      const op = JSON.parse(args[4]);
+      const exported = [];
+      const failed = [];
+      op.ids.forEach((id, index) => {
+        if (index < op.offset) return;
+        if (id === "PH-9") { failed.push({ id, error: "Can't get media item id \"PH-9\"." }); return; }
+        if (id === "PH-8") { exported.push({ id, index }); return; }
+        fs.writeFileSync(path.join(op.dirs[index], `${id}.HEIC`), "heic");
+        if (op.original) fs.writeFileSync(path.join(op.dirs[index], `${id}.MOV`), "mov");
+        exported.push({ id, index });
+      });
+      return { stdout: JSON.stringify({ exported, failed }) };
+    }
+    if (args[0] === "-g") return { stdout: `${args.at(-1)}\n  pixelWidth: 4032\n  pixelHeight: 3024\n` };
+    fs.writeFileSync(args.at(-1), "jpeg");
+    return { stdout: "" };
+  };
+  const result = await runMacAppCall("mac_photos_export", { ids: ["PH-1", "PH-9", "PH-8"] }, { platform: "darwin", execFile, saveDir });
+  assert.equal(result.isError, undefined, result.content[0].text);
+  const out = JSON.parse(result.content[0].text);
+  assert.equal(out.files.length, 1);
+  assert.equal(out.files[0].id, "PH-1");
+  assert.equal(out.files[0].mime, "image/jpeg");
+  assert.equal(out.files[0].name, "PH-1.jpg");
+  assert.ok(out.files[0].path.startsWith(saveDir + path.sep));
+  assert.deepEqual(out.failed.map((row) => row.id), ["PH-9", "PH-8"]);
+  assert.match(out.failed[0].error, /Photos could not export it/);
+  assert.match(out.failed[1].error, /wrote no file/);
+  const sips = calls.filter(([file]) => file === "sips").map(([, args]) => args);
+  assert.deepEqual(sips[1].slice(0, 6), ["-s", "format", "jpeg", "-s", "formatOptions", "85"]);
+  assert.deepEqual(sips[1].slice(6, 8), ["-Z", "2048"]);
+  assert.equal(calls[0][1][3], MAC_APP_SCRIPTS.mac_photos_export);
+  assert.deepEqual(fs.readdirSync(saveDir).filter((entry) => entry.startsWith(".")), []);
+  // The original: every file Photos wrote (a Live Photo's still and video), moved as is.
+  const original = JSON.parse((await runMacAppCall("mac_photos_export", { ids: ["PH-1"], original: true }, { platform: "darwin", execFile, saveDir })).content[0].text);
+  assert.deepEqual(original.files.map((file) => [file.name, file.mime]).sort(), [["PH-1.HEIC", "image/heic"], ["PH-1.MOV", "video/quicktime"]]);
+  // Nothing exported at all: an error result.
+  const none = await runMacAppCall("mac_photos_export", { ids: ["PH-9"] }, { platform: "darwin", execFile, saveDir });
+  assert.equal(none.isError, true);
+  // No folder to save in: refused before osascript.
+  const before = calls.length;
+  assert.equal((await runMacAppCall("mac_photos_export", { ids: ["PH-1"] }, { platform: "darwin", execFile })).isError, true);
+  assert.equal(calls.length, before);
+  assert.equal(typeof exportPhotos, "function");
+});
+
+test("Photos: an Automation refusal names Photos and the Automation pane; a timeout says how to narrow", () => {
+  const denied = Object.assign(new Error("Command failed"), { stderr: "execution error: Not authorized to send Apple events to Photos. (-1743)" });
+  const said = macAppErrorText("photos", denied);
+  assert.equal(said.denied, true);
+  assert.match(said.message, /control Photos.*Automation and turn on Photos under Sagax/);
+  assert.match(macAppErrorText("photos", Object.assign(new Error("x"), { killed: true })).message, /Photos did not answer in time.*an album, a date range/);
 });

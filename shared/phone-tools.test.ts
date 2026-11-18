@@ -166,3 +166,31 @@ describe("health tools", () => {
     expect(checkPhoneToolResult("health_read", {}, { category: "steps", unit: "count", days: [{ date: "yesterday", value: 1 }] }).ok).toBe(false);
   });
 });
+
+// 2026-11-17: the phone's photo library (PhotoKit) as one more phone tool.
+describe("photo_library", () => {
+  it("checks each action's arguments, and every action reads", () => {
+    expect(parsePhoneToolArgs("photo_library", { action: "list_albums", limit: 20 }).ok).toBe(true);
+    expect(parsePhoneToolArgs("photo_library", { action: "search", album: "Trips", from: "2026-01-01", to: "2026-06-01", favorite: true, media: "photo", cursor: "30" }).ok).toBe(true);
+    expect(parsePhoneToolArgs("photo_library", { action: "search", from: "2026-06-01", to: "2026-01-01" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("photo_library", { action: "search", cursor: "next" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("photo_library", { action: "read", ids: ["A/L0/001"] }).ok).toBe(true);
+    expect(parsePhoneToolArgs("photo_library", { action: "export", ids: ["a", "b", "c", "d"] }).ok).toBe(false);
+    expect(parsePhoneToolArgs("photo_library", { action: "export", ids: ["a"], original: true }).ok).toBe(true);
+    expect(parsePhoneToolArgs("photo_library", { action: "delete", ids: ["a"] }).ok).toBe(false);
+    for (const action of ["list_albums", "search", "read", "export"]) expect(phoneToolAccess("photo_library", { action })).toBe("read");
+    expect(phoneToolGrantKey("photo_library", { action: "export" })).toBe("photo_library:read");
+  });
+
+  it("keeps the answer to what was asked: the limit, the ids, JPEG images only", () => {
+    const photos = Array.from({ length: 40 }, (_, index) => ({ id: `P${index}`, width: 10, height: 10, favorite: false, media: "photo" }));
+    const found = checkPhoneToolResult("photo_library", { action: "search", limit: 5 }, { photos, total: 40, next: "5", limited: true, extra: "dropped" });
+    expect(found.ok && (found.result.photos as unknown[]).length).toBe(5);
+    expect(found.ok && found.result.extra).toBeUndefined();
+    expect(found.ok && found.result.limited).toBe(true);
+    const sent = checkPhoneToolResult("photo_library", { action: "export", ids: ["a"] }, { images: [{ id: "a", mimeType: "image/jpeg", data: "AQID" }, { id: "b", mimeType: "image/jpeg", data: "AQID" }] });
+    expect(sent.ok && (sent.result.images as unknown[]).length).toBe(1);
+    expect(checkPhoneToolResult("photo_library", { action: "export", ids: ["a"] }, { images: [{ id: "a", mimeType: "image/png", data: "AQID" }] }).ok).toBe(false);
+  });
+});
+

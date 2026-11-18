@@ -32,6 +32,7 @@ import {
   macAppLegacyCall,
   macAppOfTool,
   macAppOperation,
+  macAppSavesFiles,
   macAppTarget,
   macAppToolWrites,
   macAppToolsFor,
@@ -201,8 +202,8 @@ async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<stri
   const intoChat = typeof op.chat === "string";
   if (!deps.macApps || !macAppsReachable(deps)) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
   if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Connect Apps > This Mac. Nothing was done.`, true);
-  if (name.endsWith("_read_attachment")) {
-    if (!deps.saveDir) return text("There is no folder to save the attachment in here.", true);
+  if (macAppSavesFiles(name)) {
+    if (!deps.saveDir) return text(name === "mac_photos_export" ? "There is no folder to save the photos in here." : "There is no folder to save the attachment in here.", true);
     return deps.macApps.run(name, { ...op, ...extra }, { saveDir: deps.saveDir });
   }
   const chat = name === "mac_messages_send" && intoChat ? await chatInfoOf(deps, String(op.chat)).catch(() => null) : null;

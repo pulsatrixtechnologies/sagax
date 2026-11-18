@@ -224,18 +224,31 @@ export const RECORDS_NOTE_MAX_BYTES = 600;
  * the ready-made link: one record, its link; several, the form once per
  * kind and turn (`severalFirst` says whether this turn already had it).
  * Null when there is nothing to add. */
-export function recordsNote(groups: readonly RecordsMetaGroup[], severalFirst: (group: RecordsMetaGroup) => boolean = () => true): string | null {
+export function recordsNote(
+  groups: readonly RecordsMetaGroup[],
+  severalFirst: (group: RecordsMetaGroup) => boolean = () => true,
+  /** Whether the sentence is still owed this turn (true once per turn); a later line is the link form alone. */
+  sentenceFirst: () => boolean = () => true,
+): string | null {
   const parts: string[] = [];
+  let asked = false;
+  const sentence = (): boolean => {
+    if (asked) return false;
+    asked = true;
+    return sentenceFirst();
+  };
   let bytes = 0;
   for (const group of groups) {
     let part: string | null = null;
     if (group.records.length === 1 && group.more === 0) {
       const only = group.records[0]!;
-      part = `${CHAT_ONLY}mention it as ${recordMarkdown(only.label, { product: group.product, kind: group.kind, id: only.id })}.`;
+      const link = recordMarkdown(only.label, { product: group.product, kind: group.kind, id: only.id });
+      part = sentence() ? `${CHAT_ONLY}mention it as ${link}.` : `Link: ${link}`;
     } else if (severalFirst(group)) {
       const numbered = group.records.every((item) => item.label === `#${item.id}`);
       const href = `${RECORD_LINK_PREFIX}${group.product}/${group.kind}/<id>`;
-      part = `${CHAT_ONLY}mention one of these as [${numbered ? "#<id>" : "<label>"}](${href}).`;
+      const link = `[${numbered ? "#<id>" : "<label>"}](${href})`;
+      part = sentence() ? `${CHAT_ONLY}mention one of these as ${link}.` : `Link: ${link}`;
     }
     if (!part) continue;
     const size = new TextEncoder().encode(part).length + (parts.length ? 1 : 0);
@@ -457,7 +470,48 @@ function escapeRegExp(value: string): string {
  * A second pass changes nothing.
  */
 export function linkSeenRecords(text: string, seen: readonly SeenRecord[], kindNames: (product: string, kind: string) => readonly string[] = () => []): string {
-  if (!seen.length || !/\d/.test(text)) return text;
+  if (!seen.length) return text;
+  return linkSeenIds(linkSeenLabels(text, seen), seen, kindNames);
+}
+
+/** A label is number-like when it has a digit, no space and four characters at least. */
+export function numberLikeLabel(label: string): boolean {
+  return label.length >= 4 && label.length <= 96 && /\d/.test(label) && !/\s/.test(label);
+}
+
+const LABEL_LEAD = String.raw`(?<![\p{L}\p{N}_#/.@$\\-])`;
+const LABEL_TAIL = String.raw`(?![\p{L}\p{N}_]|-[\p{L}\p{N}]|[.,:]\d)`;
+
+/**
+ * Link a seen label that is a number-like token (an invoice or purchase order
+ * number) when it labels exactly one seen record. A label two records share is
+ * never linked, nor one that is also the id of another record (the id pass owns
+ * it), nor a name with a space. Never inside code, a link or an address.
+ */
+function linkSeenLabels(text: string, seen: readonly SeenRecord[]): string {
+  const ids = new Set(seen.map((item) => item.id));
+  const byLabel = new Map<string, Map<string, RecordRef>>();
+  for (const item of seen) {
+    const label = item.label?.trim();
+    if (!label || !numberLikeLabel(label) || !validRecordRef(item)) continue;
+    // a label that is the record's own id (`481516`, `#481516`) is the id pass's work
+    if (label === item.id || label === `#${item.id}` || ids.has(label.replace(/^#/, ""))) continue;
+    const refs = byLabel.get(label) ?? new Map<string, RecordRef>();
+    refs.set(recordKey(item), { product: item.product, kind: item.kind, id: item.id });
+    byLabel.set(label, refs);
+  }
+  for (const [label, refs] of byLabel) if (refs.size !== 1 || !text.includes(label)) byLabel.delete(label);
+  if (!byLabel.size) return text;
+  const names = [...byLabel.keys()].sort((a, b) => b.length - a.length).map(escapeRegExp);
+  const pattern = new RegExp(`${LABEL_LEAD}(?:${names.join("|")})${LABEL_TAIL}`, "gu");
+  return segments(text).map((segment) => {
+    if (segment.kind !== "plain") return segment.text;
+    return segment.text.replace(pattern, (whole) => recordMarkdown(whole, [...byLabel.get(whole)!.values()][0]!));
+  }).join("");
+}
+
+function linkSeenIds(text: string, seen: readonly SeenRecord[], kindNames: (product: string, kind: string) => readonly string[]): string {
+  if (!/\d/.test(text)) return text;
   const byId = new Map<string, Map<string, RecordRef>>();
   for (const item of seen) {
     if (!/^\d+$/.test(item.id) || !validRecordRef(item)) continue;

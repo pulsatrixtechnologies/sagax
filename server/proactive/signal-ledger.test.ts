@@ -209,9 +209,10 @@ describe("moved: the streak's told state (routine fix card)", () => {
   function cards(ledger: SignalLedger, state: { pending: PendingProblemCard | null; asked: string[]; reminded: number; now: number; latest?: { at: number } }) {
     const deps: RoutineProblemCardsDeps<R> = {
       need: () => NEED,
+      investigate: (_routine, _need, ask) => ask({ title: "Mailbox unavailable", question: "Sign in again?", options: ["Reconnect", "Pause"], details: [] }),
       facts: () => ({ summary: "Sign-in failed.", count: 3 }),
       words: () => ({ t: (key: string) => key } as unknown as ReturnType<RoutineProblemCardsDeps<R>["words"]>),
-      ask: (_routine, input) => { state.asked.push("retire" in input ? "retire" : "raise"); },
+      ask: (_routine, input) => { state.asked.push("retire" in input ? "retire" : "raise"); return "card"; },
       pending: () => state.pending,
       // the card in storage was put away and cleared: storage says nothing
       latest: () => state.latest ?? null,

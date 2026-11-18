@@ -1,35 +1,5 @@
-/** #4233 (Q2): a problem that lasts is told to the person as something to
- * fix, once. When a routine's need (routine-needs-person.ts, the one rule in
- * shared/outcomes.ts routineNeed) is a told problem streak or a pause after
- * failures, the server raises one keyed ask_choice card (#4205) in the
- * person's conversation with the routine's bot: key
- * `routine-problem:<routineId>`, the streak's summary and the failing
- * readiness line as its words, choices to run a check, pause the routine or
- * open it. It is the existing question card: it sits in the pinned zone and
- * in Today, rings once as a question when raised, and holds nothing. When
- * the run it is raised for already rang its own failure (routine-failed),
- * it is raised quiet: one failure is told once (#4316).
- *
- * - While the problem lasts, a later run only replaces its words in place
- *   (the count moves); nothing rings again.
- * - The first good run (no problem need any more) retires it.
- * - The person answered it (or it was put away): nothing is raised again
- *   for the same streak, a restart included (the newest card under the key,
- *   in storage, was raised at or after the streak began).
- * - A restart finds the pending card by its key and replaces it in place.
- * - Still open after a day: told again, the needs-you of the card itself
- *   (the reminder step of a parked question, INPUT_REMIND_REPEAT_MS),
- *   marked on the card so a restart never rings it again. #4250 (S3): then
- *   weekly while it stays open (the fix ladder of
- *   server/proactive/escalation-ladder.ts), each step once.
- *
- * RoutineNeedsWatch calls `sync` on every pass with every routine; the
- * server's sweep calls `remindDue`.
- *
- * #4250 (S1): the told state is the signal ledger's (key
- * `routine-problem:<routineId>` in the person's store): raised is told, the
- * reminder is its step 1, a good run retires it. The card in storage is read
- * only for a streak a previous version told. */
+/** Investigate a failure streak once. The bot authors its own question. */
+import { redactSecretsInText } from "../redact.ts";
 import type { ApprovalWords } from "../../shared/approval-describe.ts";
 import { ROUTINE_PROBLEM_KEY_PREFIX } from "../../shared/fix-card-keys.ts";
 import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
@@ -69,7 +39,7 @@ export interface RoutineProblemCardInput {
   title: string;
   question: string;
   options: string[];
-  details: string[];
+  details: (string | undefined)[];
   /** #4438: the raw words a plain sentence replaced (a tool's own error and
    * its code), kept on the card under Details (`card.technicalDetails`). */
   technical?: string;
@@ -111,31 +81,22 @@ export function routineProblemCardInput(
   facts: RoutineProblemFacts,
   words: ApprovalWords,
 ): RoutineProblemCardInput {
-  const name = routine.name.trim() || routine.id;
-  const count = Math.max(1, facts.count);
-  const lead = need.kind === "paused"
-    ? words.t("routine.problemCard.paused", { routine: name, count })
-    : count === 1
-      ? words.t("routine.problemCard.problemOnce", { routine: name })
-      : words.t("routine.problemCard.problem", { routine: name, count });
+  const name = routine.name.trim();
+  const lead = words.t("routine.investigation.unavailable", { routine: name });
   const summary = plainProblemText(facts.summary.trim(), words);
   const readiness = plainProblemText(facts.readiness?.trim() ?? "", words);
   const technical = [summary.raw, readiness.raw].filter(Boolean).join("\n\n");
-  const question = [lead, summary.text.trim(), readiness.text.trim()].filter(Boolean).join("\n\n");
-  const choices: Array<[string, string]> = [
-    [words.t("routine.problemCard.check"), words.t("routine.problemCard.checkDetail")],
-    ...(need.kind === "paused" ? [] : [[words.t("routine.problemCard.pause"), words.t("routine.problemCard.pauseDetail")] as [string, string]]),
-    [words.t("routine.problemCard.open"), words.t("routine.problemCard.openDetail")],
-  ];
+  const question = [summary.text.trim(), readiness.text.trim()].filter(Boolean).join("\n\n") || lead;
+  const choices = [words.t("routine.investigation.retry"), ...(need.kind === "paused" ? [words.t("routine.problemCard.open")] : [words.t("routine.problemCard.pause")])];
   return {
     tool: ASK_CHOICE_TOOL,
     key: routineProblemKey(routine.id),
     wait: false,
     decision: true,
-    title: words.t("routine.problemCard.title", { routine: name }).slice(0, 120),
+    title: lead.slice(0, 120),
     question,
-    options: choices.map(([label]) => label),
-    details: choices.map(([, detail]) => detail),
+    options: choices,
+    details: [],
     ...(technical ? { technical } : {}),
   };
 }
@@ -151,10 +112,11 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string; b
    * problem or a pause counts here). */
   need(routine: R): RoutineNeedsPerson | null;
   facts(routine: R, need: RoutineNeedsPerson): RoutineProblemFacts;
+  investigate(routine: R, need: RoutineNeedsPerson, ask: (card: Pick<RoutineProblemCardInput, "title" | "question" | "options" | "details">) => string | undefined, unavailable: (reason: string) => void, incomplete: () => void): void;
   words(routine: R): ApprovalWords;
   /** ask_choice as the routine's bot, in its conversation with the person:
    * raises, replaces in place (same key) or retires (`retire` true). */
-  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true; reason?: string }, options?: { quiet?: boolean }): void;
+  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true; reason?: string }, options?: { quiet?: boolean }): string | void;
   /** Whether the run the need names already rang its own failure (the
    * routine-failed notification of that run): the card it raises then
    * shows without a second ring for the same run. */
@@ -180,6 +142,7 @@ interface Shown<R> {
   /** The problem it was raised for (kind and since), "" for none. */
   episode: string;
   question: string;
+  retryAfterRun?: string;
 }
 
 export class RoutineProblemCards<R extends { id: string; name: string; botId?: string }> {
@@ -205,7 +168,7 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
     }
   }
 
-  sync(routine: R): void {
+  sync(routine: R, retry = false): void {
     const key = routineProblemKey(routine.id);
     const last = this.shown.get(routine.id);
     const need = lastingProblem(this.deps.need(routine));
@@ -215,28 +178,34 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
       if (last?.episode || !last) this.retire(routine, "routine.problemCard.alreadyFixed");
       return;
     }
-    const episode = `${need.kind}:${need.since}`;
-    const input = routineProblemCardInput(routine, need, this.deps.facts(routine, need), this.deps.words(routine));
-    if (last && last.episode === episode && last.question === input.question) return;
-    this.shown.set(routine.id, { routine, episode, question: input.question });
-    const open = this.deps.pending(routine, key);
-    if (!open) {
-      // the person answered this streak's card: it is told, never raised
-      // again; after a restart the ledger says so (a previous version's
-      // streak: the card in storage)
-      if (last?.episode === episode) return;
-      // the later of the two: a card in storage newer than the ledger (a
-      // rollback, then an upgrade) still counts
-      const told = [this.signal(routine)?.toldAt, this.deps.latest(routine, key)?.at].filter((at): at is number => at !== undefined);
-      if (told.length && Math.max(...told) >= need.since) return;
+    const episode = String(need.since);
+    if (!retry && last?.episode === episode && (!last.retryAfterRun || last.retryAfterRun === need.runId)) return;
+    const entry: Shown<R> = { routine, episode, question: "" };
+    this.shown.set(routine.id, entry);
+    const told = Math.max(this.signal(routine)?.toldAt ?? 0, this.deps.latest(routine, key)?.at ?? 0);
+    if (!retry && told >= need.since) return;
+    const current = () => this.shown.get(routine.id) === entry && this.deps.need(routine)?.since === need.since;
+    const publish = (card: Pick<RoutineProblemCardInput, "title" | "question" | "options" | "details" | "technical">) => {
+      if (entry.question || !current()) return;
+      const input: RoutineProblemCardInput = { ...card, key, tool: ASK_CHOICE_TOOL, wait: false, decision: true };
+      const quiet = this.deps.runFailureTold?.(routine, need) === true;
+      const messageId = this.deps.ask(routine, input, quiet ? { quiet } : undefined);
+      if (!messageId) return;
+      entry.question = input.question;
+      this.deps.signals?.told(this.person(routine), { key, kind: ROUTINE_PROBLEM_KIND, level: "card", bot: routine.botId ?? "", label: input.title });
+      return messageId;
+    };
+    const unavailable = (reason: string) => {
+      if (!current()) return;
+      const facts = this.deps.facts(routine, need);
+      const fallback = routineProblemCardInput(routine, need, { ...facts, summary: [reason, facts.summary].filter(Boolean).join("\n") }, this.deps.words(routine));
+      publish(fallback);
+    };
+    try {
+      this.deps.investigate(routine, need, publish, unavailable, () => { entry.retryAfterRun = this.deps.need(routine)?.runId; });
+    } catch (error) {
+      unavailable(redactSecretsInText(error instanceof Error ? error.message : String(error)).slice(0, 400));
     }
-    // #4316: one failure, one ring. A card raised for a run whose own
-    // failure already rang is shown quiet; a replace never rings anyway.
-    const quiet = !open && this.deps.runFailureTold?.(routine, need) === true;
-    this.deps.ask(routine, input, quiet ? { quiet } : undefined);
-    const note = { key, kind: ROUTINE_PROBLEM_KIND, level: "card" as const, bot: routine.botId ?? "", label: input.title };
-    if (open) this.deps.signals?.note(this.person(routine), note);
-    else this.deps.signals?.told(this.person(routine), note);
   }
 
   /** #4250 (S3): the cards still open at a step of the fix ladder (a day

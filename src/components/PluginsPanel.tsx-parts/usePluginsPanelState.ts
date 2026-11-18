@@ -438,6 +438,7 @@ export function usePluginsPanelState() {
     perspicaxOrg, organization, mayManageOrganization, featured, setFeatured, dataCenterFor, setDataCenterFor,
     macAppsVisible, macAppsSetup, skills, setSkills, installing, markInstalling, itemErrors, setItemError, justAdded, markJustAdded, panelError, setPanelError,
     mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, officialErrors, marketBusy, setMarketBusy,
+    marketError, setMarketError, marketNeedsToken, setMarketNeedsToken, panelNotice, setPanelNotice,
     workspaceMarkets, scopeBot, scopeBotId, setScopeChoice, scope, botView, personalView,
     scopedPluginView, scopedPluginTarget, scopedPluginName, setScopedPluginView, orgRevision, botCapabilities,
     botBusy, setBotBusy, loadFeatured, skillsRoute, loadSkills, loadMarketplaces, loadBotView,

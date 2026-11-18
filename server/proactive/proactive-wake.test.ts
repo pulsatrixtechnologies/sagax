@@ -36,7 +36,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger; pendingFile?: string; wake?: (batch: ProactiveWakeBatch) => boolean | void } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger; pendingFile?: string; wake?: (batch: ProactiveWakeBatch) => unknown } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];

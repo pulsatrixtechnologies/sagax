@@ -344,7 +344,7 @@ export interface ProactiveWakerDeps {
   owner?: (botId: string) => string | undefined;
   /** Start the background wake run (proactive on). `false`: no run was
    * started (no bot, routines not ready), so the wake's events settle now. */
-  wake(batch: ProactiveWakeBatch): boolean | void;
+  wake(batch: ProactiveWakeBatch): unknown;
   /** One line in the bot conversation's Events tab. */
   log(botId: string, line: string): void;
   /**
@@ -655,7 +655,7 @@ export class ProactiveWaker {
     this.running.set(held, pending.events.map((event) => ({ ...event })));
     this.pending.delete(held);
     this.changed(botId);
-    let started: boolean | void;
+    let started: unknown;
     try {
       this.deps.log(botId, wakeLine(batch));
       started = this.deps.wake(batch);

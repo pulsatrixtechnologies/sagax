@@ -67,8 +67,7 @@ describe("a plugin named for a product group", () => {
     const update = vi.fn();
     const remove = vi.fn();
     const openPlugin = vi.fn();
-    const rows = productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), plugins: (key) => key === "vendor:acme" ? {
-      skills: 2,
+    const rows = productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), skills: () => 2, plugins: (key) => key === "vendor:acme" ? {
       update: { running: false, onUpdate: update },
       actions: { update, updateWaiting: true, links: [{ id: "plugin-page", label: "AcmeDesk plugin page", icon: null, run: openPlugin }], remove, removeLabel: "Uninstall the AcmeDesk plugin" },
     } : undefined });
@@ -84,7 +83,14 @@ describe("a plugin named for a product group", () => {
     expect(openPlugin).toHaveBeenCalled();
   });
 
-  it("without a plugin the card reads as before", async () => {
+  it("a group with no plugin says its skills on the card as its page does (the console's skill)", async () => {
+    const view = await render(createElement("div", null, productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), skills: () => 1 })[0]!.node));
+    expect(view.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 1 skill · 2 on");
+    const page = await render(createElement(VendorPage, { vendor: groupByVendor(products)[0]!, ctx: ctx(), onBack: vi.fn(), skills: [{ name: "macros", description: "From the console" }] }));
+    expect(page.querySelector("[data-vendor-head]")?.textContent).toContain("2 connectors · 1 skill · 2 on");
+  });
+
+  it("without a plugin or a skill the card reads as before", async () => {
     const view = await render(createElement("div", null, productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn() })[0]!.node));
     expect(view.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 2 on");
   });
@@ -117,8 +123,8 @@ describe("a plugin named for a product group", () => {
   });
 
   it("keeps the plugin's state on the group's card: a plugin turned off says so on the line, a sign-in to finish is the card's warning", async () => {
-    const rows = productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), plugins: () => ({
-      skills: 2, off: true, state: { tone: "fix", text: "Needs sign-in" }, actions: {},
+    const rows = productRows(products, ctx(), { mode: "plugins", onOpenVendor: vi.fn(), skills: () => 2, plugins: () => ({
+      off: true, state: { tone: "fix", text: "Needs sign-in" }, actions: {},
     }) });
     const view = await render(createElement("div", null, rows[0]!.node));
     expect(view.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 2 skills · 2 on · plugin off");

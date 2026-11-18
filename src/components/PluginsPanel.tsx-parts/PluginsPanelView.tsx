@@ -371,7 +371,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     if (!plugin || !scopedPluginView) return true;
     return Boolean(botPluginState(scopedPluginView, plugin.id)?.installed?.enabled);
   };
-  /** what a product group's card carries of its plugins: the group's skills and "plugin off" on its line, their state in its icon, their Update, page, switch and Uninstall in its menu */
+  /** what a product group's card carries of its plugins: "plugin off" on its line, their state in its icon, their Update, page, switch and Uninstall in its menu */
   const vendorPlugins = (vendorKey: string): VendorPlugins | undefined => {
     const plugins = pluginsOfGroup(vendorKey);
     if (plugins.length === 0) return undefined;
@@ -381,7 +381,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     const one = menus.length === 1;
     const change = scopedPluginView?.canChange ? toggleForBot : undefined;
     return {
-      skills: groupSkills(vendorKey).length,
       off: menus.some((menu) => !menu.on),
       state: menus.reduce<RowState | undefined>((worst, menu) => worseState(worst, statusState(menu.entry.status, () => openItem(menu.entry.primary))), undefined) ?? null,
       update: updating?.update ?? null,
@@ -588,7 +587,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               personal={personalHere ? personal.rows : undefined}
               // #4453: the console's section: one row per vendor, its products under it
               products={(scope === "me" || scope === "bot") && perspicaxOrg !== null
-                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }), plugins: vendorPlugins }, sort === "update" ? (key) => Boolean(vendorPlugins(key)?.update || vendorPlugins(key)?.actions.updateWaiting) : undefined)
+                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }), plugins: vendorPlugins, skills: (key) => groupSkills(key).length }, sort === "update" ? (key) => Boolean(vendorPlugins(key)?.update || vendorPlugins(key)?.actions.updateWaiting) : undefined)
                 : undefined}
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}

@@ -59,6 +59,12 @@ export const MAX_REMEMBERED_PLACES = 100;
 const SCREEN_LIMIT = 100_000;
 const TITLE_MAX = 120;
 const PAGE_WINDOW_PREFIX = "page:";
+const CHAT_WINDOW_PREFIX = "chat:";
+/** A bot's own chat window (the sidebar row menu's "New window", #4639):
+ * first-open size and the smallest it may be made. Mirrored by
+ * CHAT_WINDOW_SIZE in src/lib/chat-windows.ts. */
+export const CHAT_WINDOW_SIZE = Object.freeze({ width: 480, height: 760 });
+export const CHAT_WINDOW_MIN = Object.freeze({ width: 360, height: 420 });
 
 const ID_RE = /^[a-zA-Z0-9:_-]{1,128}$/;
 
@@ -67,6 +73,17 @@ const isString = (value) => Object.prototype.toString.call(value) === "[object S
 /** Whether this desktop window id is a published page (`page:<pageId>`). */
 export function isPageWindowArtifactId(artifactId) {
   return isString(artifactId) && artifactId.startsWith(PAGE_WINDOW_PREFIX);
+}
+/** Whether this desktop window id is a bot's chat (`chat:<botId>`). */
+export function isChatWindowArtifactId(artifactId) {
+  return isString(artifactId) && artifactId.startsWith(CHAT_WINDOW_PREFIX);
+}
+
+/** BrowserWindow options of a bot's chat window: the main window's own chrome
+ * on macOS (inset traffic lights over the chat's header, which drags the
+ * window), the native title bar elsewhere. */
+export function chatWindowChromeOptions(platform) {
+  return platform === "darwin" ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 16 } } : {};
 }
 const clampSize = (value, fallback, min) =>
   Number.isFinite(value) ? Math.min(4000, Math.max(min, Math.round(value))) : fallback;
@@ -466,12 +483,14 @@ export function createArtifactWindows(deps) {
     if (windows.size >= MAX_ARTIFACT_WINDOWS) return "refused";
 
     const pageWindow = isPageWindowArtifactId(request.artifactId);
+    const chatWindow = isChatWindowArtifactId(request.artifactId);
     const place = readPlaces().get(request.artifactId);
     const personSized = pageWindow && place?.personSized === true;
     const autoFit = pageWindow && !personSized;
     const openRequest = autoFit
       ? { ...request, width: PAGE_WINDOW_FIT_DEFAULT_WIDTH, height: Math.max(ARTIFACT_WINDOW_MIN.height, Math.min(request.height, 480)) }
       : request;
+    const minimum = chatWindow ? CHAT_WINDOW_MIN : ARTIFACT_WINDOW_MIN;
     const placed = resolveArtifactWindowBounds({
       place,
       workAreas: screenAreas(),
@@ -481,8 +500,8 @@ export function createArtifactWindows(deps) {
     const onTop = typeof request.alwaysOnTop === "boolean" ? request.alwaysOnTop : place?.alwaysOnTop === true;
     const win = new BrowserWindow({
       ...placed.bounds,
-      minWidth: ARTIFACT_WINDOW_MIN.width,
-      minHeight: ARTIFACT_WINDOW_MIN.height,
+      minWidth: minimum.width,
+      minHeight: minimum.height,
       resizable: true,
       movable: true,
       minimizable: true,
@@ -496,6 +515,7 @@ export function createArtifactWindows(deps) {
       // no native title bar. The page draws its own header on hover (a drag
       // region, close, full screen); macOS keeps its buttons on hover too.
       ...(pageWindow ? pageWindowChromeOptions(process.platform) : {}),
+      ...(chatWindow ? chatWindowChromeOptions(process.platform) : {}),
       ...(deps.icon ? { icon: deps.icon() } : {}),
       backgroundColor: "#070707",
       autoHideMenuBar: true,

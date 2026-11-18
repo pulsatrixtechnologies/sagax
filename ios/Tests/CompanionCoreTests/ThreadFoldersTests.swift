@@ -91,6 +91,11 @@ final class ThreadFoldersTests: XCTestCase {
         XCTAssertEqual(ThreadLink.encodeURIComponent("it's(ok)!~*"), "it's(ok)!~*")
     }
 
+    func testBotLinkMatchesTheDesktopsBotRefUrl() {
+        XCTAssertEqual(ThreadLink.botUrl(botId: "bot-1"), "sagax://bot/bot-1")
+        XCTAssertEqual(ThreadLink.botUrl(botId: "a b/c"), "sagax://bot/a%20b%2Fc")
+    }
+
     // MARK: Order
 
     func testMoveFolderStepsThroughTheSavedOrder() {

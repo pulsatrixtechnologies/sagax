@@ -235,6 +235,10 @@ struct BotRowMenu: View {
                 Label(String(localized: "Share"), systemImage: "person.badge.plus")
             }
             .accessibilityIdentifier("bot-row-share")
+        case .copyLink:
+            Button { threadActions.copyLink(bot) } label: {
+                Label(String(localized: "Copy link"), systemImage: "link")
+            }
         case .copyConversationId:
             Button { threadActions.copyConversationId(bot) } label: {
                 Label(String(localized: "Copy conversation ID"), systemImage: "doc.on.doc")

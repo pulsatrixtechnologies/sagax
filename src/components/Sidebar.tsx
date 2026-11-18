@@ -13,8 +13,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  AppWindow,
   Archive,
+  Bell,
   BellDot,
+  Copy,
+  Link2,
   ListChecks,
   Check,
   ChevronRight,
@@ -48,6 +52,7 @@ import {
   visibleMessages,
   currentTaskBot,
   openBot,
+  botOpensTo,
   openBotThread,
   openNotificationTarget,
   startNewTopic,
@@ -83,6 +88,9 @@ import { lastSpokenLine } from "@/lib/receipts";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
+import { botRefUrl } from "@/lib/thread-refs";
+import { canOpenBotInOwnWindow, openBotInOwnWindow } from "@/lib/chat-windows";
+import { botShowsUnread } from "@/lib/bot-unread";
 import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
@@ -229,6 +237,16 @@ export function paletteShortcutLabel(isMac: boolean = isMacPlatform()): string {
   const item = SHORTCUT_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === "command-palette");
   const keys = item ? shortcutKeysForPlatform(item, isMac) : isMac ? ["⌘", "K"] : ["Ctrl", "K"];
   return keys.join(isMac ? "" : "+");
+}
+
+/** Mark As Read from the row menu: every thread of the bot the person has
+ * not read, by the same read route opening a bot uses; the server's frame
+ * clears the dot. */
+function markBotRead(bot: Bot) {
+  const threads = (bot.tasks ?? []).filter((task) => task.unread && task.archivedAt === undefined).map((task) => task.threadId);
+  for (const threadId of threads.length ? threads : [bot.threadId]) {
+    api(`/api/bots/${bot.id}/read`, { method: "POST", body: JSON.stringify({ threadId }) }).catch(() => {});
+  }
 }
 
 /** The same point the bot row's context menu and "more" button already use. */
@@ -1257,10 +1275,34 @@ export function BotContextMenu({
     startNewTopic(dispatch, bot);
   }, { id: "new-topic" });
 
-  // One flat menu, no More (2026-10-15): New thread | Pin, Move to › |
-  // Rename, Edit bot, Share, Make primary bot, Put on the desktop | Hide from
-  // sidebar, Archive, Delete. Mark as Unread, Mark all as read and Model…
-  // left this menu (2026-10-15, for 0.5.7).
+  // One flat menu, no More. The reference's three groups, in its order
+  // (owner, 2026-11-17, #4639): [Pin, Mark as Unread, New window] |
+  // [Copy link, Copy conversation ID] | [Hide from sidebar, Delete]. What the
+  // sidebar menu already had stays in its own groups around them: New thread
+  // first, Move to › under Pin, Rename, Edit bot, Share, Make primary bot, Put
+  // on the desktop after the first group, the bulk thread actions and Archive
+  // beside Hide and Delete. Mark all as read and Model… stay out (2026-10-15).
+  const unread = botShowsUnread(bot);
+  const markItem = item(
+    unread ? <Bell size={16} /> : <BellDot size={16} />,
+    unread ? t("sidebar.bot.markRead") : t("sidebar.bot.markUnread"),
+    () => {
+      if (unread) markBotRead(bot);
+      else dispatch({ type: "markUnread", botId: bot.id });
+    },
+    { id: unread ? "mark-read" : "mark-unread" },
+  );
+  // A second window of the bot's own chat: where this surface can open one
+  // (the desktop app, a browser); hidden where it cannot.
+  const windowItem = canOpenBotInOwnWindow()
+    ? item(<AppWindow size={16} />, t("sidebar.bot.newWindow"), () => { void openBotInOwnWindow(bot); }, { id: "new-window" })
+    : null;
+  // The app's own deep link to this bot's conversation (sagax://bot/<id>,
+  // opened by openChatLink), and the id of the conversation it opens on.
+  const copyItems = [
+    item(<Link2 size={16} />, t("sidebar.bot.copyLink"), () => { void copyText(botRefUrl(bot.id)); }, { id: "copy-link" }),
+    item(<Copy size={16} />, t("sidebar.copyConversationId"), () => { void copyText(botOpensTo(bot, showThreads)); }, { id: "copy-id" }),
+  ];
   const entries = remoteClient ? [
     ...(newThreadItem ? [newThreadItem] : []),
     floatItem,
@@ -1270,6 +1312,8 @@ export function BotContextMenu({
     }, { id: "move" })] : []),
     editItem,
     ...(shareItem ? [shareItem] : []),
+    markItem,
+    ...copyItems,
   ] : [
     ...(newThreadItem ? [newThreadItem, divider("d-new")] : []),
     item(
@@ -1279,6 +1323,8 @@ export function BotContextMenu({
       { id: "pin" },
     ),
     ...(moveItem ? [moveItem] : []),
+    markItem,
+    ...(windowItem ? [windowItem] : []),
     ...(onSelect && variant === "sidebar" ? [item(<ListChecks size={16} />, t("sidebar.select.start"), () => onSelect(bot.id), { id: "select" })] : []),
     divider("d-name"),
     ...(canRename ? [item(<Pencil size={16} />, t("persona.menu.rename"), () => onRename(bot.id), { id: "rename" })] : []),
@@ -1286,6 +1332,8 @@ export function BotContextMenu({
     ...(shareItem ? [shareItem] : []),
     ...(primaryItem ? [primaryItem] : []),
     floatItem,
+    divider("d-copy"),
+    ...copyItems,
     ...(threadsOwner ? [
       divider("d-threads"),
       item(<Archive size={16} />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },

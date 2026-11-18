@@ -1,8 +1,10 @@
 // The sidebar's bot menu, one flat menu (owner, 2026-10-15): New thread |
-// Pin, Move to › | Rename, Edit bot, Make primary bot, Put on the desktop |
-// Hide from sidebar, Archive, Delete. No More, no Copy conversation ID, and
-// (for 0.5.7) no New thread in a working folder, Mark as Unread, Mark all as
-// read or Model….
+// Pin, Move to ›, Mark as Unread, New window | Rename, Edit bot, Make primary
+// bot, Put on the desktop | Copy link, Copy conversation ID | Hide from
+// sidebar, Archive, Delete. No More, and no New thread in a working folder,
+// Mark all as read or Model…. Mark as Unread, New window, Copy link and Copy
+// conversation ID came back with the reference's three groups (owner,
+// 2026-11-17, #4639).
 import { readFileSync } from "node:fs";
 import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -17,6 +19,11 @@ const fixture = vi.hoisted(() => ({
   toggled: [] as string[],
   models: [] as string[],
   dispatched: [] as unknown[],
+  copied: [] as string[],
+}));
+vi.mock("@/lib/copy-text", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/copy-text")>()),
+  copyText: async (text: string) => { fixture.copied.push(text); return "copied"; },
 }));
 vi.mock("react-dom", async (importOriginal) => {
   const original = await importOriginal<typeof import("react-dom")>();
@@ -84,9 +91,10 @@ beforeEach(() => {
   fixture.toggled = [];
   fixture.models = [];
   fixture.dispatched = [];
+  fixture.copied = [];
   fixture.portal = null;
   vi.stubGlobal("document", { body: {}, activeElement: null });
-  vi.stubGlobal("window", { innerWidth: 1000, innerHeight: 800, addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal("window", { innerWidth: 1000, innerHeight: 800, addEventListener() {}, removeEventListener() {}, open: () => null });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -94,25 +102,59 @@ describe("the sidebar's bot menu", () => {
   it("lists every action in one menu, in Owner's order", () => {
     const { html } = render();
     // the maintainer, 2026-11-04: Archive all threads and Delete all threads, their own group
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "put-on-desktop", "copy-link", "copy-id", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     for (const label of [">New thread<", ">Pin<", ">Move to<", ">Rename the bot<", ">Edit bot<", ">Hide from sidebar<", ">Archive<"]) expect(html).toContain(label);
     expect(html).not.toContain("Rename Bot");
   });
 
-  it("has no More page and no Copy conversation ID", () => {
+  it("has no More page", () => {
     const { html } = render();
     expect(items(html)).not.toContain("more");
     expect(items(html)).not.toContain("back");
-    expect(items(html)).not.toContain("copy-id");
     expect(html).not.toContain(">More<");
-    expect(html).not.toContain("Copy conversation ID");
     expect(html).not.toContain("data-bot-menu-page");
   });
 
-  it("sets the groups apart: four separators, Delete last", () => {
+  it("keeps the reference's three groups in its order: Pin, Mark as Unread, New window | Copy link, Copy conversation ID | Hide, Delete", () => {
+    const { html } = render();
+    for (const label of [">Pin<", ">Mark as Unread<", ">New window<", ">Copy link<", ">Copy conversation ID<", ">Hide from sidebar<", ">Delete<"]) expect(html).toContain(label);
+    const order = items(html);
+    const pos = (id: string) => order.indexOf(id);
+    expect(pos("pin")).toBeLessThan(pos("mark-unread"));
+    expect(pos("mark-unread")).toBeLessThan(pos("new-window"));
+    expect(pos("copy-link")).toBe(pos("copy-id") - 1);
+    expect(pos("hide")).toBeLessThan(pos("delete"));
+    // each of the three groups is set apart from the next by a divider
+    expect(html).toMatch(/data-menu-item="new-window"[\s\S]*?class="menu-divider[\s\S]*?data-menu-item="rename"/);
+    expect(html).toMatch(/data-menu-item="copy-id"[\s\S]*?class="menu-divider[\s\S]*?data-menu-item="archive-all-threads"/);
+  });
+
+  it("Mark as Unread flags the bot, Copy link copies its sagax://bot link, Copy conversation ID its conversation", () => {
+    render();
+    const found = buttons();
+    found.get("mark-unread")!.props.onClick();
+    expect(fixture.dispatched).toContainEqual({ type: "markUnread", botId: bot.id });
+    found.get("copy-link")!.props.onClick();
+    found.get("copy-id")!.props.onClick();
+    expect(fixture.copied).toEqual(["sagax://bot/dumpling", "thread"]);
+  });
+
+  it("offers Mark as Read to a bot with unread messages", () => {
+    const { html } = render({ ...bot, unread: true });
+    expect(items(html)).toContain("mark-read");
+    expect(items(html)).not.toContain("mark-unread");
+    expect(html).toContain(">Mark as Read<");
+  });
+
+  it("hides New window where the surface cannot open a second window", () => {
+    vi.stubGlobal("window", { innerWidth: 1000, innerHeight: 800, addEventListener() {}, removeEventListener() {} });
+    expect(items(render().html)).not.toContain("new-window");
+  });
+
+  it("sets the groups apart: five separators, Delete last", () => {
     const { html } = render();
     // #4183: the menu family's divider (MenuDivider, menu-look.tsx)
-    expect(html.match(/class="menu-divider /g)).toHaveLength(4);
+    expect(html.match(/class="menu-divider /g)).toHaveLength(5);
     expect(items(html).at(-1)).toBe("delete");
   });
 
@@ -145,10 +187,10 @@ describe("the sidebar's bot menu", () => {
     expect(props.onRename).toHaveBeenCalledWith(bot.id);
   });
 
-  it("no longer offers Mark as Unread, Mark all as read, Model… or New thread in a working folder", () => {
+  it("still does not offer Mark all as read, Model… or New thread in a working folder", () => {
     const html = render(bot, { ...handlers(), onNewInFolder: vi.fn() } as ReturnType<typeof handlers>).html;
-    for (const id of ["mark-unread", "mark-all-read", "model", "new-thread-folder"]) expect(items(html)).not.toContain(id);
-    for (const label of [">Mark as Unread<", ">Mark all conversations as read<", ">Model…<", ">New thread in a working folder…<"]) expect(html).not.toContain(label);
+    for (const id of ["mark-all-read", "model", "new-thread-folder"]) expect(items(html)).not.toContain(id);
+    for (const label of [">Mark all conversations as read<", ">Model…<", ">New thread in a working folder…<"]) expect(html).not.toContain(label);
     expect(fixture.models).toEqual([]);
     expect(items(html)).toEqual(expect.arrayContaining(["rename", "edit"]));
   });
@@ -158,9 +200,9 @@ describe("the sidebar's bot menu", () => {
     setLocale("fr");
     const main = render().html;
     for (const label of [">Nouveau fil<", ">Épingler<", ">Déplacer vers<", ">Renommer le bot<", ">Modifier le bot<", ">Mettre sur le bureau<", ">Masquer de la barre latérale<", ">Archiver<", ">Supprimer<"]) expect(main).toContain(label);
-    for (const label of [">Marquer comme non lu<", ">Tout marquer comme lu<", ">Modèle…<"]) expect(main).not.toContain(label);
+    for (const label of [">Marquer comme non lu<", ">Nouvelle fenêtre<", ">Copier le lien<", ">Copier l&#x27;ID de la conversation<"]) expect(main).toContain(label);
+    for (const label of [">Tout marquer comme lu<", ">Modèle…<"]) expect(main).not.toContain(label);
     expect(main).not.toContain(">Plus<");
-    expect(main).not.toContain("Copier l'ID");
     expect(main).not.toContain("robot");
   });
 });
@@ -171,7 +213,7 @@ describe("Share in the sidebar's bot menu", () => {
   it("sits after Edit bot and opens the bot's Sharing page, for any member", () => {
     fixture.state = organization;
     const { html } = render();
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "share", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "share", "put-on-desktop", "copy-link", "copy-id", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     expect(html).toContain(">Share<");
     buttons().get("share")!.props.onClick();
     expect(fixture.dispatched).toEqual([{ type: "toggleSettings", open: true, botId: bot.id, section: "sharing" }]);

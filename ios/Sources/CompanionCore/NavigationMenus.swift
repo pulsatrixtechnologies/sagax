@@ -24,7 +24,7 @@ import Foundation
 public enum BotMenuItem: String, Hashable, Sendable, CaseIterable {
     case newThread, newFolder
     case pin, unpin, moveTo, markUnread
-    case rename, share, copyConversationId
+    case rename, share, copyLink, copyConversationId
     case hide, archive, delete
     case makePrimary, replacePrimary
 }
@@ -192,8 +192,12 @@ public enum NavigationMenus {
         // organization server. Every member shares their own bots; the
         // server keeps its rules about other people's.
         if gate.allows(.botSharing) { second.append(.share) }
-        second.append(.copyConversationId)
-        groups.append(second)
+        if !second.isEmpty { groups.append(second) }
+
+        // The reference's copy group (#4639): the app's own link to the bot
+        // (sagax://bot/<id>), then the id of the conversation it opens on.
+        // "New window" is the desktop's alone: a phone has one window.
+        groups.append([.copyLink, .copyConversationId])
 
         var third: [BotMenuItem] = [.hide]
         var block: BotArchiveBlock?

@@ -14,12 +14,15 @@
  * #3624: ?scene=idle|background|open is the idle cost measure's window
  * (app-shell-scene.ts, scripts/capture/idle-cost.mjs).
  * #4157: &engines=2|5 (with ?parity=1) fills the usage side card.
- * #4145: ?shapes=N is a sidebar of N bots wearing shapes (one in five in a premium skin). */
+ * #4145: ?shapes=N is a sidebar of N bots wearing shapes (one in five in a premium skin).
+ * #4639: ?window=chat is a bot's own window (BotChatWindow, "New window" in the
+ * bot row menu): the chat view alone, no sidebar; ?select=<id> picks the bot. */
 import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AppSidebar } from "../components/AppSidebar";
 import { ChatView } from "../components/ChatView";
+import { BotChatWindow } from "../components/BotChatWindow";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -269,6 +272,10 @@ function Gallery() {
  * store through selectors, as App does, so a store change renders only the
  * components that read what changed (#3624). */
 const Shell = memo(function Shell() {
+  return params.get("window") === "chat" ? <BotChatWindow botId={selectParam ?? "atlas"} /> : <ShellRow />;
+});
+
+function ShellRow() {
   const [drawerOpen, setDrawerOpen] = useState(params.get("drawer") === "1");
   const selected = useStoreSelector((current) => current.bots.find((entry) => entry.id === current.selectedId) ?? current.bots[1]!);
   const settingsOpen = useStoreSelector((current) => current.settingsOpen);
@@ -283,7 +290,7 @@ const Shell = memo(function Shell() {
       </div>
     </div>
   );
-});
+}
 
 /** The live text a turn streams, kept as StoreProvider's StreamRoot keeps it:
  * its own state, so a delta re-renders only the components that read it. */

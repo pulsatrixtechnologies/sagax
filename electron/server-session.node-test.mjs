@@ -44,7 +44,7 @@ test("main.mjs sets the guard before the first window, and sends the owner heade
   assert.match(main, /installSessionBlock\(created, \(line\) => slog\(`network: \$\{line\}`\), serverRequestRefusal\(created, \(\) => serverSessionGuard\)\)/);
   assert.ok(main.indexOf("createWindow();", install) > install, "set before the first window");
   // the owner header rule (electron/desktop-owner-request.mjs) covers ws: too
-  assert.match(main, /isAppServerRequest\(details, SERVER_PORT\)/);
+  assert.match(main, /isAppServerRequest\(details, SERVER_PORT, redirects\)/);
   const rule = readFileSync(new URL("./desktop-owner-request.mjs", import.meta.url), "utf8");
   assert.match(rule, /target\.protocol === "http:" \|\| target\.protocol === "ws:"/);
   assert.match(main, /reportOwnListeners\(proc\);/);

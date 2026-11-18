@@ -46,8 +46,22 @@ export interface MediaProxyBody {
 }
 
 let proxyKey: Buffer | null = null;
+/** The port this server listens on (127.0.0.1): on the desktop, the one a
+ * request of the app window reaches with the app's owner capability. */
+let selfPort: number | null = null;
 
-export function initMediaProxy(dataDir: string): void {
+/** Whether `url` names this server itself: a loopback host in any spelling
+ * (localhost, 127/8, ::1, ::ffff:127.x, 0.0.0.0) and this server's port. */
+export function isMediaProxySelf(url: URL, port: number | null = selfPort): boolean {
+  if (port === null) return false;
+  const host = url.hostname.toLowerCase();
+  if (!isLoopbackMediaHost(host) && host !== "0.0.0.0" && host !== "[::]") return false;
+  const urlPort = url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80;
+  return urlPort === port;
+}
+
+export function initMediaProxy(dataDir: string, options: { selfPort?: number } = {}): void {
+  selfPort = Number.isInteger(options.selfPort) ? options.selfPort! : null;
   const path = join(dataDir, "media-proxy.key");
   if (!existsSync(path)) {
     mkdirSync(dataDir, { recursive: true });
@@ -215,10 +229,11 @@ export function rewriteHlsPlaylist(
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return raw;
     if (resolved.username || resolved.password) return raw;
     // A private host the policy does not allow stays as written for the
-    // browser to try (#2505), except this machine itself: a loopback URI goes
-    // through the proxy too, whose guard refuses it, so the player never
-    // loads the app's own server from a playlist.
-    if (!mediaUrlMayBeProxied(resolved, policy) && !isLoopbackMediaHost(resolved.hostname)) return raw;
+    // browser to try (#2505), a media server on the person's own machine
+    // included, except this server itself (its address and port, in any
+    // spelling): that URI goes through the proxy, whose guard refuses it, so
+    // the player never loads the app's own server from a playlist.
+    if (!mediaUrlMayBeProxied(resolved, policy) && !isMediaProxySelf(resolved)) return raw;
     return mint(resolved.href);
   };
   return text

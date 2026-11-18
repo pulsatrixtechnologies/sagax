@@ -9,7 +9,9 @@
 // - a frame: the page that embeds it is the app (a page preview, a widget
 //   document the app serves); a frame of another origin is not;
 // - anything else (an API call, an event stream, a WebSocket, the app's own
-//   picture or file preview): its Referer, else its Origin, is the app.
+//   picture or file preview): its Origin, when it has one, else its Referer,
+//   is the app;
+// - never a request whose chain began elsewhere (a redirect toward the port).
 // A picture, a clip or a segment that message content names loads with no
 // Referer (the chat draws an absolute address with referrerpolicy
 // no-referrer, src/lib/content-referrer.ts) and from no frame of the app, so
@@ -43,9 +45,35 @@ export function targetsAppServer(url, serverPort) {
   }
 }
 
-/** Whether this webRequest `details` is the app's own request to its server. */
-export function isAppServerRequest(details, serverPort) {
+/**
+ * The requests whose chain began somewhere else than the app's server: a
+ * hop that answered with a redirect from another address marks the request
+ * id (Chromium keeps one id through its redirects), and a request so marked
+ * never carries the capability, whatever Referer it arrives with (a media
+ * server answering 302 toward the app's port). Bounded: the oldest ids go.
+ */
+export function createRedirectLedger(limit = 4096) {
+  const marked = new Set();
+  return {
+    /** webRequest.onBeforeRedirect: `details.url` is the hop that redirected. */
+    noteRedirect(details, serverPort) {
+      if (!details || details.id === undefined || targetsAppServer(details.url, serverPort)) return;
+      const id = String(details.id);
+      marked.delete(id);
+      marked.add(id);
+      if (marked.size > limit) marked.delete(marked.values().next().value);
+    },
+    startedElsewhere(details) {
+      return Boolean(details) && details.id !== undefined && marked.has(String(details.id));
+    },
+  };
+}
+
+/** Whether this webRequest `details` is the app's own request to its server.
+ * `ledger` (createRedirectLedger) refuses a request redirected from elsewhere. */
+export function isAppServerRequest(details, serverPort, ledger) {
   if (!details || !Number.isInteger(serverPort) || !targetsAppServer(details.url, serverPort)) return false;
+  if (ledger?.startedElsewhere(details)) return false;
   const app = `http://127.0.0.1:${serverPort}`;
   if (details.resourceType === "mainFrame") return true;
   if (details.resourceType === "subFrame") {
@@ -57,6 +85,11 @@ export function isAppServerRequest(details, serverPort) {
     }
     return originOf(embedder) === app;
   }
-  const requester = originOf(details.referrer) ?? originOf(header(details.requestHeaders, "referer")) ?? originOf(header(details.requestHeaders, "origin"));
+  // An Origin, when the request has one, is the answer: `Origin: null` (a
+  // sandboxed frame, a request redirected across origins) is never made up
+  // for by a Referer.
+  const origin = header(details.requestHeaders, "origin");
+  if (origin !== undefined) return origin === app;
+  const requester = originOf(details.referrer) ?? originOf(header(details.requestHeaders, "referer"));
   return requester === app;
 }

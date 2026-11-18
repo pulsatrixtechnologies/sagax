@@ -8715,7 +8715,7 @@ const WEBHOOK_PUBLIC_URL = resolveWebhookPublicUrl();
 const STATIC_DIR = process.env.SAGAX_STATIC_DIR || null;
 
 ensureDirs();
-initMediaProxy(DATA_DIR);
+initMediaProxy(DATA_DIR, { selfPort: PORT });
 // Engine process groups an earlier run left running (a crash, a kill): their
 // sub-agents, MCP servers and commands stop now (server/engines/engine-groups.ts).
 void reapOrphanEngineGroups(join(DATA_DIR, "engine-groups.json"), { log: (line) => console.log(line) })

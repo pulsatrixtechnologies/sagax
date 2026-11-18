@@ -68,7 +68,7 @@ test("main.mjs answers the embed document with this rule, in every build", () =>
   assert.match(main, /if \(isYoutubeEmbedUrl\(details\.url\)\) \{\s*callback\(\{ requestHeaders: withYoutubeEmbedReferer\(details,/);
   assert.match(main, /installRequestHeaderRules\(\{ mutationHeader: app\.isPackaged \}\);/);
   // The mutation capability stays out of unpackaged runs.
-  assert.match(main, /ownsTarget = mutationHeader && serverReady && isAppServerRequest\(details, SERVER_PORT\)/);
+  assert.match(main, /ownsTarget = mutationHeader && serverReady && isAppServerRequest\(details, SERVER_PORT, redirects\)/);
   // One listener per session: no second onBeforeSendHeaders on the default session.
   assert.equal(main.match(/defaultSession\.webRequest\.onBeforeSendHeaders/g)?.length, 1);
 });

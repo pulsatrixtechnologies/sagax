@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { isAppServerRequest, targetsAppServer } from "./desktop-owner-request.mjs";
+import { createRedirectLedger, isAppServerRequest, targetsAppServer } from "./desktop-owner-request.mjs";
 
 const PORT = 8799;
 const APP = `http://127.0.0.1:${PORT}`;
@@ -41,9 +41,45 @@ test("a load that message content names never carries it, even toward the server
   assert.equal(isAppServerRequest(req({ url: "http://127.0.0.1:9999/api/bots" }), PORT), false);
 });
 
+// #4764 review: an external .mp4 (or playlist, or the expiry probe) that
+// answers 302 toward the app's port arrives with the app's Referer.
+test("a request redirected toward the server from elsewhere never carries it: media, xhr, fetch", () => {
+  const external = "https://media.example.test/clip.mp4";
+  for (const [id, resourceType, requestHeaders] of [
+    [101, "media", {}],
+    [102, "xhr", { Origin: "null" }],
+    [103, "xhr", {}],
+  ]) {
+    const ledger = createRedirectLedger();
+    ledger.noteRedirect({ id, url: external, redirectURL: `${APP}/api/bots` }, PORT);
+    const redirected = req({ id, resourceType, url: `${APP}/api/bots`, referrer: `${APP}/`, requestHeaders });
+    assert.equal(isAppServerRequest(redirected, PORT, ledger), false, `${resourceType} ${JSON.stringify(requestHeaders)}`);
+    // another request of the app, never redirected, still carries it
+    assert.equal(isAppServerRequest(req({ id: id + 1000 }), PORT, ledger), true);
+  }
+  // a redirect from the app's own server (its own 302) keeps it
+  const own = createRedirectLedger();
+  own.noteRedirect({ id: 7, url: `${APP}/api/old`, redirectURL: `${APP}/api/new` }, PORT);
+  assert.equal(isAppServerRequest(req({ id: 7, url: `${APP}/api/new` }), PORT, own), true);
+});
+
+test("Origin: null is never made up for by the app's Referer", () => {
+  assert.equal(isAppServerRequest(req({ referrer: `${APP}/`, requestHeaders: { Origin: "null" } }), PORT), false);
+  assert.equal(isAppServerRequest(req({ referrer: `${APP}/`, requestHeaders: { origin: "https://evil.example" } }), PORT), false);
+  assert.equal(isAppServerRequest(req({ referrer: "", requestHeaders: { Origin: APP } }), PORT), true);
+});
+
+test("the ledger forgets the oldest ids past its limit", () => {
+  const ledger = createRedirectLedger(2);
+  for (const id of [1, 2, 3]) ledger.noteRedirect({ id, url: "https://x.example/a" }, PORT);
+  assert.equal(ledger.startedElsewhere({ id: 1 }), false);
+  assert.equal(ledger.startedElsewhere({ id: 3 }), true);
+});
+
 test("the header rule of main.mjs goes through this check", () => {
   const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
-  const rule = main.slice(main.indexOf("function installRequestHeaderRules"), main.indexOf("function installRequestHeaderRules") + 1600);
-  assert.match(rule, /isAppServerRequest\(details, SERVER_PORT\)/);
+  const rule = main.slice(main.indexOf("function installRequestHeaderRules"), main.indexOf("function installRequestHeaderRules") + 2000);
+  assert.match(rule, /webRequest\.onBeforeRedirect\(\(details\) => redirects\.noteRedirect\(details, SERVER_PORT\)\)/);
+  assert.match(rule, /isAppServerRequest\(details, SERVER_PORT, redirects\)/);
   assert.doesNotMatch(rule, /target\.hostname === "127\.0\.0\.1"/);
 });

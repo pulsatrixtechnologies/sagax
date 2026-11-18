@@ -67,12 +67,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     macAppsVisible, macAppsSetup, skills, panelError, setPanelError, panelNotice,
     scopeBot, scope, scopedPluginView, orgRevision, botCapabilities, botView,
     skillsLibraryOn, close, shownMarketplaces, grokConfigured, items, scopedItems,
-    refreshAll, refreshing, chooseTab, featured, kind, setKind, viewChosen, skillsRoute, loadSkills, installing,
+    refreshAll, refreshing, chooseTab, featured, kind, setKind, viewChosen, skillsRoute, loadSkills, installing, justAdded,
   } = s;
   const {
     openItem, installFeatured, marketRoute, addMarketplace, setMarketplaceVisibility, refreshMarketplace,
     removeMarketplace, githubHere, openGithub, marketCredentials, marketSummaries,
-    renderAction, renderBelow, botBusy, removeSuperseded, toggleForBot, installPlugin, installForBot,
+    renderAction, renderBelow, botBusy, removeSuperseded, toggleForBot, installPlugin, installForBot, queued,
   } = a;
   const marketBusy = s.marketBusy;
   const officialErrors = s.officialErrors;
@@ -124,21 +124,21 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     const label = t("connectApps.install");
     if (!handled && !item.installed && item.kind === "plugin") {
       const at = item.id.lastIndexOf("@");
-      const allBots = scope === "workspace" ? () => void installPlugin(item) : () => installForBot(item.id);
+      const allBots = scope === "workspace" ? () => void installPlugin(item) : () => installForBot(item.id, "card");
       if (scope !== "workspace" && !scopedPluginView?.canChange) return null;
-      const busy = scope === "workspace" ? installing === item.id : botBusy === `install:${item.id}`;
-      if (scope === "bot") return <button type="button" data-bot-plugin-add={item.id} disabled={botBusy !== null} onClick={allBots} className={pluginActionClass()}>{busy ? <Loader2 size={13} className="mx-auto animate-spin" /> : label}</button>;
+      const busy = installing.has(item.id);
+      if (scope === "bot") return <button type="button" data-bot-plugin-add={item.id} disabled={busy} onClick={allBots} className={pluginActionClass()}>{busy ? <Loader2 size={13} className="mx-auto animate-spin" /> : label}</button>;
       return (
-        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={installing !== null || botBusy !== null} onAll={allBots}
+        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={busy} onAll={allBots}
           bots={scope === "me" && at > 0 ? menuBots : undefined}
-          onBots={(botIds) => { void Promise.all(botIds.map((botId) => installBotPlugin(botId, item.id.slice(at + 1), item.id.slice(0, at)))).then(() => refreshAll(), (cause) => setPanelError(readableError(cause))); }} />
+          onBots={(botIds) => { void queued([item.id], async () => { await Promise.all(botIds.map((botId) => installBotPlugin(botId, item.id.slice(at + 1), item.id.slice(0, at)))); void refreshAll(); }); }} />
       );
     }
     if (!handled && !item.installed && item.kind === "featured") {
       const oneBot = !listing && scope !== "bot" && menuBots.length > 0;
-      const busy = installing === item.id || (listing !== null && personal.connecting === item.id);
+      const busy = installing.has(item.id) || (listing !== null && personal.connecting === item.id);
       return (
-        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={installing !== null || personal.connecting !== null}
+        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={busy}
           onAll={(anchor) => {
             if (listing) { setPanelError(null); void personal.connect(listing).catch((cause: unknown) => setPanelError(readableError(cause))); return; }
             void installFeatured(item, undefined, anchor);
@@ -512,6 +512,11 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       counts.connectors += accountSections.reduce((sum, section) => sum + section.rows.length, 0) + (personalHere ? personal.rows.length + products.products.length : 0);
       return counts;
     })();
+  // what Discover lists, and the cards just added, which stay where they are with their Added state for a moment
+  const discoverRows = (() => {
+    const open = new Set(discoverItems(scopedItems, state.pluginsFocusApps ?? undefined).map((item) => item.key));
+    return scopedItems.flatMap((item): PluginItem[] => open.has(item.key) ? [item] : item.installed && justAdded.has(item.id) ? [{ ...item, justAdded: true }] : []);
+  })();
   const yoursLoaded = scope === "bot" ? botCapabilities.data !== null : mcp.servers !== null && skills !== null && (scope === "workspace" || scopedPluginView !== null);
   // #4453: the window opens on Yours when the person has something of the
   // kind here, else on Discover; a view the person chose stays
@@ -666,7 +671,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               vendorSlides={vendorSlides}
               bundleCards={bundleCards}
               kind={kind}
-              items={discoverItems(scopedItems, state.pluginsFocusApps ?? undefined)}
+              items={discoverRows}
               loading={mcp.servers === null || (scope !== "workspace" && scopedPluginView === null)}
               catalogPending={featured === null}
               filter={filter}

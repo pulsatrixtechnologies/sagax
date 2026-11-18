@@ -41,7 +41,8 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var probing: Set<String> = []
     @Published private(set) var claudeConnectors = 0
     @Published private(set) var tailscale: BotTailscaleView?
-    @Published var busy: String?
+    /// the rows being worked on: several adds in a row each show their own spinner
+    @Published var busy: Set<String> = []
     @Published var message: String?
     @Published var query = ""
     @Published var filter: ConnectAppFilter = .all
@@ -122,8 +123,8 @@ final class ConnectAppsModel: ObservableObject {
 
     private func run(_ key: String, _ session: Session, _ work: (CompanionClient) async throws -> Void) async {
         guard let client = session.settingsClient else { return }
-        busy = key
-        defer { busy = nil }
+        busy.insert(key)
+        defer { busy.remove(key) }
         do {
             try await work(client)
         } catch {
@@ -904,7 +905,7 @@ struct ConnectAppsMain: View {
         case let .app(key):
             if let item = hit.app {
                 Button { open(item) } label: {
-                    ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
+                    ConnectAppRow(item: item, busy: model.busy.contains(item.key)) { act(item) }
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(key == tailscaleConnectAppKey ? "connect-apps-tailscale-row" : "connect-apps-app-\(key)")
@@ -955,7 +956,7 @@ struct ConnectAppsMain: View {
             Section {
                 ForEach(section.items) { item in
                     Button { open(item) } label: {
-                        ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
+                        ConnectAppRow(item: item, busy: model.busy.contains(item.key)) { act(item) }
                     }
                     .buttonStyle(.plain)
                 }
@@ -1123,7 +1124,7 @@ struct ConnectAppsMain: View {
                     phoneSectionTitle(section)
                     ForEach(section.items) { item in
                         Button { open(item) } label: {
-                            ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
+                            ConnectAppRow(item: item, busy: model.busy.contains(item.key)) { act(item) }
                         }
                         .buttonStyle(.plain)
                     }
@@ -1542,7 +1543,7 @@ struct ConnectAppsManage: View {
                             .foregroundStyle(desktop ? theme.inkSecondary : Theme.textSecondary)
                     }
                     Spacer()
-                    if model.busy == "market:\(market.name)" { ProgressView().controlSize(.small) }
+                    if model.busy.contains("market:\(market.name)") { ProgressView().controlSize(.small) }
                     // SourcesView.tsx: the row's own pills where the phone swipes
                     if desktop, session.canAdminister {
                         Button { Task { await model.refreshMarketplace(market.name, session: session) } } label: {
@@ -1583,7 +1584,7 @@ struct ConnectAppsManage: View {
                     marketRef = ""
                     Task { await model.addMarketplace(source, ref: ref, session: session) }
                 }
-                .disabled(marketSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy == "market:new")
+                .disabled(marketSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy.contains("market:new"))
             }
         } header: {
             Text(String(localized: "Marketplaces"))
@@ -1759,7 +1760,7 @@ struct ConnectAppDetail: View {
     @ViewBuilder
     private func statePill(_ item: ConnectAppItem) -> some View {
         Group {
-            if model.busy == item.key {
+            if model.busy.contains(item.key) {
                 ProgressView().controlSize(.small)
                     .frame(minWidth: CGFloat(PhoneSheetMetrics.statePillWidth), minHeight: CGFloat(PhoneSheetMetrics.statePillHeight))
                     .background(Theme.cardRaised, in: Capsule())

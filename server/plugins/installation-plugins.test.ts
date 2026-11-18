@@ -111,7 +111,7 @@ describe("complete organization plugin copies", () => {
     // an install or update made while a redo copies wins over the redo
     const racing = new InstallationPlugins(root, marketplaces, "build-3"); racing.restore();
     const redo = racing.refreshStale();
-    racing.refresh(marketplaces.installed().find((plugin) => plugin.key === record.key)!);
+    await racing.refresh(marketplaces.installed().find((plugin) => plugin.key === record.key)!);
     writeFileSync(join(copy.dir, "kept.txt"), "the explicit refresh");
     await redo;
     expect(readFileSync(join(copy.dir, "kept.txt"), "utf8")).toBe("the explicit refresh");

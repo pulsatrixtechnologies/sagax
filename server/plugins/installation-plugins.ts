@@ -31,13 +31,34 @@ export class InstallationPlugins {
   private stale = new Set<string>();
   constructor(dataDir: string, marketplaces: PluginMarketplaces, build: string = buildStamp()) { this.dataDir = dataDir; this.marketplaces = marketplaces; this.build = build; }
 
-  /** Called after explicit install/update, never by a receipt. */
-  refresh(plugin: InstalledMarketplacePlugin): void {
-    const stamps = this.readStamps();
+  /** Called after explicit install/update, never by a receipt. The tree is
+   * copied without holding the loop (the copy in use stays mounted until the
+   * new one takes its place in one rename), so an install of a plugin of
+   * hundreds of files never freezes the server. */
+  async refresh(plugin: InstalledMarketplacePlugin): Promise<void> {
+    const dir = this.dirFor(plugin);
+    // names of its own ("~" is outside plugin names): a redo after a start, or another add of the same plugin, copies beside it
+    const unique = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const staging = `${dir}~new-${unique}`;
+    const old = `${dir}~old-${unique}`;
+    const original = this.marketplaces.pluginDir(plugin.marketplace, plugin.name);
     try {
-      this.copy(plugin, stamps);
-    } finally {
+      const result = await copySanitizedPluginAsync(original, staging, undefined, this.executionRoot(plugin));
+      if (existsSync(dir)) renameSync(dir, old);
+      renameSync(staging, dir);
+      notePluginFolderChanged(dir);
+      this.stale.delete(plugin.key);
+      this.copies.set(plugin.key, { name: plugin.name, dir, mcpServers: result.mcpServers, declaredMcpServers: result.declaredMcpServers });
+      const stamps = this.readStamps();
+      stamps[plugin.key] = { source: this.sourceOf(plugin, original), build: this.build, mcpServers: result.mcpServers, declaredMcpServers: result.declaredMcpServers };
       this.writeStamps(stamps);
+      const cacheRoot = pluginMetadataCacheRoot(this.dataDir);
+      invalidatePluginMetaCache(cacheRoot, dir);
+      if (!scheduleMetaRebuild(cacheRoot, dir)) setTimeout(() => { try { rebuildPluginMetaCache(cacheRoot, dir); } catch { /* turn reports partial on miss */ } }, 0).unref?.();
+      await rm(old, { recursive: true, force: true });
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
     }
   }
 

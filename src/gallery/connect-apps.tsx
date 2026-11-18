@@ -110,6 +110,8 @@ const MANAGE_API: Record<string, unknown> = {
     { id: "bot-b", name: "Atlas", instanceId: "grok-main", model: "default", ownerUserId: "p-1", mcpServers: ["twilio-docs"], threads: [], messages: [], ...(params.get("bundle") === "off" ? { products: { "prod-edr": false, "prod-more-1": false } } : {}) },
   ], groups: [], sections: [] },
   "/api/org": ORG,
+  // &addplugins=1 (#4647): the owner on this machine, so Connect apps opens on the installation's own scope
+  ...(params.has("addplugins") ? { "/api/auth/session": { kind: "loopback" } } : {}),
   // the GitHub plugin's page: the account, and one list of other credentials (2026-10-28)
   "/api/me/github/credentials": { canManageOrg: admin, deviceFlow, credentials: [
     { id: "gt_0000000000000011", label: "Second GitHub organization", hint: "9c1d", owner: "mine", chosenBy: 1 },
@@ -157,6 +159,15 @@ const MANAGE_API: Record<string, unknown> = {
       { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, servers: [], skills: ["ship-it", "rule-no-inline-imports"], category: "developer-tools", convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
       { name: "linear", description: "Issues, projects and cycles from your editor", installed: false, servers: ["linear"], skills: [], category: "productivity", convertedFrom: "cursor", notConverted: [] },
     ] },
+    // #4647: a catalog to add from, several in a row
+    ...(params.has("addplugins") ? [{ name: "catalog-six", source: "example-org/catalog-six", visibility: "org", plugins: [
+      { name: "notes-wiki", description: "Search and write pages of a team wiki", installed: false, servers: [], skills: ["wiki"], category: "productivity" },
+      { name: "parts-feed", description: "Look up parts and prices from a supplier feed", installed: false, servers: [], skills: ["parts"], category: "productivity" },
+      { name: "reseller-hub", description: "Quotes and orders from a reseller portal", installed: false, servers: [], skills: ["quotes"], category: "productivity" },
+      { name: "vault-sync", description: "Find a shared credential's name and owner", installed: false, servers: [], skills: ["vault"], category: "security" },
+      { name: "desk-flow", description: "Service desk routines and dispatch", installed: false, servers: [], skills: ["dispatch"], category: "productivity" },
+      { name: "endpoint-guard", description: "Threats and agents of an endpoint console", installed: false, servers: [], skills: ["threats"], category: "security" },
+    ] }] : []),
   ] },
   "/api/skills-library": { skills: [
     { name: "frontend-design", description: "Distinctive interfaces", source: "claude-plugins-official", enabled: true },
@@ -602,6 +613,17 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
         : { key: item.key, kind: item.kind, name: item.name, status: "updated", from: item.installedVersion, to: item.availableVersion });
       galleryUpdates = galleryUpdates.filter((item) => !results.some((result) => result.key === item.key && result.status === "updated"));
       return json({ results, count: galleryUpdates.filter((item) => item.canUpdate).length });
+    }
+    // &addplugins=1 (#4647): a catalog of six plugins to add in a row; each add answers after a pause
+    // (the third fails), so the cards show their own spinner, Added state and error
+    const addPlugin = params.has("addplugins") ? /^\/api\/marketplaces\/([^/]+)\/plugins\/([^/]+)$/.exec(url.pathname) : null;
+    if (addPlugin && method === "POST") {
+      const [, market, plugin] = addPlugin.map(decodeURIComponent);
+      await new Promise((resolve) => setTimeout(resolve, Number(params.get("addplugins")) > 1 ? Number(params.get("addplugins")) : 1500));
+      if (plugin === "reseller-hub") return json({ error: "The marketplace could not be reached." }, 422);
+      const listed = (MANAGE_API["/api/marketplaces"] as { marketplaces: Array<{ name: string; plugins: Array<{ name: string; installed: boolean }> }> }).marketplaces;
+      for (const entry of listed.find((candidate) => candidate.name === market)?.plugins ?? []) if (entry.name === plugin) entry.installed = true;
+      return json({ marketplaces: listed, skipped: [] });
     }
     // &solo=1: a server with no organization: the person is the installation (the workspace scope, where a plugin lists what it brought)
     if (params.has("solo") && url.pathname === "/api/org") return json({ error: "no organization" }, 404);

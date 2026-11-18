@@ -86,7 +86,8 @@ export interface DetailContext {
   setMcpAccountDraft: (value: { server: string; label: string } | null) => void;
   items: PluginItem[];
   marketplaces: MarketplaceListing[] | null;
-  installing: string | null;
+  /** the cards being added, updated or removed */
+  installing: ReadonlySet<string>;
   openItem: (item: PluginItem) => void;
   uninstallPlugin: (item: PluginItem) => void;
   scope: PluginScope;

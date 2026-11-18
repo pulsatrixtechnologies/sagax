@@ -7,7 +7,7 @@ export type Host = Record<string, any>;
 export function createUpdateInstallationPlugin(getHost: () => Host): any {
 async function updateInstallationPlugin(marketplace: string, plugin: string, { auth }: { auth: RequestAuth }) {
   const host = getHost();
-  const { cfg, installLibrarySkill, parseStoredMcpServer, readSkillLibraryIndex, removeLibrarySkillFrom, scanSkillText, sessionPrincipal } = host;
+  const { cfg, parseStoredMcpServer, readSkillLibraryIndex, removeLibrarySkillFrom, scanSkillText, sessionPrincipal } = host;
     const installed = host.pluginMarketplaces.installed().find((entry) => entry.key === `${plugin}@${marketplace}`);
     if (!installed) return { status: 404, body: { error: "That plugin is not installed.", code: "not_installed" } };
     if (host.mcpConfigBusy) return { status: 409, body: { error: "MCP servers are already being updated." } };
@@ -56,15 +56,25 @@ async function updateInstallationPlugin(marketplace: string, plugin: string, { a
     if (added.length) await host.probeMcpOAuth(added);
     const skills: string[] = [];
     const library = readSkillLibraryIndex();
+    const fresh: Array<{ name: string; instructions: string; source: string; warnings: string[]; reviewState: "disabled" }> = [];
+    let updates = 0;
     for (const skill of plan.skills) {
       const warnings = scanSkillText(skill.text);
       const existing = library[skill.name];
-      const result = existing && existing.source === marketplace && installed.skills.includes(skill.name)
-        // The text changes in place; whether it is on stays the person's.
-        ? updateLibrarySkill(skill.name, { text: skill.text, warnings })
-        : installLibrarySkill({ name: skill.name, instructions: skill.text, source: marketplace, warnings, reviewState: "disabled" });
+      if (!(existing && existing.source === marketplace && installed.skills.includes(skill.name))) {
+        fresh.push({ name: skill.name, instructions: skill.text, source: marketplace, warnings, reviewState: "disabled" });
+        continue;
+      }
+      // The text changes in place; whether it is on stays the person's.
+      const result = updateLibrarySkill(skill.name, { text: skill.text, warnings });
       if ("error" in result) skipped.push(`skill ${skill.name} (${result.error})`);
       else skills.push(skill.name);
+      // the loop is given back now and then: no update holds the server
+      if (++updates % 20 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    for (const result of await host.installLibrarySkills(fresh)) {
+      if ("error" in result) skipped.push(`skill ${result.name} (${result.error})`);
+      else skills.push(result.name);
     }
     for (const name of installed.skills) {
       if (!plan.skills.some((skill) => skill.name === name)) removeLibrarySkillFrom(name, marketplace);
@@ -73,7 +83,7 @@ async function updateInstallationPlugin(marketplace: string, plugin: string, { a
       ...(version ? { version } : {}), ...(revision ? { revision } : {}),
       servers: Object.values(serverNames), serverNames, skills
     });
-    host.installationPlugins.refresh(record);
+    await host.installationPlugins.refresh(record);
     return { status: 200, body: { plugin: record, skipped, servers: host.mcpServerResponse(host.mcpViewer(auth)).servers } };
 
 }

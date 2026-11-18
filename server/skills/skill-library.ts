@@ -373,7 +373,7 @@ export function listLibrarySkills(root: string = skillsLibraryRoot()): LibrarySk
  * SKILL.md bytes is idempotent (the existing entry wins); the same name
  * with different bytes is refused, mirroring the per-bot import rule.
  * Every failure returns `{ error }` — callers fall back. */
-export function installLibrarySkill(input: {
+type LibrarySkillInstallInput = {
   name: string;
   description?: string;
   instructions: string;
@@ -389,8 +389,12 @@ export function installLibrarySkill(input: {
   skippedFiles?: string[];
   github?: GitHubSkillOrigin;
   root?: string;
-}): LibrarySkillListing | { error: string } {
-  const root = input.root ?? skillsLibraryRoot();
+};
+
+/** One skill into an index already read: its bytes are stored, the entry is
+ * put in `index` (the caller writes the index, the commit point). `existing`
+ * is the same skill already there, unchanged. */
+function addLibrarySkillToIndex(root: string, index: Record<string, SkillLibraryEntry>, input: LibrarySkillInstallInput): { entry: SkillLibraryEntry; existing: boolean } | { error: string } {
   if (!isSkillName(input.name)) return { error: "invalid skill name" };
   if (Buffer.byteLength(input.instructions, "utf8") > SKILL_FILE_MAX_BYTES) {
     return { error: `SKILL.md is larger than ${SKILL_FILE_MAX_BYTES / 1024}KB` };
@@ -399,12 +403,9 @@ export function installLibrarySkill(input: {
   if ("error" in parsed) return parsed;
   if (parsed.name !== input.name) return { error: `the skill is named "${parsed.name}", not "${input.name}"` };
   const sha256 = sha256Hex(input.instructions);
-  const indexRead = readSkillLibraryIndexState(root);
-  if ("error" in indexRead) return indexRead;
-  const index = indexRead.index;
   const existing = index[input.name];
   if (existing) {
-    if (existing.sha256 === sha256) return librarySkillListing(root, existing);
+    if (existing.sha256 === sha256) return { entry: existing, existing: true };
     return { error: `a skill named "${input.name}" is already in the library — choose a different name` };
   }
   // Callers such as the library migration do not pass tags; frontmatter
@@ -437,9 +438,65 @@ export function installLibrarySkill(input: {
     writeFileAtomic(join(librarySkillDirectory(root, input.name), "SKILL.md"), input.instructions, { mode: 0o600 });
   }
   index[input.name] = entry;
-  writeSkillLibraryIndex(root, index);
-  skillLibraryEvents.emit("invalidate", { kind: "install", name: input.name });
-  return librarySkillListing(root, entry);
+  return { entry, existing: false };
+}
+
+export function installLibrarySkill(input: LibrarySkillInstallInput): LibrarySkillListing | { error: string } {
+  const root = input.root ?? skillsLibraryRoot();
+  const indexRead = readSkillLibraryIndexState(root);
+  if ("error" in indexRead) return indexRead;
+  const added = addLibrarySkillToIndex(root, indexRead.index, input);
+  if ("error" in added) return added;
+  if (!added.existing) {
+    writeSkillLibraryIndex(root, indexRead.index);
+    skillLibraryEvents.emit("invalidate", { kind: "install", name: input.name });
+  }
+  return librarySkillListing(root, added.entry);
+}
+
+/** How long one slice may hold the loop before it is given back. */
+const SKILL_SLICE_MS = 15;
+const yieldToLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+/** Many skills of one plugin without holding the loop: the index is read and
+ * written once per slice (about SKILL_SLICE_MS of work, not once per skill,
+ * which grew with the library), and the loop is given back between slices,
+ * so a plugin of hundreds of skills never freezes the server and another
+ * install running at the same time interleaves between slices. Each result
+ * is the skill's name or its error. */
+export async function installLibrarySkills(inputs: readonly LibrarySkillInstallInput[]): Promise<Array<{ name: string } | { name: string; error: string }>> {
+  const results: Array<{ name: string } | { name: string; error: string }> = [];
+  let next = 0;
+  while (next < inputs.length) {
+    // read-modify-write of a slice runs without an await: one writer at a time
+    const started = performance.now();
+    const roots = new Map<string, Record<string, SkillLibraryEntry>>();
+    const added: string[] = [];
+    do {
+      const input = inputs[next++]!;
+      const root = input.root ?? skillsLibraryRoot();
+      let index = roots.get(root);
+      if (!index) {
+        const read = readSkillLibraryIndexState(root);
+        if ("error" in read) {
+          results.push({ name: input.name, error: read.error });
+          continue;
+        }
+        index = read.index;
+        roots.set(root, index);
+      }
+      const done = addLibrarySkillToIndex(root, index, input);
+      if ("error" in done) results.push({ name: input.name, error: done.error });
+      else {
+        results.push({ name: input.name });
+        if (!done.existing) added.push(input.name);
+      }
+    } while (next < inputs.length && performance.now() - started < SKILL_SLICE_MS);
+    if (added.length) for (const [root, index] of roots) writeSkillLibraryIndex(root, index);
+    for (const name of added) skillLibraryEvents.emit("invalidate", { kind: "install", name });
+    if (next < inputs.length) await yieldToLoop();
+  }
+  return results;
 }
 
 /** Written beside the library and renamed into place; bytes a crash left under the name, which no entry names, are set aside. */

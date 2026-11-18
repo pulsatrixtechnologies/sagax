@@ -49,7 +49,7 @@ final class ChatWidgetTests: XCTestCase {
     func testActionsScopesAndDefaultsMatchTheServer() throws {
         let expectations = try JSONDecoder().decode([String: Expectation].self, from: fixture("widget-expectations"))
         let rows = try messages()
-        XCTAssertEqual(expectations.count, 11)
+        XCTAssertEqual(expectations.count, 12)
         for (id, expected) in expectations {
             let root = try XCTUnwrap(rows.first { $0.id == id }?.widget?.root, id)
             let actions = ChatWidgetRules.actions(root)

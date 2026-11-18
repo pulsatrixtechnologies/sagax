@@ -65,7 +65,7 @@ export type FileRootId = "workspace" | "tasks" | "project" | "attachments" | "sa
 export const FILE_ROOT_IDS: readonly FileRootId[] = ["workspace", "tasks", "project", "attachments", "sandbox", "desktop"];
 
 /** Why a root is listed but cannot be opened. */
-export type RootUnavailable = "not_created" | "outside_server_data" | "person_environment" | "own_computer" | "not_set";
+export type RootUnavailable = "not_created" | "outside_server_data" | "outside_bot_folders" | "person_environment" | "own_computer" | "not_set";
 
 export type BotFileRoot =
   | {

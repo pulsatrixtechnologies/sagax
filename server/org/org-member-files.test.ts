@@ -5,14 +5,15 @@
 // rules, the sensitive names never listed nor served, the conversation
 // folders the person may read, the recursive paged listing and the secret
 // mask on a text read. Fake deps around real folders.
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
+import { createOrgBotFileRoots } from "../index-leaves/orgBotFileRoots.ts";
 import type { BotAttachment, BotFileRoot } from "./org-admin-files.ts";
 import { createOrgMemberRoutes, type MemberRequest, type OrgMemberRouteDeps } from "./org-member-routes.ts";
 
@@ -47,7 +48,27 @@ const catalogue = {
   ],
 };
 
+/** #4627: a working folder set on b1, its roots then come from the real
+ * server function (server/index-leaves/orgBotFileRoots.ts), member view. */
+let projectCwd: string | null = null;
+
+function leafRoots(botId: string, cwd: string): BotFileRoot[] {
+  const leaf = createOrgBotFileRoots(() => ({
+    ATTACHMENTS_DIR: attachmentsDir,
+    TASK_WORKSPACES_DIR: join(home, "tasks"),
+    workspaceDir: (id: string) => join(home, "workspaces", id),
+    store: { tasks: () => [{ threadId: "t-bob" }, { threadId: "t-other" }] },
+    botThreadReadable: (_bot: unknown, threadId: string) => threadId === "t-bob",
+    insideDataDir: (path: string) => {
+      const rel = relative(realpathSync(home), realpathSync(path));
+      return !rel.startsWith("..");
+    },
+  }));
+  return leaf({ id: botId, threadId: "t-main", cwd }, "pr_bob");
+}
+
 function rootsOf(botId: string): BotFileRoot[] {
+  if (botId === "b1" && projectCwd) return leafRoots(botId, projectCwd);
   return [
     { id: "workspace", kind: "folder", dir: join(home, "workspaces", botId) },
     // Bob may read his conversation t-bob, never t-other (another person's
@@ -156,6 +177,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
+  projectCwd = null;
   performed = [];
   filesAsked = [];
   attachments = [
@@ -320,6 +342,34 @@ describe("member API: the files of the person's own bots (#4625)", () => {
       }
     }
     expect(JSON.stringify(await walkAll("b1", { root: "tasks" }))).not.toContain("t-other");
+  });
+
+  it("browses a working folder only inside the bot's own folders, never the data folder nor another bot's (#4627)", async () => {
+    const link = join(home, "workspaces", "b1", "to-b2");
+    symlinkSync(join(home, "workspaces", "b2"), link);
+    try {
+      for (const cwd of [home, join(home, "workspaces"), join(home, "workspaces", "b2"), join(home, "tasks", "b2"), join(home, "tasks", "b1", "t-other"), link]) {
+        projectCwd = cwd;
+        const roots = await call("bots/b1/files/roots");
+        expect(JSON.stringify(roots.body), cwd).toContain("outside_bot_folders");
+        const listed = await call(`bots/b1/files/list?${q({ root: "project", recursive: "1" })}`);
+        expect(listed.status, cwd).toBe(409);
+        expect(listed.raw.toString(), cwd).not.toContain("Memory of b2");
+        const walked = JSON.stringify(await walkAll("b1", {}));
+        expect(walked, cwd).not.toContain("SOMEONE ELSE");
+        expect(walked.match(/MEMORY\.md/g)?.length ?? 0, cwd).toBe(1);
+        expect(walked, cwd).not.toContain("private.md");
+      }
+      projectCwd = join(home, "workspaces", "b1", "reports");
+      const own = await walkAll("b1", { root: "project" });
+      expect(own.map((entry: any) => entry.name).sort()).toEqual(["q1.csv", "summary.pdf"]);
+      projectCwd = join(home, "tasks", "b1");
+      const tasks = JSON.stringify(await walkAll("b1", { root: "project" }));
+      expect(tasks).toContain("draft.md");
+      expect(tasks).not.toContain("private.md");
+    } finally {
+      rmSync(link, { force: true });
+    }
   });
 
   it("answers 404 for a bot the person does not own, an admin's assertion included, and opens no file", async () => {

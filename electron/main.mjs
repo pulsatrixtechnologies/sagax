@@ -1071,6 +1071,7 @@ import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
 import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
 import { isYoutubeEmbedUrl, withYoutubeEmbedReferer } from "./youtube-referer.mjs";
+import { createRedirectLedger, isAppServerRequest } from "./desktop-owner-request.mjs";
 import { isPermissionSettingsUrl, normalizePermissionStatus, permissionAction, permissionsFor } from "./os-permissions.mjs";
 import { execFile } from "node:child_process";
 
@@ -1771,19 +1772,23 @@ function youtubeEmbedderPage(details) {
 // it: the mutation capability (packaged builds only) and the Referer of the
 // YouTube player in the chat (electron/youtube-referer.mjs, every build).
 function installRequestHeaderRules({ mutationHeader }) {
+  // a request redirected toward the server from another address never
+  // carries the capability (electron/desktop-owner-request.mjs)
+  const redirects = createRedirectLedger();
+  session.defaultSession.webRequest.onBeforeRedirect((details) => redirects.noteRedirect(details, SERVER_PORT));
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     if (isYoutubeEmbedUrl(details.url)) {
       callback({ requestHeaders: withYoutubeEmbedReferer(details, () => youtubeEmbedderPage(details)) });
       return;
     }
+    // http: and ws: alike: a browser's WebSocket handshake needs the header
+    // too, since the server refuses browsers without it (OpenMausBot #2930).
+    // Only the app's own requests to its server carry it, never a load that
+    // message content or another origin's frame aims at the same port
+    // (electron/desktop-owner-request.mjs).
     let ownsTarget = false;
     try {
-      const target = new URL(details.url);
-      // http: and ws: alike: a browser's WebSocket handshake needs the header
-      // too, since the server refuses browsers without it (OpenMausBot #2930).
-      ownsTarget = mutationHeader && serverReady && (target.protocol === "http:" || target.protocol === "ws:") &&
-        target.hostname === "127.0.0.1" &&
-        Number(target.port || 80) === SERVER_PORT;
+      ownsTarget = mutationHeader && serverReady && isAppServerRequest(details, SERVER_PORT, redirects);
     } catch {}
     if (!ownsTarget) {
       callback({ requestHeaders: details.requestHeaders });

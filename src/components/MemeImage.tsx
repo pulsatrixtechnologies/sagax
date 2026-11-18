@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
+import { contentReferrerPolicy } from "@/lib/content-referrer";
 import { t } from "@/lib/i18n";
 
 function prefersReducedMotion(): boolean {
@@ -58,6 +59,8 @@ export function MemeImage({
         setStaticUrl(null);
       }
     };
+    const policy = contentReferrerPolicy(src);
+    if (policy) img.referrerPolicy = policy;
     img.src = src;
     return () => { cancelled = true; };
   }, [reduce, src]);
@@ -85,6 +88,7 @@ export function MemeImage({
       >
         <img
           src={shown}
+          referrerPolicy={contentReferrerPolicy(shown)}
           alt={alt || ""}
           data-meme-img=""
           className="block h-auto max-h-72 w-auto max-w-full object-contain"

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Check, Clock3, Maximize, Minimize, MoreHorizontal, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
 
 import { t } from "@/lib/i18n";
+import { isAppOriginAddress } from "./media-source-guard";
 import type { MediaChromeActions } from "./MediaPlayerChrome";
 import { isExpiredStatus, keyAction, SEEK_STEP_SECONDS, ZOOM_STEP } from "./video-player-state";
 
@@ -31,6 +32,8 @@ export function qualityLevelsOf(levels: { height?: number; bitrate?: number }[] 
 
 /** A plain media error: probe the URL once, an auth status means the link expired. */
 export async function probeExpiry(src: string): Promise<boolean> {
+  // never a request to an absolute address of the app's own origin (#4752)
+  if (isAppOriginAddress(src)) return false;
   try {
     const res = await fetch(src, { method: "GET", headers: { Range: "bytes=0-0" }, cache: "no-store" });
     void res.body?.cancel().catch(() => {});

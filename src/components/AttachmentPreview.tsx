@@ -1,6 +1,7 @@
 // Same-origin attachment previews plus the reusable image viewer used by
 // Markdown. Transcript paths are resolved through attachmentImageUrl; model
 // text never gets to turn an arbitrary local path into a browser request.
+import { contentReferrerPolicy, isExternalImageSource } from "@/lib/content-referrer";
 import {
   useCallback,
   useEffect,
@@ -115,17 +116,7 @@ export function imageGalleryLayout(count: number): string {
 }
 
 
-export function isExternalImageSource(src: string): boolean {
-  const value = src.trim();
-  // The URL parser removes embedded ASCII tab/LF/CR and treats backslashes as
-  // slashes for special schemes. Normalize those parser quirks before deciding
-  // whether mounting the image would make a network request.
-  const networkSpelling = value.replace(/[\t\n\r]/g, "").replace(/\\/g, "/");
-  // Chromium canonicalizes special-scheme variants such as `https:host/x`,
-  // `https:/host/x`, and backslash spellings into network requests. Treat the
-  // whole scheme family as remote before an <img> can mount.
-  return networkSpelling.startsWith("//") || /^https?:/i.test(networkSpelling);
-}
+export { isExternalImageSource };
 
 /** A message-scoped image URL is safe for an <img>: the server still proves
  * that this exact message rendered an image at this Markdown source offset
@@ -521,6 +512,7 @@ export function AttachmentPreviewDialog({
               <img
                 key={`${current.src}:${attempt}`}
                 src={current.src}
+                referrerPolicy={contentReferrerPolicy(current.src)}
                 alt={current.name}
                 draggable={false}
                 onLoad={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
@@ -701,6 +693,7 @@ export function AttachmentThumbnail({
           <img
             key={`${image.src}:${attempt}`}
             src={image.src}
+            referrerPolicy={contentReferrerPolicy(image.src)}
             alt={image.name}
             loading={eager ? "eager" : "lazy"}
             fetchPriority={eager ? "high" : undefined}

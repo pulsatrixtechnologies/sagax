@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 
+import { playableAddress } from "./media-source-guard";
+
 /**
  * Which source plays: the proxied playbackUrl first, then once the original
  * URL (directUrl) when the proxy could not serve it (a refused destination
@@ -19,7 +21,9 @@ export function useSourceFallback({
   onExpired: () => void;
 }) {
   const [useDirect, setUseDirect] = useState(false);
-  const directUrl = rawDirectUrl && rawDirectUrl !== playbackUrl ? rawDirectUrl : undefined;
+  // never a fallback to an absolute address of the app's own origin: the
+  // proxy refused it, and the page must not load it itself (#4752)
+  const directUrl = rawDirectUrl && rawDirectUrl !== playbackUrl && playableAddress(rawDirectUrl) ? rawDirectUrl : undefined;
   const src = useDirect && directUrl ? directUrl : playbackUrl;
   const canFallBack = Boolean(directUrl) && !useDirect;
 

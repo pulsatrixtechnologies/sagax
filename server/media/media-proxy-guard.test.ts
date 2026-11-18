@@ -199,6 +199,35 @@ describe("playlist rewrite and the allow list", () => {
     expect(rewriteHlsPlaylist(local, "http://localhost/index.m3u8", mint, NONE)).toBe(local);
   });
 
+  // #4752: a URI aimed at this server itself (on the desktop, the app's own
+  // port, which grants the owner capability) goes through the proxy, whose
+  // guard refuses it; a media server on another port of the machine plays as
+  // before (#2505).
+  it("sends this server's own address and port through the proxy, in any spelling", async () => {
+    initMediaProxy(mkdtempSync(join(tmpdir(), "sagax-media-self-")), { selfPort: 8799 });
+    try {
+      const app = [
+        "#EXTM3U",
+        "#EXTINF:4,", "http://127.0.0.1:8799/api/bots",
+        "#EXTINF:4,", "http://localhost:8799/api/a",
+        "#EXTINF:4,", "http://[::1]:8799/api/b",
+        "#EXTINF:4,", "http://[::ffff:127.0.0.1]:8799/api/c",
+        "#EXTINF:4,", "http://127.1:8799/api/d",
+        "#EXTINF:4,", "http://0.0.0.0:8799/api/e",
+        "#EXTINF:4,", "http://127.0.0.1:9000/own-media/seg.ts",
+        "",
+      ].join("\n");
+      const out = rewriteHlsPlaylist(app, "https://cdn.example/live/index.m3u8", mint, NONE);
+      for (const self of ["http://127.0.0.1:8799/api/bots", "http://localhost:8799/api/a", "http://[::1]:8799/api/b", "http://[::ffff:7f00:1]:8799/api/c", "http://127.0.0.1:8799/api/d", "http://0.0.0.0:8799/api/e"]) {
+        expect(out).toContain(mint(self));
+      }
+      expect(out).toContain("\nhttp://127.0.0.1:9000/own-media/seg.ts\n");
+      expect(await reasonFor("http://127.0.0.1:8799/api/bots", NONE)).toBe("loopback");
+    } finally {
+      initMediaProxy(mkdtempSync(join(tmpdir(), "sagax-media-self-")));
+    }
+  });
+
   it("rewrites them when the host is allowed", () => {
     const out = rewriteHlsPlaylist(playlist, "http://10.0.0.5/live/index.m3u8", mint, parseMediaProxyAllowList("10.0.0.5"));
     expect(out).toContain(mint("http://10.0.0.5/live/seg0.ts"));

@@ -3,9 +3,32 @@ import { useCallback, useRef, type RefObject, type SyntheticEvent } from "react"
 import { isHlsVideo, type WireVideoWidget } from "../../../shared/video-widget.ts";
 import { HLS_MANIFEST_LOAD_POLICY, probeExpiry, qualityLevelsOf, type QualityLevel } from "./VideoPlayerParts";
 import { isExpiredAt, planHlsError, reloadBackoffMs, RELOAD_MAX_ATTEMPTS } from "./video-player-state";
+import { isAppOriginAddress } from "./media-source-guard";
 
 /** How long a natively played HLS stream may take to show its first frame. */
 export const NATIVE_HLS_START_MS = 12_000;
+
+/** The hls.js loader class (playlists, segments, keys alike). */
+type LoaderClass = new (config: unknown) => {
+  load(context: { url: string }, config: unknown, callbacks: { onError: (error: { code: number; text: string }, context: unknown, networkDetails: unknown, stats: unknown) => void }): void;
+};
+
+/** hls.js's own loader, except that an address of the app's own origin is
+ * answered as a refusal (400) without a request: a playlist read straight
+ * from its server may name any address for a segment or a key. */
+export function guardedLoader(Base: LoaderClass): LoaderClass {
+  return class GuardedLoader extends Base {
+    load(...args: Parameters<InstanceType<LoaderClass>["load"]>) {
+      const [context, , callbacks] = args;
+      if (isAppOriginAddress(context.url)) {
+        const stats = { aborted: false, loaded: 0, retry: 0, total: 0, chunkCount: 0, bwEstimate: 0, loading: { start: 0, first: 0, end: 0 }, parsing: { start: 0, end: 0 }, buffering: { start: 0, first: 0, end: 0 } };
+        callbacks.onError({ code: 400, text: "refused" }, context, null, stats);
+        return;
+      }
+      super.load(...args);
+    }
+  };
+}
 
 export type HlsLike = {
   levels: { height?: number; bitrate?: number }[];
@@ -96,20 +119,59 @@ export function useMediaLoader({
     setError(null);
     let disposed = false;
     let stopWatchdog = () => {};
+    // An absolute address of the app's own origin, from a message: never
+    // loaded (media-source-guard.ts), so it says it cannot be played.
+    if (isAppOriginAddress(src)) {
+      setError(null);
+      failNow();
+      return;
+    }
     // Decided from the source before the media proxy hid its extension.
     const isHls = isHlsVideo({ format, playbackUrl: src });
-    if (isHls && !el.canPlayType("application/vnd.apple.mpegurl")) {
+    const nativeHls = Boolean(el.canPlayType("application/vnd.apple.mpegurl"));
+    // A playlist read straight from its server (not the proxy, which rewrites
+    // every URI) goes through hls.js where it runs, whose loader refuses a
+    // segment aimed at the app's own origin; native playback could not.
+    const direct = !src.startsWith("/");
+    const playNatively = (el: HTMLVideoElement) => {
+      el.src = src;
+      // Native HLS (Safari, recent Chrome) reports a stream whose segments
+      // are missing by never starting, without an error event: a stream
+      // that shows no frame in time is checked, then said unplayable.
+      if (isHls && !isLive) {
+        const started = () => clearTimeout(watchdog);
+        const watchdog = setTimeout(() => {
+          el.removeEventListener("canplay", started);
+          // nothing parsed, or asked to play and still no frame to show
+          if (disposed || (el.readyState >= 1 && (el.paused || el.readyState >= 3))) return;
+          void probeExpiry(src).then((expired) => {
+            if (disposed) return;
+            if (expired) expireOrFallBack();
+            else failNow();
+          });
+        }, NATIVE_HLS_START_MS);
+        el.addEventListener("canplay", started, { once: true });
+        stopWatchdog = () => {
+          clearTimeout(watchdog);
+          el.removeEventListener("canplay", started);
+        };
+      }
+    };
+    if (isHls && (!nativeHls || direct)) {
       void import("hls.js").then(({ default: Hls }) => {
         if (disposed || !videoRef.current) return;
         if (!Hls.isSupported()) {
-          failSource();
+          if (nativeHls) playNatively(videoRef.current);
+          else failSource();
           return;
         }
+        const Base = (Hls as unknown as { DefaultConfig?: { loader?: LoaderClass } }).DefaultConfig?.loader;
         const instance = new Hls({
           enableWorker: true,
           lowLatencyMode: isLive,
           backBufferLength: isLive ? 300 : 90,
           manifestLoadPolicy: HLS_MANIFEST_LOAD_POLICY,
+          ...(Base ? { loader: guardedLoader(Base) as never } : {}),
         });
         hlsRef.current = instance as unknown as HlsLike;
         instance.loadSource(src);
@@ -157,28 +219,7 @@ export function useMediaLoader({
         if (!disposed) failSource();
       });
     } else {
-      el.src = src;
-      // Native HLS (Safari, recent Chrome) reports a stream whose segments
-      // are missing by never starting, without an error event: a stream
-      // that shows no frame in time is checked, then said unplayable.
-      if (isHls && !isLive) {
-        const started = () => clearTimeout(watchdog);
-        const watchdog = setTimeout(() => {
-          el.removeEventListener("canplay", started);
-          // nothing parsed, or asked to play and still no frame to show
-          if (disposed || (el.readyState >= 1 && (el.paused || el.readyState >= 3))) return;
-          void probeExpiry(src).then((expired) => {
-            if (disposed) return;
-            if (expired) expireOrFallBack();
-            else failNow();
-          });
-        }, NATIVE_HLS_START_MS);
-        el.addEventListener("canplay", started, { once: true });
-        stopWatchdog = () => {
-          clearTimeout(watchdog);
-          el.removeEventListener("canplay", started);
-        };
-      }
+      playNatively(el);
     }
     return () => {
       disposed = true;

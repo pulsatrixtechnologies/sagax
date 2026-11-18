@@ -543,6 +543,10 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
   const counters = new Map<string, Counter>();
   /** One server line per bot for a sign-in the review cannot heal. */
   const signInLogged = new Set<string>();
+  /** The last failure written for a bot: a review that fails the same way at
+   * every retry (a used-up balance, an outage) is written once, not every
+   * RETRY_AFTER_MS, until a review of that bot answers again. */
+  const failureLogged = new Map<string, string>();
   const running = new Map<string, { threadId: string; controller: AbortController; done: Promise<ReviewReport> }>();
   const waiting = new Map<string, PendingApply>();
   const settling = new Map<string, ReturnType<typeof setTimeout>>();
@@ -607,7 +611,10 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
       counter.failedAt = now();
       save();
     }
-    log(`${botId}: ${note}`);
+    if (failureLogged.get(botId) !== note) {
+      failureLogged.set(botId, note);
+      log(`${botId}: ${note}`);
+    }
     return { state: "failed", applied: [], note };
   };
 
@@ -679,6 +686,8 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
       return failed(botId, threadId, `the review call failed (${message})`);
     }
     if (controller.signal.aborted) return { state: "cancelled", applied: [] };
+    failureLogged.delete(botId);
+    signInLogged.delete(botId);
     const { changes, note } = parseSkillReview(typeof answer === "string" ? answer : "", skills, shown);
     const pending: PendingApply = { threadId, changes, steps, note };
     if (!changes.length) {

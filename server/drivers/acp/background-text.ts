@@ -9,6 +9,7 @@
 // reports, before its result is read. The caller keeps its own timeout too.
 import type { TextGenerationOptions, TextGenerationUsage } from "../../contracts.ts";
 import type { killCliTree, spawnCli } from "../../procs.ts";
+import { acpRpcError } from "./helpers.ts";
 
 export const BACKGROUND_TEXT_TIMEOUT_MS = 120_000;
 /** More than any capture, organize or contradiction answer needs. */
@@ -57,7 +58,7 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
     let model: string | undefined;
     let usage: TextGenerationUsage | undefined;
     let nextId = 1;
-    const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+    const pending = new Map<number, { method: string; resolve: (value: any) => void; reject: (error: Error) => void }>();
 
     const finish = async (error?: Error) => {
       if (settled) return;
@@ -95,7 +96,7 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
     const request = (method: string, params: unknown): Promise<any> => new Promise((ok, fail) => {
       if (settled) return fail(new Error(`${name} background call closed`));
       const id = nextId++;
-      pending.set(id, { resolve: ok, reject: fail });
+      pending.set(id, { method, resolve: ok, reject: fail });
       send({ jsonrpc: "2.0", id, method, params });
     });
 
@@ -104,8 +105,17 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
         const waiter = pending.get(msg.id);
         pending.delete(msg.id);
         if (!waiter) return;
-        if (msg.error) waiter.reject(new Error(`${name} background ${typeof msg.error?.message === "string" ? msg.error.message.slice(0, 200) : "request failed"}`));
-        else waiter.resolve(msg.result);
+        if (msg.error) {
+          // Grok puts the real cause in error.data under a bare "Internal
+          // error" (a 402 used-up balance, a rate limit, a model refusal).
+          // Keep it, as a turn does (acpRpcError), so the log says what the
+          // provider answered and the turn's verdict reads a limit or credit.
+          const cause = acpRpcError(msg.error, waiter.method);
+          waiter.reject(Object.assign(new Error(`${name} background ${cause.message.slice(0, 400)}`), {
+            code: (cause as Error & { code?: unknown }).code,
+            data: (cause as Error & { data?: unknown }).data,
+          }));
+        } else waiter.resolve(msg.result);
         return;
       }
       if (msg?.id !== undefined && typeof msg.method === "string") {

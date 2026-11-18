@@ -12,6 +12,8 @@ import { ensureDirs } from "../../config.ts";
 import type { ProviderDriver, ProviderInstance, TextGenerationUsage } from "../../contracts.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import * as procs from "../../procs.ts";
+import { classifyRoutineFailure } from "../../routines/routine-recovery.ts";
+import { OUT_OF_CREDITS } from "../../../shared/engine-limit-words.ts";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./core.ts";
 import { CursorAgentDriver } from "./cursor.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
@@ -112,6 +114,18 @@ describe("ACP memory one-shot (generateMemoryText)", () => {
     process.env.FAKE_ACP_MODE = "permission";
     const engine = await create(GrokAgentDriver);
     await expect(engine.generateMemoryText!("prompt")).rejects.toThrow(/may not use|tried to use a tool/);
+  });
+
+  it("keeps the provider's words of a JSON-RPC internal error, so the cause reads as used-up credit", async () => {
+    // Production 0.8.132 to 0.8.134: "Grok background Internal error" at
+    // every start, xAI's own reason dropped from error.data.
+    process.env.FAKE_ACP_MODE = "prompt-payment-required";
+    const engine = await create(GrokAgentDriver);
+    const error = await engine.generateMemoryText!("prompt").then(() => null, (failure: Error) => failure);
+    expect(error?.message).toMatch(/^Grok background Internal error: API error \(status 402 Payment Required\): Grok Build usage balance exhausted \(session\/prompt\)$/);
+    expect(OUT_OF_CREDITS.test(error?.message ?? "")).toBe(true);
+    expect(classifyRoutineFailure(error?.message ?? "")).toEqual({ kind: "owner", cause: "credits" });
+    expect((error as Error & { data?: { http_status?: number } }).data?.http_status).toBe(402);
   });
 
   it("stops on abort", async () => {

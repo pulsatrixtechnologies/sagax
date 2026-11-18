@@ -1542,6 +1542,12 @@ function handle(msg: any) {
         void playTimedModel(msg);
         return;
       }
+      // The account refusal grok 1.0.50 sends on session/prompt (grok.ts
+      // classifyGrokError): a bare "Internal error" with xAI's words in data.
+      if (mode === "prompt-payment-required") {
+        out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "Internal error", data: { message: "API error (status 402 Payment Required): Grok Build usage balance exhausted", http_status: 402 } } });
+        return;
+      }
       // FAKE_ACP_TEXT_REPLY: a plain text answer and nothing else, the shape of
       // memory upkeep's one-shot call (drivers/acp/background-text.ts)
       if (process.env.FAKE_ACP_TEXT_REPLY !== undefined) {

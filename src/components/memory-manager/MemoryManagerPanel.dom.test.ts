@@ -288,11 +288,12 @@ describe("MemoryManagerPanel page", () => {
     expect(rail.className).toContain("w-[280px]");
     expect(rail.className).toContain("border-l");
     expect(rail.className).not.toContain("border-r");
-    // The "›" sits at its top-left, in its own row above "Open a note".
+    // The "›" ends the row of "Open a note": never alone on a row of its own.
     const hide = rail.querySelector("[data-right-rail-hide]")!;
     expect(hide).not.toBeNull();
     expect(rail.children[0]!.contains(hide)).toBe(true);
-    expect(rail.children[0]!.querySelector("[data-memory-switcher-open]")).toBeNull();
+    expect(rail.children[0]!.querySelector("[data-memory-switcher-open]")).not.toBeNull();
+    expect(rail.children[0]!.lastElementChild).toBe(hide);
     expect(hide.querySelector("svg")?.getAttribute("class")).toContain("chevron-right");
   });
 
@@ -428,7 +429,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
-    expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("5");
+    expect(host.querySelector('[data-memory-map-tiers] button[aria-haspopup="listbox"]')?.textContent).toContain("All memory");
     expect(host.querySelector("[data-memory-map-count]")?.getAttribute("title")).toMatch(/^5 notes, \d+ links/);
     expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 5 notes");
     const columns = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Columns")!;
@@ -440,24 +441,27 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
   });
 
-  it("Map: the fixed scopes stay buttons, every other team lives in one Teams select, on one row", async () => {
+  it("Map: one Scope select holds every scope and team with its count, and the bar is one wrapping row", async () => {
     (globalThis as { __memoryOwn?: boolean }).__memoryOwn = true;
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
-    const bar = host.querySelector("[data-memory-map-tiers]")!;
-    expect(bar.querySelector('[data-memory-map-tier="mine"]')).not.toBeNull();
-    expect(bar.querySelector('[data-memory-map-tier="team:general"]')?.textContent).toContain("Facts my bots learned");
-    // data-built entries are not buttons
-    expect(bar.querySelector('[data-memory-map-tier="team:unclaimed:"]')).toBeNull();
-    expect(host.querySelector("[data-memory-map-bar]")?.className).toContain("flex-nowrap");
-    const teams = host.querySelector('[data-memory-map-teams] button[aria-haspopup="listbox"]') as HTMLButtonElement;
-    expect(teams.textContent).toContain("Teams");
-    await act(async () => { teams.click(); });
+    const bar = host.querySelector("[data-memory-map-bar]")!;
+    expect(bar.className).toContain("flex-wrap");
+    expect(bar.className).not.toContain("overflow");
+    expect(bar.querySelector('[data-memory-map-tier]')).toBeNull();
+    const scope = host.querySelector('[data-memory-map-tiers] button[aria-haspopup="listbox"]') as HTMLButtonElement;
+    expect(scope.textContent).toContain("All memory");
+    await act(async () => { scope.click(); });
     const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent ?? "");
+    expect(options.some((text) => text.includes("My memory") && /\d/.test(text))).toBe(true);
+    expect(options.some((text) => text.includes("Facts my bots learned"))).toBe(true);
     expect(options.some((text) => text.includes("No known author"))).toBe(true);
-    await act(async () => { (document.querySelector('[role="option"]') as HTMLElement).click(); });
-    expect(host.querySelector('[data-memory-map-teams] button[aria-haspopup="listbox"]')?.textContent).toContain("No known author");
+    const unknown = Array.from(document.querySelectorAll('[role="option"]')).find((option) => option.textContent?.includes("No known author")) as HTMLElement;
+    await act(async () => { unknown.click(); });
+    expect(host.querySelector('[data-memory-map-tiers] button[aria-haspopup="listbox"]')?.textContent).toContain("No known author");
+    // the layout switch keeps its labels (icons alone while the bar is narrow)
+    expect(host.querySelector("[data-memory-map-layout-switch]")?.textContent).toContain("Radial");
   });
 
   it("Collections: the list, one collection, its notes in order", async () => {

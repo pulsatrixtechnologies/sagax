@@ -1,11 +1,13 @@
 /** Headless gallery for Tools > Memory > Map > Graph (2026-11-03). Synthetic data only.
  * ?skin=<id>&lang=<code>&n=<notes>&width=&height=&settings=1
+ * teams=<N> adds N data-built teams; rail=1 puts the Memory explorer's right rail beside the map (from 1280px, as the app does); side=<px> is the app sidebar's width.
  * n: how many notes (the perf check uses 1200); settings=1 opens the Graph
  * settings card with every section unfolded.
  */
 import { StrictMode, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 
+import { RightRailPanel } from "../components/RightRail";
 import { MemoryMapView } from "../components/memory-manager/MemoryMapView";
 import { loadLocale } from "../lib/i18n";
 import { seededRandom } from "../lib/memory-graph";
@@ -33,20 +35,26 @@ try {
   } }));
 } catch { /* storage refused: defaults */ }
 
-const tiers: PageTier[] = [
+const teamCount = Number(params.get("teams") ?? 0);
+const tiers: PageTier[] = teamCount > 0 ? [
+  { key: "mine", name: "My memory", kind: "mine", color: tierColor("mine") },
+  { key: "team:general", name: "Facts my bots learned", kind: "team", fixed: true, color: tierColor("team", 9) },
+  { key: "org", name: "Organization", kind: "org", color: tierColor("org") },
+  ...Array.from({ length: teamCount }, (_, i) => ({ key: `team:t${i}`, name: `Team ${["Network", "Backup", "Billing", "Support", "Security"][i % 5]} ${i + 1}`, kind: "team" as const, color: tierColor("team", i) })),
+] : [
   { key: "mine", name: "My memory", kind: "mine", color: tierColor("mine") },
   { key: "org", name: "Organization", kind: "org", color: tierColor("org") },
   { key: "bot:atlas", name: "Atlas", kind: "team", color: tierColor("team", 0) },
   { key: "bot:nova", name: "Nova", kind: "team", color: tierColor("team", 1) },
   { key: "team:ops", name: "Operations", kind: "team", color: tierColor("team", 2) },
 ];
-const FOLDERS: Record<string, string[]> = {
+const FOLDERS: Record<string, string[]> = new Proxy<Record<string, string[]>>({
   mine: ["notes", "notes / reading", "journal", "projects"],
   org: ["network", "backup", "policies", "clients", "clients / onboarding"],
   "bot:atlas": ["Atlas / Topics", "Atlas / Logs", "Atlas / People"],
   "bot:nova": ["Nova / Topics", "Nova / Logs"],
   "team:ops": ["runbooks", "incidents", "decisions"],
-};
+}, { get: (target, key: string) => target[key] ?? ["notes", "runbooks"] });
 const WORDS = ["Backup", "Firewall", "Switch", "VLAN", "Onboarding", "Policy", "Weekly", "Briefing", "Restore", "Drill", "DNS", "Zone", "Travel", "Dining", "Release", "Checklist", "Style", "Reading", "Systems", "Meeting", "Decision", "Incident", "Printer", "Laptop", "Licence", "Renewal", "Vendor", "Contract", "Budget", "Roadmap", "Audit", "Password", "Rotation", "Mailbox", "Calendar", "Archive"];
 const TAGS = ["work", "urgent", "area:network", "area:backup", "reading", "client", "review", "tech:dns", "tech:switch"];
 
@@ -92,11 +100,19 @@ function rowsOf(n: number): { rows: PageRow[]; bodies: Record<string, string> } 
 
 function Shell() {
   const { rows, bodies } = useMemo(() => rowsOf(total), []);
+  const side = Number(params.get("side") ?? 0);
+  const rail = params.get("rail") === "1" && width >= 1280;
   return (
-    <div className="flex h-full flex-col bg-app" style={{ width, height }} data-gallery-ready="1">
+    <div className="flex h-full bg-app" style={{ width, height }} data-gallery-ready="1">
+      {side > 0 && <div className="shrink-0 border-r border-hairline/40 bg-panel" style={{ width: side }} />}
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
         <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={3} onOpen={() => {}} />
       </div>
+      {rail && (
+        <RightRailPanel label="Explorer" onCollapse={() => {}} hideLabel="Hide" lead={<button type="button" className="flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-hairline/60 bg-app px-2.5 text-left text-[13px] text-ink-secondary"><span className="min-w-0 flex-1 truncate">{params.get("lang") === "fr" ? "Ouvrir une note" : "Open a note"}</span><kbd className="rounded border border-hairline/60 px-1 text-[11px]">⌘O</kbd></button>}>
+          <p className="p-3 text-[12px] text-ink-secondary">Lists</p>
+        </RightRailPanel>
+      )}
     </div>
   );
 }

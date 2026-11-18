@@ -96,24 +96,33 @@ export function StatStrip({ items, ...rest }: { items: StatTile[] } & { [key: `d
 }
 
 /** A segmented switch inside a view (the list's order, the Quality tabs). */
-export function MiniSegment<T extends string>({ label, value, options, onChange, ...rest }: {
+export function MiniSegment<T extends string>({ label, value, options, onChange, tall = false, ...rest }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: ReactNode }>;
   onChange: (next: T) => void;
+  /** A toolbar control: 36px high like its neighbours; an option's icon shows alone until the container is wide (`@[860px]`). */
+  tall?: boolean;
 } & { [key: `data-${string}`]: string | undefined }) {
   return (
-    <div {...rest} role="group" aria-label={label} className="flex shrink-0 items-center rounded-lg border border-hairline/50 bg-app p-0.5">
+    <div {...rest} role="group" aria-label={label} className={cn("flex shrink-0 items-center rounded-lg border border-hairline/50 bg-app p-0.5", tall && "h-9")}>
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           aria-pressed={value === option.value}
+          aria-label={tall && option.icon ? option.label : undefined}
+          title={tall && option.icon ? option.label : undefined}
           onClick={() => onChange(option.value)}
-          className={cn("rounded-md px-2.5 py-1 text-[12px]", value === option.value ? "bg-raised font-medium text-ink" : "text-ink-secondary hover:text-ink")}
+          className={cn(
+            "rounded-md px-2.5 py-1 text-[12px]",
+            tall && "inline-flex h-full items-center justify-center gap-1.5 px-2 text-[13px] @[860px]:px-2.5",
+            value === option.value ? "bg-raised font-medium text-ink" : "text-ink-secondary hover:text-ink",
+          )}
           data-memory-segment={option.value}
         >
-          {option.label}
+          {tall && option.icon}
+          <span className={cn(tall && option.icon && "hidden @[860px]:inline")}>{option.label}</span>
         </button>
       ))}
     </div>

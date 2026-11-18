@@ -168,6 +168,9 @@ export interface MemoryGraphProps {
   onAnimate?: () => void;
   /** Top left, over the canvas (the tag filter). */
   overlay?: React.ReactNode;
+  /** The page's toolbar holds the settings button: it says whether the card is open and hears each change. */
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
   testId?: string;
 }
 
@@ -176,7 +179,7 @@ type Drag =
   | { kind: "pan"; id: number; x: number; y: number; moved: boolean }
   | null;
 
-export function MemoryGraph({ notes, tierColor, matches, hidden, focusKey, depth = 0, onPreview, onOpen, onAnimate, overlay, testId = "memory-graph" }: MemoryGraphProps) {
+export function MemoryGraph({ notes, tierColor, matches, hidden, focusKey, depth = 0, onPreview, onOpen, onAnimate, overlay, settingsOpen, onSettingsOpenChange, testId = "memory-graph" }: MemoryGraphProps) {
   const principalId = useStoreOptional()?.state.config?.viewer?.principalId ?? null;
   const [settings, setSettingsState] = useState<GraphSettings>(() => readGraphSettings(principalId));
   useEffect(() => setSettingsState(readGraphSettings(principalId)), [principalId]);
@@ -184,9 +187,14 @@ export function MemoryGraph({ notes, tierColor, matches, hidden, focusKey, depth
     setSettingsState((current) => {
       const next = update(current);
       writeGraphSettings(principalId, next);
+      if (next.open !== current.open) queueMicrotask(() => onSettingsOpenChange?.(next.open));
       return next;
     });
-  }, [principalId]);
+  }, [principalId, onSettingsOpenChange]);
+  useEffect(() => {
+    if (settingsOpen !== undefined && settingsOpen !== settings.open) setSettings((current) => ({ ...current, open: settingsOpen }));
+    // follows the toolbar's button only
+  }, [settingsOpen]);
 
   // The model: the notes through the filters, then the neighbourhood asked for.
   const model = useMemo<GraphModel>(() => {
@@ -495,7 +503,7 @@ export function MemoryGraph({ notes, tierColor, matches, hidden, focusKey, depth
         <p className="pointer-events-none absolute inset-0 grid place-items-center text-[13px] text-ink-secondary" data-testid={`${testId}-none`}>{t("memoryManager.graph.none")}</p>
       ) : null}
       {overlay ? <div className="absolute left-2 top-2 max-w-[calc(100%-16px)]">{overlay}</div> : null}
-      <GraphSettingsPanel settings={settings} onChange={setSettings} onAnimate={onAnimate} testId={testId} />
+      <GraphSettingsPanel settings={settings} onChange={setSettings} onAnimate={onAnimate} testId={testId} hideOpener={settingsOpen !== undefined} />
       <canvas
         ref={mini}
         className="absolute bottom-2 right-[52px] size-[132px] cursor-crosshair touch-none rounded-lg border border-hairline/60 bg-panel/90"
@@ -548,7 +556,9 @@ function Slider({ label, value, range, onChange, id }: { label: string; value: n
   );
 }
 
-export function GraphSettingsPanel({ settings, onChange, onAnimate, testId = "memory-graph" }: {
+export function GraphSettingsPanel({ settings, onChange, onAnimate, hideOpener = false, testId = "memory-graph" }: {
+  /** The page's toolbar has the open button. */
+  hideOpener?: boolean;
   settings: GraphSettings;
   onChange: (update: (current: GraphSettings) => GraphSettings) => void;
   onAnimate?: () => void;
@@ -558,6 +568,7 @@ export function GraphSettingsPanel({ settings, onChange, onAnimate, testId = "me
     onChange((current) => ({ ...current, [key]: typeof current[key] === "object" && !Array.isArray(current[key]) ? { ...(current[key] as object), ...(value as object) } : value }));
   const section = (id: GraphSection) => () => onChange((current) => ({ ...current, sections: { ...current.sections, [id]: !current.sections[id] } }));
   if (!settings.open) {
+    if (hideOpener) return null;
     return (
       <button
         type="button"

@@ -83,7 +83,7 @@ const engine = (id: string, name: string, plan: string, weekly: number, fiveHour
 });
 const rows = [
   engine("claude", "Claude", "Max", 64, 18),
-  engine("grok", "Grok", "SuperGrok Heavy", 87, 12),
+  engine("grok", "Grok", "Ultra", 87, 12),
   engine("codex", "Codex", "Business Enterprise Annual", 100, 41),
   engine("gemini", "Gemini", "Ultra", 23, 5),
   engine("cursor", "Cursor", "Pro Plus", 56, 30),

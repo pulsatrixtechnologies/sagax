@@ -33,7 +33,7 @@ describe("the avatar menu's Usage", () => {
 });
 
 describe("the avatar menu's starred subscription (2026-11-03)", () => {
-  const grok = row({ id: "grok", name: "Grok", plan: "SuperGrok Heavy", weekly: open(87) });
+  const grok = row({ id: "grok", name: "Grok", plan: "Ultra", weekly: open(87) });
   const codex = row({ id: "codex", name: "Codex", plan: "Business", fiveHour: open(100) });
 
   it("shows the starred plan's own percent and its short name, not the highest", () => {

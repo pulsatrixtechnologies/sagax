@@ -124,7 +124,10 @@ const PLAN_NAMES: Record<string, string> = {
   edu: "Edu",
   education: "Edu",
   supergrok: "SuperGrok",
-  supergrok_heavy: "SuperGrok Heavy",
+  supergrok_heavy: "Ultra",
+  supergrok_lite: "SuperGrok Lite",
+  supergroklite: "SuperGrok Lite",
+  ultra: "Ultra",
   premium: "Premium",
   premium_plus: "Premium+",
 };
@@ -136,7 +139,7 @@ const PLAN_ID_PREFIX = /^(?:self_serve|default|claude|chatgpt|openai|grok|xai)[_
 /**
  * The plan as the person reads it, never a raw id (2026-11-03: "Codex
  * self_serve_business_prolite" was shown as is). A name the provider already
- * wrote for people ("SuperGrok Heavy") is kept. An id is looked up as sent,
+ * wrote for people ("Ultra") is kept. An id is looked up as sent,
  * then without its leading words; a Business or Enterprise id of any flavor
  * is that plan; anything else is cleaned and title-cased
  * ("team_annual" -> "Team Annual").
@@ -144,6 +147,8 @@ const PLAN_ID_PREFIX = /^(?:self_serve|default|claude|chatgpt|openai|grok|xai)[_
 export function humanPlanName(plan: string | null | undefined): string | null {
   const raw = plan?.trim();
   if (!raw) return null;
+  // xAI still sends "Ultra" for the plan it now sells as Ultra
+  if (/^super\s*grok[\s_-]*heavy$/i.test(raw)) return "Ultra";
   // spaces or capitals and no id separators: already a name
   if (!/[_]/.test(raw) && (/\s/.test(raw) || /[A-Z]/.test(raw))) return raw;
   let id = raw.toLowerCase().replace(/[\s.]+/g, "_");

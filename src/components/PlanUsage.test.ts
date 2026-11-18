@@ -231,7 +231,7 @@ describe("planRows", () => {
 describe("Plan usage stars (2026-11-03)", () => {
   const report: PlanUsageReport = {
     providers: [
-      row({ id: "grok", name: "Grok", driver: "grok", instanceId: "grok", state: "windows", ok: true, plan: "SuperGrok Heavy", weekly: { available: true, remainingPercent: 13, usedPercent: 87, resetsAt: null } }),
+      row({ id: "grok", name: "Grok", driver: "grok", instanceId: "grok", state: "windows", ok: true, plan: "Ultra", weekly: { available: true, remainingPercent: 13, usedPercent: 87, resetsAt: null } }),
       row({ id: "codex", name: "Codex", driver: "codex", instanceId: "codex", state: "windows", ok: true, plan: "self_serve_business_prolite", fiveHour: { available: true, remainingPercent: 0, usedPercent: 100, resetsAt: null } }),
       row({ id: "claude", state: "signed-out" }),
     ],
@@ -241,7 +241,7 @@ describe("Plan usage stars (2026-11-03)", () => {
     const html = render(report, { favorite: { id: "grok", onToggle: () => {} } });
     expect(html.match(/data-usage-favorite="on"/g)).toHaveLength(1);
     expect(html.match(/data-usage-favorite="off"/g)).toHaveLength(1);
-    expect(html).toContain("Stop showing Grok SuperGrok Heavy in the Usage menu");
+    expect(html).toContain("Stop showing Grok Ultra in the Usage menu");
     expect(html).toContain("Show Codex Business in the Usage menu");
     expect(html).not.toContain("self_serve");
   });

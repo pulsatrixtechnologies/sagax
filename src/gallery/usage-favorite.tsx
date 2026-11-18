@@ -27,7 +27,7 @@ const CLOSED = { available: false, remainingPercent: null, usedPercent: null, re
 const open = (used: number, hours: number) => ({ available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt: new Date(NOW + hours * 3_600_000).toISOString() });
 const report: PlanUsageReport = {
   providers: [
-    { id: "grok", name: "Grok", driver: "grok", plan: "SuperGrok Heavy", ok: true, error: null, state: "windows", access: "subscription", instanceId: "grok", fiveHour: CLOSED, weekly: open(87, 56) },
+    { id: "grok", name: "Grok", driver: "grok", plan: "Ultra", ok: true, error: null, state: "windows", access: "subscription", instanceId: "grok", fiveHour: CLOSED, weekly: open(87, 56) },
     { id: "codex", name: "Codex", driver: "codex", plan: "self_serve_business_prolite", ok: true, error: null, state: "windows", access: "subscription", instanceId: "codex", fiveHour: CLOSED, weekly: open(100, 71) },
   ],
 };

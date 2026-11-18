@@ -72,7 +72,7 @@ export interface UsageLine {
   key: string;
   /** the plan row this line belongs to (a favorite names it) */
   planId?: string;
-  /** that plan as people read it ("Grok SuperGrok Heavy") */
+  /** that plan as people read it ("Grok Ultra") */
   planName?: string;
   label: string;
   subtitle?: string;

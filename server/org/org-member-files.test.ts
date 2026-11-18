@@ -352,9 +352,16 @@ describe("member API: the files of the person's own bots (#4625)", () => {
         projectCwd = cwd;
         const roots = await call("bots/b1/files/roots");
         expect(JSON.stringify(roots.body), cwd).toContain("outside_bot_folders");
-        const listed = await call(`bots/b1/files/list?${q({ root: "project", recursive: "1" })}`);
+        const listed = await call(`bots/b1/files/list?${q({ root: "project" })}`);
         expect(listed.status, cwd).toBe(409);
-        expect(listed.raw.toString(), cwd).not.toContain("Memory of b2");
+        // the recursive walk skips a root it cannot open
+        const walkedProject = await walkAll("b1", { root: "project" });
+        expect(walkedProject, cwd).toEqual([]);
+        for (const path of ["MEMORY.md", "workspaces/b2/MEMORY.md", "b2/t-other/private.md"]) {
+          const read = await call(`bots/b1/files/read?${q({ root: "project", path })}`);
+          expect(read.status, `${cwd} ${path}`).toBe(409);
+          expect(read.raw.toString()).not.toContain("Memory of b2");
+        }
         const walked = JSON.stringify(await walkAll("b1", {}));
         expect(walked, cwd).not.toContain("SOMEONE ELSE");
         expect(walked.match(/MEMORY\.md/g)?.length ?? 0, cwd).toBe(1);

@@ -16,8 +16,8 @@ import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 
-/** macOS draws its traffic lights over the chat header in this window (the
- * desktop window's hidden inset title bar): the header keeps clear of them. */
+/** macOS draws its traffic lights over the title bar in this window (the
+ * desktop window's hidden inset title bar): the bar keeps clear of them. */
 function insetChrome(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean((window as { artifactWindowSelf?: unknown }).artifactWindowSelf) && /Mac/i.test(globalThis.navigator?.platform ?? "");
@@ -48,7 +48,7 @@ export function BotChatWindow({ botId }: { botId: string }) {
         <main
           data-bot-chat-window={botId}
           data-inset={insetChrome() || undefined}
-          className="app-content-frame relative flex h-dvh min-w-0 flex-col bg-app text-ink data-[inset=true]:[&_[data-chat-header-bar]]:pl-[84px]"
+          className="app-content-frame bot-chat-window relative flex h-dvh min-w-0 flex-col bg-app text-ink"
         >
           <ChatView bot={bot} />
         </main>

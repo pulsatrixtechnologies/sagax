@@ -5246,3 +5246,39 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --usage-s5: #e87ba4;
   --usage-s6: #6250d6;
 }
+
+/* A bot's own window (BotChatWindow, #4639): the chat header is a solid,
+   compact title bar, not the main window's floating pill. Mascot and name sit
+   left-aligned after the traffic-light space (macOS inset), the "..." menu at
+   the right, a hairline under it, and nothing of the conversation shows
+   behind it. The bar is the window's drag handle (.content-topbar). */
+.bot-chat-window [data-chat-header-bar] {
+  background: var(--color-app);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  padding-left: 1rem;
+  /* the 52px the transcript keeps free under the bar: the bar is exactly it */
+  padding-block: 6px;
+  min-height: 0;
+  height: 52px;
+}
+.bot-chat-window[data-inset="true"] [data-chat-header-bar] {
+  padding-left: 84px;
+}
+.bot-chat-window [data-chat-header-bar] [data-chat-edge-fade] {
+  display: none;
+}
+.bot-chat-window [data-chat-header-bar] [data-chat-header-center] {
+  position: static;
+  inset: auto;
+  transform: none;
+  translate: none;
+  max-width: none;
+  min-width: 0;
+  margin-right: auto;
+}
+/* the pill's capsule is dropped in the bar: mascot and name read as plain title */
+.bot-chat-window [data-chat-header-bar] [data-chat-pill] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}

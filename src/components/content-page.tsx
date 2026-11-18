@@ -91,7 +91,7 @@ export function PageTopStrip() {
  * sets the data attributes the page's tests and tours find it by
  * (`data-<name>-header`, `-primary`, `-actions`, `-section`).
  */
-export function PageHeader({ name, icon: Icon, title, count, subtitle, section, onRoot, primary, actions, below, topbar = false, inset = false, aligned = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
+export function PageHeader({ name, icon: Icon, title, count, subtitle, section, onRoot, primary, actions, below, topbar = false, inset = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
   name: string;
   icon: LucideIcon;
   title: string;
@@ -113,10 +113,8 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
   topbar?: boolean;
   /** A standalone window on macOS: clear the traffic lights. */
   inset?: boolean;
-  /** A 16 px gutter on a phone (the Routines page, 2026-11-17): the title row sits under the drawer button, and
-   * the indicators and the menu take the button's row. From 640 px it is the standard header, the same edges as
-   * the Memory page's. */
-  aligned?: boolean;
+  /* Phone (390): every page has the reference's 16 px gutter (its full pages, measured, #4420), the title row under the
+   * drawer button and the indicators and the menu on the button's row; from 640 px the standard header. */
   primaryStyle?: CSSProperties;
   actionsStyle?: CSSProperties;
   titleProps?: HTMLAttributes<HTMLDivElement> & DataAttributes;
@@ -127,7 +125,7 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
       {...rest}
       {...{ [`data-${name}-header`]: "" }}
       data-page-header=""
-      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : aligned ? "relative px-6 max-sm:px-4 max-sm:pb-3 max-sm:pt-12" : "pl-6 max-sm:pl-12", rest.className)}
+      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : "relative pl-6 max-sm:px-4 max-sm:pb-3 max-sm:pt-12", rest.className)}
     >
       <div>
       <div className="flex items-start justify-between gap-3">
@@ -138,11 +136,11 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
               ? <h1 className="min-w-0 text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink"><button type="button" data-page-crumb="" {...{ [`data-${name}-crumb`]: "" }} onClick={onRoot} className="rounded-md text-ink-secondary hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{title}</button></h1>
               : <h1 className="min-w-0 truncate text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink">{title}</h1>}
             {section && <span {...{ [`data-${name}-section`]: "" }} aria-current="page" className="flex min-w-0 items-center gap-1 text-[17px] font-semibold leading-6 text-ink"><ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" /><span className="truncate">{section}</span></span>}
-            {count != null && count !== false && <span data-page-count="" className={cn("ml-1 shrink-0 text-[11px] tabular-nums text-ink-secondary", aligned && "max-[24rem]:hidden")}>{count}</span>}
+            {count != null && count !== false && <span data-page-count="" className={"ml-1 shrink-0 text-[11px] tabular-nums text-ink-secondary max-[24rem]:hidden"}>{count}</span>}
           </div>
           {subtitle && <p data-page-subtitle="" className="mt-1 text-[12px] text-ink-secondary">{subtitle}</p>}
         </div>
-        <div {...{ [`data-${name}-actions`]: "" }} data-page-actions="" className={cn("ml-auto flex shrink-0 items-center gap-2", aligned && "max-sm:absolute max-sm:right-4 max-sm:top-2")} style={actionsStyle}>{actions}</div>
+        <div {...{ [`data-${name}-actions`]: "" }} data-page-actions="" className={"ml-auto flex shrink-0 items-center gap-2 max-sm:absolute max-sm:right-4 max-sm:top-2"} style={actionsStyle}>{actions}</div>
       </div>
       {primary && <div {...{ [`data-${name}-primary`]: "" }} data-page-toolbar="" className="mt-3 flex min-w-0 flex-wrap items-center gap-2" style={primaryStyle}>{primary}</div>}
       {below}

@@ -176,7 +176,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         titleProps={{ "data-tour": "automations-page" }}
         {...(fill ? dragProps : {})}
         topbar={fill}
-        aligned
         inset={!embedded && !fill && macInset}
         style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
         primaryStyle={noDragStyle ?? windowNoDragStyle}

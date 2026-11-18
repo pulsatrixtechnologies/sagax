@@ -84,7 +84,8 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
               <DetailLabel>{t("connectApps.detail.reach")}</DetailLabel>
               <ul className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
                 {(allChips ? vendor.products : vendor.products.slice(0, CHIPS_SHOWN)).map((product) => {
-                  const state = productRowState(product, () => ctx.onOpen(product));
+                  // the chip itself opens the product: its state mark is a plain image with its tooltip, never a second button inside the button
+                  const state = productRowState(product);
                   return (
                     <li key={product.id} className="min-w-0">
                       <button type="button" data-vendor-chip-product={product.id} title={product.name} onClick={() => ctx.onOpen(product)}

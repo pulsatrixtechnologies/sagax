@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult, stepToolName, stuckNoticeKey } from "./step-label";
+import { readStep, stepArgs, stepDuration, stepFailureText, stepJson, stepLabel, stepPhase, stepResult, stepToolName, stuckNoticeKey } from "./step-label";
 
 afterEach(() => {
   setLocale("en");
@@ -317,5 +317,18 @@ describe("a hub call names its connector, tool and account (#3349)", () => {
     setLocale("fr");
     expect(readStep(answered).target).toContain("Compte : Claude");
     expect(readStep(answered).label).toBe(readStep(native(true)).label);
+  });
+});
+
+describe("#4711: a failed step's Result", () => {
+  it("shows the cause a failed turn's row carries in its name", () => {
+    const name = "error: Claude stopped with an error (HTTP 403; Claude says: \"Your organization has disabled Claude subscription access\").";
+    expect(stepFailureText({ name })).toBe("Claude stopped with an error (HTTP 403; Claude says: \"Your organization has disabled Claude subscription access\").");
+  });
+
+  it("keeps the tool's own error first, and says nothing only when nothing was said", () => {
+    expect(stepFailureText({ name: "error: turn failed", output: JSON.stringify({ error: { message: "Mail is not reachable" } }) })).toBe("Mail is not reachable");
+    expect(stepFailureText({ name: "mail_search" })).toBeUndefined();
+    expect(stepFailureText({ name: "mail_search", output: "  " })).toBeUndefined();
   });
 });

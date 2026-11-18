@@ -20,6 +20,8 @@ import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../
 import { humanPath } from "@/lib/short-path";
 import { gatewayToolId, toolDisplayName } from "../../shared/tool-display-name";
 import { readConnectorCall } from "../../shared/connector-call";
+import { failedTurnCause } from "../../shared/failed-turn";
+import { toolFailureText } from "../../shared/tool-failure-text";
 
 export type StepPhase = "running" | "done" | "failed" | "unverified";
 
@@ -684,6 +686,17 @@ export function stepResult(output: string | undefined, maxLines = 4, maxChars = 
   let text = lines.slice(0, maxLines).join("\n");
   if (text.length > maxChars) text = `${text.slice(0, maxChars - 1).trimEnd()}…`;
   return { text, cut: text.length < trimmed.length };
+}
+
+/** #4711: the words of a failed step for its Result: the tool's own error
+ * (whatever envelope its engine wrapped it in, shared/tool-failure-text.ts),
+ * else the cause a failed turn's row carries in its name ("error: <cause>",
+ * shared/failed-turn.ts). Undefined only when the failure said nothing. */
+export function stepFailureText(tool: { name?: string; output?: string }): string | undefined {
+  const own = toolFailureText(tool.output) ?? (tool.output?.trim() ? tool.output : undefined);
+  if (own) return own;
+  const cause = failedTurnCause(tool.name ?? "");
+  return cause || undefined;
 }
 
 /** The full technical record a person can copy: tool id, input, result. */

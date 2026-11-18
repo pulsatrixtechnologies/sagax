@@ -1,6 +1,6 @@
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TurnAuthenticationRefusedError, type RuntimeEvent } from "../contracts.ts";
-import { claudeAuthRecovery } from "./claude-auth-recovery.ts";
+import { claudeAuthFailure, claudeAuthRecovery } from "./claude-auth-recovery.ts";
 
 const message = "Not logged in · Please run /login";
 const auth = {
@@ -151,4 +151,12 @@ it("matches a multi-block refusal to the error the driver emits for it", async (
     f.recovery.frame("thread", result);
     f.recovery.emit(completed);
   })).rejects.toBeInstanceOf(TurnAuthenticationRefusedError);
+});
+
+describe("#4711: a plan that does not allow this use is no expired sign-in", () => {
+  it("stays an engine error in its own words, never the reconnect sentence", () => {
+    const text = "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead";
+    expect(claudeAuthFailure({ is_api_error_message: true, error: "unknown" }, text)).toBe(false);
+    expect(claudeAuthFailure({ is_api_error_message: true, error: "authentication_failed" }, "Invalid API key · Please run /login")).toBe(true);
+  });
 });

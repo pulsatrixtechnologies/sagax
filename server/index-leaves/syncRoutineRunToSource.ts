@@ -271,7 +271,10 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // it has items only the person can do or paused its routine.
     const streakOnly = byStreak && !attentionFound && !run.autoPaused;
     const tells = streakOnly ? problemRun(run) && tellsPerson(host, run) : !run.problemRepeat || attentionFound;
-    if (reportable && tells && mayWrite(undefined, streakOnly && tells) && own?.routineRunId === run.id) {
+    // #4711: never a proactive wake's task: its first message is the wake's
+    // prompt (internal instructions and event data), never a person's
+    // words, and its passes stay out of the chat; it stays in Automations.
+    if (reportable && tells && !run.proactive && mayWrite(undefined, streakOnly && tells) && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }
     return null;

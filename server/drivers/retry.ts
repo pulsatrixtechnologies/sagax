@@ -77,6 +77,11 @@ const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
     pattern: /\b(?:oauth session expired|oauth token (?:has )?expired|failed to authenticate:\s*oauth|authentication_failed|oauth\b[^.\n]{0,80}could not be refreshed)\b/i,
     reason: "auth",
   },
+  // #4711: the account's plan or organization turned this use off ("Your
+  // organization has disabled Claude subscription access for Claude Code"):
+  // the engine is held for this payer like a sign-in, so the bot's backups
+  // take its next turns; never a quota (no reset) and never retried.
+  { pattern: /\bdisabled\b[^.\n]{0,80}\bsubscription access\b|\bsubscription access\b[^.\n]{0,40}\b(?:is )?(?:disabled|turned off|not (?:allowed|available|enabled))\b/i, reason: "auth" },
   // Config refusal before the quota words: bare "billing"/"subscription" in
   // these sentences must not block the engine for an hour (#1758).
   { pattern: PROVIDER_NOT_CONFIGURED, reason: "auth" },

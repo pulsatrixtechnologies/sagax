@@ -7,7 +7,17 @@ import { USAGE_LIMIT } from "./retry.ts";
 import { contextFullMessage, isContextFullText } from "../context/context-renewal.ts";
 import { usageLimitWait } from "./acp/quiet-status.ts";
 
-export type EngineFailureKind = "credits" | "usage_limit" | "context_full" | "rate_limit" | "overloaded" | "server" | "tool_schema" | "refused";
+export type EngineFailureKind = "credits" | "usage_limit" | "context_full" | "rate_limit" | "overloaded" | "server" | "tool_schema" | "access" | "refused";
+
+/** #4711: an account whose plan or organization does not allow this use of the engine (Claude Code: "Your organization
+ * has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead"). No retry, wait or
+ * reconnect fixes it: another way to connect the engine, or another engine, does. */
+const PLAN_ACCESS = /\bdisabled\b[^.\n]{0,80}\bsubscription access\b|\bsubscription access\b[^.\n]{0,40}\b(?:is )?(?:disabled|turned off|not (?:allowed|available|enabled))\b/i;
+
+/** Whether an engine refused because the account's plan or organization does not allow this use (PLAN_ACCESS). */
+export function isPlanAccessRefusal(text: string | undefined): boolean {
+  return typeof text === "string" && PLAN_ACCESS.test(text);
+}
 
 /** A provider refusing for want of credit or payment, in its own words (402 is read from the status). */
 const OUT_OF_CREDITS = /\bpayment required\b|\binsufficient (?:account )?(?:funds|balance|credits?)\b|\b(?:credit|account) balance is too low\b|\bout of credits?\b|\bno credits? (?:left|remaining)\b|\bused all (?:available |of (?:your|its) )?credits\b/i;
@@ -75,6 +85,7 @@ export function providerReason(text: string): string | null {
 
 /** What a raw engine failure is, from its HTTP status or its words; null when it is none of these. */
 export function engineFailureKind(text: string, status = httpStatusOf(text)): EngineFailureKind | null {
+  if (PLAN_ACCESS.test(text)) return "access";
   if (status === 402 || OUT_OF_CREDITS.test(text)) return "credits";
   if (USAGE_LIMIT.test(text)) return "usage_limit";
   // The engine's context filled up (Claude Code's compaction breaker, an API's 400 for a prompt past the window):
@@ -115,6 +126,9 @@ export function engineFailureMessage(
       return `${provider} refused this turn as an invalid request because the input schema of ${tool ? `the "${tool}" tool` : "one of this bot's tools"} `
         + `${problem}, so nothing ran. Turn off the MCP server or app that tool comes from for this bot, or switch the bot to another AI.`;
     }
+    // #4711: which engine refused and what to do, in one sentence; the HTTP status stays (the sign-in hold reads it).
+    case "access": return `${provider} refused to run this bot: this ${provider} account does not allow it here${detail(code, says)}. `
+      + `Connect ${provider} with an API key in Settings, or switch this bot to another engine. Until then, this bot's backup engine answers when it has one.`;
     case "refused": return `${provider} stopped with an error${detail(code, says)}.`;
   }
 }

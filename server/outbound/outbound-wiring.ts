@@ -153,7 +153,7 @@ export const TAKE_OVER_ANSWERED_MS = 25_000;
 /** The card's line once the person is on the call (their own part is never
  * transcribed), in the call's language. */
 export function onTheCallLine(language: "fr" | "en"): string {
-  return language === "fr" ? "Vous êtes sur l'appel." : "You're on the call.";
+  return language === "fr" ? "Tu es sur l'appel." : "You're on the call.";
 }
 
 /** The bot's mid-call controls (DTMF, take over, hang up) and the person's

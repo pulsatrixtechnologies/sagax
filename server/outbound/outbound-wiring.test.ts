@@ -357,12 +357,12 @@ describe("live call card lot 4: the person takes the call over", () => {
     expect(voice).toHaveBeenLastCalledWith(expect.anything(), { control: "take_over", ref: id, take_over_to: OWN });
     expect(rows[0]!.outbound).toMatchObject({ phase: "transferred", takeOver: { state: "transferring", at: 5_000 }, liveAnsweredAt: 1_000 });
     // Perspicax's own progress says the same: nothing doubles
-    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "transferred", lines: [{ speaker: "system", text: "Transfert de l'appel vers vous.", at: 5_100 }] })).toBe("applied");
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "transferred", lines: [{ speaker: "system", text: "Transfert de l'appel vers toi.", at: 5_100 }] })).toBe("applied");
     expect(timers).toHaveLength(1);
     tick(31_000);
     timers[0]!.fn();
     expect(rows[0]!.outbound?.takeOver).toEqual({ state: "answered", at: 5_000 });
-    expect(rows[0]!.outbound?.liveTranscript?.at(-1)).toMatchObject({ speaker: "system", text: "Vous êtes sur l'appel." });
+    expect(rows[0]!.outbound?.liveTranscript?.at(-1)).toMatchObject({ speaker: "system", text: "Tu es sur l'appel." });
     wiring.callResult({ sub: "sub-jean", result: { ref: id, callSid: SID, outcome: "completed", endedBy: "transfer", durationSec: 95, points: ["Transféré"], commitments: [], transcript: [{ speaker: "bot", text: "Bonjour" }] } });
     expect(rows[0]!.outbound?.result).toMatchObject({ outcome: "completed", endedBy: "transfer", durationSec: 95 });
   });
@@ -376,7 +376,7 @@ describe("live call card lot 4: the person takes the call over", () => {
     expect(rows[0]!.outbound).not.toHaveProperty("takeOver");
     timers[0]!.fn();
     expect(rows[0]!.outbound).not.toHaveProperty("takeOver");
-    expect(rows[0]!.outbound?.liveTranscript?.map((line) => line.text)).not.toContain("Vous êtes sur l'appel.");
+    expect(rows[0]!.outbound?.liveTranscript?.map((line) => line.text)).not.toContain("Tu es sur l'appel.");
   });
 
   it("only the person who asked for the call: anyone else gets 404 and nothing is reached", async () => {

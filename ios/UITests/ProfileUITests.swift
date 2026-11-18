@@ -377,6 +377,22 @@ final class ProfileUITests: XCTestCase {
 
     // MARK: Bot profile cards (#3403)
 
+    /// The bot profile's header follows the desktop (#4602): the name and the
+    /// label on ONE line (same row), the label after the name, and no
+    /// description line.
+    @MainActor
+    func testProfileHeaderShowsNameAndLabelOnOneLineWithoutDescription() throws {
+        let app = launchProfile()
+        openBotProfile(in: app)
+        let name = element("bot-profile-name", in: app)
+        let label = element("bot-profile-title", in: app)
+        XCTAssertTrue(name.waitForExistence(timeout: 10), "the name")
+        XCTAssertTrue(label.exists, "the label")
+        XCTAssertLessThan(abs(name.frame.midY - label.frame.midY), 12, "name and label share one line")
+        XCTAssertGreaterThan(label.frame.minX, name.frame.minX, "the label follows the name")
+        XCTAssertFalse(element("bot-profile.hero.description", in: app).exists, "no description line in the header")
+    }
+
     /// The gear's bot profile, on General.
     @MainActor
     private func openBotProfile(in app: XCUIApplication) {

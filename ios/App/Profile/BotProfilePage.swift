@@ -1,8 +1,8 @@
 // Bot profile page, the desktop's BotProfilePage (#2127, #2313, #3030) on
-// iPhone and iPad: the mascot's colour wash, the bare mascot centred on it
-// (a tap plays a move), the name with its title under it (never
-// "Name · Title"), who sees it, the owner, the Primary badge and the
-// description, all edited in place. A top bar that condenses on scroll
+// iPhone and iPad: the mascot's colour wash, the mascot at 64 in a 3 pt ring
+// of the page colour on its lower edge (a tap plays a move), the name and
+// title on one line "Name · Title" (#4602), who sees it, the owner and the
+// Primary badge, name and title edited in place; no description line. A top bar that condenses on scroll
 // (mascot 26, name 14), Private / Shared as a label, Share and the "…"
 // menu (Archive, Delete) only where this pairing allows them (hidden, never
 // greyed). Pill tabs General / Knowledge / Analytics with a search beside
@@ -158,7 +158,9 @@ struct BotProfilePage: View {
         actions.openSection(context.sections.contains(.sharing) ? .sharing : .visibility)
     }
 
-    private var mascotSize: CGFloat { fillsMain ? 150 : 110 }
+    /// The reference's 64 mascot inside a 3 pt ring of the page colour (a 70 plate).
+    private let mascotSize: CGFloat = 64
+    private let ringWidth: CGFloat = 3
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -277,10 +279,12 @@ struct BotProfilePage: View {
         .accessibilityHidden(true)
     }
 
-    /// The desktop's header: no card, the bare mascot over the banner's
-    /// lower edge, the name and title centred under it, then the facts.
+    /// The desktop's header (#4602): the mascot at 64 in a 3 pt ring of the
+    /// page colour, its middle on the banner's lower edge, then "Name · Label"
+    /// on one line and the facts, all aligned left.
     private var hero: some View {
-        VStack(spacing: 10) {
+        let plate = mascotSize + ringWidth * 2
+        return VStack(alignment: .leading, spacing: 8) {
             BotMascotView(
                 bot: current,
                 size: mascotSize,
@@ -288,29 +292,32 @@ struct BotProfilePage: View {
                 animated: true,
                 owlHandle: owlHandle
             )
-            .frame(width: mascotSize + 20, height: mascotSize + 20)
-            .contentShape(Rectangle())
+            .frame(width: plate, height: plate)
+            .background(Circle().fill(Theme.bg))
+            .contentShape(Circle())
             .onTapGesture { playMove() }
             .accessibilityElement()
             .accessibilityLabel(Text("Play a move"))
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("bot-profile-mascot")
-            BotProfileHeroIdentity(bot: current, centered: true)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.onValueChange(of: geo.frame(in: .global).maxY, initial: true) { edge in
-                            nameEdge = edge
-                            condense()
+            .padding(.top, -(plate / 2))
+            VStack(alignment: .leading, spacing: 4) {
+                BotProfileHeroIdentity(bot: current)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.onValueChange(of: geo.frame(in: .global).maxY, initial: true) { edge in
+                                nameEdge = edge
+                                condense()
+                            }
                         }
-                    }
-                )
-            BotProfileHeroDetails(bot: current, audience: privacy, centered: true)
+                    )
+                BotProfileHeroDetails(bot: current, audience: privacy)
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         // The hero's inks follow the page's palette on the phone too (light or dark).
         .environment(\.desktopTheme, fillsMain ? desktopTheme : DesktopTheme.of(themePalette))
-        .padding(.horizontal, 24)
-        .padding(.top, -(mascotSize * 0.55))
+        .padding(.horizontal, 16)
         // A picture dropped on the hero, or pasted from its menu, becomes the avatar.
         .botProfileHeroImageTarget(current)
         .accessibilityElement(children: .contain)

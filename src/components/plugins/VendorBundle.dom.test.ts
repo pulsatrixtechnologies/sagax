@@ -1,9 +1,4 @@
 // @vitest-environment happy-dom
-// A vendor the organization console offers is ONE plugin-like bundle (#4453):
-// one row under Plugins that opens its page, never an unfolding list under
-// Connectors; each of its products is still its own row of Connectors, marked
-// "in <vendor>"; its page has Overview and Connectors; images come by https
-// and fall back to the one neutral tile.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,8 +20,8 @@ const suite = { id: "harbor", name: "Harbor Suite", description: { en: "Service 
 const wire = (id: string, name: string, over: Record<string, unknown> = {}) => ({ id, name, state: "connected", ...over });
 const product = (id: string, name: string, over: Record<string, unknown> = {}): PersonProduct => parsePersonProduct(wire(id, name, { group: suite, ...over }))!;
 const products = [
-  product("desk", "Service Desk", { state: "key_expired", description: "Tickets and time" }),
-  product("rmm", "Remote Monitoring"),
+  product("desk", "Service Desk", { state: "key_expired", description: "Tickets and time", profiles: [{ name: "Support" }, { name: "Direct", personal: true }] }),
+  product("rmm", "Remote Monitoring", { profiles: [{ name: "Support" }, { name: "Operations" }] }),
   parsePersonProduct(wire("wiki", "Team Wiki"))!,
 ];
 const ctx = (extra: Partial<RowsContext> = {}): RowsContext => ({ bots: [{ id: "bot-a", name: "Rocket" }, { id: "bot-b", name: "Orbit" }], setProducts: vi.fn(), onOpen: vi.fn(), ...extra });
@@ -74,43 +69,48 @@ describe("the vendor as one bundle row under Plugins", () => {
   });
 });
 
-describe("each product is its own row of Connectors, marked as part of its bundle", () => {
-  const flat = (onOpenVendor = vi.fn()) => productRows(products, ctx(), { mode: "connectors", onOpenVendor });
-
-  it("lists every product once, flat, with a small \"in <vendor>\" chip on those in a bundle only", async () => {
-    const list = flat();
-    expect(list.map((row) => row.key)).toEqual(["product:desk", "product:rmm", "product:wiki"]);
-    const view = await render(createElement("div", null, list.map((row) => createElement("div", { key: row.key }, row.node))));
-    expect(view.querySelector("[data-vendor-toggle]")).toBeNull();
-    const chips = [...view.querySelectorAll("[data-vendor-chip]")].map((chip) => chip.textContent);
-    expect(chips).toEqual(["in Harbor Suite", "in Harbor Suite"]);
-    expect(view.querySelector("[data-person-product='wiki'] [data-vendor-chip]")).toBeNull();
+describe("gateway connectors grouped by product", () => {
+  it("shares one bundle card per product, including a standalone connector, and counts switches for the selected bot", async () => {
+    const onOpenVendor = vi.fn();
+    const setProducts = vi.fn();
+    const context = ctx({ forBot: { id: "bot-b", name: "Orbit", products: { desk: false } }, setProducts });
+    const rows = productRows(products, context, { mode: "connectors", onOpenVendor });
+    expect(rows.map((row) => row.key)).toEqual(["vendor:harbor", "product:wiki"]);
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    const bundle = view.querySelector('[data-vendor-bundle="vendor:harbor"]')!;
+    expect(bundle.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 1 on");
+    expect(bundle.querySelector('[title="Support, Operations"]')?.textContent).toBe("Support, Operations");
+    expect(bundle.textContent).not.toContain("Direct");
+    expect(bundle.querySelectorAll("[data-row-state]")).toHaveLength(1);
+    expect(bundle.querySelector('[data-row-state="fix"]')).not.toBeNull();
+    await click(bundle.querySelector("[data-row-switch]"));
+    expect(setProducts).toHaveBeenCalledWith(["bot-b"], ["desk", "rmm"], true);
+    await click(bundle.querySelector("button"));
+    expect(onOpenVendor).toHaveBeenCalledWith("vendor:harbor");
+    const single = view.querySelector('[data-vendor-bundle="product:wiki"]')!;
+    expect(single.querySelector("[data-vendor-line]")?.textContent).toBe("1 connector · 1 on");
+    await click(single.querySelector("button"));
+    expect(onOpenVendor).toHaveBeenCalledWith("product:wiki");
   });
 
-  it("the chip is its own button (a keyboard stop of its own, never a control inside a control) and opens the bundle, not the product's page", async () => {
-    const onOpenVendor = vi.fn();
-    const opened = vi.fn();
-    const view = await render(createElement("div", null, productRows(products, ctx({ onOpen: opened }), { mode: "connectors", onOpenVendor })[0]!.node));
-    const chip = view.querySelector<HTMLElement>("[data-vendor-chip]")!;
-    expect(chip.tagName).toBe("BUTTON");
-    expect(chip.parentElement?.closest("button")).toBeNull();
-    expect(view.querySelectorAll("[data-person-product='desk'] button").length).toBeGreaterThanOrEqual(2);
-    expect(chip.getAttribute("aria-label")).toBe("Part of Harbor Suite: open it");
-    await click(chip);
-    expect(onOpenVendor).toHaveBeenCalledWith("vendor:harbor");
-    expect(opened).not.toHaveBeenCalled();
-    // the row's own button opens the product
-    await click(view.querySelector("[data-person-product='desk'] button"));
-    expect(opened).toHaveBeenCalledTimes(1);
+  it("shows these same cards in Discover, including when they are its only results", async () => {
+    const { DiscoverView } = await import("./DiscoverView");
+    const rows = productRows(products, ctx(), { mode: "connectors", onOpenVendor: vi.fn() });
+    const view = await render(createElement(DiscoverView, {
+      items: [], filter: "all", onFilter: vi.fn(), type: "any", onType: vi.fn(), sourceLabel: (name: string) => name,
+      onOpenItem: vi.fn(), renderAction: () => null, kind: "connectors", connectorProducts: { title: "Gateway", rows },
+    }));
+    expect(view.querySelectorAll('[data-plugins-section="connector-products"] [data-vendor-bundle]')).toHaveLength(2);
+    expect(view.querySelector("[data-plugins-empty]")).toBeNull();
   });
 
   it("a product with no icon of its own takes its vendor's", async () => {
-    const view = await render(createElement("div", null, flat()[0]!.node));
+    const view = await render(createElement("div", null, productRows(products, ctx())[0]!.node));
     expect(view.querySelector("[data-person-product='desk'] [data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
   });
 
   it("keeps the one neutral tile when an image cannot load", async () => {
-    const view = await render(createElement("div", null, flat()[0]!.node));
+    const view = await render(createElement("div", null, productRows(products, ctx())[0]!.node));
     const image = view.querySelector("[data-person-product='desk'] [data-remote-image]")!;
     await act(async () => { image.dispatchEvent(new Event("error")); });
     expect(view.querySelector("[data-person-product='desk'] [data-remote-image]")).toBeNull();

@@ -4,7 +4,7 @@
 // (the vendor's line in the person's language, its facts, "Connectors & tools")
 // and Connectors (each product with its own icon, state, switch and key
 // action), and Skills only when the console offers skills that go with the
-// vendor. Every product also stays a row of Connectors, marked "in <vendor>".
+// vendor.
 // The marketplace plugins installed for the product (lib/product-plugins) are
 // part of it: their row (switch, Update, page, Uninstall) in the Overview,
 // their skills in Skills, their count in the grey line.
@@ -30,9 +30,10 @@ type VendorTab = "overview" | "skills" | "connectors";
 const CHIPS_SHOWN = 8;
 const SEARCH_FROM = 8;
 
-export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [], plugins }: {
+export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [], plugins, initialTab = "overview" }: {
   vendor: ProductVendor<PersonProduct>;
   ctx: ProductRowsContext;
+  initialTab?: "overview" | "connectors";
   onBack: () => void;
   trail?: readonly Crumb[];
   /** the console the vendor comes from ("Perspicax · <organization>"), for the grey line */
@@ -46,7 +47,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
    * turned off, their state rolled up with the products'; absent: none */
   plugins?: { rows: ReadonlyArray<{ key: string; node: ReactNode }>; off?: boolean; state?: RowState | null };
 }) {
-  const [tab, setTab] = useState<VendorTab>("overview");
+  const [tab, setTab] = useState<VendorTab>(initialTab);
   const [allChips, setAllChips] = useState(false);
   const [query, setQuery] = useState("");
   const ids = vendor.products.map((product) => product.id);

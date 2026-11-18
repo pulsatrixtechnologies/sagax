@@ -2604,8 +2604,8 @@ async function refreshSharedComputersAllowed() {
   if (locked) {
     sharedComputersAllowed = await fetchEnvironmentDescriptor(locked.origin, { redirect: "error", credentials: "omit", signal: AbortSignal.timeout(3_000) })
       .then((res) => (res.ok ? res.json() : null))
-      .then((descriptor) => descriptor?.capabilities?.sharedComputers === true)
-      .catch(() => false);
+      .then((descriptor) => descriptor == null ? null : descriptor?.capabilities?.sharedComputers === true)
+      .catch(() => null);
     return sharedComputersAllowed;
   }
   // The window may open while the server still loads (startServerOn): the
@@ -2613,8 +2613,8 @@ async function refreshSharedComputersAllowed() {
   await localServerAnswering;
   sharedComputersAllowed = await fetch(`http://127.0.0.1:${SERVER_PORT}/api/config`, { signal: AbortSignal.timeout(3_000) })
     .then((res) => (res.ok ? res.json() : null))
-    .then((status) => status?.features?.sharedComputers === true)
-    .catch(() => false);
+    .then((status) => status == null ? null : status.features?.sharedComputers === true)
+    .catch(() => null);
   return sharedComputersAllowed;
 }
 
@@ -6019,11 +6019,9 @@ app.whenReady().then(async () => {
   // Server mode: this app bridges the organization's bots to this computer
   // for the signed-in person (electron/desktop-bridge.mjs).
   desktopBridge().sync();
-  // Maintainer grants never start while computer sharing is off: no poll
-  // loop, no registration, no grant replay from disk.
-  void refreshSharedComputersAllowed().then((allowed) => {
-    sharingController().start({ maintainer: allowed });
-  });
+  // Each saved grant checks the server before registration and retries
+  // when its capability descriptor is temporarily unavailable.
+  sharingController().start();
   startupPhase("opening the workspace");
   let restoredOrganizationEntry = false;
   await workspaceMenuAction(async () => { restoredOrganizationEntry = await organizationEntry.restore(); });

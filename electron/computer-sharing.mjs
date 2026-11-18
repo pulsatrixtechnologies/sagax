@@ -95,6 +95,7 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
   // A maintainer grant only: Cloud grants never read the maintainer flag.
   const requireEnabled = async () => {
     const allowed = !closed && !maintainerOff && await enabled().catch(() => false);
+    if (allowed === null) throw new Error("Waiting for the server to confirm computer sharing.");
     if (allowed && !closed && !maintainerOff) return;
     maintainerOff = true;
     for (const env of environments()) {

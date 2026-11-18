@@ -53,7 +53,7 @@ export function createComputerSharing(options: {
   file: string;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   environments: () => Workspace[];
-  enabled?: () => Promise<boolean>;
+  enabled?: () => Promise<boolean | null>;
   protectedPaths?: string[];
   cuaConnection: () => Promise<{ mcpCommand: string; mcpArgs: string[]; mcpEnv?: Record<string, string> } | null>;
   hostControl?: (id: string, signal: AbortSignal) => Promise<{ renew(): Promise<unknown>; release(): Promise<unknown> }>;

@@ -6,6 +6,9 @@
 // person removed is not added again (PluginMarketplaces.dismissedOfficial).
 import { OFFICIAL_CATALOGS, type OfficialCatalog } from "../../shared/skill-catalogs.ts";
 
+/** the first pass waits this long after the start, so the server is ready and
+ * idle (and its own first minute is not shared with a clone) */
+export const OFFICIAL_AUTO_FIRST_DELAY_MS = 60_000;
 /** the wait before the first retry; it doubles up to the longest */
 export const OFFICIAL_AUTO_RETRY_MS = 10 * 60_000;
 export const OFFICIAL_AUTO_RETRY_MAX_MS = 6 * 60 * 60_000;
@@ -19,6 +22,8 @@ export interface OfficialCatalogsAutoOptions {
   dismissed: () => string[];
   add: (catalog: OfficialCatalog) => Promise<unknown>;
   catalogs?: readonly OfficialCatalog[];
+  /** wait before the first pass (default OFFICIAL_AUTO_FIRST_DELAY_MS) */
+  firstDelayMs?: number;
   log?: (line: string) => void;
 }
 
@@ -78,8 +83,8 @@ export function startOfficialCatalogsAuto(options: OfficialCatalogsAutoOptions):
     return running;
   };
 
-  // after the start, never during it
-  const first = setTimeout(() => { void once(); }, 0);
+  // after the start, once the server is ready and idle: never during it
+  const first = setTimeout(() => { void once(); }, options.firstDelayMs ?? OFFICIAL_AUTO_FIRST_DELAY_MS);
   first.unref?.();
 
   return {

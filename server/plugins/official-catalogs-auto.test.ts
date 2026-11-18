@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OFFICIAL_CATALOGS } from "../../shared/skill-catalogs.ts";
-import { OFFICIAL_AUTO_RETRY_MS, startOfficialCatalogsAuto } from "./official-catalogs-auto.ts";
+import { OFFICIAL_AUTO_FIRST_DELAY_MS, OFFICIAL_AUTO_RETRY_MS, startOfficialCatalogsAuto } from "./official-catalogs-auto.ts";
 import { PluginMarketplaces } from "./plugin-marketplaces.ts";
 
 let dir: string;
@@ -17,11 +17,24 @@ afterEach(() => { vi.useRealTimers(); rmSync(dir, { recursive: true, force: true
 const quiet = () => {};
 
 describe("startOfficialCatalogsAuto", () => {
+  it("waits for the server to be idle before the first pass", async () => {
+    const added: string[] = [];
+    const auto = startOfficialCatalogsAuto({
+      enabled: () => true, sources: () => new Set(), dismissed: () => [], log: quiet,
+      add: async (catalog) => { added.push(catalog.id); },
+    });
+    await vi.advanceTimersByTimeAsync(OFFICIAL_AUTO_FIRST_DELAY_MS - 1);
+    expect(added).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(added.length).toBe(OFFICIAL_CATALOGS.length);
+    auto.stop();
+  });
+
   it("adds every missing official catalog once, and none inside an organization", async () => {
     const have = new Set<string>();
     const added: string[] = [];
     const run = (enabled: boolean) => startOfficialCatalogsAuto({
-      enabled: () => enabled, sources: () => have, dismissed: () => [], log: quiet,
+      enabled: () => enabled, sources: () => have, dismissed: () => [], log: quiet, firstDelayMs: 0,
       add: async (catalog) => { added.push(catalog.id); have.add(catalog.source.toLowerCase()); },
     });
     const org = run(false);
@@ -41,7 +54,7 @@ describe("startOfficialCatalogsAuto", () => {
     const have = new Set([first!.source.toLowerCase()]);
     const added: string[] = [];
     const auto = startOfficialCatalogsAuto({
-      enabled: () => true, sources: () => have, dismissed: () => [second!.id], log: quiet,
+      enabled: () => true, sources: () => have, dismissed: () => [second!.id], log: quiet, firstDelayMs: 0,
       add: async (catalog) => { added.push(catalog.id); },
     });
     await vi.advanceTimersByTimeAsync(1);
@@ -53,7 +66,7 @@ describe("startOfficialCatalogsAuto", () => {
     const have = new Set<string>();
     let fail = true;
     const auto = startOfficialCatalogsAuto({
-      enabled: () => true, sources: () => have, dismissed: () => [], log: quiet,
+      enabled: () => true, sources: () => have, dismissed: () => [], log: quiet, firstDelayMs: 0,
       add: async (catalog) => {
         if (catalog.id === "openclaw" && fail) throw new Error("offline");
         have.add(catalog.source.toLowerCase());

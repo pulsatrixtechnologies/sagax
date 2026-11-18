@@ -1,6 +1,5 @@
 access.engineMissing.owner
 access.worksOn
-achievements.gamertag.label
 approval.action.alwaysAllowCommand
 approval.action.alwaysAllowSession
 approval.action.alwaysDeny

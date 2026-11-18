@@ -94,6 +94,33 @@ const send = (w: World, source: RoomAddress, generation: string, parentId: strin
   w.coordinator.enqueue(source, generation, parentId, target, target.botId, text, opts.approved ?? false, opts.rework ?? false,
     opts.sourceText ?? "Ship the CSV export", opts.batchKey, userOrigin);
 
+it("reports available answers and outstanding teammates once when a peer never answers", async () => {
+  let now = 1_000;
+  const host = fakeHost(hold);
+  const reports: { thread: string; entries: { name: string; result?: string }[] }[] = [];
+  host.peerReport = (root, entries) => { reports.push({ thread: root.threadId, entries }); return true; };
+  const coordinator = new RuntimeCoordinator({ dataDir: ":memory:", host, now: () => now });
+  try {
+    for (const target of [builder, tester]) {
+      coordinator.enqueue(chief, "batch", undefined, target, target.botId, "List the checks", false, false,
+        "Ask both teammates", undefined, userOrigin, "consult");
+    }
+    coordinator.sourceSettled("batch", true);
+    coordinator.tick();
+    await flush();
+    now += 15 * 60_000;
+    coordinator.tick();
+    await flush();
+    coordinator.tick();
+    expect(reports).toEqual([{ thread: chief.threadId, entries: expect.arrayContaining([
+      { name: builder.botId, result: undefined }, { name: tester.botId, result: "tester done" },
+    ]) }]);
+    expect(coordinator.children("batch").find(child => child.botId === builder.botId)?.status).toBe("running");
+  } finally {
+    coordinator.close();
+  }
+});
+
 const base: Assignment = {
   id: "as_1", rootId: "gen-1", parentId: "gen-1", depth: 1,
   origin: { kind: "person", source: "chat", ref: "chief-chat", quote: "Ship the CSV export" },

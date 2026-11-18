@@ -611,6 +611,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       ...(resume ? { reply: "resume" } : {}),
       ...workLabelArgs(args),
     }) });
+    if (r.applied === false || r.limit === true) return { text: String(r.message ?? "The send was declined."), isError: true };
     if (r.error) return { text: `Couldn't send to that bot: ${String(r.error)}`, isError: true };
     const destination = `@${String(r.botName ?? "that bot")} in "${String(r.title ?? title)}" [thread id: ${String(r.threadId ?? "")}]`;
     const state = r.approvalRequired === true
@@ -624,7 +625,9 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const handle = typeof r.threadId === "string" && typeof r.handle === "string"
       ? `\n${JSON.stringify({ threadId: r.threadId, handle: r.handle })}`
       : "";
-    const after = resume
+    const after = r.coordinatedReturn === true
+      ? " Your bot reports the collected replies here, with a partial update if teammates are still outstanding after 15 minutes."
+      : resume
       ? " Its result stays in that thread; when the recipient finishes, a short return line resumes you here."
       : " Its result stays in that thread and will not resume you: read it later with send_status.";
     return { text: `${state}${note}${after}${openWorkLine(r)}${handle}` };

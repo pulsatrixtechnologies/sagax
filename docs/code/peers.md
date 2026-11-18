@@ -6,6 +6,21 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Collecting replies in a direct chat (#4828)
+
+Fresh teammate requests enter the runtime queue even when the sender has
+filled its thread slots. The sender's thread limit bounds concurrent peer
+starts. Each recipient still passes its own admission and access checks.
+A direct send with `reply: "resume"` participates in the requesting turn's
+batch and keeps its send receipt. One-way sends keep their own results.
+
+The requester reviews the collected results in its original conversation.
+After 15 minutes with an outstanding answer, the runtime posts one partial
+report there, including which teammates have yet to answer. This uses the
+stored assignments and works even while the conversation is busy. Late
+answers still reach the requester. If its review fails, the server can
+publish the collected answers directly or update the existing partial report.
+
 ## Peer receipts never name a teammate made private (2026-11-02)
 
 Isolation between people. A bot record is patched in place, so a teammate

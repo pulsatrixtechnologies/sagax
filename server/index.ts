@@ -111,6 +111,8 @@ import { STOPPED_TURN_NAME, assistantTranscript, errorTranscript } from "../shar
 import { SafePointPreempts } from "./safe-point-preempt.ts";
 import { cardPosted, cardSettled, postedCardWaits, PostedCardTurns } from "./approvals/card-turn-handoff.ts";
 import { atThreadCapacity, interruptKeepsTeammates } from "./team/teammate-replies.ts";
+import { sendSummary } from "../shared/send-receipt.ts";
+import { botTurnLimit } from "../shared/turn-limits.ts";
 import { createSendReceipts } from "./team/send-receipts.ts";
 
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
@@ -14277,6 +14279,23 @@ const coordinator: Coordinator = createCoordinator({
     },
     // DEL-08: capacity with one reserved person slot (see canStart).
     slotUse: coordinatorSlotUse,
+    peerReport: (root, entries) => {
+      if (!store.taskByThread(root.botId, root.threadId) || isUnattended(root.botId, root.threadId)) return false;
+      const french = languageOfPerson(joinPerson(root.threadId)).startsWith("fr");
+      const lines = entries.map(entry => {
+        const answer = entry.result === undefined ? (french ? "En attente de sa réponse." : "Awaiting a reply.")
+          : sendSummary(redactSecretsInText(entry.result)) || (french ? "Aucune réponse reçue." : "No answer received.");
+        return `* ${entry.name}: ${answer}`;
+      });
+      const text = lines.join("\n");
+      const key = { kind: "team.peer_report", key: root.id };
+      const existing = commandReceipt<Message>(key.kind, key.key)?.result;
+      if (existing) store.patchMessage(root.threadId, existing.id, { text });
+      else store.appendMessage(root.threadId, { role: "bot", kind: "text", text }, key);
+      store.patchTask(root.botId, root.threadId, { unread: true });
+      return true;
+    },
+    peerConcurrency: senderId => botTurnLimit(store.bot(senderId), "threadsOpened"),
     // #3461: the orchestrator's panel reads its team work again
     handedOutChanged: (changes) => queueTeamWorkFrames(changes, (frame) => broadcast({ ...frame }), IDENTITY.kind === "perspicax"),
     changed: (groupIds, directThreadIds) => {
@@ -14291,7 +14310,7 @@ const coordinator: Coordinator = createCoordinator({
         // #3246: a send's receipt follows its recipient thread
         const sendId = bot ? store.taskByThread(bot.id, threadId)?.openedBy?.delegationId : undefined;
         const sent = sendId ? coordinator.node(sendId) : undefined;
-        if (sent?.oneWay) sendReceipts.changed(sent);
+        if (sent) sendReceipts.changed(sent);
       }
       // #1194: when a direct coordination's last node settles, no later
       // turn.completed arrives to release messages parked behind it — the
@@ -14350,6 +14369,11 @@ const coordinator: Coordinator = createCoordinator({
         if (room) store.patchGroup(room.id, { unread: true });
         else store.patchTask(child.botId, child.threadId, { unread: true });
         return;
+      }
+      // A send with a coordinated return still owns a status receipt. The
+      // parent reviews the batch, so this receipt needs no separate wake.
+      if (store.taskByThread(child.botId, child.threadId)?.openedBy?.reply === "resume" && !roomHandoffProblem(child, parent)) {
+        sendReceipts.settled(child, parent.threadId, true);
       }
       // Achievements (achievements-mastery.ts): a teammate's work handed out
       // from a bot's own conversation settled, for the person it is theirs.

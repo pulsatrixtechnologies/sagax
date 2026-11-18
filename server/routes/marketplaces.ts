@@ -39,6 +39,8 @@ export interface MarketplaceRouteDeps {
   /** May this caller share a marketplace with the whole organization? When
    * absent, anyone who manages marketplaces may share their own. */
   mayShareOrgWide?: (auth: RequestAuth) => boolean;
+  /** Official catalogs the automatic add could not add yet, id to the error (shown on that row only). */
+  officialErrors?: () => Record<string, string>;
   install: (marketplace: string, plugin: string, request: { req: IncomingMessage; auth: RequestAuth }) =>
     Promise<{ status: number; body: Record<string, unknown> }>;
   uninstall: (marketplace: string, plugin: string) => Promise<{ status: number; body: Record<string, unknown> }>;
@@ -96,7 +98,10 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
         return { ...market, hasToken: sources.has(market.source), ...(credential ? { credential } : {}) };
       });
     };
-    const list = async () => json(res, 200, { marketplaces: await views() });
+    const list = async () => {
+      const officialErrors = deps.officialErrors?.() ?? {};
+      return json(res, 200, { marketplaces: await views(), ...(Object.keys(officialErrors).length ? { officialErrors } : {}) });
+    };
     /** A private marketplace that is not this viewer's does not exist to them. */
     const unreachable = (name: string) => method !== "GET" && typeof deps.store.canAccess === "function" && !deps.store.canAccess(name, viewer);
     if (method !== "GET" && !deps.mayManage(auth)) {

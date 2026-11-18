@@ -208,6 +208,8 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ANTHROPIC_API_KEY: "sk-ant-test-org-key",
       SAGAX_ORG_NAME: "Acme",
+      // no clone from the network while a test reads its files
+      SAGAX_NO_OFFICIAL_CATALOGS: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

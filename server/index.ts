@@ -1122,6 +1122,7 @@ import { MaintenanceScheduler, MaintenanceStore } from "./computer/computer-care
 import { createPluginRoutes, pluginServerName, type InstalledPlugin } from "./routes/plugins.ts";
 import { createMarketplaceRoutes } from "./routes/marketplaces.ts";
 import { createInstallationCapabilityRoutes } from "./routes/installation-capabilities.ts";
+import { startOfficialCatalogsAuto, type OfficialCatalogsAuto } from "./plugins/official-catalogs-auto.ts";
 import { PluginMarketplaces, startMarketplaceBackgroundRefresh, type MarketplaceBackgroundRefresh, type MarketplacePullScope, type MarketplaceViewer } from "./plugins/plugin-marketplaces.ts";
 import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts";
 import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./auth/account-reauth.ts";
@@ -12722,6 +12723,8 @@ function pullMarketplaceAs(name: string, scope: MarketplacePullScope): Promise<u
   return personalPlugins.pullMarketplace(scope.id, name, scope.owner);
 }
 let marketplaceBackgroundRefresh: MarketplaceBackgroundRefresh | null = null;
+/** Outside an organization: every official catalog added on its own, in the background. */
+let officialCatalogsAuto: OfficialCatalogsAuto | null = null;
 let capabilityUpdateChecks: { stop(): void } | null = null;
 // The linked installation downloads its signed Flow pack independently of
 // member sign-ins and engine availability. Every engine reads the same copy.
@@ -26916,6 +26919,7 @@ ROUTES.push(createMarketplaceRoutes({
   actor: (auth) => sessionPrincipal(auth) ?? undefined,
   viewer: marketplaceViewer,
   mayShareOrgWide: mayShareMarketplaceOrgWide,
+  officialErrors: () => officialCatalogsAuto?.errors() ?? {},
   install: async (marketplace, plugin, { auth }) => {
     if (pluginMarketplaces.installed().some((entry) => entry.key === `${plugin}@${marketplace}`)) return updateInstallationPlugin(marketplace, plugin, { auth });
     const { plan, version, revision } = await pluginMarketplaces.prepare(marketplace, plugin, sessionPrincipal(auth) ?? undefined, marketplaceViewer(auth));
@@ -37969,6 +37973,17 @@ const onListening = async () => {
       singlePerson: IDENTITY.kind !== "perspicax",
     });
   }
+  // Outside an organization every official catalog is added on its own, in
+  // the background (first start, and when a later version brings a new one)
+  if (!companyShutdown && !officialCatalogsAuto) {
+    officialCatalogsAuto = startOfficialCatalogsAuto({
+      // never inside a test run: its servers must not clone from the network
+      enabled: () => IDENTITY.kind !== "perspicax" && !process.env.VITEST && process.env.SAGAX_TEST_SEAMS !== "1" && process.env.SAGAX_NO_OFFICIAL_CATALOGS !== "1",
+      sources: () => pluginMarketplaces.sources(),
+      dismissed: () => pluginMarketplaces.dismissedOfficial(),
+      add: (catalog) => pluginMarketplaces.add({ source: catalog.source }, undefined, { visibility: "private" }),
+    });
+  }
   // #4504: the sources of every installed skill, plugin and connector,
   // checked on their own (past five minutes, then every six hours)
   if (!companyShutdown && !capabilityUpdateChecks) capabilityUpdateChecks = capabilityUpdates.start();
@@ -38063,6 +38078,7 @@ const gracefulShutdown = createGracefulShutdown({
       calendarCalls?.stop();
       memoryUpkeep.stop();
       marketplaceBackgroundRefresh?.stop();
+      officialCatalogsAuto?.stop();
       capabilityUpdateChecks?.stop();
       skillReview.stop();
       limitReset.stop();

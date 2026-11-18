@@ -148,8 +148,10 @@ function CredentialSelect({ value, chosen, onChange, disabled, label, id }: {
   );
 }
 
-export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefresh, onRemove, onSetVisibility, canChooseVisibility, disabled, removeKeepsInstalls, credentials, needsToken, onOpenGithub }: {
+export function MarketplacesSection({ marketplaces, officialErrors, busy, error, onAdd, onRefresh, onRemove, onSetVisibility, canChooseVisibility, disabled, removeKeepsInstalls, credentials, needsToken, onOpenGithub }: {
   marketplaces: MarketplaceSummary[] | null;
+  /** official catalogs the automatic add could not add yet (id to error): shown on that row only */
+  officialErrors?: Record<string, string>;
   /** "add", or the name being refreshed or removed */
   busy: string | null;
   error: string | null;
@@ -331,7 +333,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           })}
         </ul>
       )}
-      <OfficialCatalogs marketplaces={marketplaces ?? []} disabled={disabled || busy !== null} adding={busy === "add" ? pendingOfficial : null}
+      <OfficialCatalogs marketplaces={marketplaces ?? []} errors={officialErrors} disabled={disabled || busy !== null} adding={busy === "add" ? pendingOfficial : null}
         onAdd={(catalogSource) => { setPendingOfficial(catalogSource); void onAdd(catalogSource, "", visibility).finally(() => setPendingOfficial(null)); }} />
     </section>
   );
@@ -349,8 +351,9 @@ function officialCatalogBlurb(id: string): string {
 
 /** #2613: the official skill catalogs (Hermes Agent, OpenClaw, Anthropic),
  * each added in one click; one already in the list shows Added. */
-function OfficialCatalogs({ marketplaces, disabled, adding, onAdd }: {
+function OfficialCatalogs({ marketplaces, errors, disabled, adding, onAdd }: {
   marketplaces: MarketplaceSummary[];
+  errors?: Record<string, string>;
   disabled?: boolean;
   adding: string | null;
   onAdd: (source: string) => void;
@@ -371,6 +374,11 @@ function OfficialCatalogs({ marketplaces, disabled, adding, onAdd }: {
                 <div className="truncate text-[12px] text-ink-secondary">
                   <span className="font-mono">{catalog.source}</span>{" · "}{officialCatalogBlurb(catalog.id)}
                 </div>
+                {!isAdded && errors?.[catalog.id] && (
+                  <div className="truncate text-[12px] text-danger" role="alert" title={errors[catalog.id]} data-official-catalog-error={catalog.id}>
+                    {t("connectApps.market.official.autoFailed")} {errors[catalog.id]}
+                  </div>
+                )}
               </div>
               {isAdded ? (
                 <span className="flex items-center gap-1 text-[12px] text-ink-secondary" data-official-catalog-added=""><Check size={14} aria-hidden="true" />{t("connectApps.market.official.added")}</span>

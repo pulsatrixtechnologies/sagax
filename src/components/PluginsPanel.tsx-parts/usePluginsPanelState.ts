@@ -111,6 +111,8 @@ export function usePluginsPanelState() {
   const [panelError, setPanelError] = useState<string | null>(null);
   const [mcpAccountDraft, setMcpAccountDraft] = useState<{ server: string; label: string } | null>(null);
   const [marketplaces, setMarketplaces] = useState<MarketplaceListing[] | null>(null);
+  /** official catalogs the automatic add could not add yet (id to error) */
+  const [officialErrors, setOfficialErrors] = useState<Record<string, string>>({});
   const [marketBusy, setMarketBusy] = useState<string | null>(null);
   const [marketError, setMarketError] = useState<string | null>(null);
   /** the git host refused "add" or a marketplace's refresh: offer a token */
@@ -162,6 +164,7 @@ export function usePluginsPanelState() {
   const loadMarketplaces = useCallback(() => api("/api/marketplaces")
     .then((result) => {
       setMarketplaces(result.marketplaces ?? []);
+      setOfficialErrors(result.officialErrors ?? {});
       setWorkspaceMarkets(true);
     })
     // only an admin or this computer's owner manages marketplaces; a member
@@ -411,7 +414,7 @@ export function usePluginsPanelState() {
     harness, claudeConnectors, ownerOrAdmin, libraryEditor,
     perspicaxOrg, organization, mayManageOrganization, featured, setFeatured, dataCenterFor, setDataCenterFor,
     macAppsVisible, macAppsSetup, skills, setSkills, installing, setInstalling, panelError, setPanelError,
-    mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, marketBusy, setMarketBusy,
+    mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, officialErrors, marketBusy, setMarketBusy,
     marketError, setMarketError, marketNeedsToken, setMarketNeedsToken, panelNotice, setPanelNotice,
     workspaceMarkets, scopeBot, scopeBotId, setScopeChoice, scope, botView, personalView,
     scopedPluginView, scopedPluginTarget, scopedPluginName, setScopedPluginView, orgRevision, botCapabilities,

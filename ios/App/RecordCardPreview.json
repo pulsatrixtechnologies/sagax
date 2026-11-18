@@ -1,0 +1,47 @@
+{
+ "bots": [
+  {
+   "id": "preview-pepper",
+   "threadId": "preview-gmail",
+   "name": "Pepper",
+   "title": "Personal assistant",
+   "description": "Offline record cards fixture",
+   "notifications": false,
+   "color": "purple",
+   "unread": false,
+   "busy": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1789088400000,
+   "tasks": [
+    {
+     "threadId": "preview-gmail",
+     "title": "Unpaid bills",
+     "createdAt": 1789088400000
+    }
+   ],
+   "activeLeafId": "rc2",
+   "messages": [
+    {
+     "id": "rc1",
+     "role": "user",
+     "kind": "text",
+     "at": 1789088400000,
+     "text": "Which bill is late, and what is on it?"
+    },
+    {
+     "id": "rc2",
+     "parentId": "rc1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1789088401000,
+     "text": "BILL-20417 is five days late. It bills the Managed services contract and one device, FRONT-DESK-01, owned by Ana Roy. Tool X 99 is not one of your products.",
+     "recordText": "[BILL-20417](sagax://record/nimbus_desk/bill/88213) is five days late. It bills the [Managed services](sagax://record/nimbus_desk/contract/412) contract and one device, [FRONT-DESK-01](sagax://record/nimbus_desk/device/7), owned by [Ana Roy](sagax://record/nimbus_desk/person/3). Tool X 99 is not one of your products."
+    }
+   ]
+  }
+ ],
+ "groups": []
+}

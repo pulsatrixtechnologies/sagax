@@ -145,6 +145,8 @@ struct ChatView: View {
     @State var openingFileName: String?
     @State var fileOpenError: String?
     @State var filePreview: FilePreviewItem?
+    /// #4572: the record a chip opened, shown as a card in a sheet.
+    @State var recordSheet: RecordSheetItem?
     @State var fileDownloadTask: Task<Void, Never>?
     @State var fileDownloadRequestID: UUID?
     @State var threadOpenTask: Task<Void, Never>?
@@ -364,6 +366,12 @@ struct ChatView: View {
             if case let .bot(bot) = current {
                 BotConversationPage(row: row, selfBot: bot).environmentObject(session)
             }
+        }
+        .sheet(item: $recordSheet) { item in
+            RecordCardSheet(start: item)
+                .environmentObject(session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: $besideThread) { beside in
             BesideThreadSheet(beside: beside).environmentObject(session)

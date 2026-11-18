@@ -133,9 +133,9 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
   handedMessages?: Record<string, HandedState>;
   /** Last compaction represented by a dispatched session on this task. */
   appliedCompactionId?: string;
-  /** #4632: the files the server itself staged in the bot's workspace inbox
+  /** #4632: the files the server itself staged in the bot's inbox or the private attachment store
    * for this conversation's sends (send_prompt, the member API's `files`),
-   * workspace-relative. Written only by addStagedFiles, never by a patch or
+   * prefixed with inbox/ or attachments/. Written only by addStagedFiles, never by a patch or
    * from a message's text: what goes when the conversation goes. */
   stagedFiles?: string[];
   /** Summaries Sagax wrote when it folded this thread on its own, newest

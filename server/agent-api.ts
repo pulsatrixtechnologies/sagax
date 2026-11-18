@@ -1,5 +1,5 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
-import { FILES_NOTE } from "./messages/staged-file-refs.ts";
+import { FILES_NOTE, PRIVATE_FILES_NOTE } from "./messages/staged-file-refs.ts";
 import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { restartCauseNotResumed, restartPendingRow } from "./turns/restart-line-words.ts";
@@ -172,7 +172,7 @@ export function agentPromptWithFiles(prompt: string, staged: readonly string[], 
 /** sha256 of a prompt as it lands in the conversation, without the staged
  * files note (#2858): what a pending send_prompt receipt is matched on. */
 export function promptHash(text: string): string {
-  const cut = text.lastIndexOf(FILES_NOTE);
+  const cut = Math.max(text.lastIndexOf(FILES_NOTE), text.lastIndexOf(PRIVATE_FILES_NOTE));
   return createHash("sha256").update((cut >= 0 ? text.slice(0, cut) : text).trim()).digest("hex");
 }
 export const TIMEOUT_MS_MIN = 1_000;

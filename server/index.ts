@@ -185,7 +185,7 @@ import { appendDecision, bindConfidentialDecisions, bindSurfaceDecisions, person
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
 import { AttachmentUploaders } from "./attachments/attachment-uploaders.ts";
-import { ATTACHMENTS_DIR, attachmentExists, cleanupStaleAttachmentPartials, cleanupResumableUploads, deleteAttachment, isArchiveAttachment, readAttachment, setAttachmentStillShown, saveAudio, saveFile } from "./attachments/attachments.ts";
+import { ATTACHMENTS_DIR, attachmentExists, cleanupStaleAttachmentPartials, cleanupResumableUploads, deleteAttachment, isArchiveAttachment, readAttachment, setAttachmentStillShown, saveAgentAttachment, saveAudio, saveFile } from "./attachments/attachments.ts";
 import { messageAttachmentTags, statMessageFile } from "./messages/message-file.ts";
 import { createThreadFilePins } from "./threads/thread-file-pins.ts";
 import { activePath, listThreadFiles, threadFileId, threadFileRefs, type ThreadFileRef } from "./threads/thread-files.ts";
@@ -7445,6 +7445,7 @@ bindLeafHost({
   get sweepTemporaryAgents() { return sweepTemporaryAgents; },
   get agentApiCallerBot() { return agentApiCallerBot; },
   get agentApiSourceFile() { return agentApiSourceFile; },
+  get saveAgentAttachment() { return saveAgentAttachment; },
   get agentApiStageFiles() { return agentApiStageFiles; },
   get startAgentPrompt() { return startAgentPrompt; },
   get agentApiAudit() { return agentApiAudit; },
@@ -33843,6 +33844,13 @@ function stagedFilesOfThread(botId: string, threadId: string): string[] {
  * attachments' attachmentStillShown rule). */
 function removeBotStagedFiles(botId: string, paths: readonly string[]): void {
   if (!paths.length) return;
+  for (const stagedPath of paths) {
+    if (!/^attachments\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/.test(stagedPath)) continue;
+    const name = basename(stagedPath);
+    if (!threadsReferencing(name).length && !store.tasks(botId).some(task => task.stagedFiles?.includes(stagedPath))) {
+      deleteAttachment(join(ATTACHMENTS_DIR, name));
+    }
+  }
   removeStagedFiles(workspaceDir(botId), paths, (file) =>
     store.tasks(botId).some((task) => task.stagedFiles?.includes(file)) || threadsReferencing(file).length > 0 || threadsReferencing(stagedFileRef(file)).length > 0);
 }
@@ -34685,10 +34693,11 @@ const agentApi = createAgentApi({
     // an AI client never writes into a confidential thread
     if (store.isConfidentialThread(threadId)) return agentRefuse(403, "confidential_thread", CONFIDENTIAL_PEER_REFUSED);
     if (caller.kind === "person") {
-      const staged = agentApiStageFiles(caller, target, files);
-      if ("code" in staged) return staged;
+      const prepared = agentApiStageFiles(caller, target, files, prompt, threadId);
+      if ("code" in prepared) return prepared;
+      const { staged, text } = prepared;
       const sent = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/messages`, body: {
-        text: agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), threadId,
+        text, threadId,
         // #2575: a busy conversation queues the prompt for its own turn
         // (never steered into the running one, never merged with another
         // queued prompt), so every handle gets its own reply
@@ -34727,9 +34736,10 @@ const agentApi = createAgentApi({
         return agentRefuse(403, "unknown_agent", "That agent is no longer reachable.");
       }
     }
-    const staged = agentApiStageFiles(caller, target, files);
-    if ("code" in staged) return staged;
-    const started = await startAgentPrompt(from, target, threadId, agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), caller.sourceThreadId, capability, wake);
+    const prepared = agentApiStageFiles(caller, target, files, prompt, threadId);
+    if ("code" in prepared) return prepared;
+    const { staged, text } = prepared;
+    const started = await startAgentPrompt(from, target, threadId, text, caller.sourceThreadId, capability, wake);
     // #4632: the conversation keeps the files the server staged for it; a refused send leaves none
     if ("code" in started) removeBotStagedFiles(target.id, staged);
     else store.addStagedFiles(target.id, threadId, staged);
@@ -34826,9 +34836,7 @@ async function stageMemberSendFiles(person: MemberPerson, botId: string, text: s
     ? recordedBotOwner(target) === person.principalId.trim().toLowerCase()
     : (await agentsReachedBy(caller)).some((agent) => agent.id === target.id));
   if (!target || !reached) return { status: 404, code: "not_found", message: "No such bot." };
-  const staged = agentApiStageFiles(caller, target, files);
-  if ("code" in staged) return staged;
-  return { text: agentPromptWithFiles(text, staged, workspaceDir(target.id)), staged };
+  return agentApiStageFiles(caller, target, files, text);
 }
 const orgMember = createOrgMemberRoutes({
   agentApi: agentApiForMember,

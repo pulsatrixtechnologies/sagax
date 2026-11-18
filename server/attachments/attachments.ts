@@ -1163,6 +1163,37 @@ export function parseAttachmentRange(header: string | undefined, size: number): 
 /** Compatibility name for the original voice-note tests and callers. */
 export const parseAudioRange = parseAttachmentRange;
 
+/** A send_prompt file can have any name and may be empty. Its generated
+ * storage name is independent of the supplied name, like a composer upload. */
+export function saveAgentAttachment(bytes: Buffer, name: string, owner: string): string {
+  ensureAttachmentsDir();
+  const suffix = extname(name).toLowerCase();
+  const type = Object.entries({ ...IMAGE_MIMES, ...FILE_MIMES }).find(([, ext]) => ext === suffix)?.[0];
+  let extension = ".bin";
+  if (type) {
+    try {
+      assertContentMatches(type, bytes.subarray(0, 4100), "enforce");
+      extension = suffix;
+    } catch (error) {
+      if (!(error instanceof UploadContentError)) throw error;
+    }
+  }
+  const path = join(ATTACHMENTS_DIR, randomUUID() + extension);
+  const reservation = new AttachmentReservation();
+  reservation.reserve(bytes.length);
+  try {
+    writeFileSync(path, bytes, { flag: "wx", mode: 0o600 });
+    addCommittedBytes(bytes.length);
+    noteStoredAttachment(path, owner);
+    return path;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") deleteAttachment(path);
+    throw error;
+  } finally {
+    reservation.release();
+  }
+}
+
 /** A file a bot package brings back (server/bots/bot-zip.ts): stored under a new
  * UUID name with the extension its mime maps to, never the archive's own
  * name, within the same per-kind size caps as an upload. */

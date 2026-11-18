@@ -1,12 +1,13 @@
 // @ts-nocheck
 /** perspicaxSessionAlone (#1388). Pure move from server/index.ts. */
+import { watchCatalog } from "../routines/watch-tool-resolution.ts";
 import { PERSPICAX_PROTOCOL_VERSION } from "../perspicax/perspicax-mcp.ts";
 export type Host = Record<string, any>;
 
 export function createPerspicaxSessionAlone(getHost: () => Host): any {
 async function perspicaxSessionAlone<T>(
   input: { botId: string; principalId: string; threadId: string; clientName: string },
-  work: (call: (tool: string, args: Record<string, unknown>) => Promise<ToolAnswer | { error: string }>) => Promise<T>,
+  work: (call: (tool: string, args: Record<string, unknown>) => Promise<ToolAnswer | { error: string }>, list: () => Promise<string[]>) => Promise<T>,
 ): Promise<T |{ error: string }> {
   const host = getHost();
   const { serverVersion } = host;
@@ -36,7 +37,11 @@ async function perspicaxSessionAlone<T>(
       const body = answer.body as { error?: { message?: unknown }; result?: unknown } | undefined;
       if (!body || body.error) return { error: typeof body?.error?.message === "string" ? body.error.message : "Perspicax refused the call." };
       return host.toolResultValue(body.result);
-    });
+    }, () => watchCatalog(async params => {
+      const answer = await relay({ jsonrpc: "2.0", id: `watch-list-${++sequence}`, method: "tools/list", params });
+      if (answer.body?.error) throw new Error(answer.body.error.message);
+      return answer.body?.result;
+    }));
   } finally {
     await mcp.endGeneration(threadId, generation).catch(host.reportBackgroundError);
   }

@@ -10,8 +10,8 @@
 
 export type RoutineWatchSource =
   /** A file or a folder, relative to the bot's own folder: names, sizes and
-   * modification times (never the contents). */
-  | { type: "files"; path: string; recursive?: boolean }
+   * modification times. readBytes reads bounded text for content conditions. */
+  | { type: "files"; path: string; recursive?: boolean; readBytes?: number; pattern?: string }
   /** A shell line run in the bot's folder, where the bot itself works. */
   | { type: "command"; command: string }
   /** A read-only MCP tool with fixed arguments: one of the bot's MCP

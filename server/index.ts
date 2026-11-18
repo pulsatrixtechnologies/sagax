@@ -1302,7 +1302,8 @@ import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.
 import { createArtifactRefresher } from "./artifacts/artifact-refresh.ts";
 import { createArtifactSourceRunner, isDispatchKpi, toolResultValue } from "./artifacts/artifact-sources.ts";
 import { createDispatchKpiService, dispatchRoutineMatches, DISPATCH_KPI_TOOL, parseDispatchKpiArgs } from "./artifacts/dispatch-kpi.ts";
-import { createRoutineWatchEvaluator, RoutineWatchStates, type RoutineWatchDeps } from "./routines/routine-watch.ts";
+import { parseRoutinePrecheck } from "./routines/routine-precheck.ts";
+import { createRoutineWatchEvaluator, resolvedWatchSource, type WatchRoutine, RoutineWatchStates, type RoutineWatchDeps } from "./routines/routine-watch.ts";
 import { RemoteMcpClient } from "./mcp/mcp-http.ts";
 import { createMeetingService, type MeetingService } from "./meetings/meeting-requests.ts";
 import { parseEvalJson } from "./meetings/meet-scripts.ts";
@@ -7312,6 +7313,7 @@ bindLeafHost({
   get refreshStreamDigests() { return refreshStreamDigests; },
   get streamDigestPrompt() { return streamDigestPrompt; },
   get routineResultsRefusalFor() { return routineResultsRefusalFor; },
+  get normalizeRoutineBody() { return normalizeRoutineBody; },
   get patchRoutineAs() { return patchRoutineAs; },
   get routineConversationOf() { return routineConversationOf; },
   get routineSeenBy() { return routineSeenBy; },
@@ -20648,10 +20650,20 @@ const routineWatchStates = new RoutineWatchStates(join(DATA_DIR, "routine-watch"
  * read-only rule itself is server/routines/routine-watch-tools.ts. */
 const routineWatchDeps: RoutineWatchDeps = {
   place: routineWatchPlace,
+  keepSource: (routine, before, after) => routines?.keepWatchSource(routine, before, after),
+  listTools: routineWatchCallTool.list,
   callTool: routineWatchCallTool,
   states: routineWatchStates,
   now: () => Date.now()
 };
+async function normalizeWatchForSave(routine: WatchRoutine, watch: import("../shared/routine-watch.ts").RoutineWatchPrecheck) {
+  return { ...watch, source: await resolvedWatchSource(routineWatchDeps, routine, watch, AbortSignal.timeout(15_000)) };
+}
+async function normalizeRoutineBody(body: any, routine: WatchRoutine) {
+  if (body?.precheck?.source?.type !== "tool") return body;
+  const watch = parseRoutinePrecheck(body.precheck);
+  return watch.kind === "watch" ? { ...body, precheck: await normalizeWatchForSave(routine, watch) } : body;
+}
 const routineWatchEvaluator = createRoutineWatchEvaluator(routineWatchDeps);
 // Recovery can synchronously offer failed-run events from the constructor.
 // Keep the waker ready so those events join its usual batch.
@@ -21996,6 +22008,7 @@ if (recoveryOwners.length > 0) {
 // after the user confirms a durable card. Keeping this beside the scheduler
 // makes the card resolvable after an app restart without involving the model.
 const routineRequests = new RoutineRequestService({
+  normalizeWatch: normalizeWatchForSave,
   store,
   routines,
   // The details panel reads in the language of the person who answers the
@@ -35510,6 +35523,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
   fullReport: (run) => routineFullReport(run),
+  normalizeBody: normalizeRoutineBody,
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),
   wakeHold: () => routines!.wakeHold(),
   runNow: (id, request, startedBy) => routines!.runNow(id, request, startedBy),

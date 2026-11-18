@@ -46,6 +46,8 @@ import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effo
 import { defaultNextCheck, expireGoal, goalPastDeadline, loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, routineGoalLinesSay, routineGoalOfLines, routineRunInstructions, stepGoal, writeRoutineGoalLines, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
+import { canonicalJson } from "../../shared/canonical-json.ts";
+import { watchRepairHint } from "./watch-tool-resolution.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
 import { awayDecision, awayReportDue, loadAwaySkips, recordAwaySkip, type AwayVerdict, type RoutineAwaySkips } from "./routine-away.ts";
 import type { RoutineRequestOperation } from "../../shared/routine-request.ts";
@@ -3389,6 +3391,17 @@ export class RoutineManager {
   }
 
   /** The routine itself, or null. Callers that mirror a trigger read this. */
+  keepWatchSource(seen: Pick<Routine, "id" | "botId" | "runAs">, before: RoutineWatchPrecheck, after: RoutineWatchPrecheck): void {
+    const routine = this.routines.find(row => row.id === seen.id);
+    if (!routine || routine.botId !== seen.botId || routine.runAs !== seen.runAs || routine.precheck?.kind !== "watch"
+      || canonicalJson(routine.precheck) !== canonicalJson(before)) return;
+    this.commitMutation(() => {
+      routine.precheck = structuredClone(after);
+      routine.updatedAt = Math.max(this.now(), routine.updatedAt + 1);
+    });
+    this.emitRoutine(routine);
+  }
+
   routineById(id: string): Routine | null {
     const routine = this.routines.find((candidate) => candidate.id === id);
     return routine ? cloneRoutine(routine) : null;
@@ -3977,7 +3990,7 @@ export class RoutineManager {
     }
     void reading.then(
       (verdict) => ({ ok: true as const, verdict }),
-      (error: unknown) => ({ ok: false as const, error: `Pre-check failed, the run did not start: ${error instanceof Error ? error.message : String(error)}` }),
+      (error: unknown) => ({ ok: false as const, error: `Pre-check failed, the run did not start: ${error instanceof Error ? error.message : String(error)}${isWatchPrecheck(watch) ? " " + watchRepairHint : ""}` }),
     ).then((settled) => {
       this.watchInFlight.delete(run.id);
       const live = this.runs.find((candidate) => candidate.id === run.id);

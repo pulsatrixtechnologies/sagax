@@ -914,7 +914,12 @@ changes. Doc: `docs/routine-schedules.md` ("Only when something changes").
   Read tools only: `server/routines/routine-watch-tools.ts` reuses
   `perspicaxReadTool`, `connectorCallReads`, `isOutboundTool`,
   `connectorWriteKind`, `perspicaxWriteOnceTool`; checked on save and at
-  every check.
+  every check. The watch resolves the exact connector name or a unique alias
+  from the acting person's catalog. An unserved environment file read uses
+  the native files source, with bounded content for a condition or tracking.
+  An old unmappable built-in starts the turn with a repair note in the run.
+  The bot edits its own watch with `propose_routine_action` and retries with
+  `run_routine`.
 - Scheduler (`server/routines/routines.ts`): a watch is read beside the pass
   (`startWatch`, `watchSettled`), never awaited inside it; the answer quiets
   the run (`nothing_to_report`, as for any pre-check) or wakes it with

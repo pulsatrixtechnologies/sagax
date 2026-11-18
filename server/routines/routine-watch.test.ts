@@ -21,6 +21,7 @@ import {
   type RoutineWatchDeps,
   type WatchPlace,
 } from "./routine-watch.ts";
+import { resolveWatchSource, watchCatalog } from "./watch-tool-resolution.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
 
 let dir: string;
@@ -301,6 +302,36 @@ describe("the evaluator", () => {
     expect(await evaluate(routine, tool({ track: { items: "issues" } }))).toMatchObject({ wake: false });
     expect(placed).toBe(0);
     await expect(evaluate({ ...routine, id: "r2" }, { kind: "watch", source: { type: "tool", tool: "mail__send_message" } })).rejects.toThrow(/read tools only/);
+  });
+
+  it("uses the exact served name before folding aliases and never guesses between matches", async () => {
+    const alias = "sagax_environment_read_file";
+    const served = "sagax-environment__read_file";
+    const source = { type: "tool" as const, tool: alias, args: { path: "jobs.json" } };
+    const watch = tool({ source, firstRun: "wake" });
+    const catalog = await watchCatalog(async ({ cursor }) => cursor ? { tools: [{ name: served }] } : { tools: [], nextCursor: "more" });
+    expect(resolveWatchSource(watch, [alias, ...catalog])).toEqual(source);
+    expect(() => resolveWatchSource(watch, [served, "sagax_environment__read_file"])).toThrow(/exact MCP/);
+    const calls: string[] = [];
+    const evaluate = createRoutineWatchEvaluator(deps({ kind: "refuse", reason: "no computer" }, undefined, {
+      listTools: async () => catalog,
+      callTool: async (_, name, args) => { calls.push(name); expect(args).toEqual(source.args); return { isError: false, value: "ready" }; },
+    }));
+    expect(await evaluate(routine, watch)).toMatchObject({ wake: true });
+    expect(calls).toEqual([served]);
+  });
+
+  it("reads native files when the connector does not serve the environment tool and preserves tracked content", async () => {
+    const source = { type: "tool" as const, tool: "sagax_environment_read_file", args: { path: "jobs.json" } };
+    writeFileSync(join(dir, source.args.path), JSON.stringify({ jobs: [{ id: "queued" }] }));
+    const watch = tool({ source, track: { items: "jobs" }, firstRun: "wake" });
+    expect(resolveWatchSource(tool({ source }), [])).toEqual({ type: "files", path: "jobs.json" });
+    const d = deps({ kind: "host", cwd: dir }, undefined, {
+      listTools: async () => [], callTool: async () => { throw new Error("unexpected MCP call"); },
+    });
+    expect(await previewWatch(d, routine, watch)).toMatchObject({ ok: true, items: 1, excerpt: expect.stringContaining("queued") });
+    expect(resolveWatchSource(tool({ source: { type: "tool", tool: "sagax_environment_glob", args: { pattern: "**/*.json" } } }), []))
+      .toEqual({ type: "files", path: ".", recursive: true, pattern: "**/*.json" });
   });
 
   it("a refused place, a failing tool and a timed-out command fail the check", async () => {

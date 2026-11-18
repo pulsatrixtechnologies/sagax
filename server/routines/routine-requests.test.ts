@@ -18,6 +18,7 @@ import {
 } from "./routine-requests.ts";
 import { RoutineManager, type RoutineInput } from "./routines.ts";
 import type { JsonValue } from "../schema.ts";
+import { resolveWatchSource } from "./watch-tool-resolution.ts";
 import { directApply, type DirectApplyCheck } from "../direct-apply.ts";
 
 class MemoryStore implements RoutineRequestStore {
@@ -545,6 +546,25 @@ describe("RoutineRequestService", () => {
     const update = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { watch: null } } });
     service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: update.requestId, behavior: "allow" });
     expect(routines.listRoutines()[0].precheck).toBeUndefined();
+  });
+
+  it("saves a served alias, refuses an unavailable built-in and lets the bot repair its watch", async () => {
+    const { routines, store } = harness();
+    const served = "sagax-environment__read_file";
+    const service = new RoutineRequestService({ routines, store, autoApply: () => "self", newPaused: () => false,
+      normalizeWatch: async (_, watch) => ({ ...watch, source: resolveWatchSource(watch, [served]) }),
+    });
+    const who = { botId: "bot-a", threadId: "thread-a" };
+    const watch = { kind: "watch", source: { type: "tool", tool: "sagax_environment_read_file", args: { path: "queue" } } } as const;
+    await service.submit({ ...who, proposal: createProposal({ watch }) });
+    const routine = routines.listRoutines()[0]!;
+    expect(routine.precheck).toMatchObject({ source: { tool: served } });
+    const update = (name: string) => service.submit({ ...who, proposal: { action: "update", routineId: routine.id,
+      changes: { watch: { ...watch, source: { ...watch.source, tool: name } } } } });
+    await expect(update("agents_list_bots")).rejects.toThrow(/Use files.*command/);
+    await expect(update("sagax_environment_read_files")).rejects.toThrow(served);
+    await update("sagax_environment_list_files");
+    expect(routines.listRoutines()[0]?.precheck).toMatchObject({ source: { type: "files", path: "queue" } });
   });
 
   it("a bot files its routine in a folder of its list, and takes it out again (2026-10-28)", async () => {

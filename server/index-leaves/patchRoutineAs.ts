@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createPatchRoutineAs(getHost: () => Host): any {
-function patchRoutineAs(auth: RequestAuth, req: IncomingMessage, id: string, body: any): { status: number; body: unknown } {
+function patchRoutineAs(auth: RequestAuth, req: IncomingMessage, id: string, body: any, resolved = false) {
   const host = getHost();
   const { routineActor } = host;
 
@@ -18,6 +18,13 @@ function patchRoutineAs(auth: RequestAuth, req: IncomingMessage, id: string, bod
   const existingRoutine = host.routines!.listRoutines().find((candidate) => candidate.id === id);
   const runAsChoice = host.routineRunAsChoice(auth, body, existingRoutine);
   if ("refusal" in runAsChoice) return { status: runAsChoice.refusal.status, body: { error: runAsChoice.refusal.error, code: runAsChoice.refusal.code, ...(runAsChoice.refusal.permission ? { permission: runAsChoice.refusal.permission } : {}) } };
+  if (!resolved && existingRoutine && body?.precheck?.source?.type === "tool") {
+    return host.normalizeRoutineBody(body, { ...existingRoutine, botId: body.botId ?? existingRoutine.botId,
+      runAs: runAsChoice.runAs ?? existingRoutine.runAs }).then(normalized => {
+      if (host.routines.routineById(id)?.updatedAt !== existingRoutine.updatedAt) return { status: 409, body: { error: "The routine changed. Retry the edit." } };
+      return patchRoutineAs(auth, req, id, normalized, true);
+    }, error => ({ status: 400, body: { error: error.message } }));
+  }
   const runAsBefore = existingRoutine ? host.effectiveRunAs(existingRoutine) : undefined;
   const wasOwners = false;
   const previous = undefined;

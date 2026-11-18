@@ -168,7 +168,7 @@ export const ROUTINE_FIELDS_SCHEMA = {
   },
   watch: {
     type: ["object", "null"],
-    description: "Wake only on change/match. {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. Repeating schedule; null clears.",
+    description: "Wake only on change/match. {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. tool is an MCP connector tool only. Use files for files in your environment. Repeating schedule; null clears.",
   },
   folder: {
     type: ["string", "null"],

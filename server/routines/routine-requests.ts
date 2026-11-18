@@ -507,6 +507,7 @@ export interface RoutineRequestStore {
 }
 
 export interface RoutineRequestServiceOptions {
+  normalizeWatch?(routine: { id: string; botId: string; runAs?: string }, watch: RoutineWatchPrecheck): Promise<RoutineWatchPrecheck>;
   store: RoutineRequestStore;
   routines: RoutineManager;
   now?: () => number;
@@ -1888,6 +1889,7 @@ export class RoutineRequestService {
   private readonly now: () => number;
   private readonly timeZone: () => string;
   private readonly language?: RoutineRequestServiceOptions["language"];
+  private readonly normalizeWatch?: RoutineRequestServiceOptions["normalizeWatch"];
   private readonly cloudReady?: (botId: string) => Promise<{ ready: boolean; reason?: string }>;
   private readonly canPersist?: RoutineRequestServiceOptions["canPersist"];
   private readonly validateTarget?: RoutineRequestServiceOptions["validateTarget"];
@@ -1904,6 +1906,7 @@ export class RoutineRequestService {
     this.now = options.now ?? Date.now;
     this.timeZone = options.timeZone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
     this.language = options.language;
+    this.normalizeWatch = options.normalizeWatch;
     this.cloudReady = options.cloudReady;
     this.canPersist = options.canPersist;
     this.validateTarget = options.validateTarget;
@@ -1941,6 +1944,15 @@ export class RoutineRequestService {
     if (operation.forBot && this.validateTarget) {
       const refusal = this.validateTarget(botId, operation.forBot);
       if (refusal) throw new RoutineRequestError(refusal, 403);
+    }
+    const fields = operation.action === "create" ? operation.routine : operation.action === "update" ? operation.changes : undefined;
+    if (fields?.watch?.source.type === "tool" && this.normalizeWatch) {
+      const target = operation.action === "update" ? this.routines.routineById(operation.routineId) : undefined;
+      try {
+        fields.watch = await this.normalizeWatch({ id: target?.id ?? "", botId: operation.forBot?.botId ?? botId, runAs: target?.runAs }, fields.watch);
+      } catch (error) {
+        throw new RoutineRequestError(error instanceof Error ? error.message : String(error));
+      }
     }
     await this.requireCloudReadiness(operation, botId);
     // The readiness probe is asynchronous. Another request can edit or

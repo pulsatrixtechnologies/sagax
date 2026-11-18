@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import { isRoutineProblemRun } from "../../shared/routines.ts";
+import { createRoutineWatchEvaluator, RoutineWatchStates } from "./routine-watch.ts";
 import { routineRepeatingRule } from "./routine-report.ts";
 
 /** #3695, #3990: a run of a routine that does not post each result reads its rule after the work;
@@ -4703,6 +4704,23 @@ describe("routine watch: runs only when something changes (2026-10-26)", () => {
   const input = () => ({ name: "Queue", prompt: "Handle the new jobs", botId: "maus-1",
     schedule: { type: "interval" as const, everyMinutes: 5, anchorAt: start }, precheck: watch });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("starts the next scheduled turn after reloading an unmappable built-in and records the repair hint once", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), precheck: { kind: "watch", source: { type: "tool", tool: "agents_list_bots" } } });
+    h.options.evaluateWatch = createRoutineWatchEvaluator({
+      states: new RoutineWatchStates(join(dirs.at(-1)!, "watches")), now: () => start,
+      place: () => { throw new Error("unexpected file read"); },
+      listTools: async () => [], callTool: async () => { throw new Error("unexpected MCP call"); },
+    });
+    const restored = new RoutineManager(h.options);
+    h.setNow(routine.nextRunAt!);
+    await restored.tick(); await settle(); await restored.tick();
+    expect(h.started).toHaveLength(1);
+    expect(restored.listRuns()[0].watchNote?.match(/Started without the saved pre-check/g)).toHaveLength(1);
+    expect(restored.listRuns()[0].watchNote).toContain("propose_routine_action");
+    expect(h.failed).toHaveLength(0);
+  });
 
   it("reads the watch beside the pass, then quiets the run: no turn, no card", async () => {
     const h = harness(start);

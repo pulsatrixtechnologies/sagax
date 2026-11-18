@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OutboundCalls } from "../outbound/outbound-calls.ts";
-import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone-call-control.ts";
+import { hangUpLiveCall, sendDtmfLiveCall, takeOverLiveCall, type LiveCallPatch } from "./phone-call-control.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -93,19 +93,41 @@ describe("phone-call-control", () => {
     expect(none.isError).toBe(true);
   });
 
-  it("transfers to another Canadian number", async () => {
-    const { calls } = liveRow();
+  it("takes the live call over through Perspicax voice_call control take_over, with the Reach me number", async () => {
+    const { calls, row } = liveRow();
     const patches: LiveCallPatch[] = [];
-    const twilio = vi.fn(async () => ({ ok: true as const, isError: false, value: {} }));
-    const answer = await transferLiveCall({
+    const voice = vi.fn(async () => ({ ok: true as const, isError: false, value: JSON.stringify({ taken_over: true, ref: row.id, to: "+15145550177", status: "dialing" }) }));
+    const answer = await takeOverLiveCall({
       calls,
-      twilio,
+      voice,
       patchLive: (_row, change) => { patches.push(change); },
       now: () => NOW + 2_000,
-    }, { principalId: "jean", botId: "bot-a", threadId: "t-1", to: "+1 514 555 0199" });
+    }, { principalId: "jean", botId: "bot-a", threadId: "t-1", takeOverTo: "+1 514 555 0177" });
+    expect(voice).toHaveBeenCalledWith({ control: "take_over", ref: row.id, take_over_to: "+15145550177" });
     expect(answer.isError).toBeUndefined();
-    expect(answer.text).toContain("Transferred");
-    expect(patches[0]?.phase).toBe("transferred");
-    expect(patches[0]?.liveEvents?.[0]?.kind).toBe("transfer");
+    expect(answer.to).toBe("+15145550177");
+    expect(answer.text).toContain("+1 514 ••• •• 77");
+    expect(patches).toEqual([{ phase: "transferred", takeOver: { state: "transferring", at: NOW + 2_000 } }]);
+  });
+
+  it("reports a refused take over to its caller and leaves the card as it is (the bot keeps talking)", async () => {
+    const { calls } = liveRow();
+    const patches: LiveCallPatch[] = [];
+    const refused = vi.fn(async () => ({ ok: true as const, isError: true, value: "denied: no_take_over_number: your person has no verified number" }));
+    const answer = await takeOverLiveCall({ calls, voice: refused, patchLive: (_row, change) => { patches.push(change); } }, { principalId: "jean", botId: "bot-a", threadId: "t-1" });
+    expect(answer).toMatchObject({ isError: true, code: "no_take_over_number" });
+    expect(refused).toHaveBeenCalledWith({ control: "take_over", ref: expect.stringMatching(/^call_/) });
+    const failed = await takeOverLiveCall({
+      calls, voice: async () => ({ ok: true as const, isError: true, value: "Twilio refused the redirect (502)" }), patchLive: (_row, change) => { patches.push(change); },
+    }, { principalId: "jean", botId: "bot-a", threadId: "t-1" });
+    expect(failed).toMatchObject({ isError: true, code: "takeover_failed" });
+    const down = await takeOverLiveCall({
+      calls, voice: async () => ({ ok: false as const, code: "unreachable", error: "unreachable" }), patchLive: (_row, change) => { patches.push(change); },
+    }, { principalId: "jean", botId: "bot-a", threadId: "t-1" });
+    expect(down.isError).toBe(true);
+    expect(patches).toEqual([]);
+    // someone else's conversation has no live call to take over
+    const none = await takeOverLiveCall({ calls, voice: refused, patchLive: () => {} }, { principalId: "alex", botId: "bot-a", threadId: "t-1" });
+    expect(none).toMatchObject({ isError: true, code: "not_live" });
   });
 });

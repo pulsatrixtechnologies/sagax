@@ -36,6 +36,9 @@ struct OutboundCardView: View {
     @State private var showTranscript: Bool
     @State private var showLiveTranscript = true
     @State private var hanging = false
+    /// Live call card lot 4: the take over request is on its way.
+    @State private var taking = false
+    @State private var askTakeOver = false
     @State private var liveTranscriptHeight: CGFloat = 0
     @State private var nowMs = Date().timeIntervalSince1970 * 1000
 
@@ -128,7 +131,7 @@ struct OutboundCardView: View {
             Image(systemName: icon).font(.system(size: 12, weight: .medium))
             Text(headerLabel).lineLimit(1)
             if live {
-                phaseChip(phaseLabel(card.phase ?? "dialing"), tone: ink.accent, fill: ink.accent.opacity(0.12), ink: ink)
+                phaseChip(liveChipLabel, tone: ink.accent, fill: ink.accent.opacity(0.12), ink: ink)
                     .accessibilityIdentifier("outbound-phase-chip")
                 // the timer counts from the pickup: none while it dials or rings
                 if let start = OutboundCardRules.timerStart(card) {
@@ -139,7 +142,7 @@ struct OutboundCardView: View {
                         .accessibilityIdentifier("outbound-live-timer")
                 }
             } else if ended, let result = card.result {
-                phaseChip(String(localized: "Ended"), tone: ink.secondary, fill: ink.inset, ink: ink)
+                phaseChip(result.endedBy == .transfer ? String(localized: "Transferred to you") : String(localized: "Ended"), tone: ink.secondary, fill: ink.inset, ink: ink)
                     .accessibilityIdentifier("outbound-phase-chip")
                 Text(verbatim: OutboundCallResult.duration(result.durationSec))
                     .font(ink.font(11.5, .regular))
@@ -226,6 +229,13 @@ struct OutboundCardView: View {
         case .purchaseDenied: String(localized: "Declined.")
         case nil: nil
         }
+    }
+
+    /// The live chip: the take over's state while it runs, else the phase.
+    private var liveChipLabel: String {
+        if taking || card.takeOver?.isTransferring == true { return String(localized: "Transferring…") }
+        if card.takeOver?.isAnswered == true { return String(localized: "Transferred to you") }
+        return phaseLabel(card.phase ?? "dialing")
     }
 
     private func phaseLabel(_ phase: String) -> String {
@@ -459,23 +469,69 @@ struct OutboundCardView: View {
                 .accessibilityIdentifier("outbound-live-transcript")
             }
         }
-        Button { hangUp() } label: {
-            HStack(spacing: 6) {
-                if hanging { ProgressView().controlSize(.mini) }
-                else { Image(systemName: "phone.down").font(.system(size: 12, weight: .semibold)) }
-                Text("End call")
+        HStack(spacing: 8) {
+            // live call card lot 4: Take over, left of End call, only with a
+            // number of the person's own to ring while the bot is in call
+            if card.canTakeOver || taking || card.takeOver?.isTransferring == true {
+                let busy = taking || card.takeOver?.isTransferring == true
+                Button { askTakeOver = true } label: {
+                    HStack(spacing: 6) {
+                        if busy { ProgressView().controlSize(.mini) }
+                        else { Image(systemName: "phone.arrow.right").font(.system(size: 12, weight: .semibold)) }
+                        Text(busy ? String(localized: "Transferring…") : String(localized: "Take over"))
+                    }
+                    .font(ink.font(13, .medium))
+                    .foregroundStyle(ink.ink)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(ink.hairline.opacity(0.6), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(busy || hanging)
+                .opacity(busy ? 0.6 : 1)
+                .accessibilityIdentifier("outbound-takeover")
             }
-            .font(ink.font(13, .medium))
-            .foregroundStyle(ink.danger)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(ink.danger.opacity(0.4), lineWidth: 1))
+            Button { hangUp() } label: {
+                HStack(spacing: 6) {
+                    if hanging { ProgressView().controlSize(.mini) }
+                    else { Image(systemName: "phone.down").font(.system(size: 12, weight: .semibold)) }
+                    Text("End call")
+                }
+                .font(ink.font(13, .medium))
+                .foregroundStyle(ink.danger)
+                .padding(.horizontal, 14)
+                .frame(height: 32)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(ink.danger.opacity(0.4), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(hanging)
+            .opacity(hanging ? 0.4 : 1)
+            .accessibilityIdentifier("outbound-hangup")
         }
-        .buttonStyle(.plain)
-        .disabled(hanging)
-        .opacity(hanging ? 0.4 : 1)
-        .accessibilityIdentifier("outbound-hangup")
         .padding(.top, 2)
+        // the reference's dialog: Cancel first, then Take Over
+        .alert(String(localized: "Take over this call?"), isPresented: $askTakeOver) {
+            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(String(localized: "Take Over")) { takeOver() }
+        } message: {
+            Text(verbatim: String(localized: "\(card.botName) will transfer the call to \(card.takeOverTo ?? "") immediately"))
+        }
+    }
+
+    private func takeOver() {
+        guard let client = session.settingsClient else { return }
+        Haptics.selection()
+        taking = true
+        error = ""
+        Task {
+            do {
+                try await client.takeOverOutbound(card)
+            } catch {
+                // the bot keeps talking: one plain line on the card
+                self.error = String(localized: "The call could not be transferred. The bot stays on the call.")
+            }
+            taking = false
+        }
     }
 
     @ViewBuilder
@@ -543,8 +599,11 @@ struct OutboundCardView: View {
         case .stopRequest: String(localized: "the other party asked to stop")
         case .timeLimit: String(localized: "time limit reached")
         case .hangUp: String(localized: "hung up")
+        case .transfer: nil
         case .unknown: nil
         }
+        // live call card lot 4: "Transferred to you · 1:35", the person took it
+        if endedBy == .transfer { return "\(String(localized: "Transferred to you")) · \(OutboundCallResult.duration(result.durationSec))" }
         return reason.map { "\(outcome) · \($0)" } ?? outcome
     }
 

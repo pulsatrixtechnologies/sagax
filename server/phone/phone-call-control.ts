@@ -1,10 +1,11 @@
-// Mid-call controls for a live conversation outbound call: hang up, send
-// DTMF, transfer. Sagax builds the Twilio Calls update itself (judged path,
-// never a bot's own Twilio frame) through the person's Perspicax access,
-// the same link place_phone_call already uses. Pure helpers plus the async
-// runners that take a mocked or live Twilio write.
+// Mid-call controls for a live conversation outbound call: hang up and send
+// DTMF (Sagax builds the Twilio Calls update itself, judged path, never a
+// bot's own Twilio frame), and take over (Perspicax voice_call control
+// take_over, which owns the transfer and its failure path), all through the
+// person's Perspicax access, the same link place_phone_call already uses.
+// Pure helpers plus the async runners that take a mocked or live write.
 import { normalizePhone } from "../../shared/allowed-recipients.ts";
-import { canadianNumber, formatPhone, maskPhone } from "../../shared/outbound-call.ts";
+import { maskPhone } from "../../shared/outbound-call.ts";
 import { parseDtmfDigits, type PhoneCallEventKind, type PhoneCallLiveEvent, type PhoneCallPhase } from "../../shared/phone-call-live.ts";
 import type { OutboundCallRecord, OutboundCalls } from "../outbound/outbound-calls.ts";
 
@@ -28,6 +29,10 @@ export interface LiveCallPatch {
   recordingUrl?: string;
   liveStartedAt?: number;
   liveAnsweredAt?: number;
+  /** The take over's state on the card; null clears it (nobody answered). */
+  takeOver?: { state: "transferring" | "answered"; at: number } | null;
+  /** Lines added after the card's own (deduped), such as a system line. */
+  appendLines?: { speaker: "bot" | "callee" | "system"; text: string; at?: number }[];
 }
 
 function shortError(value: unknown, fallback: string): string {
@@ -123,33 +128,64 @@ export async function sendDtmfLiveCall(deps: CallControlDeps, input: {
   return { text: `Sent keys ${digits} on the call to ${maskPhone(row.request.to)}.` };
 }
 
-export async function transferLiveCall(deps: CallControlDeps, input: {
+/** Perspicax's refusal of a take over, in plain words (never a key, never an id). */
+export function takeOverRefusal(value: unknown): { code: string; text: string } {
+  const said = shortError(value, "refused");
+  if (/no_take_over_number/.test(said)) return { code: "no_take_over_number", text: "There is no verified number of the person's own on their Perspicax Voice line to ring (voice_number verify adds one)." };
+  if (/taken_over/.test(said)) return { code: "taken_over", text: "This call is already being handed to the person." };
+  if (/not_live/.test(said)) return { code: "not_live", text: "This call is not under way with the bot's voice (not answered yet, or over)." };
+  if (/no_call/.test(said)) return { code: "unknown_call", text: "Perspicax has no call of the person's with this card." };
+  return { code: "takeover_failed", text: `Perspicax could not transfer the call: ${said}` };
+}
+
+/** The number a take over rang, from Perspicax's `taken_over` answer. */
+function rangNumber(value: unknown): string | undefined {
+  let record: unknown = value;
+  if (typeof value === "string") {
+    try { record = JSON.parse(value); } catch { record = null; }
+  }
+  const to = record && typeof record === "object" ? (record as Record<string, unknown>).to : undefined;
+  return typeof to === "string" && /^\+[1-9]\d{6,14}$/.test(to) ? to : undefined;
+}
+
+export interface TakeOverDeps {
+  calls: OutboundCalls;
+  /** Perspicax voice_call as the person (their own line). */
+  voice(args: Record<string, unknown>): Promise<ToolAnswer>;
+  patchLive(row: OutboundCallRecord, change: LiveCallPatch): void;
+  now?: () => number;
+  log?(line: string): void;
+}
+
+/** The person takes the live call over (live call card lot 4): Perspicax
+ * voice_call `control: "take_over"` with the call's `ref` rings their own
+ * verified number at once (`takeOverTo`, their "Reach me" number, when it
+ * is verified on the line; else their first verified one). The card shows
+ * the transfer ringing; Perspicax brings the call back to the bot when
+ * nobody answers. A refusal changes nothing: the bot keeps talking. One
+ * path for the person's Take over and the bot's `transfer` tool. */
+export async function takeOverLiveCall(deps: TakeOverDeps, input: {
   principalId: string;
   botId: string;
   threadId: string;
-  to: unknown;
   callId?: string;
-}): Promise<{ text: string; isError?: boolean }> {
-  const to = typeof input.to === "string" ? normalizePhone(input.to) : null;
-  if (!to) return { text: "transfer needs to: a phone number such as +1 514 555 0142.", isError: true };
-  if (!canadianNumber(to)) return { text: "Only Canadian numbers can be transferred to for now.", isError: true };
+  takeOverTo?: string;
+}): Promise<{ text: string; isError?: boolean; code?: string; to?: string }> {
   const row = findLiveCall(deps.calls, input);
-  if (!row?.callSid) return { text: "No live conversation call to transfer.", isError: true };
-  if (to === row.request.to) return { text: "to is already the number on this call.", isError: true };
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Dial>${to}</Dial></Response>`;
-  const answer = await deps.twilio(updateCallArgs(row.callSid, { Twiml: twiml }));
-  if (!answer.ok || answer.isError) {
-    return { text: `Could not transfer: ${answer.ok ? shortError(answer.value, "refused") : answer.error}.`, isError: true };
+  if (!row) return { text: "No live conversation call to take over in this conversation.", isError: true, code: "not_live" };
+  const takeOverTo = input.takeOverTo ? normalizePhone(input.takeOverTo) : null;
+  const answer = await deps.voice({ control: "take_over", ref: row.id, ...(takeOverTo ? { take_over_to: takeOverTo } : {}) });
+  if (!answer.ok) return { text: `Could not transfer the call: ${answer.error}.`, isError: true, code: "takeover_failed" };
+  if (answer.isError) {
+    const refused = takeOverRefusal(answer.value);
+    return { text: refused.text, isError: true, code: refused.code };
   }
+  const to = rangNumber(answer.value) ?? row.takeOverNumber;
   const at = (deps.now ?? Date.now)();
-  deps.patchLive(row, {
-    phase: "transferred",
-    liveEvents: [...((row as { liveEvents?: PhoneCallLiveEvent[] }).liveEvents ?? []), eventOf("transfer", formatPhone(to), at)],
-    liveTranscript: [
-      ...((row as { liveTranscript?: LiveCallPatch["liveTranscript"] }).liveTranscript ?? []),
-      { speaker: "system", text: `Transferred to ${formatPhone(to)}`, at },
-    ],
-  });
-  deps.log?.(`outbound transfer ${row.id} to ${maskPhone(to)}`);
-  return { text: `Transferred the call to ${maskPhone(to)}. Stay on the card for the new leg.` };
+  deps.patchLive(row, { phase: "transferred", takeOver: { state: "transferring", at } });
+  deps.log?.(`outbound take_over ${row.id}${to ? ` to ${maskPhone(to)}` : ""}`);
+  return {
+    text: `The call to ${maskPhone(row.request.to)} is being handed to the person: their own phone${to ? ` (${maskPhone(to)})` : ""} rings now. Once they answer, your voice leaves the call and they talk with the other party; if nobody answers within 15 seconds, the call comes back to your voice. The result arrives in a new turn.`,
+    ...(to ? { to } : {}),
+  };
 }

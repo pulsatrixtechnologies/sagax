@@ -103,6 +103,9 @@ export interface OutboundCallRecord {
   /** On whose behalf the call says it is made (the card shows the
    * disclosure as it will be said). */
   personName?: string;
+  /** The person's own verified number Perspicax rings on a take over
+   * (voice_call's `take_over_number`). Absent: the card offers no Take over. */
+  takeOverNumber?: string;
 }
 
 export class OutboundCallError extends Error {
@@ -352,12 +355,13 @@ export class OutboundCalls {
   }
 
   /** The approval is used: placed with Twilio's call sid, or failed. */
-  settle(id: string, outcome: { callSid?: string } | { error: string }): OutboundCallRecord | undefined {
+  settle(id: string, outcome: { callSid?: string; takeOverNumber?: string } | { error: string }): OutboundCallRecord | undefined {
     const row = this.load()[id];
     if (!row) return undefined;
     if (!("error" in outcome)) {
       row.status = "placed";
       if (outcome.callSid) row.callSid = outcome.callSid.slice(0, 64);
+      if (outcome.takeOverNumber) row.takeOverNumber = outcome.takeOverNumber;
     } else {
       row.status = "failed";
       row.error = outcome.error.slice(0, 240);
@@ -464,6 +468,9 @@ export function callCard(row: OutboundCallRecord, botName: string, live?: Partia
         ...(live?.liveAnsweredAt ? { liveAnsweredAt: live.liveAnsweredAt } : {}),
         ...(live?.liveTranscript?.length ? { liveTranscript: live.liveTranscript } : {}),
         ...(live?.liveEvents?.length ? { liveEvents: live.liveEvents } : {}),
+        // the person's own number, masked: the card's Take over says it
+        ...(row.takeOverNumber ? { takeOverTo: maskPhone(row.takeOverNumber) } : {}),
+        ...(live?.takeOver ? { takeOver: live.takeOver } : {}),
       } : {}),
       ...(live?.recordingUrl && row.result ? { recordingUrl: live.recordingUrl } : {}),
       ...(live?.phase === "ended" || row.result ? { phase: live?.phase ?? "ended" } : {}),
@@ -517,6 +524,9 @@ export interface PlaceCallDeps {
   autoPlace?: boolean;
   /** The server clock (the live card's liveStartedAt). */
   now?: () => number;
+  /** The person's "Reach me" text number: voice_call's `take_over_to`,
+   * the number a take over rings when it is verified on their line. */
+  takeOverTo?: string;
 }
 
 /** A name said on the call: visible characters, cut at 80 on a word, never
@@ -611,9 +621,40 @@ async function callVoice(deps: PlaceCallDeps, args: Record<string, unknown>): Pr
     args = rest;
     answer = await deps.voice!(args);
   }
+  // a Perspicax older than the take over (#2141) refuses take_over_to: the call then goes without it
+  if ("take_over_to" in args && answer.ok && answer.isError && /take_over_to|additional|unexpected|unknown/i.test(shortError(answer.value, ""))) {
+    const { take_over_to: _to, ...rest } = args;
+    args = rest;
+    answer = await deps.voice!(args);
+  }
   if (!("bot" in args) || !answer.ok || !answer.isError || !/bot: one of the line's bots/.test(shortError(answer.value, ""))) return answer;
   const { bot: _bot, ...rest } = args;
   return deps.voice!(rest);
+}
+
+/** A placed call's record: Twilio's call sid and the take over number. */
+function placedOutcome(value: unknown): { callSid?: string; takeOverNumber?: string } {
+  const sid = sidOf(value);
+  const takeOverNumber = takeOverNumberOf(value);
+  return { ...(sid ? { callSid: sid } : {}), ...(takeOverNumber ? { takeOverNumber } : {}) };
+}
+
+/** voice_call's `take_over_number` (Perspicax #2141): the person's own
+ * verified number a take over rings, wherever the connector put it. */
+export function takeOverNumberOf(value: unknown): string | undefined {
+  let record: unknown = value;
+  if (typeof value === "string") {
+    try { record = JSON.parse(value); } catch { record = null; }
+  }
+  const direct = record && typeof record === "object" ? (record as Record<string, unknown>).take_over_number : undefined;
+  let text = "";
+  if (typeof direct === "string") text = direct;
+  else {
+    try { text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; } catch { text = ""; }
+    // a JSON text inside the tool's content escapes its quotes
+    text = /take_over_number\\?"\s*:\s*\\?"(\+[1-9]\d{6,14})\\?"/.exec(text)?.[1] ?? "";
+  }
+  return /^\+[1-9]\d{6,14}$/.test(text) ? text : undefined;
 }
 
 /** Why a placement failed, in words for the card and the bot. */
@@ -637,10 +678,9 @@ async function placeConversation(
   if (approved && deps.calls.overLimit(context.principalId, "calls")) return { text: deps.calls.overLimit(context.principalId, "calls")!, isError: true };
   if (approved && deps.calls.claim(approved.id)) {
     // used now, whatever Perspicax answers: a retry asks again
-    const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false }));
+    const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false, takeOverTo: deps.takeOverTo }));
     const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
-    const sid = placed ? sidOf(answer.value) : undefined;
-    const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;
+    const settled = deps.calls.settle(approved.id, placed ? placedOutcome(answer.value) : { error: placementError(answer) })!;
     const live = placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
     deps.card(settled, settled.messageId, live);
     deps.log?.(`outbound conversation call ${settled.status} to ${maskPhone(request.to)}`);
@@ -671,10 +711,9 @@ async function placeConversation(
     }
     const approved = deps.calls.approvedFor({ ...context, request, names });
     if (approved && deps.calls.claim(approved.id)) {
-      const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false }));
+      const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false, takeOverTo: deps.takeOverTo }));
       const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
-      const sid = placed ? sidOf(answer.value) : undefined;
-      const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;
+      const settled = deps.calls.settle(approved.id, placed ? placedOutcome(answer.value) : { error: placementError(answer) })!;
       const live = placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
       deps.card(settled, settled.messageId, live);
       if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
@@ -746,6 +785,7 @@ const ENDED_BY_WORDS: Record<NonNullable<OutboundCallResult["endedBy"]>, string>
   "stop-request": "the other person asked not to be called again",
   "time-limit": "the time limit was reached",
   "hang-up": "the other person hung up",
+  transfer: "the person took the call over (it was transferred to them; their own part is not transcribed)",
 };
 
 /** What the bot is told when a conversation call ended: the facts, the

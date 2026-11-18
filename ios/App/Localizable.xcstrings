@@ -2,6 +2,118 @@
   "sourceLanguage": "en",
   "version": "1.0",
   "strings": {
+    "Take over": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take over"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prendre l'appel"
+          }
+        }
+      }
+    },
+    "Take over this call?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take over this call?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prendre l'appel ?"
+          }
+        }
+      }
+    },
+    "Take Over": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take Over"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prendre l'appel"
+          }
+        }
+      }
+    },
+    "Transferring…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transferring…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfert…"
+          }
+        }
+      }
+    },
+    "Transferred to you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transferred to you"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transféré vers toi"
+          }
+        }
+      }
+    },
+    "%@ will transfer the call to %@ immediately": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ will transfer the call to %@ immediately"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ va transférer l'appel au %@ tout de suite."
+          }
+        }
+      }
+    },
+    "The call could not be transferred. The bot stays on the call.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The call could not be transferred. The bot stays on the call."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'appel n'a pas pu être transféré. Le bot reste en ligne."
+          }
+        }
+      }
+    },
     " (Default: none sent)": {
       "localizations": {
         "fr": {

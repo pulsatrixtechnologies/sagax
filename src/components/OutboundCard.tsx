@@ -11,14 +11,17 @@
 // A conversation call (mode `conversation`) shows the objective, the most it
 // may last and the language, its guidance and voicemail words behind a
 // disclosure; once placed, the live card (phase chip, timer, transcript,
-// End call); once ended, the result with the recording player when present.
+// End call, and Take over when the person can take the call: their own
+// phone rings at once, after a confirmation); once ended, the result with
+// the recording player when present.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneForwarded, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck, X } from "lucide-react";
 
 import { answerPurchase } from "@/lib/credential-vault";
 import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { api, type Message } from "@/state/store";
+import { api, ApiError, type Message } from "@/state/store";
+import { useConfirm } from "./ConfirmProvider";
 import type { OutboundCallResult, OutboundCard as OutboundCardData } from "../../shared/wire";
 import {
   dedupeLiveLines,
@@ -55,8 +58,19 @@ export function isLiveConversationCall(card: Pick<OutboundCardData, "kind" | "mo
   return card.status === "done" || card.status === "approved";
 }
 
-function phaseLabel(phase: PhoneCallPhase | undefined): string {
+function phaseLabel(phase: PhoneCallPhase | undefined, takeOver?: OutboundCardData["takeOver"]): string {
+  if (takeOver?.state === "transferring") return t("outbound.call.takeOver.transferring");
+  if (takeOver?.state === "answered") return t("outbound.call.takeOver.transferred");
   return t(PHASE_LABEL[phase && phase in PHASE_LABEL ? phase : "dialing"]);
+}
+
+/** Take over's refusal, in the person's words (the route's code). */
+function takeOverError(cause: unknown): string {
+  const code = cause instanceof ApiError ? cause.body?.code : undefined;
+  if (code === "no_take_over_number") return t("outbound.call.takeOver.noNumber");
+  if (code === "taken_over") return t("outbound.call.takeOver.already");
+  if (code === "not_live") return t("outbound.call.takeOver.notLive");
+  return t("outbound.call.takeOver.failed");
 }
 
 function callRequestTitle(card: OutboundCardData): string {
@@ -128,6 +142,7 @@ const ENDED_BY_LABEL: Record<NonNullable<OutboundCallResult["endedBy"]>, LocaleK
   "stop-request": "outbound.call.endedBy.stopRequest",
   "time-limit": "outbound.call.endedBy.timeLimit",
   "hang-up": "outbound.call.endedBy.hangUp",
+  transfer: "outbound.call.endedBy.transfer",
 };
 
 const OUTCOME_TONE: Record<OutboundCallResult["outcome"], string> = {
@@ -140,6 +155,10 @@ const OUTCOME_TONE: Record<OutboundCallResult["outcome"], string> = {
 
 /** The badge's words: an outcome from a newer server reads as "Ended". */
 export function outcomeLabel(result: OutboundCallResult): string {
+  // live call card lot 4: "Transferred to you · 1:35", the person took it
+  if (result.outcome === "completed" && result.endedBy === "transfer") {
+    return `${t("outbound.call.endedBy.transfer")} · ${formatCallDuration(result.durationSec)}`;
+  }
   const outcome = t(OUTCOME_LABEL[result.outcome] ?? "outbound.call.outcome.ended");
   const reason = result.outcome === "completed" && result.endedBy ? ENDED_BY_LABEL[result.endedBy] : undefined;
   return reason ? `${outcome} · ${t(reason)}` : outcome;
@@ -376,6 +395,8 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
   const [open, setOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hanging, setHanging] = useState(false);
+  const [taking, setTaking] = useState(false);
+  const confirm = useConfirm();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const name = card.calleeName?.trim() ?? "";
   const number = card.destination ?? "";
@@ -384,6 +405,11 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
   const other = name || t("outbound.call.otherParty");
   const timerStart = liveTimerStart(card);
   const canEnd = live && card.status === "done" && phase !== "ended";
+  // live call card lot 4: only with a number of the person's own to ring,
+  // while the bot talks with the other party; hidden otherwise, never greyed
+  const takeOver = card.takeOver;
+  const canTakeOver = canEnd && Boolean(card.takeOverTo) && phase === "in_call" && !takeOver;
+  const transferring = taking || takeOver?.state === "transferring";
   const hasTranscript = ended ? lines.length > 0 : stream.some((item) => item.kind === "line");
 
   useEffect(() => {
@@ -418,6 +444,26 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
     }
   };
 
+  const takeOverCall = async () => {
+    const ok = await confirm({
+      title: t("outbound.call.takeOver.title"),
+      body: t("outbound.call.takeOver.body", { bot: card.botName, number: card.takeOverTo ?? "" }),
+      confirmLabel: t("outbound.call.takeOver.confirm"),
+      tone: "neutral",
+    });
+    if (!ok) return;
+    setTaking(true);
+    onError("");
+    try {
+      await api(`/api/me/phone-calls/${encodeURIComponent(card.id)}/takeover`, { method: "POST", body: "{}" });
+    } catch (cause) {
+      // the bot keeps talking: one plain sentence on the card
+      onError(takeOverError(cause));
+    } finally {
+      setTaking(false);
+    }
+  };
+
   const state = statusLine({ ...card, status });
   const title = name || number;
   return (
@@ -440,7 +486,7 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
             <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-4 text-ink-secondary">
               {live && (
                 <span data-outbound-phase-chip className="shrink-0 rounded-full bg-accent/12 px-2 py-px text-[11.5px] font-medium text-accent">
-                  {phaseLabel(card.phase)}
+                  {phaseLabel(card.phase, takeOver)}
                 </span>
               )}
               {result && (
@@ -453,7 +499,7 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
             </span>
           </span>
           {live && phase !== "ended" && timerStart && <LiveTimer startedAt={timerStart} />}
-          {result && <span data-outbound-duration className="shrink-0 tabular-nums text-[13px] text-ink-secondary">{formatCallDuration(result.durationSec)}</span>}
+          {result && result.endedBy !== "transfer" && <span data-outbound-duration className="shrink-0 tabular-nums text-[13px] text-ink-secondary">{formatCallDuration(result.durationSec)}</span>}
         </button>
         {open && (
           <>
@@ -497,9 +543,15 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
           {card.via && status !== "pending" && !live && <p className="px-3 pb-2 text-[12px] text-ink-secondary">{t("outbound.via", { name: card.via })}</p>}
           {/* #4304: a call that is over shows no leftover control error */}
           {error && !ended && phase !== "ended" && <p role="alert" className="px-3 pb-2 text-[12px] text-danger">{error}</p>}
-          {/* the Take over button takes its place here when it ships (lot 4); hidden until then */}
           {canEnd && (
             <footer className="flex flex-wrap justify-end gap-2 border-t border-hairline/30 px-3 py-2.5">
+              {(canTakeOver || (transferring && takeOver?.state !== "answered")) && (
+                <button type="button" data-outbound-takeover disabled={transferring || hanging} onClick={() => void takeOverCall()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-hairline/60 px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-ink/[0.04] disabled:opacity-60">
+                  {transferring ? <Loader2 size={13} className="animate-spin" /> : <PhoneForwarded size={13} aria-hidden="true" />}
+                  {transferring ? t("outbound.call.takeOver.transferring") : t("outbound.call.takeOver.action")}
+                </button>
+              )}
               <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40">
                 {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}

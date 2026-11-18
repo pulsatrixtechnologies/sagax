@@ -129,15 +129,14 @@ export const SEND_DTMF_TOOL_SPEC = {
 export const TRANSFER_CALL_TOOL_SPEC = {
   name: TRANSFER_CALL_TOOL,
   description:
-    "While a conversation call you placed is live, transfer it to another Canadian number. The live card shows Transferred.",
+    "While a conversation call you placed is live, hand it to the person (the same as Take over on their card): their own verified phone rings at once, their Reach me number when it is verified on their line, else their first verified number. Once they answer, your voice leaves the call; nobody answering within 15 seconds brings the call back to your voice. A refusal is said in the answer: the call then stays with you; tell the person. Only the person's own numbers can be rung.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
     properties: {
-      to: { type: "string", description: "Number to transfer to, such as +1 514 555 0199." },
+      to: { type: "string", description: "Optional: one of the person's own verified numbers to ring, such as +1 514 555 0199. Left out: their Reach me number." },
       call_id: { type: "string", description: "Optional call id when more than one live call exists." },
     },
-    required: ["to"],
   },
 } as const;
 

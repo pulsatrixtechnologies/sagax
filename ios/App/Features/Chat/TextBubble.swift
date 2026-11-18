@@ -197,7 +197,9 @@ struct TextBubble: View {
                         .accessibilityIdentifier("raw-markdown-\(message.id)")
                 } else {
                     MarkdownText(
-                        source: message.text ?? "",
+                        // #4572: a bot's record links draw as chips from `recordText`;
+                        // everything else (copy, quote, speech) reads `text`
+                        source: RecordLinks.chipText(text: message.text, recordText: message.recordText) ?? "",
                         scrollIdentifier: "message-\(message.id)-scroll",
                         mentions: context.mentionPeers,
                         mentionEveryone: context.mentionEveryone,

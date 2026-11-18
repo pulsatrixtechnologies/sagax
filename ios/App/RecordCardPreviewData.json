@@ -1,0 +1,634 @@
+{
+ "products": {
+  "products": [
+   {
+    "id": "nimbus_desk",
+    "name": "Nimbus Desk",
+    "records": [
+     {
+      "kind": "bill",
+      "name": {
+       "en": "Bill",
+       "fr": "Facture"
+      }
+     },
+     {
+      "kind": "contract",
+      "name": {
+       "en": "Contract",
+       "fr": "Entente"
+      }
+     },
+     {
+      "kind": "device",
+      "name": {
+       "en": "Device",
+       "fr": "Poste"
+      }
+     },
+     {
+      "kind": "person",
+      "name": {
+       "en": "Person",
+       "fr": "Personne"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "cards": {
+  "nimbus_desk/bill/88213": {
+   "en": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "bill",
+     "name": "Bill"
+    },
+    "id": "88213",
+    "number": "BILL-20417",
+    "title": "Acme Fabrication",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "Sent",
+     "tone": "open"
+    },
+    "chips": [
+     {
+      "label": "Contract",
+      "tone": "open"
+     }
+    ],
+    "dates": {
+     "due": "2026-11-05"
+    },
+    "fields": [
+     {
+      "label": "Billed to",
+      "value": "Acme Fabrication",
+      "type": "ref",
+      "ref": {
+       "product": "other_tool",
+       "kind": "company",
+       "id": "19301"
+      }
+     },
+     {
+      "label": "Total",
+      "value": "$1,234.50",
+      "type": "money",
+      "amount": "1234.5",
+      "currency": "CAD"
+     },
+     {
+      "label": "Balance",
+      "value": "$1,234.50",
+      "type": "money",
+      "amount": "1234.5",
+      "currency": "CAD"
+     },
+     {
+      "label": "Date",
+      "value": "2026-10-06",
+      "type": "date",
+      "at": "2026-10-06",
+      "day": true
+     },
+     {
+      "label": "Terms",
+      "value": "Net 30"
+     },
+     {
+      "label": "Contract",
+      "value": "Managed services",
+      "type": "ref",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "contract",
+       "id": "412"
+      }
+     },
+     {
+      "label": "Sales rep",
+      "value": "Ana Roy",
+      "type": "person",
+      "role": "owner",
+      "detail": "Sales",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "person",
+       "id": "3"
+      }
+     }
+    ],
+    "lines": {
+     "state": "ok",
+     "title": "Lines",
+     "items": [
+      {
+       "label": "Managed device",
+       "detail": "42",
+       "value": "$1,050.00",
+       "ref": {
+        "product": "nimbus_desk",
+        "kind": "device",
+        "id": "7"
+       }
+      },
+      {
+       "label": "Cloud backup",
+       "detail": "3",
+       "value": "$184.50"
+      }
+     ],
+     "total": 2,
+     "more": false
+    },
+    "open_url": "https://console.example/bills/88213"
+   },
+   "fr": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "bill",
+     "name": "Facture"
+    },
+    "id": "88213",
+    "number": "BILL-20417",
+    "title": "Acme Fabrication",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "Envoyée",
+     "tone": "open"
+    },
+    "chips": [
+     {
+      "label": "Entente",
+      "tone": "open"
+     }
+    ],
+    "dates": {
+     "due": "2026-11-05"
+    },
+    "fields": [
+     {
+      "label": "Facturé à",
+      "value": "Acme Fabrication",
+      "type": "ref",
+      "ref": {
+       "product": "other_tool",
+       "kind": "company",
+       "id": "19301"
+      }
+     },
+     {
+      "label": "Total",
+      "value": "1 234,50 $",
+      "type": "money",
+      "amount": "1234.5",
+      "currency": "CAD"
+     },
+     {
+      "label": "Solde",
+      "value": "1 234,50 $",
+      "type": "money",
+      "amount": "1234.5",
+      "currency": "CAD"
+     },
+     {
+      "label": "Date",
+      "value": "2026-10-06",
+      "type": "date",
+      "at": "2026-10-06",
+      "day": true
+     },
+     {
+      "label": "Modalités",
+      "value": "Net 30"
+     },
+     {
+      "label": "Entente",
+      "value": "Services gérés",
+      "type": "ref",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "contract",
+       "id": "412"
+      }
+     },
+     {
+      "label": "Représentant",
+      "value": "Ana Roy",
+      "type": "person",
+      "role": "owner",
+      "detail": "Ventes",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "person",
+       "id": "3"
+      }
+     }
+    ],
+    "lines": {
+     "state": "ok",
+     "title": "Lignes",
+     "items": [
+      {
+       "label": "Poste géré",
+       "detail": "42",
+       "value": "1 050,00 $",
+       "ref": {
+        "product": "nimbus_desk",
+        "kind": "device",
+        "id": "7"
+       }
+      },
+      {
+       "label": "Sauvegarde infonuagique",
+       "detail": "3",
+       "value": "184,50 $"
+      }
+     ],
+     "total": 2,
+     "more": false
+    },
+    "open_url": "https://console.example/bills/88213"
+   }
+  },
+  "nimbus_desk/contract/412": {
+   "en": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "contract",
+     "name": "Contract"
+    },
+    "id": "412",
+    "number": "Managed services",
+    "title": "Managed services",
+    "notes": {
+     "state": "ok",
+     "title": "Timeline",
+     "total": 2,
+     "more": false,
+     "items": [
+      {
+       "author": "Luc Gagnon",
+       "at": "2026-11-10T10:00:00-05:00",
+       "text": "Renewal discussed on the phone."
+      },
+      {
+       "author": "Ana Roy",
+       "at": "2026-10-02T09:30:00-04:00",
+       "internal": true,
+       "text": "Margin 31 percent after cost."
+      }
+     ]
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "Active",
+     "tone": "done"
+    },
+    "chips": [
+     {
+      "label": "Recurring",
+      "tone": "open"
+     }
+    ],
+    "fields": [
+     {
+      "label": "Amount",
+      "value": "$2,400.00",
+      "type": "money",
+      "amount": "2400",
+      "currency": "CAD"
+     },
+     {
+      "label": "Start",
+      "value": "2026-01-01",
+      "type": "date",
+      "at": "2026-01-01",
+      "day": true
+     },
+     {
+      "label": "End",
+      "value": "2026-12-31",
+      "type": "date",
+      "at": "2026-12-31",
+      "day": true
+     },
+     {
+      "label": "Coverage used",
+      "value": "52 %",
+      "type": "percent",
+      "share": 52
+     },
+     {
+      "label": "Contact",
+      "value": "Ana Roy",
+      "type": "person",
+      "role": "contact",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "person",
+       "id": "3"
+      }
+     }
+    ],
+    "description": {
+     "text": "Monitoring, patching and help desk for the front office.",
+     "more": false
+    }
+   },
+   "fr": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "contract",
+     "name": "Entente"
+    },
+    "id": "412",
+    "number": "Services gérés",
+    "title": "Services gérés",
+    "notes": {
+     "state": "ok",
+     "title": "Chronologie",
+     "total": 2,
+     "more": false,
+     "items": [
+      {
+       "author": "Luc Gagnon",
+       "at": "2026-11-10T10:00:00-05:00",
+       "text": "Renouvellement discuté au téléphone."
+      },
+      {
+       "author": "Ana Roy",
+       "at": "2026-10-02T09:30:00-04:00",
+       "internal": true,
+       "text": "Marge de 31 pour cent après coûts."
+      }
+     ]
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "Active",
+     "tone": "done"
+    },
+    "chips": [
+     {
+      "label": "Récurrente",
+      "tone": "open"
+     }
+    ],
+    "fields": [
+     {
+      "label": "Montant",
+      "value": "2 400,00 $",
+      "type": "money",
+      "amount": "2400",
+      "currency": "CAD"
+     },
+     {
+      "label": "Début",
+      "value": "2026-01-01",
+      "type": "date",
+      "at": "2026-01-01",
+      "day": true
+     },
+     {
+      "label": "Fin",
+      "value": "2026-12-31",
+      "type": "date",
+      "at": "2026-12-31",
+      "day": true
+     },
+     {
+      "label": "Couverture utilisée",
+      "value": "52 %",
+      "type": "percent",
+      "share": 52
+     },
+     {
+      "label": "Contact",
+      "value": "Ana Roy",
+      "type": "person",
+      "role": "contact",
+      "ref": {
+       "product": "nimbus_desk",
+       "kind": "person",
+       "id": "3"
+      }
+     }
+    ],
+    "description": {
+     "text": "Surveillance, correctifs et soutien technique pour le bureau principal.",
+     "more": false
+    }
+   }
+  },
+  "nimbus_desk/device/7": {
+   "en": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "device",
+     "name": "Device"
+    },
+    "id": "7",
+    "number": "FRONT-DESK-01",
+    "title": "Front desk laptop",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "Online",
+     "tone": "done"
+    },
+    "chips": [
+     {
+      "label": "Out of date",
+      "tone": "waiting"
+     }
+    ],
+    "fields": [
+     {
+      "label": "Site",
+      "value": "Main office"
+     },
+     {
+      "label": "System",
+      "value": "Workstation OS 14.2"
+     },
+     {
+      "label": "Last seen",
+      "value": "2 h ago",
+      "type": "ago",
+      "at": "2026-11-17T12:30:00-05:00"
+     },
+     {
+      "label": "Active threats",
+      "value": "0"
+     }
+    ]
+   },
+   "fr": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "device",
+     "name": "Poste"
+    },
+    "id": "7",
+    "number": "FRONT-DESK-01",
+    "title": "Portable de la réception",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "state": {
+     "label": "En ligne",
+     "tone": "done"
+    },
+    "chips": [
+     {
+      "label": "Pas à jour",
+      "tone": "waiting"
+     }
+    ],
+    "fields": [
+     {
+      "label": "Site",
+      "value": "Bureau principal"
+     },
+     {
+      "label": "Système",
+      "value": "Workstation OS 14.2"
+     },
+     {
+      "label": "Dernière vue",
+      "value": "il y a 2 h",
+      "type": "ago",
+      "at": "2026-11-17T12:30:00-05:00"
+     },
+     {
+      "label": "Menaces actives",
+      "value": "0"
+     }
+    ]
+   }
+  },
+  "nimbus_desk/person/3": {
+   "en": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "person",
+     "name": "Person"
+    },
+    "id": "3",
+    "number": "Ana Roy",
+    "title": "Ana Roy",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "fields": [
+     {
+      "label": "Title",
+      "value": "Office manager"
+     },
+     {
+      "label": "Phone",
+      "value": "555 0142"
+     },
+     {
+      "label": "E-mail",
+      "value": "ana@acme.example"
+     }
+    ]
+   },
+   "fr": {
+    "product": {
+     "id": "nimbus_desk",
+     "name": "Nimbus Desk"
+    },
+    "kind": {
+     "id": "person",
+     "name": "Personne"
+    },
+    "id": "3",
+    "number": "Ana Roy",
+    "title": "Ana Roy",
+    "notes": {
+     "state": "none",
+     "items": [],
+     "more": false
+    },
+    "tz": "America/Toronto",
+    "as_of": "2026-11-17T14:32:10-05:00",
+    "cached": false,
+    "fields": [
+     {
+      "label": "Titre",
+      "value": "Gestionnaire de bureau"
+     },
+     {
+      "label": "Téléphone",
+      "value": "555 0142"
+     },
+     {
+      "label": "Courriel",
+      "value": "ana@acme.example"
+     }
+    ]
+   }
+  }
+ }
+}

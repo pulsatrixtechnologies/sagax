@@ -524,7 +524,7 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-form-cards-preview") ? "FormCardsPreview" : arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
+               forResource: arguments.contains("-record-cards-preview") ? "RecordCardPreview" : arguments.contains("-form-cards-preview") ? "FormCardsPreview" : arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),
@@ -561,6 +561,11 @@ final class Session: ObservableObject {
                 let config = URLSessionConfiguration.ephemeral
                 config.protocolClasses = [ImagePreviewProtocol.self]
                 client = CompanionClient(connection: preview, token: "image-fixture-token", session: URLSession(configuration: config))
+            }
+            if arguments.contains("-record-cards-preview") {
+                let config = URLSessionConfiguration.ephemeral
+                config.protocolClasses = [RecordCardPreviewProtocol.self]
+                client = CompanionClient(connection: preview, token: "record-cards-fixture-token", session: URLSession(configuration: config))
             }
             if arguments.contains("-bot-conversation-preview") {
                 let config = URLSessionConfiguration.ephemeral
@@ -3230,6 +3235,22 @@ final class Session: ObservableObject {
     func youtubeTranscript(videoId: String) async throws -> YouTubeTranscriptResponse {
         guard let client else { throw APIError.transport("This computer is offline.") }
         return try await client.youtubeTranscript(videoId: videoId)
+    }
+
+    /// #4572: the card of one record, read as the signed-in person. A card or
+    /// the state that says why there is none; `down` when this computer cannot
+    /// be reached.
+    func recordCard(_ ref: RecordRef, language: String, fresh: Bool = false) async -> RecordCardAnswer {
+        guard let client else { return .miss(.init(state: "down")) }
+        do { return try await client.recordCard(ref, language: language, fresh: fresh) }
+        catch { return .miss(.init(state: "down")) }
+    }
+
+    /// #4572: the person's products and the kinds each describes: which
+    /// records a card may open. Empty when it cannot be read (every record then stays plain words).
+    func recordProducts(language: String) async -> RecordProducts {
+        guard let client else { return .init() }
+        return (try? await client.recordProducts(language: language)) ?? .init()
     }
 
     /// The search sheet's messages: nil when the server could not answer,

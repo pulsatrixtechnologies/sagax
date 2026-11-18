@@ -33,6 +33,11 @@ extension ChatView {
     }
 
     func openLink(_ url: URL, from message: Message) -> OpenURLAction.Result {
+        // #4572: a record chip opens that record's card in a sheet, in this chat
+        if let ref = RecordLinks.parse(url) {
+            recordSheet = RecordSheetItem(ref: ref, label: RecordLinks.label(of: url.absoluteString, in: message.recordText))
+            return .handled
+        }
         // A thread reference ("#Title" sent as its canonical link, WP3).
         if let ref = ThreadRefs.parse(url.absoluteString) {
             if let botId = ref.botId, session.state.bot(botId) != nil {

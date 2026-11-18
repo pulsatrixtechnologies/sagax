@@ -1,0 +1,2474 @@
+{
+  "note": "Frozen from shared/record-cards.ts. Checked by shared/record-card-vectors.test.ts and ios/Tests/CompanionCoreTests/RecordCardTests.swift; regenerate with `pnpm exec tsx` or by hand after a contract change, never edit expected by hand.",
+  "cards": [
+    {
+      "name": "a minimal card",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication"
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "not an object",
+      "raw": "text",
+      "expected": null
+    },
+    {
+      "name": "no title",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417"
+      },
+      "expected": null
+    },
+    {
+      "name": "a bad product id",
+      "raw": {
+        "product": {
+          "id": "Bad Id",
+          "name": "N"
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication"
+      },
+      "expected": null
+    },
+    {
+      "name": "an id of 128 characters",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication"
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "an id of 129 characters",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication"
+      },
+      "expected": null
+    },
+    {
+      "name": "a state with an unknown tone",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "state": {
+          "label": "Envoyée",
+          "tone": "purple"
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "state": {
+          "label": "Envoyée",
+          "tone": "open"
+        }
+      }
+    },
+    {
+      "name": "a priority with an unknown level",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "priority": {
+          "label": "Haute",
+          "level": "extreme"
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "priority": {
+          "label": "Haute",
+          "level": "normal"
+        }
+      }
+    },
+    {
+      "name": "three chips keep two",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "chips": [
+          {
+            "label": "A",
+            "tone": "done"
+          },
+          {
+            "label": "B",
+            "tone": "bogus"
+          },
+          {
+            "label": "C",
+            "tone": "alert"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "chips": [
+          {
+            "label": "A",
+            "tone": "done"
+          },
+          {
+            "label": "B",
+            "tone": "open"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a company with a valid ref",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "company": {
+          "name": "Acme",
+          "ref": {
+            "product": "nimbus_desk",
+            "kind": "company",
+            "id": "19301"
+          }
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "company": {
+          "name": "Acme",
+          "ref": {
+            "product": "nimbus_desk",
+            "kind": "company",
+            "id": "19301"
+          }
+        }
+      }
+    },
+    {
+      "name": "a company with an invalid ref",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "company": {
+          "name": "Acme",
+          "ref": {
+            "product": "x",
+            "kind": "company",
+            "id": "1"
+          }
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "company": {
+          "name": "Acme"
+        }
+      }
+    },
+    {
+      "name": "people with roles and a ref",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "people": [
+          {
+            "role": "owner",
+            "label": "Responsable",
+            "name": "Ana Roy",
+            "detail": "Ventes",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            }
+          },
+          {
+            "role": "Bad Role",
+            "name": "Skip"
+          },
+          {
+            "role": "contact",
+            "name": "Luc Gagnon"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "people": [
+          {
+            "role": "owner",
+            "label": "Responsable",
+            "name": "Ana Roy",
+            "detail": "Ventes",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            }
+          },
+          {
+            "role": "contact",
+            "label": "",
+            "name": "Luc Gagnon"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dates keep the four keys and drop a bad one",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "dates": {
+          "due": "2026-11-05",
+          "opened": "2026-11-01T09:00:00-05:00",
+          "closed": "not a date",
+          "other": "2026-01-01"
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "dates": {
+          "opened": "2026-11-01T09:00:00-05:00",
+          "due": "2026-11-05"
+        }
+      }
+    },
+    {
+      "name": "a date that is not on the calendar",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "dates": {
+          "due": "2026-13-40",
+          "updated": "2026-11-05T25:00:00Z"
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "a text field and an unknown type read as text",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Termes",
+            "value": "Net 30"
+          },
+          {
+            "label": "Mystère",
+            "value": "x",
+            "type": "hologram",
+            "extra": 1
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Termes",
+            "value": "Net 30"
+          },
+          {
+            "label": "Mystère",
+            "value": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a money field",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Total",
+            "value": "1 234,50 $",
+            "type": "money",
+            "amount": "1234.5",
+            "currency": "CAD"
+          },
+          {
+            "label": "Solde",
+            "value": "-5 $",
+            "type": "money",
+            "amount": "-5",
+            "currency": "cad"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Total",
+            "value": "1 234,50 $",
+            "type": "money",
+            "amount": "1234.5",
+            "currency": "CAD"
+          },
+          {
+            "label": "Solde",
+            "value": "-5 $",
+            "type": "money",
+            "amount": "-5"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a money field with a bad amount stays text",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Total",
+            "value": "1 234,50 $",
+            "type": "money",
+            "amount": "1,234.50",
+            "currency": "CAD"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Total",
+            "value": "1 234,50 $"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a day date, an instant date and an ago",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Date",
+            "value": "2026-10-06",
+            "type": "date",
+            "at": "2026-10-06",
+            "day": true
+          },
+          {
+            "label": "Début",
+            "value": "x",
+            "type": "date",
+            "at": "2026-10-06T08:00:00-04:00",
+            "day": true
+          },
+          {
+            "label": "Vu",
+            "value": "il y a 2 h",
+            "type": "ago",
+            "at": "2026-11-17T12:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Date",
+            "value": "2026-10-06",
+            "type": "date",
+            "at": "2026-10-06",
+            "day": true
+          },
+          {
+            "label": "Début",
+            "value": "x",
+            "type": "date",
+            "at": "2026-10-06T08:00:00-04:00"
+          },
+          {
+            "label": "Vu",
+            "value": "il y a 2 h",
+            "type": "ago",
+            "at": "2026-11-17T12:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a percent field",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Avancement",
+            "value": "52 %",
+            "type": "percent",
+            "share": 52
+          },
+          {
+            "label": "Trop",
+            "value": "140 %",
+            "type": "percent",
+            "share": 140
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Avancement",
+            "value": "52 %",
+            "type": "percent",
+            "share": 52
+          },
+          {
+            "label": "Trop",
+            "value": "140 %"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a person field",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Représentant",
+            "value": "Ana Roy",
+            "type": "person",
+            "role": "owner",
+            "detail": "Ventes",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Représentant",
+            "value": "Ana Roy",
+            "type": "person",
+            "detail": "Ventes",
+            "role": "owner",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a ref field with and without a valid ref",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Entente",
+            "value": "Services gérés",
+            "type": "ref",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            },
+            "detail": "Active"
+          },
+          {
+            "label": "Projet",
+            "value": "Migration",
+            "type": "ref",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "project",
+              "id": "../x/y"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Entente",
+            "value": "Services gérés",
+            "type": "ref",
+            "ref": {
+              "product": "nimbus_desk",
+              "kind": "contract",
+              "id": "412"
+            },
+            "detail": "Active"
+          },
+          {
+            "label": "Projet",
+            "value": "Migration"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a state field",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Statut",
+            "value": "En retard",
+            "type": "state",
+            "tone": "alert"
+          },
+          {
+            "label": "Statut 2",
+            "value": "?",
+            "type": "state",
+            "tone": "pink"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Statut",
+            "value": "En retard",
+            "type": "state",
+            "tone": "alert"
+          },
+          {
+            "label": "Statut 2",
+            "value": "?",
+            "type": "state",
+            "tone": "open"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a duration field",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Heures",
+            "value": "3,5 / 8",
+            "type": "duration"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Heures",
+            "value": "3,5 / 8",
+            "type": "duration"
+          }
+        ]
+      }
+    },
+    {
+      "name": "twelve fields keep ten",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "L0",
+            "value": "V0"
+          },
+          {
+            "label": "L1",
+            "value": "V1"
+          },
+          {
+            "label": "L2",
+            "value": "V2"
+          },
+          {
+            "label": "L3",
+            "value": "V3"
+          },
+          {
+            "label": "L4",
+            "value": "V4"
+          },
+          {
+            "label": "L5",
+            "value": "V5"
+          },
+          {
+            "label": "L6",
+            "value": "V6"
+          },
+          {
+            "label": "L7",
+            "value": "V7"
+          },
+          {
+            "label": "L8",
+            "value": "V8"
+          },
+          {
+            "label": "L9",
+            "value": "V9"
+          },
+          {
+            "label": "L10",
+            "value": "V10"
+          },
+          {
+            "label": "L11",
+            "value": "V11"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "L0",
+            "value": "V0"
+          },
+          {
+            "label": "L1",
+            "value": "V1"
+          },
+          {
+            "label": "L2",
+            "value": "V2"
+          },
+          {
+            "label": "L3",
+            "value": "V3"
+          },
+          {
+            "label": "L4",
+            "value": "V4"
+          },
+          {
+            "label": "L5",
+            "value": "V5"
+          },
+          {
+            "label": "L6",
+            "value": "V6"
+          },
+          {
+            "label": "L7",
+            "value": "V7"
+          },
+          {
+            "label": "L8",
+            "value": "V8"
+          },
+          {
+            "label": "L9",
+            "value": "V9"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a long value is cut on a word",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "fields": [
+          {
+            "label": "Note",
+            "value": "mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "Note",
+            "value": "mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot…"
+          }
+        ]
+      }
+    },
+    {
+      "name": "control characters and blanks",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "  Acme\u0007  \t Fabrication\n\n\n\nInc ",
+        "fields": [
+          {
+            "label": "A",
+            "value": "x\u0000y"
+          }
+        ]
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication\n\nInc",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "fields": [
+          {
+            "label": "A",
+            "value": "xy"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a description cut and a flag",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "description": {
+          "text": "mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot motmot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot motmot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot",
+          "more": false
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "description": {
+          "text": "mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot motmot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot motmot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot mot…",
+          "more": true
+        }
+      }
+    },
+    {
+      "name": "lines ok keep six and say more",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "lines": {
+          "state": "ok",
+          "title": "Lignes",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            },
+            {
+              "label": "Ligne 3",
+              "detail": "3",
+              "value": "3,00 $"
+            },
+            {
+              "label": "Ligne 4",
+              "detail": "4",
+              "value": "4,00 $"
+            },
+            {
+              "label": "Ligne 5",
+              "detail": "5",
+              "value": "5,00 $"
+            },
+            {
+              "label": "Ligne 6",
+              "detail": "6",
+              "value": "6,00 $"
+            },
+            {
+              "label": "Ligne 7",
+              "detail": "7",
+              "value": "7,00 $"
+            }
+          ],
+          "total": 7
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "lines": {
+          "state": "ok",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            },
+            {
+              "label": "Ligne 3",
+              "detail": "3",
+              "value": "3,00 $"
+            },
+            {
+              "label": "Ligne 4",
+              "detail": "4",
+              "value": "4,00 $"
+            },
+            {
+              "label": "Ligne 5",
+              "detail": "5",
+              "value": "5,00 $"
+            },
+            {
+              "label": "Ligne 6",
+              "detail": "6",
+              "value": "6,00 $"
+            }
+          ],
+          "title": "Lignes",
+          "total": 7,
+          "more": true
+        }
+      }
+    },
+    {
+      "name": "lines with a total larger than the items",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "lines": {
+          "state": "ok",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            }
+          ],
+          "total": 9
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "lines": {
+          "state": "ok",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            }
+          ],
+          "total": 9,
+          "more": true
+        }
+      }
+    },
+    {
+      "name": "lines forbidden hold no item",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "lines": {
+          "state": "forbidden",
+          "title": "Lignes",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            },
+            {
+              "label": "Ligne 3",
+              "detail": "3",
+              "value": "3,00 $"
+            },
+            {
+              "label": "Ligne 4",
+              "detail": "4",
+              "value": "4,00 $"
+            },
+            {
+              "label": "Ligne 5",
+              "detail": "5",
+              "value": "5,00 $"
+            },
+            {
+              "label": "Ligne 6",
+              "detail": "6",
+              "value": "6,00 $"
+            },
+            {
+              "label": "Ligne 7",
+              "detail": "7",
+              "value": "7,00 $"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "lines": {
+          "state": "forbidden",
+          "items": [],
+          "title": "Lignes",
+          "more": false
+        }
+      }
+    },
+    {
+      "name": "lines with a bad state are unavailable",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "lines": {
+          "state": "weird",
+          "items": [
+            {
+              "label": "Ligne 1",
+              "detail": "1",
+              "value": "1,00 $"
+            },
+            {
+              "label": "Ligne 2",
+              "detail": "2",
+              "value": "2,00 $"
+            },
+            {
+              "label": "Ligne 3",
+              "detail": "3",
+              "value": "3,00 $"
+            },
+            {
+              "label": "Ligne 4",
+              "detail": "4",
+              "value": "4,00 $"
+            },
+            {
+              "label": "Ligne 5",
+              "detail": "5",
+              "value": "5,00 $"
+            },
+            {
+              "label": "Ligne 6",
+              "detail": "6",
+              "value": "6,00 $"
+            },
+            {
+              "label": "Ligne 7",
+              "detail": "7",
+              "value": "7,00 $"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "lines": {
+          "state": "unavailable",
+          "items": [],
+          "more": false
+        }
+      }
+    },
+    {
+      "name": "a line with a ref",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "lines": {
+          "state": "ok",
+          "items": [
+            {
+              "label": "Poste géré",
+              "ref": {
+                "product": "nimbus_desk",
+                "kind": "contract",
+                "id": "412"
+              },
+              "value": "50,00 $"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "lines": {
+          "state": "ok",
+          "items": [
+            {
+              "label": "Poste géré",
+              "value": "50,00 $",
+              "ref": {
+                "product": "nimbus_desk",
+                "kind": "contract",
+                "id": "412"
+              }
+            }
+          ],
+          "more": false
+        }
+      }
+    },
+    {
+      "name": "notes with a title, an internal mark and a total",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "ok",
+          "title": "Chronologie",
+          "total": 5,
+          "items": [
+            {
+              "author": "Ana",
+              "at": "2026-11-16T10:00:00-05:00",
+              "internal": true,
+              "text": "Appelé le client."
+            },
+            {
+              "text": "Rappel"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "ok",
+          "items": [
+            {
+              "author": "Ana",
+              "at": "2026-11-16T10:00:00-05:00",
+              "internal": true,
+              "text": "Appelé le client.",
+              "more": false
+            },
+            {
+              "text": "Rappel",
+              "more": false
+            }
+          ],
+          "title": "Chronologie",
+          "total": 5,
+          "more": true
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "four notes keep three",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "ok",
+          "items": [
+            {
+              "text": "Note 1"
+            },
+            {
+              "text": "Note 2"
+            },
+            {
+              "text": "Note 3"
+            },
+            {
+              "text": "Note 4"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "ok",
+          "items": [
+            {
+              "text": "Note 1",
+              "more": false
+            },
+            {
+              "text": "Note 2",
+              "more": false
+            },
+            {
+              "text": "Note 3",
+              "more": false
+            }
+          ],
+          "more": true
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "an open address over http is dropped",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "open_url": "http://console.example/x"
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false
+      }
+    },
+    {
+      "name": "an open address over https is kept",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "open_url": "https://console.example/bills/88213"
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false,
+        "openUrl": "https://console.example/bills/88213"
+      }
+    },
+    {
+      "name": "a zone, an as_of and cached",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "tz": "America/Toronto",
+        "as_of": "2026-11-17T14:32:10-05:00",
+        "cached": true
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": true,
+        "tz": "America/Toronto",
+        "asOf": "2026-11-17T14:32:10-05:00"
+      }
+    },
+    {
+      "name": "a bad zone is dropped",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "tz": "Not A Zone!"
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk",
+          "icon": {
+            "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+          }
+        },
+        "kind": {
+          "id": "bill",
+          "name": "Facture"
+        },
+        "id": "88213",
+        "number": "BILL-20417",
+        "title": "Acme Fabrication",
+        "notes": {
+          "state": "none",
+          "items": [],
+          "more": false
+        },
+        "cached": false
+      }
+    }
+  ],
+  "answers": [
+    {
+      "name": "a card",
+      "raw": {
+        "card": {
+          "product": {
+            "id": "nimbus_desk",
+            "name": "Nimbus Desk",
+            "icon": {
+              "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+            }
+          },
+          "kind": {
+            "id": "bill",
+            "name": "Facture"
+          },
+          "id": "88213",
+          "number": "BILL-20417",
+          "title": "Acme Fabrication"
+        }
+      },
+      "expected": {
+        "card": {
+          "product": {
+            "id": "nimbus_desk",
+            "name": "Nimbus Desk",
+            "icon": {
+              "url": "https://console.example/api/v1/product-icons/nimbus.svg?v=3"
+            }
+          },
+          "kind": {
+            "id": "bill",
+            "name": "Facture"
+          },
+          "id": "88213",
+          "number": "BILL-20417",
+          "title": "Acme Fabrication",
+          "notes": {
+            "state": "none",
+            "items": [],
+            "more": false
+          },
+          "cached": false
+        }
+      }
+    },
+    {
+      "name": "a card that does not parse",
+      "raw": {
+        "card": {
+          "id": "1"
+        }
+      },
+      "expected": {
+        "state": "unavailable"
+      }
+    },
+    {
+      "name": "sign_in",
+      "raw": {
+        "state": "sign_in"
+      },
+      "expected": {
+        "state": "sign_in"
+      }
+    },
+    {
+      "name": "busy with a retry",
+      "raw": {
+        "state": "busy",
+        "retryAfter": 4.2,
+        "code": "rate"
+      },
+      "expected": {
+        "state": "busy",
+        "code": "rate",
+        "retryAfter": 5
+      }
+    },
+    {
+      "name": "not connected with the product's state",
+      "raw": {
+        "state": "not_connected",
+        "productState": "needs_key"
+      },
+      "expected": {
+        "state": "not_connected",
+        "productState": "needs_key"
+      }
+    },
+    {
+      "name": "refused by the organization",
+      "raw": {
+        "state": "org_refused",
+        "rule": {
+          "id": "r1",
+          "text": "No reading of invoices."
+        }
+      },
+      "expected": {
+        "state": "org_refused",
+        "rule": {
+          "id": "r1",
+          "text": "No reading of invoices."
+        }
+      }
+    },
+    {
+      "name": "an unknown state is unavailable",
+      "raw": {
+        "state": "exploded"
+      },
+      "expected": {
+        "state": "unavailable"
+      }
+    },
+    {
+      "name": "a body that is not an object",
+      "raw": null,
+      "expected": {
+        "state": "unavailable"
+      }
+    },
+    {
+      "name": "a retry that is not positive",
+      "raw": {
+        "state": "busy",
+        "retryAfter": -3
+      },
+      "expected": {
+        "state": "busy"
+      }
+    }
+  ],
+  "links": [
+    {
+      "name": "a record link",
+      "href": "sagax://record/nimbus_desk/bill/88213",
+      "expected": {
+        "product": "nimbus_desk",
+        "kind": "bill",
+        "id": "88213"
+      }
+    },
+    {
+      "name": "an encoded id",
+      "href": "sagax://record/nimbus_desk/bill/a%3Ab",
+      "expected": {
+        "product": "nimbus_desk",
+        "kind": "bill",
+        "id": "a:b"
+      }
+    },
+    {
+      "name": "upper case scheme",
+      "href": "SAGAX://record/nimbus_desk/bill/88213",
+      "expected": {
+        "product": "nimbus_desk",
+        "kind": "bill",
+        "id": "88213"
+      }
+    },
+    {
+      "name": "two segments",
+      "href": "sagax://record/nimbus_desk/88213",
+      "expected": null
+    },
+    {
+      "name": "four segments",
+      "href": "sagax://record/nimbus_desk/bill/88213/x",
+      "expected": null
+    },
+    {
+      "name": "an id of only dots",
+      "href": "sagax://record/nimbus_desk/bill/..",
+      "expected": null
+    },
+    {
+      "name": "a bad product name",
+      "href": "sagax://record/Nimbus/bill/1",
+      "expected": null
+    },
+    {
+      "name": "a query",
+      "href": "sagax://record/nimbus_desk/bill/1?x=1",
+      "expected": null
+    },
+    {
+      "name": "a space",
+      "href": "sagax://record/nimbus_desk/bill/1%202",
+      "expected": null
+    },
+    {
+      "name": "a web address",
+      "href": "https://example.com/record/a/b/c",
+      "expected": null
+    }
+  ],
+  "texts": [
+    {
+      "name": "one link",
+      "text": "Voir [BILL-1](sagax://record/nimbus_desk/bill/1) svp.",
+      "expected": "Voir BILL-1 svp."
+    },
+    {
+      "name": "two links and a bare address",
+      "text": "[A](sagax://record/nimbus_desk/bill/1) et [B](sagax://record/nimbus_desk/bill/2) <sagax://record/nimbus_desk/bill/3>",
+      "expected": "A et B "
+    },
+    {
+      "name": "no link",
+      "text": "Rien ici.",
+      "expected": "Rien ici."
+    },
+    {
+      "name": "a normal link stays",
+      "text": "[doc](https://example.com)",
+      "expected": "[doc](https://example.com)"
+    }
+  ]
+}

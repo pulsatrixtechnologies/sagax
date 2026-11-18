@@ -529,6 +529,7 @@ struct MarkdownText: View {
                 DesktopFindHighlight.apply(to: &attributed, needle: findHighlight, theme: desktop)
             }
             styleFootnotes(&attributed)
+            styleRecordChips(&attributed)
             styleSpoilers(&attributed)
             return attributed
         }
@@ -598,6 +599,21 @@ struct MarkdownText: View {
             mark.font = .system(size: 10, weight: .medium)
             mark.baselineOffset = 5
             attributed.replaceSubrange(range, with: mark)
+        }
+    }
+
+    /// #4572: a record link (`sagax://record/<product>/<kind>/<id>`) is a chip,
+    /// not a blue underlined word: the accent over the quiet field tint, with a
+    /// hair of room on both sides. The tap opens that record's card.
+    private func styleRecordChips(_ attributed: inout AttributedString) {
+        let chips = attributed.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let link = run.link, RecordLinks.parse(link) != nil else { return nil }
+            return run.range
+        }
+        for range in chips.reversed() {
+            attributed[range].foregroundColor = Theme.blue
+            attributed[range].backgroundColor = Theme.inset
+            attributed[range].underlineStyle = nil
         }
     }
 

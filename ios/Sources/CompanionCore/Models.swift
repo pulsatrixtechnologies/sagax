@@ -730,6 +730,10 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     public var kind: Kind
     public var at: Double
     public var text: String?
+    /// #4507: a bot's `text` with its record links
+    /// (`[#481516](sagax://record/<product>/<kind>/<id>)`), for a client that
+    /// draws them as chips. `text` never holds a record address.
+    public var recordText: String? = nil
     /// Provider turn markers let clients fold settled narration while keeping
     /// the final answer visible. Older servers may omit both fields.
     public var turnId: String?

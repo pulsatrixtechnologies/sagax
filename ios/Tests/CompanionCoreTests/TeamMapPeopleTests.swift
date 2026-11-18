@@ -169,11 +169,19 @@ final class TeamMapPeopleTests: XCTestCase {
 
     func testRunsBreakOnAuthorOrFiveMinutes() {
         let sam = RoomAuthor.person(key: "person:pr_sam", name: "Sam", initials: "S", personId: "pr_sam")
-        let now = Date().timeIntervalSince1970 * 1000
+        // Local noon, never the wall clock: a run also breaks at midnight, so
+        // "now" within a minute of it (a pre-push at 23:59) failed the first
+        // check (2026-11-18).
+        let calendar = Calendar.current
+        let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date(timeIntervalSince1970: 1_794_000_000))!
+        let now = noon.timeIntervalSince1970 * 1000
         XCTAssertTrue(RoomAuthor.continuesRun(previous: (now, sam), next: (now + 60_000, sam)))
         XCTAssertFalse(RoomAuthor.continuesRun(previous: (now, sam), next: (now + 6 * 60_000, sam)))
         XCTAssertFalse(RoomAuthor.continuesRun(previous: (now, .me), next: (now + 1, sam)))
         XCTAssertFalse(RoomAuthor.continuesRun(previous: nil, next: (now, sam)))
+        // two lines a minute apart across local midnight start a new run (the day separator)
+        let midnight = calendar.startOfDay(for: noon.addingTimeInterval(86_400)).timeIntervalSince1970 * 1000
+        XCTAssertFalse(RoomAuthor.continuesRun(previous: (midnight - 30_000, sam), next: (midnight + 30_000, sam)))
     }
 
     func testAPeopleConversationReadsAsTheOtherPerson() {

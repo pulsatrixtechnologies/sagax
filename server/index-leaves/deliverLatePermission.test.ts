@@ -6,7 +6,9 @@ import { createCloseOpenApprovals } from "./closeOpenApprovals.ts";
 import { createInterruptDirectThread } from "./interruptDirectThread.ts";
 import { allowSavedPermission } from "../turns/saved-permission-pass.ts";
 
-function card(extra: Record<string, unknown> = {}) {
+type Row = { id: string; card: Record<string, unknown> };
+
+function card(extra: Record<string, unknown> = {}): Row {
   return {
     id: "m1",
     card: {
@@ -20,7 +22,7 @@ function card(extra: Record<string, unknown> = {}) {
   };
 }
 
-function hostFor(rows: Array<Record<string, any>>, over: Record<string, any> = {}) {
+function hostFor(rows: Row[], over: Record<string, any> = {}) {
   const started: string[] = [];
   const appended: Array<Record<string, unknown>> = [];
   const host: Record<string, any> = {

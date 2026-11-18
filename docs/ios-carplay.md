@@ -73,6 +73,18 @@ Apple has granted the entitlement and the App ID has the CarPlay
 capability: signing without a CarPlay profile fails, so it cannot ship by
 accident. Plain `xcodegen generate` stays the usual build.
 
+## Status and next lots (#4666)
+
+Apple granted the CarPlay entitlement (2026-11-17); the category is read
+from the request (voice-based conversational), not from the portal, whose
+API has no CarPlay capability. Left to do: enable CarPlay on the App ID,
+regenerate the store profile, then build with `project-carplay.yml`.
+The `project-carplay.yml` build compiles and launches in the iOS Simulator
+(scene manifest and `CarPlaySceneDelegate` present). Next lots: a tab bar
+(Bots, Recent, To answer), pending approvals as a list answered by voice
+with Approve and Deny alert actions, a notification that opens "To answer",
+then the CarPlay spec becomes the default once the profile exists.
+
 ## Testing
 
 - `swift test --filter CarAssistTests`: names, replies, handles, the car's

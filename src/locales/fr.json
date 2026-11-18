@@ -11568,7 +11568,6 @@
   "outbound.call.takeOver.noNumber": "Aucun numéro vérifié à toi à faire sonner. Vérifies-en un sur ta ligne Perspicax Voice.",
   "outbound.call.takeOver.already": "Cet appel est déjà en train de t'être transféré.",
   "outbound.call.takeOver.notLive": "Cet appel ne peut pas encore être pris. Réessaie une fois qu'il est répondu.",
-  "outbound.call.liveTranscript": "Transcription en direct",
   "outbound.call.event.hold": "En attente",
   "outbound.call.event.dtmf": "A composé {digits}",
   "outbound.call.event.transfer": "Transféré vers {destination}",

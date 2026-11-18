@@ -107,6 +107,10 @@ describe("OutboundCard, Take over", () => {
     expect(answered.querySelector("[data-outbound-phase-chip]")?.textContent).toBe("Transferred to you");
     expect(answered.querySelector("[data-outbound-live-timer]")).not.toBeNull();
     expect(answered.textContent).toContain("You're on the call.");
+    const sys = answered.querySelector("[data-outbound-live-system]");
+    expect(sys?.textContent).toBe("You're on the call.");
+    expect(sys?.className).toContain("italic");
+    expect(answered.textContent).not.toContain("Live transcript:");
     expect(answered.querySelector("[data-outbound-takeover]")).toBeNull();
     expect(answered.querySelector("[data-outbound-hangup]")).not.toBeNull();
   });

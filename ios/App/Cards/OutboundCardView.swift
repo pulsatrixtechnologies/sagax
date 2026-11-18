@@ -437,15 +437,24 @@ struct OutboundCardView: View {
                                 .id(item.id)
                         } else {
                             let speaker = item.speaker ?? "callee"
+                            if speaker == "system" {
+                                Text(verbatim: item.text)
+                                    .font(ink.font(12, .regular))
+                                    .italic()
+                                    .foregroundStyle(ink.tertiary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(item.id)
+                            } else {
                             (Text(verbatim: speakerName(speaker) + ":")
                                 .font(ink.font(12.5, .semibold))
-                                .foregroundColor(speaker == "bot" ? ink.accent : speaker == "system" ? ink.tertiary : ink.secondary)
+                                .foregroundColor(speaker == "bot" ? ink.accent : ink.secondary)
                              + Text(verbatim: " " + item.text)
                                 .font(ink.font(12.5, .regular))
                                 .foregroundColor(ink.ink))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .id(item.id)
+                            }
                         }
                     }
                 }

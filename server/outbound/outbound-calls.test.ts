@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALL_APPROVAL_MS, callAnswerNote, callCard, OutboundCalls, placePhoneCall, type OutboundCallRecord, type PlaceCallDeps, STANDING_CALL_VIA } from "./outbound-calls.ts";
+import { maskTransferEvents, CALL_APPROVAL_MS, callAnswerNote, callCard, OutboundCalls, placePhoneCall, type OutboundCallRecord, type PlaceCallDeps, STANDING_CALL_VIA } from "./outbound-calls.ts";
 
 // #4193: every call a bot places is a live conversation through voice_call on
 // the person's own line; there is no one-way spoken message any more.
@@ -304,5 +304,16 @@ describe("a placed call is a live conversation, never a spoken message (#4193)",
     expect(failed.isError).toBe(true);
     expect(calls.get(row.id)).toMatchObject({ status: "failed", error: "The realtime voice is off on this Perspicax; an admin turns it on" });
     expect(failed.text).toContain("an admin turns it on");
+  });
+});
+
+describe("maskTransferEvents", () => {
+  it("masks the person's own number in transfer events only", () => {
+    const out = maskTransferEvents([
+      { kind: "transfer", detail: "+1 514 555 0199" },
+      { kind: "dtmf", detail: "1234567" },
+    ]);
+    expect(out[0]!.detail).toBe("+1 514 ••• •• 99");
+    expect(out[1]!.detail).toBe("1234567");
   });
 });

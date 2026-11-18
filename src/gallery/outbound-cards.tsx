@@ -83,7 +83,7 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
   }) },
   { message: row(19, {
     ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
-    liveEvents: [{ kind: "transfer", detail: "+1 514 555 0199", at: liveStartedAt + 40_000 }],
+    liveEvents: [{ kind: "transfer", detail: "+1 514 ••• •• 99", at: liveStartedAt + 40_000 }],
   }) },
   // live call card lot 4: Take over (the person's own number, masked), its
   // transfer ringing, the person on the call, nobody answered, and the end
@@ -99,7 +99,7 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
     takeOver: { state: "transferring", at: liveStartedAt + 20_000 },
     liveTranscript: [
       { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
-      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
+      { speaker: "system", text: "Transfert de l'appel vers toi.", at: liveStartedAt + 20_000 },
     ],
   }) },
   { message: row(23, {
@@ -107,15 +107,15 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
     takeOver: { state: "answered", at: liveStartedAt + 20_000 },
     liveTranscript: [
       { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
-      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
-      { speaker: "system", text: "Vous êtes sur l'appel.", at: liveStartedAt + 45_000 },
+      { speaker: "system", text: "Transfert de l'appel vers toi.", at: liveStartedAt + 20_000 },
+      { speaker: "system", text: "Tu es sur l'appel.", at: liveStartedAt + 45_000 },
     ],
   }) },
   { message: row(24, {
     ...conversation, id: "call_0000000000000024", status: "done", phase: "in_call", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay", takeOverTo: "+1 514 ••• •• 77",
     liveTranscript: [
       { speaker: "callee", text: "Oui, bonjour. Je peux lui parler directement?", at: liveStartedAt + 12_000 },
-      { speaker: "system", text: "Transfert de l'appel vers vous.", at: liveStartedAt + 20_000 },
+      { speaker: "system", text: "Transfert de l'appel vers toi.", at: liveStartedAt + 20_000 },
       { speaker: "system", text: "Transfert sans réponse, Rocket a repris l'appel.", at: liveStartedAt + 38_000 },
       { speaker: "bot", text: "Je suis toujours là. Alex n'est pas disponible pour le moment; puis-je prendre un message?", at: liveStartedAt + 40_000 },
     ],

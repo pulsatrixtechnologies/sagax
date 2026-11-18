@@ -51,7 +51,6 @@ export interface OutboundWiringDeps {
    * and a bot's transfer when its turn holds no connection. */
   personVoice?(principalId: string, botId: string, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
   /** Run `fn` after `ms` (tests pass their own clock). */
-  later?(ms: number, fn: () => void): void;
   /** Perspicax voice_call as the person who speaks in the turn (their own
    * line and key). Absent: no Perspicax on this server. */
   voice?(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
@@ -143,17 +142,10 @@ export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, 
   };
 }
 
-/** How long after a take over starts the person counts as on the call
- * when the call did not come back to the bot: Perspicax rings their phone
- * 15 seconds (DIAL_TIMEOUT_SECS), plus the redirect and the ring's start.
- * Perspicax sends no event when they answer; it sends one (phase in_call
- * and its system line) when nobody did. */
-export const TAKE_OVER_ANSWERED_MS = 25_000;
-
 /** The card's line once the person is on the call (their own part is never
  * transcribed), in the call's language. */
 export function onTheCallLine(language: "fr" | "en"): string {
-  return language === "fr" ? "Vous êtes sur l'appel." : "You're on the call.";
+  return language === "fr" ? "Tu es sur l'appel." : "You're on the call.";
 }
 
 /** The bot's mid-call controls (DTMF, take over, hang up) and the person's
@@ -163,7 +155,6 @@ function liveCallControls(
   calls: OutboundCalls,
   patchLive: (row: OutboundCallRecord, change: LiveCallPatch) => void,
   phaseOf: (row: OutboundCallRecord) => OutboundCard["phase"],
-  takeOverStarted: (row: OutboundCallRecord) => void,
 ) {
   /** #4304: a live call is reached through the turn's connection when it
    * holds one, else on the person's own access outside any turn (the call
@@ -219,7 +210,6 @@ function liveCallControls(
         if (row && outcome.code !== "not_live") patchLive(row, { appendLines: [{ speaker: "system", text: outcome.text, at: (deps.now ?? Date.now)() }] });
         return { text: `${outcome.text} The call stays with your voice. Tell the person.`, isError: true };
       }
-      if (row) takeOverStarted(row);
       return { text: outcome.text };
     },
 
@@ -286,7 +276,6 @@ function liveCallControls(
         if (outcome.code === "no_take_over_number") return { error: "No verified number of yours to ring. Verify one on your Perspicax Voice line.", status: 409, code: "no_take_over_number" };
         return { error: "The call could not be transferred. The bot stays on the call.", status: 502, code: "takeover_failed" };
       }
-      takeOverStarted(row);
       return { ok: true, ...(outcome.to ? { to: outcome.to } : {}) };
     },
   };
@@ -356,26 +345,6 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       ...(change.liveEvents ? { liveEvents: change.liveEvents } : {}),
     };
     deps.store.patchMessage(row.threadId, existing.id, { outbound, text: callCardText(row) });
-  }
-
-  /** A take over started (the person's Take over, the bot's transfer, or
-   * Perspicax saying so): once the ring time passed and the call did not
-   * come back to the bot, the person is on the call. */
-  function takeOverStarted(row: OutboundCallRecord): void {
-    const startedAt = rowOf(row.threadId, row.id, row.messageId)?.outbound?.takeOver?.at;
-    if (!startedAt) return;
-    const later = deps.later ?? ((ms: number, fn: () => void) => { setTimeout(fn, ms).unref?.(); });
-    later(TAKE_OVER_ANSWERED_MS, () => {
-      const current = calls.get(row.id);
-      if (!current || current.status !== "placed" || current.result) return;
-      const card = rowOf(row.threadId, row.id, row.messageId)?.outbound;
-      if (!card || card.phase === "ended" || card.takeOver?.state !== "transferring" || card.takeOver.at !== startedAt) return;
-      patchLive(current, {
-        phase: "transferred",
-        takeOver: { state: "answered", at: startedAt },
-        appendLines: [{ speaker: "system", text: onTheCallLine(current.request.language), at: (deps.now ?? Date.now)() }],
-      });
-    });
   }
 
   function stageConsentCard(_principalId: string, botId: string, threadId: string): string {
@@ -482,7 +451,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       return api.placeCall(context, { ...parsed, to });
     },
 
-    ...liveCallControls(deps, calls, patchLive, (row) => rowOf(row.threadId, row.id, row.messageId)?.outbound?.phase, takeOverStarted),
+    ...liveCallControls(deps, calls, patchLive, (row) => rowOf(row.threadId, row.id, row.messageId)?.outbound?.phase),
 
     /** Accept or decline the one-time phone-call consent card. */
     resolveConsent(input: { principalId: string; botId: string; threadId: string; requestId: string; allow: boolean }): void {
@@ -601,6 +570,8 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       callSid?: string;
       phase?: LiveCallPatch["phase"];
       calleeName?: string;
+      personAnswered?: boolean;
+      personAnsweredAt?: number;
       lines?: NonNullable<LiveCallPatch["liveTranscript"]>;
       events?: NonNullable<LiveCallPatch["liveEvents"]>;
     }): "applied" | "unknown" | "not_yours" {
@@ -614,8 +585,18 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       // or that nobody answered and the bot resumed (in_call)
       const takeOverStarts = input.phase === "transferred" && !existing?.takeOver;
       const takeOverBack = input.phase === "in_call" && Boolean(existing?.takeOver);
+      // Perspicax says the person picked up: the card is on the call from
+      // that event (no guess from a timer)
+      const answered = input.phase === "transferred" && input.personAnswered === true;
+      const startedAt = existing?.takeOver?.at ?? input.personAnsweredAt ?? (deps.now ?? Date.now)();
+      const alreadyAnswered = existing?.takeOver?.state === "answered";
       patchLive(row, {
-        ...(takeOverStarts ? { takeOver: { state: "transferring" as const, at: (deps.now ?? Date.now)() } } : {}),
+        ...(answered
+          ? { takeOver: { state: "answered" as const, at: startedAt } }
+          : takeOverStarts ? { takeOver: { state: "transferring" as const, at: (deps.now ?? Date.now)() } } : {}),
+        ...(answered && !alreadyAnswered
+          ? { appendLines: [{ speaker: "system" as const, text: onTheCallLine(row.request.language), at: input.personAnsweredAt ?? (deps.now ?? Date.now)() }] }
+          : {}),
         ...(takeOverBack ? { takeOver: null } : {}),
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.calleeName ? { calleeName: input.calleeName } : {}),
@@ -631,7 +612,6 @@ export function outboundWiring(deps: OutboundWiringDeps) {
         ...(!existing?.liveAnsweredAt && (input.phase === "in_call" || (!input.phase && input.lines?.length && (!existing?.phase || existing.phase === "dialing" || existing.phase === "ringing")))
           ? { liveAnsweredAt: (deps.now ?? Date.now)() } : {}),
       });
-      if (takeOverStarts) takeOverStarted(row);
       return "applied";
     },
 

@@ -19,7 +19,7 @@ function harness() {
   let settled = () => {};
   const dispatch = vi.fn(async (_text: string, done: () => void) => { settled = done; });
   turns.start("hidden", failed(3), "investigate", {
-    ask, unavailable, recovered, dispatch, readRun: id => check.id === id ? check : undefined, messages: () => [], stillBroken: () => true, incomplete: vi.fn(),
+    ask, unavailable, recovered, dispatch, readRun: id => check.id === id ? check : undefined, messages: () => [], stillBroken: () => true,
   });
   return { turns, check, ask, unavailable, recovered, dispatch, settle: () => settled() };
 }
@@ -69,11 +69,25 @@ describe("the routine bot investigates", () => {
     expect(w.unavailable).not.toHaveBeenCalled();
   });
 
+  it("falls back to a card with the bot's last words when it ends twice without a repair or a question", async () => {
+    const turns = new InvestigationTurns();
+    const unavailable = vi.fn();
+    const dispatch = vi.fn(async (_text: string, settled: () => void) => { setImmediate(settled); });
+    turns.start("hidden", failed(3), "investigate", {
+      ask: vi.fn(), unavailable, recovered: vi.fn(), readRun: () => undefined, stillBroken: () => true,
+      messages: () => [{ role: "bot", kind: "text", text: "The archive still refuses the sign-in.", at: 5 } as Message],
+      dispatch,
+    });
+    await vi.waitFor(() => expect(unavailable).toHaveBeenCalledTimes(1));
+    expect(dispatch).toHaveBeenCalledTimes(2);
+    expect(unavailable.mock.calls[0]?.[0]).toContain("The archive still refuses the sign-in.");
+  });
+
   it("preserves the dispatch failure for the fallback, once", async () => {
     const turns = new InvestigationTurns();
     const unavailable = vi.fn();
     turns.start("hidden", failed(3), "investigate", {
-      ask: vi.fn(), unavailable, recovered: vi.fn(), readRun: () => undefined, messages: () => [], stillBroken: () => true, incomplete: vi.fn(),
+      ask: vi.fn(), unavailable, recovered: vi.fn(), readRun: () => undefined, messages: () => [], stillBroken: () => true,
       dispatch: async (_prompt, settled, fail) => { fail("Engine unreachable"); settled(); throw new Error("Transport closed"); },
     });
     await Promise.resolve();

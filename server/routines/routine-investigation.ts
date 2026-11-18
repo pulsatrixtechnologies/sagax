@@ -49,7 +49,6 @@ export class InvestigationTurns {
     readRun(id: string): RoutineRun | undefined;
     messages(): readonly Message[];
     stillBroken(): boolean;
-    incomplete(): void;
     recovered(check: RoutineRun): void;
     dispatch(prompt: string, settled: () => void, failed: (reason: string) => void): Promise<unknown>;
   }): void {
@@ -100,11 +99,9 @@ export class InvestigationTurns {
         id: receipt.id, status: receipt.status, error: receipt.error, problems: receipt.problems, readiness: receipt.readiness,
       }))) : "";
       const attempt = receipt?.id ?? run.id;
-      if (continuedFor === attempt) {
-        this.active.delete(threadId);
-        deps.incomplete();
-        return;
-      }
+      // the bot ended twice without a verified repair or its question: the
+      // person gets the fallback card with the bot's last words
+      if (continuedFor === attempt) { fail(last?.text ?? ""); return; }
       continuedFor = attempt;
       setImmediate(() => dispatch("Continue the investigation. There is no verified recovery. Use ask_choice with the evidence and concrete next steps if still broken. " + result));
     };

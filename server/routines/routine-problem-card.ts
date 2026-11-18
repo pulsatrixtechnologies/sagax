@@ -112,7 +112,7 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string; b
    * problem or a pause counts here). */
   need(routine: R): RoutineNeedsPerson | null;
   facts(routine: R, need: RoutineNeedsPerson): RoutineProblemFacts;
-  investigate(routine: R, need: RoutineNeedsPerson, ask: (card: Pick<RoutineProblemCardInput, "title" | "question" | "options" | "details">) => string | undefined, unavailable: (reason: string) => void, incomplete: () => void): void;
+  investigate(routine: R, need: RoutineNeedsPerson, ask: (card: Pick<RoutineProblemCardInput, "title" | "question" | "options" | "details">) => string | undefined, unavailable: (reason: string) => void): void;
   words(routine: R): ApprovalWords;
   /** ask_choice as the routine's bot, in its conversation with the person:
    * raises, replaces in place (same key) or retires (`retire` true). */
@@ -142,7 +142,6 @@ interface Shown<R> {
   /** The problem it was raised for (kind and since), "" for none. */
   episode: string;
   question: string;
-  retryAfterRun?: string;
 }
 
 export class RoutineProblemCards<R extends { id: string; name: string; botId?: string }> {
@@ -179,7 +178,7 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
       return;
     }
     const episode = String(need.since);
-    if (!retry && last?.episode === episode && (!last.retryAfterRun || last.retryAfterRun === need.runId)) return;
+    if (!retry && last?.episode === episode) return;
     const entry: Shown<R> = { routine, episode, question: "" };
     this.shown.set(routine.id, entry);
     const told = Math.max(this.signal(routine)?.toldAt ?? 0, this.deps.latest(routine, key)?.at ?? 0);
@@ -202,7 +201,7 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
       publish(fallback);
     };
     try {
-      this.deps.investigate(routine, need, publish, unavailable, () => { entry.retryAfterRun = this.deps.need(routine)?.runId; });
+      this.deps.investigate(routine, need, publish, unavailable);
     } catch (error) {
       unavailable(redactSecretsInText(error instanceof Error ? error.message : String(error)).slice(0, 400));
     }

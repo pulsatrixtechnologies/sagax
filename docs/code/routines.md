@@ -123,15 +123,16 @@ chat's row gate already reads, and rides on the routine as
 - `goal`: a goal past its deadline, or stalled.
 
 After three consecutive problem runs the routine's own bot investigates in a
-hidden task as the person the routine runs as (#4871). It receives the last
+hidden task as the person the routine runs as (#4873). It receives the last
 three receipts and their tool results, diagnoses the live problem, and can
 repair its settings and verify the repair with `run_routine`. A successful
 verification leaves one line in run history. If a decision is needed, the
 bot writes its evidence, attempts and concrete choices with `ask_choice`.
 The question is pinned in the reporting conversation under
 `routine-problem:<routineId>`. A later failure does not replace that advice.
-Recovery retires the card. An engine failure gets a localized fallback
-with the recorded cause. Older cards still support their original answers.
+Recovery retires the card. An engine failure, or an investigation that ends
+twice without a verified repair or a question, gets a localized fallback
+with the recorded cause and the bot's last words. Older cards still support their original answers.
 Still open
 after a day (`INPUT_REMIND_REPEAT_MS`), its question rings once more, marked
 on the card (`remindedAt`) so a restart never rings it again.

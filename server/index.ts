@@ -17286,7 +17286,7 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     const need = investigationNeed(investigationRuns(routine));
     return need && !routine.enabled ? { ...need, kind: "paused" } : need;
   },
-  investigate: (routine, need, publish, unavailable, incomplete) => {
+  investigate: (routine, need, publish, unavailable) => {
     const bot = store.bot(routine.botId);
     const runs = investigationRuns(routine).filter(run => run.finishedAt !== undefined && run.finishedAt >= need.since)
       .sort((a, b) => b.finishedAt! - a.finishedAt! || b.createdAt - a.createdAt).slice(0, 3);
@@ -17302,7 +17302,7 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
         run.threadId && !store.isConfidentialThread(run.threadId) && store.taskByThread(bot.id, run.threadId)?.routineRunId === run.id
           ? store.messagesFor(run.threadId) : []);
     investigationTurns.start(threadId, { ...latest, access: routine.access, actAs: routine.actAs }, prompt, {
-      ask: publish, unavailable, incomplete,
+      ask: publish, unavailable,
       readRun: id => investigationRuns(routine).find(run => run.id === id),
       messages: () => store.messagesFor(threadId),
       stillBroken: () => {

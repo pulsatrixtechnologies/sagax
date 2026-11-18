@@ -72,6 +72,9 @@ export const USER_PREFERENCE_KEYS = [
   // Settings > Appearance > Sidebar: the account menu kept open above the name in
   // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is off.
   "sagax.accountMenuAbove.v1",
+  // Settings > Appearance > Sidebar: the Primary Bot as a large tile or a regular
+  // row (src/lib/primary-bot-style.ts, #4588). "tile" | "row"; absent is tile.
+  "sagax.primaryBotStyle.v1",
   // the Team map's layout: team positions and the personal card order
   // (src/lib/team-canvas.ts; solo servers keep it per workspace instead)
   "sagax.teamCanvasPositions.v1",

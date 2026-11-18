@@ -3484,6 +3484,14 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .bot-activity-wave > span { animation: none; }
 }
+/* #4589: the sidebar's working indicator is words, not still dots, under reduced motion */
+.sidebar-working-text { display: none; }
+:root[data-reduced-motion="true"] .sidebar-working-dots { display: none; }
+:root[data-reduced-motion="true"] .sidebar-working-text { display: inline; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-working-dots { display: none; }
+  .sidebar-working-text { display: inline; }
+}
 @media (prefers-reduced-motion: reduce) {
   .animate-caret, .animate-msg-in, .animate-shimmer, .animate-pop-in, .animate-pop-out, .animate-call-dock-in, .animate-card-fade-in, .animate-card-fade-out { animation: none; }
   .animate-status-pulse { animation: none; opacity: 0.6; }
@@ -5065,6 +5073,15 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   /* the menu family's edge (menus, composer, pinned cards) follows */
   --menu-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
   --composer-focus-edge: var(--color-ink);
+}
+/* #4599: the sidebar stands apart from the main pane in every skin: its edge
+   is the skin's own sidebar hairline (a real 1px line); with high contrast the
+   edge is the strong one and the rail takes a tonal step away from the pane. */
+:root[data-contrast="high"]:not(#a11y) {
+  --color-sidebar-hairline: color-mix(in srgb, var(--color-sidebar-ink) 55%, transparent);
+}
+:root[data-contrast="high"] aside[data-sidebar-surface] {
+  background-color: color-mix(in srgb, var(--color-sidebar) 90%, var(--color-sidebar-ink));
 }
 :root[data-contrast="high"] :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
 /* The composer pill draws focus on its own border. A send puts the caret

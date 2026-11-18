@@ -6,6 +6,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAchievementsForTests } from "@/lib/achievements";
 import type { AppState } from "@/state/store";
 
 const fixture = vi.hoisted(() => ({ state: {} as Partial<AppState>, dispatch: vi.fn() }));
@@ -39,6 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  resetAchievementsForTests();
 });
 
 const render = (props: Parameters<typeof SidebarProfileMenu>[0] = {}) => {
@@ -102,4 +104,23 @@ describe("the avatar's approvals dot", () => {
       expect(container.querySelector('[role="menu"]')).toBeNull();
     });
   }
+});
+
+describe("sidebar trophy", () => {
+  it("opens Achievements from its own focusable button", () => {
+    resetAchievementsForTests({ status: "ready", snapshot: {
+      points: 75, maxPoints: 100, level: { level: 1, from: 0, to: 100 },
+      unlockedCount: 1, count: 10, streak: 1, rewards: [], recent: [], items: [],
+      settings: { showPoints: true, showTitle: true, toasts: true, native: false, public: false },
+    } });
+    render();
+    const trophy = container.querySelector<HTMLButtonElement>("button[data-gamertag]")!;
+    expect(menuButton().contains(trophy)).toBe(false);
+    expect(trophy.getAttribute("aria-label")).toContain("Open achievements");
+    trophy.focus();
+    expect(document.activeElement).toBe(trophy);
+    act(() => trophy.click());
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showAchievements" });
+    expect(menuButton().getAttribute("aria-expanded")).toBe("false");
+  });
 });

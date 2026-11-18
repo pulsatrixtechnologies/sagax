@@ -92,6 +92,7 @@ import { botRefUrl } from "@/lib/thread-refs";
 import { canOpenBotInOwnWindow, openBotInOwnWindow } from "@/lib/chat-windows";
 import { botShowsUnread } from "@/lib/bot-unread";
 import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
+import { usePrimaryBotAsRow } from "@/lib/primary-bot-style";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
@@ -2038,8 +2039,11 @@ export function BotListItem({
               {lineWorking ? (
                 // the same typing dots as the chat header; sized to the text's
                 // line box so the row does not jump when work starts or ends
-                <span className="flex h-[18px] items-center" role="status">
-                  <WorkingDots size={3.5} />
+                // Reduce motion (#4589): still dots read as a "more options"
+                // menu, so the words take their place (styles.css)
+                <span className="flex h-[18px] items-center" role="status" data-sidebar-working="" title={t("sidebar.preview.working")}>
+                  <WorkingDots size={3.5} className="sidebar-working-dots" />
+                  <span className="sidebar-working-text truncate" aria-hidden="true">{t("sidebar.preview.working")}</span>
                   <span className="sr-only">{t("sidebar.preview.working")}</span>
                 </span>
               ) : (
@@ -2496,6 +2500,10 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
     remoteClient,
     onShowArchived: () => dispatch({ type: "showArchivedBots" }),
   });
+  const primaryAsRow = usePrimaryBotAsRow();
+  const primaryRow = primaryAsRow && density !== "icons"
+    ? roster.pinnedBots.find((bot) => isViewersPrimaryBot(bot, roster.viewerId)) ?? null
+    : null;
   const dnd = useSidebarSectionDnD({
     density,
     q: roster.q,
@@ -2558,9 +2566,10 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       // density above (src/lib/sidebar-preferences.ts)
       data-sidebar-layout={viewport === "phone" ? "drawer" : autoRail ? "auto-rail" : "own"}
       data-sidebar-density={density}
+      data-sidebar-surface=""
       style={density === "icons" ? { width: SIDEBAR_RAIL_WIDTH } : { width: sidebarWidth }}
       className={cn(
-        "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-hairline-weak bg-sidebar",
+        "relative flex h-full shrink-0 flex-col border-r border-sidebar-hairline bg-sidebar",
         // The width never transitions: it follows the pointer exactly, and a
         // snap (rail in or out) is drawn with transforms (animateSidebarSnap).
         // Below sm only (a phone): the sidebar leaves the flow and slides in
@@ -2631,8 +2640,24 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         data-sidebar-rail={density === "icons" ? "" : undefined}
         onKeyDown={density === "icons" ? moveRailFocus : undefined}
         onContextMenu={sections.orgMode ? (event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset?.sidebarEmpty !== undefined) sections.openOrgMenu(event, null, null); } : undefined}>
+        {primaryRow && (
+          // #4588: the Primary Bot as an ordinary row (same avatar, name and
+          // status line), first in the list, its star on the avatar
+          <div className="mb-1 pt-1" data-primary-row="">
+            <VirtualBotListItem
+              bot={primaryRow}
+              density={density}
+              quiet={quietRows}
+              query={roster.q}
+              onMenu={actions.setMenu}
+              startRename={actions.renameBotId === primaryRow.id}
+              onRenameStarted={() => actions.setRenameBotId(null)}
+              selection={multi.selectionFor(primaryRow.id)}
+            />
+          </div>
+        )}
         <SidebarPinnedGrid
-          pinnedBots={roster.pinnedBots}
+          pinnedBots={primaryRow ? roster.pinnedBots.filter((bot) => bot.id !== primaryRow.id) : roster.pinnedBots}
           density={density}
           state={state}
           viewerId={roster.viewerId}

@@ -20,6 +20,7 @@ import { api, type Message } from "@/state/store";
 import { listenLiveFrames } from "@/lib/live-events";
 import { pendingApprovals, type Pending } from "@/components/PendingApproval";
 import { inputRequestCard, pendingOffers, pendingQuestions, type PinnedItem } from "@/lib/pending-question";
+import { widgetActions, widgetFields } from "../../shared/widget";
 import { waitingChangeFrame, type ServedWaitingItem } from "../../shared/waiting-items";
 import type { PersonAttentionCard } from "../../shared/person-attention";
 
@@ -199,6 +200,20 @@ export function servedWordsCard(item: ServedWaitingItem): PersonAttentionCard | 
   };
 }
 
+/** A routine run's form as the server lists it carries the widget row the
+ * conversation draws (checkboxes, fields, its actions). The pinned card
+ * draws that same row with the same component, never words and a text box:
+ * a checklist must be answered with its own controls. Undefined for a
+ * form whose row has no control (it reads as its words, servedWordsCard). */
+export function servedWidgetMessage(item: ServedWaitingItem): Message | undefined {
+  if (item.kind !== "form" || !item.message || typeof item.message !== "object") return undefined;
+  const message = item.message as Message;
+  const root = message.widget?.root;
+  if (message.kind !== "widget" || !root || typeof root !== "object" || typeof root.type !== "string") return undefined;
+  // a tree with nothing to press or fill reads as its words
+  return widgetActions(root).length || widgetFields(root).length ? message : undefined;
+}
+
 /** #3681, the owner's rule (2026-11-11): while an ask waits and the pinned
  * card of the view holds it, the conversation draws no card for it; once it
  * is answered, skipped or expired its record is back at its place. These
@@ -209,7 +224,13 @@ export function servedWordsCard(item: ServedWaitingItem): PersonAttentionCard | 
 export function pinnedHeldIds(items: readonly PinnedItem[]): ReadonlySet<string> {
   const out = new Set<string>();
   for (const item of items) {
-    if (item.kind === "other") continue;
+    if (item.kind === "other") {
+      // a form's widget is drawn up here, so its row is not drawn twice
+      // (one card, one state)
+      const widget = servedWidgetMessage(item.item);
+      if (widget) out.add(widget.id);
+      continue;
+    }
     out.add(item.kind === "approval" ? item.pending.message.id : item.message.id);
   }
   return out;

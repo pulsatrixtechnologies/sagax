@@ -15,6 +15,9 @@
  * (GET /api/approvals?waiting=1), built here as the server serves them.
  * form (#4440): only a routine run's form the server lists with no choice
  * (options [], freeText, skippable): the field in words and the skip.
+ * form now carries the widget row the conversation draws (a checklist with
+ * its two actions): the pinned card draws it, never words and a text box.
+ * qchecklist | qform | qchoice: a question card of that kind, pinned.
  * Every action is recorded in window.__decisions. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -32,6 +35,9 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, type Bot, type Message, type useStore } from "../state/store";
 import type { ServedWaitingItem } from "../../shared/waiting-items";
 import { OptionCard } from "../components/OptionCard";
+import { parseAskChoiceInput } from "../../shared/options-card";
+import { GOOD_TIME_CARD } from "../../shared/card-rules.fixtures";
+import { parseWidgetInput } from "../../shared/widget";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -101,7 +107,7 @@ const briefOffer = {
     : { title: "Keep today's brief?", subtitle: "Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at 08:00, as one of my routines, which you can pause, edit or delete.", options: ["Yes", "Not now"], proactiveProposal: { id: "proposal-brief" } },
 } as unknown as Message;
 
-const current = which === "offer" || which === "form" ? [] : [handoff, inputRequest];
+const current = which === "offer" || which === "form" || which.startsWith("q") ? [] : [handoff, inputRequest];
 const earlier = which === "two" ? [oldChoice] : which === "approval" ? [oldApproval] : which === "offer" ? [briefOffer] : [];
 const hidden = pending.inputRequestsDrawnElsewhere(current);
 
@@ -123,15 +129,44 @@ const unknownItem: ServedWaitingItem = {
   text: fr ? "Signer la liste de vérification de la mise en production\n\nIl reste trois points : les sauvegardes, le DNS et l'avis aux clients." : "Sign the release checklist\n\nThree points are left: the backups, the DNS and the customer notice.",
 };
 
-// #4440: a routine run's form, as the server lists it: no choice to draw
+// #4440: a routine run's form, as the server lists it, with the widget row
+// the conversation draws: a checklist and its two actions
+const checklistTree = parseWidgetInput({
+  type: "Card", title: fr ? "Brouillons de ce soir" : "Tonight's drafts",
+  children: [
+    { type: "Text", value: fr ? "Ce soir chez Nimbus. Tout est coché. Publier la sélection n'envoie que les brouillons cochés. Passer ce soir ne publie rien." : "Tonight at Nimbus. All checked. Post selected sends only the checked ones. Skip tonight posts nothing." },
+    { type: "Checkbox", name: "d1", label: fr ? "Notes de version de Nimbus 2.4" : "Release notes for Nimbus 2.4", defaultChecked: true },
+    { type: "Checkbox", name: "d2", label: fr ? "Fil sur la rencontre acme" : "Thread about the acme meetup", defaultChecked: true },
+    { type: "Checkbox", name: "d3", label: fr ? "Réponse sur le mode hors ligne" : "Reply about offline mode", defaultChecked: true },
+  ],
+  confirm: { label: fr ? "Publier la sélection" : "Post selected", action: { type: "drafts.post" } },
+  cancel: { label: fr ? "Passer ce soir" : "Skip tonight", action: { type: "drafts.skip" } },
+});
+if (!checklistTree.ok) throw new Error(checklistTree.error);
 const formItem: ServedWaitingItem = {
   id: "form:m-form", kind: "form", botId: bot.id, botName: bot.name, threadId: "thread-main", messageId: "m-form",
   at: now - 11 * 3_600_000, ageMs: 11 * 3_600_000, options: [], answerWith: "text", freeText: true, skippable: true,
   routineName: fr ? "Brouillons du soir" : "Evening drafts",
   title: fr ? "Brouillons de ce soir" : "Tonight's drafts",
   text: fr ? "Brouillons de ce soir\n\nTrois brouillons sont prêts. Coche ceux à publier, puis « Publier la sélection » ou « Passer ce soir »." : "Tonight's drafts\n\nThree drafts are ready. Check the ones to post, then \"Post selected\" or \"Skip tonight\".",
-  message: { id: "m-form", role: "bot", kind: "widget", at: now - 11 * 3_600_000, text: fr ? "Brouillons de ce soir" : "Tonight's drafts", widget: { v: 1, root: { type: "Card", id: "n1", children: [] } } },
+  message: { id: "m-form", role: "bot", kind: "widget", at: now - 11 * 3_600_000, text: fr ? "Brouillons de ce soir" : "Tonight's drafts", widget: { v: 1, root: checklistTree.value } },
 };
+
+// a question card of a given kind, pinned
+const askKinds: Record<string, unknown> = {
+  qchoice: { question: fr ? "Je mets en pause les deux webhooks ?" : "Do I pause the two webhooks?", options: [{ label: "Pause" }, { label: fr ? "Garder" : "Keep" }] },
+  qform: GOOD_TIME_CARD,
+  qchecklist: { title: fr ? "Brouillons à publier ce soir" : "Drafts to post tonight", question: fr ? "Décoche ceux que tu ne veux pas publier." : "Uncheck any you do not want posted.",
+    items: [{ label: fr ? "Notes de version de Nimbus 2.4" : "Release notes for Nimbus 2.4" }, { label: fr ? "Fil sur la rencontre acme" : "Thread about the acme meetup" }, { label: fr ? "Réponse sur le mode hors ligne" : "Reply about offline mode" }],
+    actions: [fr ? "Publier la sélection" : "Post selected", fr ? "Passer ce soir" : "Skip tonight"] },
+};
+const askParsed = which === "qchoice"
+  ? { ok: true as const, value: { questions: [{ question: (askKinds.qchoice as { question: string }).question, options: (askKinds.qchoice as { options: Array<{ label: string }> }).options }] } }
+  : askKinds[which] ? parseAskChoiceInput(askKinds[which]) : undefined;
+const askMessage = askParsed?.ok && "value" in askParsed ? ({
+  id: "m-ask", role: "bot", kind: "options", at: now - 600_000, text: "", from: { botId: bot.id, name: bot.name, color: "violet" },
+  card: { title: (askKinds[which] as { title?: string }).title ?? "", subtitle: "", options: [], requestId: "req-ask", requestType: "question", questionRequest: { version: 1, questions: askParsed.value.questions } },
+} as unknown as Message) : undefined;
 
 // the hand-off's card and its input request are one ask: one item
 const servedItems: ServedWaitingItem[] = [
@@ -139,6 +174,7 @@ const servedItems: ServedWaitingItem[] = [
   ...current.filter((message) => !hidden.has(message.id)).map((message) => served(message, "thread-main")),
   ...(which === "unknown" ? [unknownItem] : []),
   ...(which === "form" ? [formItem] : []),
+  ...(askMessage ? [served(askMessage, "thread-main")] : []),
 ].sort((x, y) => x.at - y.at);
 
 function Bubble({ children }: { children: string }) {
@@ -162,7 +198,7 @@ function Gallery() {
             <TopicDivider task={{ threadId: "thread-main", title: fr ? "Migration" : "Migration", createdAt: now - DAY }} />
           </>
         )}
-        {which === "form" ? (
+        {which === "form" || which.startsWith("q") ? (
           <Bubble>{fr ? "Orla : la routine du soir a préparé tes brouillons." : "Orla: the evening routine prepared your drafts."}</Bubble>
         ) : which === "offer" ? (
           <Bubble>{fr ? "Orla : la migration du siège est terminée." : "Orla: the head office migration is done."}</Bubble>

@@ -31,7 +31,7 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PinnedItem } from "@/lib/pending-question";
-import { pinnedItemsFrom, servedItemPlace, servedWordsCard, stillListed } from "@/lib/pinned-waiting";
+import { pinnedItemsFrom, servedItemPlace, servedWidgetMessage, servedWordsCard, stillListed } from "@/lib/pinned-waiting";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, type Bot, type Message, type useStore } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
@@ -41,6 +41,7 @@ import { QuestionCard } from "../QuestionCard";
 import { PersonRequestCard, ServedItemCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
 import { CardCloseButton } from "../AskCard";
 import { OptionCard } from "../OptionCard";
+import { WidgetMessage } from "../widget/WidgetMessage";
 
 /** How much of the question the folded line keeps. */
 const FOLDED_TEXT_MAX = 72;
@@ -230,7 +231,9 @@ export function PinnedWaitingCard({
             <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
             {controls}
           </div>
-          {servedWordsCard(current.item)
+          {servedWidgetMessage(current.item)
+            ? <WidgetMessage key={current.key} botId={current.item.botId} threadId={askedIn} message={servedWidgetMessage(current.item)!} />
+            : servedWordsCard(current.item)
             ? <ServedItemCard key={current.key} item={current.item} />
             : <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-ink" data-pinned-text="">{current.item.text || current.item.title}</p>}
         </div>

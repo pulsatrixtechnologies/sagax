@@ -73,6 +73,8 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  // One surface per bot: a click opens the popover; the column shows a bot only when it is asked for.
+  const [detailBotId, setDetailBotId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [trayOpen, setTrayOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(() => readFlag(DETAIL_KEY) !== "0");
@@ -166,7 +168,8 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
 
   const selectedBot = selectedBotId ? botById.get(selectedBotId) ?? null : null;
   const searching = query.trim().length > 0;
-  const connectedIds = useMemo(() => new Set(selectedBotId ? pairs.filter((pair) => pair.count > 0 || pair.live).flatMap((pair) => pair.sourceBotId === selectedBotId ? [pair.targetBotId] : pair.targetBotId === selectedBotId ? [pair.sourceBotId] : []) : []), [pairs, selectedBotId]);
+  const focusId = selectedBotId ?? detailBotId;
+  const connectedIds = useMemo(() => new Set(focusId ? pairs.filter((pair) => pair.count > 0 || pair.live).flatMap((pair) => pair.sourceBotId === focusId ? [pair.targetBotId] : pair.targetBotId === focusId ? [pair.sourceBotId] : []) : []), [pairs, focusId]);
   const teamName = useCallback((key: string) => (key ? sections.find((section) => section.key === key)?.name ?? key : t("sidebar.section.general")), [sections]);
   const teamOfBot = useCallback((id: string) => sections.find((section) => [...section.chiefs, ...section.members].some((bot) => bot.id === id))?.key ?? "", [sections]);
   const minimapOn = minimapChoice ? minimapChoice === "on" : allBots.length > LARGE;
@@ -217,8 +220,8 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
     saveBotOrder(block, bot, block.ordered.findIndex((other) => other.id === bot.id) + delta);
   };
 
-  const select = (bot: Bot) => { if (suppressClick.current) return; setSelectedBotId((was) => (was === bot.id ? null : bot.id)); setSelectedTeam(null); };
-  const closeSelection = () => { setSelectedBotId(null); setSelectedTeam(null); };
+  const select = (bot: Bot) => { if (suppressClick.current) return; setSelectedBotId((was) => (was === bot.id ? null : bot.id)); setSelectedTeam(null); setDetailBotId(null); };
+  const closeSelection = () => { setSelectedBotId(null); setSelectedTeam(null); setDetailBotId(null); };
 
   // Pointer: a drag on a card arranges it or moves it to another team; a drag on empty space pans.
   const destinationAt = (x: number, y: number) => {
@@ -361,11 +364,19 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
   };
 
   const toggleExpanded = (key: string) => setExpanded((previous) => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
-  const toggleDetail = () => { setDetailOpen((was) => { writeFlag(DETAIL_KEY, was ? "0" : "1"); return !was; }); };
+  const openDetail = () => { setDetailOpen(true); writeFlag(DETAIL_KEY, "1"); };
+  const toggleDetail = () => {
+    if (detailOpen) { setDetailOpen(false); writeFlag(DETAIL_KEY, "0"); setDetailBotId(null); return; }
+    openDetail();
+    // Opened from the toolbar with a bot selected: the column takes the bot and the popover closes.
+    if (selectedBotId) { setDetailBotId(selectedBotId); setSelectedBotId(null); }
+  };
+  const showHandoffs = (id: string) => { setDetailBotId(id); setSelectedBotId(null); setSelectedTeam(null); openDetail(); };
   const toggleMinimap = () => { const next = minimapOn ? "off" : "on"; setMinimapChoice(next); writeFlag(MINIMAP_KEY, next); };
   const panTo = (worldX: number, worldY: number) => { touched.current = true; setView((previous) => ({ ...previous, x: vs.w / 2 - worldX * previous.scale, y: (vs.h + TOP_RESERVE) / 2 - worldY * previous.scale })); };
 
-  const scope: TeamMapDetailScope = selectedBot ? { kind: "bot", bot: selectedBot }
+  const detailBot = detailBotId ? botById.get(detailBotId) ?? null : null;
+  const scope: TeamMapDetailScope = detailBot ? { kind: "bot", bot: detailBot }
     : selectedTeam !== null ? { kind: "team", key: selectedTeam, name: teamName(selectedTeam), botIds: (layout.blocks.find((block) => block.key === selectedTeam)?.ordered ?? sections.find((section) => section.key === selectedTeam)?.members ?? []).map((bot) => bot.id) }
     : { kind: "busiest" };
   const toolbar = (
@@ -377,23 +388,33 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
   );
 
   const stateOf = (bot: Bot): OrgState => orgState(bot);
-  const dimmed = (bot: Bot) => (searching && !botMatches(bot, query)) || (!searching && selectedBotId !== null && bot.id !== selectedBotId && !connectedIds.has(bot.id));
+  const dimmed = (bot: Bot) => (searching && !botMatches(bot, query)) || (!searching && focusId !== null && bot.id !== focusId && !connectedIds.has(bot.id));
   const linkDim = (link: OrgLayout<Bot>["links"][number]) => {
-    if (!selectedBotId) return false;
-    if (link.kind === "bot") return link.fromBot !== selectedBotId && link.toBot !== selectedBotId;
-    const home = teamOfBot(selectedBotId);
-    return !(home === link.fromKey || home === link.toKey || (link.kind === "lead" && layout.lead?.bot.id === selectedBotId));
+    if (!focusId) return false;
+    if (link.kind === "bot") return link.fromBot !== focusId && link.toBot !== focusId;
+    const home = teamOfBot(focusId);
+    return !(home === link.fromKey || home === link.toKey || (link.kind === "lead" && layout.lead?.bot.id === focusId));
   };
 
   const rect = selectedBotId ? rectOf(layout, selectedBotId) : null;
   const popover = (() => {
     if (!selectedBot || !rect || mobile) return null;
+    const POP_H = 200;
+    const home = layout.blocks.find((block) => block.ordered.some((bot) => bot.id === selectedBot.id));
     const cardRight = view.x + (rect.x + rect.w) * view.scale, cardLeft = view.x + rect.x * view.scale;
-    const side: "left" | "right" = cardRight + 12 + POPOVER_W < vs.w - 8 ? "right" : "left";
-    const left = side === "right" ? cardRight + 12 : Math.max(8, cardLeft - 12 - POPOVER_W);
     const mid = view.y + (rect.y + rect.h / 2) * view.scale;
-    const top = Math.max(TOP_RESERVE + 4, Math.min(mid - 40, vs.h - 220));
-    return { side, left, top, arrowTop: Math.max(12, mid - top - 6) };
+    const top = Math.max(TOP_RESERVE + 4, Math.min(mid - 40, vs.h - POP_H - 12));
+    // What the popover would cover: the other teams, the lead and the tray, in screen px.
+    const others: Rect[] = [...layout.blocks.filter((block) => block !== home), ...(layout.lead ? [layout.lead] : []), ...(layout.tray ? [layout.tray] : [])]
+      .map((item) => ({ x: view.x + item.x * view.scale, y: view.y + item.y * view.scale, w: item.w * view.scale, h: item.h * view.scale }));
+    const covered = (left: number) => others.reduce((sum, item) => {
+      const w = Math.min(left + POPOVER_W, item.x + item.w) - Math.max(left, item.x), h = Math.min(top + POP_H, item.y + item.h) - Math.max(top, item.y);
+      return sum + (w > 0 && h > 0 ? w * h : 0);
+    }, 0);
+    const rightLeft = Math.min(cardRight + 12, vs.w - 8 - POPOVER_W), leftLeft = Math.max(8, cardLeft - 12 - POPOVER_W);
+    // The side with room: the one that covers less of another team, the right on a tie.
+    const side: "left" | "right" = covered(leftLeft) < covered(rightLeft) ? "left" : "right";
+    return { side, left: side === "right" ? rightLeft : leftLeft, top, arrowTop: Math.max(12, mid - top - 6) };
   })();
 
   if (mobile) {
@@ -456,7 +477,7 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
                 className={cn("absolute rounded-2xl border bg-panel", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/40", selectedTeam === block.key && "ring-1 ring-accent/40", section?.parent && "border-l-[3px] border-l-accent/40")}
                 style={{ left: block.x, top: block.y, width: block.w, height: block.h }}>
                 <header className="flex h-11 items-center gap-1.5 px-3">
-                  <button type="button" data-team-select={block.key} aria-label={t("teamMap.org.teamHandoffs", { name: label })} onClick={() => { setSelectedTeam(block.key); setSelectedBotId(null); if (!detailOpen) toggleDetail(); }}
+                  <button type="button" data-team-select={block.key} aria-label={t("teamMap.org.teamHandoffs", { name: label })} onClick={() => { setSelectedTeam(block.key); setSelectedBotId(null); setDetailBotId(null); openDetail(); }}
                     className="flex min-w-0 flex-1 flex-col rounded-md py-0.5 text-left leading-[16px] focus-visible:outline-2 focus-visible:outline-accent">
                     <span className="truncate text-[13px] font-medium text-ink">{label}</span>
                     {section?.parent && <span data-sub-team-of={section.parent} className="truncate text-[11px] text-ink-secondary">{t("team.subTeamOf", { name: section.parent })}</span>}
@@ -483,7 +504,7 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
                   <button type="button" data-team-more={block.key} aria-expanded={block.expanded} onClick={() => toggleExpanded(block.key)}
                     className="absolute flex items-center justify-center gap-1 rounded-lg text-[12px] text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
                     style={{ left: 12, width: block.w - 24, bottom: 12, height: 24 }}>
-                    {block.expanded ? <><ChevronUp size={13} />{t("teamMap.org.showLess")}</> : <>{t("teamMap.org.moreBots", { count: block.hidden })}<ChevronDown size={13} /></>}
+                    {block.expanded ? <><ChevronUp size={13} />{t("teamMap.org.showLess")}</> : <>{block.hidden === 1 ? t("teamMap.org.moreBotsOne") : t("teamMap.org.moreBots", { count: block.hidden })}<ChevronDown size={13} /></>}
                   </button>
                 )}
               </section>
@@ -517,7 +538,7 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
         </div>
         {selectedBot && popover && (
           <TeamMapBotPopover bot={selectedBot} state={stateOf(selectedBot)} last={lastOf(selectedBot.id)} teamName={teamName(teamOfBot(selectedBot.id))}
-            side={popover.side} left={popover.left} top={popover.top} arrowTop={popover.arrowTop} onClose={closeSelection} onComputer={onComputer} />
+            side={popover.side} left={popover.left} top={popover.top} arrowTop={popover.arrowTop} onClose={closeSelection} onComputer={onComputer} onShowHandoffs={() => showHandoffs(selectedBot.id)} />
         )}
         {minimapOn && <TeamMapMiniMap layout={layout} view={view} size={{ w: vs.w, h: vs.h }} onPan={panTo} />}
         {dragged && <div className="pointer-events-none absolute z-50 rounded-xl border border-accent/40 bg-card px-3 py-2 text-[13px] shadow-lg" style={{ left: dragged.point.x + 16, top: dragged.point.y + 16 }}>
@@ -531,7 +552,7 @@ export function TeamMapOrgChart(props: TeamMapOrgChartProps) {
       </div>
       {detailOpen && (
         <div className="shrink-0 py-3 pr-3">
-          <TeamMapDetail scope={scope} pairs={pairs} bots={allBots} onSelect={(bot) => { setSelectedBotId(bot.id); setSelectedTeam(null); }} onClose={toggleDetail} />
+          <TeamMapDetail scope={scope} pairs={pairs} bots={allBots} onSelect={(bot) => showHandoffs(bot.id)} onClose={toggleDetail} />
         </div>
       )}
     </div>

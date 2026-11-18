@@ -107,6 +107,15 @@ describe("TeamMapOrgChart", () => {
     expect(desk.getAttribute("aria-label")).toBe("Service desk team");
   });
 
+  it("says +1 autre and +3 autres in French, +1 more in English", async () => {
+    await mount();
+    expect(q("[data-team-more='Service desk']")?.textContent).toBe("+1 more");
+    setLocale("fr");
+    await mount();
+    expect(q("[data-team-more='Service desk']")?.textContent).toBe("+1 autre");
+    setLocale("en");
+  });
+
   it("opens +N to show every bot and closes it again", async () => {
     await mount();
     await click(q("[data-team-more='Service desk']")!);
@@ -154,14 +163,38 @@ describe("TeamMapOrgChart", () => {
     expect(q("[data-team-map-popover]")).toBeNull();
   });
 
-  it("the detail column follows the selection: a bot's received and sent handoffs", async () => {
+  it("one surface per bot: a click opens the popover and the column keeps the busiest pairs until the bot's handoffs are asked for", async () => {
     await mount();
     await click(q("[data-bot-id=echo]")!);
-    const detail = q("[data-team-map-detail]")!;
-    expect(detail.textContent).toContain("Received · 1");
-    expect(detail.textContent).toContain("Sent · 1");
-    expect(detail.querySelector("[data-pair='boreas:echo']")).not.toBeNull();
-    expect(detail.querySelector("[data-pair='echo:fjord']")).not.toBeNull();
+    expect(q("[data-team-map-popover]")).not.toBeNull();
+    const detail = () => q("[data-team-map-detail]")!;
+    expect(detail().textContent).toContain("Busiest pairs");
+    expect(detail().textContent).not.toContain("Received");
+    await click(q("[data-team-map-show-handoffs]")!);
+    expect(q("[data-team-map-popover]")).toBeNull();
+    expect(detail().textContent).toContain("Received · 1");
+    expect(detail().textContent).toContain("Sent · 1");
+    expect(detail().querySelector("[data-pair='boreas:echo']")).not.toBeNull();
+    expect(detail().querySelector("[data-pair='echo:fjord']")).not.toBeNull();
+  });
+
+  it("opened from the toolbar with a bot selected, the column takes the bot and the popover closes", async () => {
+    await mount();
+    await click(qa("[data-team-map-detail] button").find((button) => button.getAttribute("aria-label") === "Hide handoffs")!);
+    expect(q("[data-team-map-detail]")).toBeNull();
+    await click(q("[data-bot-id=echo]")!);
+    expect(q("[data-team-map-popover]")).not.toBeNull();
+    await click(q("[aria-label='Show handoffs']")!);
+    expect(q("[data-team-map-popover]")).toBeNull();
+    expect(q("[data-team-map-detail]")?.textContent).toContain("Received · 1");
+  });
+
+  it("anchors the popover on the side with room: it covers no other team", async () => {
+    await mount();
+    await click(q("[data-bot-id=echo]")!);
+    expect(q("[data-team-map-popover]")?.getAttribute("data-side")).toBe("right");
+    await click(q("[data-bot-id=juno]")!);
+    expect(q("[data-team-map-popover]")?.getAttribute("data-side")).toBe("left");
   });
 
   it("closes the detail column and the map keeps its size", async () => {

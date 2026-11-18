@@ -3334,7 +3334,7 @@ something ("avec une logique UX"), and approved v3. Code: `src/lib/team-map-layo
   with the count, opened on a click (a tray, not hidden detail).
 - Air: 72 px between teams both ways, a 60 px lane under the lead, a team block
   216 px wide. A team shows its first four bots, then "+N" that opens (a search
-  that matches a hidden bot opens it). Bots in a team read in the order of the
+  that matches a hidden bot opens it; "+1 more", "+3 more", in French "+1 autre", "+3 autres"). Bots in a team read in the order of the
   work: a delegation chain reads down, a bot that hands work to another team is
   last, nearest its link; the person's own drag order wins once they arranged.
 - Cards: two lines (name, then role and model) and the live state as a dot on the
@@ -3358,9 +3358,12 @@ something ("avec une logique UX"), and approved v3. Code: `src/lib/team-map-layo
   12 px corners, as the record card): who, team, live state, model (opens the
   model settings), last handoff, Open chat, Open page, Computer. It flips to
   the left when there is no room on the right. Esc closes it.
-- The right column is the selection's detail, narrow and closable (remembered):
-  with nothing selected the busiest five pairs; with a bot or a team selected,
-  that one's received, sent and inside handoffs. A row's small open icon opens the
+- The right column is the detail, narrow and closable (remembered): the busiest
+  five pairs by default; a team's handoffs when its title is pressed; a bot's
+  received and sent handoffs only when asked for ("Show its handoffs" in the
+  popover, or the toolbar toggle with a bot selected), and then the popover
+  closes: a bot is never shown twice at once. The popover sits on the side
+  that covers less of another team (the right on a tie). A row's small open icon opens the
   thread doing the work, the room it ran in, or else the bot.
 - Toolbar: search (Cmd or Ctrl + F, highlights matches and dims the rest), the
   searchable team select, the state segment (All, Working, Waiting), Fit and the

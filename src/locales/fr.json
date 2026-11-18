@@ -15377,7 +15377,7 @@
   "teamMap.org.noHandoffs": "Aucun transfert dans les 7 derniers jours.",
   "teamMap.org.teamHandoffs": "Équipe {name}",
   "teamMap.org.openHandoff": "Ouvrir le transfert de {from} vers {to}",
-  "teamMap.org.moreBots": "+{count} autre(s)",
+  "teamMap.org.moreBots": "+{count} autres",
   "teamMap.org.showLess": "Réduire",
   "teamMap.org.unassignedAria": "Bots sans équipe",
   "teamMap.org.needsYou": "Ta réponse",
@@ -15393,5 +15393,7 @@
   "teamMap.org.connected": "Connectés",
   "teamMap.org.live.running": "En cours",
   "teamMap.org.live.queued": "En attente",
-  "teamMap.org.linkAria": "{from} vers {to} : {count} en 7 jours"
+  "teamMap.org.linkAria": "{from} vers {to} : {count} en 7 jours",
+  "teamMap.org.moreBotsOne": "+1 autre",
+  "teamMap.org.seeHandoffs": "Voir ses transferts"
 }

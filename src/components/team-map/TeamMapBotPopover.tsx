@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MessageCircle, Monitor, UserRound, X } from "lucide-react";
+import { ArrowRight, MessageCircle, Monitor, UserRound, X } from "lucide-react";
 import { openBot, useStore, type Bot } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openBotProfile } from "@/lib/open-bot-profile";
@@ -15,7 +15,7 @@ export const POPOVER_W = 296;
 /** A bot's card on the map: who it is, what it is doing, its last handoff, and
  * the actions the old card had (chat, page, model, computer). It is drawn
  * beside the card it points at, never in a free slot. */
-export function TeamMapBotPopover({ bot, state, last, teamName, side, top, left, arrowTop, onClose, onComputer, inline = false }: {
+export function TeamMapBotPopover({ bot, state, last, teamName, side, top, left, arrowTop, onClose, onComputer, onShowHandoffs, inline = false }: {
   bot: Bot;
   state: OrgState;
   last: string | null;
@@ -26,6 +26,8 @@ export function TeamMapBotPopover({ bot, state, last, teamName, side, top, left,
   arrowTop: number;
   onClose: () => void;
   onComputer?: (bot: Bot) => void;
+  /** The bot's own seven-day handoffs: the detail column (desktop) or the list in place (phone). */
+  onShowHandoffs?: () => void;
   inline?: boolean;
 }) {
   const { state: store, dispatch } = useStore();
@@ -40,7 +42,7 @@ export function TeamMapBotPopover({ bot, state, last, teamName, side, top, left,
   }, [onClose]);
   const tone = state === "working" ? "text-success" : state === "waiting" ? "text-warning" : state === "noSignal" ? "text-danger" : "text-ink-secondary";
   return (
-    <div ref={root} role="dialog" aria-label={bot.name} data-team-map-popover=""
+    <div ref={root} role="dialog" aria-label={bot.name} data-team-map-popover="" data-side={inline ? undefined : side}
       className={cn("z-40 rounded-xl border-[0.5px] border-border p-3 popover-surface menu-surface bg-elevated text-ink", inline ? "relative w-full" : "absolute")}
       style={inline ? undefined : { left, top, width: POPOVER_W }}>
       {!inline && <span aria-hidden="true" className="absolute size-3 rotate-45 border-border bg-elevated"
@@ -64,7 +66,8 @@ export function TeamMapBotPopover({ bot, state, last, teamName, side, top, left,
         {onComputer && <button type="button" className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent" aria-label={t("canvas.botComputer", { name: bot.name })} title={t("computer.tab.computer")} onClick={() => onComputer(bot)}><Monitor size={14} /></button>}
       </div>
       <div className="mt-0.5 truncate text-[11px] text-ink-tertiary">{last ?? t("teamMap.org.noHandoffYet")}</div>
-      <div className="mt-2.5 flex gap-2">
+      {onShowHandoffs && <button type="button" data-team-map-show-handoffs="" onClick={onShowHandoffs} className="mt-1 flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent">{t("teamMap.org.seeHandoffs")}<ArrowRight size={12} aria-hidden="true" /></button>}
+      <div className="mt-2 flex gap-2">
         <button type="button" className={cn(PAGE_ACTION_BUTTON, "min-w-0 flex-1 justify-center whitespace-nowrap px-2")} aria-label={t("canvas.openBotChat", { name: bot.name })}
           onClick={() => openBot(dispatch, bot, showThreads)}><MessageCircle size={14} />{t("canvas.openChat")}</button>
         <button type="button" className={cn(PAGE_ACTION_BUTTON, "min-w-0 flex-1 justify-center whitespace-nowrap px-2")} onClick={() => openBotProfile(dispatch, bot.id)}><UserRound size={14} />{t("teamMap.org.openPage")}</button>

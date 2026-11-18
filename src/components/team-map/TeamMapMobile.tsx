@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -43,6 +43,7 @@ export function TeamMapMobile({ layout, pairs, bots, query, selectedBotId, onSel
   onToggleExpanded: (key: string) => void;
   onToggleTray: () => void;
 }) {
+  const [handoffsOf, setHandoffsOf] = useState<string | null>(null);
   const leadWeight = (key: string) => layout.links.find((link) => link.kind === "lead" && link.toKey === key)?.count ?? 0;
   const ordered = [...layout.blocks].sort((a, b) => a.tier - b.tier || leadWeight(b.key) - leadWeight(a.key) || a.col - b.col);
   const selected = selectedBotId ? bots.find((bot) => bot.id === selectedBotId) ?? null : null;
@@ -53,8 +54,8 @@ export function TeamMapMobile({ layout, pairs, bots, query, selectedBotId, onSel
       {selected && selected.id === bot.id && (
         <div className="my-1 flex flex-col gap-2">
           <TeamMapBotPopover inline bot={bot} state={stateOf(bot)} last={lastOf(bot.id)} teamName={teamName(layout.blocks.find((block) => block.ordered.some((other) => other.id === bot.id))?.key ?? "")}
-            side="right" left={0} top={0} arrowTop={0} onClose={onClose} onComputer={onComputer} />
-          <TeamMapDetail fluid scope={{ kind: "bot", bot }} pairs={pairs} bots={bots} onSelect={onSelect} />
+            side="right" left={0} top={0} arrowTop={0} onClose={() => { setHandoffsOf(null); onClose(); }} onComputer={onComputer} onShowHandoffs={handoffsOf === bot.id ? undefined : () => setHandoffsOf(bot.id)} />
+          {handoffsOf === bot.id && <TeamMapDetail fluid scope={{ kind: "bot", bot }} pairs={pairs} bots={bots} onSelect={onSelect} />}
         </div>
       )}
     </Fragment>
@@ -86,7 +87,7 @@ export function TeamMapMobile({ layout, pairs, bots, query, selectedBotId, onSel
                 {block.total === 0 && <p className="rounded-xl border border-dashed border-hairline/70 px-4 py-3 text-center text-[12px] text-ink-secondary">{t("canvas.dropHere")}</p>}
               </div>
               {block.total > 4 && <button type="button" onClick={() => onToggleExpanded(block.key)} aria-expanded={block.expanded}
-                className="mt-1 flex h-8 w-full items-center justify-center gap-1 rounded-lg text-[12px] text-ink-secondary hover:bg-control">{block.expanded ? <><ChevronUp size={13} />{t("teamMap.org.showLess")}</> : <>{t("teamMap.org.moreBots", { count: block.hidden })}<ChevronDown size={13} /></>}</button>}
+                className="mt-1 flex h-8 w-full items-center justify-center gap-1 rounded-lg text-[12px] text-ink-secondary hover:bg-control">{block.expanded ? <><ChevronUp size={13} />{t("teamMap.org.showLess")}</> : <>{block.hidden === 1 ? t("teamMap.org.moreBotsOne") : t("teamMap.org.moreBots", { count: block.hidden })}<ChevronDown size={13} /></>}</button>}
             </div>
           </section>
         );

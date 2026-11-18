@@ -36,7 +36,7 @@ function PairRow({ pair, bots, bars, maxCount, onSelect }: {
   const open = () => openPairTarget(pair, target, dispatch, state, showThreads);
   const at = pair.lastAt ?? null;
   return (
-    <div className="group flex flex-col gap-1 rounded-lg px-2.5 py-2 leading-4 hover:bg-raised/60" data-pair={`${pair.sourceBotId}:${pair.targetBotId}`}>
+    <div className="group relative flex flex-col gap-1 rounded-lg px-2.5 py-2 leading-4 hover:bg-raised/60" data-pair={`${pair.sourceBotId}:${pair.targetBotId}`}>
       <div className="flex items-center gap-2 text-[13px]">
         <span className={cn("size-1.5 shrink-0 rounded-full", tone)} aria-hidden="true" />
         <button type="button" onClick={() => onSelect(source)} className="truncate font-medium text-ink hover:underline">{source.name}</button>
@@ -44,7 +44,7 @@ function PairRow({ pair, bots, bars, maxCount, onSelect }: {
         <button type="button" onClick={() => onSelect(target)} className="truncate font-medium text-ink hover:underline">{target.name}</button>
         <span className="ml-auto shrink-0 text-[11px] text-ink-tertiary">{at ? agoLabel(at) : pair.live === "running" ? t("teamMap.org.live.running") : pair.live === "queued" ? t("teamMap.org.live.queued") : ""}</span>
         <button type="button" aria-label={t("teamMap.org.openHandoff", { from: source.name, to: target.name })} onClick={open}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-secondary opacity-0 hover:bg-control hover:text-ink focus-visible:opacity-100 group-hover:opacity-100">
+          className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-md bg-panel text-ink-secondary opacity-0 hover:bg-control hover:text-ink focus-visible:opacity-100 group-hover:opacity-100">
           <ExternalLink size={12} />
         </button>
       </div>
@@ -101,11 +101,13 @@ export function TeamMapDetail({ scope, pairs, bots, onSelect, onClose, fluid = f
   }
   return (
     <aside data-team-map-detail="" aria-label={t("canvas.handoffs")} className={cn("flex flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-panel", fluid ? "w-full" : "h-full w-[248px] shrink-0")}>
-      <div className="flex h-11 shrink-0 items-center gap-2 px-4 text-[13px]">
-        {title}
-        <span className="text-[11px] text-ink-tertiary">{t("teamMap.org.last7")}</span>
+      <div className="flex shrink-0 items-start gap-2 px-4 pb-1 pt-3 text-[13px]">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-[18px]">
+          <div className="flex min-w-0 items-center gap-2 [&>*:not(span:first-child)]:truncate">{title}</div>
+          <span className="text-[11px] text-ink-tertiary">{t("teamMap.org.last7")}</span>
+        </div>
         {onClose && <button type="button" aria-label={t("teamMap.org.detailHide")} onClick={onClose}
-          className="ml-auto flex size-7 items-center justify-center rounded-lg text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"><X size={15} /></button>}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"><X size={15} /></button>}
       </div>
       <div className={cn("px-2 pb-2", !fluid && "min-h-0 flex-1 overflow-y-auto")}>{body}</div>
     </aside>

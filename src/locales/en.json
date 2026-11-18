@@ -15393,5 +15393,7 @@
   "teamMap.org.connected": "Connected",
   "teamMap.org.live.running": "Running",
   "teamMap.org.live.queued": "Queued",
-  "teamMap.org.linkAria": "{from} to {to}: {count} in 7 days"
+  "teamMap.org.linkAria": "{from} to {to}: {count} in 7 days",
+  "teamMap.org.moreBotsOne": "+1 more",
+  "teamMap.org.seeHandoffs": "Show its handoffs"
 }

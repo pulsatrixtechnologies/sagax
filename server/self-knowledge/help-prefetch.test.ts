@@ -27,6 +27,14 @@ describe("help prefetch", () => {
     expect(out.text.endsWith("</sagax_help_prefetch>")).toBe(true);
   });
 
+  it("never reads an attachment's path as the product's name (steer-e2e, 2026-11-17)", () => {
+    const question = 'look at this\n\n<attached-image path="/home/ana/.sagax/attachments/123e4567-e89b-42d3-a456-426614174000.png" name="first.png" />';
+    expect(wantsHelpPrefetch(index, question, { organization: false })).toBe(false);
+    expect(withHelpPrefetch("TURN", question, index, { organization: false, release: "0.8.66" })).toEqual({ text: "TURN", ids: [] });
+    // the words still count: a picture sent with a question about Sagax
+    expect(wantsHelpPrefetch(index, `Dans Sagax, c'est quoi Today?\n\n<attached-image path="/tmp/x.png" name="x.png" />`, { organization: false })).toBe(true);
+  });
+
   it("prefetches a how-to the product is not named in only when a guide matches strongly", async () => {
     const bundled = (await bundledKnowledgeIndex())!;
     expect(wantsHelpPrefetch(bundled, "Crée une routine qui me résume mes courriels chaque matin.", { organization: false })).toBe(true);

@@ -8,6 +8,7 @@ vi.resetModules();
 const fs = await import("node:fs");
 const realFs = await vi.importActual<typeof import("node:fs")>("node:fs");
 const { flushOwnedFiles, flushOwnedFilesSync } = await import("../atomic.ts");
+const { commandReceipt, setCommandReceipt } = await import("../commands.ts");
 const { closeMessageDb } = await import("../messages/message-db.ts");
 const { BotsSaveError } = await import("./bots-save.ts");
 const { DATA_DIR } = await import("../config.ts");
@@ -145,6 +146,8 @@ describe("bots.json save failures", () => {
   it("keeps a thread and its conversation when its deletion cannot be saved, and deletes both on retry", () => {
     const { store, bot, first, second, changes } = storeWithTwoThreads();
     store.appendMessage(second.threadId, { role: "user", kind: "text", text: "Keep this conversation" });
+    const key = "person:ada|" + bot.id + "|send";
+    setCommandReceipt("agent.send_prompt", key, { thread_id: second.threadId, pending: true });
     changes.mockClear();
 
     expect(() => failingSaves(() => store.deleteTask(bot.id, second.threadId))).toThrow("Couldn't save the thread deletion");
@@ -152,10 +155,12 @@ describe("bots.json save failures", () => {
     expect(new Store(selection).messagesFor(second.threadId).map((message) => message.text)).toEqual(["Keep this conversation"]);
     expect(bot.threadId).toBe(second.threadId);
     expect(changes).not.toHaveBeenCalled();
+    expect(commandReceipt("agent.send_prompt", key)).not.toBeNull();
     expect(new Store(selection).tasks(bot.id)).toHaveLength(2);
 
     expect(store.deleteTask(bot.id, second.threadId)?.threadId).toBe(first.threadId);
     expect(bot.threadId).toBe(first.threadId);
+    expect(commandReceipt("agent.send_prompt", key)).toBeNull();
     expect(changes).toHaveBeenCalledWith({ type: "thread.deleted", threadId: second.threadId });
     expect(new Store(selection).tasks(bot.id).map((task) => task.threadId)).toEqual([first.threadId]);
     expect(new Store(selection).messagesFor(second.threadId)).toEqual([]);

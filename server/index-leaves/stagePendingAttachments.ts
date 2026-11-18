@@ -48,17 +48,20 @@ async function stagePendingAttachments(threadId: string, generation: string) {
         }
       } else if (target.kind === "user-desktop") {
         const active = () => host.activeInternalGenerationByThread.get(threadId) === generation;
+        const desktop = host.desktopBridges.current(person);
+        if (!desktop) throw new Error("The computer is offline.");
+        const context = { botId: workplace.botId, threadId };
         for await (const chunk of host.attachmentChunks(file, 512 * 1024)) {
           const result = await host.desktopBridges.request(person, {
             action: "stage_file", name: host.stagedName(file), content: chunk.data.toString("base64"), encoding: "base64", offset: chunk.offset, final: chunk.final
-          }, active) as { isError?: boolean; content?: { text?: string }[] } | null;
+          }, active, undefined, desktop.id, context) as { isError?: boolean; content?: { text?: string }[] } | null;
           if (result?.isError) throw new Error(result.content?.[0]?.text ?? "copy failed");
         }
         if (isArchiveAttachment(file.file) && host.storedArchiveManifest(file.file)?.status === "ok") {
           // The desktop app unpacks it next to its copy with the same rules
           // (electron/archive-extract.mjs); an older app answers that it does
           // not know the action, and the bot was told to unpack it then.
-          const result = await host.desktopBridges.request(person, { action: "extract_archive", name: host.stagedName(file), timeout_seconds: 300 }, active) as { isError?: boolean; content?: { text?: string }[] } | null;
+          const result = await host.desktopBridges.request(person, { action: "extract_archive", name: host.stagedName(file), timeout_seconds: 300 }, active, undefined, desktop.id, context) as { isError?: boolean; content?: { text?: string }[] } | null;
           if (result?.isError) throw new Error(`unpack failed: ${result.content?.[0]?.text ?? "no result"}`);
         }
       }

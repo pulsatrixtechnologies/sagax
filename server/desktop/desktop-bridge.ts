@@ -673,7 +673,8 @@ export class DesktopBridges {
       if (!hook) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.denied, 403, "access_denied"));
       return hook({ person: key, device: { id: `${key}/${hostKey(chosen.registration.name)}`, name: this.nameOf(chosen) }, context }).then((allowed) => {
         if (!allowed) throw failure(DESKTOP_BRIDGE_MESSAGES.denied, 403, "access_denied");
-        if (!this.online(chosen) || !this.bridges.has(DesktopBridges.key(chosen.session, chosen.registration.id))) throw failure(DESKTOP_BRIDGE_MESSAGES.chosenOffline, 409, "not_connected");
+        if (!this.online(chosen) || this.bridges.get(DesktopBridges.key(chosen.session, chosen.registration.id)) !== chosen) throw failure(DESKTOP_BRIDGE_MESSAGES.chosenOffline, 409, "not_connected");
+        if (this.accessOf(key, chosen.registration.name) === "never") throw failure(DESKTOP_BRIDGE_MESSAGES.never, 403, "access_never");
         if (!active()) throw failure(DESKTOP_BRIDGE_MESSAGES.ended, 401);
         return this.enqueue(chosen, operation, active, onProgress);
       });

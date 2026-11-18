@@ -21,6 +21,7 @@ import { createdByBotMark, type BotCreatedBy } from "./bots/bot-creation.ts";
 import type { BotProfilePatch } from "./bots/bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peers/peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
+import { forgetConversationSendReceipts } from "./commands.ts";
 import * as mdb from "./messages/message-db.ts";
 import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { sameStoredSpeaker, storedTurnSpeaker } from "./turns/thread-speakers.ts";
@@ -1913,7 +1914,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
    * per-thread event logs. Every delete path funnels here — task, group,
    * and bot deletion — so the logs cannot outlive the thread anywhere. */
   private deleteThreadRecord(threadId: string, beforeCommit?: () => void) {
-    mdb.deleteThread(threadId, beforeCommit);
+    mdb.deleteThread(threadId, () => {
+      forgetConversationSendReceipts(threadId);
+      beforeCommit?.();
+    });
     this.threads.delete(threadId);
     discardNativeLog(threadId);
     for (const file of [

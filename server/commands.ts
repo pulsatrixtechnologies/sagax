@@ -75,3 +75,16 @@ export function dropCommandReceiptsWhere(kind: string, match: (key: string, resu
 export function expireCommandReceipts(kind: string, ttlMs: number, now: () => number = Date.now): number {
   return purgeCommandReceipts(kind, now() - ttlMs);
 }
+
+/** Erase pending and final send receipts inside the conversation deletion transaction. */
+export function forgetConversationSendReceipts(threadId: string): number {
+  return dropCommandReceiptsWhere("agent.send_prompt", (_key, result) =>
+    (result as { thread_id?: string } | null)?.thread_id === threadId);
+}
+
+export function forgetCallerSendReceipts(person: string, botIds: ReadonlySet<string>): number {
+  return dropCommandReceiptsWhere("agent.send_prompt", (key) => {
+    const caller = key.slice(0, key.indexOf("|"));
+    return caller.toLowerCase() === "person:" + person || (caller.startsWith("bot:") && botIds.has(caller.slice(4)));
+  });
+}

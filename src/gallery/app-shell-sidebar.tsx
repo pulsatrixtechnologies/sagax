@@ -81,7 +81,7 @@ function usageEngines(count: number) {
   const span = (used: number, hours: number) => ({ available: true, usedPercent: used, remainingPercent: 100 - used, resetsAt: new Date(Date.now() + hours * 3_600_000).toISOString() });
   const engines = [
     { id: "claude", name: "Claude", plan: "Max", weekly: span(64, 53), fiveHour: span(18, 3) },
-    { id: "grok", name: "Grok", plan: "SuperGrok Heavy", weekly: span(87, 56), fiveHour: span(12, 2) },
+    { id: "grok", name: "Grok", plan: "Ultra", weekly: span(87, 56), fiveHour: span(12, 2) },
     { id: "codex", name: "Codex", plan: "Business Enterprise Annual", weekly: span(100, 71), fiveHour: span(41, 4) },
     { id: "gemini", name: "Gemini", plan: "Ultra", weekly: span(23, 120), fiveHour: span(5, 1) },
     { id: "cursor", name: "Cursor", plan: "Pro Plus", weekly: span(56, 90), fiveHour: span(30, 3) },

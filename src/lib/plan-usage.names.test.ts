@@ -18,8 +18,14 @@ describe("humanPlanName", () => {
   });
 
   it("keeps a name already written for people", () => {
-    expect(humanPlanName("SuperGrok Heavy")).toBe("SuperGrok Heavy");
+    expect(humanPlanName("SuperGrok")).toBe("SuperGrok");
     expect(humanPlanName("Pro")).toBe("Pro");
+  });
+
+  it("shows xAI's old SuperGrok Heavy as Ultra and names Lite", () => {
+    expect(humanPlanName("SuperGrok Heavy")).toBe("Ultra");
+    expect(humanPlanName("supergrok_heavy")).toBe("Ultra");
+    expect(humanPlanName("supergrok_lite")).toBe("SuperGrok Lite");
   });
 
   it("cleans and title-cases any other id, never leaving snake_case", () => {

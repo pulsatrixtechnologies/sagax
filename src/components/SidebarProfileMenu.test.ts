@@ -292,8 +292,8 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
   it("shows the starred plan's percent without its name, the name in the tooltip, and stars each plan once in Usage ›", () => {
     const toggled: string[] = [];
     const lines = [
-      { key: "grok:weekly", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · Weekly", value: "87% used" },
-      { key: "grok:five-hour", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · 5-hour", value: "10% used" },
+      { key: "grok:weekly", planId: "grok", planName: "Grok Ultra", label: "Grok Ultra · Weekly", value: "87% used" },
+      { key: "grok:five-hour", planId: "grok", planName: "Grok Ultra", label: "Grok Ultra · 5-hour", value: "10% used" },
       { key: "codex:five-hour", planId: "codex", planName: "Codex Business", label: "Codex Business · 5-hour", value: "100% used" },
     ];
     const usage = items({

@@ -97,7 +97,7 @@ describe("Usage ›'s star (2026-11-03)", () => {
       label: "Usage",
       value: "Grok 87%",
       submenu: [
-        { key: "grok:weekly", label: "Grok SuperGrok Heavy · Weekly", value: "87% used", info: true, favorite: { on: true, label: "Stop showing Grok", onToggle: toggle } },
+        { key: "grok:weekly", label: "Grok Ultra · Weekly", value: "87% used", info: true, favorite: { on: true, label: "Stop showing Grok", onToggle: toggle } },
         { key: "codex:five-hour", label: "Codex Business · 5-hour", value: "100% used", info: true, favorite: { on: false, label: "Show Codex", onToggle: toggle } },
       ],
       onSelect: () => {},

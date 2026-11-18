@@ -34,7 +34,7 @@ const ALL: PlanProvider[] = [
   account("claude", "Personal", "claude", "max_20x", open(34, 2, 5), open(46, 92)),
   account("work", "Work", "claude", "pro", open(81, 4, 5), open(22, 40)),
   account("codex", "Codex", "codex", "plus", open(12, 3, 5), open(93, 18)),
-  account("grok", "Grok", "grok", "SuperGrok Heavy", CLOSED, open(57, 120)),
+  account("grok", "Grok", "grok", "Ultra", CLOSED, open(57, 120)),
   account("research", "Research", "codex", "pro", open(4, 1, 5), open(9, 150)),
   account("lab", "Lab", "claude", "max_5x", open(63, 5, 5), open(71, 60)),
 ];
@@ -51,7 +51,7 @@ const OWNER_EMAIL = "alex.martin@example.test";
 const owner: PlanProvider[] = [
   { id: "work-a", name: OWNER_EMAIL, driver: "claude", plan: "business", ok: false, error: "Could not reach Claude: rate limited (429), try again in a minute", state: "error", access: "subscription", instanceId: "work-a", failure: { kind: "http", status: 429 }, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
   account("work-b", OWNER_EMAIL, "claude", "business", open(64, 3, 5), open(100, 52)),
-  account("grok-team", "Studio Grok team", "grok", "SuperGrok Heavy", CLOSED, open(57, 120)),
+  account("grok-team", "Studio Grok team", "grok", "Ultra", CLOSED, open(57, 120)),
   { ...account("codex-lab", "sam.lee@example.test", "codex", "plus", open(12, 3, 5), open(41, 18)), ok: true, error: "Could not reach Codex: network error", failure: { kind: "network" }, staleSince: iso(NOW - 20 * 60_000) },
 ];
 const scenario = params.get("scenario") === "owner";

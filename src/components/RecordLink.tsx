@@ -5,10 +5,11 @@
 // Nothing here navigates, and the chip is a button with no address: the link's
 // own scheme is never handed to the shell, shown in a status bar, copied as a
 // link address or opened by a middle click (a thread reference is the same).
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 
 import { RecordCard, RecordProductMark } from "@/components/RecordCard";
+import { useRecordDetail } from "@/components/useRecordDetail";
 import { cn } from "@/lib/cn";
 import { HoverCard } from "@/components/LinkHoverCard";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
@@ -132,6 +133,12 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, current.ref);
   const read = useRecordCard(current.ref, { enabled: true });
+  // a ticket card gains its tabs and editable fields once the card is read; a
+  // server without the detail route leaves the original card
+  const { refresh: refreshCard } = read;
+  const detail = useRecordDetail(current.ref, current.ref.kind === "ticket" && Boolean(read.card), refreshCard);
+  const { refresh: refreshDetail } = detail;
+  const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
   return (
     <RecordCard
       key={`${current.ref.product}/${current.ref.kind}/${current.ref.id}`}
@@ -139,7 +146,9 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       label={current.label}
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
-      read={read}
+      read={detail.related ? { ...read, refresh } : read}
+      related={detail.related}
+      edits={detail.edits}
       canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).kind)}
       pinned={pinned}
       onClose={onClose}

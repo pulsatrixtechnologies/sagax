@@ -279,7 +279,14 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     update();
     const outside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!anchorRef.current?.contains(target) && !cardRef.current?.contains(target)) closeNow();
+      if (anchorRef.current?.contains(target) || cardRef.current?.contains(target)) return;
+      // A picker opened by the card is portalled to the document body.
+      const pickers = cardRef.current?.querySelectorAll('[aria-expanded="true"][aria-controls]');
+      for (const picker of pickers ?? []) {
+        const menu = document.getElementById(picker.getAttribute("aria-controls")!);
+        if (menu?.contains(target)) return;
+      }
+      closeNow();
     };
     // a card that loads grows or shrinks: it keeps its place against the anchor
     const observer = typeof ResizeObserver === "undefined" || !cardRef.current ? null : new ResizeObserver(update);
@@ -303,7 +310,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   useEffect(() => {
     if (!pinnable || !open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       const holdsFocus = cardRef.current?.contains(document.activeElement) ?? false;
       dismissed.current = pointerOver.current;
       clear();

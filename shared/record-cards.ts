@@ -568,6 +568,7 @@ export const RECORD_CARD_CAPS = {
  * beside it say how to draw it, never what it is worth: a money `amount` is
  * the product's number, never computed here. */
 export interface RecordField {
+  editKey?: string;
   label: string;
   value: string;
   type?: RecordFieldType;
@@ -820,7 +821,13 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
       const label = plain(field?.label, 400);
       const value = capped(field?.value, RECORD_CARD_CAPS.fieldValue);
       if (!field || !label || !value) continue;
-      fields.push({ label: cutText(label, RECORD_CARD_CAPS.label).text, value: value.text, ...typedPart(field) });
+      const editKey = field.edit_key ?? field.editKey;
+      fields.push({
+        label: cutText(label, RECORD_CARD_CAPS.label).text,
+        value: value.text,
+        ...(typeof editKey === "string" && /^[a-z]{1,32}$/.test(editKey) ? { editKey } : {}),
+        ...typedPart(field),
+      });
       if (fields.length >= RECORD_CARD_CAPS.fields) break;
     }
     if (fields.length) out.fields = fields;
@@ -893,11 +900,11 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
       more: notes.more === true || dropped || (total !== undefined && total > items.length),
     };
   }
-  const openUrl = httpsUrl(card.open_url);
+  const openUrl = httpsUrl(card.open_url ?? card.openUrl);
   if (openUrl) out.openUrl = openUrl;
   const tz = plain(card.tz, 64);
   if (tz && /^[A-Za-z0-9_+\-/]{1,64}$/.test(tz)) out.tz = tz;
-  const asOf = isoDate(card.as_of);
+  const asOf = isoDate(card.as_of ?? card.asOf);
   if (asOf) out.asOf = asOf;
   return out;
 }

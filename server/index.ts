@@ -30967,13 +30967,14 @@ ROUTES.push(createRecordCardsRoutes({
   subjectToken: personProductsSubjectToken,
   client: recordCards,
   // only the organization's Refuse and Ask first rules, as for a bot's read of that product
-  orgRule: async (principalId, token, ref) => {
+  orgRule: async (principalId, token, ref, change) => {
     const rules = customRules.orgRules().filter((rule) => rule.enabled);
     if (!rules.length) return { kind: "none" };
     const listed = await personProducts.list(principalId, token);
     if (listed.ok) recordLinks.noteProducts(principalId, listed.products);
     const name = listed.ok ? listed.products.find((product) => product.id === ref.product)?.name : undefined;
-    return recordReadOrgRule(rules, ref, name, serverHome());
+    const read = recordReadOrgRule(rules, ref, name, serverHome());
+    return change && read.kind !== "deny" ? recordReadOrgRule(rules, ref, name, serverHome(), change) : read;
   },
   language: languageOfRequest,
 }));

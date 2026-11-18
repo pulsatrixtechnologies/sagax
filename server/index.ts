@@ -33844,10 +33844,10 @@ function stagedFilesOfThread(botId: string, threadId: string): string[] {
  * attachments' attachmentStillShown rule). */
 function removeBotStagedFiles(botId: string, paths: readonly string[]): void {
   if (!paths.length) return;
-  for (const path of paths) {
-    if (!/^attachments\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/.test(path)) continue;
-    const name = basename(path);
-    if (!threadsReferencing(name).length && !store.tasks(botId).some(task => task.stagedFiles?.includes(path))) {
+  for (const stagedPath of paths) {
+    if (!/^attachments\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/.test(stagedPath)) continue;
+    const name = basename(stagedPath);
+    if (!threadsReferencing(name).length && !store.tasks(botId).some(task => task.stagedFiles?.includes(stagedPath))) {
       deleteAttachment(join(ATTACHMENTS_DIR, name));
     }
   }

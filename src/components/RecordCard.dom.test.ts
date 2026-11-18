@@ -262,10 +262,7 @@ describe("RecordCard without a layout engine's help", () => {
     });
     const card = show({ raw: ticketCard(NOW, "fr"), pinned: true });
     const left = card.querySelector("[data-record-pane=left]")!;
-    expect(left.querySelectorAll("[data-fit-hidden]").length).toBeGreaterThan(0);
-    const more = left.querySelector<HTMLButtonElement>("button[data-fit-more]")!;
-    expect(more.textContent).toMatch(/de plus$/);
-    act(() => { more.click(); });
+    // pinned (clicked): nothing is left out, there is no "N more", the pane scrolls
     expect(left.querySelectorAll("[data-fit-hidden]")).toHaveLength(0);
     expect(left.querySelector("[data-fit-more]")).toBeNull();
   });
@@ -302,10 +299,10 @@ describe("RecordCard without a layout engine's help", () => {
     const dropped = keys.length - 2;
     expect(more.textContent).toMatch(new RegExp(`^${dropped} (champs|lignes) de plus$`));
     expect(hidden.length).toBeGreaterThan(dropped - 1);
-    // pinned: whole rows too, and the line is a button that opens the rest to scroll
+    // pinned: every row shows, no "N more"
     const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
-    expect(pinned.querySelector("[data-fit-hidden]")).not.toBeNull();
-    expect(pinned.querySelector("button[data-fit-more]")).not.toBeNull();
+    expect(pinned.querySelector("[data-fit-hidden]")).toBeNull();
+    expect(pinned.querySelector("[data-fit-more]")).toBeNull();
   });
 
   it("keeps its notes behind one 'Notes (7)' row when it is not wider than tall, and opens them in place when pinned", () => {

@@ -184,6 +184,9 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   // focus handed back to the anchor after Escape must not reopen the card
   const returning = useRef(false);
   const wasOpen = useRef(false);
+  // where the card sits against its anchor once the person navigates inside it:
+  // kept until it closes, so a card that changes height never flips or jumps
+  const lock = useRef<{ dx: number; dy: number } | null>(null);
   const clear = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = undefined;
@@ -208,6 +211,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   useEffect(() => {
     if (wasOpen.current && !open && warm) warmClosedAt = Date.now();
     wasOpen.current = open;
+    if (!open) lock.current = null;
   }, [open, warm]);
 
   // one pinned card at a time
@@ -255,6 +259,17 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       if (!anchor || !box) return;
       const rects = anchor.getClientRects();
       const rect = rects.length ? rects[0]! : anchor.getBoundingClientRect();
+      const held = lock.current;
+      if (held) {
+        // the top-left stays where it was; a taller card grows downward and scrolls inside
+        const left = Math.min(Math.max(EDGE, window.innerWidth - box.offsetWidth - EDGE), Math.max(EDGE, rect.left + held.dx));
+        const top = Math.max(EDGE, rect.top + held.dy);
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.setProperty("--hover-card-room", `${Math.max(120, window.innerHeight - top - EDGE)}px`);
+        box.style.visibility = "visible";
+        return;
+      }
       const spot = placeCard(rect, { width: box.offsetWidth, height: box.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
       box.style.left = `${spot.left}px`;
       box.style.top = `${spot.top}px`;
@@ -451,7 +466,17 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
               closeNow();
               if (held) returnFocus();
             },
-            pin: () => { clear(); setMode("pinned"); },
+            pin: () => {
+              clear();
+              setMode("pinned");
+              const a = anchorRef.current, box = cardRef.current;
+              if (a && box && !lock.current) {
+                const rects = a.getClientRects();
+                const rect = rects.length ? rects[0]! : a.getBoundingClientRect();
+                const at = box.getBoundingClientRect();
+                lock.current = { dx: at.left - rect.left, dy: at.top - rect.top };
+              }
+            },
           })}
         </div>,
         document.body,

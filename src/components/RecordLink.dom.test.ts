@@ -249,6 +249,45 @@ describe("the card", () => {
     expect(card()!.textContent).toContain("Imprimante de l'accueil");
   });
 
+  it("keeps the card where it opened across a nested navigation and Back, whatever the new height", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => String(input).includes("/company/") ? json(answer(companyCard(Date.now(), "fr"))) : reply()));
+    const observers: Array<() => void> = [];
+    vi.stubGlobal("ResizeObserver", class { constructor(cb: () => void) { observers.push(cb); } observe() {} disconnect() {} });
+    let height = 300;
+    const chipBox = { top: 500, bottom: 520, left: 100, right: 160, width: 60, height: 20, x: 100, y: 500, toJSON() { return {}; } } as DOMRect;
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      if (this.hasAttribute("data-record-card")) {
+        const top = parseFloat((this as HTMLElement).style.top) || 0, left = parseFloat((this as HTMLElement).style.left) || 0;
+        return { top, left, bottom: top + height, right: left + 380, width: 380, height, x: left, y: top, toJSON() { return {}; } } as DOMRect;
+      }
+      return chipBox;
+    });
+    const offset = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-record-card") ? height : 0; });
+    try {
+      await render(`[#481516](${LINK})`);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      const box = card()!;
+      const spot = () => [box.style.left, box.style.top];
+      const first = spot();
+      await act(async () => { box.querySelector<HTMLElement>("[data-record-company-link]")!.click(); });
+      height = 150;
+      act(() => { observers.forEach((cb) => cb()); });
+      await advance(50);
+      expect(spot()).toEqual(first);
+      await act(async () => { box.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+      height = 340;
+      act(() => { observers.forEach((cb) => cb()); });
+      await advance(50);
+      expect(spot()).toEqual(first);
+      // a taller card is held inside the window: it scrolls inside, not past the edge
+      expect(box.style.getPropertyValue("--hover-card-room")).toMatch(/px$/);
+    } finally {
+      spy.mockRestore();
+      offset.mockRestore();
+    }
+  });
+
   it("draws the chip of any kind the product declares with the product's mark, and reads its card at once, no button", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string) => {
       const url = String(input);

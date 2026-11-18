@@ -101,6 +101,38 @@ export function normalizeXDraft(value: unknown): { text: string } | { problems: 
   return problems.length ? { problems } : { text };
 }
 
+/** The text a held X post call carries, under the keys X tools use. */
+export function xPostTextOfInput(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    return undefined;
+  }
+  const rows: Record<string, unknown>[] = [];
+  const walk = (value: unknown, depth: number) => {
+    if (depth > 3 || !value || typeof value !== "object" || Array.isArray(value)) return;
+    rows.push(value as Record<string, unknown>);
+    for (const inner of Object.values(value)) walk(inner, depth + 1);
+  };
+  walk(parsed, 0);
+  for (const key of ["text", "status", "tweet", "post", "content", "body", "message"]) {
+    for (const row of rows) {
+      const found = row[key];
+      if (typeof found === "string" && found.trim()) return xPostText(found);
+    }
+  }
+  return undefined;
+}
+
+/** A bot's own X post call that the person may review as the draft card, else null. */
+export function heldXDraft(tool: string | undefined, input: string | undefined): XDraft | null {
+  if (!tool || !isXPostTool(tool)) return null;
+  const text = xPostTextOfInput(input);
+  return text ? { text } : null;
+}
+
 /** FNV-1a of the text as the bot wrote it: the card finds its own state after a reload. */
 export function xDraftKey(text: string): string {
   const body = xPostText(text);
@@ -352,13 +384,13 @@ export function parseXDraftFence(code: string): XDraft | null {
         const handle = handleOf(parsed.handle);
         const name = text(parsed.name);
         const avatarUrl = httpsUrl(first(parsed.avatarUrl, parsed.avatar));
-        return { text: parsed.text.replace(/\r\n?/g, "\n").trim(), ...(name ? { name: name.slice(0, 80) } : {}), ...(handle ? { handle } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+        return { text: xPostText(parsed.text), ...(name ? { name: name.slice(0, 80) } : {}), ...(handle ? { handle } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
       }
     } catch {
       // not JSON: the text is the post
     }
   }
-  return { text: trimmed };
+  return { text: xPostText(trimmed) };
 }
 
 /** 1 234, 12.3 K, 4.5 M: X's own short counts. */

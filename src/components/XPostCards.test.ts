@@ -65,3 +65,19 @@ describe("X post cards (#4638)", () => {
     expect(xDateText("2025-03-01T10:00:00Z", now)).toContain("2025");
   });
 });
+
+describe("held X post call and the footer (#4638)", () => {
+  it("shows the same card for a held call, with Post and Discard answering it", () => {
+    const html = renderToStaticMarkup(createElement(XDraftCard, { draft: sampleDraft("en"), held: { onPost: () => {}, onDiscard: () => {} } }));
+    expect(html).toContain("data-x-post-button");
+    expect(html).toContain("data-x-discard");
+    const post = /<button[^>]*data-x-post-button[^>]*>/.exec(html)?.[0] ?? "";
+    expect(post).not.toContain('disabled=""');
+  });
+  it("spreads the four counts evenly and keeps bookmark and share at the right", () => {
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [samplePost("en")] }));
+    expect(html.match(/flex min-w-0 flex-1 items-center gap-1/g)).toHaveLength(4);
+    expect(html).toContain("ms-auto flex shrink-0");
+    expect(html).not.toContain("max-w-[425px]");
+  });
+});

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createXPostCard } from "./xPostCard.ts";
 
 function setup() {
-  const messages = [{ id: "m1", role: "bot", from: { botId: "b1", name: "Bot" } } as any];
+  const messages = [{ id: "m1", role: "bot", text: "```x-post\n{}\n```", from: { botId: "b1", name: "Bot" } } as any];
   const store = {
     messagesFor: () => messages,
     patchMessage: (_thread: string, id: string, patch: any) => Object.assign(messages.find((row) => row.id === id)!, patch),
@@ -73,5 +73,18 @@ describe("the X draft card's Post (#4638)", () => {
     const { card, host } = setup();
     host.emailDraftBot = () => ({ status: 403, body: { error: "no" } });
     expect((await card.post({}, "t1", { messageId: "m1", draftKey: "k1", draft: { text: "ok" } })).status).toBe(403);
+  });
+
+  it("a direct X post call answered on the held card gets its published-post card (no second flow)", () => {
+    const { card, messages, host } = setup();
+    const appended: any[] = [];
+    host.store.appendMessage = (_t: string, row: any) => { appended.push(row); messages.push({ id: `n${appended.length}`, ...row }); return row; };
+    host.store.botByThread = () => ({ id: "b1", name: "Bot", color: "blue" });
+    expect(card.finish("t1", TOOL, true, '{"url":"https://x.com/sample/status/1234567890123"}', JSON.stringify({ text: "Direct" }))).toBe(true);
+    expect(appended[0].text).toContain("```x-post");
+    expect(Object.values(appended[0].xPosts)[0]).toMatchObject({ status: "posted", text: "Direct", url: "https://x.com/sample/status/1234567890123" });
+    // a failed call, or another tool, adds nothing
+    expect(card.finish("t1", TOOL, false, "no", JSON.stringify({ text: "Direct" }))).toBe(false);
+    expect(card.finish("t1", "mcp__x__get_posts", true, "{}", JSON.stringify({ text: "Direct" }))).toBe(false);
   });
 });

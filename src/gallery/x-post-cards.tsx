@@ -10,12 +10,15 @@
  *   failed     the card when the post did not go out
  *   single     one post with a quoted post and a photo
  *   timeline   three posts stacked
+
+ *   held       a bot's own X post call held for the answer: the same card
  *   neighbour  the email draft card (the conforming neighbour) beside the draft card
  * The gallery has no server: fetch answers the card's own calls. */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { EmailCard } from "../components/EmailCard";
+import { XDraftCard } from "../components/XPostCards";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { nearLimitText, quotePost, sampleDraft, samplePost, timelinePosts, type Lang } from "../lib/x-post-fixtures";
@@ -67,6 +70,11 @@ const chat = (text: string, id: string) => (
 );
 
 function Page() {
+  if (scene === "held") {
+    // a bot's own X post call, held for the answer: the same card, Post answers that call
+    const note = lang === "fr" ? "Sample attend ta réponse" : "Sample is waiting for you";
+    return <Frame><div className="mb-2 text-[13px] text-ink-secondary">{note}</div><XDraftCard draft={draft} held={{ onPost: () => {}, onDiscard: () => {} }} /></Frame>;
+  }
   if (scene === "single") return <Frame>{bubble(readLine)}{chat(singleFence, "m-2")}</Frame>;
   if (scene === "timeline") return <Frame>{bubble(readLine)}{chat(timelineFence, "m-3")}</Frame>;
   if (scene === "neighbour") {

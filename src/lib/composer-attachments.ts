@@ -185,6 +185,7 @@ const DOCUMENT_MIMES: Readonly<Record<string, string>> = {
   tsv: "text/tab-separated-values",
   json: "application/json",
   pdf: "application/pdf",
+  evtx: "application/x-ms-evtx",
   rtf: "application/rtf",
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

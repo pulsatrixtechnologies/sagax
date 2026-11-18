@@ -198,6 +198,7 @@ const FILE_MIMES: Readonly<Record<string, string>> = {
   "text/tab-separated-values": ".tsv",
   "application/json": ".json",
   "application/pdf": ".pdf",
+  "application/x-ms-evtx": ".evtx",
   "application/rtf": ".rtf",
   "text/rtf": ".rtf",
   "application/msword": ".doc",

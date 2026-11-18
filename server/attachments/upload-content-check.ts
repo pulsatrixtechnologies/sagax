@@ -11,7 +11,7 @@ export const SNIFF_BYTES = 4100;
 
 export type SniffedKind =
   | "png" | "jpeg" | "gif" | "webp" | "pdf" | "zip" | "gzip" | "7z" | "tar" | "rtf"
-  | "ole" | "ogg" | "flac" | "wav" | "webm" | "mp4" | "mp3" | "aac"
+  | "evtx" | "ole" | "ogg" | "flac" | "wav" | "webm" | "mp4" | "mp3" | "aac"
   | "elf" | "pe" | "macho" | "wasm" | "shebang" | "text" | "unknown";
 
 const startsWith = (b: Buffer, sig: number[], at = 0) =>
@@ -32,6 +32,7 @@ export function sniff(head: Buffer): SniffedKind {
   if (ascii(head, "GIF87a") || ascii(head, "GIF89a")) return "gif";
   if (ascii(head, "RIFF") && ascii(head, "WEBP", 8)) return "webp";
   if (ascii(head, "RIFF") && ascii(head, "WAVE", 8)) return "wav";
+  if (ascii(head, "ElfFile\0")) return "evtx";
   if (ascii(head, "%PDF-")) return "pdf";
   if (startsWith(head, [0x50, 0x4b, 0x03, 0x04]) || startsWith(head, [0x50, 0x4b, 0x05, 0x06])) return "zip";
   if (startsWith(head, [0x1f, 0x8b])) return "gzip";
@@ -56,6 +57,7 @@ const EXECUTABLE: ReadonlySet<SniffedKind> = new Set(["elf", "pe", "macho", "was
 const ALLOWED: Readonly<Record<string, readonly SniffedKind[]>> = {
   "image/png": ["png"], "image/jpeg": ["jpeg"], "image/gif": ["gif"], "image/webp": ["webp"],
   "application/pdf": ["pdf"],
+  "application/x-ms-evtx": ["evtx"],
   "application/zip": ["zip"], "application/x-zip-compressed": ["zip"],
   "application/x-tar": ["tar"],
   "application/gzip": ["gzip"], "application/x-gzip": ["gzip"], "application/x-gtar": ["gzip"], "application/x-compressed-tar": ["gzip"],

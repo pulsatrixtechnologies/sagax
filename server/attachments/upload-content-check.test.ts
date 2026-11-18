@@ -20,6 +20,12 @@ describe("upload content check", () => {
     expect(sniff(Buffer.from("hello, world\n"))).toBe("text");
   });
 
+  it("recognizes the event log header when file checks are enforced", () => {
+    const mime = "application/x-ms-evtx";
+    expect(assertContentMatches(mime, Buffer.from("ElfFile\0"), "enforce")).toBe("evtx");
+    expect(() => assertContentMatches(mime, Buffer.from("ElfFileX"), "enforce")).toThrow(/does not match/);
+  });
+
   it("accepts matching content", () => {
     expect(assertContentMatches("image/png", png, "enforce")).toBe("png");
     expect(assertContentMatches("application/zip", zip, "enforce")).toBe("zip");

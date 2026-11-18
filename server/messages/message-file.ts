@@ -399,6 +399,7 @@ export function mimeFor(path: string): string {
     case ".tsv": return "text/tab-separated-values; charset=utf-8";
     case ".json": return "application/json";
     case ".pdf": return "application/pdf";
+    case ".evtx": return "application/x-ms-evtx";
     case ".rtf": return "application/rtf";
     case ".png": return "image/png";
     case ".jpg":

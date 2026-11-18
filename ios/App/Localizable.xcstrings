@@ -16867,6 +16867,96 @@
         }
       }
     },
+    "To answer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À répondre"
+          }
+        }
+      }
+    },
+    "Approve": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver"
+          }
+        }
+      }
+    },
+    "Talk by voice": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parler à voix haute"
+          }
+        }
+      }
+    },
+    "Nothing to answer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à répondre"
+          }
+        }
+      }
+    },
+    "Nothing recent": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien de récent"
+          }
+        }
+      }
+    },
+    "The bots you talk to appear here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les robots avec qui tu parles apparaissent ici."
+          }
+        }
+      }
+    },
+    "A bot that needs you appears here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un robot qui a besoin de toi apparaît ici."
+          }
+        }
+      }
+    },
+    "%@ needs an answer: %@. Open To answer.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ attend une réponse : %@. Ouvre À répondre."
+          }
+        }
+      }
+    },
+    "%@ asks: %@. %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ demande : %@. %@"
+          }
+        }
+      }
+    },
     "Calling…": {
       "localizations": {
         "fr": {

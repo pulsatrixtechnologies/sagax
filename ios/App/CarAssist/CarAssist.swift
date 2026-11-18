@@ -111,3 +111,47 @@ enum CarCalls {
         return nil
     }
 }
+
+extension Notification.Name {
+    /// A notification was tapped while CarPlay is connected: the car's
+    /// "To answer" tab opens (CarPlaySceneDelegate).
+    static let sagaxCarOpenToAnswer = Notification.Name("sagax.car.openToAnswer")
+}
+
+/// Reads an ask aloud on the car's audio, short, on the call's rules: no
+/// speech over a call, the audio session released after, the music resumes.
+@MainActor
+final class CarSpeaker: NSObject, AVSpeechSynthesizerDelegate {
+    static let shared = CarSpeaker()
+    private let synthesizer = AVSpeechSynthesizer()
+
+    override private init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func say(_ text: String) {
+        guard CallController.shared.target == nil else { return }
+        stop()
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        try? session.setActive(true)
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.preferredLanguages.first)
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        release()
+    }
+
+    private func release() {
+        guard CallController.shared.target == nil else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.release() }
+    }
+}

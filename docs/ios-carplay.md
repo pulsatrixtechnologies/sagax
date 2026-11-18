@@ -73,17 +73,27 @@ Apple has granted the entitlement and the App ID has the CarPlay
 capability: signing without a CarPlay profile fails, so it cannot ship by
 accident. Plain `xcodegen generate` stays the usual build.
 
-## Status and next lots (#4666)
+## Tabs and To answer (#4666 follow-up)
 
-Apple granted the CarPlay entitlement (2026-11-17); the category is read
-from the request (voice-based conversational), not from the portal, whose
-API has no CarPlay capability. Left to do: enable CarPlay on the App ID,
-regenerate the store profile, then build with `project-carplay.yml`.
-The `project-carplay.yml` build compiles and launches in the iOS Simulator
-(scene manifest and `CarPlaySceneDelegate` present). Next lots: a tab bar
-(Bots, Recent, To answer), pending approvals as a list answered by voice
-with Approve and Deny alert actions, a notification that opens "To answer",
-then the CarPlay spec becomes the default once the profile exists.
+Apple assigned two CarPlay entitlements to the App ID: voice-based
+conversation (the call) and driving task (`com.apple.developer.carplay-driving-task`,
+lists and information screens for simple tasks). `project-carplay.yml` declares both.
+Whether Apple lets one app keep both categories in review is not confirmed;
+if it does not, drop the driving task key and the To answer tab with it.
+
+The root is a tab bar:
+
+1. Bots: every bot by name (up to twelve).
+2. Recent: the bots used last, with when (never a message).
+3. To answer: the tool approvals waiting for the person, by bot and title. A
+   learned skill, a question and a phone-call consent wait for the phone
+   (`CarApprovals`). An ask opens an information screen with Approve (allow
+   once), Deny and Talk by voice (a call with that bot, which asks aloud). A
+   new ask, while no call runs, shows the tab and is read aloud
+   (`CarSpeaker`); a notification tapped while connected opens the tab.
+
+Left to do: the default project carries the CarPlay spec only once an
+Xcode-managed profile is seen to carry both entitlements (signing check).
 
 ## Testing
 

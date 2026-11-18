@@ -4,10 +4,15 @@
 // CarPlay scene in Info.plist, both added by `project-carplay.yml`; without
 // them this file is compiled and never runs.
 //
-// Two screens, the depth Apple allows is three:
-//   1. the recent bots, by name and face, never a message (a list);
-//   2. the call: CarPlay's voice screen while the bot listens, thinks or
-//      speaks, with mute and hang up (iOS 26.4 action buttons).
+// The root is a tab bar (three tabs, Apple allows four), the depth Apple
+// allows is three:
+//   1. Bots: every bot by name and face, never a message (a list);
+//   2. Recent: the bots used last, with when (a list);
+//   3. To answer: the asks waiting for the person, by bot and title, each
+//      opening an information screen (Approve, Deny, Talk by voice), read
+//      aloud when one arrives;
+//   and, over any of them, the call: CarPlay's voice screen while the bot
+//   listens, thinks or speaks, with mute and hang up (iOS 26.4 buttons).
 // Choosing a bot calls it: the conversation is the voice, as the category
 // requires. An approval during the call is asked aloud or waits for the
 // phone (DrivingSafety); nothing on this screen asks to pick up the iPhone.
@@ -19,7 +24,12 @@ import UIKit
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private var interface: CPInterfaceController?
-    private var list: CPListTemplate?
+    private var tabs: CPTabBarTemplate?
+    private var botsList: CPListTemplate?
+    private var recentList: CPListTemplate?
+    private var answerList: CPListTemplate?
+    private var announced: Set<String> = []
+    private var announcedLoaded = false
     private var voice: CPVoiceControlTemplate?
     private var shownState: CarVoiceState?
     private var faces: [String: UIImage] = [:]
@@ -33,12 +43,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let session = SessionHub.session
         session.connect()
 
-        let list = CPListTemplate(title: "Sagax", sections: [])
-        list.emptyViewTitleVariants = [String(localized: "No bots yet")]
-        list.emptyViewSubtitleVariants = [String(localized: "Your bots appear here once Sagax is connected.")]
-        self.list = list
-        interfaceController.setRootTemplate(list, animated: false, completion: nil)
+        let bots = Self.makeList(title: String(localized: "Bots"), symbol: "person.2.fill",
+                                 empty: String(localized: "No bots yet"),
+                                 subtitle: String(localized: "Your bots appear here once Sagax is connected."))
+        let recent = Self.makeList(title: String(localized: "Recent"), symbol: "clock.fill",
+                                   empty: String(localized: "Nothing recent"),
+                                   subtitle: String(localized: "The bots you talk to appear here."))
+        let answer = Self.makeList(title: String(localized: "To answer"), symbol: "checkmark.bubble.fill",
+                                   empty: String(localized: "Nothing to answer"),
+                                   subtitle: String(localized: "A bot that needs you appears here."))
+        botsList = bots
+        recentList = recent
+        answerList = answer
+        let tabs = CPTabBarTemplate(templates: [bots, recent, answer])
+        self.tabs = tabs
+        interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
         reload(session.state)
+
+        // a notification tapped on the phone while in the car opens the tab
+        NotificationCenter.default.publisher(for: .sagaxCarOpenToAnswer)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.showToAnswer() }
+            .store(in: &subscriptions)
 
         // the list follows the fleet, calmly (no faster than every 2 s)
         session.statePublisher
@@ -66,7 +92,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         CarRoute.carPlayConnected = false
         subscriptions.removeAll()
         interface = nil
-        list = nil
+        tabs = nil
+        botsList = nil
+        recentList = nil
+        answerList = nil
+        announced = []
+        announcedLoaded = false
+        CarSpeaker.shared.stop()
         voice = nil
         shownState = nil
         faces = [:]
@@ -75,20 +107,118 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - The list
 
+    private static func makeList(title: String, symbol: String, empty: String, subtitle: String) -> CPListTemplate {
+        let list = CPListTemplate(title: title, sections: [])
+        list.tabTitle = title
+        list.tabImage = UIImage(systemName: symbol) ?? UIImage()
+        list.emptyViewTitleVariants = [empty]
+        list.emptyViewSubtitleVariants = [subtitle]
+        return list
+    }
+
     private func reload(_ state: CompanionState) {
-        guard let list else { return }
-        let bots = CarDirectory.recentBots(CarDirectory.contacts(bots: state.bots))
+        guard let botsList, let recentList, let answerList else { return }
+        let contacts = CarDirectory.contacts(bots: state.bots)
         let limit = min(CPListTemplate.maximumItemCount, CarDirectory.carLimit)
-        let items: [CPListItem] = bots.prefix(limit).map { contact in
-            let item = CPListItem(text: contact.name, detailText: nil, image: faces[contact.id] ?? UIImage(systemName: "waveform.circle.fill"))
-            item.handler = { [weak self] _, done in
-                self?.call(contact)
-                done()
-            }
-            return item
+        let all = CarDirectory.alphabeticalBots(contacts, limit: limit)
+        let recent = CarDirectory.recentBots(contacts, limit: limit)
+        botsList.updateSections([CPListSection(items: all.map { botItem($0, detail: nil) }, header: String(localized: "Call a bot"), sectionIndexTitle: nil)])
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        recentList.updateSections([CPListSection(items: recent.map {
+            botItem($0, detail: formatter.localizedString(for: Date(timeIntervalSince1970: $0.latestActivity / 1000), relativeTo: Date()))
+        }, header: String(localized: "Call a bot"), sectionIndexTitle: nil)])
+        var seen: Set<String> = []
+        loadFaces((all + recent).filter { seen.insert($0.id).inserted }, state: state)
+
+        let asks = CarApprovals.items(in: state)
+        answerList.updateSections([CPListSection(items: asks.map(askItem), header: String(localized: "Waiting for you"), sectionIndexTitle: nil)])
+        answerList.showsTabBadge = !asks.isEmpty
+        announce(asks)
+    }
+
+    private func botItem(_ contact: CarContact, detail: String?) -> CPListItem {
+        let item = CPListItem(text: contact.name, detailText: detail, image: faces[contact.id] ?? UIImage(systemName: "waveform.circle.fill"))
+        item.handler = { [weak self] _, done in
+            self?.call(contact)
+            done()
         }
-        list.updateSections([CPListSection(items: items, header: String(localized: "Call a bot"), sectionIndexTitle: nil)])
-        loadFaces(bots, state: state)
+        return item
+    }
+
+    // MARK: - To answer
+
+    private func askItem(_ ask: CarApproval) -> CPListItem {
+        let item = CPListItem(text: ask.botName, detailText: ask.title, image: UIImage(systemName: "questionmark.bubble.fill"))
+        item.handler = { [weak self] _, done in
+            self?.showAsk(ask)
+            done()
+        }
+        return item
+    }
+
+    /// An ask the person has not heard yet, while no call is running: the
+    /// tab is shown and it is said once. What already waited when the car
+    /// connected is on the tab, not said.
+    private func announce(_ asks: [CarApproval]) {
+        guard announcedLoaded else {
+            announcedLoaded = true
+            announced = Set(asks.map(\.requestId))
+            return
+        }
+        let fresh = asks.filter { !announced.contains($0.requestId) }
+        announced.formUnion(asks.map(\.requestId))
+        guard let first = fresh.first else { return }
+        showToAnswer()
+        guard CallController.shared.target == nil else { return }
+        CarSpeaker.shared.say(String(localized: "\(first.botName) needs an answer: \(first.title). Open To answer."))
+    }
+
+    private func showToAnswer() {
+        guard let tabs, let answerList else { return }
+        if #available(iOS 17.0, *) { tabs.select(answerList) }
+    }
+
+    private func showAsk(_ ask: CarApproval) {
+        guard let interface else { return }
+        let spoken = DrivingSafety.spokenDetail(ask.detail, driving: true)
+        let info = CPInformationTemplate(
+            title: ask.botName, layout: .leading,
+            items: [CPInformationItem(title: ask.title, detail: spoken.isEmpty ? nil : spoken)],
+            actions: [
+                CPTextButton(title: String(localized: "Approve"), textStyle: .confirm) { [weak self] _ in
+                    self?.answer(ask, allow: true)
+                },
+                CPTextButton(title: String(localized: "Deny"), textStyle: .cancel) { [weak self] _ in
+                    self?.answer(ask, allow: false)
+                },
+                CPTextButton(title: String(localized: "Talk by voice"), textStyle: .normal) { [weak self] _ in
+                    self?.interface?.popToRootTemplate(animated: true, completion: nil)
+                    Task { await CarCalls.call(contactId: ask.botId) }
+                },
+            ]
+        )
+        interface.pushTemplate(info, animated: true, completion: nil)
+        if CallController.shared.target == nil {
+            CarSpeaker.shared.say(String(localized: "\(ask.botName) asks: \(ask.title). \(spoken)"))
+        }
+    }
+
+    /// Approve or Deny, once (never "always"): the answer goes the way the
+    /// phone's own button sends it, a security key class still waits for the phone.
+    private func answer(_ ask: CarApproval, allow: Bool) {
+        CarSpeaker.shared.stop()
+        interface?.popToRootTemplate(animated: true, completion: nil)
+        Task { @MainActor in
+            let session = SessionHub.session
+            guard let chat = session.state.chat(forThread: ask.threadId),
+                  let message = session.state.visibleTranscript(forThread: ask.threadId).first(where: { $0.card?.requestId == ask.requestId }),
+                  let card = message.card, let tool = card.tool
+            else { return }
+            let pending = PendingApproval(message: message, card: card, requestId: ask.requestId, tool: tool)
+            await session.decide(allow ? .allowOnce : .deny, on: pending, in: chat)
+            reload(session.state)
+        }
     }
 
     /// Each bot's mascot, drawn once (the notification's face).

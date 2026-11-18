@@ -309,6 +309,8 @@ interface Entry {
    * may read it was tried, or the person declined. Other work may still
    * switch roles (QA 0.8.67 G6, #2960). */
   readRefused?: boolean;
+  /** #4838: the holiday calendar limitation was already told in this run */
+  holidayNoted?: boolean;
   /** #2960: per permission path, the roles a refused read was already sent
    * under in this turn: each held role is tried once per path (no loop).
    * #3694: a refused write keeps its own set (`write:<path>`), the only
@@ -431,6 +433,12 @@ export function listSizeOf(body: unknown): number | undefined {
     } catch { /* not JSON */ }
   }
   return undefined;
+}
+
+/** #4838: the permission path of a holiday calendar read (schedule/holidays,
+ * schedule/holidayLists). */
+function holidayRead(path: string): boolean {
+  return /^schedule\/(?:holidaylists|holidays)(?:\/|$)/i.test(path);
 }
 
 function withNote(answer: PerspicaxRelayAnswer, note: string): PerspicaxRelayAnswer {
@@ -1408,6 +1416,7 @@ export class PerspicaxMcp {
    * pick: the default surface ("Moi"), never a stored choice. */
   private applyTurnRole(entry: Entry, routine: boolean): void {
     entry.readRefused = false;
+    entry.holidayNoted = false;
     entry.triedRoles = undefined;
     entry.boardWidest = undefined;
     entry.meWritesAllowed = undefined;
@@ -1937,8 +1946,19 @@ export class PerspicaxMcp {
     const refusedRole = this.roleView(entry, from);
     const readStop = (why: string) => `STOP: this read was refused (403) under ${this.refusedList(entry, tried)}${why}. ${needs} This is a permission block, not missing data: in this turn, do not retry the same records with other tools or another connection, and do not answer as if the records were empty; when the read was only a detail of the answer (a ticket or project title), give the rest of the answer and say in one line what could not be read. Tell the person the read is blocked, which API member and role refused it and which permission the account needs; never say it needs an admin or that nothing can be done.`;
     const blocked = (why: string) => {
-      entry.readRefused = true;
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
+      // #4838: the holiday calendar is an optional input of a scheduled run:
+      // every role refused it, so the run goes on without holiday data and
+      // says so once; every other refused read still stops
+      if (entry.source === "delegation" && holidayRead(permission.path)) {
+        const first = !entry.holidayNoted;
+        entry.holidayNoted = true;
+        const text = first
+          ? `Holiday calendar not read: ${this.refusedList(entry, tried)} refused it (403). ${needs} This read is optional for this run: continue without holiday data, never treat any day as a holiday or as a working day because of it, and say once in your report that holidays were not taken into account.`
+          : "Holiday calendar still not readable in this run (already reported once). Continue without holiday data and do not repeat the notice.";
+        return { status: 200, body: { jsonrpc: "2.0", id, result: { structuredContent: { available: false, reason: "permission_denied" }, content: [{ type: "text", text }] } } };
+      }
+      entry.readRefused = true;
       return blockWith(answer, id, readStop(why));
     };
     for (;;) {

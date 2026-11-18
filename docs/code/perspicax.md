@@ -329,6 +329,11 @@ aggregate. The server's own instructions win if they differ.
   covers only that role's boards and names the other held roles
   (explicit-only first), so a partial count is never given as complete. The prompt carries the week-time fast path (one
   time.entries read on member and week, server total, titles optional).
+- #4838: a holiday calendar read (`schedule/holidays`, `schedule/holidayLists`)
+  of a scheduled run that every held role refused does not stop the run:
+  `tryHeldRoles` answers with a plain note (no `STOP:`) to continue without
+  holiday data, told once per run (`holidayNoted`). Chat turns and every other
+  refused read keep the `STOP:`.
 - Rendering: `cleanReplyStyle` (`shared/reply-style.ts`), before
   `dashFreeReply` in `runtime-events/preamble.ts`, drops a trailing signature
   emoji and hearts in a multi-line report, turns a bare ConnectWise ticket

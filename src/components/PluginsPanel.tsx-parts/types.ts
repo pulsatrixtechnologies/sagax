@@ -57,7 +57,9 @@ export type Page =
   /** a plugin or skill the organization installed that is on for the person: its page, with Contents */
   | { page: "orgItem"; id: string }
   /** a vendor the organization console offers: its products as one bundle (Perspicax #2071) */
-  | { page: "vendor"; key: string };
+  | { page: "vendor"; key: string }
+  /** a connector an engine account brought (Claude, ChatGPT, Grok): what the account says, and Manage on the provider */
+  | { page: "account"; key: string };
 
 export interface HarnessAnswer {
   manageUrl?: string;

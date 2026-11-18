@@ -220,6 +220,9 @@ export function accountConnectorSub(row: Pick<AccountConnectorRow, "provider" | 
   return head;
 }
 
+/** An account connector's state in words (the page says it; the card shows its mark). */
+export const accountStatusWord = (status: HarnessConnectorStatus | undefined): string | null => (status ? t(STATUS_KEY[status]) : null);
+
 const openManage = (url: string) => void openExternalLink(url).catch(() => undefined);
 
 /** The right side of an account row: Installed when connected, a Sign in
@@ -239,15 +242,31 @@ export function AccountConnectorStatus({ row, installedMark }: { row: AccountCon
   return null;
 }
 
+/** An account connector's mark: its own logo or site's mark when the data has one (Outlook, Sites...); otherwise the generic
+ * plug with the provider's own logo small at the corner, so a bare plug never stands for a ChatGPT or Claude connector. */
+export function AccountMark({ row, className }: { row: Pick<AccountConnectorRow, "engine" | "name">; className: string }) {
+  const mark = providerMark(row.name);
+  const known = Boolean(mark.logo || mark.site);
+  const icon = <PluginIcon item={{ kind: "app", name: row.name, logo: mark.logo, domain: mark.site }} className={className} />;
+  if (known) return icon;
+  return (
+    <span className="relative shrink-0" data-account-mark="">
+      {icon}
+      <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full border-[0.5px] border-ink/10 bg-app text-ink" data-account-provider-mark={row.engine}>
+        <EngineMark id={row.engine} size={11} />
+      </span>
+    </span>
+  );
+}
+
 /** An account row's mark, name, what it reaches and its gray line. */
 export function AccountConnectorBody({ row }: { row: AccountConnectorRow }) {
-  const mark = providerMark(row.name);
   const sub = accountConnectorSub(row);
   // Grok's reach rule stays on the row (once a line under its section)
   const tip = row.engine === "grok" ? `${sub}\n${t("connectApps.capabilities.grokOrg")}` : sub;
   return (
     <>
-      <PluginIcon item={{ kind: "app", name: row.name, logo: mark.logo, domain: mark.site }} className={CARD_ICON} />
+      <AccountMark row={row} className={CARD_ICON} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-2">
           <span className={cn(PLUGINS.rowName, "min-w-0")}>{row.name}</span>

@@ -32,7 +32,8 @@
 // then the organization's tokens); the token itself stays per bot
 // (server/plugins/marketplace-tokens.ts), never here.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { cp, lstat, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
+import { copyTreeAsync } from "./plugin-tree-copy.ts";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -1131,11 +1132,7 @@ async function copyPlain(from: string, to: string): Promise<void> {
   await rm(to, { recursive: true, force: true });
   notePluginFolderChanged(to);
   await mkdir(join(to, ".."), { recursive: true });
-  await cp(from, to, {
-    recursive: true,
-    dereference: false,
-    filter: async (path) => plainCopyPath(path, (await lstat(path)).isSymbolicLink()),
-  });
+  await copyTreeAsync(from, to, (path) => withoutMacMetadata(path));
 }
 
 /** The same copy for the one-time migration (`adopt`), which is synchronous. */

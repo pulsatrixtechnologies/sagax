@@ -39,7 +39,7 @@ export { BotPluginError, type GitSource, parseGitSource, type MarketplacePolicy,
 //     plugin's skills, commands, agents and output styles stay. The MCP
 //     servers it declared mount separately in the person's environment.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
-import { cp, lstat, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { z } from "zod";
 
@@ -60,6 +60,7 @@ import type { MarketplaceCredentialView } from "../../shared/github-credentials.
 import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "../plugins/plugin-config.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "../plugins/plugin-metadata-cache.ts";
 import { withoutMacMetadata } from "../mac-metadata.ts";
+import { copyTreeAsync } from "../plugins/plugin-tree-copy.ts";
 import { changelogNotes, pluginListedFields } from "../capabilities/capability-update-providers.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -194,7 +195,7 @@ export async function copySanitizedPluginAsync(from: string, to: string, marketp
   await rm(to, { recursive: true, force: true });
   notePluginFolderChanged(to);
   await mkdir(join(to, ".."), { recursive: true });
-  await cp(from, to, { recursive: true, dereference: false, filter: async (path) => copiedPluginPath(path, await lstat(path)) });
+  await copyTreeAsync(from, to, (path) => withoutMacMetadata(path));
   return { ...sanitizeCopiedPlugin(to, executionRoot, marketplaceEntry), hooks: captured.hooks, hookFiles: captured.files };
 }
 

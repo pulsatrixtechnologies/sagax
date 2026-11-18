@@ -23,15 +23,15 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-// the install copies without holding the loop (cp of node:fs/promises): the same seam
+// the install copies without holding the loop (copyFile of node:fs/promises): the same seam, after the first file
 vi.mock("node:fs/promises", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...real,
-    cp: (async (from: string, to: string, options?: Parameters<typeof real.cp>[2]) => {
-      await real.cp(from, to, options);
+    copyFile: (async (from: string, to: string, mode?: number) => {
+      await real.copyFile(from, to, mode);
       if (copyFault.armed) throw Object.assign(new Error("EIO: the copy failed midway"), { code: "EIO" });
-    }) as typeof real.cp,
+    }) as typeof real.copyFile,
   };
 });
 

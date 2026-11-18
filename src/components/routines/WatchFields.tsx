@@ -25,6 +25,9 @@ export interface WatchDraft {
   type: RoutineWatchSourceType;
   path: string;
   recursive: boolean;
+  readBytes?: number;
+  pattern?: string;
+  trackWholeResult?: boolean;
   command: string;
   tool: string;
   args: string;
@@ -52,6 +55,9 @@ export function draftFromWatch(watch: RoutineWatchPrecheck | undefined | null): 
     type: source?.type ?? "files",
     path: source?.type === "files" ? source.path : "",
     recursive: source?.type === "files" ? source.recursive === true : false,
+    readBytes: source?.type === "files" ? source.readBytes : undefined,
+    pattern: source?.type === "files" ? source.pattern : undefined,
+    trackWholeResult: Boolean(watch?.track && !Object.keys(watch.track).length),
     command: source?.type === "command" ? source.command : "",
     tool: source?.type === "tool" ? source.tool : "",
     args: source?.type === "tool" && source.args && Object.keys(source.args).length ? JSON.stringify(source.args, null, 2) : "",
@@ -87,7 +93,8 @@ export function watchFromDraft(draft: WatchDraft): { watch: RoutineWatchPrecheck
   let source: RoutineWatchPrecheck["source"];
   if (draft.type === "files") {
     if (/(^|\/)\.\.(\/|$)/.test(draft.path) || draft.path.trim().startsWith("/")) return { error: "routineWatch.errorPath" };
-    source = { type: "files", path: draft.path.trim(), ...(draft.recursive ? { recursive: true } : {}) };
+    source = { type: "files", path: draft.path.trim(), ...(draft.recursive ? { recursive: true } : {}),
+      ...(draft.readBytes ? { readBytes: draft.readBytes } : {}), ...(draft.pattern ? { pattern: draft.pattern } : {}) };
   } else if (draft.type === "command") {
     if (!draft.command.trim()) return { error: "routineWatch.errorCommand" };
     source = { type: "command", command: draft.command.trim() };
@@ -116,7 +123,7 @@ export function watchFromDraft(draft: WatchDraft): { watch: RoutineWatchPrecheck
     condition = { test: "exit_code", op: draft.exitOp, value: Math.max(0, Math.min(255, Math.round(Number(draft.exitValue) || 0))) };
   }
   const fields = draft.trackFields.split(",").map((field) => field.trim()).filter(Boolean);
-  const track = draft.type !== "files" && (draft.trackItems.trim() || draft.trackKey.trim() || fields.length)
+  const track = (draft.type !== "files" || draft.readBytes) && (draft.trackWholeResult || draft.trackItems.trim() || draft.trackKey.trim() || fields.length)
     ? { ...(draft.trackItems.trim() ? { items: draft.trackItems.trim() } : {}), ...(draft.trackKey.trim() ? { key: draft.trackKey.trim() } : {}), ...(fields.length ? { fields } : {}) }
     : undefined;
   return {

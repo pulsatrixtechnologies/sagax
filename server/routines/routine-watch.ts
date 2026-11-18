@@ -782,9 +782,11 @@ async function readResolvedWatch(deps: RoutineWatchDeps, routine: WatchRoutine, 
       const root = await realpath(place.cwd);
       const path = await realpath(resolve(root, source.path));
       if (!inside(root, path) || sensitiveEnvironmentPath(relative(root, path))) throw new RoutineWatchError("Choose a file in the bot's folder.");
+      const checked = await lstat(path);
       const opened = await openMessageFile(pathToFileURL(path).href, [root]);
       try {
-        if ((await opened.handle.stat()).nlink !== 1) throw new RoutineWatchError("Choose the original file in the bot's folder.");
+        const actual = await opened.handle.stat();
+        if (actual.dev !== checked.dev || actual.ino !== checked.ino || actual.nlink !== 1) throw new RoutineWatchError("Choose the original file in the bot's folder.");
         const parts: Buffer[] = [];
         if (opened.bytes) for await (const part of opened.stream({ end: Math.min(source.readBytes, opened.bytes) - 1, autoClose: false })) parts.push(Buffer.from(part));
         return { probe: { kind: "output", text: Buffer.concat(parts).toString("utf8"), truncated: opened.bytes > source.readBytes } };

@@ -162,7 +162,7 @@ const TEAM_WORDS = ["Harbor", "Lantern", "Quarry", "Willow", "Summit", "Meadow",
 for (let index = PX.tiers.length - 3; index < TEAM_COUNT; index++) {
   const notes = index % 4 === 0 ? 0 : (index * 7) % 19 + 1;
   PX.tiers.push({
-    scope: `team:gen${index}`, kind: "team", name: `${TEAM_WORDS[index % TEAM_WORDS.length]} ${["crew", "desk", "guild", "unit", "group"][index % 5]} ${index}`,
+    scope: `team:gen${index}`, kind: "team", name: `${TEAM_WORDS[index % TEAM_WORDS.length]} ${["crew", "desk", "guild", "unit", "group"][(index * 7 + (index >> 2)) % 5]} ${index}`,
     may_write: true, may_manage: false, trashed: 0, archived: 0, edit_mode: "review",
     topics: notes === 0 ? [] : [{ topic: "general", count: notes, entries: Array.from({ length: notes }, (_, n) => ({ id: `g${index}-${n}`, title: `Note ${index}-${n}`, topic: "general", tags: [], updated: iso(n * D), created: iso(n * D + D), excerpt: "Invented fixture note.", author_name: "Sam Okafor" })) }],
   } as unknown as (typeof PX.tiers)[number]);

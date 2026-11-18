@@ -167,8 +167,8 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" data-memory-map-view="">
-      <div className="@container flex flex-nowrap items-center gap-2 overflow-x-auto" data-memory-map-bar="">
-        <label className="flex h-8 w-[240px] shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
+      <div className="@container -my-1 flex flex-nowrap items-center gap-2 overflow-x-auto py-1 pl-0.5" data-memory-map-bar="">
+        <label className="flex h-8 w-[240px] min-w-[120px] shrink items-center gap-1.5 rounded-full border border-hairline/60 bg-panel px-3 text-ink focus-within:ring-2 focus-within:ring-accent/60">
           <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} placeholder={t("memoryManager.map.search")} aria-label={t("memoryManager.map.search")} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-tertiary" data-memory-map-search="" />
         </label>
@@ -193,8 +193,7 @@ export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, 
                 placeholder={t("memoryManager.map.teams")}
                 searchAbove={8}
                 searchLabel={t("memoryManager.map.teamsSearch")}
-                bordered
-                active={teamTiers.some((tier) => tier.key === focus)}
+                triggerClass={cn(chip, "max-w-[170px] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent/70", teamTiers.some((tier) => tier.key === focus) ? "border-accent/60 bg-raised text-ink" : "border-hairline/60 text-ink-secondary hover:text-ink")}
                 options={teamOptions}
               />
             </div>

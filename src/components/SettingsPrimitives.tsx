@@ -584,7 +584,10 @@ export function PillSelect<T extends string>({
   searchLabel,
   placeholder,
   active,
+  triggerClass,
 }: {
+  /** Replaces the pill look of the control (a chip of its row). */
+  triggerClass?: string;
   /** The open list gets a search field once it holds more than this many options. */
   searchAbove?: number;
   searchLabel?: string;
@@ -667,9 +670,10 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2", active && "bg-raised")}
+        className={triggerClass ?? (fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2", active && "bg-raised"))}
       >
         <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{current?.color && <span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full align-middle" style={{ background: current.color }} />}{shown}</span>
+        {current?.count !== undefined && <span className="shrink-0 tabular-nums text-ink-tertiary">{current.count}</span>}
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
       {open && (

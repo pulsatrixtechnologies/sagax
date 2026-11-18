@@ -60,9 +60,13 @@ export function ChatHeaderBar({
     >
       <ChatEdgeFade edge="top" />
       {start && <div data-chat-header-start="" className={cn("mr-auto flex min-w-0 max-w-[20%] items-center gap-1", startClassName)}>{start}</div>}
+      {/* Centered by auto margins, never a transform: Blink takes a
+          -webkit-app-region box from the untransformed layout, so a
+          translate(-50%, -50%) left the pill's no-drag box half a pill to the
+          right and below it and the window drag ate clicks on its left half. */}
       <div
         data-chat-header-center=""
-        className={cn("absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2", centerClassName)}
+        className={cn("absolute inset-0 m-auto flex h-fit w-fit max-w-[60%] items-center gap-2", centerClassName)}
         style={centerStyle}
       >
         {center}

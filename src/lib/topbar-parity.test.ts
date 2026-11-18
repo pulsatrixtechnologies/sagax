@@ -42,14 +42,14 @@ describe("round controls, as the reference measures them (#4163)", () => {
     expect(list).toEqual(expect.arrayContaining(["size-9", "rounded-full", "border", "border-sidebar-circle-ring", "bg-sidebar-circle", "text-sidebar-circle-glyph", "hover:bg-sidebar-circle-hover"]));
     for (const old of ["bg-sidebar-elevated", "border-sidebar-hairline-weak", "text-sidebar-ink-secondary", "hover:text-sidebar-ink"]) expect(list).not.toContain(old);
     const sidebar = read("../components/Sidebar.tsx");
-    // the reference's top row: collapse, search, New, in that order (#4484)
-    const head = sidebar.slice(sidebar.indexOf("const collapseButton ="), sidebar.indexOf("const railButtons ="));
-    expect(head).toContain("<PanelLeft {...CIRCLE_ICON}");
+    // the reference's top row: the bot panel "...", search, New, in that order (replaces #4484's collapse)
+    const head = sidebar.slice(sidebar.indexOf("const panelButton ="), sidebar.indexOf("const railButtons ="));
+    expect(head).toContain("<Ellipsis {...CIRCLE_ICON}");
     expect(head).toContain("<Search {...CIRCLE_ICON}");
     expect(head).toContain("<Plus {...CIRCLE_ICON}");
-    expect(head.indexOf("<PanelLeft")).toBeLessThan(head.indexOf("<Search"));
+    expect(head.indexOf("<Ellipsis")).toBeLessThan(head.indexOf("<Search"));
     expect(head.indexOf("<Search")).toBeLessThan(head.indexOf("<Plus"));
-    expect(head).toContain("const headButtons = <>{collapseButton}{searchButton}{newButton}</>");
+    expect(head).toContain("const headButtons = <>{panelButton}{searchButton}{newButton}</>");
     expect(CIRCLE_ICON).toEqual({ size: 18, strokeWidth: 1.75 });
   });
 

@@ -407,7 +407,11 @@ A bot names files relative to its workspace or conversation folder. Paths
 are resolved with realpath and confined to those roots. An AI client sends
 the bytes (`{path, content_base64}`), and the request can be up to 64 MiB.
 The files are copied to the target's workspace under `inbox/<sender>/`, and
-the prompt names them.
+the prompt names them. They belong to the conversation the prompt lands in:
+deleting that conversation, or erasing the person whose conversation it is,
+removes them (#4632). The member API's `POST bots/{id}/messages` takes the
+same `files`, through the same parser and staging
+(`docs/org-member-api.md`).
 
 **On a computer.** The files land in the Sagax workspace on the host, and
 the prompt says so. It names each file twice: the path relative to the

@@ -73,6 +73,7 @@ import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 import { readRouteRefusal } from "../route-refusal.ts";
+import { isRefusal, parseSendFiles, type FileInput } from "../agent-api.ts";
 import { isEffortLevel, type ModelSelection } from "../../shared/model-selection.ts";
 
 export const ORG_MEMBER_PREFIX = "/api/org/member/";
@@ -222,6 +223,17 @@ export interface OrgMemberRouteDeps {
    * agent's conversation, or any conversation of their surface bot), never a
    * confidential one; else null. */
   hiddenConversationOf?(threadId: string, principalId: string): { botId: string } | null;
+  /** #4632: put the files of a send in the bot's workspace inbox, exactly as
+   * send_prompt does (server/index-leaves/agentApiStageFiles.ts), for a bot
+   * the person may send to, and answer the text with the note that names
+   * them (agentPromptWithFiles). */
+  stageSendFiles?(person: MemberPerson, botId: string, text: string, files: FileInput[]): Promise<{ text: string; staged: string[] } | { status: number; code: string; message: string }>;
+  /** #4632: remove files staged for a send that was then refused. */
+  removeStagedFiles?(botId: string, paths: readonly string[]): void;
+  /** #4632: the text a send with this sendId already put in this
+   * conversation (a stored line, or one waiting in its queue), else null: a
+   * retry reuses it and stages nothing twice. */
+  sentText?(botId: string, threadId: string, sendId: string): string | null;
   /** Lot S1: the model a conversation runs on now (its own, else its bot's). */
   threadModel?(botId: string, threadId: string): ModelSelection | null;
   /** One admin activity row, category `client`, actor the person. */
@@ -1207,7 +1219,8 @@ export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingM
     }
     let body: unknown = null;
     if (method === "POST" || method === "PATCH") {
-      const max = sub === "agents/send_prompt" ? AGENT_SEND_BODY_BYTES : MAX_BODY_BYTES;
+      // #4632: a message with files carries them as send_prompt does (base64)
+      const max = sub === "agents/send_prompt" || /^bots\/[^/]+\/messages$/.test(sub) ? AGENT_SEND_BODY_BYTES : MAX_BODY_BYTES;
       const declared = Number(req.headers["content-length"] ?? 0);
       if (Number.isFinite(declared) && declared > max) return refuse(413, "too_large", `The body is larger than ${max} bytes.`);
       body = await readSmallJson(req, max);
@@ -1717,7 +1730,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
       async handle({ person, params, body }) {
         const input = objectOf(body);
         if (!input) return fail(400, "bad_request", "Send { \"text\": \"...\" }.");
-        const extra = Object.keys(input).filter((key) => !["text", "threadId", "newThread", "wait", "sendId", "stream", "hidden", "modelSelection"].includes(key));
+        const extra = Object.keys(input).filter((key) => !["text", "threadId", "newThread", "wait", "sendId", "stream", "hidden", "modelSelection", "files"].includes(key));
         if (extra.length) return fail(400, "bad_request", `Unknown field: ${extra[0]}.`);
         const text = typeof input.text === "string" ? input.text.trim() : "";
         if (!text || text.length > MEMBER_TEXT_MAX) return fail(400, "bad_request", `text is 1 to ${MEMBER_TEXT_MAX} characters.`);
@@ -1731,6 +1744,10 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         if (input.hidden !== undefined && typeof input.hidden !== "boolean") return fail(400, "bad_request", "hidden is true or false.");
         const model = input.modelSelection === undefined ? null : memberModelSelection(input.modelSelection);
         if (typeof model === "string") return fail(400, "bad_request", model);
+        // #4632: files, read by send_prompt's own parser (same shape, count and size)
+        const files = input.files === undefined ? [] : parseSendFiles(input.files);
+        if (isRefusal(files)) return fail(files.status, files.code, files.message, files.extra?.details ? { details: files.extra.details } : {});
+        if (files.length && !deps.stageSendFiles) return fail(501, "not_supported", "This server does not take files with a message.");
         const botId = params.id!;
         const surface = deps.surfaceBot?.(botId) === true;
         let threadId = input.threadId as string | undefined;
@@ -1785,14 +1802,33 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
             const switched = await deps.perform(person, { method: "PATCH", path: `/api/bots/${encodeURIComponent(botId)}/tasks/${encodeURIComponent(threadId)}`, body: { modelSelection: model } });
             if (!okStatus(switched)) return { refused: passThrough(switched, "This model cannot be used for this conversation.") };
           }
-          return { sent: await deps.perform(person, {
+          // #4632: the files go to the bot's workspace inbox as send_prompt
+          // puts them, named in the line. A retry of a send already in this
+          // conversation (same sendId) reuses its line and stages nothing.
+          let line = text;
+          let staged: string[] = [];
+          if (files.length) {
+            const before = threadId && input.sendId ? deps.sentText?.(botId, threadId, input.sendId as string) ?? null : null;
+            if (before !== null) {
+              if (before === text || before.startsWith(`${text}\n\n[`)) line = before;
+            } else {
+              const put = await deps.stageSendFiles!(person, botId, text, files);
+              if ("code" in put) return { refused: fail(put.status, put.code, put.message) };
+              line = put.text;
+              staged = put.staged;
+            }
+          }
+          const reply = await deps.perform(person, {
             method: "POST",
             path: `/api/bots/${encodeURIComponent(botId)}/messages`,
             // #3220: an AI client's prompt keeps its own turn and reply (queued
             // behind a running turn, never steered into it or merged with
             // another queued prompt); the console is the person typing.
-            body: { text, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}), ...(hidden ? { busyMode: "after", aiClient: true } : {}) },
-          }) };
+            body: { text: line, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}), ...(hidden ? { busyMode: "after", aiClient: true } : {}) },
+          });
+          // a refused send leaves no file behind
+          if (!okStatus(reply) && staged.length) deps.removeStagedFiles?.(botId, staged);
+          return { sent: reply };
         });
         if ("refused" in posted) return posted.refused;
         const sent = posted.sent;
@@ -1802,7 +1838,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         const messageId = str(objectOf(receipt.message)?.id);
         const queueId = messageId ? null : str(receipt.queueId);
         if (hidden && finalThread && messageId) deps.markAiClientLine?.(finalThread, messageId);
-        deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}), ...(model ? { model: model.model } : {}), ...(surface ? { surface: true } : {}) } });
+        deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}), ...(model ? { model: model.model } : {}), ...(surface ? { surface: true } : {}), ...(files.length ? { files: files.length } : {}) } });
         if (!finalThread) return answer({ botId, threadId: null, messageId, status: "working", pending: true, reply: null, approvals: [], cursor: null, summary: null });
         if (input.stream === true) {
           return {

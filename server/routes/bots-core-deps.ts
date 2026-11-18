@@ -226,6 +226,10 @@ export interface BotsCoreRouteDeps {
   coordinator: { cancelDirect(threadId: string, reason: string): void };
   cancelTeamSetupResumesForThread(threadId: string): void;
   confidentialThreadAttachments(botId: string, threadId: string): string[];
+  /** The files sent with this conversation's lines through the agent or member API (server/threads/staged-files.ts). */
+  stagedFilesOfThread(botId: string, threadId: string): string[];
+  /** Remove those files from the bot's workspace inbox. */
+  removeStagedFiles(botId: string, paths: readonly string[]): void;
   threadEngineKeys(botId: string, threadId: string): string[];
   wipeConfidentialThread(botId: string, threadId: string, attachmentNames: readonly string[], engineKeys: readonly string[]): void;
   clearTurnDigestState(threadId: string): void;

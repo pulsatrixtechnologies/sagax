@@ -166,6 +166,36 @@ any other shape, so the plan's `clients.bots.read` is written
   sent then. A send that changes nothing waits only behind the sends before
   it, so at most their own `wait` (120 s each). A queued send left
   interrupted never counts as busy.
+- `files` (#4632): the files the bot reads with this message (an image, a
+  PDF, a document, any type), exactly as the agent API's `send_prompt` takes
+  them, through its own parser and staging (one way to receive a file):
+  `[{"path": "photo.png", "content_base64": "..."}]`, where `path` is the
+  name the file is given (its last segment; no leading `/`, no `..`, at
+  most 512 characters) and `content_base64` its bytes. At most 8 files of
+  25 MiB each; the request body is then up to 64 MiB (64 KiB without
+  `files`). `text` stays required.
+  - Where it goes: the bot's workspace, `inbox/<sender>/<name>` (a name
+    already there gets `-2`, `-3`, ...), and the line sent to the bot says
+    so, with the paths the bot reads them at (its file tools read images and
+    PDFs; `workspace_read` reads text). On the person's own bot and their
+    surface bot the file is in that bot's workspace, so a host Library that
+    reads the person's bot files (`GET bots/{id}/files/...`) lists it under
+    `inbox/`. On a bot shared with them, it lands in that bot's workspace
+    (its owner's), as with `send_prompt`.
+  - Only into a bot the person reaches (`send_prompt`'s list, or their own
+    surface bot): any other is `404 not_found`, and nothing is written. A
+    send the message route then refuses (a conversation that is not
+    theirs, for one) removes what it staged.
+  - Deleted with its conversation (`DELETE threads/{id}` and the app's
+    delete) and with the person when they are erased; deleting the bot
+    deletes its workspace.
+  - A retry with the same `sendId` in the same conversation reuses the
+    first line and stages nothing again (no second copy).
+  - Errors (send_prompt's own): `400 bad_request` (`files` not a list or
+    more than 8, an entry that is not a `path`, a path with a leading `/`
+    or `..`, a file without `content_base64`), `413 file_too_large` (one file
+    over 25 MiB), `413 too_large` (the body over 64 MiB), `404 not_found`
+    (a bot the person does not reach).
 
 ```json
 {

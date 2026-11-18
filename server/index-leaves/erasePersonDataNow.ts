@@ -33,8 +33,11 @@ async function erasePersonDataNow(principalId: string): Promise<{ bots: number; 
       // the stored files its messages point at, read before they go
       const files = host.confidentialThreadAttachments(bot.id, task.threadId);
       const engineKeys = confidential ? host.threadEngineKeys(bot.id, task.threadId) : [];
+      // the files sent with its lines (send_prompt, the member API), in the bot's inbox
+      const staged = host.stagedFilesOfThread(bot.id, task.threadId);
       if (!host.store.deleteTask(bot.id, task.threadId)) continue;
       threads++;
+      host.removeBotStagedFiles(bot.id, staged);
       if (confidential) {
         host.wipeConfidentialThread(bot.id, task.threadId, files, []);
         confidentialEngines.push({ threadId: task.threadId, keys: engineKeys });

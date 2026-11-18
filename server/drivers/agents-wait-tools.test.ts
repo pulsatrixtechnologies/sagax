@@ -50,6 +50,7 @@ describe("wait tools", () => {
     for (const prefix of ["url_*", "file_*", "process_*", "bot_idle"]) expect(properties.kind!.description).toContain(prefix);
     expect(properties.follow_up!.description).toMatch(/^Only if the person asked for something to be done then.*You carry it out here\.$/);
     expect(properties.label!.description).toBe('A noun phrase in the person\'s words, e.g. "the build".');
+    expect(properties.at!.description).toBe("time_reached only: RFC3339 with offset, at least a minute ahead. No far limit.");
     expect(list!.description).toMatch(/^Your waits in this chat that have not ended/);
     // The advertised bytes ride every turn that lists it: the catalog wire test budgets them, this keeps them small.
     const [advertised] = availableTools(catalogProfileFromEnv({ SAGAX_BOT_ID: "scout" })).filter((tool) => tool.name === "wait_until");

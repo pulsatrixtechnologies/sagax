@@ -44,11 +44,15 @@ export type WaitCondition =
   | { kind: "bot_idle"; botId: string; botName: string; sawBusy: boolean }
   | { kind: "time_reached"; at: number };
 export interface WaitNotice { status: "fired" | "expired" | "stopped"; text: string }
+/** How far a due check-back got. Saved before the next step, so a restart finishes it once. */
+export type CheckBackHanded = "due" | "line";
 export interface WaitRecord {
   id: string; botId: string; threadId: string; label: string; condition: WaitCondition; followUp?: string;
   createdAt: number; expiresAt: number; nextCheckAt: number; errors: number; cardMessageId?: string;
-  /** Decided and saved first; posted once its chat is free. */
+  /** Decided and saved first; posted once its chat is free. A check-back is posted even while its chat is busy. */
   ending?: WaitNotice;
+  /** Set only for a due time_reached: "due" once it is time, "line" once the chat line is posted. */
+  handed?: CheckBackHanded;
 }
 export interface NewWait { botId: string; threadId: string; label: string; condition: NewWaitCondition; followUp?: string; hours?: number }
 export type CreateWaitResult =
@@ -92,6 +96,7 @@ const recordSchema = z.object({
   errors: z.number(),
   cardMessageId: z.string().optional(),
   ending: z.object({ status: z.enum(["fired", "expired", "stopped"]), text: z.string() }).optional(),
+  handed: z.enum(["due", "line"]).optional(),
 });
 const fileSchema = z.object({ version: z.literal(1), waits: z.array(z.unknown()) });
 
@@ -206,7 +211,7 @@ export class WaitManager {
       condition,
       ...(input.followUp ? { followUp: input.followUp } : {}),
       createdAt: now,
-      // A time wait stays open past its time (a busy chat posts it later), whatever `hours` says.
+      // A check-back is kept until it is told (#4528). `hours` does not drop it, and neither does a busy chat.
       expiresAt: condition.kind === "time_reached"
         ? Math.max(condition.at + WAIT_TIME.graceMs, now + (input.hours ?? WAIT_HOURS.default) * 3_600_000)
         : now + (input.hours ?? WAIT_HOURS.default) * 3_600_000,
@@ -334,7 +339,7 @@ export class WaitManager {
         this.save();
       }
       const now = this.now();
-      const due = this.waits.filter((w) => !w.ending && now >= w.nextCheckAt);
+      const due = this.waits.filter((w) => !w.ending && (now >= w.nextCheckAt || (w.condition.kind === "time_reached" && now >= w.condition.at)));
       const verdicts = new Map<WaitRecord, Verdict>();
       let processes: Promise<ProcessEntry[]> | undefined;
       const readProcesses = () => (processes ??= this.probes.processes());
@@ -361,15 +366,18 @@ export class WaitManager {
         const verdict = verdicts.get(wait);
         const expired = now >= wait.expiresAt;
         if (!verdict) {
-          if (expired && now < wait.nextCheckAt) {
+          // A check-back is never dropped for being late. It fires on the tick that sees its time.
+          if (expired && now < wait.nextCheckAt && wait.condition.kind !== "time_reached") {
             wait.ending = this.expiredNotice(wait);
             decided = true;
           }
           continue;
         }
-        if (verdict.met) wait.ending = { status: "fired", text: `${wait.label}: done. ${firedDetail(wait.condition)}` };
-        else if (verdict.gone && wait.condition.kind === "bot_idle") wait.ending = { status: "stopped", text: `Stopped waiting for ${wait.label}: ${wait.condition.botName} no longer exists.` };
-        else if (expired) wait.ending = this.expiredNotice(wait);
+        if (verdict.met) {
+          wait.ending = { status: "fired", text: `${wait.label}: done. ${firedDetail(wait.condition)}` };
+          if (wait.condition.kind === "time_reached") wait.handed = "due";
+        } else if (verdict.gone && wait.condition.kind === "bot_idle") wait.ending = { status: "stopped", text: `Stopped waiting for ${wait.label}: ${wait.condition.botName} no longer exists.` };
+        else if (expired && wait.condition.kind !== "time_reached") wait.ending = this.expiredNotice(wait);
         else {
           wait.errors = verdict.page && !verdict.page.ok ? wait.errors + 1 : 0;
           wait.nextCheckAt = now + interval(wait.condition.kind, wait.errors);
@@ -382,6 +390,10 @@ export class WaitManager {
 
       for (const wait of this.waits.slice()) {
         if (!wait.ending) continue;
+        if (wait.condition.kind === "time_reached" && wait.ending.status === "fired") {
+          this.deliverCheckBack(wait);
+          continue;
+        }
         let posted = false;
         try { posted = this.options.post(wait, wait.ending); } catch (error) { console.error(`wait ${wait.id}: could not post`, error); }
         if (!posted) continue;
@@ -393,6 +405,25 @@ export class WaitManager {
     } finally {
       this.ticking = false;
     }
+  }
+
+  /** A due check-back. The decision is already on disk. The line, then the follow-up, each once across a restart. */
+  private deliverCheckBack(wait: WaitRecord): void {
+    const notice = wait.ending;
+    if (!notice || notice.status !== "fired") return;
+    if (wait.handed !== "line") {
+      let posted = false;
+      try { posted = this.options.post(wait, notice); } catch (error) { console.error(`wait ${wait.id}: could not post`, error); }
+      if (!posted) return;
+      wait.handed = "line";
+      try { this.save(); } catch (error) { console.error(`wait ${wait.id}: could not store the posted line`, error); return; }
+    }
+    if (wait.followUp) {
+      try { this.options.followUp(wait as WaitRecord & { followUp: string }); }
+      catch (error) { console.error(`wait ${wait.id}: could not start the follow-up`, error); return; }
+    }
+    this.commit(() => { this.waits = this.waits.filter((w) => w !== wait); });
+    if (wait.cardMessageId) this.safely(() => this.options.settleCard(wait, "fired"));
   }
 
   private expiredNotice(wait: WaitRecord): WaitNotice {

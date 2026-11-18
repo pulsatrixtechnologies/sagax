@@ -19,7 +19,7 @@ export const WAIT_TOOL_DEFINITIONS = [
     // Short on purpose: it rides every turn. Its result says when the condition already holds, when this computer cannot
     // check files or programs, and when a sleeping home can delay the message.
     description:
-      `Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised). No AI runs while you wait, only plain checks. Ends after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
+      `Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised, as far ahead as you need). No AI runs while you wait, only plain checks. Other kinds end after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -35,7 +35,7 @@ export const WAIT_TOOL_DEFINITIONS = [
         path: { type: "string" },
         process: { type: "string" },
         bot: { type: "string" },
-        at: { type: "string", description: "time_reached only: RFC3339 with offset, 1 minute to 168 hours ahead." },
+        at: { type: "string", description: "time_reached only: RFC3339 with offset, at least a minute ahead. No far limit." },
         follow_up: {
           type: "string",
           maxLength: 2000,

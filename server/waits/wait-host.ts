@@ -75,7 +75,8 @@ export function createWaitHost(deps: WaitHostDeps): Pick<WaitManagerOptions, "so
     post(wait, notice) {
       const bot = store.bot(wait.botId);
       if (!bot) return true;
-      if (deps.threadBusy(wait.botId, wait.threadId)) return false;
+      // #4528: a promised check-back is told when it is due. A busy chat does not hold it, and does not drop it.
+      if (wait.condition.kind !== "time_reached" && deps.threadBusy(wait.botId, wait.threadId)) return false;
       const posted = store.messagesFor(wait.threadId).some((m) => m.wait?.id === wait.id && m.wait.status === notice.status);
       if (posted) return true;
       store.appendMessage(wait.threadId, { role: "bot", kind: "text", text: notice.text, wait: { id: wait.id, status: notice.status } });

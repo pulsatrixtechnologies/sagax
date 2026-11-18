@@ -83,7 +83,7 @@ const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
   }) },
   { message: row(19, {
     ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, liveAnsweredAt: liveStartedAt + 8_000, calleeName: "Marie Tremblay",
-    liveEvents: [{ kind: "transfer", detail: "+1 514 555 0199", at: liveStartedAt + 40_000 }],
+    liveEvents: [{ kind: "transfer", detail: "+1 514 ••• •• 99", at: liveStartedAt + 40_000 }],
   }) },
   // live call card lot 4: Take over (the person's own number, masked), its
   // transfer ringing, the person on the call, nobody answered, and the end

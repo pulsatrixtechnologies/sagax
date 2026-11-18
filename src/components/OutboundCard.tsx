@@ -613,12 +613,16 @@ function LiveConversationBody({ card, stream, phase, other }: {
             <p key={`e-${item.index}-${item.at}`} data-outbound-live-event={item.event.kind} className="text-[12px] italic text-ink-tertiary">
               {eventLine(item.event)}
             </p>
+          ) : item.line.speaker === "system" ? (
+            <p key={`l-${item.index}-${item.at}`} data-outbound-live-system className="text-[12px] italic text-ink-tertiary">
+              {item.line.text}
+            </p>
           ) : (
             <TranscriptLine
               key={`l-${item.index}-${item.at}`}
               strong
-              tone={item.line.speaker === "bot" ? "bot" : item.line.speaker === "system" ? "system" : "other"}
-              speaker={`${item.line.speaker === "bot" ? card.botName : item.line.speaker === "system" ? t("outbound.call.liveTranscript") : other}:`}
+              tone={item.line.speaker === "bot" ? "bot" : "other"}
+              speaker={`${item.line.speaker === "bot" ? card.botName : other}:`}
             >
               {item.line.text}
             </TranscriptLine>

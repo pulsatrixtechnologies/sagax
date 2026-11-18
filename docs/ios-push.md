@@ -175,6 +175,26 @@ the Primary Bot (the existing voice mode, `CarCalls.call`). Apple offers this
 only on an iPhone in Japan (the Apple Account's region and the physical
 location); on every other phone the system never shows it and nothing changes.
 
+## App Attest
+
+The phone attests a Secure Enclave key (DeviceCheck `DCAppAttestService`) with
+the Sagax server it is signed in to, then proves that key on each sign-in,
+each recovered token and every six hours of a long session. The server keeps
+the key per person and device (`<data>/app-attest/<principal>.json`, mode 0600)
+and verifies Apple's attestation (chain to the Apple App Attestation Root CA,
+nonce, app id `<team>.<bundle>` from `SAGAX_APNS_TEAM_ID` and
+`SAGAX_APNS_BUNDLE_ID`, key id, counter 0) and each assertion (signature,
+counter strictly increasing).
+
+- `POST /api/attest/challenge`, `/register`, `/assert`: `server/routes/app-attest.ts`,
+  `server/attest/`; the phone side is `ios/Sources/CompanionCore/AppAttest.swift`
+  and `ios/App/AppAttestRegistrar.swift`.
+- Log only, never a lock: a simulator, an old device, an older server or a check
+  that fails leaves the app working; the server logs one line (key id masked).
+- The App ID needs the App Attest capability (entitlement
+  `com.apple.developer.devicecheck.appattest-environment`). The app also carries
+  Increased Memory Limit and Extended Virtual Addressing.
+
 ## Live Activities (ActivityKit push)
 
 A bot's Dynamic Island / lock-screen Live Activity is started on the phone

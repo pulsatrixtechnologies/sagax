@@ -173,6 +173,15 @@ targets:
         # profile.
         com.apple.developer.carplay-voice-based-conversation: true
         com.apple.developer.carplay-driving-task: true
+        # App Attest (DeviceCheck): the app attests its key and the server
+        # verifies assertions on sign-in (AppAttestRegistrar.swift). `development`
+        # here; a TestFlight or App Store export runs on `production`. The
+        # App ID needs the App Attest capability; automatic signing adds it.
+        com.apple.developer.devicecheck.appattest-environment: development
+        # Heavy local work (the on-device browser, big attachments, models)
+        # may use more memory and address space before iOS ends the app.
+        com.apple.developer.kernel.increased-memory-limit: true
+        com.apple.developer.kernel.extended-virtual-addressing: true
         com.apple.security.application-groups:
           - group.ca.pulsatrix.sagax
         keychain-access-groups:

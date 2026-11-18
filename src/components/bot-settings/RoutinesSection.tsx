@@ -13,6 +13,7 @@ import { canManageRoutineFolders, RoutineFolderList, type RoutineFolderControl }
 import { RoutinePanelPage } from "./RoutinePanelPage";
 import { PanelPageHeader as RoutineDetailHeader, PanelPageLayer } from "./PanelPage";
 import { useSettingsSurface } from "../SettingsPrimitives";
+import { useRepeatsModalTitle } from "../bot-profile/modal-title";
 
 export { RoutineDetailHeader };
 
@@ -38,6 +39,8 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   // The bot's profile page (#3400): the shared group, a grey label with its
   // actions at the right and one card of rows, as every card of the page.
   const plain = useSettingsSurface() === "plain";
+  // the modal's own title says Routines: the label is kept for screen readers only
+  const repeatsTitle = useRepeatsModalTitle(t("computer.tab.routines"));
   const [editing, setEditing] = useState<Routine | "new" | { copyOf: Routine } | null>(null);
   // A new or copied routine, once created, opens its own page.
   const opened = (routine: Routine) => { setEditing(null); setNewFolder(undefined); setDetailId(routine.id); };
@@ -119,7 +122,8 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     return <section data-routines-group="" aria-label={t("computer.tab.routines")} className="relative flex min-w-0 flex-col gap-2">
       {/* no routine: no label and no + (the owner, 2026-10-27), the quiet line as the card's row */}
       {!empty && <div className="flex min-h-6 items-center gap-1.5 px-1">
-        <h3 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("computer.tab.routines")}</h3>
+        <h3 className={repeatsTitle ? "sr-only" : "min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary"}>{t("computer.tab.routines")}</h3>
+        {repeatsTitle && <span className="flex-1" />}
         {canManageRoutineFolders(routines, foldersServed) && <button type="button" data-routines-section-more="" aria-haspopup="menu" aria-label={sectionMenuLabel} title={sectionMenuLabel}
           onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); folderControl.current?.openSectionMenu({ x: rect.left, y: rect.bottom + 4 }, event.currentTarget); }}
           className="ui-icon-button"><MoreHorizontal size={15} /></button>}

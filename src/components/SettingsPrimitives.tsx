@@ -91,6 +91,7 @@ export function cardCount(key: CountKey, count: number): string {
   return one ? t(`settings.card.${key}One`, { count }) : t(`settings.card.${key}`, { count });
 }
 
+import { useRepeatsModalTitle } from "./bot-profile/modal-title";
 import { useCardOpen, ANONYMOUS_CARD } from "./settings-card-state";
 export { loadCardOpen, saveCardOpen, requestSettingsCard, takeRequestedSettingsCard, peekRequestedSettingsCard, resetSettingsCards, useSettingsCardOpen } from "./settings-card-state";
 
@@ -311,18 +312,21 @@ export function SettingsGroup({
   const folded = Boolean(advanced && fold);
   const register = fold?.register;
   const foldTitle = title ?? groupId;
+  // a label that repeats the title of the bot page modal around it is kept for screen readers only
+  const repeated = useRepeatsModalTitle(title);
   useLayoutEffect(() => (folded && register ? register(foldTitle) : undefined), [folded, register, foldTitle]);
   const card = surface === "plain" ? `${PLAIN_CARD} empty:hidden` : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden";
   const section = (
     <section aria-labelledby={title ? headingId : undefined} data-settings-group={groupId} data-settings-advanced={advanced ? "" : undefined} className="flex flex-col gap-2 has-[>div:empty]:hidden">
-      {(title || accessory) && (
+      {((title && !repeated) || accessory) && (
         // the bot page (plain): the grey label on its left edge, 12px in, with the name and the tabs (#4420);
         // over a card, 14px in like the reference's "Account" (#4457, the owner 2026-11-17)
         <div className={cn("flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1", surface === "plain" ? "px-3" : "px-3.5")}>
-          {title && <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>}
+          {title && <h3 id={headingId} className={cn("shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary", repeated && "sr-only")}>{title}</h3>}
           {accessory}
         </div>
       )}
+      {title && repeated && !accessory && <h3 id={headingId} className="sr-only">{title}</h3>}
       <div data-settings-surface={plain ? undefined : ""} className={plain ? "flex flex-col gap-2 empty:hidden" : card}>{children}</div>
     </section>
   );

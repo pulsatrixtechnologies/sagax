@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { HelpTip, useSettingsSurface } from "../SettingsPrimitives";
+import { useRepeatsModalTitle } from "../bot-profile/modal-title";
 
 /** The card a section's controls sit in (a SettingsGroup's card, with
  * room for free-form controls rather than rows). */
@@ -37,14 +38,16 @@ export function PaneSection({
   className?: string;
 } & Record<`data-${string}`, string | undefined>) {
   const label = typeof title === "string" ? title : "";
+  const repeated = useRepeatsModalTitle(title);
   const card = useSettingsSurface() === "plain" ? PLAIN_PANE_CARD : PANE_CARD;
   return (
     <section {...rest} data-pane-section="" className={cn("flex min-w-0 flex-col gap-2", className)}>
-      {(title || action) && (
+      {((title && !repeated) || help || action) && (
         <div className="flex min-h-6 items-center gap-1.5 px-1">
-          {title && <h3 className="flex min-w-0 items-center gap-1.5 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>}
-          {help && <HelpTip label={t("settings.moreAbout", { title: label })}>{help}</HelpTip>}
-          {action && <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
+          {title && <h3 className={cn("flex min-w-0 items-center gap-1.5 text-[13px] font-normal leading-[18px] text-ink-secondary", repeated && "sr-only")}>{title}</h3>}
+          {/* with no visible title, the help rides with the action on the right */}
+          {help && <span className={cn("flex", repeated && "ml-auto")}><HelpTip label={t("settings.moreAbout", { title: label })}>{help}</HelpTip></span>}
+          {action && <div className={cn("flex shrink-0 items-center gap-2", !repeated || !help ? "ml-auto" : "")}>{action}</div>}
         </div>
       )}
       {children && (plain ? <div className="flex min-w-0 flex-col gap-2">{children}</div> : <div className={card} data-settings-surface="">{children}</div>)}

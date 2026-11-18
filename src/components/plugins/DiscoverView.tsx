@@ -68,6 +68,7 @@ export interface DiscoverViewProps {
   /** where Recommended for you picks from, when it is wider than `items`
    * (Me: the catalog's apps too); absent: `items` */
   recommendFrom?: readonly PluginItem[];
+  connectorProducts?: { title: string; rows: ReadonlyArray<{ key: string; node: ReactNode }> };
   /** a bundle the console offers that the person has not turned on (Plugins): a card, not only a slide */
   bundleCards?: ReadonlyArray<{ item: PluginItem; from: string; title: string; onOpen: () => void; action: ReactNode }>;
   /** one slide per vendor the organization console offers the person (Connectors) */
@@ -76,7 +77,7 @@ export interface DiscoverViewProps {
   sort?: ConnectAppsSort;
 }
 
-export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [], bundleCards = [] }: DiscoverViewProps) {
+export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [], connectorProducts, bundleCards = [] }: DiscoverViewProps) {
   // #4453: the kind tab says what is listed (the type filter's apps, MCP
   // servers or skills); the engine accounts and the custom connector are
   // connectors
@@ -117,6 +118,7 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
   ];
   // a bundle not turned on: Plugins, on All (a category or a search narrows the list to catalog rows)
   const bundles = (kind === undefined || kind === "plugins") && !single && !listsPicks ? bundleCards : [];
+  const productShelf = kind === "connectors" && !single && connectorProducts?.rows.length ? connectorProducts : undefined;
   const featuredKeys = new Set(featuredPicks.map((row) => row.item.key));
   const shelf = recommended.filter((row) => !featuredKeys.has(row.item.key));
   const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
@@ -135,6 +137,14 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
         </div>
       )}
       {slides.length > 0 && <FeaturedCarousel slides={slides} />}
+      {productShelf && (
+        <section data-plugins-section="connector-products" className="mt-[30px] first:mt-4">
+          <SectionHead title={productShelf.title} count={productShelf.rows.length} />
+          <ul className={CARD_GRID}>
+            {productShelf.rows.map((row) => <li key={row.key}>{row.node}</li>)}
+          </ul>
+        </section>
+      )}
       {bundles.length > 0 && (
         <section data-plugins-section="bundles" className="mt-[30px] first:mt-4">
           <SectionHead title={bundles[0]!.title} count={bundles.length} />
@@ -186,7 +196,7 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
         <div className="flex items-center justify-center gap-2 py-24 text-[12px] text-ink-secondary">
           <Loader2 size={14} className="animate-spin" /> {t("connectors.loadingCatalog")}
         </div>
-      ) : sections.every((section) => section.items.length === 0) ? (recommended.length > 0 || accountSections.some((section) => section.rows.length > 0) ? null : (
+      ) : sections.every((section) => section.items.length === 0) ? (productShelf || recommended.length > 0 || accountSections.some((section) => section.rows.length > 0) ? null : (
         <div className="mt-6 rounded-xl bg-card px-4 py-3 text-[12px] text-ink-secondary" data-plugins-empty>
           {t("connectApps.discover.empty")}
         </div>

@@ -172,7 +172,7 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
-    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} plugins={vendorPlugins?.(vendor.key)} />;
+    if (vendor) return <VendorPage initialTab={page.connectors ? "connectors" : "overview"} vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} plugins={vendorPlugins?.(vendor.key)} />;
   }
   if (page.page === "account") {
     const row = accountRows?.find((entry) => entry.key === page.key);

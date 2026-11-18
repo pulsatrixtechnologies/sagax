@@ -461,6 +461,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     );
   };
 
+  const consoleTitle = perspicaxOrg && t("connectApps.console.title", { org: perspicaxOrg.org.name });
+  const consoleRows = (scope === "me" || scope === "bot") && consoleTitle && kind !== "skills"
+    ? productRows(products.products, productCtx, {
+      mode: kind, sortByName: sort === "name",
+      onOpenVendor: (key) => push({ page: "vendor", key, connectors: kind === "connectors" }),
+      ...(kind === "plugins" ? { plugins: vendorPlugins, skills: (key: string) => groupSkills(key).length } : {}),
+    }, kind === "plugins" && sort === "update" ? (key) => Boolean(vendorPlugins(key)?.update || vendorPlugins(key)?.actions.updateWaiting) : undefined)
+    : [];
   // one featured slide per vendor the console files products under: its name, logo and
   // line are the console's data (never written here)
   const vendorSlides = perspicaxOrg !== null ? groupByVendor(products.products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
@@ -590,11 +598,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               entries={entries}
               grouped={groupedKeys}
               personal={personalHere ? personal.rows : undefined}
-              // #4453: the console's section: one row per vendor, its products under it
-              products={(scope === "me" || scope === "bot") && perspicaxOrg !== null
-                ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx, kind === "skills" ? undefined : { mode: kind === "plugins" ? "plugins" : "connectors", onOpenVendor: (key) => push({ page: "vendor", key }), plugins: vendorPlugins, skills: (key) => groupSkills(key).length }, sort === "update" ? (key) => Boolean(vendorPlugins(key)?.update || vendorPlugins(key)?.actions.updateWaiting) : undefined)
-                : undefined}
-              consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
+              products={consoleRows}
+              consoleTitle={consoleTitle ?? undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}
               consoleCount={scope === "me" ? orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length : 0}
               consoleExtras={scope === "me" ? (after) => <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} onOpen={(item) => push({ page: "orgItem", id: item.id })} after={after} /> : undefined}
@@ -669,6 +674,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
             <DiscoverView
               sort={sort}
               vendorSlides={vendorSlides}
+              connectorProducts={kind === "connectors" && consoleTitle ? { title: consoleTitle, rows: consoleRows } : undefined}
               bundleCards={bundleCards}
               kind={kind}
               items={discoverRows}

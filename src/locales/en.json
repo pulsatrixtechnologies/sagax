@@ -15234,8 +15234,6 @@
   "connectApps.updates.reason.unknown": "It could not be updated.",
   "connectApps.updates.oldStays": "The old version stays.",
   "connectApps.updates.retry": "Retry",
-  "connectApps.vendor.in": "in {name}",
-  "connectApps.vendor.inAria": "Part of {name}: open it",
   "connectApps.vendor.line": "{connectors} · {on}",
   "connectApps.vendor.lineSkills": "{connectors} · {skills} · {on}",
   "connectApps.vendor.pluginPage": "{name} plugin page",

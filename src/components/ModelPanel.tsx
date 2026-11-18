@@ -151,7 +151,7 @@ export function ModelPanel(props: ModelPanelProps) {
     const description = rowDescription(row);
     return (
       <div key={`${view}:${row.key}`} className="group flex items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
-        <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
+        <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
           disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title}
           tabIndex={row.current || (!viewRows.some((candidate) => candidate.current) && row === shownRows[0]) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}

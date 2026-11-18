@@ -95,9 +95,12 @@ writeFileSync(join(data, "config.json"), JSON.stringify({
       driver: "claudeAgent", access: "api",
       environment: {
         FAKE_CLAUDE_TOOL_CALLS: "[]",
+        FAKE_CLAUDE_MCP_TEXT_LIMIT: "5000",
         FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
+          { server: "agents", tool: "select_computer", arguments: {}, when: "inspect fixture computer" },
+          { server: "agents", tool: "list_terminal_resources", arguments: {}, when: "inspect fixture computer" },
           { server: "sagax-computer", tool: "computer_select", arguments: {}, when: "inspect fixture computer" },
-          { server: "sagax-computer", tool: "computer_select", arguments: { target: "this_computer", reason: "Read the desktop fixture" }, when: "inspect fixture computer" },
+          { server: "agents", tool: "select_computer", arguments: { surface: "local" }, when: "inspect fixture computer" },
           { server: "sagax-desktop", tool: "read_file", arguments: { path: "~/bridge.txt" }, when: "inspect fixture computer" },
           { server: "sagax-desktop", tool: "read_file", arguments: { path: "$ATTACHED_FILE" }, when: "read the attachment" },
           { server: "sagax-environment", tool: "read_file", arguments: { path: "$ATTACHED_FILE" }, when: "read the attachment" },

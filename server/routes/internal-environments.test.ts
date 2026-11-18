@@ -3,7 +3,7 @@
 // personal-mcp, desktop/mcp, workplace/mcp, computer/mcp, messages/mcp,
 // phone/claim, shared-computers, computer-control.
 import type { ServerResponse } from "node:http";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { InternalRouteContext } from "./internal-route.ts";
 import {
   createInternalEnvironmentsRoutes,
@@ -357,6 +357,21 @@ describe("createInternalEnvironmentsRoutes", () => {
     expect(sent[0]?.status).toBe(200);
     const body = sent[0]?.body as { result: { tools: Array<{ name: string }> } };
     expect(body.result.tools[0]?.name).toBeTruthy();
+  });
+
+  it("select_computer discovers the signed-in speaker's desktop through the Auto turn", async () => {
+    const connected = vi.fn((person: string) => person === "speaker");
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      isPerspicax: () => true,
+      turnWorkplace: () => ({ generation: "g1", decision: { principal: "speaker" }, auto: { auto: true, selected: "cloud", desktopMounted: true, sandboxConfigured: true, routine: false, routinesAllowed: false } }),
+      desktopConnected: connected,
+      selectableComputers: async () => { throw new Error("The shared host must not be probed"); },
+    }));
+    const list = () => call(route, { path: "/api/internal/computer/select", method: "GET" });
+    expect((await list()).sent[0]?.body).toMatchObject({ current: "cloud", options: expect.arrayContaining([{ surface: "local", target: "this_computer", label: "this computer", ready: true, available: true, canCreate: false, canStart: false }]) });
+    expect(connected).toHaveBeenCalledWith("speaker");
+    connected.mockReturnValue(false);
+    expect((await list()).sent[0]?.body).toMatchObject({ options: expect.arrayContaining([expect.objectContaining({ surface: "local", available: false })]) });
   });
 
   it("workplace/mcp counts each move and refuses a third one in the same turn (#2736)", async () => {

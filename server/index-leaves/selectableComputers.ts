@@ -48,6 +48,8 @@ async function selectableComputers(bot: BotRecord) {
           reason = (cloudPlaceRefusal(host.cloudEngine(instance, bot.modelSelection.model), "works-on", bot.name)
             ?? host.boatNotConfigured(bot, "works-on")).message;
         }
+      } else if (host.IDENTITY.kind === "perspicax" && (surface === "vm" || surface === "local")) {
+        reason = "Your computer is available through your signed-in desktop app during your bot’s turn.";
       } else if (surface === "vm" && caps?.computerMcp) {
         const target = host.localVmTargetForStatus(bot.id);
         const status = await containerComputerStatus(undefined, undefined, target);

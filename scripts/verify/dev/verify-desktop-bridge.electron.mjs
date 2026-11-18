@@ -95,6 +95,12 @@ app.whenReady().then(async () => {
 
     await turn("inspect fixture computer");
     const inspection = JSON.parse(readFileSync(process.env.VERIFY_MCP_DUMP, "utf8")).calls;
+    const choice = inspection.find((item) => item.server === "agents" && item.tool === "select_computer");
+    const local = choice?.ok && JSON.parse(choice.text).options.find((item) => item.surface === "local");
+    check("select_computer listed the person's connected computer", local?.available && local?.ready);
+    check("select_computer selected the connected computer", inspection.some((item) => item.tool === "select_computer" && item.ok && item.text.includes('"status":"ready"')));
+    const terminals = inspection.find((item) => item.tool === "list_terminal_resources");
+    check("terminal discovery sees the registered desktop", terminals?.ok && terminals.text.includes("Office desktop"));
     check("Auto listed the computer", inspection.some((item) => item.tool === "computer_select" && item.ok && item.text.includes("this_computer")));
     check("Auto selected the computer and read its fixture", inspection.some((item) => item.tool === "read_file" && item.listed && item.ok && item.text.includes("desktop fixture ready")));
 

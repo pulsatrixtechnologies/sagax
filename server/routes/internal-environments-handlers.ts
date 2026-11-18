@@ -3,12 +3,14 @@
 // computer-control bot-lookup exception. Each route owns its match.
 import {
   autoComputerReason,
+  autoComputerUnavailable,
   autoComputerToolRefusal,
   COMPUTER_SELECT_TOOL,
   MAX_AUTO_COMPUTER_SWITCHES,
   selectAutoComputer,
   tooManyMovesText,
   type AutoComputerState,
+  type AutoComputerTarget,
 } from "../computer/auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
 import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
@@ -389,6 +391,30 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
   }
   if (method === "POST" && requested !== "auto" && !parseSurface(requested)) {
     return json(res, 400, { error: "surface must be auto, cloud, vm, local, or browser" });
+  }
+  const workplace = deps.isPerspicax() ? deps.turnWorkplace(capability.threadId) : undefined;
+  if (bot.computer !== "off" && workplace?.auto?.auto && workplace.generation === capability.generation) {
+    const state = workplace.auto;
+    const principal = workplace.decision.principal;
+    const connected = Boolean(principal && deps.desktopConnected(principal));
+    const surfaces: [Surface, AutoComputerTarget][] = [["cloud", "cloud"], ["vm", "local_vm"], ["local", "this_computer"], ["browser", "browser"]];
+    const current = surfaces.find(([, target]) => target === state.selected)?.[0] ?? "off";
+    const options = surfaces.map(([surface, target]) => {
+      const reason = autoComputerUnavailable(state, target, connected);
+      // The desktop can manage its VM even when that VM is stopped.
+      return { surface, target, label: surfaceLabel(surface), available: !reason, ready: !reason && target !== "local_vm", canStart: false, canCreate: false, ...(reason ? { reason } : {}) };
+    });
+    if (method === "GET") {
+      const hosts = await deps.selectableHosts?.(capability.botId, capability.threadId).catch(() => []);
+      deps.requireActive(capability);
+      return json(res, 200, { current, canSelect, options, ...(hosts?.length ? { hosts } : {}) });
+    }
+    const { option } = pickComputer(options, requested as Surface | "auto", current, false);
+    if (!option?.available) return json(res, 409, { error: option?.reason ?? "No computer is available.", options });
+    const answer = selectTurnComputer(deps, capability, { target: option.target });
+    return answer.ok
+      ? json(res, 200, { status: "ready", surface: option.surface, message: answer.text })
+      : json(res, 409, { error: answer.text, options });
   }
   const options = await deps.selectableComputers(bot);
   const current = source ? source.mounted ?? "off" : await deps.computerPreviewSurface(bot, bot.threadId);
@@ -934,10 +960,15 @@ async function handleWorkplaceMcp(deps: InternalEnvironmentsDeps, ctx: InternalR
   const args = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
     ? call.arguments as Record<string, unknown>
     : {};
+  const answer = selectTurnComputer(deps, capability, args);
+  return json(res, 200, { result: { content: [{ type: "text", text: answer.text }], ...(answer.ok ? {} : { isError: true }) } });
+}
+
+function selectTurnComputer(deps: InternalEnvironmentsDeps, capability: InternalCapabilityView, args: { target?: unknown; reason?: unknown }) {
   deps.requireActive(capability);
   const workplace = deps.turnWorkplace(capability.threadId);
   if (!workplace?.auto || workplace.generation !== capability.generation) {
-    return json(res, 200, { result: { content: [{ type: "text", text: "This turn has no computer to choose." }], isError: true } });
+    return { ok: false, text: "This turn has no computer to choose." };
   }
   const person = workplace.decision.principal;
   const answer = selectAutoComputer(
@@ -965,7 +996,7 @@ async function handleWorkplaceMcp(deps: InternalEnvironmentsDeps, ctx: InternalR
       actor: person ? { kind: "person", principalId: person, via: "sagax" } : { kind: "worker" },
     });
   }
-  return json(res, 200, { result: { content: [{ type: "text", text: answer.text }], ...(answer.ok ? {} : { isError: true }) } });
+  return answer;
 }
 
 export function routeComputerMcp(deps: InternalEnvironmentsDeps, ctx: InternalRouteContext): EnvironmentAnswer {

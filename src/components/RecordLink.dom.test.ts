@@ -350,7 +350,7 @@ describe("the card", () => {
     expect(card()!.textContent).toContain("Managed services");
   });
 
-  it("reads nothing when the pointer only crosses a ref, and once when it rests on it", async () => {
+  it("never replaces the card when the pointer rests on a nested ref: only a click does (once)", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string) => {
       const url = String(input);
       if (url.includes("/api/me/records/")) reads.push(url);
@@ -363,15 +363,18 @@ describe("the card", () => {
     expect(card()!.textContent).toContain("Facture");
     const chip = [...card()!.querySelectorAll<HTMLElement>("[data-record-ref-link]")].find((node) => node.textContent === "Managed services")!;
     fire(chip, "pointerover");
-    await advance(200);
+    await advance(2_000);
     fire(chip, "pointerout");
     await advance(500);
+    // resting on it for two seconds changed nothing and read nothing
     expect(reads).toHaveLength(1);
-    fire(chip, "pointerover");
-    await advance(310);
+    expect(card()!.querySelector("[aria-label=Retour]")).toBeNull();
+    expect(card()!.textContent).toContain("Facture");
+    await act(async () => { chip.click(); });
     await advance(300);
     expect(reads).toHaveLength(2);
     expect(reads[1]).toContain("/agreement/412");
+    expect(card()!.querySelector("[aria-label=Retour]")).not.toBeNull();
   });
 
   it("leaves a ref to a product the person does not hold as plain words", async () => {

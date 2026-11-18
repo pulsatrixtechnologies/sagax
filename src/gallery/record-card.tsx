@@ -3,7 +3,7 @@
  * records: nothing here names a real product, company or person.
  * ?lang=fr|en &skin=<id> &scene=<name>
  *   overview   every kind, then every state (default)
- *   ticket | company | project | guid | pinned   one card
+ *   ticket | company | contact | department | email | project | guid | pinned   one card
  *   invoice | agreement   a kind the product declares (#4572), drawn by the same renderer
  *   invoicelong | invoicenoref | agreementnoend | agreementnodecimals   their stress variants (&pinned=1 pins)
  *   busy       a chip in a busy chat (bubbles and a table above and below): the card must sit above it
@@ -18,7 +18,7 @@ import { ChatMarkdown } from "../components/ChatMarkdown";
 import { LinkPreviewCard } from "../components/LinkHoverCard";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
-import { NIMBUS_MARK, NIMBUS_PRODUCT, agreementCard, companyCard, guidCard, invoiceCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, AGREEMENT_REF, COMPANY_REF, GUID_REF, INVOICE_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
+import { NIMBUS_MARK, NIMBUS_PRODUCT, agreementCard, companyCard, contactCard, departmentCard, emailCard, guidCard, invoiceCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, AGREEMENT_REF, COMPANY_REF, CONTACT_REF, DEPARTMENT_REF, EMAIL_REF, GUID_REF, INVOICE_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
 import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { parseRecordCardAnswer, type RecordCardAnswer, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
@@ -35,8 +35,8 @@ const NOW = Date.parse("2026-11-17T14:34:00-05:00");
 
 const product = { name: "Nimbus Desk", iconUrl: NIMBUS_MARK };
 const kindNames: Record<string, string> = lang === "fr"
-  ? { ticket: "Billet", company: "Entreprise", project: "Projet", invoice: "Facture", agreement: "Entente" }
-  : { ticket: "Ticket", company: "Company", project: "Project", invoice: "Invoice", agreement: "Agreement" };
+  ? { ticket: "Billet", company: "Entreprise", project: "Projet", invoice: "Facture", agreement: "Entente", contact: "Contact", department: "Département", email: "Courriel" }
+  : { ticket: "Ticket", company: "Company", project: "Project", invoice: "Invoice", agreement: "Agreement", contact: "Contact", department: "Department", email: "Email" };
 const noop = () => {};
 
 function read(raw: RecordCardAnswer | RecordCardMiss) {
@@ -64,6 +64,9 @@ function Card({ record, label, answerOf, pinned, miss, loading }: { record: Reco
 
 const ticket = <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={ticketCard(NOW, lang)} />;
 const company = <Card record={COMPANY_REF} label="Acme Fabrication" answerOf={companyCard(NOW, lang)} />;
+const contact = <Card record={CONTACT_REF} label="Ada Lindqvist" answerOf={contactCard(NOW, lang)} />;
+const department = <Card record={DEPARTMENT_REF} label={lang === "fr" ? "Soutien technique" : "Technical support"} answerOf={departmentCard(NOW, lang)} />;
+const email = <Card record={EMAIL_REF} label={lang === "fr" ? "Courriel du 17 nov." : "Email of Nov 17"} answerOf={emailCard(NOW, lang)} />;
 const project = <Card record={PROJECT_REF} label={lang === "fr" ? "Migration du serveur" : "Server migration"} answerOf={projectCard(NOW, lang)} />;
 const guid = <Card record={GUID_REF} label={GUID_REF.id} answerOf={guidCard(NOW, lang)} />;
 const asPinned = params.get("pinned") === "1";
@@ -163,7 +166,7 @@ window.fetch = async (input, init) => {
   if (match) {
     const mode = params.get("answer");
     if (mode) return json({ state: mode, ...(mode === "busy" ? { retryAfter: 10 } : {}) });
-    const make = { ticket: ticketCard, company: companyCard, project: projectCard, invoice: invoiceCard, agreement: agreementCard }[match[1]!];
+    const make = { ticket: ticketCard, company: companyCard, project: projectCard, invoice: invoiceCard, agreement: agreementCard, contact: contactCard, department: departmentCard, email: emailCard }[match[1]!];
     return json(make ? answer(make(Date.now(), lang)) : { state: "unknown" });
   }
   return realFetch(input, init);
@@ -223,7 +226,7 @@ function Page() {
       </Frame>
     );
   }
-  const single: Record<string, ReactElement> = { ticket, company, project, invoice, agreement, guid, pinned, ...variants, ...states };
+  const single: Record<string, ReactElement> = { ticket, company, contact, department, email, project, invoice, agreement, guid, pinned, ...variants, ...states };
   if (single[scene]) return <Frame>{single[scene]}</Frame>;
   return (
     <Frame>

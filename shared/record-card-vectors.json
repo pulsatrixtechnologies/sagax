@@ -2078,6 +2078,83 @@
       }
     },
     {
+      "name": "a note's tag is kept, cut, and dropped when blank; external is its own mark",
+      "raw": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk"
+        },
+        "kind": {
+          "id": "ticket",
+          "name": "Billet"
+        },
+        "id": "481516",
+        "number": "#481516",
+        "title": "Imprimante",
+        "notes": {
+          "state": "ok",
+          "total": 2,
+          "items": [
+            {
+              "author": "Ana",
+              "at": "2026-11-16T10:00:00-05:00",
+              "internal": false,
+              "tag": "Courriel",
+              "text": "Bonjour"
+            },
+            {
+              "internal": true,
+              "tag": "Une étiquette beaucoup trop longue pour la carte",
+              "text": "Rappel"
+            },
+            {
+              "tag": "   ",
+              "text": "Sans étiquette"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "product": {
+          "id": "nimbus_desk",
+          "name": "Nimbus Desk"
+        },
+        "kind": {
+          "id": "ticket",
+          "name": "Billet"
+        },
+        "id": "481516",
+        "number": "#481516",
+        "title": "Imprimante",
+        "notes": {
+          "state": "ok",
+          "items": [
+            {
+              "author": "Ana",
+              "at": "2026-11-16T10:00:00-05:00",
+              "internal": false,
+              "tag": "Courriel",
+              "text": "Bonjour",
+              "more": false
+            },
+            {
+              "internal": true,
+              "tag": "Une étiquette beaucoup…",
+              "text": "Rappel",
+              "more": false
+            },
+            {
+              "text": "Sans étiquette",
+              "more": false
+            }
+          ],
+          "total": 2,
+          "more": false
+        },
+        "cached": false
+      }
+    },
+    {
       "name": "an open address over http is dropped",
       "raw": {
         "product": {

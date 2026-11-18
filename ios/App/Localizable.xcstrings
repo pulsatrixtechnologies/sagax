@@ -119221,6 +119221,28 @@
         }
       }
     },
+    "External": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "External"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Externe"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Externa"
+          }
+        }
+      }
+    },
     "Open in %@": {
       "localizations": {
         "en": {

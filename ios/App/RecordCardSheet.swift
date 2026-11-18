@@ -328,9 +328,12 @@ struct RecordCardSheet: View {
                     if lines.more {
                         separator
                         let others = max(1, (lines.total ?? lines.items.count + 1) - lines.items.count)
-                        (others == 1 ? Text("1 other line") : Text("\(others) other lines"))
-                            .font(Theme.Font.profileLabel).foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                        HStack(spacing: 8) {
+                            (others == 1 ? Text("1 other line") : Text("\(others) other lines"))
+                                .font(Theme.Font.profileLabel).foregroundStyle(Theme.textSecondary)
+                            seeAll
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
                     }
                 }
             }
@@ -374,8 +377,12 @@ struct RecordCardSheet: View {
                                 if let at = item.at {
                                     Text(verbatim: RecordCardFormat.relative(at, now: clock, lang: language, tz: nil)).font(Theme.Font.profileLabel).foregroundStyle(Theme.textSecondary)
                                 }
+                                if let tag = item.tag { Text(verbatim: tag).font(Theme.Font.label).foregroundStyle(Theme.textSecondary) }
                                 if item.isInternal == true {
                                     Label { Text("Internal") } icon: { Image(systemName: "lock.fill") }
+                                        .font(Theme.Font.label).foregroundStyle(Theme.textSecondary)
+                                } else if item.isInternal == false {
+                                    Label { Text("External") } icon: { Image(systemName: "globe") }
                                         .font(Theme.Font.label).foregroundStyle(Theme.textSecondary)
                                 }
                             }
@@ -385,13 +392,30 @@ struct RecordCardSheet: View {
                     }
                     if notes.more {
                         let others = max(1, (notes.total ?? notes.items.count + 1) - notes.items.count)
-                        (others == 1 ? Text("1 other note") : Text("\(others) other notes"))
-                            .font(Theme.Font.profileLabel).foregroundStyle(Theme.textSecondary)
+                        HStack(spacing: 8) {
+                            (others == 1 ? Text("1 other note") : Text("\(others) other notes"))
+                                .font(Theme.Font.profileLabel).foregroundStyle(Theme.textSecondary)
+                            seeAll
+                        }
                     }
                 }
             }
         default:
             EmptyView()
+        }
+    }
+
+    private var openAddress: URL? {
+        if case let .card(card)? = answers[shown.ref] { return card.openUrl.flatMap(URL.init(string:)) }
+        return nil
+    }
+
+    /// "See all": the record in its product (the same address as "Open in"), when the card has one.
+    @ViewBuilder private var seeAll: some View {
+        if let url = openAddress {
+            Button { UIApplication.shared.open(url) } label: { Text("See all").font(Theme.Font.profileLabel).foregroundStyle(Theme.blue) }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("record-card-see-all")
         }
     }
 

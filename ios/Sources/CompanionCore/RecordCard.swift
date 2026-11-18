@@ -184,10 +184,12 @@ public struct RecordCard: Codable, Equatable, Sendable {
         public var author: String?
         public var at: String?
         public var isInternal: Bool?
+        /// A short marker the product gives the entry (a channel, a kind: "Email", "Time entry").
+        public var tag: String?
         public var text: String
         public var more: Bool
 
-        enum CodingKeys: String, CodingKey { case author, at, text, more, isInternal = "internal" }
+        enum CodingKeys: String, CodingKey { case author, at, tag, text, more, isInternal = "internal" }
     }
 
     public struct Notes: Codable, Equatable, Sendable {
@@ -261,7 +263,7 @@ public enum RecordCardParser {
 
     private enum Cap {
         static let title = 200, description = 600, note = 400, fieldValue = 120, name = 80, label = 80
-        static let people = 4, fields = 10, notes = 3, chips = 2, lines = 6
+        static let people = 4, fields = 10, notes = 3, chips = 2, lines = 6, tag = 24
         static let lineLabel = 160, lineDetail = 80, lineValue = 80, heading = 80
     }
 
@@ -548,6 +550,7 @@ public enum RecordCardParser {
                         author: capped(note["author"], Cap.name)?.text,
                         at: isoDate(note["at"]),
                         isInternal: isBool(note["internal"]),
+                        tag: capped(note["tag"], Cap.tag)?.text,
                         text: text.text,
                         more: text.cut || isBool(note["more"]) == true
                     ))

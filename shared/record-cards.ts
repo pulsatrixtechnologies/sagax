@@ -561,7 +561,7 @@ export type RecordLinesState = typeof RECORD_LINES_STATES[number];
 /** The card caps (the console's own, enforced again). */
 export const RECORD_CARD_CAPS = {
   title: 200, description: 600, note: 400, fieldValue: 120, name: 80, label: 80,
-  people: 4, fields: 10, notes: 3, chips: 2, lines: 6, lineLabel: 160, lineDetail: 80, lineValue: 80, heading: 80,
+  people: 4, fields: 10, tag: 24, notes: 3, chips: 2, lines: 6, lineLabel: 160, lineDetail: 80, lineValue: 80, heading: 80,
 } as const;
 
 /** One key field. `value` is the product's own ready text; the typed parts
@@ -622,7 +622,7 @@ export interface RecordCard {
     state: RecordNotesState;
     /** the activity's name as the console words it ("Timeline") */
     title?: string;
-    items: Array<{ author?: string; at?: string; internal?: boolean; text: string; more: boolean }>;
+    items: Array<{ author?: string; at?: string; internal?: boolean; /** a short marker the product gives the entry (a channel, a kind: "Email", "Time entry") */ tag?: string; text: string; more: boolean }>;
     total?: number;
     /** there are notes beyond `items` */
     more: boolean;
@@ -873,10 +873,12 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
         }
         const author = capped(note.author, RECORD_CARD_CAPS.name);
         const at = isoDate(note.at);
+        const tag = capped(note.tag, RECORD_CARD_CAPS.tag);
         items.push({
           ...(author ? { author: author.text } : {}),
           ...(at ? { at } : {}),
           ...(typeof note.internal === "boolean" ? { internal: note.internal } : {}),
+          ...(tag ? { tag: tag.text } : {}),
           text: noteText.text,
           more: noteText.cut || note.more === true,
         });

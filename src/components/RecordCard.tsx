@@ -22,8 +22,8 @@
 // Parts of the skeleton pulse and the notes rail are adapted from Arc,
 // Copyright (c) 2026 Elia Kuratli, used under the MIT License
 // (third_party/arc-library/LICENSE).
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Globe, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
@@ -35,6 +35,9 @@ import type { UseRecordCard } from "@/lib/record-cards";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
 import type { RecordCard as Card, RecordCardMiss, RecordField, RecordLevel, RecordRef, RecordTone } from "../../shared/record-cards";
+
+/** A hovered list shows this many entries, then "See all". */
+const LIST_FOLD = 3;
 
 /** A description this short (one line) is not given a pane of its own. */
 const SHORT_TEXT_MAX = 90;
@@ -92,6 +95,30 @@ const ICON_BUTTON = "inline-flex size-7 shrink-0 items-center justify-center rou
 /** Hovered, the card is a tooltip: it holds no control in the tab order until
  * it is pinned (a dialog). Every button reads this. */
 const TabContext = createContext<number | undefined>(undefined);
+
+/** The product's page of the record: the target of every "See all" (absent: no such action). */
+const SeeAllContext = createContext<{ url?: string; product?: string }>({});
+
+/** The quiet "N more" line of a list, with "See all" opening the record in its product. */
+function MoreLine({ fitKey, text, className }: { fitKey: string; text: string; className?: string }) {
+  const { url, product } = useContext(SeeAllContext);
+  const tab = useContext(TabContext);
+  return (
+    <p data-fit-row={fitKey} className={cn("flex items-baseline gap-1.5 text-[12px] leading-4 text-popover-ink-secondary", className)}>
+      <span>{text}</span>
+      {url && (
+        <button
+          type="button"
+          tabIndex={tab}
+          data-record-see-all
+          title={product ? t("recordCard.openIn", { product }) : t("recordCard.open")}
+          className="rounded text-popover-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          onClick={() => { void openExternalLink(url); }}
+        >{t("recordCard.seeAll")}</button>
+      )}
+    </p>
+  );
+}
 
 /** What a record named inside the card does: opens in this card's place when
  * the person holds its product, else it is plain words. */
@@ -258,7 +285,7 @@ function useStacked(ref: RefObject<HTMLElement | null>, below = RECORD_CARD_STAC
  * are one the person may open), a quiet detail. One drawing for the people
  * block and for a `person` field. */
 function PersonLine({ role, label, name, detail, personRef }: { role?: string; label?: string; name: string; detail?: string; personRef?: RecordRef }) {
-  const Icon = role === "owner" ? UserCheck : UserRound;
+  const Icon = role === "owner" || role === "manager" ? UserCheck : UserRound;
   const open = useOpenRef(personRef);
   return (
     <>
@@ -279,13 +306,12 @@ function PersonRow({ person, fitKey }: { person: NonNullable<Card["people"]>[num
   );
 }
 
-/** A record the card names: the record chip of it. Resting on it (300 ms) or a
- * click opens that record's card in this card's place. `slot` marks the card's
- * own company slot (its attribute is kept for the captures and the tests). */
+/** A record the card names: the record chip of it. Only a click opens that
+ * record's card in this card's place (a pointer resting on it never does: a
+ * pointer crossing a card must not replace it); hovering shows the chip's own
+ * hover tint and a tooltip. `slot` marks the card's own company slot (its
+ * attribute is kept for the captures and the tests). */
 function RecordRefChip({ name, refTo, onOpen, slot }: { name: string; refTo: RecordRef; onOpen: (ref: RecordRef, label: string) => void; slot?: "company" }) {
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = undefined; };
-  useEffect(() => clear, []);
   const tab = useContext(TabContext);
   return (
     <button
@@ -294,38 +320,22 @@ function RecordRefChip({ name, refTo, onOpen, slot }: { name: string; refTo: Rec
       dir="auto"
       title={name}
       {...(slot === "company" ? { "data-record-company-link": true } : { "data-record-ref-link": true })}
-      className={cn(REF_PILL_CLASS, "-ms-1.5 min-w-0 max-w-full items-center truncate font-sans text-[1em] no-underline")}
-      onPointerEnter={(event) => {
-        if (event.pointerType === "touch") return;
-        // a crossing reads nothing: the card switches (and so reads, once) only after the pointer rests
-        clear();
-        timer.current = setTimeout(() => onOpen(refTo, name), 300);
-      }}
-      onPointerLeave={clear}
-      onClick={() => { clear(); onOpen(refTo, name); }}
+      className={cn(REF_PILL_CLASS, "-ms-1.5 min-w-0 max-w-full cursor-pointer items-center truncate font-sans text-[1em] no-underline")}
+      onClick={() => onOpen(refTo, name)}
     >
       <span className="truncate">{name}</span>
     </button>
   );
 }
 
-function PriorityChip({ priority, onClip }: { priority: NonNullable<Card["priority"]>; onClip?: (clipped: boolean) => void }) {
-  const text = useRef<HTMLSpanElement>(null);
-  // a narrow head cuts the label (to its glyph at worst): the card says so, and
-  // its body then says the full name once
-  useLayoutEffect(() => {
-    const el = text.current;
-    if (!el || !onClip) return;
-    const measure = () => onClip(el.scrollWidth > el.clientWidth + 1);
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(el);
-    return () => observer?.disconnect();
-  }, [onClip, priority.label]);
+/** The priority never loses words to its neighbours: the head wraps to a second
+ * line before a chip is cut, and a label wider than the whole card is cut with
+ * its full name in the tooltip and the accessible name. */
+function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
   return (
-    <Chip className={cn(LEVEL_CLASS[priority.level], "min-w-8")} title={priority.label} role="img" label={priority.label}>
+    <Chip className={cn(LEVEL_CLASS[priority.level], "shrink-0")} title={priority.label} role="img" label={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
-      <span ref={text} className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
+      <span className="min-w-0 truncate">{priority.label}</span>
     </Chip>
   );
 }
@@ -369,15 +379,13 @@ function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label
 }
 
 /** The dates and key fields as one description list. */
-function Facts({ card, now, lang, part = "all", showPriority = false, chipRows = [] }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; showPriority?: boolean; chipRows?: NonNullable<Card["chips"]> }) {
+function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; chipRows?: NonNullable<Card["chips"]> }) {
   const tz = card.tz;
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
   const time = (iso: string, mode: "relative" | "absolute") => (
     <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang, tz) : formatAbsolute(iso, now, lang, tz)}</time>
   );
-  // a narrow head that cuts the priority chip: the full name is a row of the body, once
-  if (showPriority && card.priority) rows.push({ key: "priority", label: t("recordCard.priority"), value: <span dir="auto">{card.priority.label}</span> });
   // a narrow head gives its last chips way: their words are rows of the body, once
   chipRows.forEach((chip, index) => rows.push({ key: `chip-${index}`, label: t("recordCard.chip"), value: <span dir="auto">{chip.label}</span> }));
   if (dates.opened) rows.push({ key: "opened", label: t("recordCard.date.opened"), value: time(dates.opened, "relative") });
@@ -432,27 +440,27 @@ function LineRow({ line }: { line: NonNullable<Card["lines"]>["items"][number] }
 /** The right pane's list (an invoice's products, an agreement's additions):
  * a label, a quiet detail, a value at the right in tabular figures. One row
  * is a unit of the fit pass, like a field. */
-function Lines({ card, above }: { card: Card; above: boolean }) {
+function Lines({ card, above, pinned, folded }: { card: Card; above: boolean; pinned: boolean; /** the card also has an activity: a hovered list keeps one line for it */ folded: boolean }) {
   const { lines } = card;
   if (!lines) return null;
   if (lines.state === "forbidden") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.forbidden")}</p>;
   if (lines.state === "unavailable") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.unavailable")}</p>;
-  const others = lines.total !== undefined ? Math.max(0, lines.total - lines.items.length) : 0;
-  if (!lines.items.length && !others) return null;
+  // hovered, a list shows 3 lines (1 beside an activity), the rest behind "See all"; pinned, all it has
+  const items = pinned ? lines.items : lines.items.slice(0, folded ? 1 : LIST_FOLD);
+  const others = Math.max(0, (lines.total ?? lines.items.length) - items.length);
+  if (!items.length && !others) return null;
   return (
-    <div className={cn("flex flex-col", above && "border-t border-popover-hairline pt-2")} data-record-lines>
+    <div className={cn("flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden", above && "border-t border-popover-hairline pt-2")} data-record-lines>
       {lines.title && <p data-fit-row="l-title" className="pb-1 text-[12px] leading-4 text-popover-ink-secondary">{lines.title}</p>}
       <ul className="flex flex-col">
-        {lines.items.map((line, index) => (
+        {items.map((line, index) => (
           <li key={index} data-record-line data-fit-row={`l-${index}`} className="flex min-w-0 items-baseline gap-2 leading-[18px]">
             <LineRow line={line} />
           </li>
         ))}
       </ul>
       {others > 0 && (
-        <p data-fit-row="l-others" className="pt-1 text-[12px] leading-4 text-popover-ink-secondary">
-          {others === 1 ? t("recordCard.lines.otherOne") : t("recordCard.lines.other", { count: others })}
-        </p>
+        <MoreLine fitKey="l-others" className="pt-1" text={others === 1 ? t("recordCard.lines.otherOne") : t("recordCard.lines.other", { count: others })} />
       )}
     </div>
   );
@@ -473,7 +481,7 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
   const folded = stacked && !open;
   const title = notes.title ? `${notes.title} (${count})` : t("recordCard.notes.title", { count });
   return (
-    <div className="flex flex-col" data-record-notes>
+    <div className="flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden" data-record-notes>
       {stacked && (pinned ? (
         <div data-fit-row="n-title" className={cn(above && "border-t border-popover-hairline pt-1")}>
           <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen((value) => !value)}>
@@ -491,26 +499,26 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
         <>
           <ol className="flex flex-col">
             {items.map((item, index) => (
-              <li key={index} className={cn("relative flex gap-2.5 pb-2.5 last:pb-0", index === 0 && above && !stacked && "border-t border-popover-hairline pt-2")} data-record-note data-fit-row={`n-${index}`}>
+              <li key={index} className={cn("relative flex gap-2.5 last:pb-0", pinned ? "pb-2.5" : "pb-1.5", index === 0 && above && !stacked && "border-t border-popover-hairline pt-2")} data-record-note data-fit-row={`n-${index}`}>
                 <span aria-hidden="true" className="relative flex w-1.5 shrink-0 justify-center">
                   <span className="mt-[7px] size-1.5 rounded-full bg-popover-ink-secondary" />
                   {(index < items.length - 1 || others > 0) && <span className="absolute inset-y-[15px] start-1/2 w-px -translate-x-1/2 bg-popover-hairline" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-5 text-popover-ink-secondary">
+                  <div className={cn("flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-popover-ink-secondary", pinned ? "leading-5" : "leading-4")}>
                     {item.author && <span dir="auto" className="min-w-0 truncate font-medium text-popover-ink">{item.author}</span>}
                     {item.at && <time dateTime={item.at} title={formatFull(item.at, lang, card.tz)}>{formatAbsolute(item.at, now, lang, card.tz)}</time>}
-                    {item.internal === true && <span className="inline-flex items-center gap-1"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
+                    {item.tag && <span dir="auto" className="max-w-[8rem] truncate rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink" data-record-note-tag>{item.tag}</span>}
+                    {item.internal === true && <span className="inline-flex items-center gap-1" data-record-note-scope="internal"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
+                    {item.internal === false && <span className="inline-flex items-center gap-1" data-record-note-scope="external"><Globe size={11} aria-hidden="true" />{t("recordCard.notes.external")}</span>}
                   </div>
-                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-5", !pinned && "line-clamp-2")}>{item.text}</p>
+                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-[18px]", !pinned && (items.length > 2 ? "line-clamp-1" : "line-clamp-2"))}>{item.text}</p>
                 </div>
               </li>
             ))}
           </ol>
           {others > 0 && (
-            <p data-fit-row="n-others" className="ps-4 pt-1 text-[12px] leading-4 text-popover-ink-secondary">
-              {others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })}
-            </p>
+            <MoreLine fitKey="n-others" className="ps-4 pt-1" text={others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })} />
           )}
         </>
       )}
@@ -518,14 +526,14 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
   );
 }
 
-function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, onPriorityClip, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; onPriorityClip?: (clipped: boolean) => void; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
+function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
   const tab = useContext(TabContext);
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
   // a number that is the title, or begins it (a company's or a project's name), is said once; a GUID never
   const hidden = isGuid(shown) || (card ? card.title.trim().toLowerCase().startsWith(shown.trim().toLowerCase()) : false);
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-2 px-3 pt-2.5" data-record-head>
+    <div className={cn("relative flex min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5", pinned && onClose && "pe-9")} data-record-head>
       {onBack && (
         <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
           <ArrowLeft size={14} aria-hidden="true" className="rtl:-scale-x-100" />
@@ -534,19 +542,19 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       <RecordProductMark product={card ? { name: card.product.name, iconUrl: product?.iconUrl } : product} iconUrl={card?.product.icon?.url} />
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
       {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
-      <span className="ms-auto flex min-w-0 items-center gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
-        {card?.priority && <PriorityChip priority={card.priority} onClip={onPriorityClip} />}
+      <span className="ms-auto flex max-w-full flex-wrap items-center justify-end gap-1">
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="truncate">{card.state.label}</span></Chip>}
+        {card?.priority && <PriorityChip priority={card.priority} />}
         {chips.map((chip, index) => (
-          <Chip key={index} className={cn(TONE_CLASS[chip.tone], "shrink min-w-8")} title={chip.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[chip.tone])} /><span className="max-w-[9rem] min-w-0 truncate">{chip.label}</span></Chip>
+          <Chip key={index} className={cn(TONE_CLASS[chip.tone], "shrink-0")} title={chip.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[chip.tone])} /><span className="min-w-0 truncate">{chip.label}</span></Chip>
         ))}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
-        {pinned && onClose && (
-          <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-me-1.5")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
-            <X size={14} aria-hidden="true" />
-          </button>
-        )}
       </span>
+      {pinned && onClose && (
+        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "absolute end-1.5 top-2")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -607,7 +615,6 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const stacked = useStacked(wrap);
   // below this a head has no room for a second chip: its words move into the body
   const narrowHead = useStacked(wrap, 30);
-  const [priorityClipped, setPriorityClipped] = useState(false);
   const lang = activeLocale();
   const now = clock ?? Date.now();
   const { card, miss, loading } = read;
@@ -700,8 +707,9 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   return (
     <TabContext.Provider value={tab}>
       <RefContext.Provider value={{ open: onOpenRecord, can: canOpenRecord }}>
+      <SeeAllContext.Provider value={{ url: openUrl, product: productLabel }}>
       <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy={loading}>
-        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} onPriorityClip={setPriorityClipped} chips={headChips} />
+        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} chips={headChips} />
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
         <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
@@ -723,13 +731,14 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
               </div>
             )}
             {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
-            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} showPriority={stacked && priorityClipped} chipRows={chipRows} />
+            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} chipRows={chipRows} />
           </Pane>
           {right && (
             <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
-              {description && <p dir="auto" className={cn("whitespace-pre-line break-words", pinned ? "" : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
-              {hasLines && <Lines card={card} above={Boolean(description)} />}
-              {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description || hasLines)} pinned={pinned} stacked={stacked} />}
+              {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", pinned ? "" : hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
+              {/* the latest activity comes before a list: a hovered card drops whole rows from the foot */}
+              {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
+              {hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
             </Pane>
           )}
           {/* a card not wider than tall says who and what it says first; the key fields come last (and are the first dropped) */}
@@ -762,6 +771,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
           </span>
         </div>
       </Shell>
+      </SeeAllContext.Provider>
       </RefContext.Provider>
     </TabContext.Provider>
   );

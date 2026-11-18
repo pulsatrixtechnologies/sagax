@@ -67,6 +67,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { readHandoffs } from "../testing/handoff-rows.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 import { ZipReader } from "../zip.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -215,16 +216,9 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  // The shared readiness wait (60 s): a cold boot on a busy build host took
+  // over 20 s (2026-11-17). Any healthy answer is this server's.
+  await waitForServerReady(child, BASE, () => log, () => true);
 }
 
 posixOnly("confidential thread of a person on a team bot someone else owns", () => {
@@ -313,7 +307,7 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     }
     ana = await signIn(ANA);
     carl = await signIn(CARL);
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     child?.kill("SIGTERM");

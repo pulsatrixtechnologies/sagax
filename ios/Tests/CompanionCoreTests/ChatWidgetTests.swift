@@ -35,7 +35,7 @@ final class ChatWidgetTests: XCTestCase {
     func testEveryWidgetRowDecodesWithItsTree() throws {
         let rows = try messages()
         let widgets = rows.filter { $0.kind == .widget }
-        XCTAssertEqual(widgets.count, 14)
+        XCTAssertEqual(widgets.count, 15)
         for row in widgets where row.id != "widget-broken" {
             XCTAssertNotNil(row.drawableWidget, row.id)
             XCTAssertFalse((row.text ?? "").isEmpty, row.id)

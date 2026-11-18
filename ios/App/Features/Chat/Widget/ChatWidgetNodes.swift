@@ -151,6 +151,8 @@ struct ChatWidgetNodeView: View {
                 ChatWidgetCarousel(node: node)
             case "Product":
                 ChatWidgetProduct(node: node)
+            case "Booking":
+                ChatWidgetBooking(node: node)
             case "Button":
                 ChatWidgetButton(
                     actionRef: node.id, label: node.string("label"), look: node.string("style") ?? "secondary",

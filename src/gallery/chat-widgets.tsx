@@ -3,7 +3,7 @@
  * Every sample of shared/widget-samples.ts is drawn by the real renderer;
  * a press is answered here (nothing leaves the page) and folds the card
  * as the server's answer would.
- * ?skin=<id>&lang=<code>&only=<sample name>&narrow=1 */
+ * ?skin=<id>&lang=<code>&only=<sample name>&narrow=1&booked=<slot index of bookingCard> */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { WidgetCardFrame } from "../components/widget/WidgetCardFrame";
@@ -12,7 +12,7 @@ import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, type Message, type useStore } from "../state/store";
 import { WIDGET_SAMPLES } from "../../shared/widget-samples";
-import { parseWidgetInput, widgetToText, type WidgetPayload } from "../../shared/widget";
+import { parseWidgetInput, widgetActions, widgetToText, type WidgetPayload } from "../../shared/widget";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -32,11 +32,14 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-const store = { state: {}, dispatch: () => {}, flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
+const store = { state: { config: { profile: { name: "Alex Doe" } } }, dispatch: () => {}, flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
 
 function message(name: string, extra: Partial<WidgetPayload> = {}): Message | null {
   const parsed = parseWidgetInput(WIDGET_SAMPLES[name]);
   if (!parsed.ok) return null;
+  // a booked Booking: the time at this index of its slots was pressed
+  const booked = name === "bookingCard" ? widgetActions(parsed.value)[Number(params.get("booked"))] : undefined;
+  if (booked && params.has("booked")) extra = { ...extra, settled: { ref: booked.ref, label: booked.label, tone: "submit", at: 0 } };
   return { id: `gallery-${name}`, role: "bot", kind: "widget", at: 0, text: widgetToText(parsed.value), widget: { v: 1, root: parsed.value, ...extra } };
 }
 

@@ -219,6 +219,135 @@
       }
     }
   },
+  "widget-bookingCard": {
+    "pressable": [
+      "n3",
+      "n4",
+      "n5",
+      "n6",
+      "n7",
+      "n8",
+      "n9",
+      "n10",
+      "n11",
+      "n12",
+      "n13",
+      "n14",
+      "n15",
+      "n16",
+      "n17",
+      "n18",
+      "n19",
+      "n20",
+      "n21",
+      "n22"
+    ],
+    "onDevice": [],
+    "settles": [
+      "n3",
+      "n4",
+      "n5",
+      "n6",
+      "n7",
+      "n8",
+      "n9",
+      "n10",
+      "n11",
+      "n12",
+      "n13",
+      "n14",
+      "n15",
+      "n16",
+      "n17",
+      "n18",
+      "n19",
+      "n20",
+      "n21",
+      "n22"
+    ],
+    "scopes": {
+      "n3": {
+        "fields": [],
+        "initial": {}
+      },
+      "n4": {
+        "fields": [],
+        "initial": {}
+      },
+      "n5": {
+        "fields": [],
+        "initial": {}
+      },
+      "n6": {
+        "fields": [],
+        "initial": {}
+      },
+      "n7": {
+        "fields": [],
+        "initial": {}
+      },
+      "n8": {
+        "fields": [],
+        "initial": {}
+      },
+      "n9": {
+        "fields": [],
+        "initial": {}
+      },
+      "n10": {
+        "fields": [],
+        "initial": {}
+      },
+      "n11": {
+        "fields": [],
+        "initial": {}
+      },
+      "n12": {
+        "fields": [],
+        "initial": {}
+      },
+      "n13": {
+        "fields": [],
+        "initial": {}
+      },
+      "n14": {
+        "fields": [],
+        "initial": {}
+      },
+      "n15": {
+        "fields": [],
+        "initial": {}
+      },
+      "n16": {
+        "fields": [],
+        "initial": {}
+      },
+      "n17": {
+        "fields": [],
+        "initial": {}
+      },
+      "n18": {
+        "fields": [],
+        "initial": {}
+      },
+      "n19": {
+        "fields": [],
+        "initial": {}
+      },
+      "n20": {
+        "fields": [],
+        "initial": {}
+      },
+      "n21": {
+        "fields": [],
+        "initial": {}
+      },
+      "n22": {
+        "fields": [],
+        "initial": {}
+      }
+    }
+  },
   "widget-kitchenSink": {
     "pressable": [
       "n25",

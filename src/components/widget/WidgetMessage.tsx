@@ -38,6 +38,11 @@ function labelledFields(node: WidgetNode, into = new Set<string>()): Set<string>
   return into;
 }
 
+/** Whether the card holds a Booking, which shows its own answer instead of folding into a line. */
+function hasBooking(node: WidgetNode): boolean {
+  return node.type === "Booking" || kids(node).some(hasBooking);
+}
+
 /** A required field that a confirming press may not leave empty. */
 function isEmpty(field: WidgetField, values: WidgetValues): boolean {
   const value = values[field.name];
@@ -233,6 +238,7 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
     actions,
     pendingRef: pending,
     sentRef: sent,
+    settledRef: settled?.ref,
     press,
     imagesAllowed,
     allowImages: () => setImagesAllowed(true),
@@ -292,7 +298,8 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
     </WidgetFormProvider>
   );
 
-  if (!settled) return card;
+  // a booked card stays in place: its chosen time is the confirmation
+  if (!settled || hasBooking(root)) return card;
   const detailsId = `${uid}-details`;
   return (
     <AskSettledLine

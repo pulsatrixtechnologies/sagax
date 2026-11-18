@@ -113,6 +113,8 @@ final class ChatWidgetForm: ObservableObject {
     @Published var imagesAllowed = false
     /// Settled, or drawn read-only in Details: nothing takes input.
     @Published var settled = false
+    /// The ref whose press settled the card (the booked slot of a Booking).
+    @Published var settledRef: String?
     /// Too narrow for a label and a field side by side (under 400 pt).
     @Published var compact = true
     var press: (String) -> Void = { _ in }
@@ -189,14 +191,19 @@ struct ChatWidgetCard: View {
 
     var body: some View {
         Group {
-            if let settled {
+            // a booked card stays in place: its chosen time is the confirmation
+            if let settled, !root.containsBooking {
                 settledLine(settled)
             } else {
                 card(form: form)
             }
         }
         .onAppear {
-            if payload.settled != nil { rowSpoke = true }
+            if let settled = payload.settled {
+                rowSpoke = true
+                form.settled = true
+                form.settledRef = settled.ref
+            }
             form.press = { ref in press(ref) }
             detailsForm.press = { ref in
                 // read-only: only a link still opens
@@ -204,9 +211,15 @@ struct ChatWidgetCard: View {
             }
         }
         .onValueChange(of: payload.settled) { value in
-            if value != nil {
+            if let value {
                 rowSpoke = true
                 form.pending = nil
+                form.settled = true
+                form.settledRef = value.ref
+            } else if form.settled, settledHere == nil {
+                // a queued press the person cancelled: the card is live again
+                form.settled = false
+                form.settledRef = nil
             }
         }
     }
@@ -401,6 +414,7 @@ struct ChatWidgetCard: View {
                         sendId: sendId, values: sending
                     )
                     form.settled = true
+                    form.settledRef = ref
                     form.pending = nil
                 } else {
                     form.pending = nil

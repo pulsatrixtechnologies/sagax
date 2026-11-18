@@ -200,6 +200,35 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
     ],
   },
 
+  // Scheduling: the free slots of the person's calendar and the bookings already on it.
+  bookingCard: {
+    type: "Card",
+    children: [
+      {
+        type: "Booking",
+        title: "Book a call",
+        meetingType: "Quick sync",
+        detail: "30 min \u00b7 Your booking link",
+        durationMinutes: 30,
+        timeZone: "America/Toronto",
+        upcoming: [
+          { name: "Jordan Lee", start: "2026-11-09T14:00:00-05:00" },
+          { name: "Sam Rivera", start: "2026-11-10T10:30:00-05:00" },
+          { name: "Casey Morgan", start: "2026-11-11T13:00:00-05:00" },
+          { name: "Riley Chen", start: "2026-11-12T09:30:00-05:00" },
+        ],
+        upcomingMore: 1,
+        slots: [
+          "2026-11-09T15:30:00-05:00", "2026-11-09T16:00:00-05:00", "2026-11-09T16:30:00-05:00", "2026-11-09T17:00:00-05:00", "2026-11-09T17:30:00-05:00", "2026-11-09T18:00:00-05:00",
+          "2026-11-10T09:00:00-05:00", "2026-11-10T09:30:00-05:00", "2026-11-10T11:00:00-05:00", "2026-11-10T14:00:00-05:00", "2026-11-10T14:30:00-05:00",
+          "2026-11-11T10:00:00-05:00", "2026-11-11T10:30:00-05:00", "2026-11-11T15:00:00-05:00",
+          "2026-11-12T09:00:00-05:00", "2026-11-12T13:30:00-05:00", "2026-11-12T16:00:00-05:00",
+          "2026-11-13T10:00:00-05:00", "2026-11-13T11:30:00-05:00", "2026-11-13T15:30:00-05:00",
+        ],
+      },
+    ],
+  },
+
   // Everything the other samples leave out, in one card.
   kitchenSink: {
     type: "Card",

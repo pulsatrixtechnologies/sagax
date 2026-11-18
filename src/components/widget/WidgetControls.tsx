@@ -30,6 +30,8 @@ export interface WidgetForm {
   pendingRef?: string;
   /** The ref whose press just went through without settling the widget. */
   sentRef?: string;
+  /** The ref whose press settled the widget (the booked slot of a Booking). */
+  settledRef?: string;
   press: (ref: string) => void;
   /** Remote images wait for a click, as they do in a bot's Markdown. */
   imagesAllowed: boolean;

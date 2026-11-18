@@ -4,6 +4,9 @@
 // normalised here once, into a canonical tree, and nothing else is stored or
 // drawn: every renderer (desktop, iOS, Android) reads canonical trees only.
 import type { JsonValue } from "./json.ts";
+import {
+  BOOKING_ACTION, BOOKING_LABEL, BOOKING_LIMITS, bookingInstant, bookingLocale, bookingMoment, bookingSlotLabel, bookingZone,
+} from "./widget-booking.ts";
 
 export const WIDGET_VERSION = 1;
 
@@ -463,6 +466,73 @@ function productChildren(raw: Record<string, unknown>, path: string): unknown[] 
   return children;
 }
 
+// ── Booking ─────────────────────────────────────────────────────────────────
+// A Booking is the "Book a call" card (shared/widget-booking.ts): the meeting
+// type, the person's upcoming bookings, and the free slots of their calendar as
+// day tiles and time chips. Each slot is a Button child that settles the card
+// with `book_slot` and the slot in its payload.
+
+const zoneReader: Reader = (raw, path) => {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  return bookingZone(raw) ?? fail(path, "must be an IANA time zone name such as America/Toronto");
+};
+const localeReader: Reader = (raw) => bookingLocale(raw);
+const instantReader: Reader = (raw, path) => bookingInstant(raw) ?? fail(path, "must be an ISO 8601 time with an offset, such as 2026-11-09T15:30:00-05:00");
+const upcomingReader: Reader = (raw, path) => {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return fail(path, "must be a list of {name, start}");
+  const kept = raw.slice(0, BOOKING_LIMITS.upcoming).map((item, index) => {
+    if (!isRecord(item)) return fail(`${path}[${index}]`, "must be {name, start}");
+    return { name: line(WIDGET_LIMITS.label, "nonEmpty")(item.name, `${path}[${index}].name`) as string, start: instantReader(item.start, `${path}[${index}].start`) as string };
+  });
+  return kept.length ? kept : undefined;
+};
+
+/** The Booking's own children: one Button per free slot, earliest first. */
+function bookingChildren(raw: Record<string, unknown>, path: string): unknown[] {
+  const list = Array.isArray(raw.slots) ? raw.slots : [];
+  if (list.length < 1 || list.length > BOOKING_LIMITS.slots) return fail(`${path}.slots`, `a Booking takes 1 to ${BOOKING_LIMITS.slots} slots`);
+  const zone = zoneReader(raw.timeZone, `${path}.timeZone`) as string | undefined;
+  const locale = localeReader(raw.locale, "") as string | undefined;
+  const duration = integer(5, 1_440)(raw.durationMinutes, "") as number | undefined;
+  const meetingType = line(WIDGET_LIMITS.label)(raw.meetingType, `${path}.meetingType`) as string | undefined;
+  const prefix = (line(WIDGET_LIMITS.label)(raw.bookLabel, `${path}.bookLabel`) as string | undefined) ?? BOOKING_LABEL;
+  const starts = new Set<string>();
+  list.forEach((item, index) => starts.add(instantReader(isRecord(item) ? item.start : item, `${path}.slots[${index}]`) as string));
+  return [...starts].sort().map((start) => ({
+    type: "Button",
+    label: bookingSlotLabel(prefix, start, zone, locale).slice(0, WIDGET_LIMITS.label),
+    style: "secondary",
+    submit: true,
+    onClickAction: {
+      type: BOOKING_ACTION,
+      payload: {
+        start,
+        ...(duration ? { end: new Date(Date.parse(start) + duration * 60_000).toISOString(), durationMinutes: duration } : {}),
+        ...(zone ? { timeZone: zone } : {}),
+        ...(meetingType ? { meetingType } : {}),
+      },
+    },
+  }));
+}
+
+/** A Booking on one line, for the text fallback. */
+export function bookingLine(node: WidgetNode): string {
+  const zone = widgetString(node, "timeZone");
+  const locale = widgetString(node, "locale");
+  const slots = (Array.isArray(node.children) ? node.children : [])
+    .map((child) => (isRecord(child.onClickAction) && isRecord(child.onClickAction.payload) ? child.onClickAction.payload.start : undefined))
+    .filter((start): start is string => typeof start === "string");
+  const upcoming = Array.isArray(node.upcoming) ? node.upcoming as Array<{ name: string; start: string }> : [];
+  return [
+    widgetString(node, "title") ?? BOOKING_LABEL,
+    widgetString(node, "meetingType"),
+    widgetString(node, "detail"),
+    upcoming.length ? `Upcoming: ${upcoming.map((item) => `${item.name} ${bookingMoment(item.start, zone, locale)}`).join("; ")}` : "",
+    `Free: ${slots.slice(0, 8).map((start) => bookingMoment(start, zone, locale)).join("; ")}${slots.length > 8 ? ` and ${slots.length - 8} more` : ""}`,
+  ].filter(Boolean).join(" · ");
+}
+
 const CHART_MAX = 1e12;
 const CHART_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -602,6 +672,15 @@ const SPECS: Record<string, NodeSpec> = {
     },
     children: "any",
   },
+  // Scheduling: the free slots of the person's calendar, each a Button child.
+  Booking: {
+    props: {
+      title: line(WIDGET_LIMITS.title), meetingType: line(WIDGET_LIMITS.label), detail: line(WIDGET_LIMITS.caption),
+      durationMinutes: integer(5, 1_440), timeZone: zoneReader, locale: localeReader, bookLabel: line(WIDGET_LIMITS.label),
+      upcoming: upcomingReader, upcomingMore: integer(0, 999),
+    },
+    children: "any",
+  },
 };
 
 /** Every node type a widget may contain, roots first. */
@@ -634,6 +713,7 @@ function normalize(input: unknown, path: string, depth: number, slot: "root" | "
   if (slot === "rows" && type !== "Table.Row") return fail(path, "a Table takes Table.Row children");
   if (slot === "products" && type !== "Product") return fail(path, "a Carousel takes Product children");
   if (type === "Product") raw = { ...raw, title: raw.title ?? raw.name, store: raw.store ?? raw.seller ?? raw.merchant, children: productChildren(raw, path) };
+  if (type === "Booking") raw = { ...raw, children: bookingChildren(raw, path) };
   if (slot !== "root" && ROOT_TYPES.has(type)) return fail(path, `${type} is a root and cannot be nested`);
   if (slot === "any" && (type === "Table.Row" || type === "Table.Cell")) return fail(path, `${type} belongs inside a Table`);
   if (depth > WIDGET_LIMITS.depth) return fail(path, `is nested deeper than ${WIDGET_LIMITS.depth} levels`);
@@ -1087,6 +1167,8 @@ function inlineText(node: WidgetNode): string {
     }
     case "Product":
       return productLine(node);
+    case "Booking":
+      return bookingLine(node);
     case "Checkbox":
       return `[ ] ${widgetString(node, "label") ?? String(node.name)}`;
     case "Select": case "RadioGroup":
@@ -1122,6 +1204,7 @@ function blockLines(node: WidgetNode): string[] {
   const children = Array.isArray(node.children) ? node.children : [];
   if (node.type === "Carousel") return [...(widgetString(node, "title") ? [widgetString(node, "title")!] : []), ...children.map((product) => `- ${productLine(product)}`)];
   if (node.type === "Product") return [`- ${productLine(node)}`];
+  if (node.type === "Booking") return [bookingLine(node)];
   if (node.type === "ListViewItem") return [`- ${inlineText(node)}`];
   if (node.type === "Table") return children.map((row) => (Array.isArray(row.children) ? row.children : []).map(inlineText).join(" | "));
   if (node.type === "Markdown") return [widgetString(node, "value") ?? ""];

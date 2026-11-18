@@ -308,14 +308,14 @@
       "at": 1791930002000,
       "role": "bot",
       "kind": "widget",
-      "text": "Uploading\n**Build 25 to TestFlight** · OpenMausMobile 1.4.0 (25)\nabout 40s left 62%\nArchived · 9:41 PM\nSigned · 9:42 PM\nUploading to App Store Connect · now\nProcessing · waiting",
+      "text": "Uploading\n**Build 25 to TestFlight** · SagaxMobile 1.4.0 (25)\nabout 40s left 62%\nArchived · 9:41 PM\nSigned · 9:42 PM\nUploading to App Store Connect · now\nProcessing · waiting",
       "widget": {
         "v": 1,
         "root": {
           "type": "Card",
           "id": "n1",
           "title": "Build 25 to TestFlight",
-          "caption": "OpenMausMobile 1.4.0 (25)",
+          "caption": "SagaxMobile 1.4.0 (25)",
           "status": {
             "text": "Uploading",
             "icon": "upload"
@@ -1443,8 +1443,394 @@
       }
     },
     {
-      "id": "widget-kitchenSink",
+      "id": "widget-bookingCard",
       "at": 1791930010000,
+      "role": "bot",
+      "kind": "widget",
+      "text": "Book a call · Quick sync · 30 min · Your booking link · Upcoming: Jordan Lee Mon, Nov 9, 2:00 PM; Sam Rivera Tue, Nov 10, 10:30 AM; Casey Morgan Wed, Nov 11, 1:00 PM; Riley Chen Thu, Nov 12, 9:30 AM · Free: Mon, Nov 9, 3:30 PM; Mon, Nov 9, 4:00 PM; Mon, Nov 9, 4:30 PM; Mon, Nov 9, 5:00 PM; Mon, Nov 9, 5:30 PM; Mon, Nov 9, 6:00 PM; Tue, Nov 10, 9:00 AM; Tue, Nov 10, 9:30 AM and 12 more",
+      "widget": {
+        "v": 1,
+        "root": {
+          "type": "Card",
+          "id": "n1",
+          "children": [
+            {
+              "type": "Booking",
+              "id": "n2",
+              "title": "Book a call",
+              "meetingType": "Quick sync",
+              "detail": "30 min · Your booking link",
+              "durationMinutes": 30,
+              "timeZone": "America/Toronto",
+              "upcoming": [
+                {
+                  "name": "Jordan Lee",
+                  "start": "2026-11-09T19:00:00.000Z"
+                },
+                {
+                  "name": "Sam Rivera",
+                  "start": "2026-11-10T15:30:00.000Z"
+                },
+                {
+                  "name": "Casey Morgan",
+                  "start": "2026-11-11T18:00:00.000Z"
+                },
+                {
+                  "name": "Riley Chen",
+                  "start": "2026-11-12T14:30:00.000Z"
+                }
+              ],
+              "upcomingMore": 1,
+              "children": [
+                {
+                  "type": "Button",
+                  "id": "n3",
+                  "label": "Book Mon, Nov 9, 3:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T20:30:00.000Z",
+                      "end": "2026-11-09T21:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n4",
+                  "label": "Book Mon, Nov 9, 4:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T21:00:00.000Z",
+                      "end": "2026-11-09T21:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n5",
+                  "label": "Book Mon, Nov 9, 4:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T21:30:00.000Z",
+                      "end": "2026-11-09T22:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n6",
+                  "label": "Book Mon, Nov 9, 5:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T22:00:00.000Z",
+                      "end": "2026-11-09T22:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n7",
+                  "label": "Book Mon, Nov 9, 5:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T22:30:00.000Z",
+                      "end": "2026-11-09T23:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n8",
+                  "label": "Book Mon, Nov 9, 6:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-09T23:00:00.000Z",
+                      "end": "2026-11-09T23:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n9",
+                  "label": "Book Tue, Nov 10, 9:00 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-10T14:00:00.000Z",
+                      "end": "2026-11-10T14:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n10",
+                  "label": "Book Tue, Nov 10, 9:30 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-10T14:30:00.000Z",
+                      "end": "2026-11-10T15:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n11",
+                  "label": "Book Tue, Nov 10, 11:00 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-10T16:00:00.000Z",
+                      "end": "2026-11-10T16:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n12",
+                  "label": "Book Tue, Nov 10, 2:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-10T19:00:00.000Z",
+                      "end": "2026-11-10T19:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n13",
+                  "label": "Book Tue, Nov 10, 2:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-10T19:30:00.000Z",
+                      "end": "2026-11-10T20:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n14",
+                  "label": "Book Wed, Nov 11, 10:00 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-11T15:00:00.000Z",
+                      "end": "2026-11-11T15:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n15",
+                  "label": "Book Wed, Nov 11, 10:30 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-11T15:30:00.000Z",
+                      "end": "2026-11-11T16:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n16",
+                  "label": "Book Wed, Nov 11, 3:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-11T20:00:00.000Z",
+                      "end": "2026-11-11T20:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n17",
+                  "label": "Book Thu, Nov 12, 9:00 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-12T14:00:00.000Z",
+                      "end": "2026-11-12T14:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n18",
+                  "label": "Book Thu, Nov 12, 1:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-12T18:30:00.000Z",
+                      "end": "2026-11-12T19:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n19",
+                  "label": "Book Thu, Nov 12, 4:00 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-12T21:00:00.000Z",
+                      "end": "2026-11-12T21:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n20",
+                  "label": "Book Fri, Nov 13, 10:00 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-13T15:00:00.000Z",
+                      "end": "2026-11-13T15:30:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n21",
+                  "label": "Book Fri, Nov 13, 11:30 AM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-13T16:30:00.000Z",
+                      "end": "2026-11-13T17:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                },
+                {
+                  "type": "Button",
+                  "id": "n22",
+                  "label": "Book Fri, Nov 13, 3:30 PM",
+                  "submit": true,
+                  "onClickAction": {
+                    "type": "book_slot",
+                    "payload": {
+                      "start": "2026-11-13T20:30:00.000Z",
+                      "end": "2026-11-13T21:00:00.000Z",
+                      "durationMinutes": 30,
+                      "timeZone": "America/Toronto",
+                      "meetingType": "Quick sync"
+                    }
+                  },
+                  "style": "secondary"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "widget-kitchenSink",
+      "at": 1791930011000,
       "role": "bot",
       "kind": "widget",
       "text": "**Kitchen sink**\nSuccess · Info · Discovery · Danger · Warning · Secondary\nTitle xl\nBody text with a longer line that wraps onto a second line when the card is narrow.\nA caption in secondary ink\nInside a box\nwith padding and a surface\n[image: MausBot]\nA transition wraps one child.\nHow did the run go?\n(Good / Mixed / Bad)\n[Optional: where Scout can reply]\nNote\n[Anything Scout should know?]\n[Send feedback] · [Open the docs] · [Ask me later]",

@@ -68,21 +68,23 @@ function nestedCardBorders(html: string): string[] {
 }
 
 describe("Settings in server mode", () => {
-  it("General's Account card is the reference's: name, email, pills, then Team; the server and the managed note in Team's tooltip", () => {
+  it("General's Account card is the reference's: name, email, pills, one row; the server and the managed note in the name's tooltip", () => {
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com", profileManagedBy: "perspicax", profileManageUrl: "https://px.example.test/console/me" };
     const html = render();
     const card = html.slice(html.indexOf('data-settings-card="general.account"'));
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
-    // the identity row is name then email; the pills sit at its right; Team comes below
-    const order = [">Jean Tremblay<", ">jean@example.com<", "Sign out</button>", "data-account-team"];
+    // the identity row is name then email; the pills sit at its right; nothing below
+    const order = [">Jean Tremblay<", ">jean@example.com<", "Sign out</button>"];
     const positions = order.map((text) => card.indexOf(text));
     expect(positions.every((at) => at >= 0)).toBe(true);
     expect([...positions].sort((x, y) => x - y)).toEqual(positions);
     // the owner 2026-11-17: no Server row and no managed line; the address,
-    // then the managed note, are the tooltip of the organization's name,
-    // which opens the Perspicax profile
-    expect(card).toMatch(/data-account-team[^>]*><span[^>]*>Team<\/span><button type="button" title="Connected to bot\.example\.test · Managed by your organization · Edit in Perspicax"[^>]*>Example<\/button>/);
+    // then the managed note, are the tooltip of the person's name, which
+    // opens the Perspicax profile; the Team row is gone
+    expect(card).toMatch(/<button type="button" title="Connected to bot\.example\.test · Managed by your organization · Edit in Perspicax"[^>]*>Jean Tremblay<\/button>/);
+    expect(html).not.toContain("data-account-team");
+    expect(html).not.toMatch(/>Team</);
     expect(html).not.toContain("data-server-connected");
     expect(html).not.toContain("data-account-managed");
     expect(html).not.toMatch(/>Managed by your organization</);
@@ -107,17 +109,18 @@ describe("Settings in server mode", () => {
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com", profileManagedBy: "perspicax", profileManageUrl: "https://px.example.test/console/me" };
     const html = render();
     expect(html).toContain("Se déconnecter");
-    expect(html).toContain("Équipe");
+    expect(html).not.toContain("Équipe");
     expect(html).not.toContain("Ajouter une étiquette");
     expect(html).not.toContain("À propos de moi");
     expect(html).toContain('title="Connecté à bot.example.test · Géré par ton organisation · Modifier dans Perspicax"');
   });
 
-  it("a server whose profile is not managed: the address is the tooltip of the organization on Team", () => {
+  it("a server whose profile is not managed: the address is the tooltip of the person's name", () => {
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com" };
     const html = render();
-    expect(html).toMatch(/data-account-team[^>]*><span[^>]*>Team<\/span><span title="Connected to bot\.example\.test"[^>]*>Example<\/span>/);
+    expect(html).toMatch(/<div title="Connected to bot\.example\.test"[^>]*>Jean Tremblay<\/div>/);
+    expect(html).not.toContain("data-account-team");
     expect(html).not.toContain("data-server-connected");
     expect(html).not.toContain("Managed by your organization");
     expect(html).toContain("Sign out</button>");

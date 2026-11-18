@@ -52,8 +52,8 @@ function VisibilityChoice({ value, onChange, disabled }: { value: MarketplaceVis
       data-marketplace-visibility-option={choice}
       onClick={() => onChange(choice)}
       className={cn(
-        "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[12px] transition-colors disabled:opacity-40",
-        value === choice ? "bg-accent text-accent-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
+        "flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] transition-colors disabled:opacity-40",
+        value === choice ? "bg-raised text-ink shadow" : "text-ink-secondary hover:text-ink",
       )}
     >
       {icon}
@@ -62,7 +62,7 @@ function VisibilityChoice({ value, onChange, disabled }: { value: MarketplaceVis
   );
   return (
     <div role="radiogroup" aria-label={t("connectApps.market.visibility.aria")} data-marketplace-visibility={value}
-      className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-border p-0.5">
+      className="flex w-fit max-w-full items-center gap-1 rounded-xl bg-inset p-1">
       {option("private", t("connectApps.market.visibility.private"), <Lock size={12} aria-hidden="true" />)}
       {option("org", t("connectApps.market.visibility.org"), <Users size={12} aria-hidden="true" />)}
     </div>
@@ -76,8 +76,8 @@ function VisibilityBadge({ visibility, onToggle, disabled }: { visibility: Marke
   const label = isOrg ? t("connectApps.market.visibility.orgBadge") : t("connectApps.market.visibility.privateBadge");
   const icon = isOrg ? <Users size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />;
   const className = cn(
-    "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
-    isOrg ? "bg-accent/15 text-accent" : "bg-hover text-ink-secondary",
+    "ui-chip",
+    "bg-hover text-ink-secondary",
   );
   if (!onToggle) return <span className={className} data-marketplace-scope={visibility}>{icon}{label}</span>;
   return (
@@ -187,7 +187,11 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
   return (
     <section className="mt-6" data-plugins-marketplaces>
       <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.market.title")}</h3>
-      <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.market.intro")} {t("connectApps.market.introScopes")}</p>
+      <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">
+        {t("connectApps.market.intro")}{" "}
+        <span role="img" tabIndex={0} aria-label={t("connectApps.market.introScopes")} title={t("connectApps.market.introScopes")}
+          data-marketplace-scopes-help="" className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-border align-middle text-[10px] text-ink-secondary">?</span>
+      </p>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
@@ -208,25 +212,27 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           placeholder={t("connectApps.market.sourcePlaceholder")}
           aria-label={t("connectApps.market.sourceAria")}
           spellCheck={false}
-          className="min-w-0 flex-[1_1_260px] rounded-lg border border-border bg-raised px-3 py-2 font-mono text-[12px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent"
+          className="min-w-0 flex-[1_1_260px] rounded-lg border border-border bg-raised px-3 py-2 text-[12px] text-ink outline-none [&:not(:placeholder-shown)]:font-mono placeholder:text-ink-secondary focus:border-accent"
         />
         <input
           value={ref}
           onChange={(event) => setRef(event.target.value)}
           placeholder={t("connectApps.market.refPlaceholder")}
-          aria-label={t("connectApps.market.refPlaceholder")}
+          aria-label={t("connectApps.market.refAria")}
+          title={t("connectApps.market.refHint")}
           spellCheck={false}
-          className="w-[130px] rounded-lg border border-border bg-raised px-3 py-2 font-mono text-[12px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent"
+          className="w-[130px] rounded-lg border border-border bg-raised px-3 py-2 text-[12px] text-ink outline-none [&:not(:placeholder-shown)]:font-mono placeholder:text-ink-secondary focus:border-accent"
         />
         <button type="submit" disabled={disabled || busy !== null || !source.trim()} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40">
           {busy === "add" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {t("connectApps.market.add")}
         </button>
       </form>
+      <p className="mt-1.5 text-[11.5px] leading-snug text-ink-secondary" data-marketplace-source-hint="">{t("connectApps.market.sourceHint")} {t("connectApps.market.refHint")}</p>
       {canChooseVisibility && (
-        <div className="mt-2 flex flex-wrap items-center gap-2" data-marketplace-add-visibility="">
-          <span className="text-[12px] text-ink-secondary">{t("connectApps.market.visibility.label")}</span>
+        <div className="mt-3 flex flex-col gap-1.5" data-marketplace-add-visibility="">
+          <span className="text-[13px] font-medium text-ink">{t("connectApps.market.visibility.label")}</span>
           <VisibilityChoice value={visibility} onChange={setVisibility} disabled={disabled || busy !== null} />
-          <span className="text-[12px] text-ink-secondary">{visibility === "org" ? t("connectApps.market.visibility.orgHint") : t("connectApps.market.visibility.privateHint")}</span>
+          <span className="text-[11.5px] leading-snug text-ink-secondary" data-marketplace-visibility-hint="">{visibility === "org" ? t("connectApps.market.visibility.orgHint") : t("connectApps.market.visibility.privateHint")}</span>
         </div>
       )}
       {credentials && needs === "add" && source.trim() && !hasCredentials && (

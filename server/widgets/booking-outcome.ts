@@ -42,6 +42,10 @@ interface Watch {
   calls: Set<string>;
 }
 
+/** Threads that hold a pressed time waiting on the calendar tool: every other thread's events cost nothing here. */
+const armed = new Set<string>();
+export const armBooking = (threadId: string): void => { armed.add(threadId); };
+
 export function createBookingOutcome(store: Store, now: () => number = Date.now) {
   const watches = new Map<string, Watch>();
   const pendingOf = (threadId: string): Message | undefined =>
@@ -60,13 +64,18 @@ export function createBookingOutcome(store: Store, now: () => number = Date.now)
   return {
     observe(event: RuntimeEvent): void {
       const { threadId } = event;
+      // a turn's end is the one event read on every thread (a restart forgets what was armed); the rest, only where armed
+      if (!armed.has(threadId) && event.type !== "turn.completed") return;
       let watch = watches.get(threadId);
       const pending = pendingOf(threadId);
       if (pending?.widget?.settled && (!watch || watch.messageId !== pending.id)) {
         watch = { messageId: pending.id, settled: pending.widget.settled, queued: Boolean(pending.widget.settled.queueId), calls: new Set() };
         watches.set(threadId, watch);
       }
-      if (!watch) return;
+      if (!watch) {
+        armed.delete(threadId);
+        return;
+      }
       if (!watch.turnId && event.turnId && (event.type === "turn.started" || !watch.queued)) watch.turnId = event.turnId;
       if (event.turnId && watch.turnId && event.turnId !== watch.turnId) return;
       if (event.type === "item.started" && event.itemType === "tool" && event.itemId && isCalendarCreate(event.title)) {
@@ -75,6 +84,7 @@ export function createBookingOutcome(store: Store, now: () => number = Date.now)
         if (event.ok) {
           patch(threadId, watch, { state: "booked", at: now() });
           watches.delete(threadId);
+          armed.delete(threadId);
         } else {
           // the card is selectable again at once; a retry that works in this same turn still books it
           const detail = failureDetail(event.output);
@@ -84,6 +94,7 @@ export function createBookingOutcome(store: Store, now: () => number = Date.now)
         // the turn ended: with no calendar call that confirmed anything, nothing was booked
         if (widgetOf(threadId, watch.messageId)?.booking?.state === "pending") patch(threadId, watch, { state: "failed", at: now(), code: "not_booked" });
         watches.delete(threadId);
+        armed.delete(threadId);
       }
     },
   };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import type { WidgetPayload } from "../../shared/widget.ts";
-import { createBookingOutcome, failureDetail, isCalendarCreate } from "./booking-outcome.ts";
+import { armBooking, createBookingOutcome, failureDetail, isCalendarCreate } from "./booking-outcome.ts";
 
 const THREAD = "t1";
 const base = { eventId: "e", provider: "claude", threadId: THREAD, createdAt: "2026-11-09T19:50:00Z" } as const;
@@ -19,6 +19,7 @@ function setup(settledMore: Record<string, unknown> = {}) {
     booking: { state: "pending", at: 1 },
   };
   const rows = [{ id: "w1", kind: "widget", widget }];
+  armBooking(THREAD);
   const store = {
     messagesFor: () => rows,
     patchMessage: (_thread: string, id: string, patch: { widget: WidgetPayload }) => { rows.find((row) => row.id === id)!.widget = patch.widget; },
@@ -89,6 +90,16 @@ describe("a booking press waits for the calendar tool", () => {
     outcome.observe(ev({ type: "turn.started", turnId: "new" }));
     outcome.observe(ev({ type: "turn.completed", ok: true, turnId: "new" }));
     expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "not_booked" });
+  });
+
+  it("reads no event of a thread nothing is waiting on, but still the end of a turn after a restart", () => {
+    const { rows, outcome } = setup();
+    // a restart forgot what was armed: the next turn's end settles the stale pending card
+    const fresh = createBookingOutcome({ messagesFor: () => rows, patchMessage: (_t: string, _i: string, patch: { widget: WidgetPayload }) => { rows[0]!.widget = patch.widget; } }, () => 7);
+    fresh.observe(ev({ type: "turn.completed", ok: true, turnId: "turn9" }));
+    expect(rows[0]!.widget.booking).toMatchObject({ state: "failed", code: "not_booked" });
+    expect(rows[0]!.widget.settled).toBeUndefined();
+    void outcome;
   });
 
   it("does nothing for a thread with no pending booking", () => {

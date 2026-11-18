@@ -38,6 +38,7 @@ import type { AskQuestion, AskQuestionOption } from "../../shared/ask-question.t
 import type { Message } from "../store.ts";
 import { askTextKey, closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 import { BOOKING_ACTION } from "../../shared/widget-booking.ts";
+import { armBooking } from "./booking-outcome.ts";
 import { resolveAddressee, roomPeopleLine, type RoomPerson } from "../rooms/room-ask-cards.ts";
 import type { AskAddressee } from "../../shared/wire.ts";
 import type { PeerOutcomeItem } from "../../shared/peer-outcome.ts";
@@ -700,6 +701,7 @@ export function prepareWidgetPress(
       if (retry || !tone || !current || current.settled) return;
       const settled: WidgetSettled = { ref, label, tone, at: Date.now(), ...(sendId ? { sendId } : {}), ...sent, ...(queueId ? { queueId } : {}) };
       // a time pressed on a Booking waits for the calendar tool (booking-outcome.ts): pending, never booked yet
+      if (action.type === BOOKING_ACTION) armBooking(threadId);
       const { booking: _earlier, ...rest } = current;
       store.patchMessage(threadId, messageId, { widget: { ...rest, settled, ...(action.type === BOOKING_ACTION ? { booking: { state: "pending" as const, at: Date.now() } } : {}) } });
     },

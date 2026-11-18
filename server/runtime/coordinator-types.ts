@@ -202,6 +202,17 @@ export interface ComposedTurn {
   asked?: string[];
 }
 
+/** One bot-to-bot pair's handoffs inside a window (Team map, #org-chart):
+ * how many a bot handed another, and whether every one was a consultation. */
+export interface HandoffCount {
+  sourceBotId: string;
+  targetBotId: string;
+  count: number;
+  /** Every handoff of the pair in the window was a consultation (answer, act on nothing). */
+  consult: boolean;
+  lastAt: number;
+}
+
 export interface LiveHandoffEdge {
   sourceBotId: string;
   targetBotId: string;
@@ -292,6 +303,8 @@ export interface Coordinator {
    * threads), created since `since` or still live, no room work. Indexed
    * store read (RuntimeStore.handedOutBy). */
   handedOutBy(botId: string, since: number): HandedOver[];
+  /** Bot-to-bot handoffs created since `since`, counted per ordered pair. */
+  handoffCounts(since: number): HandoffCount[];
   /** #4421: end a piece of work on these hand-overs (their work label
    * carries the end; nothing is stopped). Answers how many rows took it. */
   endWork(ids: readonly string[], ended: TeamWorkEnded): number;

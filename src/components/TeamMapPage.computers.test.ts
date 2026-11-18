@@ -17,7 +17,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => ({ id: "org" }) }));
 vi.mock("./remote-session/AddComputerDialog", () => ({ AddComputerDialog: (props: { onClose: () => void }) => createElement("div", { "data-add-computer-dialog": "", role: "dialog" }, createElement("button", { "data-close": "", onClick: props.onClose })) }));
 vi.mock("./remote-session/remote-hosts-client", async (importOriginal) => ({ ...(await importOriginal<typeof import("./remote-session/remote-hosts-client")>()), fetchRemoteHosts: async () => ({ available: true, hosts: [] }) }));
-vi.mock("./TeamCanvas", () => ({ TeamCanvas: () => null }));
+vi.mock("./team-map/TeamMapOrgChart", () => ({ TeamMapOrgChart: () => null }));
 
 const { TeamMapPage } = await import("./TeamMapPage");
 

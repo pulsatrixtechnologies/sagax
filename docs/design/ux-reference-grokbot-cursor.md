@@ -3318,3 +3318,64 @@ the composer. Desktop: a real second window through the artifact bridge
 (`chat:<botId>`, one per bot, size and place remembered, macOS inset title
 bar). Browser: the `/artifact-window` route in a named popup window.
 Captures: `scripts/capture/bot-context-menu.mjs`.
+
+### 8.12 Team map: the org chart (owner, 2026-11-17)
+
+The Team map is an org chart, not a free canvas. The owner chose direction A by
+card, asked for more air ("ça respire plus") and a layout whose placement means
+something ("avec une logique UX"), and approved v3. Code: `src/lib/team-map-layout.ts`
+(pure placement and links), `src/components/team-map/`.
+
+- Placement follows the work. The lead (the person's Primary Bot) is on top at
+  the centre. The teams that receive the most handoffs from the lead sit in one
+  row under it, the busiest in the middle. A team that gets work from another
+  team sits under it. A team with no link fills the free cells of the second
+  row, left first. "Sans équipe" is last, apart, a dashed tray: one row of avatars
+  with the count, opened on a click (a tray, not hidden detail).
+- Air: 72 px between teams both ways, a 60 px lane under the lead, a team block
+  216 px wide. A team shows its first four bots, then "+N" that opens (a search
+  that matches a hidden bot opens it; "+1 more", "+3 more", in French "+1 autre", "+3 autres"). Bots in a team read in the order of the
+  work: a delegation chain reads down, a bot that hands work to another team is
+  last, nearest its link; the person's own drag order wins once they arranged.
+- Cards: two lines (name, then role and model) and the live state as a dot on the
+  avatar (working pulses green, waiting for you is orange with "Needs you",
+  no signal red, idle a hollow ring). The last handoff is the card's tooltip and
+  the popover's line, never a third line.
+- Links: delegation flows top to bottom, a solid line with an arrow head;
+  a review is dashed with an open circle at its end. Links route around
+  cards and never through a team block (a link that would cross one is not drawn;
+  it stays in the detail column). The lead links to a team on a bus; a team links
+  to the team under it (the sum of its bots' handoffs); inside a team the
+  delegation runs down the left of the cards and reviews on a bracket at the
+  right. A count badge sits on each link and only there: the detail list shows
+  a bar, the reason and the time, never the number again. Green and thick is
+  running now, orange queued, grey the rest. Counts and the delegates or reviews
+  kind come from `GET /api/team-map` (`handoffs`, seven days; a pair is a review
+  when every one of its handoffs was a consultation) and only for the bots the
+  person sees.
+- One popover per selected bot, drawn beside its card with an arrow that points at
+  it, on the menu family's lifted surface (`popover-surface menu-surface`,
+  12 px corners, as the record card): who, team, live state, model (opens the
+  model settings), last handoff, Open chat, Open page, Computer. It flips to
+  the left when there is no room on the right. Esc closes it.
+- The right column is the detail, narrow and closable (remembered): the busiest
+  five pairs by default; a team's handoffs when its title is pressed; a bot's
+  received and sent handoffs only when asked for ("Show its handoffs" in the
+  popover, or the toolbar toggle with a bot selected), and then the popover
+  closes: a bot is never shown twice at once. The popover sits on the side
+  that covers less of another team (the right on a tie). A row's small open icon opens the
+  thread doing the work, the room it ran in, or else the bot.
+- Toolbar: search (Cmd or Ctrl + F, highlights matches and dims the rest), the
+  searchable team select, the state segment (All, Working, Waiting), Fit and the
+  zoom, the detail toggle and "..." (legend with the gesture hint as its text,
+  minimap, export image, keyboard keys). Opens fitted, never under 75 %; Fit
+  fits everything. The minimap shows by itself above 30 bots.
+- Kept from the old canvas: drag a card to arrange within its team, drop it on
+  another team to move it (the same confirmation), Alt + arrows reorder, the team
+  menu (move or add bots, instructions, memory, rename, delete), sub-team marks,
+  the team computer chip, the bot's model and computer shortcuts, wheel zoom,
+  trackpad pan. The hint line left the canvas for the legend.
+- 390: the lead, then each team as a block in the order of the work with
+  connectors (arrow and count) between cards and between teams, "Sans équipe",
+  and the busiest handoffs always listed below. A tapped bot opens in place with
+  its handoffs.

@@ -9,7 +9,7 @@ import { Pencil, Pin } from "lucide-react";
 import { GoalRunCard } from "../components/GoalRunCard";
 import { MessageHoverActions, MessageMenuItem } from "../components/MessageHoverActions";
 import { VoiceCallCard } from "../components/VoiceCallCard";
-import { TeamCanvas } from "../components/TeamCanvas";
+import { TeamMapOrgChart } from "../components/team-map/TeamMapOrgChart";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState, type Bot, type Message } from "../state/store";
@@ -36,7 +36,7 @@ function Gallery() {
   if (params.get("sample") === "team") {
     return (
       <div className="flex h-dvh bg-app text-ink">
-        <TeamCanvas sections={sections} canManage onMove={async () => {}} onInstructions={noop} onMemory={noop} onEditTeam={noop} onDeleteTeam={noop} isEmpty={() => false} />
+        <TeamMapOrgChart sections={sections} pairs={[]} leadId="atlas" canManage onMove={async () => {}} onInstructions={noop} onMemory={noop} onEditTeam={noop} onDeleteTeam={noop} />
       </div>
     );
   }

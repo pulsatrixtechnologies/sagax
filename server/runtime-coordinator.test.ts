@@ -1145,3 +1145,20 @@ describe("a confidential thread's own turns (docs/confidential-threads.md)", () 
     expect([kept?.text, kept?.result]).toEqual(["Ship the CSV export", "Shipped."]);
   });
 });
+
+describe("handoffCounts: the Team map's seven-day pair counts", () => {
+  it("counts bot-to-bot handoffs per ordered pair, marks all-consult pairs, skips the window's past and person-started rows", async () => {
+    const w = world(hold);
+    w.coordinator.enqueue(chief, "gen-1", undefined, builder, "builder", "Build the export", false, false, "Ship the CSV export", undefined, userOrigin);
+    w.coordinator.enqueue(chief, "gen-1", undefined, { botId: "builder", threadId: "builder-two" }, "builder", "Build the import", false, false, "Ship the CSV export", undefined, userOrigin);
+    w.coordinator.enqueue(chief, "gen-1", undefined, tester, "tester", "Is the plan sound?", false, false, "Ask", undefined, userOrigin, "consult");
+    await flush();
+    const all = w.coordinator.handoffCounts(0);
+    const pair = (a: string, b: string) => all.find(p => p.sourceBotId === a && p.targetBotId === b);
+    expect(pair("chief", "builder")).toMatchObject({ count: 2, consult: false });
+    expect(pair("chief", "tester")).toMatchObject({ count: 1, consult: true });
+    expect(pair("builder", "chief")).toBeUndefined();
+    // a window that starts after every row counts nothing
+    expect(w.coordinator.handoffCounts(Date.now() + 60_000)).toEqual([]);
+  });
+});

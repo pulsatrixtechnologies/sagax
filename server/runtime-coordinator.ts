@@ -11,7 +11,7 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandedOver, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
+import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandedOver, HandoffCount, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import type { TeamWorkEnded, TeamWorkLabel } from "../shared/team-work.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
@@ -321,6 +321,27 @@ export class RuntimeCoordinator implements Coordinator {
   handedOutBy(botId: string, since: number): HandedOver[] {
     this.ready();
     return this.store.handedOutBy(botId, since).map(handedOver);
+  }
+
+  /** Handoffs one bot gave another since `since`, per ordered pair. A row a
+   * person or a routine started has no requesting bot and is not counted. */
+  handoffCounts(since: number): HandoffCount[] {
+    this.ready();
+    const pairs = new Map<string, HandoffCount>();
+    for (const row of this.store.all()) {
+      const source = row.requester.botId;
+      const target = row.assignee.botId;
+      if (!source || !target || source === target || row.createdAt < since) continue;
+      const key = `${source}\u0000${target}`;
+      const seen = pairs.get(key);
+      const consult = row.mode === "consult";
+      if (seen) {
+        seen.count += 1;
+        seen.consult = seen.consult && consult;
+        seen.lastAt = Math.max(seen.lastAt, row.createdAt);
+      } else pairs.set(key, { sourceBotId: source, targetBotId: target, count: 1, consult, lastAt: row.createdAt });
+    }
+    return [...pairs.values()];
   }
 
   endWork(ids: readonly string[], ended: TeamWorkEnded): number {

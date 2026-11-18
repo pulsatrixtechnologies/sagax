@@ -41,7 +41,7 @@ describe("bot profile entry points (#2994)", () => {
 
   it.each([
     ["command palette {bot} settings", "../components/CommandPalette.tsx", /case "botSettings":\s*openBotProfile\(dispatch, action\.botId\);/],
-    ["team map card Edit {bot}", "../components/TeamCanvas.tsx-parts/BotCard.tsx", /aria-label=\{t\("canvas\.editBot", \{ name: bot\.name \}\)\}\s*onClick=\{\(\) => openBotProfile\(dispatch, bot\.id\)\}/],
+    ["team map popover Open page", "../components/team-map/TeamMapBotPopover.tsx", /onClick=\{\(\) => openBotProfile\(dispatch, bot\.id\)\}><UserRound size=\{14\} \/>\{t\("teamMap\.org\.openPage"\)\}/],
     ["retro Bot properties", "../components/retro98/RetroChrome.tsx", /id: "profile", label: t\("retro\.cmd\.profile"\), disabled: !bot, run: \(\) => bot && openBotProfile\(dispatch, bot\.id\)/],
   ])("%s opens the profile page", (_name, path, wiring) => {
     expect(source(path)).toMatch(wiring);

@@ -12,15 +12,21 @@ import { FinishUntilSettings } from "./FinishUntilSettings";
 import { PaneSection } from "./PaneSection";
 import type { BotPatch } from "./useBotSettingsDerived";
 
+/** The large modal's editor fill (BotPageModal) less the Do not finish until card, at least the editor's own minimum. */
+const SOUL_FILL = "[--bot-modal-fill:calc(100dvh-640px)]";
+
 export function SoulSection({ bot, patch }: { bot: Bot; patch: (patch: BotPatch) => void }) {
   const { draft } = useBotEditor();
   const plain = useSettingsSurface() === "plain";
   if (plain) {
     return (
       <>
-        <PaneSection title={t("botSettings.nav.soul")} data-soul-section="">
-          <SoulField bot={bot} onPatch={patch} />
-        </PaneSection>
+        {/* the editor leaves room for the "Do not finish until" card under it: its Save row shows whole */}
+        <div className={draft ? undefined : SOUL_FILL}>
+          <PaneSection title={t("botSettings.nav.soul")} data-soul-section="">
+            <SoulField bot={bot} onPatch={patch} />
+          </PaneSection>
+        </div>
         {!draft && <FinishUntilSettings bot={bot} />}
       </>
     );

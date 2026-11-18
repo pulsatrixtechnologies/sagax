@@ -115,7 +115,7 @@ export function ApprovalsJournal({ data, loading, days, onDays, query, onQuery, 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-approvals-journal="">
-      <div className="flex flex-wrap items-center gap-1.5 px-5 pb-2" data-journal-filters="">
+      <div className="flex flex-wrap items-center gap-1.5 px-6 max-sm:px-4 pb-2" data-journal-filters="">
         <button type="button" className={chip(outcome === "")} onClick={() => setOutcome("")}>{t("approvals.filter.all")}<span className="tabular-nums opacity-70">{entries.length}</span></button>
         {OUTCOMES.map((value) => (
           <button key={value} type="button" className={chip(outcome === value)} onClick={() => setOutcome(outcome === value ? "" : value)} data-journal-chip={value}>
@@ -137,7 +137,7 @@ export function ApprovalsJournal({ data, loading, days, onDays, query, onQuery, 
           ))}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-5 pb-3">
+      <div className="flex flex-wrap items-center gap-2 px-6 max-sm:px-4 pb-3">
         <label className="flex min-w-[220px] max-w-md flex-1 items-center gap-2 rounded-xl border border-hairline/50 bg-inset px-3 py-1.5 focus-within:border-accent/60">
           <Search size={14} aria-hidden="true" className="text-ink-tertiary" />
           <input
@@ -153,7 +153,7 @@ export function ApprovalsJournal({ data, loading, days, onDays, query, onQuery, 
           {t("approvals.journal.test.title")}
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 max-sm:px-4 pb-6">
         {testing && <div className="mb-3"><RuleTestPanel bots={bots} {...(testResult ? { initialResult: testResult } : {})} /></div>}
         {shown.length === 0 ? (
           <div className="pt-16 text-center text-[13.5px] text-ink-secondary">

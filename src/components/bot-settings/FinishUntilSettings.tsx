@@ -72,25 +72,29 @@ export function FinishUntilSettings({ bot }: { bot: Bot }) {
               }}
             />
           </label>
-          <p className="text-[12px] leading-4 text-ink-secondary">
-            {stored ? t("botPanel.finishUntil.onNote", { rounds: String(rounds) }) : t("botPanel.finishUntil.offNote")}
-          </p>
           {error && <p role="alert" className="text-[12px] leading-4 text-danger">{error}</p>}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              data-finish-until-save=""
-              disabled={!changed || saving}
-              onClick={() => void save({ finishUntil: oneLine.trim() })}
-              className={plain ? PILL : cn(buttonCls, "border-transparent bg-accent text-accent-ink hover:brightness-110")}
-            >
-              {t("botPanel.finishUntil.save")}
-            </button>
-            {stored && (
-              <button type="button" data-finish-until-clear="" disabled={saving} onClick={() => void save({ finishUntil: "" })} className={plain ? PILL : buttonCls}>
-                {t("botPanel.finishUntil.clear")}
+          {/* The note and its Save row share one line (a phone wraps them), so the card stays short enough for
+              Save to show whole in a large modal at 1230x820 (#4605 follow-up). */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2" data-finish-until-actions="">
+            <p className="min-w-0 flex-1 basis-60 text-[12px] leading-4 text-ink-secondary">
+              {stored ? t("botPanel.finishUntil.onNote", { rounds: String(rounds) }) : t("botPanel.finishUntil.offNote")}
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                data-finish-until-save=""
+                disabled={!changed || saving}
+                onClick={() => void save({ finishUntil: oneLine.trim() })}
+                className={plain ? PILL : cn(buttonCls, "border-transparent bg-accent text-accent-ink hover:brightness-110")}
+              >
+                {t("botPanel.finishUntil.save")}
               </button>
-            )}
+              {stored && (
+                <button type="button" data-finish-until-clear="" disabled={saving} onClick={() => void save({ finishUntil: "" })} className={plain ? PILL : buttonCls}>
+                  {t("botPanel.finishUntil.clear")}
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <DescribedRow label={t("botPanel.finishUntil.rounds")} help={t("botPanel.finishUntil.roundsHelp")} rowId="botFinishUntilRounds">

@@ -8,7 +8,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { MemorySidebar } from "./memory-manager/MemorySidebar";
 import { CalendarSidebar } from "./routines/CalendarSidebar";
-import { RIGHT_RAIL_OPEN_FROM, RightRailStrip, rightRailStartsOpen } from "./RightRail";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { RIGHT_RAIL_OPEN_FROM, RightRailStrip, rightRailStartsOpen, useRightRailOpen } from "./RightRail";
 
 // the owner 2026-11-03: the Memory explorer is Automations' calendar rail, the same
 // component, so their side, width, border, fold and breakpoint cannot drift.
@@ -34,6 +36,35 @@ describe("the right rail shared by Automations and Memory", () => {
     }
     expect(memory.className).toBe(calendar.className);
     expect(memory.children[0]!.outerHTML.replace(/aria-label="[^"]*"|title="[^"]*"/g, "")).toBe(calendar.children[0]!.outerHTML.replace(/aria-label="[^"]*"|title="[^"]*"/g, ""));
+  });
+
+  it("below 1280px the rail is a sheet over the list with its own close, never beside it (a phone squeezed the list)", () => {
+    setLocale("en");
+    const html = renderToStaticMarkup(createElement(MemorySidebar, { shortcut: "⌘O", onOpenSwitcher: vi.fn(), lists: [], tiers: [], tidy: [], renaming: null, onRenameDone: vi.fn(), loading: null, footer: null, onCollapse: vi.fn() }));
+    const aside = rail(html);
+    expect(aside.className).toContain("max-[1279px]:absolute");
+    expect(aside.className).toContain("max-[1279px]:right-0");
+    expect(aside.className).toContain("max-[1279px]:max-w-[calc(100%-48px)]");
+    expect(aside.querySelector("[data-right-rail-hide]")).not.toBeNull();
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    expect(host.querySelector("[data-right-rail-scrim]")!.className).toContain("min-[1280px]:hidden");
+  });
+
+  it("the choice made in a wide window does not carry to a narrow one, and the sheet starts closed", () => {
+    const state = { wide: true };
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({ matches: state.wide, media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList);
+    let latest: ReturnType<typeof useRightRailOpen> = [false, () => {}];
+    const Probe = () => { latest = useRightRailOpen(); return null; };
+    const root = createRoot(document.createElement("div"));
+    act(() => root.render(createElement(Probe)));
+    expect(latest[0]).toBe(true);
+    state.wide = false;
+    act(() => root.render(createElement(Probe, { key: "narrow" })));
+    expect(latest[0], "narrow window: closed").toBe(false);
+    act(() => latest[1](true));
+    expect(latest[0]).toBe(true);
+    act(() => root.unmount());
   });
 
   it("both pages take the open state and the strip from it", () => {

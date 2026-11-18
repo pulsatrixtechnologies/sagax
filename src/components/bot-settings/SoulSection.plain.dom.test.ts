@@ -67,6 +67,20 @@ describe("Personality on the profile page (plain)", () => {
     container.remove();
   });
 
+  it("keeps the Save row of Do not finish until on the note's line, and leaves the editor room for the card (large modal at 1230x820)", async () => {
+    act(() => root.render(plainSurface(createElement(BotEditorContext.Provider, {
+      value: { request: request as never },
+      children: createElement(SoulSection, { bot, patch: () => {} }),
+    }))));
+    await flush();
+    const row = container.querySelector("[data-finish-until-actions]")!;
+    expect(row.querySelector("p")).not.toBeNull();
+    expect(row.querySelector("[data-finish-until-save]")).not.toBeNull();
+    expect(row.querySelector("[data-finish-until-clear]")).not.toBeNull();
+    // the editor box is capped to the modal's fill, less the card under it
+    expect(container.innerHTML).toContain("--bot-modal-fill:calc(100dvh-640px)");
+  });
+
   it("labels the Personality card and the Do not finish until card, pills and a plain field, no outline", async () => {
     act(() => root.render(plainSurface(createElement(BotEditorContext.Provider, {
       value: { request: request as never },

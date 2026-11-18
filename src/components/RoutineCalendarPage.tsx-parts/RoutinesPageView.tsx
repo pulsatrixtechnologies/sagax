@@ -176,7 +176,6 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         titleProps={{ "data-tour": "automations-page" }}
         {...(fill ? dragProps : {})}
         topbar={fill}
-        aligned
         inset={!embedded && !fill && macInset}
         style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
         primaryStyle={noDragStyle ?? windowNoDragStyle}
@@ -251,12 +250,12 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
           {!routinesOnly && calls.some((call) => botFilter === "all" || call.botIds.includes(botFilter)) && <section className="space-y-2" aria-label={t("routineCalendar.scheduledCalls")}><h2 className="text-[15px] font-semibold text-ink">{t("routineCalendar.scheduledCalls")}</h2>{calls.filter((call) => botFilter === "all" || call.botIds.includes(botFilter)).map((call) => <button key={call.id} type="button" onClick={() => setSelected({ kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : atLocalTime(Date.now(), call.schedule.time), durationMinutes: call.durationMinutes, call })} className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card p-4 text-left hover:bg-raised"><Video size={17} className="text-accent" /><span><span className="block text-[13px] font-medium text-ink">{call.name}</span><span className="mt-1 block text-[12px] text-ink-secondary">{scheduleLabel(call.schedule)}</span></span></button>)}</section>}
         </div></div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={openGridItem} onCreate={openCreate} onMove={moveGridItem} onResize={resizeGridItem} markers={markers} onDropOnReset={dropGridReset} pending={pendingSlot} />
           {botsOpen ? (
-            <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} hideNarrow />
+            <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} />
           ) : (
-            <RightRailStrip onOpen={() => setBotsOpen(true)} showLabel={t("routines.upcoming.show")} title={t("routines.upcoming.title")} icon={<CalendarClock size={16} />} text={t("routines.upcoming.title")} hideNarrow />
+            <RightRailStrip onOpen={() => setBotsOpen(true)} showLabel={t("routines.upcoming.show")} title={t("routines.upcoming.title")} icon={<CalendarClock size={16} />} text={t("routines.upcoming.title")} />
           )}
         </div>
       )}

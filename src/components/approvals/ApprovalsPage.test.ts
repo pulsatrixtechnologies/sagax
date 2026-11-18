@@ -20,7 +20,7 @@ const fixture = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/org-approval-policy", () => ({ useOrgApprovalPolicy: () => ({ alwaysAllow: true, orgRules: 0 }), noteOrgAlwaysAllowOff: () => {} }));
-vi.mock("../DesktopCapabilities", () => ({ WindowDragStrip: () => null }));
+vi.mock("../DesktopCapabilities", async (importOriginal) => ({ ...(await importOriginal<typeof import("../DesktopCapabilities")>()), WindowDragStrip: () => null }));
 vi.mock("@/components/Avatar", () => ({ BotAvatar: ({ bot }: { bot: { name: string } }) => createElement("span", { "data-avatar": bot.name }) }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
@@ -222,6 +222,18 @@ describe("ApprovalsPage", () => {
     expect(host.querySelector("[data-approval-detail]")).toBeNull();
   });
 
+  it("wears the shared page header: icon, title, count, bordered tabs and the close at the top right (#4605)", async () => {
+    await render();
+    const header = host.querySelector("[data-page-header]")!;
+    expect(header.hasAttribute("data-approvals-header")).toBe(true);
+    expect(header.querySelector("[data-page-title] svg")).not.toBeNull();
+    expect(header.querySelector("[data-page-count]")).not.toBeNull();
+    expect(header.querySelector("[data-page-actions] [data-approvals-close]")).not.toBeNull();
+    const group = header.querySelector("[data-approvals-tabs] [role=group]")!;
+    expect(group.className).toContain("border-hairline/50");
+    expect([...group.querySelectorAll("button")].map((tab) => tab.getAttribute("data-page-tab"))).toEqual(["pending", "history", "journal"]);
+  });
+
   it("shows the organization and team chips only where they mean something", async () => {
     await render();
     expect(host.querySelector("[data-chip=org]")).toBeNull();
@@ -245,7 +257,7 @@ describe("ApprovalsPage", () => {
     await render();
     // #4438: the screen's first read says the person opened it; none reads the History
     expect(fixture.calls.every((call) => call.path === "/api/approvals" || call.path === "/api/approvals?opened=1")).toBe(true);
-    await click([...host.querySelectorAll("[role=tab]")].find((tab) => tab.textContent === "History"));
+    await click([...host.querySelectorAll("[data-approvals-tabs] button")].find((tab) => tab.textContent === "History"));
     expect(fixture.calls.some((call) => call.path === "/api/approvals?history=1")).toBe(true);
     const items = () => [...host.querySelectorAll("[data-approvals-history] li")];
     expect(items()).toHaveLength(2);

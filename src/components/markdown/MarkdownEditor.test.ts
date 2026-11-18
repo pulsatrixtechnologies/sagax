@@ -149,7 +149,9 @@ describe("compact and full screen (routine instructions, 2026-10-29)", () => {
   it("fillModal grows the writing area to the bot page modal's room, never under minHeight; without it minHeight alone", () => {
     render({ value: "x", onChange: () => {}, minHeight: 220, fillModal: true });
     const style = host.querySelector<HTMLElement>("[data-markdown-editor]")!.parentElement!.outerHTML;
-    expect(style).toContain("max(220px, var(--bot-modal-fill, 0px))");
+    expect(style).toContain("--md-min-h: max(220px, var(--bot-modal-fill, 0px))");
+    // the box is the modal's room and no taller: a long text scrolls inside it, so the Save row under it never leaves the window
+    expect(style).toContain("--md-max-h: max(220px, var(--bot-modal-fill, 60vh))");
     render({ value: "x", onChange: () => {}, minHeight: 220 });
     expect(host.innerHTML).not.toContain("--bot-modal-fill");
   });

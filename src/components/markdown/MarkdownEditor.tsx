@@ -339,7 +339,7 @@ export function MarkdownEditor({
     "--md-font-size": "13px",
     ...(full
       ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" }
-      : { "--md-min-h": fillModal ? `max(${typeof minHeight === "number" ? `${minHeight}px` : minHeight}, var(--bot-modal-fill, 0px))` : typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
+      : { "--md-min-h": fillModal ? `max(${typeof minHeight === "number" ? `${minHeight}px` : minHeight}, var(--bot-modal-fill, 0px))` : typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": fillModal ? `max(${typeof minHeight === "number" ? `${minHeight}px` : minHeight}, var(--bot-modal-fill, ${typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight}))` : typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
   } as CSSProperties;
 
   const markEditing = (next: boolean) => {

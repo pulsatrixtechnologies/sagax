@@ -219,7 +219,7 @@ export function PermissionsSection({
   // #3480: what this bot sends the person, its quiet mode first: the
   // person's own bot, whatever the approval rows show (BotFollowsRows draws
   // nothing for a bot that is not theirs)
-  const showReceive = inPart("proactive") && !draft && !bulk;
+  const showReceive = inPart("proactive") && !draft && !bulk && viewerOwnsBot(state.config, bot);
   if (!showReceive && !showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showGrokConnectors && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (

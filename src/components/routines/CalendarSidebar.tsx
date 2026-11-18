@@ -33,22 +33,21 @@ export interface CalendarSidebarProps {
    * instance): the empty line says so instead of "Nothing scheduled". */
   filteredOut?: boolean;
   /** Hidden under 1024px, as the page has always drawn it. */
-  hideNarrow?: boolean;
 }
 
 /** The calendar's right panel (2026-10-18): the month, then what runs
  * next. Bots are scheduled by dragging them from the left sidebar, which
  * already lists them, so this panel no longer repeats them. */
-export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false, hideNarrow = false }: CalendarSidebarProps) {
+export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false }: CalendarSidebarProps) {
   return (
     // The shared right rail (RightRail.tsx), the same as the Memory explorer's. Its content below keeps a 24 px right
     // margin, so it ends on the page header's right edge (the close X); the rail itself reaches the window's edge.
-    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")} hideNarrow={hideNarrow}>
+    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")}>
       <MiniMonth anchor={anchor} onSelect={onSelectDate} />
 
       <div className="ml-4 mr-6 border-t border-hairline/40" />
 
-      <section aria-labelledby="calendar-upcoming-heading" className="flex min-h-0 flex-1 flex-col pb-3 pl-3 pr-6 pt-3">
+      <section aria-labelledby="calendar-upcoming-heading" className="flex min-h-0 flex-1 flex-col pb-3 pl-3 pr-2 pt-3">
         <div className="mb-2 flex items-center justify-between px-1">
           <div id="calendar-upcoming-heading" className="flex items-center gap-2 text-[12px] font-medium text-ink-secondary">
             <CalendarClock size={13} aria-hidden="true" />

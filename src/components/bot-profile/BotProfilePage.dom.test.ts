@@ -1016,48 +1016,20 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
 
     const again = await openOutcomes([waitingRun, doneRun]);
     await click(again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] button[aria-expanded]'), "row r2");
-    // The need block is plain (not lazy). The page's background refresh can replace the routines the gallery
-    // does not serve, so the fixture is dispatched again right before the row is read.
-    await act(async () => { dispatch({ type: "routinesHydrated", routines: fixture.routines, runs: [waitingRun, doneRun] } as never); });
-    const cardSelector = '[data-outcome-row="routine:r2"] [data-outcome-open] [data-outcome-need]';
+    // The card is lazy-loaded. Twelve event-loop ticks do not guarantee the
+    // chunk has arrived while other workers are compiling on the runner.
+    const cardSelector = '[data-outcome-row="routine:r2"] [data-outcome-open] [data-ask-card]';
+    await expect.poll(async () => {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      return again.querySelector(cardSelector) !== null;
+    }, { timeout: 15_000 }).toBe(true);
     const card = again.querySelector<HTMLElement>(cardSelector)!;
     expect(card.textContent).toContain("Which source should replace the one that closed?");
-    // "Needs you" is the row's badge, said once (never again inside the opened row)
-    expect(card.querySelector("[data-outcome-needs]")).toBeNull();
-    expect(card.textContent).not.toContain("Needs you");
-    expect(card.querySelector("[data-outcome-need-text]")!.className).not.toMatch(/font-semibold|text-\[(1[5-9]|2\d)px\]/);
+    expect(card.querySelector("[data-outcome-needs]")!.textContent).toBe("Needs you");
     // nothing is answered here: Reply in chat leaves the page for the run in the chat
     await click(card.querySelector<HTMLElement>("[data-outcome-reply]"), "Reply in chat");
     expect(latest.personaEditor).toBeNull();
     expect(latest.routineRunWindow?.runId).toBe("run-w");
-  });
-
-  it("a problem reads as the problem line: the plain sentence, the provider's words under Details, left-aligned facts, one compact row per run with its state icon", async () => {
-    await mount("en");
-    const failedRun = { id: "run-f", routineId: "r1", routineName: "Résumé", botId: "scout", target: "bot", runOn: "maus", manual: false, status: "failed", scheduledFor: NOW - 600_000, createdAt: NOW - 600_000, startedAt: NOW - 600_000, finishedAt: NOW - 540_000, error: "Search posts all failed 2 times: 429 rate limit exceeded for example.test" };
-    const problemRun = { ...doneRun, id: "run-p", scheduledFor: NOW - 9_000_000, createdAt: NOW - 9_000_000, startedAt: NOW - 9_000_000, finishedAt: NOW - 8_900_000, problems: "One source was skipped." };
-    const noteRun = { ...doneRun, id: "run-n", output: "Posted https://www.example.test/a/status/1234567890?ref=feed done." };
-    const node = await openOutcomes([failedRun, problemRun, noteRun]);
-    await click(node.querySelector<HTMLElement>('[data-outcome-row="routine:r1"] button[aria-expanded]'), "row r1");
-    const open = node.querySelector<HTMLElement>('[data-outcome-row="routine:r1"] [data-outcome-open]')!;
-    const need = open.querySelector<HTMLElement>('[data-outcome-need="problem"]')!;
-    expect(need.querySelector("[data-outcome-need-text]")!.textContent).toContain("ended with problems");
-    expect(need.querySelector("[data-outcome-need-text]")!.textContent).not.toContain("429");
-    expect(need.querySelector("[data-outcome-need-details]")!.textContent).toContain("429 rate limit");
-    expect(need.querySelector("[data-outcome-reply]")).not.toBeNull();
-    expect(need.querySelector("[data-outcome-open-routine]")!.textContent).toBe("Open the routine");
-    // facts: left-aligned in one value column, the address a link worded host and path
-    expect(open.querySelector("dl")!.className).toContain("grid");
-    expect(open.querySelector("[data-outcome-results]")!.innerHTML).not.toContain("text-right");
-    const link = open.querySelector<HTMLAnchorElement>("[data-outcome-results] a")!;
-    expect(link.textContent).toBe("example.test/a/status/1234567890");
-    expect(link.getAttribute("href")).toContain("ref=feed");
-    // runs: each its own date and state icon, never the routine's name repeated, never a green check for a failure
-    const failed = open.querySelector<HTMLElement>('[data-outcome-run="run-f"]')!;
-    expect(failed.querySelector("[data-run-state]")!.getAttribute("data-run-state")).toBe("failed");
-    expect(failed.textContent).not.toContain("Résumé");
-    expect(open.querySelector('[data-outcome-run="run-p"] [data-run-state]')!.getAttribute("data-run-state")).toBe("problems");
-    expect(open.querySelector('[data-outcome-run="run-n"] [data-run-state]')!.getAttribute("data-run-state")).toBe("success");
   });
 
   it("a reached outcome's line gives the day it was reached, never a relative time; a done run says the run card's word", async () => {

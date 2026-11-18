@@ -103,7 +103,6 @@ import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 import { OutcomesCard, useOutcomes } from "./BotProfilePage.tsx-parts/Outcomes";
-import { canRunRoutineNow } from "../routines/RunNowButton";
 import { MemoryManagerPanel, PluginsPanel } from "../lazy-screens";
 import { PageHostProvider } from "../page-host";
 
@@ -582,9 +581,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           else dispatch({ type: "select", id: bot.id });
         },
         onOpenRoutine: (routine) => dispatch({ type: "openRoutine", botId: bot.id, routineId: routine.id }),
-        // "Run a check": the routine once now, as the chat's problem card does
-        onCheck: (routine) => dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (started) => dispatch({ type: "routineRunPatched", run: started }) }),
-        canCheck: (routine) => canRunRoutineNow(state.config, routine, bot),
         onOpenRun: (runId) => {
           onClose();
           openRoutineRun(dispatch, { runId, botId: bot.id });

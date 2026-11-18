@@ -50,7 +50,7 @@ afterEach(() => {
 
 const render = () => renderToStaticMarkup(createElement(SettingsModal));
 
-const CONTAINER_BORDER = /[\s"]rounded-(?:\[14px\]|xl|lg)(?=[\s"]).*?\s(?:border|border-\[0\.5px\])(?=[\s"])/;
+const CONTAINER_BORDER = /[\s"]rounded-(?:\[14px\]|\[20px\]|xl|lg)(?=[\s"]).*?\s(?:border|border-\[0\.5px\])(?=[\s"])/;
 /** Bordered containers drawn inside another bordered container (a card in
  * a card). Not counted: a field's own frame (focus-within) and a popover
  * (absolute), which frame an input or float rather than nest a card. */

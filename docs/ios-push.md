@@ -128,6 +128,20 @@ Developer portal. Xcode automatic signing then puts
 that is on, the extension still sets the alert title to the bot's name, but
 iOS keeps showing the Sagax app icon.
 
+## Time Sensitive Notifications and data protection
+
+An approval card and a direct question from a bot carry
+`interruption-level: time-sensitive` with APNs priority 10, so they break
+through Focus and the scheduled summary. A routine pass and FYI do not
+(passive or active, as before): a notification only rings when there is
+something to do. The app needs the
+`com.apple.developer.usernotifications.time-sensitive` entitlement (the App ID's
+Time Sensitive Notifications capability; automatic signing adds it). The app
+also sets `com.apple.developer.default-data-protection` to
+`NSFileProtectionCompleteUntilFirstUserAuthentication`, matching the portal's
+Data Protection setting, so CarPlay, Push to Talk and the extensions read their
+files while the phone is locked.
+
 ## Live Activities (ActivityKit push)
 
 A bot's Dynamic Island / lock-screen Live Activity is started on the phone

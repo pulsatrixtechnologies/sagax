@@ -376,3 +376,13 @@ describe("an approval push", () => {
     });
   });
 });
+
+describe("interruption level (Time Sensitive Notifications)", () => {
+  it("only an approval card or a direct question is time sensitive; a routine pass or FYI is not", () => {
+    const level = (m: Parameters<typeof message>[0]) => JSON.parse(buildApnsRequest({ message: message(m), bundleId: "x", nowMs: 0 }).body).aps["interruption-level"];
+    expect(level({ kind: "approval", prompt: "approval", requestId: "r" })).toBe("time-sensitive");
+    expect(level({ kind: "approval", prompt: "question", requestId: "q" })).toBe("time-sensitive");
+    expect(level({ kind: "message", title: "Scout", body: "done" })).toBeUndefined();
+    expect(level({ kind: "message", title: "Scout", body: "done", routineName: "Nightly check" })).toBeUndefined();
+  });
+});

@@ -4501,6 +4501,7 @@
   "model.effort.defaultTitle": "Send no effort level and let the provider decide",
   "model.effort.defaultWith": "Default ({level})",
   "model.effort.levelTitle": "Ask for {level} reasoning effort",
+  "model.effort.slowerHint": "More effort is slower",
   "model.effort.max": "Max",
   "model.effort.off": "Off",
   "model.effort.quick": "Quick",

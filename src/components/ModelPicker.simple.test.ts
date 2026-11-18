@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
 
 const fixture = vi.hoisted(() => {
@@ -10,17 +10,6 @@ const fixture = vi.hoisted(() => {
 });
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => false, setAdvancedMode: () => {} }));
 vi.mock("./MenuMotion", () => ({ useMenuMotion: () => ({ shown: true, closing: false, className: "", exitProps: {} }) }));
-// #3116, #4329: the chat bar menu opens on its first step (the providers);
-// a test that reads the models of one provider opens the menu on that step.
-const steps = vi.hoisted(() => ({ path: {} as { provider?: string } }));
-vi.mock("./ModelMenu", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./ModelMenu")>();
-  return {
-    ...actual,
-    ModelSearchList: (props: Parameters<typeof actual.ModelSearchList>[0]) =>
-      actual.ModelSearchList({ ...props, steps: props.steps ? { ...props.steps, initialPath: steps.path } : undefined }),
-  };
-});
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
   useStore: () => ({
@@ -69,40 +58,38 @@ function bot(): Bot {
   };
 }
 
-const html = () => renderToStaticMarkup(createElement(ModelPicker, { bot: bot() }));
-
-beforeEach(() => { steps.path = {}; });
+const html = (forBot: Bot = bot()) => renderToStaticMarkup(createElement(ModelPicker, { bot: forBot }));
+/** The bot on one of this computer's models: the panel opens on that provider. */
+const onModel = (model: string): Bot => ({ ...bot(), modelSelection: { instanceId: "claude", model } });
 
 describe("model picker in Simple mode", () => {
-  it("opens on the providers, with Auto and the bot's model on top (#3116, #4329)", () => {
+  it("opens as the reference's panel: the providers as segments, the current provider's models (#3116, #4329)", () => {
     fixture.instances = [claude(true)];
     const markup = html();
-    expect(markup).toContain('data-model-search-list="popover"');
-    expect(markup).toContain('placeholder="Search models"');
-    expect(markup).toContain('data-model-step="provider"');
-    expect(markup).toContain('data-model-row-key="auto"');
-    expect(markup).toContain("Opus");
+    expect(markup).toContain("data-model-panel");
+    expect(markup).toContain('role="radiogroup"');
+    // Auto is the first segment, every provider one more; the current one shows its name
+    expect(markup).toContain('data-model-panel-segment="view:auto"');
     expect(markup).toContain('data-model-provider="anthropic"');
     expect(markup).toContain(">Claude<");
+    // the models of the provider in use, flat, in one list (no submenu, no step)
+    expect(markup).toContain('data-model-panel-row="claude\u0000claude-opus"');
+    expect(markup).toContain("Extra three");
     // never the tool's name, never a harness step
     expect(markup).not.toContain("Claude Code");
     expect(markup).not.toContain("data-model-harness");
-    // the custom ollama model sits under This computer
+    expect(markup).not.toContain("data-model-step");
+    // the custom ollama model sits under This computer, one segment away
     expect(markup).toContain('data-model-provider="computer"');
-    expect(markup).toContain(">This computer<");
-    expect(markup).toContain(">1 model<");
-    // a provider's models wait for its step
-    expect(markup).not.toContain("Extra three");
+    expect(markup).not.toContain(">qwen<");
+    // six models: no search field yet
+    expect(markup).not.toContain('placeholder="Search models"');
   });
 
   it("keeps the model list and hides effort, catalog chrome and settings links", () => {
     fixture.instances = [claude(true)];
-    steps.path = { provider: "anthropic" };
     const markup = html();
-    expect(markup).toContain('data-model-step="model"');
-    expect(markup).toContain("data-model-step-back");
     expect(markup).toContain("Opus");
-    // #2963: the chat bar menu is flat: every model shows, no Show more.
     expect(markup).not.toContain("data-model-show-more");
     expect(markup).toContain("Extra three");
     expect(markup).not.toContain("Suggested");
@@ -111,6 +98,13 @@ describe("model picker in Simple mode", () => {
     expect(markup).not.toContain("data-model-engines-link");
     expect(markup).not.toContain("data-model-local-entry");
     expect(markup).not.toContain("Show all");
+  });
+
+  it("puts a search field over a provider with more than eight models", () => {
+    const instance = claude(true);
+    for (let index = 0; index < 5; index += 1) instance.models.options.push({ id: `claude-more-${index}`, label: `More ${index}` });
+    fixture.instances = [instance];
+    expect(html()).toContain('placeholder="Search models"');
   });
 
   it("labels the composer chip with the effort, as in Advanced", () => {
@@ -125,9 +119,8 @@ describe("model picker in Simple mode", () => {
     instance.models.options.push({ id: "dwarfstar::qwen3.8-flash-next-chat", label: "DwarfStar: Qwen3.8 Flash Next", custom: true, local: true, anthropic: true });
     fixture.instances = [instance];
     expect(html()).toContain('data-model-provider="computer"');
-    steps.path = { provider: "computer" };
-    const markup = html();
-    expect(markup).toContain('data-model-section="computer"');
+    const markup = html(onModel("dwarfstar::qwen3.8-flash-next-chat"));
+    expect(markup).toContain('data-model-panel-segment="computer"');
     expect(markup).toContain("DwarfStar: Qwen3.8 Flash Next");
     expect(markup).not.toContain("data-model-local-entry");
   });
@@ -144,14 +137,13 @@ describe("model picker in Simple mode", () => {
       { id: "desk8002abc::Twin-Model", label: "Twin-Model", server: ":8002", custom: true, local: true, anthropic: true },
     );
     fixture.instances = [instance];
-    steps.path = { provider: "computer" };
-    const markup = html();
+    const markup = html(onModel("desk8000abc::Ornith-1.5-122B-oQ4e-mtp"));
     expect(markup).toContain("Ornith-1.5-122B-oQ4e-mtp");
     expect(markup).not.toContain(":8000:");
     expect(markup).toContain("oMLX");
     expect(markup).toContain(":8002");
     // who shares it: a second line under the whole name, not appended to it
-    expect(markup).toMatch(/Shared-Model-With-A-Long-Name<\/span>.*data-model-row-sub[^>]*>Shared by Camille Tremblay</s);
+    expect(markup).toMatch(/Shared-Model-With-A-Long-Name<\/span>.*data-model-panel-description[^>]*>Shared by Camille Tremblay</s);
     expect(markup).not.toContain("Shared-Model-With-A-Long-Name (Shared by");
     // the full technical id stays in the tooltip
     expect(markup).toContain("desk8000abc::Ornith-1.5-122B-oQ4e-mtp");
@@ -184,21 +176,21 @@ describe("a thread's picker and its bot's model", () => {
   /** The "<bot>'s model" row of the menu's list, as markup. */
   const followRow = (markup: string) => {
     const menu = markup.slice(markup.indexOf("data-model-menu"));
-    return /<div[^>]*data-follow-bot-model="true"[^>]*>/.exec(menu)?.[0] ?? "";
+    return /<button[^>]*data-follow-bot-model="true"[^>]*>/.exec(menu)?.[0] ?? "";
   };
 
   it("offers the bot's model to a thread on its own", () => {
     fixture.instances = [claude(true)];
     const markup = threadPicker(scout(haiku));
     expect(markup).toContain("Use Atlas&#x27;s model");
-    expect(markup).toMatch(/Use Atlas&#x27;s model<\/span><span data-model-row-detail="true" class="[^"]*">Opus<\/span>/);
-    expect(followRow(markup)).not.toContain("aria-current");
+    expect(markup).toMatch(/Use Atlas&#x27;s model<\/span><\/span><span data-model-panel-description[^>]*>Opus<\/span>/);
+    expect(followRow(markup)).toContain('aria-checked="false"');
   });
 
   it("shows a thread that follows its bot as following, and says so in the chip's tooltip", () => {
     fixture.instances = [claude(true)];
     const markup = threadPicker(scout(null));
-    expect(followRow(markup)).toContain('aria-current="true"');
+    expect(followRow(markup)).toContain('aria-checked="true"');
     expect(markup).toContain("Uses Atlas&#x27;s model");
   });
 

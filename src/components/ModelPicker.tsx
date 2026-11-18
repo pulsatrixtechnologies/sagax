@@ -191,9 +191,6 @@ export function ModelPicker({
   // #2050: the stars follow the person through /api/me/models
   useModelFavoritesServerSync();
   const [menu, setMenu] = useState(windowOnly);
-  /** #2106: Auto Edit panel (Intelligence / Balance / Cost); owned here so
-   * ModelPickerMenu stays hook-free for the function-call interaction harness. */
-  const [autoEditOpen, setAutoEditOpen] = useState(false);
   // While the bot works the menu still opens to its reasoning level, which
   // applies from the next turn; the model stays locked.
   const locked = lockedWhileBusy(state, bot, contained, threadId);
@@ -257,7 +254,6 @@ export function ModelPicker({
   const displayedInstanceId = active?.instanceId;
   const closeMenu = (refocus = false) => {
     setMenu(false);
-    setAutoEditOpen(false);
     if (windowOnly) onWindowClose?.();
     if (refocus) (anchorRef.current?.isConnected ? anchorRef.current : triggerRef.current ?? (headless ? fallbackAnchor?.() : null))?.focus();
   };
@@ -455,8 +451,6 @@ export function ModelPicker({
       autoOn={autoOn}
       setEffort={setEffort}
       setAutoOptimize={setAutoOptimize}
-      autoEditOpen={autoEditOpen}
-      setAutoEditOpen={setAutoEditOpen}
       pick={pick}
       effortTitle={effortTitle}
       headless={headless}
@@ -502,8 +496,6 @@ function ModelPickerShell({
   autoOn,
   setEffort,
   setAutoOptimize,
-  autoEditOpen,
-  setAutoEditOpen,
   pick,
   effortTitle,
   headless,
@@ -546,8 +538,6 @@ function ModelPickerShell({
   autoOn: boolean;
   setEffort: (effort: ModelSelection["effort"]) => void;
   setAutoOptimize: (optimize: NonNullable<ModelSelection["autoOptimize"]>) => void;
-  autoEditOpen: boolean;
-  setAutoEditOpen: React.Dispatch<React.SetStateAction<boolean>>;
   pick: (instance: NonNullable<typeof active>, modelId: string, keepOpen?: boolean) => void;
   effortTitle: string;
   headless: boolean;
@@ -647,8 +637,6 @@ function ModelPickerShell({
         autoOn,
         setEffort,
         setAutoOptimize,
-        autoEditOpen,
-        setAutoEditOpen,
         pick,
         effortTitle,
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,

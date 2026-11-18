@@ -99,12 +99,15 @@ const section = (params.get("section") ?? "account") as AppSettingsSection;
 
 function OpenModelPicker() {
   const { state } = useStore();
-  if (!state.bots[0]) return null;
+  // ?bot=<name> (2026-11-17): which of the gallery's bots (Scout Claude, Atlas Grok, Piper an OpenAI-compatible server); &pick=auto: that bot on Auto
+  const shown = state.bots.find((candidate) => candidate.name === params.get("bot")) ?? state.bots[0];
+  if (!shown) return null;
+  const chosen = params.get("pick") === "auto" ? { ...shown, modelSelection: { ...shown.modelSelection, auto: true as const } } : shown;
   // ?picker=bar (#2963): the composer's model chip, which opens the chat bar menu.
-  if (params.get("picker") === "bar") return <div className="m-auto w-[640px]"><ModelPicker bot={state.bots[0]} inComposer /></div>;
+  if (params.get("picker") === "bar") return <div className="m-auto w-[640px]"><ModelPicker bot={chosen} inComposer /></div>;
   // ?picker=chip (#4376): the chat head's chip, which names the account in use
-  if (params.get("picker") === "chip") return <div className="m-auto w-[640px]"><ModelPicker bot={state.bots[0]} /></div>;
-  return <ModelPicker bot={state.bots[0]} windowOnly />;
+  if (params.get("picker") === "chip") return <div className="m-auto w-[640px]"><ModelPicker bot={chosen} /></div>;
+  return <ModelPicker bot={chosen} windowOnly />;
 }
 
 function OpenSettings() {

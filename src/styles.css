@@ -3031,6 +3031,14 @@ body {
    defines, and the skins set `color-scheme: var(--code-color-scheme)`, so
    in the shipped app the base was invalid, the banner and the bar went
    transparent and the hero card floated under a dark gap (#2554). */
+/* Trace the artwork before the skin's ambient drop shadow can widen its alpha. */
+.profile-mascot-contour {
+  --mascot-filter: none;
+  --profile-mascot-edge: color-mix(in srgb, var(--color-ink) 80%, transparent);
+  filter: drop-shadow(1px 0 0 var(--profile-mascot-edge)) drop-shadow(-1px 0 0 var(--profile-mascot-edge))
+    drop-shadow(0 1px 0 var(--profile-mascot-edge)) drop-shadow(0 -1px 0 var(--profile-mascot-edge));
+}
+
 .bot-profile-banner,
 .bot-profile-banner-top {
   --bot-profile-banner-base: #f7f7f7;

@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, BotSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 import { CIRCLE_CLOSE_BUTTON, CIRCLE_LABEL } from "@/lib/circle-button";
-import { MASCOT_HERO_SIZE, MASCOT_RING_SIZE } from "@/components/floating-bots/MascotLookPreview";
+import { MASCOT_HERO_SIZE, MASCOT_PROFILE_SIZE } from "@/components/floating-bots/MascotLookPreview";
+
+import { CHARACTER_PAINT, MASCOT_CHARACTERS, MASCOT_SHAPES, type MascotLook } from "../../../shared/mascot-look";
+import { MASCOT_SKIN_IDS } from "../../../shared/mascot-skins";
 
 const fixture = vi.hoisted(() => ({
   state: {} as Partial<AppState>,
@@ -250,6 +253,25 @@ describe("bot profile page shell", () => {
     }
   });
 
+  it("traces each character and shape once, preserving skins with their own contour", () => {
+    function check(look: MascotLook, needsContour: boolean, mascotSkin?: Bot["mascotSkin"]) {
+      const html = render("overview", { bots: [{ ...bot, mascotSkin, mascotLook: look }] });
+      expect(html).toContain('data-mascot-frame=""');
+      expect(html.includes("profile-mascot-contour"), JSON.stringify(look)).toBe(needsContour);
+    }
+    for (const shape of MASCOT_SHAPES) check({ character: "shape", shape }, true);
+    for (const character of MASCOT_CHARACTERS) {
+      if (character === "owl") {
+        for (const skin of MASCOT_SKIN_IDS) check({ character }, true, skin);
+      } else {
+        for (const skin of CHARACTER_PAINT[character].skins) {
+          const hasEdge = character === "shape" && ["night", "neon", "circuit", "outline"].includes(skin);
+          check({ character, skins: { [character]: skin } }, !hasEdge);
+        }
+      }
+    }
+  });
+
   it("regression (2026-11-09, « mascot more on the left, a bit smaller »): the mascot sits bare and small at the left over a lower banner, the name and label stacked and left-aligned under it", () => {
     const html = render("overview");
     const hero = at(html, 'data-bot-profile-hero=""');
@@ -269,14 +291,12 @@ describe("bot profile page shell", () => {
     for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
     expect(card).toContain("items-start");
     expect(card).not.toContain("items-center");
-    // the reference's avatar (owner 2026-11-17): 64px mascot in a thin 3px soft-white ring, no filled disc (70px frame), this page only
-    const ring = /<span[^>]*data-mascot-ring=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
-    expect(ring).toContain("size-[70px]");
-    expect(ring).toContain("rounded-full");
-    expect(ring).toContain("border-[3px]");
-    expect(ring).not.toContain("bg-app");
+    const frame = /<span[^>]*data-mascot-frame=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
+    expect(frame).toContain("size-[70px]");
+    expect(frame).not.toMatch(/rounded|border|bg-/);
+    expect(heroHtml).toContain("profile-mascot-contour");
     const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
-    expect(stage).toContain(`width:${MASCOT_RING_SIZE}px`);
+    expect(stage).toContain(`width:${MASCOT_PROFILE_SIZE}px`);
     expect(stage).not.toContain("overflow-hidden");
     // name (26px, #4420) then the label, left-aligned, inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
@@ -287,7 +307,7 @@ describe("bot profile page shell", () => {
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[26px\] font-medium/);
-    expect(MASCOT_HERO_SIZE).toBeGreaterThan(MASCOT_RING_SIZE);
+    expect(MASCOT_HERO_SIZE).toBeGreaterThan(MASCOT_PROFILE_SIZE);
     // no button row nor summary in the header: they head the Appearance tab
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
     // nothing lost under it: who sees it, left-aligned (no description line, the bot is asked for it)

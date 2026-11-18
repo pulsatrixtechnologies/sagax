@@ -22,8 +22,8 @@ const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
  * left, the owner 2026-11-09): the reference's avatar reads larger than the
  * owl drawn at 84px, whose art leaves room around it (#4420). */
 export const MASCOT_HERO_SIZE = 96;
-/** The ringed hero's mascot (the reference's 64px avatar inside a 3px ring). */
-export const MASCOT_RING_SIZE = 64;
+/** The profile header keeps the 64px artwork centred in its 70px frame. */
+export const MASCOT_PROFILE_SIZE = 64;
 /** The preview card's Randomize button (and the tab row's, beside Reset). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
@@ -48,8 +48,8 @@ export interface MascotLookPreviewProps {
    * bare hero (the mascot, the name and label under it), no card. */
   heading?: ReactNode;
   subheading?: ReactNode;
-  /** The profile page's hero: a thin 3px ring in soft white, no filled disc (70px frame, 64px mascot) as the reference; no other mascot has it. */
-  ringed?: boolean;
+  /** The profile page's hero: a contour following the visible artwork. */
+  outlined?: boolean;
   /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
   /** The bot's live state and the moves it plays across the app. */
@@ -60,6 +60,7 @@ export interface MascotLookPreviewProps {
 type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
+  outlined?: boolean;
   /** The room around the mascot inside its button (20px in the editor's
    * card, a thin 4px on the profile page's hero). */
   pad?: number;
@@ -68,7 +69,8 @@ type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "
   clip?: boolean;
 };
 
-function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, pad = 20, clip = false }: StageProps) {
+function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, outlined, pad = 20, clip = false }: StageProps) {
+  const skinEdge = !picture && shown === "shape" && ["night", "neon", "circuit", "outline"].includes(shownLook.skins?.shape ?? "plain");
   return (
     <button
       type="button"
@@ -79,7 +81,7 @@ function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, pre
       style={{ width: size + pad, height: size + pad }}
       className={cn("relative grid shrink-0 place-items-center rounded-2xl", clip && "overflow-hidden", focusRing)}
     >
-      <span aria-hidden="true" className={cn("pointer-events-none", shownLock.locked && "opacity-60 grayscale")}>
+      <span aria-hidden="true" className={cn("pointer-events-none", outlined && !skinEdge && "profile-mascot-contour", shownLock.locked && "opacity-60 grayscale")}>
         <BotAvatar
           bot={picture ?? { name: bot.name, color: bot.color, mascotSkin: (previewSkin && shown === "owl" ? previewSkin : owlSkin) as typeof owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
           size={size}
@@ -120,7 +122,7 @@ export function MascotLookPreview({
   onRandomize,
   heading,
   subheading,
-  ringed,
+  outlined,
   picture,
   liveState,
   liveMotion,
@@ -136,11 +138,11 @@ export function MascotLookPreview({
         data-mascot-detail={shown}
         data-mascot-hero=""
         aria-label={t("appearance.preview", { name: shownName })}
-        className={cn("relative flex w-full flex-col items-start text-left", ringed ? "gap-2" : "gap-1")}
+        className={cn("relative flex w-full flex-col items-start text-left", outlined ? "gap-2" : "gap-1")}
       >
-        {ringed ? (
-          <span data-mascot-ring="" className="grid size-[70px] shrink-0 place-items-center rounded-full border-[3px] border-white/80">
-            <MascotStage {...stage} size={MASCOT_RING_SIZE} pad={0} />
+        {outlined ? (
+          <span data-mascot-frame="" className="grid size-[70px] shrink-0 place-items-center">
+            <MascotStage {...stage} size={MASCOT_PROFILE_SIZE} pad={0} outlined />
           </span>
         ) : (
           <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />

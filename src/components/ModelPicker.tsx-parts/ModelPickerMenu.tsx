@@ -55,6 +55,7 @@ export function ModelPickerMenu({
   onRow,
   bot,
   favoriteKeys,
+  providerPins,
   viewerLocal,
   openProviders,
   advanced,
@@ -84,6 +85,8 @@ export function ModelPickerMenu({
   onRow: (row: ModelMenuRow) => void;
   bot: Bot;
   favoriteKeys: readonly string[];
+  /** The person's pinned providers (src/lib/model-provider-pins.ts). */
+  providerPins?: readonly string[];
   viewerLocal: boolean;
   /** One place for connections: Settings > Providers (lot 7, no model window). */
   openProviders: () => void;
@@ -185,6 +188,8 @@ export function ModelPickerMenu({
         manage={{ onManage, turnedOff, openActiveModels, openProviders }}
         custom={customModel}
         showSettings={advanced}
+        pinnedProviders={providerPins}
+        onMore={onManage}
       />
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
     </>

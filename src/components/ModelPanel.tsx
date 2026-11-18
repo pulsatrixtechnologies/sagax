@@ -9,7 +9,7 @@
 // Favorites are segments, "Use the bot's model" and "Keep" are the first
 // rows of the list, Fast and Context size sit under Reasoning.
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Check, ChevronRight, Search, Sparkles, Star } from "lucide-react";
+import { Check, ChevronRight, MoreHorizontal, Search, Sparkles, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -23,6 +23,7 @@ import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
 import { foldItems, foldMoreLabel } from "./ShowMoreFold";
 import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { MODELS_SHOWN } from "./settings/ModelSwitchesSettings";
+import { MAX_PROVIDER_PINS, effectiveProviderPins } from "@/lib/model-provider-pins";
 
 /** A provider with more models than this gets a search field over its list. */
 export const PANEL_SEARCH_FROM = 8;
@@ -58,6 +59,12 @@ export interface ModelPanelProps {
   custom?: { label: (text: string) => string; onPick: (text: string) => void };
   /** Hide the settings (Simple mode keeps the panel's model list only). */
   showSettings: boolean;
+  /** The person's pinned providers (src/lib/model-provider-pins.ts), in the order pinned. */
+  pinnedProviders?: readonly string[];
+  /** Opens the Models window, where every provider lives and carries its pin. With it, the
+   * segment row shows the pinned providers (at most three) and a "More" segment;
+   * without it (a surface with no window) the row shows every provider. */
+  onMore?: () => void;
 }
 
 /** The view the panel opens on: Auto when it is on, else the provider that
@@ -101,7 +108,7 @@ function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orient
 }
 
 export function ModelPanel(props: ModelPanelProps) {
-  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings } = props;
+  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings, pinnedProviders, onMore } = props;
   const providers = panelProviders(sections);
   const top = sections.filter((section) => !section.label).flatMap((section) => section.rows);
   const autoRow = top.find((row) => row.kind === "auto");
@@ -118,10 +125,21 @@ export function ModelPanel(props: ModelPanelProps) {
   const known = chosen === AUTO_VIEW ? Boolean(autoRow) : chosen === FAVORITES_VIEW ? favoriteRows.length > 0 : providers.some((section) => section.key === chosen);
   const view = known ? chosen : initialPanelView(sections, false);
 
+  // at most three providers show as segments: the pinned ones (the bot's own and the most starred when none is
+  // pinned), plus the one being viewed while it is not pinned; "More" opens the Models window with all of them
+  const limited = Boolean(onMore) && providers.length > MAX_PROVIDER_PINS;
+  const pins = effectiveProviderPins(pinnedProviders ?? [], providers.map((candidate) => ({
+    key: candidate.key,
+    starred: candidate.rows.filter((row) => favorites.keys.includes(row.key)).length,
+    current: candidate.rows.some((row) => row.current),
+  })));
+  const visibleProviders = limited
+    ? [...pins.flatMap((key) => providers.filter((candidate) => candidate.key === key)), ...providers.filter((candidate) => candidate.key === view && !pins.includes(candidate.key))]
+    : providers;
   const segments: Array<{ key: ViewKey; label: string; icon: ReactNode; current: boolean }> = [
     ...(autoRow ? [{ key: AUTO_VIEW, label: t("model.auto.label"), icon: <Sparkles size={14} aria-hidden="true" />, current: autoOn }] : []),
     ...(favoriteRows.length > 0 ? [{ key: FAVORITES_VIEW, label: t("model.favorites"), icon: <Star size={14} aria-hidden="true" />, current: false }] : []),
-    ...providers.map((section) => ({
+    ...visibleProviders.map((section) => ({
       key: section.key, label: section.label ?? section.key, icon: mark(section.key), current: !autoOn && section.rows.some((row) => row.current),
     })),
   ];
@@ -202,9 +220,10 @@ export function ModelPanel(props: ModelPanelProps) {
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
+      <div className="mx-1.5 mb-1 mt-0.5 flex shrink-0 gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
       <div role="radiogroup" aria-label={t("model.providers")} data-model-panel-segments
         onKeyDown={(event) => arrowRadios(event, "[data-model-panel-segment]", "horizontal")}
-        className="mx-1.5 mb-1 mt-0.5 flex shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-popover-hover/60 p-0.5">
+        className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
         {segments.map((segment) => {
           const on = segment.key === view;
           return (
@@ -220,6 +239,14 @@ export function ModelPanel(props: ModelPanelProps) {
             </button>
           );
         })}
+      </div>
+      {limited && onMore && (
+        <button type="button" data-model-panel-more aria-label={t("model.allProviders")} title={t("model.allProviders")}
+          onMouseDown={(event) => event.preventDefault()} onClick={onMore}
+          className={cn(SEGMENT_BASE, SEGMENT_OFF, "shrink-0")}>
+          <MoreHorizontal size={14} aria-hidden="true" />
+        </button>
+      )}
       </div>
 
       <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>

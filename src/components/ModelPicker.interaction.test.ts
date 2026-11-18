@@ -680,6 +680,10 @@ describe("the models window (windowOnly, #2963)", () => {
     expect(shown.html).toContain(`data-model-favorite="${opus.key}"`);
     expect(shown.html).toContain("data-model-switch=");
     expect(shown.html).toContain(">Models<");
+    // each provider carries its pin (three at most): the bot's own is pinned by default
+    expect(shown.html).toContain('data-model-manager-pin="anthropic"');
+    expect(shown.html).toMatch(/aria-pressed="true"[^>]*data-model-manager-pin="anthropic"/);
+    expect(shown.html).toContain('data-model-manager-pin="openai"');
   });
 
   it("picks a model and keeps the window open", () => {

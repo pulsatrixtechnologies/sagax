@@ -91,13 +91,17 @@ anchor and its box in the frame's viewport on a selection, on scroll and on
 resize, and a clear when it goes; the app posts the same message to the
 inner frame to follow a passage in a new version or to drop it, and the
 frame hears only `window.top` (shared/page-selection.ts,
-`server/pages/page-selection-bridge.test.ts`). On the person's own page over its
+`server/pages/page-selection-bridge.test.ts`, `src/components/PageSelectionAsk.dom.test.ts`, `src/components/PageEditUndo.test.ts`, iOS `PageViewTests`). On the person's own page over its
 bot's conversation (`PageSurface`'s `ask`, given by `ChatViewPagePanel`), the
 app draws from that box, above the frame and never inside the page
-(`src/components/PageSelectionAsk.tsx`): an outline in the skin's accent, a
-"Selected text" tag on its top edge, and a small composer under the passage
-(over it near the bottom) with the bot's avatar, one field and a round send
-button. Send is the person's ordinary message in the bot's conversation with
+(`src/components/PageSelectionAsk.tsx`): an outline in the skin's accent (4 off
+the passage, 1.5 stroke, 8 radius, the accent at 90 and 12 %), a "Selected text"
+tag pinned on its top left edge, and the reference's roomy composer 10 under the
+passage (over it, growing upward, when there is no room under; 96 kept clear for
+the docked composer): 360 wide, 18 radius, the bot's avatar, a field that grows
+(Enter sends, Shift+Enter breaks the line) and a round send button. The frame
+reports a keyboard selection (Shift and the arrows, Select all) once the keys rest, and
+Escape in the page (`SELECTION_BRIDGE_SOURCE`). Send is the person's ordinary message in the bot's conversation with
 the page and `selection` (`withPageContext`); the message shows the page chip
 and the passage in the reply's quote strip (`PageSelectionQuote`) at once
 (`pageAskSend` gives it a sendId, as the composer does). A bot busy with
@@ -105,8 +109,20 @@ something else still takes the ask: it queues like the chat. Once the person
 has asked, while the bot works the composer shows the chat's working line in
 place; when its new version is
 drawn the app asks the frame for the passage again on load, and the outline
-follows it or goes. Escape or a click elsewhere puts it away (the page stays
-open); annotation mode keeps the selection for its own notes. An older card that a newer version replaced says "Updated below"
+follows it or goes. Escape (in the field, in the page, or anywhere in the app)
+or a click elsewhere puts it away (the page stays open); annotation mode keeps
+the selection for its own notes. The bot's answer is its new version, drawn in
+place as soon as it lands, with one line over the page ("{bot} edited this
+passage", Undo; `src/components/PageEditUndo.tsx`): Undo draws the version the
+person asked about again, publishing it again when the bot's version was the
+published one (the page stays current) or declining it when it is a proposal,
+and the newer versions up to that one are not drawn again; the bot's version
+stays in Versions. The composer is given only to a person who can write in that
+conversation: a page they only read has none. On iPhone and iPad (`ios/App/Features/Pages/PageSelectionAsk.swift`) the
+selection's edit menu has "Ask <bot>": the same outline, tag and composer over
+the page's web view, the same message with `dataContext.page.selection`, the
+same one line and Undo; the web view's isolated script forwards the frame's
+`sagax-page-selection` and posts back to it. An older card that a newer version replaced says "Updated below"
 (also when the thread already names a newer version than the mounted card)
 and opens the latest page. Tests: `shared/data-context.test.ts`,
 `server/data-context.test.ts`, `src/components/PageComposerParts.test.ts`,

@@ -226,9 +226,10 @@ var redraw=0;W.addEventListener("resize",function(){clearTimeout(redraw);redraw=
 /** The app's own preview frame (#4099, shared/page-selection.ts), never a
  * reading link: where the person's text selection is, as the anchor
  * annotations use and its box in the frame's viewport, posted to the app
- * on a selection and again when the page scrolls or resizes; a clear when
- * the selection goes. The app may name a passage to follow in the version
- * just drawn (found again by its words, else a clear) or drop it. The
+ * on a selection (a mouse or touch one a moment after the pointer is up, so a double or triple click is finished first, a keyboard
+ * one, Shift and the arrows or Select all, once the keys rest) and again when
+ * the page scrolls or resizes; a clear when the selection goes, or on Escape. The app may name a passage
+ * to follow in the version just drawn (found again by its words, else a clear) or drop it. The
  * page's content is never changed: the app draws the outline. Like the
  * other preview scripts it talks to window.top, the app, past the preview
  * wrapper (which relays only capability messages), and hears only the app.
@@ -243,9 +244,13 @@ function send(){if(!cur)return;var b=box(cur.r);if(!b){cur=null;post({type:"${PA
 function drop(){if(!cur)return;cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null})}
 function pick(){var a=selected(),s=W.getSelection();if(a&&s&&s.rangeCount){cur={a:a,r:s.getRangeAt(0).cloneRange(),live:true};send()}else drop()}
 function soon(){if(!cur||raf)return;raf=(W.requestAnimationFrame||function(f){return setTimeout(f,16)})(function(){raf=0;send()})}
-D.addEventListener("mouseup",function(){setTimeout(pick,0)},true);
+var down=false,rest=0;
+D.addEventListener("mousedown",function(){down=true;clearTimeout(rest)},true);W.addEventListener("blur",function(){down=false});
+D.addEventListener("mouseup",function(){down=false;clearTimeout(rest);var s=W.getSelection();if(!s||s.isCollapsed)setTimeout(pick,0);else rest=setTimeout(pick,300)},true);
 D.addEventListener("keyup",function(e){if(e.shiftKey||e.key==="Shift")pick()},true);
-D.addEventListener("selectionchange",function(){var s=W.getSelection();if(cur&&cur.live&&(!s||s.isCollapsed))drop()});
+D.addEventListener("keydown",function(e){if(e.key==="Escape"&&cur){drop();try{W.getSelection().removeAllRanges()}catch(x){}}},true);
+D.addEventListener("selectionchange",function(){var s=W.getSelection();if(!s||s.isCollapsed){clearTimeout(rest);if(cur&&cur.live)drop();return}
+if(down)return;clearTimeout(rest);rest=setTimeout(function(){if(down)return;var a=selected();if(a&&cur&&cur.live&&cur.a.quote===a.quote&&cur.a.prefix===a.prefix)return;pick()},350)});
 W.addEventListener("scroll",soon,{passive:true});W.addEventListener("resize",soon);
 W.addEventListener("message",function(e){if(e.source!==A||!e.data||e.data.v!==1||e.data.type!=="${PAGE_SELECTION_MESSAGE}")return;var a=e.data.anchor;
 if(a===null){cur=null;try{W.getSelection().removeAllRanges()}catch(x){}return}

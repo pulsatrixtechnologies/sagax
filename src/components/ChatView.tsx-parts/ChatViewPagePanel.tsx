@@ -26,6 +26,12 @@ export function pageAskSend(botId: string, text: string, page: PageContextRef): 
   return { type: "send", botId, text, sendId: crypto.randomUUID(), ...(dataContext ? { dataContext } : {}) };
 }
 
+/** The in-place ask is offered only over this bot's own conversation, where
+ * the person can write: a page they only read has no composer. */
+export function pageAskOffered(canWrite: boolean | null | undefined, openBotId: string | undefined, botId: string): boolean {
+  return canWrite !== false && (!openBotId || openBotId === botId);
+}
+
 /** Open page surface (stage cover or beside) with its optional docked composer. */
 export function ChatViewPagePanel({
   bot,
@@ -124,7 +130,7 @@ export function ChatViewPagePanel({
         // Only over this bot's own conversation, where the person can write;
         // the words go as their ordinary message there, with the page and the
         // passage, and the bot's new version is drawn in place.
-        {...(canWrite !== false && (!openPage.botId || openPage.botId === bot.id) ? {
+        {...(pageAskOffered(canWrite, openPage.botId, bot.id) ? {
           ask: {
             avatar: <BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={28} />,
             botName: bot.name,

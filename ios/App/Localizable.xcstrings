@@ -304,6 +304,22 @@
         }
       }
     },
+    "%@ edited this passage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ edited this passage"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a modifié ce passage"
+          }
+        }
+      }
+    },
     "%@ KB": {
       "localizations": {
         "fr": {
@@ -13087,6 +13103,38 @@
         }
       }
     },
+    "Ask %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à %@"
+          }
+        }
+      }
+    },
+    "Ask %@ about the selected text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask %@ about the selected text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à %@ à propos du texte sélectionné"
+          }
+        }
+      }
+    },
     "Ask %@ to continue": {
       "localizations": {
         "en": {
@@ -13121,6 +13169,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Peça a um bot para fazer algo mais tarde."
+          }
+        }
+      }
+    },
+    "Ask about this passage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask about this passage"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pose ta question sur ce passage"
           }
         }
       }
@@ -54779,6 +54843,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ressource changée"
+          }
+        }
+      }
+    },
+    "Selected text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texte sélectionné"
           }
         }
       }

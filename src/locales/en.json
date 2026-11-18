@@ -14361,6 +14361,8 @@
   "pages.selection.tag": "Selected text",
   "pages.selection.placeholder": "Ask about this passage",
   "pages.selection.composer": "Ask {name} about the selected text",
+  "pages.edit.applied": "{name} edited this passage",
+  "pages.edit.undo": "Undo",
   "outcomes.replyInChat": "Reply in chat",
   "outcomes.results": "Results",
   "outcomes.recentRuns": "Recent runs",

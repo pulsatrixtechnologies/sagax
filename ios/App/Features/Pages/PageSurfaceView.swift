@@ -78,6 +78,10 @@ struct PageSurfaceView: View {
     let onClose: () -> Void
     /// The page changed (title, sharing) or the version on screen did.
     var onShown: ((PublishedPageSummary?, Int?) -> Void)?
+    /// Ask the bot about a selected passage, in place (#4099): the person's
+    /// own page over their conversation with its bot, where they can write.
+    /// Absent elsewhere (the Library, Settings, a person who only reads).
+    var ask: PageAsk?
 
     @State private var page: PublishedPageSummary?
     @State private var version: Int?
@@ -93,6 +97,15 @@ struct PageSurfaceView: View {
     @State private var capabilities: PageCapabilityBroker?
     @State private var relay = PageCapRelay()
     @State private var handedFile: ShareFile?
+    // the in-place ask about a selected passage (#4099)
+    @State private var selection: PageSelectionUpdate?
+    @State private var asking: AskingPassage?
+    @State private var selectionRelay = PageSelectionRelay()
+    /// The version the person last asked about from the page, what the bot
+    /// answered with, and the newest version they sent back with Undo.
+    @State private var askedFrom: Int?
+    @State private var edited: (from: Int, to: Int)?
+    @State private var skipped = 0
     @FocusState private var titleFocused: Bool
 
     private var theme: PageTheme { Theme.palette.isDark ? .dark : .light }
@@ -107,8 +120,19 @@ struct PageSurfaceView: View {
                         if let capabilities { PageCapabilityStrip(broker: capabilities) }
                         PageWebView(source: source, apiBase: session.pageApiBase, drawID: drawID, dark: theme == .dark, onPlace: { y in
                             PagePlaces.shared.remember(pageId, y: y)
-                        }, capabilities: capabilities, relay: relay)
+                        }, capabilities: capabilities, relay: relay,
+                        onSelection: ask == nil ? nil : { selection = $0 },
+                        askTitle: ask.map { String(localized: "Ask \($0.chat.name)") },
+                        onAsk: ask == nil ? nil : { openAsk() },
+                        selectionRelay: selectionRelay)
                         .accessibilityIdentifier("page-surface-web")
+                        .overlay {
+                            if let ask, asking != nil {
+                                PageSelectionAskView(
+                                    asking: Binding(get: { asking ?? AskingPassage(quote: PageQuote(quote: ""), rect: PageSelectionRect(x: 0, y: 0, w: 0, h: 0)) }, set: { asking = $0 }),
+                                    chat: ask.chat, working: ask.working, onSend: { sendAsk(ask) }, onCancel: { closeAsk() })
+                            }
+                        }
                     }
                     .padding(.top, 52)
                 } else if error == nil {
@@ -117,6 +141,12 @@ struct PageSurfaceView: View {
             }
             .ignoresSafeArea(.container, edges: .bottom)
             header
+            if let ask, let edited, asking == nil {
+                PageEditUndoLine(name: ask.chat.name, busy: busy, onUndo: { Task { await undoEdit(edited) } }, onClose: { self.edited = nil })
+                    .padding(.top, 58)
+                    .padding(.horizontal, 12)
+                    .transition(.opacity)
+            }
             if let error {
                 Text(verbatim: error)
                     .font(Theme.Font.label)
@@ -130,10 +160,21 @@ struct PageSurfaceView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("page-surface-\(pageId)")
         .task(id: pageId) { await load(asked: initialVersion) }
-        .task(id: PageViewRules.newerVersion(shown: version, latest: latestVersion)) {
+        .task(id: PageViewRules.followedVersion(PageViewRules.newerVersion(shown: version, latest: latestVersion), skipped: skipped)) {
             // the bot changed this page: its new version, at the same place
-            guard let newer = PageViewRules.newerVersion(shown: version, latest: latestVersion), page != nil else { return }
+            guard let newer = PageViewRules.followedVersion(PageViewRules.newerVersion(shown: version, latest: latestVersion), skipped: skipped), page != nil else { return }
+            // the answer to an ask about a passage: said once, with Undo
+            if let from = askedFrom, newer > from {
+                askedFrom = nil
+                edited = (from, newer)
+                if asking != nil { closeAsk() }
+            }
             await load(asked: newer)
+        }
+        .onValueChange(of: ask?.working ?? false) { working in
+            // the bot finished: the composer's working line goes
+            guard var current = asking, current.sent else { return }
+            if working { current.sawWorking = true; asking = current } else if current.sawWorking { closeAsk() }
         }
         .task(id: "\(version ?? 0)") { await loadPreview() }
         .onValueChange(of: theme) { _ in redraw() }
@@ -357,6 +398,58 @@ struct PageSurfaceView: View {
                                          saveFile: { name, _, bytes in hand(name: name, bytes: bytes) })
         }
         source = session.pageWebSource(pageId: pageId, previewPath: previewPath, theme: theme, y: PagePlaces.shared.place(pageId))
+    }
+
+    // MARK: Ask about a passage
+
+    /// "Ask <bot>" in the selection's edit menu: the composer opens at the
+    /// passage the frame last reported.
+    private func openAsk() {
+        guard ask != nil, case let .selected(quote, rect)? = selection else { return }
+        edited = nil
+        asking = AskingPassage(quote: quote, rect: rect)
+    }
+
+    /// Put the composer away and drop the selection in the page.
+    private func closeAsk() {
+        asking = nil
+        selection = nil
+        selectionRelay.request(nil)
+    }
+
+    /// Send is the person's ordinary message about the page and the passage.
+    private func sendAsk(_ ask: PageAsk) {
+        guard var current = asking, !current.sent else { return }
+        let words = current.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        askedFrom = version
+        edited = nil
+        ask.send(words, PageContextRef(pageId: pageId, title: title, version: version, selection: current.quote))
+        current.sent = true
+        current.sawWorking = ask.working
+        asking = current
+    }
+
+    /// Undo of the bot's edit: the version asked about again; the bot's
+    /// version stays in the page's list.
+    private func undoEdit(_ edit: (from: Int, to: Int)) async {
+        guard let page, let client = session.settingsClient else { return }
+        skipped = max(skipped, edit.to, latestVersion ?? 0)
+        busy = true
+        defer { busy = false }
+        do {
+            var next = page
+            for step in PageViewRules.undoSteps(page: page, from: edit.from, to: edit.to) {
+                next = try await client.pageStep(id: pageId, step)
+            }
+            self.page = next
+            version = edit.from
+            edited = nil
+            error = nil
+            onShown?(next, edit.from)
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     // MARK: Actions

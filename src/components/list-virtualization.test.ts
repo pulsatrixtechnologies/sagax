@@ -1,5 +1,5 @@
 // #2791: the long lists outside the sidebar are virtualized too, the header's
-// thread picker and the Team map's bot cards, through the same VirtualRow.
+// thread picker, and the Team map draws a team's first four bots only.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -14,17 +14,11 @@ describe("lists virtualized outside the sidebar (#2791)", () => {
     expect(picker).toContain("eager={active || renaming === task.threadId || rowMenu?.threadId === task.threadId} heldAttributes={{ \"data-sidebar-thread-row\": task.threadId }}");
   });
 
-  it("the Team map pans both ways and each bot card is a VirtualRow of the card's own size", () => {
-    expect(read("./TeamCanvas.tsx")).toContain('data-team-canvas data-virtual-root="both"');
-    const layer = read("./TeamCanvas.tsx-parts/TeamSectionsLayer.tsx");
-    expect(layer).toContain("const BOT_CARD_HEIGHT = 126;");
-    expect(layer).toContain("<VirtualRow key={bot.id} rowKey={`team-card:${bot.id}`} className=\"relative w-[236px]\" estimate={BOT_CARD_HEIGHT} initiallyShown");
-    expect(layer).toContain('heldAttributes={{ "data-bot-id": bot.id }}');
-    // the card being dragged, moved or edited keeps its content
-    expect(layer).toContain("eager={(selectedId === bot.id && settingsOpen) || dragged?.bot.id === bot.id || moving === bot.id || insertion?.botId === bot.id}");
-  });
-
-  it("an insertion point measured on a held card falls back to the card's own box", () => {
-    expect(read("./TeamCanvas.tsx")).toContain('const bounds = (card?.closest("article") ?? card)?.getBoundingClientRect();');
+  it("the Team map pans both ways and draws only each team's first four bots until one is opened", () => {
+    const chart = read("./team-map/TeamMapOrgChart.tsx");
+    expect(chart).toContain('data-team-canvas data-virtual-root="both"');
+    // a team shows SHOW bots and "+N"; only an opened team draws the rest
+    expect(read("../lib/team-map-layout.ts")).toContain("export const SHOW = 4;");
+    expect(read("../lib/team-map-layout.ts")).toContain("open ? ordered : ordered.slice(0, SHOW)");
   });
 });

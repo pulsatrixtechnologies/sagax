@@ -35200,7 +35200,8 @@ ROUTES.push(createTeamMapRoutes({
   group: (id) => store.group(id),
   visibleFor: (auth) => visibleTo(viewerFor(auth)),
   delegationWatchEntries: () => delegationWatch.entries(),
-  liveHandoffEdges: () => coordinator.liveEdges()
+  liveHandoffEdges: () => coordinator.liveEdges(),
+  handoffCounts: (since) => coordinator.handoffCounts(since)
 }));
 const teamExportImportDeps: TeamExportImportRouteDeps = {
   profileName: () => cfg.profile?.name,

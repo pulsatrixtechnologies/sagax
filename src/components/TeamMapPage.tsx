@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, Loader2, Puzzle, Monitor, MonitorSmartphone, Network, Plus, Save, Users, X } from "lucide-react";
+import { BookOpen, Loader2, Puzzle, Monitor, MonitorSmartphone, Network, Plus, Save, Users, X } from "lucide-react";
 
-import { api, formatTime, openBot, openThread, useStore, type Bot } from "@/state/store";
+import { api, useStore, type Bot } from "@/state/store";
 import {
   EMPTY_TEAM_MAP_SNAPSHOT,
-  buildTeamMapEdges,
+  buildTeamMapPairs,
   buildTeamMapSections,
   teamMapBotCount,
-  type TeamMapEdge,
   type TeamMapSnapshot,
 } from "@/lib/team-map";
 import { canManageTeamMap, teamMapMutationError } from "@/lib/team-map-access";
 import { cn } from "@/lib/cn";
-import { useShowThreads } from "@/lib/thread-preferences";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { placeOffered } from "@/lib/place";
 import { isOwnerOrAdmin, readSessionState } from "@/lib/session";
-import { TeamCanvas } from "./TeamCanvas";
+import { TeamMapOrgChart } from "./team-map/TeamMapOrgChart";
 import { TeamDialog } from "./TeamDialog";
 import { PluginTeamImportDialog } from "./PluginTeamImportDialog";
 import { TeamMemoryDialog } from "./TeamMemoryDialog";
@@ -38,46 +36,6 @@ import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections, wit
 import { orderSectionTree, useSectionParents } from "@/lib/section-tree";
 import { deleteTeam, moveBotToTeam, type TeamWriteContext } from "@/lib/team-writes";
 import { viewerActorId } from "@/lib/viewer";
-
-/** One hand-off between two bots. It opens the thread doing the work, the
- * room it ran in, or else the bot it went to, as its own row would. */
-export function EdgeRow({ edge, bots }: { edge: TeamMapEdge; bots: Bot[] }) {
-  const { state, dispatch } = useStore();
-  const showThreads = useShowThreads();
-  const source = bots.find((bot) => bot.id === edge.sourceBotId);
-  const target = bots.find((bot) => bot.id === edge.targetBotId);
-  if (!source || !target) return null;
-  const live = edge.state !== "connected";
-  return (
-    <button
-      onClick={() => {
-        if (!edge.groupId && edge.threadId) openThread(dispatch, { botId: target.id, threadId: edge.threadId }, state, showThreads);
-        else if (edge.groupId) dispatch({ type: "select", id: edge.groupId });
-        else openBot(dispatch, target, showThreads);
-      }}
-      className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card px-3 py-2.5 text-left transition hover:bg-raised/50"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate text-[13px] font-medium text-ink">{source.name}</span>
-        <ArrowRight size={13} className={cn("shrink-0", live ? "text-accent" : "text-ink-secondary")} />
-        <span className="truncate text-[13px] font-medium text-ink">{target.name}</span>
-      </div>
-      {edge.reason && <span className="max-w-[220px] truncate text-[11.5px] text-ink-secondary">{edge.reason}</span>}
-      <span
-        className={cn(
-          "rounded-full px-2 py-0.5 text-[10.5px] font-medium",
-          edge.state === "running"
-            ? "bg-accent/15 text-accent-text"
-            : edge.state === "queued"
-              ? "bg-accent/15 text-accent-text"
-              : "bg-control text-ink-secondary",
-        )}
-      >
-        {edge.state === "running" ? "Running" : edge.state === "queued" ? "Queued" : edge.lastAt ? formatTime(edge.lastAt) : "Connected"}
-      </span>
-    </button>
-  );
-}
 
 interface SectionContextResponse {
   section: string;
@@ -325,7 +283,9 @@ export function TeamMapPage() {
       .sort((a, b) => order(a) - order(b));
   }, [bots, personal, sectionParents, state.sections, state.groups, viewerId, orgMode]);
   const writeContext: TeamWriteContext = { orgMode, dispatch, viewerId, bots: state.bots, serverSections: state.sections ?? [] };
-  const edges = useMemo(() => buildTeamMapEdges(bots, snapshot), [bots, snapshot]);
+  const pairs = useMemo(() => buildTeamMapPairs(bots, snapshot), [bots, snapshot]);
+  // The lead on top of the chart is the viewer's own Primary Bot.
+  const leadId = useMemo(() => sections.flatMap((section) => section.chiefs)[0]?.id ?? null, [sections]);
 
   const refresh = useCallback(async () => {
     try {
@@ -401,22 +361,16 @@ export function TeamMapPage() {
         <button aria-label={t("common.close")} className="rounded p-1 hover:bg-danger/10" onClick={() => { setError(null); setRefreshError(null); }}><X size={14} /></button>
       </div>}
       <div className="relative flex min-h-0 flex-1">
-      <TeamCanvas sections={sections} canManage={canEditTeams} onMove={requestMove}
-        connectedBotIds={state.settingsOpen ? edges.flatMap((edge) => edge.sourceBotId === state.selectedId ? [edge.targetBotId] : edge.targetBotId === state.selectedId ? [edge.sourceBotId] : []) : []}
+      <TeamMapOrgChart sections={sections} pairs={pairs} leadId={leadId} canManage={canEditTeams} onMove={requestMove}
         onComputer={(bot) => dispatch({ type: "toggleSettings", botId: bot.id, section: "access", open: true })}
         teamComputers={Object.fromEntries(hostAnswer.hosts.filter((host) => host.state === "enrolled" && host.section !== null).map((host) => [host.section!, { name: unattendedHostLabel(host), state: host.online ? t("myDevices.onlineNow") : undefined }]))}
         onTeamComputer={() => dispatch({ type: "showRemoteSessions" })}
         onInstructions={(section, label) => setContextEditor({ section, label })}
         onMemory={(section, label) => setMemoryEditor({ section, label })}
         onEditTeam={(section, rename) => setTeamEditor({ section, rename })}
-        onDeleteTeam={setDeletingTeam}
-        isEmpty={(key) => ![...laidOut.bots, ...laidOut.groups].some((record) => record.section?.trim() === key)} />
+        onDeleteTeam={setDeletingTeam} />
       {ownComputers && addingComputer && <AddComputerDialog available={hostAnswer.available} hosts={hostAnswer.hosts as never} onIssued={loadHosts} onClose={() => { setAddingComputer(false); loadHosts(); }} />}
       </div>
-      {edges.length > 0 && <details className="shrink-0 border-t border-hairline/40 bg-panel px-6 py-3">
-        <summary className="cursor-pointer text-[12px] text-ink-secondary">{t("canvas.handoffs")} · {edges.length}</summary>
-        <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">{edges.slice(0, 12).map((edge) => <EdgeRow key={`${edge.sourceBotId}:${edge.targetBotId}`} edge={edge} bots={bots} />)}</div>
-      </details>}
       </div>
       {contextEditor && (
         <SectionContextDialog

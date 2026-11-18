@@ -1815,8 +1815,6 @@
   "canvas.teamComputer": "{name} 的 {team} 團隊電腦",
   "canvas.changeModel": "變更 {name} 的預設模型",
   "canvas.defaultModel": "預設模型",
-  "canvas.arrange": "排列 {name} 團隊",
-  "canvas.arrangeHint": "拖曳以排列。使用方向鍵移動團隊；按住 Shift 可移動較遠。",
   "canvas.reorderHint": "拖曳以排列 · 按 Alt + ↑ / ↓ 重新排序",
   "canvas.arrangeBot": "在 {team} 中排列 {name}",
   "canvas.arrangedBot": "已在 {team} 中排列 {name}。團隊成員不變。",

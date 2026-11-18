@@ -16,7 +16,19 @@ export interface TeamMapBot {
   activity?: "working" | "waiting-on-you" | "idle" | "no-signal" | "dead" | "parked.computer";
 }
 
+/** One ordered pair's handoffs over the last seven days (GET /api/team-map). */
+export interface TeamMapHandoffCount {
+  sourceBotId: string;
+  targetBotId: string;
+  count: number;
+  /** Every handoff of the pair was a consultation: it reads as a review. */
+  kind: "delegates" | "reviews";
+  lastAt: number;
+}
+
 export interface TeamMapSnapshot {
+  /** Seven-day pair counts; absent from an older companion. */
+  handoffs?: TeamMapHandoffCount[];
   collaborations: Array<{ groupId: string; botIds: [string, string]; lastAt: number }>;
   queued: Array<{ sourceBotId: string; targetBotId: string; reason?: string; threadId?: string; groupId?: string }>;
   running: Array<{ sourceBotId: string; targetBotId: string; threadId: string; groupId?: string }>;
@@ -51,6 +63,7 @@ export interface TeamMapStatus {
 }
 
 export const EMPTY_TEAM_MAP_SNAPSHOT: TeamMapSnapshot = {
+  handoffs: [],
   collaborations: [],
   queued: [],
   running: [],
@@ -145,6 +158,71 @@ export function buildTeamMapEdges(bots: TeamMapBot[], snapshot: TeamMapSnapshot)
     const priority = { running: 0, queued: 1, connected: 2 } as const;
     return priority[a.state] - priority[b.state] || (b.lastAt ?? 0) - (a.lastAt ?? 0);
   });
+}
+
+/** A pair of bots the map draws a link for: who hands work to whom, how many
+ * times in seven days, whether it is review, and what is live now. */
+export interface TeamMapPair {
+  sourceBotId: string;
+  targetBotId: string;
+  count: number;
+  kind: "delegates" | "reviews";
+  /** What is live between them now: a running or queued handoff. */
+  live: "running" | "queued" | null;
+  /** A conversation exists between the two but no handoff was counted. */
+  connected: boolean;
+  lastAt?: number;
+  reason?: string;
+  threadId?: string;
+  groupId?: string;
+}
+
+/** One pair per direction: the seven-day counts, the live handoffs on top of
+ * them, and the durable conversations between bots with nothing counted. A
+ * pair never names a bot that is hidden or not in `bots`. */
+export function buildTeamMapPairs(bots: TeamMapBot[], snapshot: TeamMapSnapshot): TeamMapPair[] {
+  const visible = new Set(bots.filter((bot) => !bot.hidden).map((bot) => bot.id));
+  const pairs = new Map<string, TeamMapPair>();
+  const key = (source: string, target: string) => `${source}\u0000${target}`;
+  const get = (source: string, target: string): TeamMapPair | null => {
+    if (source === target || !visible.has(source) || !visible.has(target)) return null;
+    let pair = pairs.get(key(source, target));
+    if (!pair) {
+      pair = { sourceBotId: source, targetBotId: target, count: 0, kind: "delegates", live: null, connected: false };
+      pairs.set(key(source, target), pair);
+    }
+    return pair;
+  };
+  for (const entry of snapshot.handoffs ?? []) {
+    const pair = get(entry.sourceBotId, entry.targetBotId);
+    if (!pair || entry.count <= 0) continue;
+    pair.count = entry.count;
+    pair.kind = entry.kind;
+    pair.lastAt = entry.lastAt;
+  }
+  for (const collaboration of snapshot.collaborations) {
+    const [a, b] = collaboration.botIds;
+    const forward = pairs.get(key(a, b)) ?? pairs.get(key(b, a)) ?? get(a, b);
+    if (forward) {
+      forward.connected = true;
+      forward.lastAt = Math.max(forward.lastAt ?? 0, collaboration.lastAt);
+      if (!forward.groupId) forward.groupId = collaboration.groupId;
+    }
+  }
+  const live = (state: "running" | "queued", list: Array<{ sourceBotId: string; targetBotId: string; reason?: string; threadId?: string; groupId?: string }>) => {
+    for (const item of list) {
+      const pair = get(item.sourceBotId, item.targetBotId);
+      if (!pair) continue;
+      if (state === "queued" && pair.live === "running") continue;
+      pair.live = state;
+      if (item.reason) pair.reason = item.reason;
+      if (item.threadId) pair.threadId = item.threadId;
+      if (item.groupId) pair.groupId = item.groupId;
+    }
+  };
+  live("queued", snapshot.queued);
+  live("running", snapshot.running);
+  return [...pairs.values()].sort((a, b) => b.count - a.count || (b.lastAt ?? 0) - (a.lastAt ?? 0));
 }
 
 export function teamMapStatus(bot: TeamMapBot): TeamMapStatus {

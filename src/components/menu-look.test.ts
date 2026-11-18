@@ -116,7 +116,7 @@ describe("the rows' and cards' three dots menus", () => {
     "src/components/memory-manager/MemoryNotesList.tsx",
     "src/components/plugins/SkillPage.tsx",
     "src/components/memory-manager/MemoryManagerPanel.tsx",
-    "src/components/TeamCanvas.tsx-parts/TeamSectionsLayer.tsx",
+    "src/components/team-map/TeamMenu.tsx",
     "src/components/VoiceCallCard.tsx",
     "src/components/BrowserPanel.tsx-parts/LiveBrowserView.tsx",
     "src/components/RoutineCalendarPage.tsx",
@@ -172,7 +172,7 @@ describe("the rows' and cards' three dots menus", () => {
   it.each([
     "src/components/GoalRunCard.tsx",
     "src/components/MessageHoverActions.tsx",
-    "src/components/TeamCanvas.tsx-parts/TeamSectionsLayer.tsx",
+    "src/components/team-map/TeamMenu.tsx",
     "src/components/VoiceCallCard.tsx",
   ])("%s draws its menu on MENU_SURFACE with menu rows", (file) => {
     const text = readFileSync(file, "utf8");

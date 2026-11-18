@@ -2838,8 +2838,6 @@
   "canvas.teamComputer": "{team} チーム用コンピューター: {name}",
   "canvas.changeModel": "{name} の既定モデルを変更",
   "canvas.defaultModel": "既定モデル",
-  "canvas.arrange": "{name} チームを配置",
-  "canvas.arrangeHint": "ドラッグして配置します。矢印キーでこのチームを移動し、Shift を押すと大きく移動します。",
   "canvas.reorderHint": "ドラッグして配置 · Alt + ↑ / ↓ で並べ替え",
   "canvas.arrangeBot": "{team} 内の {name} を配置",
   "canvas.arrangedBot": "{team} 内の {name} を配置しました。チームの所属は変更されていません。",

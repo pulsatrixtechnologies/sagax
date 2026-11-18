@@ -78,10 +78,6 @@ type BotRecord = {
       await click("Team map");
       await expect.poll(() => evaluate("Boolean(document.querySelector('[data-team-canvas]'))"), { timeout: 10_000 }).toBe(true);
     };
-    const teamPosition = (name: string) => evaluate(`(() => {
-      const team = document.querySelector(${jsLiteral(teamSelector(name))});
-      return { x: parseFloat(team.style.left), y: parseFloat(team.style.top) };
-    })()`);
     const view = () => evaluate(`(() => {
       const canvas = document.querySelector('[data-team-canvas]');
       const world = canvas.querySelector('[data-canvas-world]');
@@ -153,8 +149,8 @@ type BotRecord = {
     await expect.poll(() => evaluate("[...document.querySelectorAll('[data-team-key]')].map(team => team.dataset.teamKey)"))
       .toEqual(expect.arrayContaining(["Engineering", "Research", "Delivery"]));
     expect(await snapshot()).toContain('region "Team canvas"');
-    for (const name of ["Ada", "Ben", "Cleo", "Dana"]) expect(await snapshot()).toContain(`Change default model for ${name}`);
-    expect(await evaluate("[...document.querySelectorAll('[data-team-key] article span')].some(span => span.textContent.trim() === 'Ready')")).toBe(false);
+    for (const name of ["Ada", "Ben", "Cleo", "Dana"]) expect(await snapshot()).toContain(`Edit ${name}`);
+    expect(await evaluate("[...document.querySelectorAll('[data-team-key] [data-org-card]')].some(card => /\\bReady\\b/.test(card.textContent))")).toBe(false);
     expect(await evaluate("document.querySelectorAll('[data-team-canvas] [aria-label^=\"Computer for \"]').length")).toBe(0);
 
     // The full-app fixture has no Boat credentials. The explicit + entry
@@ -186,7 +182,10 @@ type BotRecord = {
       card.dispatchEvent(new PointerEvent('pointerout', { ...options, relatedTarget: document.body }));
       return true;
     })()`);
+    // A click on a card selects it: its popover offers Open chat, Open page, the model and the computer.
     await click("Edit Ben");
+    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-team-map-popover]'))")).toBe(true);
+    await click("Open page");
     await expect.poll(snapshot).toContain('dialog "Ben"');
     expect(await evaluate("Boolean(document.querySelector('[data-team-canvas]'))")).toBe(true);
     await expect.poll(() => evaluate("[...document.querySelectorAll('[data-team-canvas] [aria-label^=\"Computer for \"]')].map(button => button.getAttribute('aria-label'))"))
@@ -194,7 +193,9 @@ type BotRecord = {
     await click("Computer for Ben");
     await expect.poll(() => evaluate("document.querySelector('[data-bot-settings-section=access] > button')?.getAttribute('aria-expanded')")).toBe("true");
     await click("Close settings");
+    await evaluate("document.querySelector('[data-team-map-popover] button[aria-label=\"Close\"]').click(); true");
     await expect.poll(() => evaluate("document.querySelectorAll('[data-team-canvas] [aria-label^=\"Computer for \"]').length")).toBe(0);
+    await click("Edit Ben");
     await click("Change default model for Ben");
     await expect.poll(() => evaluate("document.querySelector('[data-bot-settings-section=model] > button')?.getAttribute('aria-expanded')")).toBe("true");
     expect(await snapshot()).toContain("Default model");
@@ -293,16 +294,10 @@ type BotRecord = {
     expect(await bots()).toEqual(beforeReorder);
     expect(await messages(ben.id)).toEqual(transcript);
     receipts.order = await cardOrder("Delivery");
-    const beforeArrange = await teamPosition("Delivery");
-    receipts.cancelledArrange = await drag('[aria-label="Arrange Delivery team"]', { x: 45, y: 20 }, undefined, true);
-    expect(await teamPosition("Delivery")).toEqual(beforeArrange);
-    receipts.arrange = await drag('[aria-label="Arrange Delivery team"]', { x: 12, y: 10 });
-    await expect.poll(() => teamPosition("Delivery")).not.toEqual(beforeArrange);
-    const arranged = await teamPosition("Delivery");
+    // The org chart places teams by the work: there is no free team position to drag any more.
     const beforePan = await view();
     receipts.pan = await drag('[data-team-canvas]', { x: -60, y: 40 });
     await expect.poll(view).not.toEqual(beforePan);
-    expect(await teamPosition("Delivery")).toEqual(arranged);
     const beforeZoom = await view();
     await click("Zoom in");
     expect((await view()).scale).toBeGreaterThan(beforeZoom.scale);
@@ -336,13 +331,11 @@ type BotRecord = {
     })()`)).toBe(true);
 
     const layout = await evaluate("Object.fromEntries(Object.entries(localStorage).filter(([key]) => key.startsWith('omb-team-canvas:')))");
-    expect(Object.keys(layout)).toHaveLength(2);
     expect(Object.keys(layout).filter(key => key.endsWith(":bot-order"))).toHaveLength(1);
     receipts.layout = layout;
     await evaluate("location.reload(); true");
     await expect.poll(snapshot, { timeout: 15_000 }).toContain("Actions for Ada");
     await openMap();
-    await expect.poll(() => teamPosition("Delivery"), { timeout: 10_000 }).toEqual(arranged);
     await expect.poll(() => cardOrder("Delivery"), { timeout: 10_000 }).toEqual(reordered);
     expect(await evaluate("Object.fromEntries(Object.entries(localStorage).filter(([key]) => key.startsWith('omb-team-canvas:')))"))
       .toEqual(layout);
@@ -364,7 +357,7 @@ type BotRecord = {
         document.body.append(probe);
         try { return getComputedStyle(probe).backgroundColor; } finally { probe.remove(); }
       })()`);
-      await expect.poll(() => evaluate("getComputedStyle(document.querySelector('[data-team-key] article')).backgroundColor"),
+      await expect.poll(() => evaluate("getComputedStyle(document.querySelector('[data-team-key] [data-org-card]')).backgroundColor"),
         { timeout: 5_000 }).toBe(cardColor);
       receipts[`${skin}CardColor`] = cardColor;
       const screenshot = `${fixture.logPath}.team-canvas-${skin}.png`;

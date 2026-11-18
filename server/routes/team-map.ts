@@ -31,6 +31,19 @@ export interface TeamMapHandoffEdge {
   groupId?: string;
 }
 
+/** Handoffs of one ordered pair inside the window: how many, and whether the
+ * pair works as delegation or as review (every handoff a consultation). */
+export interface TeamMapHandoffCount {
+  sourceBotId: string;
+  targetBotId: string;
+  count: number;
+  consult: boolean;
+  lastAt: number;
+}
+
+/** The Team map counts the last seven days. */
+export const TEAM_MAP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export interface TeamMapVisible {
   bot(id: string): boolean;
   group(id: string): boolean;
@@ -45,6 +58,9 @@ export interface TeamMapRouteDeps {
   visibleFor(auth: RequestAuth): TeamMapVisible;
   delegationWatchEntries(): IterableIterator<[string, TeamMapDelegationWatch]>;
   liveHandoffEdges(): readonly TeamMapHandoffEdge[];
+  /** Pair counts since a time; absent on a host that keeps no handoff rows. */
+  handoffCounts?(since: number): readonly TeamMapHandoffCount[];
+  now?(): number;
 }
 
 export function createTeamMapRoutes(deps: TeamMapRouteDeps): RouteHandler {
@@ -83,8 +99,23 @@ export function createTeamMapRoutes(deps: TeamMapRouteDeps): RouteHandler {
         && (!edge.groupId || visible.group(edge.groupId)));
     const links = (state: "queued" | "running") =>
       handoffs.flatMap(({ state: edgeState, ...link }) => edgeState === state ? [link] : []);
+    // Seven-day counts per pair. Both bots must be ones the caller sees (same
+    // `mapped` set as every link above), so a person never learns of a
+    // handoff to or from a bot that is not theirs.
+    const since = (deps.now?.() ?? Date.now()) - TEAM_MAP_WINDOW_MS;
+    const counts = (deps.handoffCounts?.(since) ?? [])
+      .filter((pair) => pair.count > 0 && mapped.has(pair.sourceBotId) && mapped.has(pair.targetBotId))
+      .map((pair) => ({
+        sourceBotId: pair.sourceBotId,
+        targetBotId: pair.targetBotId,
+        count: pair.count,
+        kind: pair.consult ? "reviews" as const : "delegates" as const,
+        lastAt: pair.lastAt,
+      }))
+      .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
     return json(res, 200, {
       collaborations,
+      handoffs: counts,
       queued: links("queued"),
       running: [...running, ...links("running")],
     });

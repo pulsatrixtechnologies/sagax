@@ -161,6 +161,73 @@ public enum CarCallHandle {
     }
 }
 
+/// One ask waiting for the person, as the car's "To answer" list shows it:
+/// the bot, the card's title, never the command's text on the screen.
+public struct CarApproval: Equatable, Sendable, Identifiable {
+    public let requestId: String
+    public let threadId: String
+    public let botId: String
+    public let botName: String
+    /// The card's title, short enough for a list row.
+    public let title: String
+    /// The command or detail, for the spoken ask only (DrivingSafety cuts it).
+    public let detail: String
+    public let at: Double
+    public var id: String { requestId }
+}
+
+public enum CarApprovals {
+    /// How many asks the list shows (a glance, CarPlay allows more).
+    public static let limit = 8
+    public static let titleLimit = 40
+
+    /// The open tool approvals, newest first, that can be judged by ear: a
+    /// learned skill (a document), a question and a phone-call consent wait
+    /// for the phone (DrivingSafety), and an ask only an admin answers is
+    /// not the person's.
+    public static func items(in state: CompanionState) -> [CarApproval] {
+        var out: [CarApproval] = []
+        for entry in state.pendingApprovals {
+            let card = entry.message.card
+            guard let card, let requestId = card.requestId, card.tool != nil, card.skillRequest == nil,
+                  card.questionRequest == nil, card.phoneCallConsent == nil, card.adminApproval != true,
+                  entry.message.ownerWait == nil
+            else { continue }
+            let name: String
+            let ownerId: String
+            switch state.chat(forThread: entry.threadId) {
+            case let .bot(bot)?: (name, ownerId) = (bot.name, bot.id)
+            case let .room(room)?: (name, ownerId) = (room.name, room.id)
+            case nil: continue
+            }
+            out.append(CarApproval(
+                requestId: requestId, threadId: entry.threadId, botId: ownerId, botName: name,
+                title: clipped(card.title), detail: card.subtitle, at: entry.message.at
+            ))
+            if out.count == limit { break }
+        }
+        return out
+    }
+
+    static func clipped(_ title: String) -> String {
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count > titleLimit else { return text }
+        let cut = String(text.prefix(titleLimit))
+        if let space = cut.lastIndex(of: " ") { return String(cut[..<space]) + "…" }
+        return cut + "…"
+    }
+}
+
+extension CarDirectory {
+    /// The Bots tab: every bot by name, so the driver finds one by place.
+    public static func alphabeticalBots(_ contacts: [CarContact], limit: Int = carLimit) -> [CarContact] {
+        let bots = contacts.filter { $0.kind == .bot }.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        return Array(bots.prefix(max(0, limit)))
+    }
+}
+
 /// What a call does differently while the phone is in the car (CarPlay or a
 /// car's audio): an approval is answered by voice, or waits for the phone;
 /// nothing tells the person to look at the screen.

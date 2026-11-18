@@ -23,6 +23,8 @@ targets:
     entitlements:
       properties:
         com.apple.developer.carplay-voice-based-conversation: true
+        # simple tasks on lists and information screens: the To answer tab
+        com.apple.developer.carplay-driving-task: true
     info:
       properties:
         # The app's window stays SwiftUI's (no configuration for that role);

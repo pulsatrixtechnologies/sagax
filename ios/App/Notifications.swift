@@ -248,6 +248,9 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         switch decision {
         case let .open(target):
             responseHandler?(target)
+            if CarRoute.carPlayConnected {
+                NotificationCenter.default.post(name: .sagaxCarOpenToAnswer, object: nil)
+            }
             completionHandler()
         case .allow, .deny, .confirmKey, .reply, .needsYou, .needsYouAnswer, .proposal:
             if case .confirmKey = decision, let target = NotificationTarget(payload: strings) {

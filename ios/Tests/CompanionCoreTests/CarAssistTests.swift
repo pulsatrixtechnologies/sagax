@@ -156,4 +156,39 @@ final class CarAssistTests: XCTestCase {
         // CPVoiceControlTemplate keeps at most five states
         XCTAssertLessThanOrEqual(CarVoiceState.allCases.count, 5)
     }
+
+    // MARK: - Tabs and the To answer list
+
+    func testTheBotsTabIsAlphabeticalAndTheRecentTabFollowsActivity() throws {
+        let rows = try contacts()
+        XCTAssertEqual(CarDirectory.alphabeticalBots(rows).map(\.name), ["Atlas Finance", "Atlas Support", "Éclaireur", "Scout"])
+        XCTAssertEqual(CarDirectory.recentBots(rows).map(\.name), ["Atlas Support", "Atlas Finance", "Éclaireur", "Scout"])
+        XCTAssertEqual(CarDirectory.alphabeticalBots(rows, limit: 2).count, 2)
+    }
+
+    /// A state where the bot has the card open in its conversation.
+    private func state(asking cards: [(id: String, name: String, card: String)]) throws -> CompanionState {
+        var state = CompanionState()
+        for entry in cards {
+            state.bots.append(try bot(entry.id, name: entry.name))
+            state.messages["t-\(entry.id)"] = [try JSONDecoder().decode(Message.self, from: Data(
+                #"{"id":"m-\#(entry.id)","role":"bot","kind":"options","at":9,"card":\#(entry.card)}"#.utf8))]
+        }
+        return state
+    }
+
+    func testToAnswerListsToolApprovalsByTitleAndLeavesTheOnesThatWaitForThePhone() throws {
+        let plain = #"{"title":"Run a command in the shared project folder please","subtitle":"git push","options":["Allow","Deny"],"requestId":"r1","tool":"Bash"}"#
+        let question = #"{"title":"Which one?","subtitle":"","options":["A","B"],"requestId":"r2","requestType":"question","questionRequest":{"questions":[]}}"#
+        let items = CarApprovals.items(in: try state(asking: [("b1", "Scout", plain), ("b2", "Atlas", question)]))
+        XCTAssertEqual(items.map(\.requestId), ["r1"])
+        XCTAssertEqual(items.first?.botName, "Scout")
+        XCTAssertEqual(items.first?.detail, "git push")
+        XCTAssertLessThanOrEqual(items.first?.title.count ?? 99, CarApprovals.titleLimit + 1)
+    }
+
+    func testAnAnsweredApprovalLeavesTheList() throws {
+        let answered = #"{"title":"Run","subtitle":"","options":["Allow","Deny"],"requestId":"r1","tool":"Bash","answered":"allow"}"#
+        XCTAssertTrue(CarApprovals.items(in: try state(asking: [("b1", "Scout", answered)])).isEmpty)
+    }
 }

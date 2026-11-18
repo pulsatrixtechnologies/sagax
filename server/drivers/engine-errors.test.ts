@@ -236,3 +236,21 @@ describe("a usage limit in its plural words", () => {
     expect(engineFailureKind("You have reached the limit of 20 files")).toBeNull();
   });
 });
+
+describe("#4711: an account whose plan does not allow this use", () => {
+  const raw = "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or contact your admin.";
+
+  it("says which engine refused and what to do, keeping the status and Claude's words", () => {
+    expect(engineFailureKind(raw, 403)).toBe("access");
+    const said = engineFailureMessage("Claude", raw, { status: 403 })!;
+    expect(said).toMatch(/^Claude refused to run this bot: this Claude account does not allow it here \(HTTP 403; Claude says: "Your organization has disabled Claude subscription access/);
+    expect(said).toContain("Connect Claude with an API key in Settings, or switch this bot to another engine.");
+    expect(said).not.toMatch(/stopped with an error/);
+  });
+
+  it("holds the engine like a sign-in (the bot's backups take its next turns), raw or worded", () => {
+    expect(reason(raw)).toBe("auth");
+    expect(reason(engineFailureMessage("Claude", raw, { status: 403 })!)).toBe("auth");
+    expect(classifyError({ text: raw }).transient).toBe(false);
+  });
+});

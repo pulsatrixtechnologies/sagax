@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { ProactiveMode } from "../../shared/proactive-mode.ts";
 import { ROUTINE_RESTARTED } from "../routines/routines.ts";
 import { SignalLedger } from "./signal-ledger.ts";
+import { isProactiveWakePrompt } from "../../shared/proactive-wake-marker.ts";
 import {
   PEER_WAKE_RULES,
   PeerNoticeHops,
@@ -19,6 +20,7 @@ import {
   ProactiveProposals,
   ProactiveWaker,
   PROPOSAL_TTL_MS,
+  proactiveEventsBlock,
   proactivePrompt,
   proactiveRelevance,
   proactiveWakePrompt,
@@ -296,6 +298,14 @@ describe("what the bot reads", () => {
     expect(prompt).toContain("and 2 more events");
     expect(prompt).not.toContain("[UNTRUSTED OWNER]");
     expect(proactiveWakePrompt(batch, { accepted: true })).toContain("The person accepted your proposal");
+  });
+
+  it("#4711: the apps know a wake's prompt, whole or cut, by its markers (never a bubble)", () => {
+    const prompt = proactiveWakePrompt({ mode: "proactive", events: [mail("nova", 1)], more: 0 });
+    expect(isProactiveWakePrompt(prompt)).toBe(true);
+    expect(isProactiveWakePrompt(proactiveEventsBlock([mail("nova", 1)]))).toBe(true);
+    expect(isProactiveWakePrompt(prompt.slice(prompt.indexOf("The block below")))).toBe(true);
+    expect(isProactiveWakePrompt("Pourquoi Apple Mail ne répond pas?")).toBe(false);
   });
 
   it("every turn knows it is proactive when on", () => {

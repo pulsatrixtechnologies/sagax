@@ -808,6 +808,7 @@ import { isTriggerSchedule, type RoutineNeedsPerson } from "../shared/routines.t
 import { routineRunPostsResult } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
+import { runTaskModel } from "./routines/run-task-model.ts";
 import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoices, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
@@ -20435,6 +20436,14 @@ function conversationThreadFor(bot: BotRecord, personId?: string): string | unde
   const own = threadsShownTo(bot, store.tasks(bot.id), person);
   return conversationThreadId(own);
 }
+/** #4711: the model a bot run's own task starts on: the one the chip of the
+ * person's conversation shows (server/routines/run-task-model.ts). */
+function runTaskModelFor(botId: string, run: { model?: string; runAs?: string } | undefined): ModelSelection | undefined {
+  const bot = store.bot(botId);
+  if (!bot) return undefined;
+  const conversation = conversationThreadFor(bot, privateThreads() && run?.runAs ? run.runAs : undefined);
+  return runTaskModel({ routineModel: run?.model, conversation: conversation ? store.taskByThread(botId, conversation) : null });
+}
 /** A conversation started for the bot's owner when they have none (every
  * thread archived, confidential or a job): a plain segment, never selected
  * here (the app selects it when it opens the bot). Not on a Cloud home,
@@ -21018,8 +21027,9 @@ routines = new RoutineManager({
     // (shared/single-stream.ts) takes for the person's conversation, and the
     // chat on screen followed it and came back. syncRoutineRunToSource keeps
     // the tag; a person writing in it later still promotes it.
+    // #4711: on the model the person's conversation shows (its chip), never an older one.
     const task = store.createTask(botId, title, activate, undefined, undefined, undefined, privateThreads() && run?.runAs ? run.runAs : undefined,
-      undefined, false, undefined, false, undefined, run && !activate ? run.id : undefined);
+      runTaskModelFor(botId, run), false, undefined, false, undefined, run && !activate ? run.id : undefined);
     // On a Cloud home a run's conversation is opened, like its results
     // conversation, by whoever wrote the routine: a run of one that is
     // nobody's is confined to a folder of its own, never the bot's project.
@@ -21051,7 +21061,7 @@ routines = new RoutineManager({
     // hidden like a run's task until the run takes it (then tagged with its
     // run), from the frame that announces it (createTask above)
     const task = store.createTask(botId, title, false, undefined, undefined, undefined, privateThreads() && run.runAs ? run.runAs : undefined,
-      undefined, false, undefined, false, undefined, `${RESERVED_RUN_PREFIX}${run.routineId}`);
+      runTaskModelFor(botId, run), false, undefined, false, undefined, `${RESERVED_RUN_PREFIX}${run.routineId}`);
     if (!task) return null;
     return task;
   },

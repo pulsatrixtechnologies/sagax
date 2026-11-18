@@ -161,6 +161,12 @@ describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
     expect(w.unread).toEqual([]);
   });
 
+  it("#4711: a proactive wake's task never becomes a conversation: its prompt is no person's words", () => {
+    const w = world("normal", { proactive: { mode: "proactive", hops: 0, sources: ["run"] } }, true);
+    w.sync();
+    expect(w.promoted).toEqual([]);
+  });
+
   it("a Cloud guest's run muted with nothing else: its task stays in Automations", () => {
     const w = world("muted", {}, true);
     w.sync();

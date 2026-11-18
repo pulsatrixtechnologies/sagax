@@ -282,23 +282,15 @@ export function createPrepareValidateStartTurn(
     // the call expired without a hang-up: its session is gone with it
     voiceSessions.end(state.threadId);
   }
-  // 2026-10-30: a proactive wake runs on the fast model when there is one,
-  // the same pick as a call turn (#1694): most wakes are a quick look.
-  // Auto keeps its own pick; a request that needed a connector keeps it.
-  // Wakes use triggerSource "proactive"; legacy rows may still be webhook+proactive.
-  const proactiveWake =
-    state.opts?.automationSource === "proactive" ||
-    (state.opts?.automationSource === "webhook" && activeRoutineRunForThread(state.threadId)?.proactive);
-  // A wake a usage limit already moved (limitTakeover, above) runs on the
-  // model that took it over, never on the fast pick that was refused.
-  let wakePick = null;
-  if (!state.voiceTurnPick && !state.autoTurn && !state.opts?.warmOnly && proactiveWake && !state.limitTakeover) {
-    wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
-    if (wakePick) state.bot = { ...state.bot, modelSelection: wakePick.selection };
-  }
+  // #4711 (owner, 2026-11-17: "the chip he sees is what runs"): a proactive
+  // wake, a routine run and every other background turn run on the model the
+  // bot's conversation shows, never on a fast model Sagax picks on its own
+  // (the 2026-10-30 wake pick, #1694, sent the wake of a bot set to Grok to Claude's fast
+  // model, which the organization's plan refused). Only a live call keeps its
+  // fast pick: the person waits in silence for its first word.
   // Sagax runs this turn on a fast model of its own pick, not on the
   // conversation's: a limit that refuses it is that model's (limit failover).
-  state.fastDetour = Boolean(state.voiceTurnPick ?? wakePick);
+  state.fastDetour = Boolean(state.voiceTurnPick);
   // Routines and legacy peer delivery already have their own completion
   // owners. Only ordinary chats opt into this scheduler; its child turns
   // carry an exact node id rather than inheriting a routine's lifetime.

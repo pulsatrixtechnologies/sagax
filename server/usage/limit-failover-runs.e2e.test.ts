@@ -6,9 +6,9 @@
 //                        naming its reset
 //   Claude (fake CLI)    an engine this person has: takes the runs over
 //
-// The second test is the report of 2026-11-02 itself: a bot pinned on
-// Primary, whose proactive wake runs on another engine's fast model (the
-// Claude fixture's, #1694), and that engine's limit refuses it.
+// The second test is #4711: a bot pinned on Primary runs its proactive wake
+// on Primary, never on another engine's fast model (the Claude fixture's,
+// the 2026-11-02 pick of #1694), limited or not.
 //
 // Before: a wake refused by its engine's limit failed with "This bot's engine
 // reached its usage limit" (the bot's Primary Bot was told, and relayed it as
@@ -185,15 +185,12 @@ it("a proactive wake and a webhook run its engine's limit refused run on the bac
   }
 }, 180_000);
 
-// The report of 2026-11-02: a bot pinned on its own engine (Primary) runs its
-// proactive wake on a fast model Sagax picks (#1694), here the Claude
-// fixture's, another engine. That engine's usage limit refuses the wake.
-// Before: the wake failed as "This bot's engine reached its usage limit" and
-// a Primary Bot relayed that the bot's engine was down, while it answered.
-// Now the wake runs again at once on the bot's own model (startTurn skips the
-// fast pick once a run was taken over), the line names the quick model that
-// refused, and only that engine is held and reported as limited.
-it("a proactive wake whose fast model, on another engine, a limit refused runs on the bot's own engine", async () => {
+// #4711 (owner, 2026-11-17: "why it didn't switch model?"): a bot pinned on
+// its own engine (Primary) ran its proactive wake on a fast model Sagax
+// picked on another engine (#1694, here the Claude fixture's), which that
+// engine refused. The chip the person reads is what runs: the wake goes to
+// the bot's own engine, and the other engine never sees it, limited or not.
+it("a proactive wake runs on the bot's own model, never on another engine's fast model", async () => {
   const boot = await bootWith((config, dataDir) => {
     const cli = fileURLToPath(new URL("../testing/fake-acp-cli.ts", import.meta.url));
     config.instances = {
@@ -213,10 +210,9 @@ it("a proactive wake whose fast model, on another engine, a limit refused runs o
   try {
     const { bot } = await runControlOmb(["new-bot", "--name", "Fast wakes", "--url", boot.url]) as any;
     await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.activeTaskId}`, { modelSelection: PRIMARY, updateBotDefault: true, approvalMode: "ask" });
-    // Sagax picks another engine's fast model only once its probe found that engine ready.
+    // The Claude engine is ready (the old pick took its fast model only then) and its window is spent.
     await expect.poll(async () => ((await api("GET", `/api/bots/${bot.id}/auto-model`)).excluded as any[])
       .some((entry) => entry.instanceId === "claude" && entry.reason === "offline"), { timeout: 30_000, interval: 500 }).toBe(false);
-    // The Claude account's five-hour window is spent: every turn on Claude is refused until it resets.
     const reset = Math.ceil((Date.now() + 2 * 3_600_000) / 1_000) * 1_000;
     writeFileSync(join(dataDir, "claude-limited.json"), JSON.stringify({ status: "rejected", rateLimitType: "five_hour", resetsAt: reset / 1_000 }));
     await deliverTo(api, bot.id, "post", "FAST_WAKE_6M");
@@ -225,22 +221,13 @@ it("a proactive wake whose fast model, on another engine, a limit refused runs o
     const wake = (await runs()).find((run) => run.proactive);
     const rows = (await api("GET", `/api/threads/${wake.threadId}/messages?limit=200`)).messages as any[];
     evidence.push({ wake, rows });
-    // It went to Claude's fast model first (refused), then ran again on the bot's own model.
-    expect(JSON.stringify(jsonLines(join(dataDir, "claude-prompts.jsonl")))).toContain("Proactive wake");
+    // Before #4711 the wake went to Claude's fast model first: now Claude never sees it.
+    const claudePrompts = existsSync(join(dataDir, "claude-prompts.jsonl")) ? JSON.stringify(jsonLines(join(dataDir, "claude-prompts.jsonl"))) : "";
+    expect(claudePrompts).not.toContain("Proactive wake");
     expect(prompts(join(dataDir, "primary-rpc.jsonl")).length).toBeGreaterThanOrEqual(1);
-    expect(wake).toMatchObject({ limitTakeovers: 1, limitTakeover: PRIMARY });
-    expect(wake.attention ?? "").not.toMatch(/back on/i);
-    const lines = rows.filter((message) => message.tool?.limitFailover);
-    expect(lines.map((message) => message.tool.limitFailover)).toEqual([expect.objectContaining({
-      kind: "switched", from: expect.stringMatching(/^Verification fixture \(claude-.+\)$/), to: "Primary fixture", resetsAt: reset, detour: true,
-    })]);
-    expect(lines[0].tool.name).toMatch(/^notice: Limit reached on Verification fixture \(claude-.+\), a quick model Sagax picked for this turn: continuing on another model\. Sagax skips /);
+    expect(wake.limitTakeovers ?? 0).toBe(0);
+    expect(rows.filter((message) => message.tool?.limitFailover)).toEqual([]);
     expect(rows.filter((message) => message.kind === "activity" && String(message.tool?.name ?? "").startsWith("error:"))).toHaveLength(0);
-    // The limit is the Claude fixture's: the engines' report holds it, never the bot's own engine.
-    const report = await api("GET", "/api/limit-resets?refresh=1");
-    evidence.push({ report });
-    expect((report.engines as any[]).filter((engine) => engine.engine === PRIMARY.instanceId && engine.blocked)).toEqual([]);
-    expect((report.engines as any[]).find((engine) => engine.engine === "claude")).toMatchObject({ blocked: true, resetsAt: reset });
     expect((await runs()).filter((run) => run.status === "failed")).toEqual([]);
   } finally {
     writeFileSync(`${boot.logPath}.limit-fast-wake.json`, JSON.stringify(evidence, null, 2));
@@ -304,12 +291,13 @@ it("a proactive wake no engine could take fails with true words in its notificat
     const blocked = (await wakes()).sort((a, b) => a.createdAt - b.createdAt);
     const wake = blocked.at(-1);
     evidence.push({ wakes: blocked });
-    expect(blocked[0].error).toBe(wake.error);
-    // Its fast model was refused first (Claude's), then the bot's own engine took it and was refused in turn.
-    expect(JSON.stringify(jsonLines(join(dataDir, "claude-prompts.jsonl")))).toContain("Proactive wake");
+    // #4711: the wake runs on the bot's own engine (Primary), never on another engine's fast model; refused there,
+    // the backup (the Claude fixture) took it over and was refused in turn, and its words say so.
     expect(prompts(join(dataDir, "primary-rpc.jsonl")).length).toBeGreaterThanOrEqual(1);
+    expect(blocked[0].error).toMatch(/^Usage limit reached on Verification fixture.*, which was standing in for Primary fixture\. No other engine can take over\./);
     // The first wake tried the takeover; the next ones know no engine can take them.
-    expect(blocked[0]).toMatchObject({ limitTakeovers: 1, limitTakeover: PRIMARY });
+    expect(blocked[0]).toMatchObject({ limitTakeovers: 1 });
+    expect(blocked[1].error).toBe(wake.error);
     expect(wake).toMatchObject({ problemRepeat: { count: 3 } });
     const truth = /^Usage limit reached on Primary fixture\. No other engine can take over\. Primary fixture resets around .+; runs on it work again then\.$/;
     expect(wake.error).toMatch(truth);

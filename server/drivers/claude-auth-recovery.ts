@@ -1,5 +1,6 @@
 import { TurnAuthenticationRefusedError, type RuntimeEvent, type SendTurnInput } from "../contracts.ts";
 import { classifyError } from "./retry.ts";
+import { isPlanAccessRefusal } from "./engine-errors.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 type Frame = {
@@ -16,9 +17,12 @@ type Pending = {
   settle: (error?: Error) => void;
 };
 
-/** Only CLI-marked API errors count; assistant prose about signing out does not. */
+/** Only CLI-marked API errors count; assistant prose about signing out does not.
+ * #4711: an account whose plan does not allow this use is no expired sign-in
+ * (a reconnect changes nothing): it stays an engine error in its own words. */
 export function claudeAuthFailure(frame: { error?: unknown; is_api_error_message?: unknown }, text: string): boolean {
   if (frame.is_api_error_message !== true && typeof frame.error !== "string") return false;
+  if (frame.error !== "authentication_failed" && isPlanAccessRefusal(text)) return false;
   return frame.error === "authentication_failed" || classifyError({ text }).reason === "auth";
 }
 

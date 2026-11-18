@@ -5,14 +5,13 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { placeLabelKey, type Place } from "@/lib/place";
 import { copyText } from "@/lib/copy-text";
-import { readStep, stepArgs, stepDuration, stepJson, stepPhase, stepResult, stepToolName, type StepNameOf } from "@/lib/step-label";
+import { readStep, stepArgs, stepDuration, stepFailureText, stepJson, stepPhase, stepResult, stepToolName, type StepNameOf } from "@/lib/step-label";
 import { parseArgs } from "@/lib/approval-describe";
 import { computerSelectTarget, toolExecutionTarget } from "../../shared/execution-target";
 import { PlaceIcon } from "./PlaceIcon";
 import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
-import { toolFailureText } from "../../shared/tool-failure-text";
 import { connectorRefusalIn } from "../../shared/connector-refusal";
 import type { LocaleKey } from "@/locales";
 
@@ -122,7 +121,9 @@ export function ToolStepDetail({ tool, status, nameOf, place = null, live = fals
   // 2026-11-03: a failure shows its own words, whatever envelope the engine
   // wrapped them in (shared/tool-failure-text.ts); "no error message" only
   // when there are none.
-  const failure = phase === "failed" ? toolFailureText(tool.output) ?? tool.output : tool.output;
+  // #4711: a failed turn's row ("error: <cause>", shared/failed-turn.ts)
+  // carries its cause in its name and no output: the Result shows that cause.
+  const failure = phase === "failed" ? stepFailureText(tool) : tool.output;
   // #3515: a connector's refused sign-in reads in the app's language, whole,
   // with its step to take (shared/connector-refusal.ts, as the thread API says it)
   const said = phase === "failed" && failure ? connectorRefusalIn(failure, (key) => t(key as LocaleKey)) : undefined;

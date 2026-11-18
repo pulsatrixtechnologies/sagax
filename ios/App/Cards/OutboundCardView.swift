@@ -443,6 +443,7 @@ struct OutboundCardView: View {
                                     .italic()
                                     .foregroundStyle(ink.tertiary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(item.id)
                             } else {
                             (Text(verbatim: speakerName(speaker) + ":")
                                 .font(ink.font(12.5, .semibold))
@@ -452,8 +453,8 @@ struct OutboundCardView: View {
                                 .foregroundColor(ink.ink))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            }
                                 .id(item.id)
+                            }
                         }
                     }
                 }

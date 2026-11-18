@@ -3828,7 +3828,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     }));
   });
 
-  it.each([false, true])("finalizes root close after an uncertain Stop succeeds on retry (retained: %s)", async (retained) => {
+  it.each([false, true])("ends the turn on an uncertain Stop and finalizes the close once the cleanup retry confirms it (retained: %s, #4729)", async (retained) => {
     const gate = join(scratch, "retry-stop.gate");
     await create("slow", { FAKE_CLAUDE_SLOW_FINISH_GATE: gate });
     const threadId = `t-retry-stop-${retained}`;
@@ -3847,16 +3847,24 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     });
     try {
       await instance.adapter.interruptTurn(threadId);
-      await recorder.until((event) => event.type === "runtime.error" && event.message.includes("could not be confirmed stopped"));
-      expect(instance.adapter.hasSession(threadId)).toBe(true);
-      expect(recorder.events.some((event) => event.type === "turn.completed" && event.turnId === running.turnId)).toBe(false);
+      // The bot is never left busy: the turn ends at once with a plain reason.
+      await recorder.until((event) => event.type === "turn.completed" && event.turnId === running.turnId);
+      expect(recorder.events).toContainEqual(expect.objectContaining({
+        type: "runtime.error", turnId: running.turnId, message: "the engine did not stop cleanly; the turn was ended",
+      }));
+      expect(instance.adapter.hasSession(threadId)).toBe(false);
     } finally {
       uncertain.mockRestore();
-      await instance.adapter.interruptTurn(threadId);
     }
-    await recorder.until((event) => event.type === "turn.completed" && event.turnId === running.turnId);
-    expect(instance.adapter.hasSession(threadId)).toBe(false);
+    // The cleanup retry probes again by itself, with no second Stop.
+    const confirm = vi.spyOn(procs, "killCliTree");
+    try {
+      await expect.poll(() => confirm.mock.calls.length, { timeout: 5_000 }).toBeGreaterThan(0);
+    } finally {
+      confirm.mockRestore();
+    }
     expect(recorder.events.filter((event) => event.type === "turn.completed" && event.turnId === running.turnId)).toHaveLength(1);
+    expect(recorder.events.filter((event) => event.type === "runtime.error" && event.message === "the engine did not stop cleanly; the turn was ended")).toHaveLength(1);
 
     writeFileSync(gate, "finish");
     const replacement = await instance.adapter.sendTurn({ threadId, text: "replacement" });
@@ -4623,6 +4631,25 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await recorder.until((e) => e.type === "turn.completed" && e.eventId !== firstDone.eventId);
 
     expect(recorder.events.filter((e) => e.type === "turn.retrying").map((e) => e.attempt)).toEqual([1, 2, 1, 2]);
+  }, 20_000);
+
+  it("ends a crashed turn whose engine cannot be confirmed stopped, and keeps retrying the cleanup (#4729)", async () => {
+    await create("exit-early");
+    const uncertain = vi.spyOn(procs, "killCliTree").mockResolvedValue(false);
+    try {
+      const { turnId } = await instance.adapter.sendTurn({ threadId: "t-unconfirmed", text: "go" });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      expect(recorder.events.find((e) => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: false });
+      expect(recorder.events).toContainEqual(expect.objectContaining({
+        type: "runtime.error", turnId, message: "the engine did not stop cleanly; the turn was ended",
+      }));
+      expect(instance.adapter.hasSession("t-unconfirmed")).toBe(false);
+      const probes = uncertain.mock.calls.length;
+      await expect.poll(() => uncertain.mock.calls.length, { timeout: 5_000 }).toBeGreaterThan(probes);
+      expect(recorder.events.filter((e) => e.type === "runtime.error" && e.message === "the engine did not stop cleanly; the turn was ended")).toHaveLength(1);
+    } finally {
+      uncertain.mockRestore();
+    }
   }, 20_000);
 
   it("never retries a terminal (auth-shaped) exit", async () => {

@@ -19,6 +19,11 @@ import { removePrivateTempDir } from "./helpers.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 import { reportBackgroundError } from "../../background-error.ts";
 
+/** What the person reads when the engine's processes could not be confirmed stopped (#4729). */
+export const UNCONFIRMED_STOP_MESSAGE = "the engine did not stop cleanly; the turn was ended";
+/** Backoff of the cleanup probes after an unconfirmed stop: about 26 minutes in all. */
+const UNCONFIRMED_STOP_RETRY_MS = [1_000, 5_000, 15_000, 60_000, 300_000, 600_000, 600_000];
+
 export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
   const {
     session, threadId, emit, base, settle, settleResult, child,
@@ -28,16 +33,35 @@ export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
   } = ctx;
 
   let closeFinalized = false;
+  let unconfirmedStop = false;
+  let cleanupRetry = 0;
 const finalizeClose = async (code: number | null) => {
   if (closeFinalized) return;
   // The root can close while its MCP helpers are still running. Join
   // an in-flight stop (or reap its remaining group) before releasing
   // the turn so a replacement cannot overlap the old helpers.
   if (!(await killCliTree(child, 0))) {
+    if (closeFinalized) return;
     session.broker?.close();
     session.broker = undefined;
     session.elicit.close();
-    emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: "Claude could not be confirmed stopped; its helper processes may still be running." });
+    // #4729: a stop that cannot be confirmed never leaves the bot busy.
+    // The turn ends as failed with a plain reason, once; the group stays
+    // tracked and its cleanup is probed again on a backoff until it is
+    // confirmed, which then finishes this close below.
+    if (!unconfirmedStop) {
+      unconfirmedStop = true;
+      console.warn(`claude: thread ${threadId}: the engine (pid ${child.pid ?? "unknown"}) could not be confirmed stopped; the turn was ended, cleanup is retried`);
+      if (session.turn && !session.turn.settled) {
+        emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: UNCONFIRMED_STOP_MESSAGE });
+        settle(false, session.turn.stopRequested ? "interrupted" : "exit_before_result");
+      }
+    }
+    const delay = UNCONFIRMED_STOP_RETRY_MS[cleanupRetry++];
+    if (delay !== undefined) {
+      const timer = setTimeout(() => { void finalizeClose(code).catch(reportBackgroundError); }, delay);
+      timer.unref?.();
+    }
     return;
   }
   if (closeFinalized) return;

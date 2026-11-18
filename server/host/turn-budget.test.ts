@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { RuntimeEvent } from "../contracts.ts";
 import {
   DEFAULT_TURN_MAX_CONTINUATIONS,
-  DEFAULT_TURN_MAX_MINUTES,
-  DEFAULT_TURN_MAX_STEPS,
   createTurnBudget,
   partialRender,
   turnBudgetConfigSchema,
@@ -48,8 +46,10 @@ function harness(settings: Partial<TurnBudgetSettings> = {}, language: "fr" | "e
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("turn budget (#2737)", () => {
-  it("defaults to a 20 minute and 80 step ceiling, settable per config, bot and env (0 = no ceiling)", () => {
-    expect(turnBudgetSettings({}, {})).toEqual({ enabled: true, maxMinutes: DEFAULT_TURN_MAX_MINUTES, maxSteps: DEFAULT_TURN_MAX_STEPS, maxContinuations: DEFAULT_TURN_MAX_CONTINUATIONS, wrapUpAt: 0.75 });
+  it("applies only ceilings set in config, per bot or by environment", () => {
+    expect(turnBudgetSettings({}, {})).toEqual({ enabled: true, maxContinuations: DEFAULT_TURN_MAX_CONTINUATIONS, wrapUpAt: 0.75 });
+    expect(turnBudgetSettings({ turnBudget: { bots: { other: { maxMinutes: 10 } } } }, {}, "mine").maxMinutes).toBeUndefined();
+    expect(turnBudgetSettings({ turnBudget: { maxContinuations: 0 } }, {})).toMatchObject({ maxMinutes: 20, maxSteps: 80, maxContinuations: 0 });
     expect(DEFAULT_TURN_MAX_CONTINUATIONS).toBe(10);
     expect(turnBudgetSettings({ turnBudget: turnBudgetConfigSchema.parse({ maxContinuations: 3 }) }, {}).maxContinuations).toBe(3);
     expect(turnBudgetSettings({}, { SAGAX_TURN_MAX_CONTINUATIONS: "0" }).maxContinuations).toBe(0);

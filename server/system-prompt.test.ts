@@ -229,7 +229,7 @@ describe("buildSystemPrompt", () => {
     expect(built.stable).toContain(WORK_STYLE_PROMPT);
     expect(built.volatile).not.toContain("How you work");
     // the five things the reference app's bots do that ours were measured not to
-    for (const said of ["state a 1-2 line plan and complete it", "report unfinished work and what remains", "before asking", "session_search", "fix its cause and retry once", "try another route", "never repeat an unchanged failure", "name only the one next step", "Answer first in the person's language", "no preamble"]) {
+    for (const said of ["state a 1-2 line plan and complete it", "report unfinished work and what remains", "before asking", "session_search", "correct the call", "try another authorized route", "never repeat an unchanged failure", "name only the one next step", "Answer first in the person's language", "no preamble"]) {
       expect(WORK_STYLE_PROMPT).toContain(said);
     }
     expect(WORK_STYLE_PROMPT.startsWith("\n")).toBe(true);
@@ -537,13 +537,13 @@ describe("verify-first rule (2026-10-19)", () => {
   // skills_list, session_search, workspace_read, search_tool) over six
   // minutes instead of one card ("Quel rapport, \u00e0 qui ?") in the first
   // step; "versions en prod" ran 23 steps with search_tool nine times.
-  it("asks an ambiguous request with the card in the first step and caps discovery (#2670)", () => {
+  it("asks an ambiguous request with the card in the first step and allows targeted discovery (#2670)", () => {
     expect(VERIFY_FIRST_PROMPT).toMatch(/object or recipient is missing .* is a real decision: ask it with the card as your first step/);
     expect(VERIFY_FIRST_PROMPT).toContain("Envoie-moi le rapport");
     expect(VERIFY_FIRST_PROMPT).toMatch(/zero tool calls before it/);
-    expect(WORK_STYLE_PROMPT).toMatch(/Discovery \(.*\) takes at most two calls per turn, never the same one twice/);
-    expect(WORK_STYLE_PROMPT).toMatch(/a known tool is called, not searched/);
-    expect(WORK_STYLE_PROMPT).toMatch(/wins over a skill's own "catalog first"/);
+    expect(WORK_STYLE_PROMPT).toContain("Use known tools directly");
+    expect(WORK_STYLE_PROMPT).toContain("discover its exact served name and schema, then retry");
+    expect(WORK_STYLE_PROMPT).not.toContain("at most two calls");
     expect(WORK_STYLE_PROMPT).not.toMatch(/[\u2013\u2014]/);
   });
 });

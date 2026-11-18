@@ -22,10 +22,6 @@ export type UnfinishedKind = "announced" | "after_tools";
 /** Rows that hand the turn to the person: their answer is the next step. */
 const ASKS_THE_PERSON = new Set(["options", "widget", "app", "access", "secret", "productKey", "call"]);
 
-/** Tool rows that are a failure streak the loop guard is counting: at this
- * many failed calls in one turn, the guard is the one to act, not this. */
-const LOOP_FAILURES = 3;
-
 // An announcement opens the last sentence: the bot says what it is about to
 // do. "Let me know", "I'll be here", "Je reste disponible" and offers ("If
 // you want, I'll ...", "Si tu veux, je vais ...") are not announcements.
@@ -56,8 +52,6 @@ export function endsWithAnnouncement(text: string): boolean {
 export function unfinishedTurnKind(rows: readonly Pick<Message, "role" | "kind" | "text" | "tool">[]): UnfinishedKind | null {
   const own = rows.filter((row) => row.role === "bot" && row.kind !== "digest");
   if (own.some((row) => ASKS_THE_PERSON.has(row.kind))) return null;
-  const failures = own.filter((row) => row.kind === "activity" && row.tool && row.tool.ok === false).length;
-  if (failures >= LOOP_FAILURES) return null;
   const lastText = own.findLastIndex((row) => row.kind === "text" && Boolean(row.text?.trim()));
   const toolAfter = own.slice(lastText + 1).some((row) => row.kind === "activity" && Boolean(row.tool?.name));
   if (lastText >= 0) {
@@ -79,8 +73,8 @@ export function unfinishedTurnPrompt(kind: UnfinishedKind): string {
     : "You called tools, but the turn ended without a word to the person.";
   return [
     `[Sagax note, not from the person] ${said}`,
-    "Do it now if you can, then tell the person the result in one short message.",
-    "If you cannot do it (no tool for it, it is on their screen, or it needs them), say so plainly in one short message and tell them what to do instead.",
+    "Resume the unfinished work. Read the latest tool result before retrying; verify any change that might already have succeeded.",
+    "Correct the inputs or look up the exact tool name and schema. Finish the authorized steps and report the verified result. Ask only for a decision or input you actually need.",
     "Do not announce it again.",
   ].join(" ");
 }

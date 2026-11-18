@@ -18,15 +18,13 @@
 //
 // Settings, first set wins: SAGAX_TURN_BUDGET=0 (off), SAGAX_TURN_MAX_MINUTES
 // and SAGAX_TURN_MAX_STEPS (0 = no ceiling), SAGAX_TURN_MAX_CONTINUATIONS,
-// config.json `turnBudget.bots[id]`, `turnBudget`, then the defaults (20
-// minutes and 80 steps per segment, 10 continuations, note at 75 %).
+// config.json `turnBudget.bots[id]`, then `turnBudget`. Without a configured
+// ceiling, productive work continues. A configured ceiling has 10 continuations by default.
 import { z } from "zod";
 
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
-export const DEFAULT_TURN_MAX_MINUTES = 20;
-export const DEFAULT_TURN_MAX_STEPS = 80;
 export const DEFAULT_TURN_WRAP_UP_AT = 0.75;
 export const DEFAULT_TURN_MAX_CONTINUATIONS = 10;
 
@@ -77,14 +75,18 @@ export function turnBudgetSettings(
 ): TurnBudgetSettings {
   const section = cfg.turnBudget;
   const bot = botId ? section?.bots?.[botId] : undefined;
-  const pick = (fromEnv: number | null | undefined, key: "maxMinutes" | "maxSteps", fallback: number): number | undefined => {
+  // Existing installations may have opted into segmented budgets by changing
+  // just the continuation count, the wrap-up mark or one of the ceilings.
+  const configured = bot !== undefined || Object.keys(section ?? {}).some(key => key !== "bots")
+    || Boolean(env.SAGAX_TURN_MAX_MINUTES || env.SAGAX_TURN_MAX_STEPS || env.SAGAX_TURN_MAX_CONTINUATIONS || env.SAGAX_TURN_BUDGET === "1");
+  const pick = (fromEnv: number | null | undefined, key: "maxMinutes" | "maxSteps", segmentDefault: number): number | undefined => {
     if (fromEnv !== undefined) return fromEnv ?? undefined;
     if (bot && bot[key] !== undefined) return bot[key] ?? undefined;
     if (section && section[key] !== undefined) return section[key] ?? undefined;
-    return fallback;
+    return configured ? segmentDefault : undefined;
   };
-  const maxMinutes = pick(envLimit(env.SAGAX_TURN_MAX_MINUTES, minutes), "maxMinutes", DEFAULT_TURN_MAX_MINUTES);
-  const maxSteps = pick(envLimit(env.SAGAX_TURN_MAX_STEPS, steps), "maxSteps", DEFAULT_TURN_MAX_STEPS);
+  const maxMinutes = pick(envLimit(env.SAGAX_TURN_MAX_MINUTES, minutes), "maxMinutes", 20);
+  const maxSteps = pick(envLimit(env.SAGAX_TURN_MAX_STEPS, steps), "maxSteps", 80);
   const envContinuations = env.SAGAX_TURN_MAX_CONTINUATIONS?.trim();
   const parsedContinuations = envContinuations ? continuations.safeParse(Number(envContinuations)) : undefined;
   const maxContinuations = parsedContinuations?.success

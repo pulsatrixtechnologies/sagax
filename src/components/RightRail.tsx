@@ -3,7 +3,9 @@
 // so their side, width, border, fold and breakpoint cannot drift apart.
 // Open, it is a 280px column with a border on its left and the "›" fold
 // button in its own row at the top-left; folded, it is a 40px strip (icon
-// and vertical label) that opens it again. It opens from 1280px and starts
+// and vertical label) that opens it again. The rail's own 8px inset plus the
+// aside's 16px right padding put its content on the page header's 24px
+// right edge (the close button's edge), on both pages. It opens from 1280px and starts
 // folded below, the state living with the page for the session.
 import { ChevronRight } from "lucide-react";
 import { useState, type HTMLAttributes, type ReactNode } from "react";
@@ -46,7 +48,7 @@ export function RightRailPanel({ label, onCollapse, hideLabel, hideNarrow = fals
       {...rest}
       aria-label={label}
       data-right-rail=""
-      className={cn("h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel", hideNarrow ? NARROW_HIDDEN : "flex", className)}
+      className={cn("h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel pr-4", hideNarrow ? NARROW_HIDDEN : "flex", className)}
     >
       {onCollapse && (
         <div className="flex shrink-0 px-2 pt-2">

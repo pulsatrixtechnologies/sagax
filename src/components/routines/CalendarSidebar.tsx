@@ -48,7 +48,7 @@ export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectD
 
       <div className="ml-4 mr-6 border-t border-hairline/40" />
 
-      <section aria-labelledby="calendar-upcoming-heading" className="flex min-h-0 flex-1 flex-col pb-3 pl-3 pr-6 pt-3">
+      <section aria-labelledby="calendar-upcoming-heading" className="flex min-h-0 flex-1 flex-col pb-3 pl-3 pr-2 pt-3">
         <div className="mb-2 flex items-center justify-between px-1">
           <div id="calendar-upcoming-heading" className="flex items-center gap-2 text-[12px] font-medium text-ink-secondary">
             <CalendarClock size={13} aria-hidden="true" />

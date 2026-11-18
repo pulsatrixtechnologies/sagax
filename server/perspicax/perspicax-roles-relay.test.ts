@@ -4,7 +4,7 @@ import { PerspicaxMcp, boardListRead, type PerspicaxRoleEvent } from "./perspica
 // Fake Perspicax for the visible-roles relay: no sockets, credentials or live
 // data. "service-desk" is refused (403) on time entries, read and write;
 // the person's own surface ("Moi") reads them.
-function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string; ticketReadableBy?: string; ticketCounts?: Record<string, number>; pauseSwitchedList?: { reached: () => void; release: Promise<void> }; scheduleWritableBy?: string } = {}) {
+function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string; ticketReadableBy?: string; ticketCounts?: Record<string, number>; pauseSwitchedList?: { reached: () => void; release: Promise<void> }; scheduleWritableBy?: string; holidaysRefused?: boolean } = {}) {
   const calls: Array<{ name?: string; args?: any; acting?: string }> = [];
   const acting = new Map<string, string>();
   const profiles = [
@@ -92,6 +92,9 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     if (name === "cw_psa_write" && String(args.resource).startsWith("schedule") && options.scheduleWritableBy !== undefined && role !== options.scheduleWritableBy) {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
+    if (name === "cw_psa_query" && /^schedule[./]holiday/i.test(String(args.resource ?? "")) && (options.holidaysRefused || role === "service-desk")) {
+      return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
     if ((name === "cw_psa_find_time_entries" || name === "cw_psa_log_time") && role === "service-desk") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
@@ -150,6 +153,43 @@ describe("visible roles in the Perspicax relay", () => {
     await f.relay("cw_psa_find_tickets");
     expect(f.calls.filter((call) => call.name === "cw_psa_find_tickets").at(-1)).toMatchObject({ acting: "service-desk" });
     expect(f.events.at(-1)).toMatchObject({ role: { slug: "service-desk", name: "Service Desk", reason: "routine" } });
+  });
+
+  // #4838: an optional holiday read refused under every role does not stop the run
+  it("continues a routine without holiday data when every role refuses it, and says so once", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, holidaysRefused: true });
+    await f.prepare();
+    await f.init();
+    const first = await f.relay("cw_psa_query", { resource: "schedule.holidays" });
+    expect(f.text(first)).toContain("Holiday calendar not read");
+    expect(f.text(first)).toContain("say once in your report");
+    expect(f.text(first)).not.toContain("STOP:");
+    expect((first.body as any).result.isError).toBeUndefined();
+    expect(first.body).toMatchObject({ result: { structuredContent: { available: false, reason: "permission_denied" } } });
+    const second = await f.relay("cw_psa_query", { resource: "schedule.holidays" });
+    expect(f.text(second)).toContain("already reported once");
+    expect(f.text(second)).not.toContain("Missing permission");
+    expect(f.events.some((event) => event.kind === "read_refused")).toBe(true);
+  });
+
+  it("keeps the STOP for a refused holiday read in a chat turn and for other refused reads of a routine", async () => {
+    const chat = fixture({ holidaysRefused: true });
+    await chat.prepare();
+    await chat.init();
+    expect(chat.text(await chat.relay("cw_psa_query", { resource: "schedule.holidays" }))).toContain("STOP:");
+    const routine = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, fallback: "stay" });
+    await routine.prepare();
+    await routine.init();
+    expect(routine.text(await routine.relay("cw_psa_find_time_entries"))).toContain("STOP:");
+  });
+
+  it("reads the holidays under a later role when the first refuses, with no notice", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" } });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_query", { resource: "schedule.holidays" });
+    expect(f.text(answer)).not.toContain("Holiday calendar not read");
+    expect(f.text(answer)).toContain("read this once");
   });
 
   it("stays in the role when the thread said so: no fallback", async () => {

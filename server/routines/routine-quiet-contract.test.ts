@@ -1,8 +1,8 @@
 // #3479, #3695, #3990: routines stay quiet when nothing needs the person. A
 // run started by a trigger follows the same report rule as a scheduled run,
 // and every routine reports by its streak: no run in the chat, one summary
-// (at the first run with a problem for a routine that runs at most once a
-// day, at the third in a row for one that can run several times a day),
+// (at the third run in a row with a problem, whatever the schedule; owner
+// rule 2026-11-18),
 // turned to works again in place. A routine set to post its results posts
 // each one when it runs at most once a day. A run's outcome comes from
 // explicit signals only. Every run stays in the run list with its outcome.
@@ -121,7 +121,7 @@ const ringsDone = (run: RoutineRun, routines?: RoutineManager) => routineRunRing
 });
 
 const PROBLEM = "RUN_STATUS: partial: the backup host has not answered since Monday";
-/** A routine that runs once a day: each run is told as before (#3695). */
+/** A routine that runs once a day: it reports by its streak too (owner rule 2026-11-18). */
 const DAILY = { type: "daily" as const, time: "08:00", weekdays: [0, 1, 2, 3, 4, 5, 6] };
 const start = Date.parse("2026-11-10T08:00:00Z");
 
@@ -461,48 +461,51 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     expect(routineCards(items.rows)).toHaveLength(1);
   });
 
-  it("a routine that runs once a day tells its first problem at once, as the one summary, counted and turned to works again in place (#3990)", async () => {
-    const { routines, prompts, run } = manager(start);
+  it("a routine that runs once a day tells nothing at its first problem, one summary at its third in a row, counted and turned to works again in place (#3990, owner rule 2026-11-18)", async () => {
+    const { routines, run } = manager(start);
     const routine = routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false, schedule: DAILY });
     const chat = conversation({ routines });
-    // the run is told that its problem reaches the person at once
+    // one failed day is not worth a notification, nor two
     const first = await run(routine.id, problem("the backup host did not answer"));
-    expect(prompts.at(-1)).toContain("the person gets your final message as one summary of the problem");
-    expect(prompts.at(-1)).not.toContain("runs in a row");
     chat.sync(first);
-    expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 1, streak: true } });
-    expect(chat.rows[0]!.text).not.toContain("runs with problems");
-    expect(ringsDone(first, routines)).toBe(true);
-    expect(chat.unread).toEqual(["main"]);
-    // the next day, still wrong: the same card counts, in place, quietly
     const second = await run(routine.id, problem("the backup host did not answer"));
-    expect(prompts.at(-1)).toContain("already has one summary");
     chat.sync(second);
-    expect(ringsDone(second, routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(0);
+    expect(ringsDone(first, routines) || ringsDone(second, routines)).toBe(false);
+    expect(chat.unread).toEqual([]);
+    // the third day in a row: its one summary, counted, rings once
+    const third = await run(routine.id, problem("the backup host did not answer"));
+    chat.sync(third);
     expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 2, streak: true } });
-    expect(chat.rows[0]!.text).toContain("2 runs with problems since");
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { firstRunId: first.id, count: 3, streak: true } });
+    expect(chat.rows[0]!.text).toContain("3 runs with problems since");
+    expect(ringsDone(third, routines)).toBe(true);
+    expect(chat.unread).toEqual(["main"]);
+    // the fourth day, still wrong: the same card counts, in place, quietly
+    const fourth = await run(routine.id, problem("the backup host did not answer"));
+    chat.sync(fourth);
+    expect(ringsDone(fourth, routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { count: 4, streak: true } });
     // fixed: that card turns to works again, in place, and nothing else is drawn
     chat.sync(await run(routine.id, "All backups ran.\nNOTHING_TO_REPORT"));
     expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, status: "completed", recovered: { afterRuns: 2, streak: true } });
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, status: "completed", recovered: { afterRuns: 4, streak: true } });
     expect(chat.rows[0]!.text).toContain("Works again");
   });
 
-  it("a routine that runs once a day and posts its results posts each result; its first problem is its one summary (#3990)", async () => {
+  it("a routine that runs once a day and posts its results posts each result; a single problem between two is never told (#3990, owner rule 2026-11-18)", async () => {
     const { routines, run } = manager(start);
     const routine = routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", enabled: false, schedule: DAILY });
     const chat = conversation({ routines, postResults: true });
     const first = await run(routine.id, problem("the calendar did not answer"));
     chat.sync(first);
-    expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 1, streak: true } });
+    expect(routineCards(chat.rows)).toHaveLength(0);
+    expect(ringsDone(first, routines)).toBe(false);
     const brief = await run(routine.id, "Three meetings today, the first at nine.");
     chat.sync(brief);
-    expect(routineCards(chat.rows)).toHaveLength(2);
-    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, recovered: { afterRuns: 1, streak: true } });
-    expect(chat.rows[1]!.routineRun.runId).toBe(brief.id);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.runId).toBe(brief.id);
     expect(ringsDone(brief, routines)).toBe(true);
   });
 });
@@ -972,7 +975,8 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     const h = manager(start);
     const routine = h.routines.create({ name: "Reminder", prompt: "Remind me", botId: "maus-1", enabled: false, schedule: DAILY });
     const chat = conversation({ routines: h.routines });
-    const failed = await h.run(routine.id, problem("the reminder could not be sent"));
+    let failed = await h.run(routine.id, problem("the reminder could not be sent"));
+    for (let index = 1; index < 3; index += 1) { chat.sync(failed); failed = await h.run(routine.id, problem("the reminder could not be sent")); }
     chat.sync(failed);
     expect(routineCards(chat.rows)).toHaveLength(1);
     h.routines.remove(routine.id);
@@ -1011,7 +1015,7 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     });
   }
 
-  it("a scheduled run missed while the computer was offline is told as before (scheduler)", async () => {
+  it("a scheduled run missed while the computer was offline is never told on its own (owner rule 2026-11-18) (scheduler)", async () => {
     const wiring = failures();
     const h = manager(start, { onRunFailed: wiring.onRunFailed });
     const routine = h.routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", schedule: DAILY });
@@ -1019,11 +1023,11 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     h.advance(due - h.now() + 13 * 3_600_000);
     await h.routines.tick();
     const missed = wiring.failed.find((run) => run.status === "missed")!;
-    expect(missed).toMatchObject({ status: "missed", tellsStreak: true });
-    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+    expect(missed).toMatchObject({ status: "missed", tellsStreak: false });
+    expect(told(h.routines, missed)).toBeNull();
   });
 
-  it("a queued run its routine ended before it could start is told as before (missQueuedRun)", async () => {
+  it("a queued run its routine ended before it could start is never told on its own (owner rule 2026-11-18) (missQueuedRun)", async () => {
     const wiring = failures();
     let bot = "busy";
     const h = manager(start, { onRunFailed: wiring.onRunFailed, botState: () => bot as never });
@@ -1036,11 +1040,11 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     bot = "ready";
     await h.routines.tick();
     const missed = wiring.failed.find((run) => run.status === "missed")!;
-    expect(missed).toMatchObject({ status: "missed", error: "The routine ended before this scheduled run could start", tellsStreak: true });
-    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+    expect(missed).toMatchObject({ status: "missed", error: "The routine ended before this scheduled run could start", tellsStreak: false });
+    expect(told(h.routines, missed)).toBeNull();
   });
 
-  it("a queued run kept as missed after a restart is told as before (load path)", async () => {
+  it("a queued run kept as missed after a restart is never told on its own (owner rule 2026-11-18) (load path)", async () => {
     const wiring = failures();
     const h = manager(start, { onRunFailed: wiring.onRunFailed });
     const routine = h.routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", schedule: DAILY, overlap: "queue" } as never);
@@ -1054,8 +1058,8 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     expect(h.routines.listRuns().map((run) => run.status).sort()).toEqual(["queued", "running"]);
     new RoutineManager(h.options);
     const missed = wiring.failed.find((run) => run.status === "missed")!;
-    expect(missed).toMatchObject({ status: "missed", tellsStreak: true });
-    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+    expect(missed).toMatchObject({ status: "missed", tellsStreak: false });
+    expect(told(h.routines, missed)).toBeNull();
   });
 
   it("a run settled before #4050 keeps the count rule its server read", async () => {
@@ -1101,10 +1105,13 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     h.routines.update(routine.id, { schedule: DAILY });
     const second = await h.run(routine.id, problem("stuck"));
     chat.sync(second);
-    expect(second.tellsStreak).toBe(true);
-    expect(h.routines.problemAlert(second, { detail: "told" })).toEqual({ detail: "told" });
+    expect(second.tellsStreak).toBe(false);
+    const third = await h.run(routine.id, problem("stuck"));
+    chat.sync(third);
+    expect(third.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(third, { detail: "told" })).toEqual({ detail: "told" });
     expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(ringsDone(second, h.routines)).toBe(true);
+    expect(ringsDone(third, h.routines)).toBe(true);
   });
 
   /** The runs a server before #4050 settled carry no `tellsStreak`. */
@@ -1130,17 +1137,17 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     expect(chat.rang).toHaveLength(rang);
   });
 
-  it("an upgrade after a daily routine's first problem, told then, tells its streak no second time", async () => {
+  it("an upgrade after a daily routine's streak was told tells it no second time", async () => {
     const h = manager(start);
     const routine = h.routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false, schedule: DAILY });
     const chat = conversation({ routines: h.routines });
-    chat.sync(await h.run(routine.id, problem("the backup host is down")));
+    for (let index = 0; index < 3; index += 1) chat.sync(await h.run(routine.id, problem("the backup host is down")));
     settledBefore(h.routines);
-    const second = await h.run(routine.id, problem("the backup host is down"));
-    chat.sync(second);
-    expect(second.tellsStreak).toBe(false);
-    expect(h.routines.problemAlert(second, { detail: "told" })).toBeNull();
-    expect(ringsDone(second, h.routines)).toBe(false);
+    const fourth = await h.run(routine.id, problem("the backup host is down"));
+    chat.sync(fourth);
+    expect(fourth.tellsStreak).toBe(false);
+    expect(h.routines.problemAlert(fourth, { detail: "told" })).toBeNull();
+    expect(ringsDone(fourth, h.routines)).toBe(false);
     expect(routineCards(chat.rows)).toHaveLength(1);
   });
 

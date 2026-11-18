@@ -3,10 +3,10 @@
 // message, a proactive watch) and however often it runs. The person does
 // not read each of its runs: a finished run that only says how it went
 // writes nothing in their chat; a problem is told once, as one summary
-// card, and that same card says when it works again: at its first run with
-// a problem for a routine that runs at most once a day, once it lasts
-// ROUTINE_PROBLEM_STREAK_TOLD runs in a row for one that can run several
-// times a day (routineProblemToldAt). What else reaches the
+// card, and that same card says when it works again: once it lasts
+// ROUTINE_PROBLEM_STREAK_TOLD runs in a row, whatever its schedule, then
+// again only when its error changes and the new one lasts as long
+// (routineProblemToldAt; owner rule 2026-11-18). What else reaches the
 // chat from a routine: a request that waits on the person, items only they
 // can do, a run they started themselves, and the result of a routine they
 // set to post its results when it runs on a clock once a day or less often
@@ -129,12 +129,12 @@ export function routineRunsSeveralTimesADay(schedule: { type: string; source?: u
 }
 
 /** #3990: after how many runs in a row with a problem the person gets the
- * routine's one summary. A routine that can run several times a day waits
- * ROUTINE_PROBLEM_STREAK_TOLD runs (one slip is not worth a card); one that
- * runs at most once a day tells at its first run with a problem, since
- * waiting would mean days of silence on a real failure. */
-export function routineProblemToldAt(schedule: { type: string; source?: unknown } | null | undefined, after = Date.now(), timeZone?: string): number {
-  return routineRunsSeveralTimesADay(schedule, after, timeZone) ? ROUTINE_PROBLEM_STREAK_TOLD : 1;
+ * routine's one summary: ROUTINE_PROBLEM_STREAK_TOLD, whatever its schedule.
+ * Owner rule (2026-11-18, Perspicax): one failed run is never worth a
+ * notification, a routine that runs once a day included; the schedule is
+ * kept in the signature for the callers that pass it. */
+export function routineProblemToldAt(_schedule?: { type: string; source?: unknown } | null, _after?: number, _timeZone?: string): number {
+  return ROUTINE_PROBLEM_STREAK_TOLD;
 }
 
 /** #3990: whether each completed result of this routine is posted in the

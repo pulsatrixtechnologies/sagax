@@ -239,7 +239,7 @@
       ]
     },
     {
-      "name": "a routine that runs at most once a day: problem runs in a row need the person with the failure line",
+      "name": "a routine that runs at most once a day: three problem runs in a row need the person with the failure line",
       "routines": [
         {
           "id": "r1",
@@ -252,7 +252,7 @@
           },
           "nextRunAt": 1800003600000,
           "createdAt": 1001,
-          "failureStreak": 2
+          "failureStreak": 3
         }
       ],
       "runs": [
@@ -315,7 +315,7 @@
       ]
     },
     {
-      "name": "a routine that runs at most once a day needs the person at its first problem run, as the chat tells it (routineProblemToldAt)",
+      "name": "a routine that runs at most once a day needs the person at its third problem run in a row, as the chat tells it (routineProblemToldAt, owner rule 2026-11-18)",
       "routines": [
         {
           "id": "r1",
@@ -328,7 +328,7 @@
           },
           "nextRunAt": 1800003600000,
           "createdAt": 1001,
-          "failureStreak": 1
+          "failureStreak": 3
         }
       ],
       "runs": [
@@ -934,7 +934,7 @@
       ]
     },
     {
-      "name": "recent runs: newest first, queued left out, Done, Nothing to do or the status (its latest run had problems: a routine that runs at most once a day needs the person)",
+      "name": "recent runs: newest first, queued left out, Done, Nothing to do or the status (its latest run had problems and its streak reached three: the person is needed)",
       "routines": [
         {
           "id": "r1",
@@ -946,7 +946,8 @@
             "timeZone": "America/Toronto"
           },
           "nextRunAt": 1800003600000,
-          "createdAt": 1001
+          "createdAt": 1001,
+          "failureStreak": 3
         }
       ],
       "runs": [

@@ -111,8 +111,8 @@ export interface RoutineNeedFacts<R extends OutcomeRun = OutcomeRun> {
 /** What needs the person for one routine: a run waiting on the person (not
  * on teammates) with its card open, items only they can do still open, a
  * pause after failures, problem runs in a row once the chat's own rule has
- * told the person (routineProblemToldAt: the first for a routine that runs
- * at most once a day, the third for one that runs several times a day) and
+ * told the person (routineProblemToldAt: the third in a row, whatever the
+ * schedule; owner rule 2026-11-18) and
  * no good run since, a goal past its deadline or stalled. The server's
  * verdict on the routine (`needsPerson`, null: nothing) wins; the server
  * itself reads it here, with its facts. */

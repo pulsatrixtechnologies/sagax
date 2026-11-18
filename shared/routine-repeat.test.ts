@@ -96,7 +96,8 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
     ];
     for (const schedule of rare) {
       expect(routineRunsSeveralTimesADay(schedule, at), JSON.stringify(schedule)).toBe(false);
-      expect(routineProblemToldAt(schedule, at), JSON.stringify(schedule)).toBe(1);
+      // owner rule 2026-11-18: one failed run is never told, whatever the schedule
+      expect(routineProblemToldAt(schedule, at), JSON.stringify(schedule)).toBe(ROUTINE_PROBLEM_STREAK_TOLD);
     }
   });
 

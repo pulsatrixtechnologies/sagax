@@ -21303,9 +21303,9 @@ routines = new RoutineManager({
     // off. Who is told is the streak's rule below, a wake's as any run's.
     if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED) proactiveWaker.noteWakeFailed(run.botId);
     // #3695, #3990: a routine says a failure once, at the run of its streak
-    // that tells the person (routineProblemToldAt: the first for a routine
-    // that runs at most once a day, the third for one that can run several
-    // times a day, its one summary card), and a pause of its own as always;
+    // that tells the person (routineProblemToldAt: the third in a row,
+    // whatever its schedule, then again only when its error changes; owner
+    // rule 2026-11-18; its one summary card), and a pause of its own as always;
     // the runs before stay in its run list.
     if (routines) alert = routines.problemAlert(run, alert);
     if (run.threadId) {

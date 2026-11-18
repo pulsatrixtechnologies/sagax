@@ -174,6 +174,8 @@ export interface RoutineRun {
    * engine error, a teammate whose work failed). The reason, for the person:
    * shown as "Completed with problems", never a plain success. */
   problems?: string;
+  /** Skipped steps to retain when the full report replaces its stored excerpt. */
+  completionNotes?: string;
   /** #3479: the same problem as the routine's previous run (the bot's
    * SAME_PROBLEM line, or the same recorded problems): the row of the first
    * run with it is updated in place, nothing new is posted or rung. `count`

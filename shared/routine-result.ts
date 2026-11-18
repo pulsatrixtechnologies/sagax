@@ -154,6 +154,11 @@ export function clipReadable(text: string, max: number, mark = "…"): string {
 export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
 export const ROUTINE_SAME_PROBLEM_MARKER = "SAME_PROBLEM";
 export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
+/** #4839: the status token (any language, the token is never translated) of a
+ * run that did its work and has notes to leave: `RUN_STATUS: completed_with_notes`,
+ * optionally followed by `: <why>`. */
+export const ROUTINE_NOTES_STATUS = "completed_with_notes";
+export const RUN_STATUS_NOTES_LINE = /^[\s`*_>]*RUN_STATUS[\s`*_]*:[\s`*_]*completed_with_notes\b[\s`*_]*[:.]?\s*(.*)$/;
 
 /** #3990: phrases a whole message uses when nothing happened. A finding
  * that only contains one stays a report: routineSaysNothing matches the

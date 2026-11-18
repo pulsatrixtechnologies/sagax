@@ -195,3 +195,15 @@ describe("routineReportProse (#3152)", () => {
     expect(routineReportProse("a | b\n| only one row |\nend")).toBe("a | b\n| only one row |\nend");
   });
 });
+
+describe("completed_with_notes status (#4839)", () => {
+  it("is a token read in any language, outside code blocks, never part of the report", () => {
+    const outcome = routineReportOutcome("RUN_STATUS: completed_with_notes\nTrois dossiers traités.");
+    expect(outcome).toMatchObject({ quiet: false, report: "Trois dossiers traités.", completedWithNotes: true });
+    expect(routineReportOutcome("RUN_STATUS: completed_with_notes: calendrier indisponible").report).toBe("calendrier indisponible");
+    expect(routineReportOutcome("```\nRUN_STATUS: completed_with_notes\n```\nok").completedWithNotes).toBeUndefined();
+  });
+  it("never overrides the bot's failed or partial line", () => {
+    expect(routineReportOutcome("RUN_STATUS: failed: x\nRUN_STATUS: completed_with_notes").completedWithNotes).toBeUndefined();
+  });
+});

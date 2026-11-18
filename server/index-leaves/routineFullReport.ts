@@ -12,7 +12,7 @@ function routineFullReport(run: RoutineRun): string | undefined {
   const last = host.store.messagesFor(run.threadId).findLast((message) => message.role === "bot" && !message.kind && typeof message.text === "string" && message.text.trim());
   if (!last?.text) return undefined;
   const report = routineReportOutcome(redactSecretsInText(last.text)).report;
-  const body = pickRoutineFullReport(run.output, report);
+  const body = pickRoutineFullReport(run.output, report, run.completionNotes);
   if (!body) return undefined;
   // 2026-11-01: dry runs recorded on a proactive wake are visible in its report.
   const dryRuns = run.proactive?.dryRuns;

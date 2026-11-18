@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
+import { routineRunCard } from "./routine-run-card.ts";
 import { isRoutineProblemRun } from "../../shared/routines.ts";
 import { createRoutineWatchEvaluator, RoutineWatchStates } from "./routine-watch.ts";
 import { routineRepeatingRule } from "./routine-report.ts";
@@ -5817,6 +5818,67 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(partial.problems).toBe("two PDFs could not be opened");
     expect(partial.quiet).toBeUndefined();
     expect(partial.output).toBe("Read 10 of 12 invoices.");
+  });
+
+  it("a French report with repeated failed reads and successful work is completed with notes, three runs in a row (#4839)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    for (const n of [1, 2, 3]) {
+      const thread = `thread-${n}`;
+      h.manager.runNow(routine.id); await h.manager.tick();
+      tool(h, thread, "a", "lire_courriel", false, "Erreur 500: boîte verrouillée");
+      tool(h, thread, "b", "lire_courriel", false, "Erreur 500: boîte verrouillée");
+      tool(h, thread, "c", "publier_journal", true, "journal publié");
+      say(h, thread, "RUN_STATUS: partial: deux courriels n'ont pas pu être lus\nJ'ai publié le journal. Deux lectures ont échoué, reprises à la prochaine passe.");
+      done(h, thread);
+    }
+    const runs = h.manager.listRuns().filter((run) => run.routineId === routine.id);
+    expect(runs).toHaveLength(3);
+    for (const run of runs) {
+      expect(run.status).toBe("completed");
+      expect(run.problems).toBeUndefined();
+      expect(isRoutineProblemRun(run)).toBe(false);
+      expect(run.problemRepeat).toBeUndefined();
+      expect(run.tellsStreak).not.toBe(true);
+      expect(run.output).toContain("J'ai publié le journal.");
+      expect(run.output).toContain("deux courriels n'ont pas pu être lus");
+      expect(run.output).toMatch(/lire_courriel failed 2 times: Erreur 500/);
+      expect(JSON.stringify(run)).not.toContain("never succeeded");
+      // the card reads the same record: the notes show in its summary, no problem line
+      const card = routineRunCard(run);
+      expect(card.problems).toBeUndefined();
+      expect(card.summary).toContain("Erreur 500");
+    }
+    expect(h.failed).toHaveLength(0);
+  });
+
+  it("the completed_with_notes status leaves a report-only partial success without a problem, in any language (#4839)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "flow_run", false, "Erreur 500");
+    tool(h, "thread-1", "b", "flow_run", false, "Erreur 500");
+    say(h, "thread-1", "RUN_STATUS: completed_with_notes\nTrois dossiers traités, un laissé pour demain.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.problems).toBeUndefined();
+    expect(run.quiet).toBeUndefined();
+    expect(run.output).toContain("Trois dossiers traités");
+    expect(run.output).not.toContain("completed_with_notes");
+    expect(run.output).toMatch(/failed 2 times/);
+  });
+
+  it("a blocker still fails the notes run: an engine error stays a problem (#4839)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "c", "publier_journal", true, "journal publié");
+    send(h, { threadId: "thread-1", type: "runtime.error", message: "engine exploded", terminal: false });
+    say(h, "thread-1", "RUN_STATUS: partial: un courriel manquant\nJournal publié.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.problems).toContain("engine exploded");
   });
 
   it("a run whose bot ended with NOTHING_TO_REPORT is not completed with problems for a tool it moved past (#3990)", async () => {

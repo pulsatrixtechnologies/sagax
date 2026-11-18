@@ -28,17 +28,18 @@ function clipReport(text: string, max: number, hardMax: number): string {
 /** The task's cleaned report when it is the run record's whole message
  * (#2186): the record keeps 2 000 characters and may end inside a fence, so
  * a strict prefix check alone would drop the rest. */
-export function pickRoutineFullReport(recorded: string, taskReport: string): string | undefined {
+export function pickRoutineFullReport(recorded: string, taskReport: string, notes?: string): string | undefined {
   const report = taskReport.trim();
-  const kept = recorded.trim();
+  const prefix = notes ? notes + "\n\n" : "";
+  const kept = recorded.startsWith(prefix) ? recorded.slice(prefix.length).trim() : recorded.trim();
   if (!report || !kept || report.length <= kept.length) return undefined;
   const head = kept.slice(0, 200);
-  if (report.startsWith(head)) return report;
+  if (report.startsWith(head)) return prefix + report;
   const open = unclosedFenceOffset(kept);
   if (open <= 0) return undefined;
   const before = kept.slice(0, open).replace(/\s+$/u, "");
   if (!before) return undefined;
-  return report.startsWith(before.slice(0, Math.min(200, before.length))) ? report : undefined;
+  return report.startsWith(before.slice(0, Math.min(200, before.length))) ? prefix + report : undefined;
 }
 
 /** #2694: the kind of proactive wake a run is, for feedback from the chat:

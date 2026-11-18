@@ -94,6 +94,8 @@ import { TableFileButton } from "./TableFilePreview";
 import { exportableMermaidSource, inlineDiagramMaxHeight, inlineDiagramSize, svgSize } from "@/lib/diagram-view";
 import { fenceBareSagaxVideos, parseSagaxVideoFence, youtubeVideoId } from "../../shared/video-widget.ts";
 import { SagaxVideoFenceView } from "./video/SagaxVideoFence";
+import { ChatMediaLink } from "./video/ChatMediaLink";
+import { bareMediaKind } from "../../shared/bare-image-urls.ts";
 import { YouTubeMiniPlayer } from "./video/YouTubeMiniPlayer";
 import { readableError } from "@/lib/plain-error";
 
@@ -1378,6 +1380,27 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         // so a long cron or script path never falls to one glyph per line.
         // A file the conversation touched becomes a file link (#file-links).
         return <ChatCodeSpan threadId={scopedMessage?.threadId}>{children}</ChatCodeSpan>;
+      },
+      // markdown never emits a div itself (no raw HTML): a div with
+      // data-bare-media is the player remarkBareImages put after a link to a
+      // playable file; any other div is a figure of ours, drawn as is
+      div(props) {
+        // SAFETY: react-markdown hands hast data-* attributes through as string props
+        const data = props as Record<string, unknown>;
+        const url = typeof data["data-media-url"] === "string" ? data["data-media-url"] : "";
+        const kind = url ? bareMediaKind(url) : null;
+        if (!kind) {
+          const { node: _node, children, ...rest } = props;
+          return <div {...rest}>{children}</div>;
+        }
+        const label = typeof data["data-media-label"] === "string" ? data["data-media-label"] : undefined;
+        // the address itself: a labeled link's words are the player's title
+        const link = data["data-media-link"] === "show"
+          ? <ExternalLink href={url} github={null}>{url}</ExternalLink>
+          : undefined;
+        // a surface that reaches no network keeps the address as a link
+        if (inert) return link ? <p>{link}</p> : null;
+        return <ChatMediaLink url={url} kind={kind} label={label} link={link} onRequestRefresh={youtubeSendToBot} />;
       },
       // markdown never emits a span itself (no raw HTML); the only
       // spans are the ones our remark plugins produced: a thread link,

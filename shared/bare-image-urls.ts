@@ -5,14 +5,21 @@
 
 export type BareImageKind = "gif" | "image";
 
+/** A link the chat plays in place: an HLS stream, a video file, an audio file. */
+export type BareMediaKind = "hls" | "video" | "audio";
+
 const IMAGE_EXTENSION = /\.(gif|png|jpe?g|webp)$/i;
 const GIPHY_HOST = /(^|\.)giphy\.com$/i;
 const TENOR_HOST = /(^|\.)tenor\.com$/i;
+// The path's extension decides, whatever the host and whatever query follows
+// (a media server's signed playback link keeps `.m3u8?exp=...&t=...`).
+const HLS_EXTENSION = /\.m3u8$/i;
+const VIDEO_EXTENSION = /\.(?:mp4|m4v|webm|mov)$/i;
+const AUDIO_EXTENSION = /\.(?:mp3|m4a|aac|ogg|oga|opus|wav|flac)$/i;
 
-/** What a whole URL points at when it is a direct picture (a GIF host's media
- * address or a .gif/.png/.jpg/.jpeg/.webp path); null for a page or anything
- * else. A giphy.com/gifs/... or tenor.com/view/... page is a page, not media. */
-export function bareImageKind(raw: string): BareImageKind | null {
+/** The one parse every chat preview of a bare address goes through: a whole
+ * http(s) address, its URL and its decoded path; null for anything else. */
+function parseBareUrl(raw: string): { url: URL; path: string } | null {
   const value = raw.trim();
   if (!/^https?:\/\/[^\s<>]+$/i.test(value)) return null;
   let url: URL;
@@ -27,6 +34,30 @@ export function bareImageKind(raw: string): BareImageKind | null {
   } catch {
     // keep the raw path
   }
+  return { url, path };
+}
+
+/** What a whole URL plays when the chat can play it in place (an `.m3u8`
+ * stream, an `.mp4`/`.m4v`/`.webm`/`.mov` video, an `.mp3`/`.m4a`/`.aac`/
+ * `.ogg`/`.oga`/`.opus`/`.wav`/`.flac` clip); null otherwise. Only `https`:
+ * the player loads it straight from the page, so a plain `http` address
+ * stays a link. */
+export function bareMediaKind(raw: string): BareMediaKind | null {
+  const parsed = parseBareUrl(raw);
+  if (!parsed || parsed.url.protocol !== "https:") return null;
+  if (HLS_EXTENSION.test(parsed.path)) return "hls";
+  if (VIDEO_EXTENSION.test(parsed.path)) return "video";
+  if (AUDIO_EXTENSION.test(parsed.path)) return "audio";
+  return null;
+}
+
+/** What a whole URL points at when it is a direct picture (a GIF host's media
+ * address or a .gif/.png/.jpg/.jpeg/.webp path); null for a page or anything
+ * else. A giphy.com/gifs/... or tenor.com/view/... page is a page, not media. */
+export function bareImageKind(raw: string): BareImageKind | null {
+  const parsed = parseBareUrl(raw);
+  if (!parsed) return null;
+  const { url, path } = parsed;
   const ext = IMAGE_EXTENSION.exec(path)?.[1]?.toLowerCase();
   if (ext) return ext === "gif" ? "gif" : "image";
   // media addresses without an extension (giphy ".../media/<id>/giphy", tenor "media"/"c" hosts)

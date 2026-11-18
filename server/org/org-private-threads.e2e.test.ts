@@ -293,6 +293,22 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
       const res = await fetch(`${BASE}/api/org/member/bots/${botId}/files/${sub}`, { headers: { authorization: `Bearer ${idp.consoleAssertion({ sub: user.sub, aud: BASE, role: user.role === "admin" ? "admin" : "employee", teams: [] })}` } });
       return { status: res.status, text: await res.text() };
     };
+    const sentFile = await fetch(`${BASE}/api/org/member/bots/${botId}/messages`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${idp.consoleAssertion({ sub: BOB.sub, aud: BASE, role: "employee", teams: [] })}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ threadId: bobThread, text: "Read the private picture", wait: 0, files: [{ path: "member-picture.png", content_base64: PNG.toString("base64") }] }),
+    });
+    expect(sentFile.status, await sentFile.text()).toBe(200);
+    const attachment = await waitFor(async () => {
+      const history = await api("GET", `/api/threads/${bobThread}/messages`, bob);
+      const line = history.body.messages?.find((item: { text?: string }) => item.text?.includes("member-picture.png"));
+      return line?.text?.match(/<attached-file path="[^"]*[/\\]([a-f0-9-]+\.png)"/)?.[1] as string | undefined;
+    });
+    expect((await api("GET", `/api/attachments/${attachment}`, bob)).status).toBe(200);
+    expect((await api("GET", `/api/attachments/${attachment}`, alice)).status).toBe(404);
     const aliceTasks = await memberFiles(ALICE, "list?root=tasks");
     expect(aliceTasks.status, aliceTasks.text).toBe(200);
     expect(aliceTasks.text).not.toContain(bobThread);
@@ -300,6 +316,8 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
     expect(aliceWalk.status, aliceWalk.text).toBe(200);
     expect(aliceWalk.text).not.toContain(bobThread);
     expect(aliceWalk.text).not.toContain(name);
+    expect(aliceWalk.text).not.toContain("member-picture.png");
+    expect(aliceWalk.text).not.toContain(attachment);
     expect((await memberFiles(ALICE, `list?root=tasks&path=${bobThread}`)).status).toBe(404);
     expect((await memberFiles(BOB, "roots")).status).toBe(404);
 

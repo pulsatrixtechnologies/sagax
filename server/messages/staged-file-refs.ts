@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 
 export const FILES_NOTE = "\n\n[Files sent with this message, now in your Sagax workspace folder: ";
+export const PRIVATE_FILES_NOTE = "\n\n[Files sent with this message as conversation attachments.]";
 export const FILES_NOTE_END = ". Read them with workspace_read using those paths";
 
 /** The workspace-relative paths a line's files note names (each under

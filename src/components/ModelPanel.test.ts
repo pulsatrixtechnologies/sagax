@@ -74,7 +74,7 @@ describe("the model panel", () => {
 
   it("folds a long list to its first three rows, the model in use kept in view", () => {
     const markup = html({ sections: sections(10, "m7") });
-    const rows = [...markup.matchAll(/data-model-panel-row="e\u0000(m\d+)"/g)].map((match) => match[1]);
+    const rows = markup.split('data-model-panel-row="e\u0000').slice(1).map((part) => part.slice(0, part.indexOf('"')));
     expect(rows).toEqual(["m7", "m0", "m1"]);
     expect(markup).toContain('data-model-panel-fold="more"');
     expect(markup).toContain("Show 7 more");

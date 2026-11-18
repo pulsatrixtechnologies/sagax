@@ -106,16 +106,15 @@ describe("The run card in the chat pane", () => {
   it("appears once the bot runs a control CLI, with the run as a checklist and its verified steps tagged", () => {
     const markup = render(run);
     expect(markup).toContain(CARD);
-    expect(markup).toContain('data-run-overlay=""');
     expect(markup).toContain('data-composer-dock=""');
-    // The card is an overlay above the dock, so its height is not the
-    // transcript pad. Closing it must not move the thread.
+    // #4583: until the pane is measured (and in a pane too narrow for the side
+    // column) the card sits inside the dock, so the transcript pad keeps the
+    // messages clear of it. It floats in the gutter only when the rail fits.
     const cardAt = markup.indexOf(CARD);
-    const overlayAt = markup.indexOf('data-run-overlay=""');
     const dockAt = markup.indexOf('data-composer-dock=""');
-    expect(overlayAt).toBeGreaterThanOrEqual(0);
-    expect(overlayAt).toBeLessThan(cardAt);
-    expect(cardAt).toBeLessThan(dockAt);
+    expect(markup).not.toContain('data-run-overlay=""');
+    expect(markup).toContain('data-run-card-docked=""');
+    expect(dockAt).toBeLessThan(cardAt);
     expect(markup).toContain(`>${t("chat.verify.title")}<`);
     expect(markup).toContain("2 steps · 2 verified · 1 failed");
     expect(markup).not.toContain("Execution timeline");
@@ -186,11 +185,12 @@ describe("The run card in the chat pane", () => {
     const markup = render(run);
     expect(markup).not.toContain(CARD);
     expect(markup).not.toContain('data-run-overlay=""');
+    expect(markup).not.toContain('data-run-card-docked=""');
     // the dock itself survives: the composer still renders
     expect(markup).toContain('data-composer-dock=""');
   });
 
-  it("shows the card by default", () => {
+  it("shows the card when the person has enabled it", () => {
     const markup = render(run);
     expect(markup).toContain(CARD);
     expect(markup).toContain(`>${t("chat.verify.title")}<`);

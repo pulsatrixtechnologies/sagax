@@ -105,11 +105,9 @@ export function useChatViewTranscript({
   );
   const canSaveRun =
     skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && recordedRunCounts.unverified === 0 && !bot.busy;
-  // A dismissal is pinned to the run's last step, per thread: the card comes
-  // back when the bot runs another command, not merely when a step settles,
-  // and stays away across a switch to another thread and back.
+  // The first step identifies this run even as the bot appends more commands.
   const [runDismissed, setRunDismissed] = useState<ReadonlyMap<string, string>>(() => new Map());
-  const lastRunStep = recordedRun.at(-1);
+  const firstRunStep = recordedRun[0];
   const showRunCard = useShowRunCard();
 
   // Only a tail of the thread mounts; everything derived below (lastBotTextId,
@@ -137,12 +135,8 @@ export function useChatViewTranscript({
     hasMore: bot.hasMore,
     ...(sideLoadOlder ? { onLoadOlder: sideLoadOlder, loadingOlder: sideLoadingOlder } : {}),
   });
-  // The run card sits in the right rail, over the transcript. It is not part
-  // of the measured dock: folding it into the pad scrolls the thread by the
-  // card's height each time the card appears or closes.
-  const runOverlayRef = useRef<HTMLDivElement>(null);
   const runCardOpen = Boolean(
-    lastRunStep && showRun(recordedRun) && showRunCard && runDismissed.get(transcriptKey) !== lastRunStep.id,
+    firstRunStep && showRun(recordedRun) && showRunCard && runDismissed.get(transcriptKey) !== firstRunStep.id,
   );
   // Rows drawn for the first time above the viewport (.transcript-row) keep
   // the reader still.
@@ -186,10 +180,10 @@ export function useChatViewTranscript({
 
   return {
     messages, lookups, threadReads, seenPlace, seenBot, seenRow,
-    recordedRun, recordedRunCounts, canSaveRun, runDismissed, setRunDismissed, lastRunStep, showRunCard,
+    recordedRun, recordedRunCounts, canSaveRun, runDismissed, setRunDismissed, firstRunStep, showRunCard,
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef, stopFollowing,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
-    runOverlayRef, runCardOpen, liveTools, liveTurns,
+    runCardOpen, liveTools, liveTurns,
     lastBotTextId, unreadDivider,
     bots, mentionPeers, showToolCalls, tts, localVoice, locale, viewerName, busy, hasMore,
     reactionSelf, botDmIds, rows, place, branch, onBranch,

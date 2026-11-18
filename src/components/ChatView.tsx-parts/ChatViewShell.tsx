@@ -19,7 +19,7 @@ import { ConfidentialBanner } from "../ConfidentialBanner";
 import { ConversationGalleryProvider } from "../ConversationGallery";
 import { VerifyCard } from "../VerifyCard";
 import { PageBotStatus, pageBotStatusLine } from "../PageComposerParts";
-import { RailAligned } from "../dev-pods/DevPods";
+import { RailAligned, useRailFits } from "../dev-pods/DevPods";
 import { ChatWindowProvider } from "../BotHeaderPill";
 import { JumpToLatestPill } from "../JumpToLatestPill";
 import { EarlierConversationList } from "../BotConversations";
@@ -52,10 +52,10 @@ export function ChatViewShell(m: Record<string, any>) {
     replyTo, clearReply, consumeReply, restoreReply, selectReply,
     autoPauseSettled, resumeAutoPaused,
     headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser, panelOpen, pillPanelOpen, togglePanelFromPill, dataItem,
-    messages, lookups, seenRow, recordedRun, canSaveRun, setRunDismissed, lastRunStep,
+    messages, lookups, seenRow, recordedRun, canSaveRun, setRunDismissed, firstRunStep,
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
-    runOverlayRef, runCardOpen, lastBotTextId, unreadDivider,
+    runCardOpen, lastBotTextId, unreadDivider,
     mentionPeers, rows, place, liveTools, liveTurns, busy,
     currentTask, streamOn, streamHasEarlier, askedFresh, resumeTopic, newTopicBack, backFromNewTopic, streamReach, clearStreamReach,
     quoteEarlier, streamEngine, streamDrawn, earlierConversations, conversationsOpen, toggleConversations,
@@ -63,11 +63,29 @@ export function ChatViewShell(m: Record<string, any>) {
     lastUserMessage, lastUserMessageHasAttachments, activity, onCall, liveShown, popping, presenceVisible,
     announcement, busySince, regenerate, threadLink, latestPageVersion, botPill, chatHeader, chatWindow, bubbleStyle, Root, preview,
   } = m;
+  const railFits = useRailFits(scrollRef, runCardOpen);
   const chatColumnClassName = useChatColumnClass();
   // #3681: this view's composer tells its transcript what its pinned card
   // holds; the transcript draws no card for those while they wait
   const [pinnedHold] = useState(createPinnedHold);
 
+  const runCard = runCardOpen && firstRunStep ? (
+    <RailAligned className="pointer-events-none pb-2">
+      <div className="pointer-events-auto w-full min-w-0">
+        <VerifyCard
+          key={transcriptKey}
+          steps={recordedRun}
+          canSave={canSaveRun}
+          skill={runSkill(messages, recordedRun)}
+          onDismiss={() => setRunDismissed((current: ReadonlyMap<string, string>) => new Map(current).set(transcriptKey, firstRunStep.id))}
+          onSave={() => {
+            appendComposerDraft(`bot:${bot.id}:${bot.threadId}`, skillPrompt(recordedRun, askText(messages)));
+            composerDockRef.current?.querySelector("textarea")?.focus();
+          }}
+        />
+      </div>
+    </RailAligned>
+  ) : null;
   return (
 <PinnedHoldContext value={pinnedHold}>
 <ThreadLinkContext value={threadLink}>
@@ -255,33 +273,13 @@ export function ChatViewShell(m: Record<string, any>) {
         <JumpToLatestPill onClick={jumpToLatest} bottom={composerDock.height + 16} scrollRef={scrollRef} />
       )}
 
-      {runCardOpen && lastRunStep && (
+      {runCard && railFits && (
         <div
-          ref={runOverlayRef}
           data-run-overlay=""
           className="pointer-events-none absolute inset-x-0 z-[2]"
           style={{ bottom: composerDock.height }}
         >
-          {/* Checklist for this ask, once it is worth one (a verified step,
-              or more than one command). An overlay on the rail: the
-              transcript pad stays the composer's, so the thread does not
-              jump when the card opens or closes. Save fills this thread's
-              composer and hands the caret over; nothing is sent from here. */}
-          <RailAligned className="pointer-events-none pb-2">
-            <div className="pointer-events-auto w-full min-w-0">
-              <VerifyCard
-                key={transcriptKey}
-                steps={recordedRun}
-                canSave={canSaveRun}
-                skill={runSkill(messages, recordedRun)}
-                onDismiss={() => setRunDismissed((current: ReadonlyMap<string, string>) => new Map(current).set(transcriptKey, lastRunStep.id))}
-                onSave={() => {
-                  appendComposerDraft(`bot:${bot.id}:${bot.threadId}`, skillPrompt(recordedRun, askText(messages)));
-                  composerDockRef.current?.querySelector("textarea")?.focus();
-                }}
-              />
-            </div>
-          </RailAligned>
+          {runCard}
         </div>
       )}
       {/* Keyed by task: each conversation keeps its own draft and a failed
@@ -302,6 +300,10 @@ export function ChatViewShell(m: Record<string, any>) {
           avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={22} />}
         />
       )}
+      {/* The pane is too narrow for the side column: the card would cover the
+          messages, so it joins the dock. The transcript pad (measured from the
+          dock) then keeps the last message clear of it. */}
+      {runCard && !railFits && <div data-run-card-docked="">{runCard}</div>}
       {/* JC 2026-11-06: the working line (dots or mascot, phrase, timer) sits
           at the bottom of the chat, just above the composer, on the message
           column, whatever the scroll. Part of the dock, so the transcript pad

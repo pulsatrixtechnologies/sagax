@@ -10,7 +10,7 @@
 // the room above it.
 import "./dev-pods.css";
 import "./all-pods";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode, type RefObject } from "react";
 import { CodeXml } from "lucide-react";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
@@ -55,6 +55,24 @@ export function railGeometry(paneWidth: number): { fits: boolean; width: number 
   const room = gutter - RAIL_EDGE - RAIL_GAP;
   if (room >= RAIL_MIN) return { fits: true, width: Math.floor(Math.min(RAIL_MAX, room)) };
   return { fits: false, width: Math.floor(Math.min(RAIL_MAX, Math.max(0, paneWidth - 2 * RAIL_EDGE))) };
+}
+
+/** Whether the side-card column fits beside the transcript of the pane `ref`
+ * holds (railGeometry of its width). False until measured, so a card never
+ * flashes over the messages first. */
+export function useRailFits(ref: RefObject<HTMLElement | null>, active: boolean): boolean {
+  const [fits, setFits] = useState(false);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || !active) return;
+    const measure = () => setFits(railGeometry(node.clientWidth).fits);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [active, ref]);
+  return fits;
 }
 
 /** Puts a card in the side-card column: the rail's right edge and width

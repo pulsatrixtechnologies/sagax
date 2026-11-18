@@ -64,7 +64,9 @@ export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
       {/* Conversation: what the chat shows of a run (was Appearance > Advanced and Usage > Advanced) */}
       <div data-settings-card="developer.conversation">
         <SettingsGroup title={t("settings.developer.conversation")} groupId="developerConversation">
-          <SwitchLine label={t("settings.runCard.title")} ariaLabel={t("settings.runCard.show")} checked={runCard} onChange={setShowRunCard} rowId="runCard" />
+          <DescribedRow label={t("settings.runCard.title")} description={t("settings.runCard.description")} rowId="runCard">
+            <Switch checked={runCard} aria-label={t("settings.runCard.show")} onClick={() => setShowRunCard(!runCard)} />
+          </DescribedRow>
           <SwitchLine label={t("settings.inspectorButton.title")} ariaLabel={t("settings.inspectorButton.show")} checked={inspector} onChange={setShowInspectorButton} rowId="inspectorButton" />
           <SwitchLine label={t("settings.turnTiming.title")} ariaLabel={t("settings.turnTiming.show")} checked={turnTiming} onChange={setShowTurnTiming} rowId="turnTiming" />
           <UsageMeterRow />

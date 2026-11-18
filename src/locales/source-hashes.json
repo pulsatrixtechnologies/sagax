@@ -19072,7 +19072,9 @@
       "media.audioRefreshRequest": "5f6b740bbabb5dd1c73e56d311967f5b2297987cf46cabd7b49b02878736befc",
       "media.untitledAudio": "b430887ce1bd3d9c3d4e31613a55c3842166b65850c14d8fb05c183bdcc5e2bf",
       "media.copyLink": "dbf362d4f210c780513a9258278d4d07abe8a224f84ba7ad775d819039342e77",
-      "media.linkCopied": "d12860c21e78baa522ac743ecfbd77fb9cf4558e581e0e54afcace23b3ce1849"
+      "media.linkCopied": "d12860c21e78baa522ac743ecfbd77fb9cf4558e581e0e54afcace23b3ce1849",
+      "chat.verify.about": "c2d86a0402dec07c76151eb025f1b9365c53a42cd53e5ca3b8bf0c4faf5f4166",
+      "settings.runCard.description": "d09f1ec1a83251ddcc1ea0697595956be8adc7701d7a3eaacdfb010c0c8e6bf8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

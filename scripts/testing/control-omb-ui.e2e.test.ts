@@ -412,7 +412,14 @@ describe("control-omb ui drives the real renderer", () => {
     expect(tree).not.toContain("Execution timeline");
     // The run card: the three scripted commands all go through the control
     // CLI, so all three are verified; one failed and one was a dry run.
-    expect(tree).toContain("3 steps · 3 verified · 1 failed · 1 dry run");
+    expect(tree).not.toContain('region "This run"');
+    await ui("eval", info.ui, "--js", `(() => {
+      localStorage.setItem("omb-show-run-card", "1");
+      window.dispatchEvent(new StorageEvent("storage", { key: "omb-show-run-card", newValue: "1", storageArea: localStorage }));
+      return true;
+    })()`);
+    await expect.poll(async () => (await ui("snapshot", info.ui)).snapshot)
+      .toContain("3 steps · 3 verified · 1 failed · 1 dry run");
 
     await ui("screenshot", info.ui, "--out", join(evidenceDir, "model-picked-fixture-turn.png"));
     // Hit-test the actual layout, not just the Tailwind class strings: the
@@ -420,7 +427,7 @@ describe("control-omb ui drives the real renderer", () => {
     // the card and composer remain interactive.
     const hitTest = await ui("eval", info.ui, "--js", `(() => {
       const card = document.querySelector('section[aria-label="This run"]');
-      const dock = card.closest("[data-run-overlay]");
+      const dock = card.closest("[data-run-overlay], [data-run-card-docked]");
       const rect = card.getBoundingClientRect();
       const blank = document.elementFromPoint(dock.getBoundingClientRect().left + 8, rect.top + rect.height / 2);
       const onCard = document.elementFromPoint(rect.left + 20, rect.top + 20);

@@ -116,8 +116,34 @@ describe("Linux CLI descendants", () => {
     const child = root();
     Object.assign(child, { exitCode: 0 });
 
+    // Its group is gone (the probe answers ESRCH), so it is stopped; only the
+    // signal-0 probe reaches it, never a real signal.
+    await expect(killCliTree(child, 0)).resolves.toBe(true);
+    expect(signal.mock.calls.filter(([, value]) => value !== 0)).toEqual([]);
+  });
+
+  it("calls an exited root stopped when its identity was never read and its group is gone (#4700)", async () => {
+    // A CLI that exits at once (a crash before init, under a burst of
+    // starts) is reaped before the spawn reads its /proc identity.
+    processes.clear();
+    const child = root();
+    Object.assign(child, { exitCode: 3 });
+
+    await expect(killCliTree(child, 0)).resolves.toBe(true);
+    expect(signal.mock.calls.filter(([, value]) => value !== 0)).toEqual([]);
+  });
+
+  it("does not call an unidentified exited root stopped while a process of its group lives", async () => {
+    denied.add(10001);
+    const child = root();
+    Object.assign(child, { exitCode: 0 });
+    signal.mockImplementation((pid: number, value: number | string) => {
+      if (pid === -10001 && value === 0) return true;
+      throw Object.assign(new Error("gone"), { code: "ESRCH" });
+    });
+
     await expect(killCliTree(child, 0)).resolves.toBe(false);
-    expect(signal).not.toHaveBeenCalled();
+    expect(signal.mock.calls.filter(([, value]) => value !== 0)).toEqual([]);
   });
 
   it("does not call unreadable captured descendants stopped", async () => {

@@ -445,7 +445,11 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
     const settled = () => {
       if (!exited() || !linuxDescendantsStopped(child)) return false;
       if (!group || linuxRootIdentityMatches(child) === false) return true;
-      if (linuxRootIdentityMatches(child) === undefined) return false;
+      // #4700: a root that exits at once is reaped before the spawn reads its
+      // identity (undefined here). An unknown identity forbids a signal, not a
+      // probe: ESRCH proves no process of that group is left, whoever the pid
+      // belongs to, while a live group stays unproven like before. Calling it
+      // not stopped stranded the turn on a CLI that was already gone.
       try {
         process.kill(-pid, 0);
         return false;

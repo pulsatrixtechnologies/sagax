@@ -257,42 +257,19 @@ struct MessageRow: View {
         return set
     }
 
-    @ViewBuilder
+    /// The row's card, drawn by `MessageRowContent` (its own view, so this
+    /// getter's frame stays tiny: the stack-budget guard, #4750).
     private var content: some View {
-        // A card projected for someone who is not its approval audience
-        // (OwnerWait.tsx): who it waits on, or who settled it. No controls.
-        if message.ownerWait != nil {
-            OwnerWaitView(message: message)
-        } else if let ref = message.pagePublish, ref.isDrawable, message.role == .bot {
-            // a bot's page: its live card; a tap opens it (PublishedPages.tsx)
-            PagePublishCardView(ref: ref, botId: message.from?.botId ?? chat.id, threadId: chat.threadId) {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        } else if let outbound = message.outbound, outbound.isDrawable, message.role == .bot {
-            // a phone call or a purchase on its card (OutboundCard.tsx)
-            OutboundCardView(card: outbound, accent: Theme.readable(MausPalette.color(chat.color)))
-        } else if let attention = message.attention, message.role == .bot, message.kind == .text {
-            // 2026-11-05: what a bot's turn elsewhere left for you
-            // (AttentionCard.tsx). One conversation (#2081, #2098): the answer
-            // is typed right here; Open thread exists only with threads shown.
-            AttentionCardView(
-                card: attention,
-                tint: MausPalette.color(chat.color),
-                openThread: threadsShown ? openThread : nil,
-                openRun: attention.routineRunId.map { runId in { Task { await session.openRoutineRunInChat(id: runId) } } },
-                reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text, message: message, in: chat) },
-                // #3471: one conversation: skipped without an answer
-                skip: threadsShown ? nil : { await session.skipAttention(message, in: chat) },
-                messageId: message.id
-            )
-            // #3465: a watch alert's two exits, for the bot's owner
-            if let watches = WatchAlertRules.alert(of: message.routineRun), let bot = session.state.bot(attention.botId),
-               session.surfaceGate.ownsBot(bot) {
-                WatchAlertExitsView(watches: watches)
-            }
-        } else {
-            kindContent
-        }
+        MessageRowContent(
+            message: message,
+            chat: chat,
+            endsRun: endsRun,
+            threadsShown: threadsShown,
+            openLink: openLink,
+            openThread: openThread,
+            askCw: askCw,
+            kind: kindContent
+        )
     }
 
     /// The message's content by kind, drawn by its own view (#3108). One
@@ -368,6 +345,79 @@ struct MessageRow: View {
         open()
     }
     #endif
+}
+
+/// The special cards a row can draw instead of its kind content, one small
+/// view per case so no body getter inlines them all (#4750).
+private struct MessageRowContent<Kind: View>: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let threadsShown: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let openThread: ((ThreadRef) -> Void)?
+    let askCw: (CwActionBody) -> Void
+    let kind: Kind
+
+    var body: some View {
+        if message.ownerWait != nil {
+            OwnerWaitView(message: message)
+        } else if let ref = message.pagePublish, ref.isDrawable, message.role == .bot {
+            PagePublishRowCard(message: message, chat: chat, ref: ref, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        } else if let outbound = message.outbound, outbound.isDrawable, message.role == .bot {
+            OutboundCardView(card: outbound, accent: Theme.readable(MausPalette.color(chat.color)))
+        } else if let attention = message.attention, message.role == .bot, message.kind == .text {
+            AttentionRowCard(message: message, chat: chat, attention: attention, threadsShown: threadsShown, openThread: openThread)
+        } else {
+            kind
+        }
+    }
+}
+
+/// A bot's page: its live card; a tap opens it (PublishedPages.tsx).
+private struct PagePublishRowCard: View {
+    let message: Message
+    let chat: Chat
+    let ref: PagePublishRef
+    let endsRun: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let askCw: (CwActionBody) -> Void
+
+    var body: some View {
+        PagePublishCardView(ref: ref, botId: message.from?.botId ?? chat.id, threadId: chat.threadId) {
+            TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
+        }
+    }
+}
+
+/// What a bot's turn elsewhere left for you (AttentionCard.tsx). One
+/// conversation (#2081, #2098): the answer is typed right here; Open thread
+/// exists only with threads shown.
+private struct AttentionRowCard: View {
+    let message: Message
+    let chat: Chat
+    let attention: PersonAttentionCard
+    let threadsShown: Bool
+    let openThread: ((ThreadRef) -> Void)?
+    private var session: Session { SessionHub.session }
+
+    var body: some View {
+        AttentionCardView(
+            card: attention,
+            tint: MausPalette.color(chat.color),
+            openThread: threadsShown ? openThread : nil,
+            openRun: attention.routineRunId.map { runId in { Task { await session.openRoutineRunInChat(id: runId) } } },
+            reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text, message: message, in: chat) },
+            // #3471: one conversation: skipped without an answer
+            skip: threadsShown ? nil : { await session.skipAttention(message, in: chat) },
+            messageId: message.id
+        )
+        // #3465: a watch alert's two exits, for the bot's owner
+        if let watches = WatchAlertRules.alert(of: message.routineRun), let bot = session.state.bot(attention.botId),
+           session.surfaceGate.ownsBot(bot) {
+            WatchAlertExitsView(watches: watches)
+        }
+    }
 }
 
 /// A row is the same row while its message, its chat record and its place in
@@ -589,27 +639,7 @@ struct OptionsKindRow: View {
         if let via = message.relayVia {
             RelayViaLabel(via: via)
         }
-        if message.card?.roleTransition != nil {
-            // 2026-11-05 (the owner): no "Agit comme" card in the chat
-            EmptyView()
-        } else if message.card?.phoneCallConsent != nil {
-            // one-time phone-call consent (PhoneCallConsentCard.tsx)
-            PhoneCallConsentCardView(
-                chat: chat,
-                message: message,
-                accent: Theme.readable(MausPalette.color(chat.color))
-            )
-        } else if message.card?.questions.isEmpty == false {
-            QuestionCardView(chat: chat, message: message, splitHead: splitForms)
-        } else if let card = message.card, ProactiveChoiceCardView.draws(card) {
-            // #3465: a watch domain's choice card, in the compact look (#3457)
-            ProactiveChoiceCardView(chat: chat, message: message)
-        } else if let card = message.card, FlatQuestionCardView.draws(card) {
-            // a bot's flat ask: the same question card (QuestionSheet)
-            FlatQuestionCardView(chat: chat, message: message)
-        } else {
-            CardView(chat: chat, message: message)
-        }
+        OptionsCardBody(chat: chat, message: message, splitForms: splitForms)
     }
 }
 
@@ -784,6 +814,38 @@ private struct RosterKindRow: View {
                 .font(.footnote)
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// The card an options message draws, by shape (#4750: kept apart from
+/// `OptionsKindRow` so neither body getter carries every card's frame).
+private struct OptionsCardBody: View {
+    let chat: Chat
+    let message: Message
+    let splitForms: Bool
+
+    var body: some View {
+        if message.card?.roleTransition != nil {
+            // 2026-11-05 (the owner): no "Agit comme" card in the chat
+            EmptyView()
+        } else if message.card?.phoneCallConsent != nil {
+            // one-time phone-call consent (PhoneCallConsentCard.tsx)
+            PhoneCallConsentCardView(
+                chat: chat,
+                message: message,
+                accent: Theme.readable(MausPalette.color(chat.color))
+            )
+        } else if message.card?.questions.isEmpty == false {
+            QuestionCardView(chat: chat, message: message, splitHead: splitForms)
+        } else if let card = message.card, ProactiveChoiceCardView.draws(card) {
+            // #3465: a watch domain's choice card, in the compact look (#3457)
+            ProactiveChoiceCardView(chat: chat, message: message)
+        } else if let card = message.card, FlatQuestionCardView.draws(card) {
+            // a bot's flat ask: the same question card (QuestionSheet)
+            FlatQuestionCardView(chat: chat, message: message)
+        } else {
+            CardView(chat: chat, message: message)
         }
     }
 }

@@ -30,9 +30,14 @@ export interface ArtifactWindowData {
 /** Ids of the page windows another feature opens through the same bridge. */
 export const PAGE_WINDOW_PREFIX = "page:";
 
-/** Whether a desktop window id is a page window (`page:<pageId>`), not an artifact. */
+/** Ids of a bot's own chat window (`chat:<botId>`, src/lib/chat-windows.ts). */
+export const CHAT_WINDOW_PREFIX = "chat:";
+
+/** Whether a desktop window id is a window of another kind than an artifact:
+ * a page window (`page:<pageId>`) or a bot's chat window (`chat:<botId>`).
+ * This module never treats those as artifacts. */
 export function isPageWindowId(id: string): boolean {
-  return typeof id === "string" && id.startsWith(PAGE_WINDOW_PREFIX);
+  return typeof id === "string" && (id.startsWith(PAGE_WINDOW_PREFIX) || id.startsWith(CHAT_WINDOW_PREFIX));
 }
 
 /** The app's address that draws one artifact on its own. */

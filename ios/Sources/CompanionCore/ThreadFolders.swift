@@ -21,6 +21,12 @@ public enum ThreadLink {
         prefix + encodeURIComponent(threadId) + "?bot=" + encodeURIComponent(ownerId)
     }
 
+    /// The link to a bot's current conversation (`botRefUrl` in
+    /// src/lib/thread-refs.ts), what a bot row's Copy link makes.
+    public static func botUrl(botId: String) -> String {
+        "sagax://bot/" + encodeURIComponent(botId)
+    }
+
     /// JavaScript's `encodeURIComponent`: everything but A-Z a-z 0-9 and
     /// `-_.!~*'()` is percent-encoded, so both sides write the same link.
     static func encodeURIComponent(_ value: String) -> String {

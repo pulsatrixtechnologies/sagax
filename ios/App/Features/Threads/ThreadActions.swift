@@ -255,6 +255,13 @@ final class ThreadActions: ObservableObject {
         show("Conversation ID copied")
     }
 
+    /// The app's own link to this bot's conversation (the desktop's Copy link,
+    /// `botRefUrl`): `sagax://bot/<bot-id>`, opened by the same chat-link route.
+    func copyLink(_ bot: Bot) {
+        UIPasteboard.general.string = ThreadLink.botUrl(botId: bot.id)
+        show("Link copied")
+    }
+
     func markUnread(_ bot: Bot, session: Session) {
         run(session) { await session.markUnread(bot) }
     }

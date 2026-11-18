@@ -3270,3 +3270,27 @@ beside the owner: next to a long name it cut the name.
 
 Captures: `scripts/capture/record-hover-card.mjs` (headless Chrome, DPR 2) of
 `src/gallery/record-card.html`, scene `neighbour` beside the link card.
+
+## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)
+
+Read from the reference's renderer (read only): the row menu is one menu with
+a separator between its sections, a leading line icon on every row and the
+last row in red. Its first section is Pin (pin, or pin-slash when pinned),
+Move to, Mark as Unread (bell with a dot, or Mark as Read with a plain bell),
+New window (two windows); then Rename and Copy link (link); then Copy
+conversation ID (copy); then Hide from sidebar (eye-slash) and Delete (trash,
+red). Sagax draws it with the menu family's one look (`menu-look.tsx`) and
+keeps what it already had, each in its own section: New thread first, Edit
+bot, Share, Make primary bot, Put on the desktop, the bulk thread actions and
+Archive. Copy link is the app's own `sagax://bot/<id>` link (`botRefUrl`,
+opened by `openChatLink`). Mark as Unread flags the conversation the bot is on,
+so the row's dot stays until the bot is opened. New window is hidden where no
+second window can open (a phone).
+
+"New window" opens the bot's chat in a window of its own: the reference loads
+the same app with the sidebar off (a pop-out of one bot), so the window is the
+chat view alone, its header (mascot, name with the title under it, "...") and
+the composer. Desktop: a real second window through the artifact bridge
+(`chat:<botId>`, one per bot, size and place remembered, macOS inset title
+bar). Browser: the `/artifact-window` route in a named popup window.
+Captures: `scripts/capture/bot-context-menu.mjs`.

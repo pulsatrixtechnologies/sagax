@@ -9,6 +9,10 @@ import {
   ARTIFACT_WINDOW_MIN,
   ARTIFACT_WINDOW_SIZE,
   artifactWindowNavigationAllowed,
+  CHAT_WINDOW_MIN,
+  CHAT_WINDOW_SIZE,
+  chatWindowChromeOptions,
+  isChatWindowArtifactId,
   CLAUDE_AI_PARTITION,
   claudeAiArtifactUrl,
   claudeAiNavigationAllowed,
@@ -320,6 +324,34 @@ describe("artifact windows", () => {
     expect(fake.windows.every((win) => win.isDestroyed())).toBe(true);
     expect(controller.list()).toEqual([]);
     expect(fake.sent).toEqual([]);
+  });
+});
+
+describe("a bot's own chat window (#4639)", () => {
+  it("is keyed chat:<botId>, compact, with the main window's chrome on macOS and the native title bar elsewhere", async () => {
+    expect(isChatWindowArtifactId("chat:dumpling")).toBe(true);
+    expect(isChatWindowArtifactId("page:pageAAAA1111")).toBe(false);
+    expect(chatWindowChromeOptions("darwin")).toEqual({ titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 16 } });
+    expect(chatWindowChromeOptions("win32")).toEqual({});
+    const { fake, open } = setup();
+    expect(await open({ artifactId: "chat:dumpling", title: "Dumpling", ...CHAT_WINDOW_SIZE })).toBe("created");
+    const [win] = fake.windows;
+    expect(win.options).toMatchObject({ width: 480, height: 760, minWidth: CHAT_WINDOW_MIN.width, minHeight: CHAT_WINDOW_MIN.height, resizable: true });
+    expect(win.loadURL).toHaveBeenCalledWith(`${ORIGIN}/artifact-window#bot=bot-a&artifact=chat%3Adumpling`);
+  });
+
+  it("is one window per bot (asking again focuses it) and remembers its size and position", async () => {
+    const store = memoryStore();
+    const first = setup({ store });
+    expect(await first.open({ artifactId: "chat:dumpling", ...CHAT_WINDOW_SIZE })).toBe("created");
+    expect(await first.open({ artifactId: "chat:dumpling", ...CHAT_WINDOW_SIZE })).toBe("focused");
+    expect(first.fake.windows).toHaveLength(1);
+    first.fake.windows[0].bounds = { x: 1600, y: 90, width: 520, height: 700 };
+    first.fake.windows[0].close();
+    expect(store.get().windows["chat:dumpling"].bounds).toEqual({ x: 1600, y: 90, width: 520, height: 700 });
+    const second = setup({ store });
+    await second.open({ artifactId: "chat:dumpling", ...CHAT_WINDOW_SIZE });
+    expect(second.fake.windows[0].options).toMatchObject({ x: 1600, y: 90, width: 520, height: 700 });
   });
 });
 

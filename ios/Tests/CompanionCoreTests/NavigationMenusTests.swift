@@ -40,7 +40,8 @@ final class NavigationMenusTests: XCTestCase {
         let plan = NavigationMenus.bot(try bot("ara"), context(admin))
         XCTAssertEqual(plan.groups, [
             [.pin, .moveTo, .markUnread],
-            [.rename, .copyConversationId],
+            [.rename],
+            [.copyLink, .copyConversationId],
             [.hide, .archive, .delete],
             [.makePrimary],
         ])
@@ -60,10 +61,10 @@ final class NavigationMenusTests: XCTestCase {
 
     func testTheSidecarHasNoArchiveAndAClientSessionNoFolderDeleteOrRename() throws {
         let sidecarPlan = NavigationMenus.bot(try bot("ara"), context(sidecar))
-        XCTAssertEqual(sidecarPlan.items, [.pin, .moveTo, .markUnread, .rename, .copyConversationId, .hide, .delete, .makePrimary])
+        XCTAssertEqual(sidecarPlan.items, [.pin, .moveTo, .markUnread, .rename, .copyLink, .copyConversationId, .hide, .delete, .makePrimary])
 
         let clientPlan = NavigationMenus.bot(try bot("ara", owner: "pr_other"), context(client, move: false, viewer: "pr_me"))
-        XCTAssertEqual(clientPlan.items, [.pin, .markUnread, .copyConversationId, .hide])
+        XCTAssertEqual(clientPlan.items, [.pin, .markUnread, .copyLink, .copyConversationId, .hide])
     }
 
     func testAnOrganizationMemberRenamesOnlyTheirOwnBot() throws {

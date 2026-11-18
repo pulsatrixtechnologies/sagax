@@ -272,11 +272,11 @@ describe("person row menu", () => {
     expect(labels).toContain(t("persona.menu.rename"));
     expect(labels).not.toContain("Rename Bot");
     expect(labels).not.toContain(t("personPanel.view"));
-    // Move to › at the first level (owner, 2026-10-15); Mark as Unread left
-    // the bot menu (0.5.7).
+    // Move to › at the first level (owner, 2026-10-15); Mark as Unread came
+    // back with the reference's groups (owner, 2026-11-17, #4639).
     expect(html).toContain(`>${t("sidebar.bot.moveTo")}<`);
     expect(html).toContain('aria-haspopup="menu"');
-    expect(labels).not.toContain(t("sidebar.bot.markUnread"));
+    expect(labels).toContain(t("sidebar.bot.markUnread"));
     // one flat menu: a single Move to, no More
     expect(html.split(`>${t("sidebar.bot.moveTo")}<`)).toHaveLength(2);
     expect(html).not.toContain('data-menu-item="more"');

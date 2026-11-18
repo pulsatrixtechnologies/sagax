@@ -19,6 +19,8 @@ import { readPageWindowFitBridge, startPageWindowFit } from "@/lib/page-window-f
 import { ArtifactFrame } from "./ArtifactFrame";
 import { PageSurface } from "../PageViewer";
 import { pageIdOfWindow } from "@/lib/page-windows";
+import { botIdOfChatWindow } from "@/lib/chat-windows";
+import { BotChatWindow } from "../BotChatWindow";
 import { ArtifactStatusLine } from "./ArtifactsSection";
 import { dockArtifactWindow, type ArtifactWindowData } from "./artifact-windows";
 
@@ -141,6 +143,9 @@ function ArtifactStandaloneBody() {
   }
   // a page's window (src/lib/page-windows.ts): the same surface as the page
   // open over its conversation; × closes the window
+  // a bot's own chat (src/lib/chat-windows.ts): the chat view, no sidebar
+  const chatBotId = botIdOfChatWindow(target.artifactId);
+  if (chatBotId) return <BotChatWindow botId={chatBotId} />;
   const pageId = pageIdOfWindow(target.artifactId);
   if (pageId) {
     return <PageStandaloneFit pageId={pageId} />;

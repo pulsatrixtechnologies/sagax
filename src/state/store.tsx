@@ -327,7 +327,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Every selection path lands on state.selectedId, so one effect is the
   // whole remember; an empty selection must never overwrite it.
   useEffect(() => {
-    if (state.selectedId) rememberConversation(state.selectedId);
+    // A bot's own window (/artifact-window) shows one bot for itself: it
+    // never changes the conversation the next launch opens on.
+    if (state.selectedId && location.pathname !== "/artifact-window") rememberConversation(state.selectedId);
   }, [state.selectedId]);
   // A remembered conversation that no longer resolves to a listed one
   // (deleted, hidden, closed) is forgotten once the snapshot says nothing

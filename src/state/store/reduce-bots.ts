@@ -143,7 +143,13 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
     case "playMascotMotion":
       return withMascotMotion(state, action.botId, action.kind);
     case "markUnread":
-      return updateBot(withMascotMotion(state, action.botId, "surprise"), action.botId, (b) => ({ ...b, unread: true }));
+      return updateBot(withMascotMotion(state, action.botId, "surprise"), action.botId, (b) => ({
+        ...b,
+        unread: true,
+        // the dot reads the threads (botShowsUnread): the conversation the bot
+        // is on carries it, as the server's patchBot does
+        ...(b.tasks ? { tasks: b.tasks.map((task) => (task.threadId === b.threadId ? { ...task, unread: true } : task)) } : {}),
+      }));
     case "botPatched": {
       const before = state.bots.find((b) => b.id === action.bot.id);
       // Bot frames are complete except for their transcript. An unknown one

@@ -339,6 +339,29 @@ describe("the scheduler", () => {
     expect(state.prompts).toHaveLength(2);
   });
 
+  it("writes a failure that repeats at every retry once, and again after a review answers", async () => {
+    let now = 1_000_000;
+    let fail = true;
+    const lines: string[] = [];
+    const { review } = harness({
+      now: () => now,
+      log: (line) => lines.push(line),
+      answer: () => (fail ? Promise.reject(new Error("Grok background Internal error: API error (status 402 Payment Required)")) : "Nothing to save."),
+    });
+    review.noteTurn(BOT.id, "thread-a", 3);
+    for (let pass = 0; pass < 3; pass += 1) {
+      expect(await review.run(BOT.id, "thread-a")).toMatchObject({ state: "failed" });
+      now += 16 * 60_000;
+    }
+    expect(lines.filter((line) => line.includes("402"))).toHaveLength(1);
+    fail = false;
+    await review.run(BOT.id, "thread-a");
+    fail = true;
+    review.noteTurn(BOT.id, "thread-a", 3);
+    await review.run(BOT.id, "thread-a");
+    expect(lines.filter((line) => line.includes("402"))).toHaveLength(2);
+  });
+
   it("is cancelled with its conversation and keeps nothing for it", async () => {
     const { review, state, nextCall } = harness({ answer: () => new Promise<string>(() => {}) });
     review.noteTurn(BOT.id, "thread-a", 3);

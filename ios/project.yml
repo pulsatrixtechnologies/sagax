@@ -129,6 +129,10 @@ targets:
         # Dynamic Island (PushToTalkController.swift). The App ID needs the
         # Push to Talk capability; automatic signing adds it to the profile.
         com.apple.developer.push-to-talk: true
+        # Side Button Access: press and hold the side button to talk to the
+        # Primary Bot (SideButtonIntent.swift). Apple offers it on an iPhone in
+        # Japan only. The App ID needs the Side Button Access capability.
+        com.apple.developer.side-button-access.allow: true
         # Communication Notifications: the banner names the bot (or person)
         # and shows their avatar instead of the Sagax app icon. The App ID
         # `ca.pulsatrix.sagax` needs this capability in the Apple Developer

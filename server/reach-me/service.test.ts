@@ -23,7 +23,7 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
 const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
 
-function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels; signals?: SignalLedger; dir?: string; ledger?: (now: () => number) => SignalLedger; cards?: Map<string, ReachCard>; timeZone?: string } = {}) {
+function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels; signals?: SignalLedger; dir?: string; ledger?: (now: () => number) => SignalLedger; cards?: Map<string, ReachCard>; timeZone?: string; refuse?: Array<"sms" | "telegram" | "teams"> } = {}) {
   const dir = options.dir ?? mkdtempSync(join(tmpdir(), "sagax-reach-"));
   if (!options.dir) dirs.push(dir);
   let now = options.now ?? Date.parse("2026-10-26T13:00:00Z");
@@ -35,7 +35,7 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
   const channel = (id: "sms" | "teams" | "telegram", ready = true): ReachChannel => ({
     id,
     status: () => ({ ready }),
-    send: async (out) => { sent.push({ channel: id, out }); return { ok: true }; },
+    send: async (out) => { sent.push({ channel: id, out }); return options.refuse?.includes(id) ? { ok: false, reason: "refused" } : { ok: true }; },
   });
   let card: ReachCard | null = options.card === undefined ? CARD : options.card;
   const responses: Array<{ person: string; body: ReachRespondBody; channel: string }> = [];
@@ -315,6 +315,19 @@ describe("Reach me: a notice (the background brief)", () => {
     expect(pushed).toHaveLength(1);
     expect(sent.map((entry) => entry.channel)).toEqual(["sms"]);
     expect(reach.deferredNoticeCount()).toBe(0);
+  });
+
+  it("a refused text is not told, and it is not sent again", async () => {
+    const signals = new SignalLedger({ schedule: () => {} });
+    const { reach, sent } = setup({ ...SMS_AND_TELEGRAM, channels: ["sms"] }, { signals, refuse: ["sms"] });
+    reach.notice(NOTICE);
+    await reach.drain();
+    expect(sent).toHaveLength(1);
+    expect(signals.get("pr_a", "b1", NOTICE.id)).toMatchObject({ state: "open", channels: [], answers: [{ channel: "sms", ok: false }] });
+    expect(signals.isTold("pr_a", "b1", NOTICE.id)).toBe(false);
+    reach.notice(NOTICE);
+    await reach.drain();
+    expect(sent).toHaveLength(1);
   });
 });
 

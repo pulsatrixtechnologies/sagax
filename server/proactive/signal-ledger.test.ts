@@ -107,6 +107,69 @@ describe("tellPerson", () => {
       "[signal] kind=routine-run key=run-problem:run-1 bot=b1 level=card step=1 verdict=already_told",
     ]);
   });
+
+  it("a throw is not told, so the next call tries once more", () => {
+    const ledger = new SignalLedger({ schedule: () => {} });
+    const rung: string[] = [];
+    const lines: string[] = [];
+    let fail = true;
+    const tell = createTellPerson<string>({
+      ledger,
+      notify: (note) => {
+        rung.push(note);
+        if (fail) throw new Error("down");
+      },
+      log: (line) => lines.push(line),
+    });
+    const item = { key: "run-problem:run-1", kind: "routine-run", bot: "b1", notification: "failed" };
+    expect(tell("pr_a", item)).toBe("not_told");
+    expect(ledger.isTold("pr_a", "b1", "run-problem:run-1")).toBe(false);
+    fail = false;
+    expect(tell("pr_a", item)).toBe("told");
+    expect(tell("pr_a", item)).toBe("already_told");
+    expect(rung).toEqual(["failed", "failed"]);
+    expect(lines.map((line) => line.slice(line.lastIndexOf(" ")))).toEqual([" verdict=not_told", " verdict=told", " verdict=already_told"]);
+  });
+
+  it("a refused text is not told and is not handed again; a refused push is tried once more", () => {
+    const dir = tempDir();
+    let texts = 0;
+    const tellOn = (ledger: SignalLedger) => createTellPerson<string>({
+      ledger,
+      notify: () => {
+        texts += 1;
+        return [{ channel: "sms", ok: false }];
+      },
+      log: () => {},
+    });
+    const text = { key: "notice-1", kind: "reach-notice", bot: "b1", notification: "brief" };
+    const first = ledgerOn(dir);
+    expect(tellOn(first)("pr_a", text)).toBe("not_told");
+    first.flush();
+    const again = ledgerOn(dir);
+    expect(tellOn(again)("pr_a", text)).toBe("not_told");
+    expect(texts).toBe(1);
+    expect(again.isTold("pr_a", "b1", "notice-1")).toBe(false);
+    expect(again.get("pr_a", "b1", "notice-1")?.answers).toEqual([{ channel: "sms", ok: false }]);
+    const ledger = again;
+
+    const pushes: boolean[] = [];
+    const tellPush = createTellPerson<string>({
+      ledger,
+      notify: () => {
+        const ok = pushes.length > 0;
+        pushes.push(ok);
+        return [{ channel: "push", ok }];
+      },
+      log: () => {},
+    });
+    const push = { key: "notice-2", kind: "reach-notice", bot: "b1", notification: "brief" };
+    expect(tellPush("pr_a", push)).toBe("not_told");
+    expect(tellPush("pr_a", push)).toBe("told");
+    expect(tellPush("pr_a", push)).toBe("already_told");
+    expect(pushes).toEqual([false, true]);
+    expect(ledger.get("pr_a", "b1", "notice-2")).toMatchObject({ state: "told", channels: ["push"] });
+  });
 });
 
 describe("moved: the waker's event keys", () => {

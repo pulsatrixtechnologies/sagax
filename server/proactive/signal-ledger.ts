@@ -15,8 +15,8 @@
  * the next tick after a change and at shutdown (`flush`).
  *
  * `tellPerson` (createTellPerson) is the one way a proactive item reaches
- * `notify`: it records the item as told in the ledger, rings once per key and
- * step, and ends in one log line. */
+ * `notify`: it rings once per key and step, records what each channel
+ * answered, and ends in one log line. A send that failed is not told. */
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,6 +25,12 @@ import type { SignalLevel } from "../../shared/signal-levels.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export type SignalState = "open" | "told" | "answered" | "retired" | "expired";
+
+/** What one channel answered. `ok` is false when that channel refused the send. */
+export interface ChannelAnswer {
+  channel: string;
+  ok: boolean;
+}
 
 export const SIGNAL_STATES: readonly SignalState[] = ["open", "told", "answered", "retired", "expired"];
 const LEVELS: readonly SignalLevel[] = ["fyi", "card", "urgent"];
@@ -42,8 +48,12 @@ export interface SignalEntry {
   count: number;
   /** When it was last told to the person. */
   toldAt?: number;
-  /** The channels it was told by. */
+  /** The channels it was told by. Only a channel that arrived is listed. */
   channels: string[];
+  /** Channels a send was handed to, before the answer came back. */
+  attempts?: string[];
+  /** What each channel answered, including a refusal. */
+  answers?: ChannelAnswer[];
   state: SignalState;
   answer?: string;
   /** S9: when the person answered it (the metrics' time to answer runs
@@ -78,6 +88,25 @@ export interface SignalNote {
 const CARD_QUESTION_MAX = 300;
 const CARD_OPTION_MAX = 120;
 const CARD_OPTIONS_MAX = 12;
+
+function readAttempts(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const attempts = value.filter((channel): channel is string => typeof channel === "string" && channel.length > 0 && channel.length <= 40).slice(0, 10);
+  return attempts.length ? attempts : undefined;
+}
+
+function readAnswers(value: unknown): ChannelAnswer[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const answers: ChannelAnswer[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as { channel?: unknown; ok?: unknown };
+    if (typeof raw.channel !== "string" || !raw.channel || raw.channel.length > 40 || typeof raw.ok !== "boolean") continue;
+    answers.push({ channel: raw.channel, ok: raw.ok });
+    if (answers.length >= 10) break;
+  }
+  return answers.length ? answers : undefined;
+}
 
 function cardWords(value: unknown): SignalCardWords | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -201,8 +230,9 @@ export class SignalLedger {
    * expired entry opens a new spell: told again, its reminders start over. */
   told(person: string, note: SignalNote, channels: readonly string[] = [], toldAt?: number): SignalEntry {
     const known = this.get(person, note.bot ?? "", note.key);
-    const reopened = known && known.state !== "open" && known.state !== "told";
-    const { entry } = this.note(person, note);
+    const reopened = Boolean(known && known.state !== "open" && known.state !== "told");
+    // An entry already opened for this spell (a send handed out) keeps its count.
+    const entry = known?.state === "open" ? known : this.note(person, note).entry;
     const at = toldAt ?? this.now();
     if (reopened) {
       entry.firstAt = at;
@@ -212,10 +242,40 @@ export class SignalLedger {
     }
     entry.state = "told";
     entry.toldAt = at;
+    entry.lastAt = at;
     if (note.level) entry.level = note.level;
     for (const channel of channels) if (!entry.channels.includes(channel)) entry.channels.push(channel);
     this.changed(person, entry.kind);
     return entry;
+  }
+
+  /** A send was handed to these channels. The entry stays open until one arrives. */
+  handed(person: string, note: SignalNote, channels: readonly string[]): SignalEntry {
+    const known = this.get(person, note.bot ?? "", note.key);
+    const entry = known ?? this.note(person, note).entry;
+    const attempts = entry.attempts ?? [];
+    for (const channel of channels) {
+      if (channel && !attempts.includes(channel)) attempts.push(channel);
+    }
+    entry.attempts = attempts.slice(0, 10);
+    this.changed(person, entry.kind);
+    return entry;
+  }
+
+  /** What each channel answered. This does not by itself mark the entry told. */
+  recordAnswers(person: string, bot: string, key: string, answers: readonly ChannelAnswer[]): void {
+    const entry = this.get(person, bot, key);
+    if (!entry) return;
+    const next = [...(entry.answers ?? [])];
+    for (const answer of answers) {
+      if (!answer.channel || typeof answer.ok !== "boolean") continue;
+      const index = next.findIndex((item) => item.channel === answer.channel);
+      const clean = { channel: answer.channel.slice(0, 40), ok: answer.ok };
+      if (index >= 0) next[index] = clean;
+      else next.push(clean);
+    }
+    entry.answers = next.slice(0, 10);
+    this.changed(person, entry.kind);
   }
 
   /** Whether (bot, key) is told and not settled since. */
@@ -333,12 +393,16 @@ function readEntry(value: unknown): SignalEntry | null {
   const ref = raw.ref && typeof raw.ref === "object" && typeof (raw.ref as { threadId?: unknown }).threadId === "string"
     ? { threadId: (raw.ref as { threadId: string }).threadId, ...(typeof (raw.ref as { requestId?: unknown }).requestId === "string" ? { requestId: (raw.ref as { requestId: string }).requestId } : {}) }
     : undefined;
+  const attempts = readAttempts(raw.attempts);
+  const answers = readAnswers(raw.answers);
   return {
     key: raw.key, kind: raw.kind, level, bot: raw.bot,
     firstAt: raw.firstAt as number, lastAt: raw.lastAt as number,
     count: Number.isFinite(raw.count) ? Math.max(1, raw.count as number) : 1,
     ...(Number.isFinite(raw.toldAt) ? { toldAt: raw.toldAt as number } : {}),
     channels: Array.isArray(raw.channels) ? raw.channels.filter((channel): channel is string => typeof channel === "string").slice(0, 10) : [],
+    ...(attempts ? { attempts } : {}),
+    ...(answers ? { answers } : {}),
     state,
     ...(typeof raw.answer === "string" ? { answer: raw.answer } : {}),
     ...(Number.isFinite(raw.answeredAt) ? { answeredAt: raw.answeredAt as number } : {}),
@@ -400,16 +464,25 @@ export interface TellItem<N> {
 
 export interface TellPersonDeps<N> {
   ledger: SignalLedger;
-  /** The one notify of the server (and its access variant). */
-  notify(notification: N, item: TellItem<N>): void;
+  /** The one notify of the server (and its access variant). A list is what
+   * each channel answered. Nothing means the app itself accepted it. */
+  notify(notification: N, item: TellItem<N>): void | readonly ChannelAnswer[];
   log?(line: string): void;
 }
 
-export type TellVerdict = "told" | "already_told";
+export type TellVerdict = "told" | "already_told" | "not_told";
+
+/** A text and a WhatsApp message are never handed twice. A push may be tried once more. */
+function retryPushOnly(answers: readonly ChannelAnswer[]): boolean {
+  const pushFails = answers.filter((answer) => answer.channel === "push" && !answer.ok).length;
+  const money = answers.some((answer) => answer.channel === "sms" || answer.channel === "whatsapp");
+  return !money && pushFails === 1 && answers.every((answer) => answer.channel === "push");
+}
 
 /** #4250: the one way a proactive item reaches `notify`. Rings once per key
- * and step (a restart included: the ledger is on disk), records it as told,
- * and ends in one log line. */
+ * and step (a restart included: the ledger is on disk) and ends in one log
+ * line. #4528: what each channel answered is stored, and a failed send is
+ * not told, so the ladder does not treat it as delivered. */
 export function createTellPerson<N>(deps: TellPersonDeps<N>): (person: string, item: TellItem<N>) => TellVerdict {
   const log = deps.log ?? ((line: string) => console.info(line));
   return (person, item) => {
@@ -422,19 +495,44 @@ export function createTellPerson<N>(deps: TellPersonDeps<N>): (person: string, i
       log(`[signal] ${where} verdict=already_told`);
       return "already_told";
     }
+    if (known?.answers?.length && !known.answers.some((answer) => answer.ok) && !retryPushOnly(known.answers)) {
+      log(`[signal] ${where} verdict=not_told`);
+      return "not_told";
+    }
     const note: SignalNote = { key: item.key, kind: item.kind, bot, ...(item.level ? { level: item.level } : {}), ...(item.label ? { label: item.label } : {}), ...(item.ref ? { ref: item.ref } : {}) };
-    if (step === 0) deps.ledger.told(person, note, ["notify"]);
-    else {
-      if (!known) deps.ledger.told(person, note, ["notify"]);
-      deps.ledger.reminded(person, bot, item.key, step, ["notify"]);
-    }
+    let answers: void | readonly ChannelAnswer[];
     try {
-      deps.notify(item.notification, item);
-    } finally {
-      log(`[signal] ${where} verdict=told`);
+      answers = deps.notify(item.notification, item);
+    } catch {
+      log(`[signal] ${where} verdict=not_told`);
+      return "not_told";
     }
-    return "told";
+    const delivered = Array.isArray(answers) ? recordChannelAnswers(deps.ledger, person, bot, step, item.key, note, answers) : recordNotify(deps.ledger, person, bot, step, item.key, note);
+    log(`[signal] ${where} verdict=${delivered ? "told" : "not_told"}`);
+    return delivered ? "told" : "not_told";
   };
+}
+
+/** The in-app notify returned no channel list: the app itself is the channel. */
+function recordNotify(ledger: SignalLedger, person: string, bot: string, step: number, key: string, note: SignalNote): boolean {
+  if (step === 0) ledger.told(person, note, ["notify"]);
+  else {
+    if (!ledger.get(person, bot, key)) ledger.told(person, note, ["notify"]);
+    ledger.reminded(person, bot, key, step, ["notify"]);
+  }
+  return true;
+}
+
+/** Store every answer. Told only when at least one channel arrived. */
+function recordChannelAnswers(ledger: SignalLedger, person: string, bot: string, step: number, key: string, note: SignalNote, answers: readonly ChannelAnswer[]): boolean {
+  const list = answers.filter((answer) => answer.channel && typeof answer.ok === "boolean").slice(0, 10);
+  ledger.handed(person, note, list.map((answer) => answer.channel));
+  ledger.recordAnswers(person, bot, key, list);
+  const arrived = list.filter((answer) => answer.ok).map((answer) => answer.channel);
+  if (!arrived.length) return false;
+  if (step === 0 || ledger.get(person, bot, key)?.state !== "told") ledger.told(person, note, arrived);
+  if (step > 0) ledger.reminded(person, bot, key, step, arrived);
+  return true;
 }
 
 /** #4250 (S2): the item's level on the notification it rings with, so the

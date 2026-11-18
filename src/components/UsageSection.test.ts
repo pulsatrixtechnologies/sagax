@@ -464,6 +464,6 @@ describe("the reference's Usage page (#4095)", () => {
     const error = html.slice(html.indexOf('data-plan-state="error"'));
     expect(error).toContain("Could not reach Grok");
     expect(error).not.toMatch(/^[^<]*<p[^>]*text-danger/);
-    expect(html).toMatch(/data-plan-retry=""[^>]*>Try again</);
+    expect(html).toMatch(/aria-label="Try again"[^>]*data-plan-retry=""/);
   });
 });

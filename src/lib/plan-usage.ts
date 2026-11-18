@@ -30,7 +30,7 @@ export type PlanRowState = "windows" | "no-windows" | "signed-out" | "error";
 export type PlanFailure =
   | { kind: "network"; code?: string }
   | { kind: "timeout"; seconds?: number }
-  | { kind: "http"; status: number }
+  | { kind: "http"; status: number; retryAfterSeconds?: number }
   | { kind: "unexpected" }
   | { kind: "renewing" }
   | { kind: "unreadable" };
@@ -55,6 +55,9 @@ export interface PlanProvider {
   weekly?: PlanWindow;
   extra?: PlanExtra[];
   models?: PlanModelUsage[];
+  /** Client side: this row's last read failed (`error`, `failure`) and the
+   * windows are the ones of the last good read, taken at this time. */
+  staleSince?: string;
 }
 
 export interface PlanUsageReport {
@@ -76,6 +79,16 @@ export interface PlanRow {
   instanceIds: string[];
   /** state error: the sentence to show. */
   message: string | null;
+  /** The ids of every row folded into this one (same account name), the
+   * favourite star matches any of them. */
+  aliasIds?: string[];
+  /** A failed refresh next to figures that are still shown: the short muted
+   * line under the bars ("Claude is limiting requests, retrying shortly"). */
+  note?: string | null;
+  /** The time the shown figures were read, when the last refresh failed. */
+  asOf?: string | null;
+  /** The failure is a rate limit: the card retries by itself. */
+  rateLimited?: boolean;
   fiveHour: PlanWindow;
   weekly: PlanWindow;
   extra: PlanExtra[];
@@ -162,6 +175,13 @@ export function planFailureText(failure: PlanFailure): string {
   }
 }
 
+/** The short muted line of a failed read: a rate limit said plainly, any
+ * other failure as "Could not reach Claude: <reason>". */
+function failureNote(name: string, failure: PlanFailure): string {
+  if (failure.kind === "http" && failure.status === 429) return t("planUsage.note.rateLimited", { name });
+  return t("planUsage.couldNotReach", { name, reason: planFailureText(failure) });
+}
+
 /** A row from a server older than this card: its state from ok and error.
  * "Sign in again in X" was its only way to say a login was missing. */
 function legacyState(provider: PlanProvider): PlanRowState {
@@ -179,8 +199,16 @@ function rowOf(provider: PlanProvider): PlanRow {
       ? t("planUsage.couldNotReach", { name, reason: planFailureText(provider.failure) })
       : provider.error || t("planUsage.fetchError");
   }
+  const failedNow = state === "windows" && !!provider.staleSince;
+  const failure = provider.failure ?? null;
+  if (failedNow) message = failure ? failureNote(name, failure) : provider.error || t("planUsage.fetchError");
+  else if (state === "error" && failure?.kind === "http" && failure.status === 429) message = failureNote(name, failure);
   return {
     id: provider.id,
+    aliasIds: [provider.id],
+    note: failedNow ? message : null,
+    asOf: failedNow ? provider.staleSince ?? null : null,
+    rateLimited: (state === "error" || failedNow) && failure?.kind === "http" && failure.status === 429,
     name: access === "api-key" ? t("planUsage.apiKeyName", { name }) : provider.state ? provider.name : name,
     driver: provider.driver ?? "",
     plan: humanPlanName(provider.plan),
@@ -188,7 +216,7 @@ function rowOf(provider: PlanProvider): PlanRow {
     access,
     instanceId: provider.instanceId ?? null,
     instanceIds: provider.instanceIds?.length ? provider.instanceIds : provider.instanceId ? [provider.instanceId] : [],
-    message,
+    message: failedNow ? null : message,
     fiveHour: provider.fiveHour ?? CLOSED,
     weekly: provider.weekly ?? CLOSED,
     extra: provider.extra ?? [],
@@ -230,7 +258,34 @@ export function connectedPlanRows(report: PlanUsageReport | null): PlanRow[] {
  * connecting and keys live in Providers. A signed-in account whose read
  * failed stays, with its reason and Try again (#1774). */
 export function accountLimitRows(report: PlanUsageReport | null): PlanRow[] {
-  return planRows(report).filter((row) => row.access === "subscription" && row.state !== "signed-out");
+  return oneRowPerAccount(planRows(report).filter((row) => row.access === "subscription" && row.state !== "signed-out"));
+}
+
+/** The same account listed twice (two instances on one login: one read
+ * failed or has no window, the other has figures) is one row: the one with
+ * figures, carrying the other's failure as its note. Two rows that both have
+ * figures stay two. */
+export function oneRowPerAccount(rows: PlanRow[]): PlanRow[] {
+  const keyOf = (row: PlanRow) => `${row.driver}|${row.name.trim().toLowerCase()}`;
+  const hasFigures = (row: PlanRow) => row.state === "windows";
+  const out: PlanRow[] = [];
+  for (const row of rows) {
+    const at = out.findIndex((kept) => keyOf(kept) === keyOf(row) && (!hasFigures(kept) || !hasFigures(row)));
+    if (at < 0) { out.push(row); continue; }
+    const kept = out[at]!;
+    const primary = hasFigures(row) && !hasFigures(kept) ? row : kept;
+    const other = primary === row ? kept : row;
+    const failedOther = other.state === "error" ? other : null;
+    out[at] = {
+      ...primary,
+      plan: primary.plan ?? other.plan,
+      aliasIds: [...new Set([...(primary.aliasIds ?? [primary.id]), ...(other.aliasIds ?? [other.id])])],
+      instanceIds: [...new Set([...primary.instanceIds, ...other.instanceIds])],
+      note: primary.note ?? (hasFigures(primary) ? failedOther?.message ?? null : null),
+      rateLimited: primary.rateLimited || (hasFigures(primary) && !!failedOther?.rateLimited),
+    };
+  }
+  return out;
 }
 
 /** How long until a window resets ("2d 3h", "45m"); null once past. */

@@ -19,10 +19,10 @@ import { Loader2, RefreshCw, RotateCw, Star } from "lucide-react";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { accountLimitRows, planRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { accountLimitRows, planRows, type PlanProvider, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { usageLocale } from "@/lib/usage-personal";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
-import { PILL, SettingsGroup } from "./SettingsPrimitives";
+import { SettingsGroup } from "./SettingsPrimitives";
 
 function dueResetDeadlines(report: PlanUsageReport, now: number, seen: Set<string>): string[] {
   const due: string[] = [];
@@ -41,6 +41,40 @@ function dueResetDeadlines(report: PlanUsageReport, now: number, seen: Set<strin
     }
   }
   return due;
+}
+
+const RETRY_FLOOR_MS = 60_000;
+
+/** Milliseconds until the next automatic read, when a row is rate limited. */
+export function rateLimitDelay(report: PlanUsageReport): number | null {
+  let wait: number | null = null;
+  for (const provider of report.providers) {
+    const failure = provider.failure;
+    if (!failure || failure.kind !== "http" || failure.status !== 429) continue;
+    if (provider.state === "windows" && !provider.staleSince) continue;
+    const asked = (failure.retryAfterSeconds ?? 0) * 1000;
+    wait = Math.max(wait ?? 0, asked, RETRY_FLOOR_MS);
+  }
+  return wait;
+}
+
+/** The last good read of a row: its figures and when they were read. */
+export type KnownRow = { provider: PlanProvider; at: string };
+
+/** A row whose read failed after one that worked keeps the last figures, marked
+ * with the time they were read; `known` holds the last good row of each id. */
+export function keepLastFigures(report: PlanUsageReport, known: Map<string, KnownRow>, at = report.fetchedAt ?? new Date().toISOString()): PlanUsageReport {
+  if (!Array.isArray(report.providers)) return report;
+  const providers = report.providers.map((provider) => {
+    if (provider.state === "windows" || (provider.state === undefined && provider.ok)) {
+      known.set(provider.id, { provider, at });
+      return provider;
+    }
+    const before = provider.state === "error" ? known.get(provider.id) : undefined;
+    if (!before) return provider;
+    return { ...before.provider, ok: true, error: provider.error, failure: provider.failure ?? null, staleSince: before.at };
+  });
+  return { ...report, providers };
 }
 
 function usageTone(used: number): string {
@@ -70,7 +104,7 @@ export interface PlanUsageViewProps {
  * a plan that reports windows (the ones the menu can show), and on the
  * starred one whatever its state, so it can be cleared. */
 function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: NonNullable<PlanUsageViewProps["favorite"]> }) {
-  const on = favorite.id === provider.id;
+  const on = favorite.id !== null && (provider.aliasIds ?? [provider.id]).includes(favorite.id);
   if (!on && provider.state !== "windows") return null;
   const name = provider.plan ? `${provider.name} ${provider.plan}` : provider.name;
   const label = t(on ? "usage.favorite.remove" : "usage.favorite.add", { name });
@@ -250,11 +284,27 @@ export function orderAccountRows(rows: PlanRow[], favoriteId: string | null = nu
     .map((entry) => entry.row);
 }
 
-/** An account's row (#4418, #4445): its name and plan, then the short window
- * and the week side by side. A failed read keeps its reason (whole on hover)
- * and Try again in the meters' place (#1774). */
+/** "as of 3:42 PM": when the shown figures were read. */
+function asOfText(asOf: string | null): string | null {
+  if (!asOf) return null;
+  const at = Date.parse(asOf);
+  if (!Number.isFinite(at)) return null;
+  try {
+    return t("planUsage.asOf", { time: new Intl.DateTimeFormat(usageLocale(), { hour: "numeric", minute: "2-digit" }).format(at) });
+  } catch {
+    return null;
+  }
+}
+
+/** An account's row (#4418, #4445): its name and plan at the left, then the
+ * short window and the week on the grid every row shares. A failed read
+ * stays inside this row: one short muted line under the bars (or in their
+ * place when no figure was ever read) with a small retry button; the last
+ * figures stay, with "as of <time>". */
 function AccountLimits({ provider, favorite, loading, onRefresh }: { provider: PlanRow } & Pick<PlanUsageViewProps, "favorite" | "loading" | "onRefresh">) {
   const meters = provider.state === "error" ? [] : planMeters(provider);
+  const line = provider.state === "error" ? provider.message : provider.note;
+  const asOf = asOfText(provider.asOf ?? null);
   return (
     <LimitRow
       data-plan-row={provider.id}
@@ -267,12 +317,22 @@ function AccountLimits({ provider, favorite, loading, onRefresh }: { provider: P
           <Meter provider={provider} meter={meter} />
         </LimitCell>
       ))}
-      {provider.state === "error" && (
-        <LimitCell col={1} span>
-          <div data-plan-state="error" className="flex min-w-0 flex-1 items-center gap-3">
-            <p data-plan-reason="" title={provider.message ?? undefined} className="line-clamp-2 min-w-0 flex-1 text-[12px] leading-4 text-ink-secondary">{provider.message}</p>
-            <button type="button" onClick={onRefresh} disabled={loading} className={cn(PILL, "shrink-0")} data-plan-retry="">
-              {t("planUsage.tryAgain")}
+      {line && (
+        <LimitCell col={1} span className={meters.length ? "pt-1" : undefined}>
+          <div data-plan-state={provider.state === "error" ? "error" : "stale"} className="flex min-w-0 items-center gap-1.5">
+            <p data-plan-reason="" title={[line, asOf].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate text-[12px] leading-4 text-ink-tertiary">
+              {line}{asOf ? ` · ${asOf}` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              aria-label={t("planUsage.tryAgain")}
+              title={t("planUsage.tryAgain")}
+              data-plan-retry=""
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50"
+            >
+              <RotateCw size={11} aria-hidden="true" className={loading ? "animate-spin" : undefined} />
             </button>
           </div>
         </LimitCell>
@@ -336,13 +396,14 @@ export function usePlanUsage(enabled = true): PlanUsageViewProps {
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const refreshedDeadlines = useRef(new Set<string>());
+  const lastGood = useRef(new Map<string, KnownRow>());
   const favorite = useUsageFavorite();
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
     try {
       const data = await api<PlanUsageReport>(refresh ? "/api/plan-usage?refresh=1" : "/api/plan-usage");
-      setReport(data);
+      setReport(keepLastFigures(data, lastGood.current));
       setFailed(false);
       setNow(Date.now());
     } catch {
@@ -363,6 +424,15 @@ export function usePlanUsage(enabled = true): PlanUsageViewProps {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  // A rate limit retries by itself: after the delay the provider gives, never
+  // sooner than a minute.
+  const waitMs = report ? rateLimitDelay(report) : null;
+  useEffect(() => {
+    if (waitMs === null) return;
+    const timer = window.setTimeout(() => void load(true), waitMs);
+    return () => window.clearTimeout(timer);
+  }, [report, waitMs, load]);
 
   useEffect(() => {
     if (!report) return;

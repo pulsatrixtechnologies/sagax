@@ -15443,5 +15443,7 @@
   "recordCard.lines.forbidden": "Your access does not include the lines.",
   "recordCard.lines.unavailable": "The lines could not be read right now.",
   "recordCard.lines.otherOne": "1 other line",
-  "recordCard.lines.other": "{count} other lines"
+  "recordCard.lines.other": "{count} other lines",
+  "planUsage.note.rateLimited": "{name} is limiting requests, retrying shortly",
+  "planUsage.asOf": "as of {time}"
 }

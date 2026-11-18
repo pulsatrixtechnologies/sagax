@@ -13,7 +13,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
   useStore: () => ({ state: { instances: [], bots: [], config: {} }, dispatch: () => {}, refreshInstances: async () => {}, refreshModels: async () => {} }),
 }));
 
-import { PlanUsageView, type PlanUsageViewProps } from "./PlanUsage";
+import { keepLastFigures, PlanUsageView, rateLimitDelay, type KnownRow, type PlanUsageViewProps } from "./PlanUsage";
 
 const CLOSED = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
 
@@ -118,9 +118,10 @@ describe("Usage limits: each signed-in account's short window and week (#4418)",
     });
     expect(html).toContain('data-plan-row="claude"');
     expect(html).toContain('data-plan-row="codex"');
-    expect(html).toContain("Could not reach Claude: rate limited (429), try again in a minute");
+    expect(html).toContain("Claude is limiting requests, retrying shortly");
     expect(html).toContain("Could not reach Codex: network error (ENOTFOUND)");
-    expect(html.match(/Try again/g)).toHaveLength(2);
+    expect(html.match(/data-plan-retry=""/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Try again"');
     setLocale("fr");
     const fr = render({ providers: [row({ state: "error", failure: { kind: "timeout", seconds: 8 } })] });
     expect(fr).toContain("Impossible de joindre Claude : aucune réponse en 8 s");
@@ -256,5 +257,58 @@ describe("Plan usage stars (2026-11-03)", () => {
 
   it("draws no star without a favorite store", () => {
     expect(render(report)).not.toContain("data-usage-favorite");
+  });
+});
+
+// 2026-11-17 (owner: "This look very bad"): the same account listed twice
+// (a rate limited read and a read with figures) is one row; a failed refresh
+// stays inside its own row under the bars; the last figures stay "as of".
+describe("Usage limits: one row per account, a failed read inside its row", () => {
+  const week = { available: true, remainingPercent: 0, usedPercent: 100, resetsAt: "2026-10-05T09:00:00Z" };
+  const duplicate: PlanUsageReport = {
+    providers: [
+      row({ id: "a", name: "alex@example.test", state: "error", failure: { kind: "http", status: 429 }, error: "Could not reach Claude: rate limited (429), try again in a minute" }),
+      row({ id: "b", name: "alex@example.test", plan: "business", ok: true, state: "windows", weekly: week }),
+    ],
+  };
+
+  it("the same account twice is one row: its figures, its plan, the rate limit as a muted line with a retry icon", () => {
+    const html = render(duplicate, { favorite: { id: "a", onToggle: () => {} } });
+    expect(html.match(/data-plan-name=""/g)).toHaveLength(1);
+    expect(html).toContain("Business");
+    expect(html).toContain(">100%</span>");
+    expect(html).toContain('data-plan-state="stale"');
+    expect(html).toContain("Claude is limiting requests, retrying shortly");
+    expect(html).not.toContain("rate limited (429)");
+    expect(html.match(/data-plan-retry=""/g)).toHaveLength(1);
+    // the star of either listing marks the one row
+    expect(html).toContain('data-usage-favorite="on"');
+    // the retry is an icon button, not a pill
+    expect(html).not.toMatch(/data-plan-retry=""[^>]*>Try again</);
+  });
+
+  it("two accounts that both have figures stay two rows", () => {
+    const two: PlanUsageReport = { providers: [row({ id: "a", name: "Work", state: "windows", ok: true, weekly: week }), row({ id: "b", name: "Work", state: "windows", ok: true, weekly: { ...week, usedPercent: 40 } })] };
+    expect(render(two).match(/data-plan-name=""/g)).toHaveLength(2);
+  });
+
+  it("a failed refresh keeps the last figures with the time they were read, and the line says so", () => {
+    const known = new Map<string, KnownRow>();
+    const good: PlanUsageReport = { fetchedAt: "2026-10-02T08:40:00Z", providers: [row({ id: "claude", name: "Personal", state: "windows", ok: true, weekly: week })] };
+    expect(keepLastFigures(good, known)).toEqual(good);
+    const bad: PlanUsageReport = { fetchedAt: "2026-10-02T09:00:00Z", providers: [row({ id: "claude", name: "Personal", state: "error", failure: { kind: "network" } })] };
+    const kept = keepLastFigures(bad, known);
+    expect(kept.providers[0]).toMatchObject({ state: "windows", staleSince: "2026-10-02T08:40:00Z", failure: { kind: "network" } });
+    const html = render(kept);
+    expect(html).toContain(">100%</span>");
+    expect(html).toMatch(/Could not reach Claude: network error · as of /);
+  });
+
+  it("a rate limit retries by itself after the provider's delay, never sooner than a minute", () => {
+    expect(rateLimitDelay(duplicate)).toBe(60_000);
+    expect(rateLimitDelay({ providers: [row({ state: "error", failure: { kind: "http", status: 429, retryAfterSeconds: 150 } })] })).toBe(150_000);
+    expect(rateLimitDelay({ providers: [row({ state: "error", failure: { kind: "http", status: 429, retryAfterSeconds: 5 } })] })).toBe(60_000);
+    expect(rateLimitDelay({ providers: [row({ state: "error", failure: { kind: "network" } })] })).toBeNull();
+    expect(rateLimitDelay({ providers: [row({ state: "windows", ok: true })] })).toBeNull();
   });
 });

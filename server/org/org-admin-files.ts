@@ -44,7 +44,9 @@ import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
 
-import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
+import { atRestStream, describeHandle, plainSizeFor } from "../encryption/content-at-rest.ts";
+import { ContentSealError } from "../encryption/content-crypto.ts";
+import { ContentKeyUnavailable } from "../encryption/content-keys.ts";
 
 export const ADMIN_FILES_ROUTE = /^files\/([A-Za-z0-9_-]{1,128})\/(roots|list|stat|read|download)$/;
 export const FILES_MAX_ENTRIES = 1_000;
@@ -282,7 +284,7 @@ export function listFolder(dir: string, segments: readonly string[], max = FILES
       continue;
     }
     const type = entryType(entry);
-    entries.push({ name, path: `${prefix}${name}`, type, size: type === "file" ? entry.size : null, modifiedAt: Math.round(entry.mtimeMs) });
+    entries.push({ name, path: `${prefix}${name}`, type, size: type === "file" ? plainSizeFor(join(path, name), entry) : null, modifiedAt: Math.round(entry.mtimeMs) });
   }
   entries.sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.toLocaleLowerCase().localeCompare(b.name.toLocaleLowerCase()) || a.name.localeCompare(b.name));
   return { entries: entries.slice(0, max), truncated: entries.length > max };
@@ -526,7 +528,7 @@ function walkFolder(walk: Walk, root: Extract<BotFileRoot, { kind: "folder" }>, 
       continue;
     }
     if (!emit || !stat.isFile() || !wanted(walk, name)) continue;
-    walk.entries.push({ root: root.id, name, path, type: "file", size: stat.size, modifiedAt: Math.round(stat.mtimeMs), mime: mimeOf(name), kind: kindOf(name) });
+    walk.entries.push({ root: root.id, name, path, type: "file", size: plainSizeFor(join(real, name), stat), modifiedAt: Math.round(stat.mtimeMs), mime: mimeOf(name), kind: kindOf(name) });
     if (walk.entries.length >= walk.limit) walk.stopped = true;
   }
 }
@@ -579,7 +581,7 @@ async function listRecursive(deps: OrgAdminFilesDeps, botId: string, roots: BotF
         }
         walk.last = { root: root.id, at: [a.id] };
         if (!stat.isFile() || !wanted(walk, a.name)) continue;
-        walk.entries.push({ root: root.id, name: a.name, path: a.id, type: "file", size: stat.size, modifiedAt: a.at, mime: mimeOf(a.name), kind: kindOf(a.name) });
+        walk.entries.push({ root: root.id, name: a.name, path: a.id, type: "file", size: plainSizeFor(a.localPath, stat), modifiedAt: a.at, mime: mimeOf(a.name), kind: kindOf(a.name) });
         if (walk.entries.length >= walk.limit) walk.stopped = true;
       }
       continue;
@@ -651,7 +653,7 @@ export async function answerBotFiles(input: {
             continue;
           }
           if (!stat.isFile() || view.withheld?.(a.name)) continue;
-          entries.push({ name: a.name, path: a.id, type: "file", size: stat.size, modifiedAt: a.at });
+          entries.push({ name: a.name, path: a.id, type: "file", size: plainSizeFor(a.localPath, stat), modifiedAt: a.at });
         }
         entries.sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0) || a.name.localeCompare(b.name));
         return send(res, 200, { root: target.root, path: "", entries: entries.slice(0, FILES_MAX_ENTRIES), truncated: entries.length > FILES_MAX_ENTRIES });
@@ -669,7 +671,7 @@ export async function answerBotFiles(input: {
         path: target.path,
         name: target.name,
         type,
-        size: type === "file" ? target.stat.size : null,
+        size: type === "file" ? plainSizeFor(target.real, target.stat) : null,
         modifiedAt: Math.round(target.stat.mtimeMs),
         mime: type === "file" ? mimeOf(target.name) : null,
       });
@@ -773,6 +775,16 @@ export async function answerBotFiles(input: {
     return;
   } catch (error) {
     if (error instanceof FileRefusal) return send(res, error.status, { code: error.code, message: error.message, error: error.message });
+    // a file sealed at rest whose key is not unlocked yet, or that does not
+    // open here: a clear refusal, never a server error nor an empty file
+    if (error instanceof ContentKeyUnavailable) {
+      const message = "This file is sealed at rest and its key is not unlocked on this server yet. Try again later.";
+      return send(res, 503, { code: "content_locked", message, error: message });
+    }
+    if (error instanceof ContentSealError) {
+      const message = "This file is sealed at rest and does not open on this server.";
+      return send(res, 422, { code: "content_unreadable", message, error: message });
+    }
     const code = (error as NodeJS.ErrnoException)?.code;
     if (code === "ELOOP" || code === "EMLINK") return send(res, 403, { code: "link_refused", message: "Links are not followed here.", error: "Links are not followed here." });
     if (code === "ENOENT" || code === "ENOTDIR") return send(res, 404, { code: "not_found", message: "No such file or folder.", error: "No such file or folder." });

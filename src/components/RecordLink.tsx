@@ -63,6 +63,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
       pinnable
       warm
       motion
+      trigger="click"
       label={t("recordCard.dialogName", { kind: kindName, number: text })}
       disabled={plain}
       onIntent={() => prefetchRecordCard(record)}
@@ -86,6 +87,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
           dir="ltr"
           lang={lang}
           aria-label={plain ? undefined : chipName}
+          title={plain ? undefined : t("recordCard.chipTitle")}
           aria-disabled={plain ? true : undefined}
           {...(plain ? { "data-record-plain": record.kind } : { "data-record-link": record.kind })}
           className={plain ? "inline cursor-text break-words text-start" : cn(REF_PILL_CLASS, "cursor-pointer")}

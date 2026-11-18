@@ -150,7 +150,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *   of the anchor, and out over 120 ms; a fade only when warm or under
  *   reduced motion.
  */
-export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false, disabled = false }: {
+export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false, disabled = false, trigger = "hover" }: {
   card: (state: HoverCardState) => ReactNode;
   kind: string;
   children: (anchor: AnchorProps) => ReactNode;
@@ -161,7 +161,11 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   motion?: boolean;
   /** the anchor asks for no card (a card already open stays until it closes) */
   disabled?: boolean;
+  /** "click": the card opens only on a click, Enter or Space (pinned), never on
+   * hover, focus or long press; the pointer resting still runs `onIntent` */
+  trigger?: "hover" | "click";
 }) {
+  const byClick = trigger === "click";
   const [mode, setMode] = useState<Mode>("closed");
   const open = mode !== "closed";
   const pinned = mode === "pinned";
@@ -317,6 +321,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       if (dismissed.current || disabled) return;
       clearIntent();
       if (onIntent) intent.current = setTimeout(onIntent, HOVER_INTENT_MS);
+      if (byClick) return;
       const isWarm = warm && Date.now() - warmClosedAt < HOVER_WARM_WINDOW_MS;
       openedWarm.current = isWarm;
       later(true, isWarm ? HOVER_WARM_OPEN_MS : HOVER_OPEN_DELAY_MS);
@@ -330,7 +335,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     },
     onFocus: (event) => {
       // keyboard focus only: a click focuses the link too
-      if (!returning.current && !disabled && event.currentTarget.matches(":focus-visible")) {
+      if (!byClick && !returning.current && !disabled && event.currentTarget.matches(":focus-visible")) {
         clear();
         openedWarm.current = false;
         onIntent?.();
@@ -338,7 +343,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       }
     },
     onBlur: () => {
-      if (pinned) return;
+      if (pinned || byClick) return;
       later(false, 0);
     },
     onKeyDown: (event) => {
@@ -357,7 +362,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       }
     },
     onPointerDown: (event) => {
-      if (event.pointerType !== "touch") return;
+      if (byClick || event.pointerType !== "touch") return;
       pressed.current = false;
       pressStart.current = { x: event.clientX, y: event.clientY };
       clear();

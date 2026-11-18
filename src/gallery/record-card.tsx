@@ -10,7 +10,7 @@
  *   chat2      live chips of an invoice and an agreement: a record named in a card opens in place, Back returns
  *   loading | noaccess | unknown | notconnected | signin | busy | down | orgrefused   one state
  *   neighbour  the link hover card (the conforming neighbour) beside a ticket card
- *   chat       live chips in a paragraph, a list and a table: hover, click (pin), Escape
+ *   chat       live chips in a paragraph, a list and a table: click (pin), Escape; hover opens nothing (#4785)
  * The time is held still (scene `now`), so a capture is the same every run. */
 import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";

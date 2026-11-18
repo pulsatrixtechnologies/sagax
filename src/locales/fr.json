@@ -15273,6 +15273,7 @@
   "recordCard.chipName": "{kind} {number}, {product}, appuie sur Entrée pour les détails",
   "recordCard.chipNameBare": "{kind} {number}, appuie sur Entrée pour les détails",
   "recordCard.dialogName": "{kind} {number}",
+  "recordCard.chipTitle": "Ouvrir la fiche",
   "recordCard.loading": "Chargement de la fiche",
   "recordCard.close": "Fermer",
   "recordCard.date.opened": "Ouverture",

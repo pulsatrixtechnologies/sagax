@@ -10,10 +10,12 @@ import { setLocale } from "@/lib/i18n";
 import { agreementCard, answer, companyCard, invoiceCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
 import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
+import { openExternalLink } from "@/lib/app-links";
 import * as drafts from "@/lib/drafts";
-import { HOVER_CLOSE_GRACE_MS, HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
+import { HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
 import { ChatMarkdown } from "./ChatMarkdown";
 
+vi.mock("@/lib/app-links", async (original) => ({ ...(await original<typeof import("@/lib/app-links")>()), openExternalLink: vi.fn(async () => {}) }));
 vi.mock("@/lib/drafts", async (original) => ({ ...(await original<typeof import("@/lib/drafts")>()), appendComposerDraft: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -98,9 +100,10 @@ describe("the chip", () => {
 });
 
 describe("the card", () => {
-  it("prefetches after the rest and not on a crossing, opens at 300 ms", async () => {
+  it("prefetches after the rest and not on a crossing, but never opens on hover", async () => {
     await render(`[#481516](${LINK})`);
     const chip = chips()[0]!;
+    expect(chip.getAttribute("title")).toBe("Ouvrir la fiche");
     fire(chip, "pointerover");
     await advance(HOVER_INTENT_MS - 20);
     fire(chip, "pointerout");
@@ -111,10 +114,45 @@ describe("the card", () => {
     fire(chip, "pointerover");
     await advance(HOVER_INTENT_MS + 1);
     expect(reads).toHaveLength(1);
-    await advance(HOVER_OPEN_DELAY_MS);
-    expect(card()?.getAttribute("role")).toBe("tooltip");
+    await advance(HOVER_OPEN_DELAY_MS + 1000);
+    expect(card()).toBeNull();
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens on click, Enter and Space, toggles on a second click, and closes on Escape", async () => {
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    await act(async () => { chip.click(); });
+    await advance(50);
+    expect(card()?.getAttribute("role")).toBe("dialog");
     expect(card()!.textContent).toContain("Imprimante de l'accueil hors ligne depuis lundi");
-    expect(reads).toHaveLength(1);
+    await act(async () => { chip.click(); });
+    await advance(200);
+    expect(card()).toBeNull();
+    // a real button turns Enter and Space into a click: the same handler
+    await act(async () => { chip.click(); });
+    await advance(50);
+    expect(card()).not.toBeNull();
+    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await advance(200);
+    expect(card()).toBeNull();
+  });
+
+  it("does not open on keyboard focus alone", async () => {
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    chip.focus();
+    await advance(HOVER_OPEN_DELAY_MS + 500);
+    expect(card()).toBeNull();
+  });
+
+  it("Cmd or Ctrl click opens the product, never the card", async () => {
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    await act(async () => { chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true })); });
+    await advance(100);
+    expect(card()).toBeNull();
+    expect(openExternalLink).toHaveBeenCalledWith(expect.stringContaining("desk.example"));
   });
 
   it("makes one read for two chips of the same record", async () => {
@@ -126,22 +164,6 @@ describe("the card", () => {
     fire(second!, "pointerover");
     await advance(HOVER_INTENT_MS + 1);
     expect(reads).toHaveLength(1);
-  });
-
-  it("closes after the grace period and opens quicker when another card just closed", async () => {
-    await render(`[#481516](${LINK}) et [le billet](${LINK})`);
-    const [first, second] = chips();
-    fire(first!, "pointerover");
-    await advance(HOVER_OPEN_DELAY_MS + 5);
-    expect(card()).not.toBeNull();
-    fire(first!, "pointerout");
-    await advance(HOVER_CLOSE_GRACE_MS + 10);
-    // the exit finishes
-    await advance(200);
-    expect(card()).toBeNull();
-    fire(second!, "pointerover");
-    await advance(100);
-    expect(card()).not.toBeNull();
   });
 
   it("pins on click, becomes a dialog, holds Tab, and Escape closes and returns focus", async () => {
@@ -167,7 +189,7 @@ describe("the card", () => {
     expect(document.activeElement).toBe(chip);
   });
 
-  it("unpins on a click outside and stays closed after Escape while the pointer rests", async () => {
+  it("closes on a click outside", async () => {
     await render(`[#481516](${LINK})`);
     const chip = chips()[0]!;
     await act(async () => { chip.click(); });
@@ -176,19 +198,6 @@ describe("the card", () => {
     fire(document.body, "pointerdown");
     await advance(200);
     expect(card()).toBeNull();
-    fire(chip, "pointerover");
-    await advance(HOVER_OPEN_DELAY_MS + 5);
-    expect(card()).not.toBeNull();
-    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    await advance(300);
-    expect(card()).toBeNull();
-    fire(chip, "pointerover");
-    await advance(HOVER_OPEN_DELAY_MS + 50);
-    expect(card()).toBeNull();
-    fire(chip, "pointerout");
-    fire(chip, "pointerover");
-    await advance(HOVER_OPEN_DELAY_MS + 5);
-    expect(card()).not.toBeNull();
   });
 
   it("is a plain label once the console cannot serve cards", async () => {
@@ -427,22 +436,6 @@ describe("the card", () => {
     await advance(200);
     expect(card()).toBeNull();
     expect(document.activeElement).toBe(chip);
-  });
-
-  it("does not ignore the next visit after an Escape pressed with the pointer elsewhere", async () => {
-    await render(`[#481516](${LINK})`);
-    const chip = chips()[0]!;
-    chip.focus();
-    await act(async () => { chip.click(); });
-    await advance(50);
-    // keyboard Escape, the pointer never was on the chip
-    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    await advance(200);
-    expect(card()).toBeNull();
-    chip.blur();
-    fire(chip, "pointerover");
-    await advance(HOVER_OPEN_DELAY_MS + 5);
-    expect(card()).not.toBeNull();
   });
 
   it("keeps an open card and the focus when the console turns out unable to serve cards", async () => {

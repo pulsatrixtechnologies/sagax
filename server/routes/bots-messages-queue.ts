@@ -72,7 +72,7 @@ async function handleQueueSteer(deps: BotsMessagesRouteDeps, ctx: RouteContext):
   const { req, res, path, method, auth, json, readBody } = ctx;
   const {
     DESKTOP_MANAGED, clearUnattended, drainQueuedSends, handoffs, requirePinnedClientThread,
-    requestedTaskBot, runningTurnInstance, store,
+    requestedTaskBot, runningTurnInstance, engineSteersImages, store,
   } = deps;
   let m: RegExpMatchArray | null = null;
 
@@ -95,25 +95,26 @@ async function handleQueueSteer(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     // turn — never both for the same words.
     const held = holdSteeredQueue(bot.id, bot.threadId, m[2]);
     if (!held) return json(res, 404, { error: "no such queued message" });
-    // A live steer has no image side channel. Attachment words wait for a
-    // real turn where central admission can hand the images to the engine.
-    if (held.items.some((item: any) => {
-      const resolved = extractTurnImages(item.text);
-      return resolved.images.length > 0 || resolved.videos.length > 0;
-    })) {
-      restoreHeldSteeredQueue(held);
-      return json(res, 200, { ok: true, queued: true, threadId: bot.threadId });
-    }
     const currentAtStart = store.projectBotForTask(bot.id, bot.threadId);
     const instance = currentAtStart?.busy ? runningTurnInstance(currentAtStart, bot.threadId) : undefined;
+    // Attachments steer into an engine that takes pictures mid-turn, as
+    // native input (capabilities.steerImages). Elsewhere they wait for a real
+    // turn where central admission hands the images over, and the answer
+    // says why (blockedBy: images), as admission decides for a send.
+    const attachments = held.items.map((item: any) => extractTurnImages(item.prompt ?? item.text));
+    if (attachments.some((resolved: any) => resolved.images.length > 0 || resolved.videos.length > 0) && !engineSteersImages?.(instance)) {
+      restoreHeldSteeredQueue(held);
+      return json(res, 200, { ok: true, queued: true, threadId: bot.threadId, blockedBy: "images" });
+    }
+    const images = attachments.flatMap((resolved: any) => resolved.images);
     // words said on a call keep their call mark when they join the turn
-    const prompt = held.items.map((item: any) => voiceCallSteerPrompt(item.prompt, item.voiceCall)).join("\n\n");
+    const prompt = held.items.map((item: any, index: number) => voiceCallSteerPrompt(attachments[index].text, item.voiceCall)).join("\n\n");
     const steerTarget = handoffs.current(bot.threadId);
     let steered: SteerOutcome = "refused";
     const steerId = randomUUID();
     if (currentAtStart?.busy && instance?.adapter.capabilities.queueing && instance.adapter.steer) {
       steered = await instance.adapter
-        .steer(bot.threadId, prompt, { steerId })
+        .steer(bot.threadId, prompt, { steerId, ...(images.length > 0 ? { images } : {}) })
         .catch((): SteerOutcome => "indeterminate");
     }
     // The steer was awaited adapter work: re-read every ownership

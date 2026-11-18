@@ -305,13 +305,17 @@ posixOnly("mid-turn steering e2e", () => {
       await api("PATCH", `/api/bots/${created.id}`, {
         modelSelection: { instanceId: "claudeSteer", model: "claude-fake" },
       });
-      const waiting = (await api("POST", `/api/bots/${created.id}/tasks`, { title: "Images" })).body.task.threadId as string;
+      // One conversation (unified chat): the newest segment is the bot's
+      // conversation, which never queues for a slot. The opener holds the
+      // slot there; the pictures go to the earlier thread, which waits.
+      const opener = (await api("POST", `/api/bots/${created.id}/tasks`, { title: "Opener" })).body.task.threadId as string;
+      const waiting = created.threadId as string;
       const waitingMessages = async () =>
         (await api("GET", `/api/threads/${waiting}/messages?limit=20`)).body.messages as any[];
-      expect((await api("POST", `/api/bots/${created.id}/messages`, { threadId: created.threadId, text: "first image task" })).status)
+      expect((await api("POST", `/api/bots/${created.id}/messages`, { threadId: opener, text: "first image task" })).status)
         .toBe(202);
       const openerMessages = async () =>
-        (await api("GET", `/api/threads/${created.threadId}/messages?limit=20`)).body.messages as any[];
+        (await api("GET", `/api/threads/${opener}/messages?limit=20`)).body.messages as any[];
       await waitFor(
         async () => (await openerMessages()).some((message: any) => message.kind === "activity"),
         "the image queue tool chip",
@@ -978,7 +982,9 @@ second = await api("POST", `/api/bots/${created.id}/messages`, { text: imageText
 
     expect((await api("POST", `/api/bots/${created.id}/messages`, { text: "first codex turn" })).status).toBe(202);
     await waitFor(async () => (await getBot(created.id)).busy === true, "the codex turn to start");
-    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.card), "the codex question card");
+    // the engine's own question (a request of the turn), not the new bot's
+    // intro card, which a fresh conversation already holds
+    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.card?.requestId), "the codex question card");
 
     const attachments = join(home, ".sagax", "attachments");
     mkdirSync(attachments, { recursive: true });

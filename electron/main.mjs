@@ -1071,6 +1071,7 @@ import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
 import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
 import { isYoutubeEmbedUrl, withYoutubeEmbedReferer } from "./youtube-referer.mjs";
+import { isAppServerRequest } from "./desktop-owner-request.mjs";
 import { isPermissionSettingsUrl, normalizePermissionStatus, permissionAction, permissionsFor } from "./os-permissions.mjs";
 import { execFile } from "node:child_process";
 
@@ -1776,14 +1777,14 @@ function installRequestHeaderRules({ mutationHeader }) {
       callback({ requestHeaders: withYoutubeEmbedReferer(details, () => youtubeEmbedderPage(details)) });
       return;
     }
+    // http: and ws: alike: a browser's WebSocket handshake needs the header
+    // too, since the server refuses browsers without it (OpenMausBot #2930).
+    // Only the app's own requests to its server carry it, never a load that
+    // message content or another origin's frame aims at the same port
+    // (electron/desktop-owner-request.mjs).
     let ownsTarget = false;
     try {
-      const target = new URL(details.url);
-      // http: and ws: alike: a browser's WebSocket handshake needs the header
-      // too, since the server refuses browsers without it (OpenMausBot #2930).
-      ownsTarget = mutationHeader && serverReady && (target.protocol === "http:" || target.protocol === "ws:") &&
-        target.hostname === "127.0.0.1" &&
-        Number(target.port || 80) === SERVER_PORT;
+      ownsTarget = mutationHeader && serverReady && isAppServerRequest(details, SERVER_PORT);
     } catch {}
     if (!ownsTarget) {
       callback({ requestHeaders: details.requestHeaders });

@@ -143,7 +143,7 @@ describe("lazyScreen", () => {
     vi.useFakeTimers();
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const load = vi.fn(() => Promise.reject(new TypeError("Failed to fetch dynamically imported module")));
-    const Screen = lazyScreen("ComputerPanel", load);
+    const Screen = lazyScreen("InspectorPanel", load);
     render(createElement(Screen, {}));
     await vi.advanceTimersByTimeAsync(60_000);
     expect(load).toHaveBeenCalledTimes(1);
@@ -174,7 +174,7 @@ describe("preloadScreens", () => {
     const preloads = stubPreloads();
     // Measured 2026-11-03: 21 prior screens + MemoryManager, Plugins, BotWizard,
     // PersonPanel, CommandPalette, OrgImport, StagedOrgImport, ArtifactsHost.
-    expect(preloads.length).toBe(29);
+    expect(preloads.length).toBe(28);
     const stop = preloadScreens();
     for (const preload of preloads) expect(preload).not.toHaveBeenCalled();
     idle!();
@@ -253,7 +253,7 @@ describe("launch bundle", () => {
     // left after foldContext moved to diff-fold.ts. Keep them off this path.
     const deferred = [
       "ActivityPanel", "artifacts/ArtifactsHost", "BotSettingsDialog", "bot-wizard/BotWizard", "BulkEditBotsDialog",
-      "CommandPalette", "ComputerPanel", "InspectorPanel", "KeyboardShortcutsModal",
+      "CommandPalette", "InspectorPanel", "KeyboardShortcutsModal",
       "LocalVmWorkspace", "memory-manager/MemoryManagerPanel", "NewBotDialog", "OrgImportDialog", "PersonPanel", "PluginsPanel",
       "RemoteAgentSettingsPanel", "remote-desktop-panel", "RoutineCalendarPage",
       "RoutinesPage", "SettingsModal", "TeamMapPage", "TriggersPanel", "WorkspaceBackupSettings",

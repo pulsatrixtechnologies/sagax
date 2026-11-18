@@ -46,15 +46,16 @@ vi.mock("@/state/store/api", () => ({
   }),
 }));
 
+// The store's config: a Boat computer is on, so the cloud computer is offered.
+const storeConfig = vi.hoisted(() => ({ value: { features: { boatComputer: true } } as unknown }));
+vi.mock("@/state/store-selector", () => ({
+  useStoreSelector: (select: (state: { config: unknown }) => unknown) => select({ config: storeConfig.value }),
+}));
+
 vi.mock("../computer/SandboxDesktopModal", () => ({
   SandboxDesktopModal: (props: { title: string; onClose: () => void }) =>
     createElement("div", { "data-sandbox-takeover": "", "data-title": props.title },
       createElement("button", { type: "button", "data-takeover-close": "", onClick: props.onClose }, "close")),
-}));
-
-// Computer details (#4208): the old side panel's body, in its own window.
-vi.mock("../lazy-screens", () => ({
-  ComputerPanel: (props: { bot: { id: string } }) => createElement("div", { "data-computer-panel-stub": props.bot.id }),
 }));
 
 const bot = {
@@ -129,6 +130,10 @@ describe("computerSelectValue / options / title", () => {
     expect(options.find((option) => option.value === "local")?.label).toContain("MacBook");
     expect(computerCardTitle("local", bridge, true)).toContain("MacBook");
     expect(computerCardTitle("cloud", bridge, true).length).toBeGreaterThan(0);
+    // one name for the cloud computer, on the card and in its menu row
+    for (const org of [false, true]) {
+      expect(computerCardTitle("cloud", bridge, org)).toBe(computerSelectOptions(bridge, org).find((o) => o.value === "cloud")!.label);
+    }
   });
 });
 
@@ -223,27 +228,38 @@ describe("ComputerCard", () => {
     expect(more.className).not.toMatch(/hidden|group-hover/);
   });
 
-  // #4208 changed this on purpose: read only still gets the "..." for
-  // Computer details (what the old side panel held), never the choices.
-  it("has a ... with only Computer details when read only", () => {
-    act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
-    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]");
-    expect(more).toBeTruthy();
-    act(() => more!.click());
-    expect(document.querySelectorAll("[data-computer-card-menu] [role=\"menuitemradio\"]")).toHaveLength(0);
-    expect(document.querySelector("[data-computer-card-menu] [data-computer-card-details]")).toBeTruthy();
+  it("opens by pointer without focusing a row (no ring), by keyboard on the first row", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!;
+    act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    expect(document.activeElement?.hasAttribute("data-computer-card-option")).toBe(false);
+    expect(document.querySelector("[data-computer-card-menu]")).toBeTruthy();
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+    act(() => more.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })));
+    expect(document.activeElement?.getAttribute("data-computer-card-option")).toBe("auto");
   });
 
-  it("opens Computer details, the old side panel's body, in a window from the menu (#4208)", () => {
+  it("lists no cloud computer (nor Auto) when this person has none, solo; an organization always has one", () => {
+    expect(computerSelectOptions(null, false, false).map((o) => o.value)).toEqual(["local"]);
+    expect(computerSelectOptions(null, true, true).map((o) => o.value)).toEqual(["auto", "local", "cloud"]);
+    storeConfig.value = {};
+    try {
+      act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+      act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+      expect([...document.querySelectorAll("[data-computer-card-option]")].map((n) => n.getAttribute("data-computer-card-option"))).toEqual(["local"]);
+    } finally {
+      storeConfig.value = { features: { boatComputer: true } };
+    }
+  });
+
+  it("has no Computer details row, and no ... at all when the viewer cannot change the computer", () => {
     act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
     act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
-    const details = document.querySelector<HTMLButtonElement>("[data-computer-card-menu] [data-computer-card-details]")!;
-    expect(details.textContent).toBe("Computer details");
-    act(() => details.click());
-    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
-    const body = document.querySelector("dialog [data-computer-details] [data-computer-panel-stub]");
-    expect(body?.getAttribute("data-computer-panel-stub")).toBe("bot-1");
-    expect(document.querySelector("dialog h2")!.textContent).toContain("Scout");
+    expect(document.querySelector("[data-computer-card-menu] [data-computer-card-details]")).toBeNull();
+    expect(document.querySelector("[data-computer-card-menu]")!.getAttribute("aria-label")).toBe("Choose computer");
+    act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
+    expect(host!.querySelector("[data-computer-card-more]")).toBeNull();
   });
 
   it("has no menu when the viewer cannot change the computer", () => {

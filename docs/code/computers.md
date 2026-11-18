@@ -703,22 +703,13 @@ opens the VM workspace) or a shell-only host. Closing the window leaves the
 panel on Activity. A desktop paired to another host keeps its own computer
 panel (`remote-desktop-panel.tsx`). Test: `src/components/teach-task.dom.test.ts`.
 
-What the side panel held and the row cannot is Computer details, the last
-row of the Computer section's "..." menu (open to whoever sees the row,
-read only included; the Works on choices above it only to whoever may
-change them). It opens `ComputerPanel` in a window (`ViewerDialog`): the
-cloud computer's preview with Start it now / Wake it now, Sleep and Replace
-(VPS), the Local VM's Start, Create, Replace and Delete, the cloud and team
-place actions, the Mac Screen Recording recovery (`MacLocalControl`,
-`ScreenPermissionActions`), Linux local control (`LinuxLocalControl`),
-an Android phone over USB (`AndroidDevicePanel`), the take control and hand
-back cards and, on an organization server, the Computer tab below. The
-place sentences a phone reads (`PLACE_WORDS` in `shared/place-view.ts`)
-name that menu. Tests: `src/components/bot-settings/ComputerCard.test.ts`,
-`src/components/teach-task.test.ts`.
+The Computer section's "..." menu holds only the Works on choices and the
+marked hosts, and is hidden for a viewer who may not change them. There is no
+Computer details window any more (owner decision 2026-11-17): the old
+`ComputerPanel` and its parts are gone. Test:
+`src/components/bot-settings/ComputerCard.test.ts`.
 
-The Computer tab (`src/components/computer/OrgComputerTab.tsx`), drawn in
-Computer details on an organization server, draws the
+The Computer tab (`src/components/computer/OrgComputerTab.tsx`) draws the
 solo screen: one rounded screen (`ComputerScreen.tsx`) with Play / Pause /
 Stop on it and "<Bot>'s screen" below, and a usage panel that keeps
 polling while the environment is off. Works on is not on this tab. It is
@@ -999,7 +990,7 @@ cloud screen and no recording starts.
 Tests: `src/components/teach-task.dom.test.ts` (the chooser, the window on
 the bot's browser, `record-start`, the recording bar, one window per bot,
 the restore), `src/components/teach-task.test.ts` (the side panel and its
-hand-over are gone, its body lives on as Computer details), `server/skills/skill-learn.test.ts` (the pinned
+hand-over are gone), `server/skills/skill-learn.test.ts` (the pinned
 question). Captures: the gallery `src/gallery/teach-task.html`
 (`node scripts/capture/teach-task.mjs`).
 Pieces: `shared/teach-recording.ts` (masking rules, SKILL.md builder),

@@ -101,7 +101,7 @@ describe("the Booking card", () => {
   it("keeps the card in place once booked, with the chosen time marked and nothing else pressable", () => {
     const parsed = sample();
     const entry = widgetActions(parsed)[2]!;
-    mount(row(parsed, { settled: { ref: entry.ref, label: entry.label, tone: "submit", at: 1 } }));
+    mount(row(parsed, { settled: { ref: entry.ref, label: entry.label, tone: "submit", at: 1 }, booking: { state: "booked", at: 2 } }));
     const card = host.querySelector('[data-widget="w1"]')!;
     expect(card.getAttribute("data-widget-state")).toBe("settled");
     expect(host.querySelector('[role="status"]')!.textContent).toMatch(/^Booked · Mon, Nov 9, 4:30\sPM$/);
@@ -109,5 +109,43 @@ describe("the Booking card", () => {
     expect(chosen.map((chip) => chip.textContent?.replace(/\s/g, " "))).toEqual(["4:30 PM"]);
     expect(all<HTMLButtonElement>("[data-widget-ref]").filter((chip) => chip.getAttribute("aria-pressed") !== "true").every((chip) => chip.disabled)).toBe(true);
     expect(all<HTMLButtonElement>("button").some((button) => button.textContent === "More times")).toBe(false);
+  });
+});
+
+describe("the Booking card is honest about the calendar tool", () => {
+  const entryAt = (index: number) => widgetActions(sample())[index]!;
+
+  it("says Booking while the tool runs, on the pressed time, and not Booked", () => {
+    const entry = entryAt(2);
+    mount(row(sample(), { settled: { ref: entry.ref, label: entry.label, tone: "submit", at: 1 }, booking: { state: "pending", at: 1 } }));
+    const chip = host.querySelector<HTMLButtonElement>(`[data-widget-ref="${entry.ref}"]`)!;
+    expect(chip.textContent).toBe("Booking…");
+    expect(chip.getAttribute("aria-busy")).toBe(null);
+    expect(host.textContent).not.toContain("Booked");
+    expect(host.querySelector('[role="status"]')!.textContent).toContain("Booking");
+  });
+
+  it("treats a settled card with no word from the tool as not booked yet", () => {
+    const entry = entryAt(2);
+    mount(row(sample(), { settled: { ref: entry.ref, label: entry.label, tone: "submit", at: 1 } }));
+    expect(host.textContent).not.toContain("Booked");
+  });
+
+  it("is Booked once the tool confirmed", () => {
+    const entry = entryAt(2);
+    mount(row(sample(), { settled: { ref: entry.ref, label: entry.label, tone: "submit", at: 1 }, booking: { state: "booked", at: 2 } }));
+    expect(host.textContent).toContain("Booked");
+  });
+
+  it("is selectable again with the tool's reason on the card when the booking failed", () => {
+    mount(row(sample(), { booking: { state: "failed", at: 2, code: "tool_failed", detail: "That time is no longer free." } }));
+    expect(host.querySelector('[data-widget="w1"]')!.getAttribute("data-widget-state")).toBe("live");
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("The booking did not go through: That time is no longer free.");
+    expect(all<HTMLButtonElement>("[data-widget-ref]").every((chip) => !chip.disabled)).toBe(true);
+  });
+
+  it("says nothing was booked when no calendar call ran", () => {
+    mount(row(sample(), { booking: { state: "failed", at: 2, code: "not_booked" } }));
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Nothing was booked. Pick a time to try again.");
   });
 });

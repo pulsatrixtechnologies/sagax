@@ -113,20 +113,24 @@ struct ChatWidgetBooking: View {
 
     var body: some View {
         let days = days
-        let booked = form.settledRef.flatMap { ref in slots.first { $0.ref == ref } }
-        let bookedDay = booked.flatMap { slot in days.first { $0.slots.contains { $0.ref == slot.ref } } }
-        if let day = bookedDay ?? days.first(where: { $0.key == picked }) ?? days.first {
-            content(days: days, day: day, booked: booked)
+        let chosen = form.settledRef.flatMap { ref in slots.first { $0.ref == ref } }
+        let chosenDay = chosen.flatMap { slot in days.first { $0.slots.contains { $0.ref == slot.ref } } }
+        if let day = chosenDay ?? days.first(where: { $0.key == picked }) ?? days.first {
+            content(days: days, day: day, chosen: chosen)
         }
     }
 
     @ViewBuilder
-    private func content(days: [Day], day: Day, booked: Slot?) -> some View {
+    private func content(days: [Day], day: Day, chosen: Slot?) -> some View {
+        // pressed, then booked only when the calendar tool said so: until then it is only being booked
+        let confirmed = chosen != nil && form.booking?.state == "booked"
+        let booked = confirmed ? chosen : nil
+        let booking = confirmed ? nil : chosen
         let dayIndex = days.firstIndex { $0.key == day.key } ?? 0
         let shown = Array(day.slots.prefix(ChatWidgetBookingFormat.timesShown * steps))
         let hasMoreInDay = shown.count < day.slots.count
         let nextDay = dayIndex + 1 < days.count ? days[dayIndex + 1] : nil
-        let canMore = booked == nil && (hasMoreInDay || nextDay != nil)
+        let canMore = chosen == nil && (hasMoreInDay || nextDay != nil)
         let start = min(max(0, windowStart), max(0, days.count - ChatWidgetBookingFormat.daysShown))
         let tiles = Array(days.dropFirst(start).prefix(ChatWidgetBookingFormat.daysShown))
         let overflow = days.count > ChatWidgetBookingFormat.daysShown
@@ -139,7 +143,7 @@ struct ChatWidgetBooking: View {
                     stepper("chevron.left", label: String(localized: "Earlier days"), enabled: start > 0) { windowStart = max(0, start - 1) }
                 }
                 HStack(spacing: 8) {
-                    ForEach(tiles) { tile in dayTile(tile, selected: tile.key == day.key, locked: booked != nil) }
+                    ForEach(tiles) { tile in dayTile(tile, selected: tile.key == day.key, locked: chosen != nil) }
                 }
                 if overflow {
                     stepper("chevron.right", label: String(localized: "Later days"), enabled: start + ChatWidgetBookingFormat.daysShown < days.count) {
@@ -148,10 +152,20 @@ struct ChatWidgetBooking: View {
                 }
             }
             ChatWidgetFlow(spacing: 8) {
-                ForEach(shown) { slot in chip(slot, booked: booked) }
+                ForEach(shown) { slot in chip(slot, chosen: chosen, confirmed: confirmed) }
             }
             HStack(spacing: 12) {
-                if let booked {
+                if let booking {
+                    Label {
+                        Text("Booking \(ChatWidgetBookingFormat.moment(booking.start, zone))…")
+                    } icon: {
+                        ProgressView().controlSize(.small)
+                    }
+                    .font(ink.font(13))
+                    .foregroundStyle(ink.secondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("widget-booking-pending")
+                } else if let booked {
                     Label {
                         Text("Booked · \(ChatWidgetBookingFormat.moment(booked.start, zone))")
                     } icon: {
@@ -288,27 +302,33 @@ struct ChatWidgetBooking: View {
         .accessibilityIdentifier("widget-booking-day-\(day.key)")
     }
 
-    private func chip(_ slot: Slot, booked: Slot?) -> some View {
-        let chosen = booked?.ref == slot.ref
-        let enabled = chosen || form.canPress(form.actions[slot.ref])
+    private func chip(_ slot: Slot, chosen: Slot?, confirmed: Bool) -> some View {
+        let picked = chosen?.ref == slot.ref
+        let waiting = picked && !confirmed
+        let enabled = picked || form.canPress(form.actions[slot.ref])
         return Button {
             form.press(slot.ref)
         } label: {
             HStack(spacing: 4) {
-                if chosen { Image(systemName: "calendar.badge.checkmark").font(.system(size: 12)) }
-                Text(verbatim: ChatWidgetBookingFormat.time(slot.start, zone)).font(ink.font(14, .medium)).monospacedDigit()
+                if picked && confirmed { Image(systemName: "calendar.badge.checkmark").font(.system(size: 12)) }
+                if waiting { ProgressView().controlSize(.mini) }
+                if waiting {
+                    Text("Booking…").font(ink.font(14, .medium))
+                } else {
+                    Text(verbatim: ChatWidgetBookingFormat.time(slot.start, zone)).font(ink.font(14, .medium)).monospacedDigit()
+                }
             }
-            .foregroundStyle(chosen ? ink.accentInk : ink.ink)
+            .foregroundStyle(picked && confirmed ? ink.accentInk : ink.ink)
             .padding(.horizontal, 14)
             .frame(minWidth: 72, minHeight: 44)
-            .background(chosen ? ink.accent : Color.clear, in: Capsule())
-            .overlay(Capsule().strokeBorder(chosen ? Color.clear : ink.ring, lineWidth: 1))
-            .opacity(booked != nil && !chosen ? 0.45 : 1)
+            .background(picked && confirmed ? ink.accent : waiting ? ink.ink.opacity(0.09) : Color.clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(picked && confirmed ? Color.clear : ink.ring, lineWidth: 1))
+            .opacity(chosen != nil && !picked ? 0.45 : 1)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityLabel(Text(verbatim: slot.label))
-        .accessibilityAddTraits(chosen ? .isSelected : [])
+        .accessibilityAddTraits(picked ? .isSelected : [])
         .accessibilityIdentifier("widget-booking-slot-\(slot.ref)")
     }
 

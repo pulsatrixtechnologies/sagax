@@ -15097,6 +15097,38 @@
         }
       }
     },
+    "Booking %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booking %@…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservation du %@…"
+          }
+        }
+      }
+    },
+    "Booking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booking…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservation…"
+          }
+        }
+      }
+    },
     "Bot": {
       "localizations": {
         "en": {
@@ -54459,6 +54491,22 @@
         }
       }
     },
+    "Nothing was booked. Pick a time to try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing was booked. Pick a time to try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'a été réservé. Choisis une heure pour réessayer."
+          }
+        }
+      }
+    },
     "Nothing was said yet.": {
       "localizations": {
         "en": {
@@ -54773,6 +54821,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Désactivé dans Connecter des apps > Installées. Teste-le et active-le là d'abord."
+          }
+        }
+      }
+    },
+    "The booking did not go through. Pick a time to try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The booking did not go through. Pick a time to try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réservation n'a pas fonctionné. Choisis une heure pour réessayer."
+          }
+        }
+      }
+    },
+    "The booking did not go through: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The booking did not go through: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réservation n'a pas fonctionné : %@"
           }
         }
       }

@@ -138,6 +138,18 @@ export interface WidgetPayload {
    * now holds that id. */
   rev?: number;
   settled?: WidgetSettled;
+  /** A Booking's slot press, until the calendar tool answers (shared/widget-booking.ts). */
+  booking?: WidgetBookingState;
+}
+
+/** Where a book_slot press stands. `pending` while the bot's calendar tool runs, `booked` only
+ * once that tool confirmed, `failed` when it did not (the card is then live again, `settled` gone). */
+export interface WidgetBookingState {
+  state: "pending" | "booked" | "failed";
+  at: number;
+  /** Why a booking failed: the tool refused (`tool_failed`, `detail` is its own words) or no calendar tool ran. */
+  code?: "tool_failed" | "not_booked";
+  detail?: string;
 }
 
 export type WidgetValues = Record<string, string | boolean>;

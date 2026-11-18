@@ -169,19 +169,36 @@ public struct ChatWidgetSettled: Hashable, Sendable, Codable {
 }
 
 /// `message.widget`: the tree, its revision and, once answered, how.
+/// Where a Booking's pressed time stands (shared/widget.ts WidgetBookingState):
+/// "pending" while the calendar tool runs, "booked" once it confirmed, "failed"
+/// when it did not (the card is then live again, with `code` and `detail`).
+public struct ChatWidgetBookingState: Hashable, Sendable, Codable {
+    public var state: String
+    public var code: String?
+    public var detail: String?
+
+    public init(state: String, code: String? = nil, detail: String? = nil) {
+        self.state = state
+        self.code = code
+        self.detail = detail
+    }
+}
+
 public struct ChatWidgetPayload: Hashable, Sendable, Codable {
     /// Nil when the row carries something that is not a tree: draw its text.
     public var root: ChatWidgetNode?
     /// How many times update_widget replaced the tree. A press names it.
     public var rev: Int
     public var settled: ChatWidgetSettled?
+    public var booking: ChatWidgetBookingState?
     /// Kept whole so a re-encoded message (the app's cache) loses nothing.
     private var raw: WidgetJSON
 
-    public init(root: ChatWidgetNode?, rev: Int = 0, settled: ChatWidgetSettled? = nil) {
+    public init(root: ChatWidgetNode?, rev: Int = 0, settled: ChatWidgetSettled? = nil, booking: ChatWidgetBookingState? = nil) {
         self.root = root
         self.rev = rev
         self.settled = settled
+        self.booking = booking
         raw = .null
     }
 
@@ -195,6 +212,12 @@ public struct ChatWidgetPayload: Hashable, Sendable, Codable {
             settled = try? JSONDecoder().decode(ChatWidgetSettled.self, from: data)
         } else {
             settled = nil
+        }
+        if let bookingJSON = object["booking"], bookingJSON.object != nil,
+           let data = try? JSONEncoder().encode(bookingJSON) {
+            booking = try? JSONDecoder().decode(ChatWidgetBookingState.self, from: data)
+        } else {
+            booking = nil
         }
     }
 

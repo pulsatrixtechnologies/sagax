@@ -13,7 +13,7 @@ import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  widgetActions, widgetAppAction, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetField, type WidgetNode, type WidgetPayload, type WidgetSettled,
+  widgetActions, widgetAppAction, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetBookingState, type WidgetField, type WidgetNode, type WidgetPayload, type WidgetSettled,
   type WidgetValues,
 } from "../../../shared/widget";
 import { ASK_QUIET_BUTTON, AskSettledLine, returnFocusToComposer } from "../AskCard";
@@ -36,6 +36,12 @@ function labelledFields(node: WidgetNode, into = new Set<string>()): Set<string>
   if (node.type === "Label" && typeof node.fieldName === "string") into.add(node.fieldName);
   for (const child of kids(node)) labelledFields(child, into);
   return into;
+}
+
+/** Why a booking did not happen, in the card's own words. */
+function bookingProblem(booking: WidgetBookingState): string {
+  if (booking.code === "not_booked") return t("widget.booking.notBooked");
+  return booking.detail ? t("widget.booking.failed", { reason: booking.detail }) : t("widget.booking.failedNoReason");
 }
 
 /** Whether the card holds a Booking, which shows its own answer instead of folding into a line. */
@@ -216,6 +222,9 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
     });
   };
 
+  // a booking the calendar tool did not confirm gives the card back with the reason on it, until the next press
+  const bookingFailed = payload.booking?.state === "failed" && !settled && !problem ? bookingProblem(payload.booking) : undefined;
+  const shownProblem = problem ?? (bookingFailed ? { text: bookingFailed } : undefined);
   const errorId = `${uid}-problem`;
   const title = widgetString(root, "title");
   const caption = widgetString(root, "caption");
@@ -239,6 +248,7 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
     pendingRef: pending,
     sentRef: sent,
     settledRef: settled?.ref,
+    booking: payload.booking,
     press,
     imagesAllowed,
     allowImages: () => setImagesAllowed(true),
@@ -279,11 +289,11 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
             </div>
           )}
           <WidgetBody root={root} headed={headed} />
-          {problem && (
+          {shownProblem && (
             // the reason sits inside the card, in the server's own sentence, and the card stays live
             <div id={errorId} role="alert" className="mx-4 flex items-start gap-2 border-t border-ink/[0.12] pb-3.5 pt-3 text-[13px] leading-[18px] text-danger">
               <CircleAlert aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
-              <span dir="auto" className="min-w-0 break-words">{problem.text}</span>
+              <span dir="auto" className="min-w-0 break-words">{shownProblem.text}</span>
             </div>
           )}
         </div>

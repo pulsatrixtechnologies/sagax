@@ -115,6 +115,8 @@ final class ChatWidgetForm: ObservableObject {
     @Published var settled = false
     /// The ref whose press settled the card (the booked slot of a Booking).
     @Published var settledRef: String?
+    /// Where a Booking's pressed time stands: pending until the calendar tool confirms it.
+    @Published var booking: ChatWidgetBookingState?
     /// Too narrow for a label and a field side by side (under 400 pt).
     @Published var compact = true
     var press: (String) -> Void = { _ in }
@@ -199,6 +201,7 @@ struct ChatWidgetCard: View {
             }
         }
         .onAppear {
+            form.booking = payload.booking
             if let settled = payload.settled {
                 rowSpoke = true
                 form.settled = true
@@ -210,14 +213,18 @@ struct ChatWidgetCard: View {
                 if let url = detailsForm.actions[ref]?.url { openURL(url) }
             }
         }
+        .onValueChange(of: payload.booking) { value in
+            form.booking = value
+        }
         .onValueChange(of: payload.settled) { value in
             if let value {
                 rowSpoke = true
                 form.pending = nil
                 form.settled = true
                 form.settledRef = value.ref
-            } else if form.settled, settledHere == nil {
-                // a queued press the person cancelled: the card is live again
+            } else if form.settled {
+                // a queued press the person cancelled, or a booking the calendar tool refused: live again
+                settledHere = nil
                 form.settled = false
                 form.settledRef = nil
             }
@@ -280,11 +287,11 @@ struct ChatWidgetCard: View {
                     .accessibilityAddTraits(.isHeader)
                 }
                 ChatWidgetBody(root: root, headed: headed)
-                if let problem = form.problem {
+                if let problemText = form.problem?.text ?? bookingProblem(settled: settled) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.circle")
                             .font(.system(size: 13))
-                        Text(verbatim: problem.text)
+                        Text(verbatim: problemText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(ink.font(13))
@@ -327,6 +334,14 @@ struct ChatWidgetCard: View {
         .accessibilityLabel(Text(verbatim: title ?? statusText ?? String(localized: "Card from your bot")))
         .accessibilityValue(Text(form.pending != nil ? "Sending" : form.sent != nil ? "Sent" : ""))
         .accessibilityIdentifier("widget-\(messageId)")
+    }
+
+    /// Why a booking did not happen, in the card's own words, until the next press.
+    private func bookingProblem(settled: ChatWidgetSettled?) -> String? {
+        guard settled == nil, let booking = form.booking, booking.state == "failed" else { return nil }
+        if booking.code == "not_booked" { return String(localized: "Nothing was booked. Pick a time to try again.") }
+        if let detail = booking.detail { return String(localized: "The booking did not go through: \(detail)") }
+        return String(localized: "The booking did not go through. Pick a time to try again.")
     }
 
     /// One tick line with the label, and Details for the card as answered.
@@ -415,6 +430,8 @@ struct ChatWidgetCard: View {
                     )
                     form.settled = true
                     form.settledRef = ref
+                    // pressed: it is only being booked until the row says the tool confirmed it
+                    if entry.type == "book_slot" { form.booking = ChatWidgetBookingState(state: "pending") }
                     form.pending = nil
                 } else {
                     form.pending = nil

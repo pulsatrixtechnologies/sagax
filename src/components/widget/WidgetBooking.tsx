@@ -6,7 +6,7 @@
 // showing the booked time as confirmed. The days and times are written in the
 // person's time zone, in their language.
 import { useMemo, useState } from "react";
-import { CalendarCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarCheck, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { useStoreSelector } from "@/state/store-selector";
@@ -48,8 +48,12 @@ export function WidgetBooking({ node }: { node: WidgetNode }) {
   const slots = useMemo(() => slotsOf(node), [node]);
   const days = useMemo(() => bookingDays(slots.map((slot) => slot.start), zone), [slots, zone]);
   const bySlot = useMemo(() => new Map(slots.map((slot) => [slot.start, slot])), [slots]);
-  const booked = form.settledRef ? slots.find((slot) => slot.ref === form.settledRef) : undefined;
-  const bookedDay = booked ? days.find((day) => day.slots.includes(booked.start)) : undefined;
+  const chosen = form.settledRef ? slots.find((slot) => slot.ref === form.settledRef) : undefined;
+  // pressed, then booked only when the calendar tool said so: until then it is only being booked
+  const confirmed = chosen !== undefined && form.booking?.state === "booked";
+  const booked = confirmed ? chosen : undefined;
+  const booking = chosen !== undefined && !confirmed ? chosen : undefined;
+  const bookedDay = chosen ? days.find((day) => day.slots.includes(chosen.start)) : undefined;
 
   const [picked, setPicked] = useState(days[0]?.key);
   const [windowStart, setWindowStart] = useState(0);
@@ -61,7 +65,7 @@ export function WidgetBooking({ node }: { node: WidgetNode }) {
   const shown = day.slots.slice(0, BOOKING_LIMITS.timesShown * steps);
   const hasMoreInDay = shown.length < day.slots.length;
   const nextDay = days[dayIndex + 1];
-  const canMore = !booked && (hasMoreInDay || nextDay !== undefined);
+  const canMore = !chosen && (hasMoreInDay || nextDay !== undefined);
   // the five tiles in view; the window follows the picked day
   const start = Math.min(Math.max(0, windowStart), Math.max(0, days.length - BOOKING_LIMITS.daysShown));
   const tiles = days.slice(start, start + BOOKING_LIMITS.daysShown);
@@ -148,12 +152,12 @@ export function WidgetBooking({ node }: { node: WidgetNode }) {
                 role="radio"
                 aria-checked={on}
                 aria-label={bookingDate(tile.at, zone, locale)}
-                disabled={booked !== undefined}
+                disabled={chosen !== undefined}
                 onClick={() => pickDay(tile.key)}
                 className={cn(
                   "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[14px] py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
                   on ? "bg-ink/[0.09] text-ink" : "text-ink-secondary inset-ring inset-ring-ink/[0.16] enabled:hover:bg-ink/[0.05]",
-                  booked !== undefined && !on && "opacity-60",
+                  chosen !== undefined && !on && "opacity-60",
                 )}
               >
                 <span className="max-w-full truncate text-[12px] leading-4">{parts.weekday}</span>
@@ -178,7 +182,8 @@ export function WidgetBooking({ node }: { node: WidgetNode }) {
       <div role="group" aria-label={dayLine} className="flex min-w-0 flex-wrap gap-2">
         {shown.map((start) => {
           const slot = bySlot.get(start)!;
-          const chosen = booked?.start === start;
+          const picked = chosen?.start === start;
+          const waiting = booking?.start === start;
           const entry = form.actions.get(slot.ref);
           const sending = form.pendingRef === slot.ref;
           return (
@@ -187,26 +192,32 @@ export function WidgetBooking({ node }: { node: WidgetNode }) {
               type="button"
               data-widget-ref={slot.ref}
               aria-label={slot.label}
-              aria-pressed={booked ? chosen : undefined}
+              aria-pressed={chosen ? picked : undefined}
               aria-busy={sending || undefined}
-              disabled={!chosen && !widgetCanPress(form, entry)}
+              disabled={!picked && !widgetCanPress(form, entry)}
               onClick={() => form.press(slot.ref)}
               className={cn(
                 CHIP,
-                chosen ? "bg-accent text-accent-ink" : "text-ink inset-ring inset-ring-ink/[0.16] enabled:hover:bg-ink/[0.07]",
-                sending && "bg-ink/[0.09]",
-                booked && !chosen && "opacity-45",
+                picked && !waiting ? "bg-accent text-accent-ink" : "text-ink inset-ring inset-ring-ink/[0.16] enabled:hover:bg-ink/[0.07]",
+                (sending || waiting) && "bg-ink/[0.09]",
+                chosen && !picked && "opacity-45",
               )}
             >
-              {chosen && <CalendarCheck aria-hidden="true" size={14} />}
-              {bookingTime(start, zone, locale)}
+              {picked && !waiting && <CalendarCheck aria-hidden="true" size={14} />}
+              {(sending || waiting) && <LoaderCircle aria-hidden="true" size={14} className="animate-spin" />}
+              {waiting ? t("widget.booking.pending") : bookingTime(start, zone, locale)}
             </button>
           );
         })}
       </div>
 
       <div className="flex min-w-0 items-center justify-between gap-3">
-        {booked ? (
+        {booking ? (
+          <p role="status" dir="auto" className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-ink-secondary">
+            <LoaderCircle aria-hidden="true" size={14} className="shrink-0 animate-spin" />
+            <span className="min-w-0 truncate">{t("widget.booking.pendingAt", { when: bookingMoment(booking.start, zone, locale) })}</span>
+          </p>
+        ) : booked ? (
           <p role="status" dir="auto" className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium leading-[18px] text-success">
             <CalendarCheck aria-hidden="true" size={14} className="shrink-0" />
             <span className="min-w-0 truncate">{t("widget.booking.booked", { when: bookingMoment(booked.start, zone, locale) })}</span>

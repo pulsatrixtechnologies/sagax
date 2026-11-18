@@ -86,6 +86,10 @@ export const ORG_MEMBER_ASSERTION_ACTORS: readonly ConsoleAssertion["actor"][] =
 export const ORG_MEMBER_API_VERSION = 1;
 export const MEMBER_WAIT_MAX_SECONDS = 120;
 export const MEMBER_TEXT_MAX = 32_000;
+/** #4632: listed in `GET capabilities` routes when `POST bots/{id}/messages`
+ * takes `files` (send_prompt's path): a host product reads it to know the
+ * engine reads an attached image or PDF. */
+export const MEMBER_SEND_FILES_CAPABILITY = "POST bots/{id}/messages:files";
 export const MEMBER_THREAD_LIMIT_MAX = 200;
 export const MEMBER_THREAD_LIMIT_DEFAULT = 50;
 /** How often a wait looks at the thread. */
@@ -1678,7 +1682,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
     {
       method: "GET", path: "capabilities",
       async handle() {
-        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: allRoutes().map((route) => `${route.method} ${route.path}`).sort() });
+        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: [...allRoutes().map((route) => `${route.method} ${route.path}`), ...(deps.stageSendFiles ? [MEMBER_SEND_FILES_CAPABILITY] : [])].sort() });
       },
     },
     {

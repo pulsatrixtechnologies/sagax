@@ -191,6 +191,9 @@ any other shape, so the plan's `clients.bots.read` is written
     deletes its workspace.
   - A retry with the same `sendId` in the same conversation reuses the
     first line and stages nothing again (no second copy).
+  - Discovery: `GET capabilities` lists `POST bots/{id}/messages:files`
+    in `routes` when this server takes files with a message; a host product
+    reads it there (no other signal).
   - Errors (send_prompt's own): `400 bad_request` (`files` not a list or
     more than 8, an entry that is not a `path`, a path with a leading `/`
     or `..`, a file without `content_base64`), `413 file_too_large` (one file

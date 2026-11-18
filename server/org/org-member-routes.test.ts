@@ -1733,6 +1733,12 @@ describe("#4632: files with a message, on send_prompt's path", () => {
     expect(performed.filter((p) => p.request.method === "POST")).toEqual([]);
   });
 
+  it("capabilities lists POST bots/{id}/messages:files only when the server takes files", async () => {
+    expect((await call("GET", "capabilities", token("bob"))).body.routes).toContain("POST bots/{id}/messages:files");
+    deps.stageSendFiles = undefined;
+    expect((await call("GET", "capabilities", token("bob"))).body.routes).not.toContain("POST bots/{id}/messages:files");
+  });
+
   it("a bot the person does not reach is 404 and nothing is written or sent", async () => {
     const got = await call("POST", "bots/other/messages", token("bob"), { text: "x", files: [{ path: "a.png", content_base64: png }] });
     expect(got.status).toBe(404);

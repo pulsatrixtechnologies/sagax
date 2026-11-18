@@ -856,13 +856,24 @@ button.vpc-live {
   }
 }
 
+/* The bar's buttons a narrow card lists in its "…" menu instead. */
+.vpc-menu-narrow {
+  display: none;
+}
+
 /* A narrow card (a chat bubble on a phone): the time stays on one line and
-   the bar keeps Play, time, sound, menu and full screen. Seeking stays on the
-   scrub bar and the arrow keys; the address stays under a link's player. */
+   the bar keeps Play, time, sound, menu and full screen; seek, picture in
+   picture and open in a new tab move to the "…" menu. */
 @container (max-width: 440px) {
   .vpc-card .vpc-optional,
   .vpc-card .vpc-volume {
     display: none;
+  }
+  .vpc-card .vpc-menu-narrow {
+    display: block;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
   .vpc-card .vpc-error {
     gap: 8px;

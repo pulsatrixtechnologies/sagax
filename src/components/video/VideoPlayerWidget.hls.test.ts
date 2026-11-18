@@ -244,4 +244,14 @@ describe("VideoPlayerWidget playback path", () => {
       vi.useRealTimers();
     }
   });
+
+  it("shows no 0:00 / 0:00 before the length is known, and lists the narrow bar's buttons in its menu", async () => {
+    await mount({ kind: "vod", format: "hls", playbackUrl: "https://media.example.test/v/index.m3u8" }, false);
+    expect(host.querySelector(".vpc-time")?.textContent).toBe("");
+    await act(async () => {
+      (host.querySelector('[aria-haspopup="menu"]') as HTMLButtonElement).click();
+    });
+    const items = [...host.querySelectorAll('.vpc-menu-narrow [role="menuitem"]')];
+    expect(items.length).toBeGreaterThanOrEqual(3);
+  });
 });

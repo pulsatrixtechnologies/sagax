@@ -71,6 +71,7 @@ describe("ChatMarkdown media links", () => {
 
   it("loads no video source before Play", () => {
     const html = render(`${LIVE_HLS}\n\nhttps://cdn.example.test/clip.mp4`);
+    expect(html).not.toContain("0:00 / 0:00");
     expect(html.match(/<video[^>]*>/g)?.every((tag) => !/\ssrc=/.test(tag))).toBe(true);
   });
 

@@ -856,7 +856,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/files$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/file$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/image$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},
-  {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/media$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/media$","tier":"read","readOnly":false,"scope":"threads:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/reactions$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages\\/([\\w-]+)\\/report$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/messages$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},

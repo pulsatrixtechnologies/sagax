@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, FastForward, PictureInPicture2, Rewind } from "lucide-react";
 
 import type { WireVideoWidget } from "../../../shared/video-widget.ts";
 import { t } from "@/lib/i18n";
@@ -257,6 +258,22 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     <ExpiredLinkPanel canRequest={Boolean(onRequestRefresh)} refreshAsked={refreshAsked} onRequest={requestRefresh} onRetry={retry} />
   ) : undefined;
 
+  // what a narrow card's bar has no room for, in its "…" menu
+  const popOutUrl = directUrl ?? video.playbackUrl;
+  const canSeek = !isLive || hasDvr(liveWindow);
+  const narrowItems = [
+    ...(canSeek ? [
+      { key: "back", label: t("video.seekBack", { seconds: SEEK_STEP_SECONDS }), icon: <Rewind size={14} aria-hidden />, onSelect: () => seekTo(current - SEEK_STEP_SECONDS) },
+      { key: "forward", label: t("video.seekForward", { seconds: SEEK_STEP_SECONDS }), icon: <FastForward size={14} aria-hidden />, onSelect: () => seekTo(current + SEEK_STEP_SECONDS) },
+    ] : []),
+    ...(typeof document !== "undefined" && document.pictureInPictureEnabled
+      ? [{ key: "pip", label: t("video.pip"), icon: <PictureInPicture2 size={14} aria-hidden />, onSelect: () => actionsRef.current?.togglePiP() }]
+      : []),
+    ...(/^https?:\/\//i.test(popOutUrl) || popOutUrl.startsWith("/")
+      ? [{ key: "popout", label: t("video.popOut"), icon: <ExternalLink size={14} aria-hidden />, onSelect: () => { window.open(new URL(popOutUrl, window.location.origin).href, "_blank", "noopener,noreferrer"); } }]
+      : []),
+  ];
+
   const extraControls = (
     <VideoExtraControls
       menuOpen={menuOpen}
@@ -272,6 +289,7 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
       setZoomTo={setZoomTo}
       expanded={expanded}
       setExpand={setExpand}
+      narrowItems={narrowItems}
     />
   );
 

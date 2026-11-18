@@ -431,7 +431,10 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                     ? native.behindLive && native.liveLatency
                       ? `-${formatMediaTime(native.liveLatency * 1000)}`
                       : t("video.live")
-                    : `${formatMediaTime(native.current * 1000)} / ${formatMediaTime((native.duration || 0) * 1000)}`}
+                    // nothing before the length is known (a card not played yet)
+                    : native.duration > 0
+                      ? `${formatMediaTime(native.current * 1000)} / ${formatMediaTime(native.duration * 1000)}`
+                      : ""}
                 </span>
                 {native.isLive && native.behindLive && native.onGoLive && (
                   <button type="button" className="vpc-golive" onClick={native.onGoLive}>

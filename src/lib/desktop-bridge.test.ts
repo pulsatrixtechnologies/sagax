@@ -34,6 +34,8 @@ describe("where bots work, as the app says it", () => {
     expect(readWorkplace(storage)).toEqual({ place: "computer", routines: false, network: "all" });
     writeWorkplace({ place: "server", routines: true, network: "lan" }, storage);
     expect(readWorkplace(storage)).toEqual({ place: "server", routines: true, network: "lan" });
+    writeWorkplace({ place: "computer", routines: false, network: "off", networkDevice: "studio" }, storage);
+    expect(readWorkplace(storage)).toEqual({ place: "computer", routines: false, network: "off", networkDevice: "studio" });
   });
 
   it("treats an equal bridge payload as the same status", () => {

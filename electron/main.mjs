@@ -2598,16 +2598,8 @@ const sharingPrompts = new Set();
 let sharedComputersAllowed = false;
 
 async function refreshSharedComputersAllowed() {
-  // Server mode runs no local server: the organization's server says
-  // whether it accepts a person's computer (its public descriptor).
-  const locked = serverModeEnvironment(environmentsState);
-  if (locked) {
-    sharedComputersAllowed = await fetchEnvironmentDescriptor(locked.origin, { redirect: "error", credentials: "omit", signal: AbortSignal.timeout(3_000) })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((descriptor) => descriptor == null ? null : descriptor?.capabilities?.sharedComputers === true)
-      .catch(() => null);
-    return sharedComputersAllowed;
-  }
+  // Organization computers use the signed-in desktop bridge.
+  if (serverModeEnvironment(environmentsState)) return false;
   // The window may open while the server still loads (startServerOn): the
   // three seconds below are the server's to answer in, not its start.
   await localServerAnswering;
@@ -2640,15 +2632,10 @@ function sharingController() {
     protectedPaths: [desktopDataDir()],
     // main's own calls never go through the bundled-UI handler (bundled-ui.cjs)
     fetch: (url, init) => session.defaultSession.fetch(url, { ...init, bypassCustomProtocolHandlers: true }),
-    environments: () => environmentsState.environments,
+    environments: () => environmentsState.environments.filter((env) => !env.org),
     enabled: refreshSharedComputersAllowed,
     cuaConnection: () => cuaReady,
-    hostControl: async (id, signal) => {
-      // Server mode: no local server and no local bot compete for this
-      // screen, so there is no local seat to lease.
-      if (serverModeEnvironment(environmentsState) && !serverReady) return { renew: async () => {}, release: async () => {} };
-      return hostScreenLease(id, signal);
-    },
+    hostControl: (id, signal) => hostScreenLease(id, signal),
   });
   return computerSharing;
 }
@@ -2836,7 +2823,7 @@ function desktopBridge() {
 async function offerComputerSharing(win, contents = win.webContents) {
   const env = activeEnvironment(environmentsState);
   // Asked on the page on screen only, never by a hidden account's page.
-  if (!env || sharingPrompts.has(env.id) || win.isDestroyed() || contents !== mainPage()) return;
+  if (!env || env.org || sharingPrompts.has(env.id) || win.isDestroyed() || contents !== mainPage()) return;
   // Never offer a grant this build's server will not honour.
   if (!(await refreshSharedComputersAllowed()) || win.isDestroyed()) return;
   sharingPrompts.add(env.id);
@@ -5315,16 +5302,11 @@ const savedWorkspace = id => {
   if (!env) throw new Error("This server is no longer connected");
   return env;
 };
-// Share this computer: the local page for any saved server, and in server
-// mode the organization server's page drawn from this app's bundle, for that
-// server only (the person decides there what their own computer lends).
-const sharingUiOnly = (channel, handler) => desktopUiOnly(channel, workspaceOnly((event, id, ...rest) => {
-  if (!senderIsLocal(event)) {
-    const locked = serverModeEnvironment(environmentsState);
-    if (!locked || (id !== undefined && id !== locked.id)) throw new Error(`${channel} is only available for this server`);
-  }
+// Non-organization workspaces still use the local folder-sharing controls.
+const sharingUiOnly = (channel, handler) => localWorkspaceOnly(channel, (event, id, ...rest) => {
+  if (id && savedWorkspace(id).org) throw new Error("Manage this device in Computer settings.");
   return handler(event, id, ...rest);
-}));
+});
 ipcMain.handle("sharing:state", sharingUiOnly("sharing:state", async (_event, id) => {
   await requireSharedComputers();
   return sharingController().state(savedWorkspace(id).id);

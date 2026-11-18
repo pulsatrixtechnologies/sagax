@@ -8851,7 +8851,11 @@ const roomTurnRuns = new Map<string, { botId: string; run: TurnRun }>();
 const turnModelRequested = new Map<string, ModelSelection>();
 const desktopLocalModels = new DesktopLocalModels(DATA_DIR, desktopBridges, (person) => personDisplayName(principals.byId(person)) || "");
 setDesktopInjectModels(() => desktopLocalModels.modelsFor(null));
-const desktopTunnels = new DesktopTunnels(liveSessionPerson);
+const desktopTunnels = new DesktopTunnels(liveSessionPerson, (person) => {
+  const key = workplacePreference(person).networkDevice;
+  if (!key) return desktopBridges.current(person)?.id ?? null;
+  return desktopBridges.devices(person).find(device => device.key === key && device.online && device.access !== "never")?.desktopId ?? null;
+});
 const bridgeAudit = createBridgeAudit(join(DATA_DIR, "desktop-bridge-audit.jsonl"));
 const userPreferenceStore = createUserPreferenceStore(DATA_DIR); const accountNames = createAccountNames(DATA_DIR); // #4376
 // Read once at start, before the server listens: a person's first turn looks
@@ -9138,7 +9142,7 @@ function personSpeaker(principal: string | null): TurnSpeaker | undefined {
  * what started its routine, so the person's own routine (or a hop from it)
  * reaches the computer they shared (user-computers.ts speakingPerson). */
 /** Lending a computer to this server: the maintainer shared-computers flag. */
-const lendingEnabled = () => sharedComputersEnabled(cfg);
+const lendingEnabled = () => IDENTITY.kind !== "perspicax" && sharedComputersEnabled(cfg);
 holdIncludedServices(process.env);
 // Who each thread is for, when a signed-in person can be named (server-private).
 const threadStarters = new ThreadStarters(join(DATA_DIR, "thread-starters.json"));
@@ -20894,7 +20898,10 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const bot = store.bot(run.botId);
     if (!bot) return undefined;
     const principal = effectiveRunAs(run) ?? localPrincipalId();
-    const rows: ReadinessComputer[] = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
+    const computers = IDENTITY.kind === "perspicax"
+      ? desktopBridges.devices(principal).filter(device => device.access !== "never")
+      : sharedComputers.status(principal);
+    const rows: ReadinessComputer[] = computers.map(row => ({ name: row.name, online: row.online }));
     const botHosts = effectiveRemoteHosts(bot);
     if (botHosts.length) {
       const listed = await remoteBotHosts.available(principal);

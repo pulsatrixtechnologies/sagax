@@ -17,7 +17,7 @@ function setup(organization = true) {
   const routes = createDesktopBridgeRoutes({
     organization: () => organization,
     bridges,
-    tunnels: { connected: () => false } as never,
+    tunnels: { connected: () => false, selectedBridge: () => null, routedThisSession: () => 0 } as never,
     audit: { record() {}, recent: () => [] } as never,
     workplace: () => ({}),
     phones: (person) => (person === ADA ? [{ name: "My iPhone", platform: "ios", lastSeenAt: 5, online: false }] : []),

@@ -688,7 +688,7 @@ export function createDesktopBridge({
             try {
               const record = await request(env, "/api/me/preferences");
               const value = JSON.parse(record?.preferences?.["sagax.botWorkplace.v1"] ?? "{}");
-              network = value?.network === "lan" ? "lan" : "all";
+              network = value?.network === "lan" || value?.network === "off" ? value.network : "all";
             } catch { /* keep the last one */ }
           };
           await preferences();

@@ -30,7 +30,6 @@ import { OrgComputerSettings } from "./settings/OrgComputerSettings";
 import { ComputerCareSettings } from "./settings/ComputerCareSettings";
 import { ComputerBrowserSettings } from "./settings/ComputerBrowserSettings";
 import { ComputerMacControlRow } from "./settings/ComputerMacControlRow";
-import { ServerModeComputerAccess } from "./ServerModeSettings";
 // Messages lives in Connect apps > Mac > Messages (MessagesSetupView).
 import { readableError } from "@/lib/plain-error";
 import {
@@ -1259,7 +1258,6 @@ function LocalComputerSectionView({
         />
       ) : (
         <SettingsGroup title={t("computer.group.yours")} groupId="yourComputer">
-          <ServerModeComputerAccess />
           <ComputerMacControlRow />
         </SettingsGroup>
       )}

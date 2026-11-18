@@ -132,6 +132,8 @@ export function createDesktopBridgeRoutes(deps: {
       return json(res, 200, {
         connected: deps.bridges.connected(person),
         tunnel: deps.tunnels.connected(person),
+        networkDesktopId: deps.tunnels.selectedBridge(person),
+        routedThisSession: deps.tunnels.routedThisSession(person, auth.session.id),
         desktops: deps.bridges.status(person),
         devices: [
           ...deps.bridges.devices(person, auth.session.id),

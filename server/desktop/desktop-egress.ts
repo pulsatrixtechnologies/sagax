@@ -142,6 +142,7 @@ class Tunnel {
   readonly session: string;
   readonly bridgeId: string;
   readonly connectedAt = Date.now();
+  routed = 0;
   private socket: Duplex;
   private next = 1;
   private streams = new Map<number, TunnelStream>();
@@ -202,6 +203,7 @@ class Tunnel {
       this.pending.delete(stream);
       clearTimeout(waiting.timer);
       if (type === TUNNEL.OPENED) {
+        this.routed++;
         const duplex = new TunnelStream(this, stream);
         this.streams.set(stream, duplex);
         waiting.resolve(duplex);
@@ -252,7 +254,11 @@ class Tunnel {
 export class DesktopTunnels {
   private tunnels = new Set<Tunnel>();
   private sessionPerson: (session: string) => string | null;
-  constructor(sessionPerson: (session: string) => string | null) { this.sessionPerson = sessionPerson; }
+  private readonly preferredBridge?: (person: string) => string | null;
+  constructor(sessionPerson: (session: string) => string | null, preferredBridge?: (person: string) => string | null) {
+    this.preferredBridge = preferredBridge;
+    this.sessionPerson = sessionPerson;
+  }
 
   /** Take over an upgraded socket (the 101 answer is written here). */
   accept(socket: Duplex, head: Buffer, key: string, owner: { person: string; session: string; bridgeId: string }): void {
@@ -267,16 +273,28 @@ export class DesktopTunnels {
   /** The person's most recent live tunnel whose session is still theirs. */
   private current(person: string): Tunnel | null {
     const key = person.trim().toLowerCase();
+    const bridgeId = this.preferredBridge?.(key);
     let best: Tunnel | null = null;
     for (const tunnel of this.tunnels) {
       if (tunnel.person !== key || !tunnel.open) continue;
       if (this.sessionPerson(tunnel.session)?.trim().toLowerCase() !== key) { tunnel.close(); continue; }
+      if (bridgeId !== undefined && tunnel.bridgeId !== bridgeId) continue;
       if (!best || tunnel.connectedAt > best.connectedAt) best = tunnel;
     }
     return best;
   }
 
+  selectedBridge(person: string): string | null { return this.current(person)?.bridgeId ?? null; }
+
   connected(person: string | null): boolean { return Boolean(person && this.current(person)); }
+
+  routedThisSession(person: string, session: string): number {
+    let routed = 0;
+    for (const tunnel of this.tunnels) {
+      if (tunnel.person === person && tunnel.session === session && tunnel.open) routed += tunnel.routed;
+    }
+    return routed;
+  }
 
   open(person: string, host: string, port: number): Promise<Duplex> {
     const tunnel = this.current(person);
@@ -313,6 +331,7 @@ export function isLanAddress(address: string): boolean {
  * as it would without the tunnel, "ask" through their computer, falling
  * back to direct if their computer says it is outside their LAN. */
 export function egressRoute(host: string, network: BotWorkplaceNetwork): "desktop" | "direct" | "ask" {
+  if (network === "off") return "direct";
   if (network === "all") return "desktop";
   const literal = host.replace(/^\[|\]$/g, "");
   if (isIP(literal)) return isLanAddress(literal) ? "desktop" : "direct";

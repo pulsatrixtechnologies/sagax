@@ -65,6 +65,7 @@ export function isBlockedAddress(address) {
  * network option. Resolves names with this computer's own resolver (its
  * VPN's DNS included). */
 export async function tunnelVerdict(host, port, network, lookup = dns.lookup, { proxied = false } = {}) {
+  if (network === "off") return { ok: false, code: "disabled", message: "Network routing through this computer is off" };
   if (typeof host !== "string" || !host || host.length > 253 || !Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, code: "bad", message: "Invalid destination" };
   if (/^localhost\.?$|\.localhost\.?$/i.test(host) || /^metadata\.google\.internal\.?$/i.test(host)) return { ok: false, code: "blocked", message: "This computer's own services and link-local addresses are not reachable through it" };
   let addresses;

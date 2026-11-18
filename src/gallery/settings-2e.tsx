@@ -5,7 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { StoreProvider } from "../state/store";
 import { AccessibilityGroup } from "../components/settings/AppearanceSettings";
-import { BotWorkplaceSettings } from "../components/settings/BotWorkplaceSettings";
+import { BotWorkplaceSettings, ManageComputerDevices } from "../components/settings/BotWorkplaceSettings";
 import { TimeZoneRows } from "../components/settings/TimeZoneSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { SettingsGroup } from "../components/SettingsPrimitives";
@@ -25,10 +25,15 @@ const status: DesktopBridgeStatus = {
   tunnel: false,
   workplace: { routines: false, network: "all", place: "computer" },
   activity: [],
+  routedThisSession: 3,
+  devices: [
+    { key: "desk", name: "Office desktop", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, current: true, access: "always", desktopId: "d1" },
+    { key: "phone", name: "Work phone", kind: "phone", platform: "ios", online: false, lastSeenAt: now - 86_400_000, current: false, access: null, desktopId: null },
+  ],
   desktops: [
-    { id: "d1", name: "MacBook de Julie", platform: "darwin", online: true, busy: false, lastSeenAt: now },
-    { id: "d2", name: "PC du bureau", platform: "win32", online: true, busy: false, lastSeenAt: now - 5_000 },
-    { id: "d3", name: "Portable de voyage", platform: "darwin", online: false, busy: false, lastSeenAt: now - 3 * 86_400_000 },
+    { id: "d1", name: "Office desktop", platform: "darwin", online: true, busy: false, lastSeenAt: now },
+    { id: "d2", name: "Studio computer", platform: "win32", online: true, busy: false, lastSeenAt: now - 5_000 },
+    { id: "d3", name: "Travel laptop", platform: "darwin", online: false, busy: false, lastSeenAt: now - 3 * 86_400_000 },
   ],
 };
 
@@ -52,9 +57,12 @@ function Gallery() {
           <TimeZoneRows />
         </SettingsGroup>
         <NotificationSettings />
-        <SettingsGroup title={t("settings.section.computer")} groupId="computer">
-          <BotWorkplaceSettings status={status} />
-        </SettingsGroup>
+        <div data-computer-panel="" className="flex flex-col gap-4">
+          <SettingsGroup title={t("computer.group.yours")} groupId="computer">
+            <BotWorkplaceSettings status={status} />
+          </SettingsGroup>
+          <ManageComputerDevices status={status} />
+        </div>
       </div>
     </main>
   );

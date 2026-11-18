@@ -3,7 +3,7 @@
 // it in server mode (Electron's session fetch and cookies, its network stack
 // for fetch_url, an offscreen window for browse), signed in as the person.
 import { app, BrowserWindow, session } from "electron";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { createDesktopBridge } from "../../../electron/desktop-bridge.mjs";
@@ -30,6 +30,7 @@ async function until(what, predicate, ms = 30_000) {
 app.whenReady().then(async () => {
   try {
     mkdirSync(home, { recursive: true });
+    writeFileSync(path.join(home, "bridge.txt"), "desktop fixture ready");
     const [name, value] = cookie.split("=");
     await session.defaultSession.cookies.set({ url: origin, name, value, httpOnly: true });
     // main's own calls to the server
@@ -66,7 +67,7 @@ app.whenReady().then(async () => {
         try { await win.loadURL(url); return { content: [{ type: "text", text: String(await win.webContents.executeJavaScript("document.documentElement.outerHTML")) }] }; }
         finally { win.destroy(); }
       },
-      hostname: "Ada-Mac",
+      hostname: "Office desktop",
       retryMs: 500,
     });
     bridge.sync();
@@ -74,9 +75,9 @@ app.whenReady().then(async () => {
       const answer = await call("GET", "/api/me/desktop-bridge");
       return answer.json?.connected && answer.json?.tunnel ? answer.json : null;
     });
-    check("this desktop is connected for the signed-in person, with its network tunnel", status.desktops[0]?.name === "Ada-Mac");
+    check("this desktop is connected for the signed-in person, with its network tunnel", status.desktops[0]?.name === "Office desktop");
 
-    const created = await call("POST", "/api/bots", { name: "Xavier" });
+    const created = await call("POST", "/api/bots", { name: "Fixture assistant" });
     const bot = created.json.bot;
     await call("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "claude", model: "fake-model" } });
     const turn = async (text) => {
@@ -92,7 +93,19 @@ app.whenReady().then(async () => {
     };
     const attach = async (name, body) => (await call("POST", `/api/files?name=${encodeURIComponent(name)}`, body, "text/markdown")).json;
 
-    // 1. desktop connected
+    await turn("inspect fixture computer");
+    const inspection = JSON.parse(readFileSync(process.env.VERIFY_MCP_DUMP, "utf8")).calls;
+    const choice = inspection.find((item) => item.server === "agents" && item.tool === "select_computer");
+    const local = choice?.ok && JSON.parse(choice.text).options.find((item) => item.surface === "local");
+    check("select_computer listed the person's connected computer", local?.available && local?.ready);
+    check("select_computer selected the connected computer", inspection.some((item) => item.tool === "select_computer" && item.ok && item.text.includes('"status":"ready"')));
+    const terminals = inspection.find((item) => item.tool === "list_terminal_resources");
+    check("terminal discovery sees the registered desktop", terminals?.ok && terminals.text.includes("Office desktop"));
+    check("Auto listed the computer", inspection.some((item) => item.tool === "computer_select" && item.ok && item.text.includes("this_computer")));
+    check("Auto selected the computer and read its fixture", inspection.some((item) => item.tool === "read_file" && item.listed && item.ok && item.text.includes("desktop fixture ready")));
+
+    // A fixed desktop turn also routes engine traffic through the tunnel.
+    await call("PATCH", `/api/bots/${bot.id}`, { computer: "vm" });
     const readme = await attach("README.md", "# Sagax\nread me on the desktop\n");
     const reply = await turn(`read the attachment\n\n<attached-file path="${readme.path}" name="README.md" />`);
     const dump = JSON.parse(readFileSync(process.env.VERIFY_MCP_DUMP, "utf8"));
@@ -110,16 +123,18 @@ app.whenReady().then(async () => {
     // 2. desktop disconnected
     bridge.close();
     await until("the server to see the desktop gone", async () => (await call("GET", "/api/me/desktop-bridge")).json?.connected === false, 60_000);
+    await call("PATCH", `/api/bots/${bot.id}`, { computer: "cloud" });
     const later = await attach("later.md", "# later\n");
     const fallback = await turn(`read the attachment\n\n<attached-file path="${later.path}" name="later.md" />`);
     const after = JSON.parse(readFileSync(process.env.VERIFY_MCP_DUMP, "utf8"));
     check("with the desktop disconnected, the bot used the server environment", fallback.includes("mcp:read_file:ok") && after.servers.includes("sagax-environment") && !after.servers.includes("sagax-desktop"), `${fallback.split("\n").slice(-1)[0]} ${JSON.stringify(after.calls.map((entry) => [entry.server, entry.ok, entry.text.slice(0, 120)]))}`);
     check("and no traffic went through this computer", fallback.includes("proxy:none"));
     const lastPrompt = readFileSync(process.env.VERIFY_PROMPTS, "utf8").trimEnd().split("\n").at(-1);
-    check("the bot was told the server environment path and why", /\/workspace\/attachments\/[0-9a-f]{8}-later\.md/.test(lastPrompt) && lastPrompt.includes("computer is not connected"));
+    check("the bot was told the server environment path", /\/workspace\/attachments\/[0-9a-f]{8}-later\.md/.test(lastPrompt));
   } catch (error) {
     check("no error", false, error?.stack ?? String(error));
   }
   const failed = checks.filter((ok) => !ok).length;
+  process.send?.(failed ? "failed" : "passed");
   app.exit(failed ? 1 : 0);
 });

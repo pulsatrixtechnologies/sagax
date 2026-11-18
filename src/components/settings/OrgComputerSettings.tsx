@@ -25,9 +25,8 @@ const defaultConfirm: LooseConfirm = (request) =>
 import { ServerComputerScreen, useDesktopLocalVm } from "../computer/OrgComputerTab";
 import { screenStateLabel } from "../computer/ComputerScreen";
 import { DANGER_PILL, DescribedRow, HelpTip, SettingsGroup } from "../SettingsPrimitives";
-import { BotWorkplaceSettings } from "./BotWorkplaceSettings";
+import { BotWorkplaceSettings, ManageComputerDevices } from "./BotWorkplaceSettings";
 import { ComputerMacControlRow } from "./ComputerMacControlRow";
-import { ServerModeComputerAccess } from "../ServerModeSettings";
 import { serverEnvironmentStateText } from "./MyServerEnvironment";
 
 export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = defaultConfirm, localVmAllowed = true, botsExtra }: {
@@ -41,7 +40,7 @@ export function OrgComputerSettings({ bridge, initialLocal = null, initialServer
   /** Cloud / VPS cards that belong in Bots' computer (#2080 L3). */
   botsExtra?: ReactNode;
 }) {
-  const desktop = currentDesktop(bridge);
+  const desktop = bridge.devices ? bridge.devices.find((device) => device.current && device.kind === "computer") : currentDesktop(bridge);
   return (
     <>
       <SettingsGroup
@@ -55,9 +54,9 @@ export function OrgComputerSettings({ bridge, initialLocal = null, initialServer
         )}
       >
         <BotWorkplaceSettings status={bridge} />
-        <ServerModeComputerAccess />
         <ComputerMacControlRow />
       </SettingsGroup>
+      <ManageComputerDevices status={bridge} />
       <SettingsGroup title={t("computer.group.bots")} groupId="botsComputer">
         <ServerEnvironmentCard initial={initialServer} confirm={confirm} withReset={false} />
         <LocalVmCard bridge={bridge} initial={initialLocal} confirm={confirm} allowed={localVmAllowed} />

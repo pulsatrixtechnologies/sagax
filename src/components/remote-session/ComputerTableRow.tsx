@@ -106,7 +106,9 @@ export function ComputerTableRow({ kind, icon: Icon, title, sub, type, presence,
             {sub && <div className="mt-0.5 @max-[44rem]/remote:hidden min-w-0 text-[12px] leading-4 text-ink-secondary" {...data(kind, "sub")}>{sub}</div>}
           </div>
         </div>
-        <div role="cell" data-computer-folded="" title={foldedTitle ?? folded} className="min-w-0 truncate pl-[2.625rem] text-[12px] leading-4 text-ink-secondary [grid-area:2/1] @[44rem]/remote:hidden" {...data(kind, "line")}>{folded}</div>
+        <div role="cell" data-computer-folded="" title={foldedTitle ?? folded} className="min-w-0 truncate pl-[2.625rem] text-[12px] leading-4 text-ink-secondary [grid-area:2/1] @[44rem]/remote:hidden" {...data(kind, "line")}>
+          {online && <span aria-hidden="true" className="me-1.5 inline-block size-1.5 rounded-full bg-success" />}{folded}
+        </div>
         <div role="cell" data-computer-type="" className={cn(WIDE, "min-w-0 truncate text-[12px] leading-4 text-ink-secondary")}>{type}</div>
         <div role="cell" data-computer-status="" className={cn(WIDE, "min-w-0 text-[12px] leading-4 text-ink-secondary")}>
           <span className="flex min-w-0 items-start gap-1.5">

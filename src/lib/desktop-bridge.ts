@@ -67,6 +67,8 @@ export interface MyDevice {
 export interface DesktopBridgeStatus {
   connected: boolean;
   tunnel: boolean;
+  networkDesktopId?: string | null;
+  routedThisSession?: number;
   desktops: DesktopBridgeDesktop[];
   /** Every device of the person, this one first (older servers omit it). */
   devices?: MyDevice[];

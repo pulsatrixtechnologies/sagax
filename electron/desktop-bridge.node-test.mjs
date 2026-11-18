@@ -263,6 +263,7 @@ test("network: this computer's own services and link-local never; local network 
   assert.equal(isLanAddress("192.168.1.2"), true);
   assert.equal(isLanAddress("8.8.8.8"), false);
   const lookup = async host => host === "intranet.test" ? [{ address: "10.1.2.3" }] : host === "public.test" ? [{ address: "93.184.216.34" }] : host === "self.test" ? [{ address: "127.0.0.1" }] : Promise.reject(new Error("nx"));
+  assert.equal((await tunnelVerdict("intranet.test", 443, "off", lookup)).code, "disabled");
   assert.deepEqual(await tunnelVerdict("intranet.test", 443, "lan", lookup), { ok: true, address: "10.1.2.3" });
   assert.equal((await tunnelVerdict("public.test", 443, "lan", lookup)).code, "outside-lan");
   assert.equal((await tunnelVerdict("public.test", 443, "all", lookup)).ok, true);

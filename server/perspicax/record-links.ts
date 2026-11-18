@@ -60,7 +60,7 @@ export function createRecordLinks(deps: RecordLinksDeps): RecordLinks {
       const kept = groups.filter(isKnown);
       if (!kept.length) return null;
       deps.seen.add(turn.principalId, turn.threadId, kept);
-      return recordsNote(kept, (group) => deps.seen.firstSeveral(turn.threadId, turn.generation, group));
+      return recordsNote(kept, (group) => deps.seen.firstSeveral(turn.threadId, turn.generation, group), () => deps.seen.firstSentence(turn.threadId, turn.generation));
     },
     finishReply(text, principalId, threadId) {
       if (!text) return text;

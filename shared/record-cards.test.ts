@@ -65,6 +65,9 @@ describe("records metadata on a tool result", () => {
     const named = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "company", records: [{ id: "1", label: "Acme" }, { id: "2", label: "Globex" }], more: 0 }]));
     expect(recordsNote(named)).toBe("In your chat reply only (never in a text, mail or message you send), mention one of these as [<label>](sagax://record/nimbus_desk/company/<id>).");
     expect(recordsNote([])).toBeNull();
+    // the sentence is owed once per turn: later lines are the link form alone
+    expect(recordsNote(one, undefined, () => false)).toBe("Link: [#481516](sagax://record/nimbus_desk/ticket/481516)");
+    expect(recordsNote(several, undefined, () => false)).toBe("Link: [#<id>](sagax://record/nimbus_desk/ticket/<id>)");
   });
 
   it("stays one bounded line", () => {
@@ -133,6 +136,22 @@ describe("a plain number linked at the end of a turn", () => {
     expect(link("- billet 481516\n| 481516 | ouvert |")).toBe(
       "- billet [481516](sagax://record/nimbus_desk/ticket/481516)\n| [481516](sagax://record/nimbus_desk/ticket/481516) | ouvert |",
     );
+  });
+
+  it("links a number-like label of exactly one seen record, never a spaced name or a shared label", () => {
+    const labelled: SeenRecord[] = [
+      { product: "nimbus_desk", kind: "bill", id: "9001", label: "INV-0042" },
+      { product: "nimbus_desk", kind: "bill", id: "9002", label: "Spring Plan 2026" },
+      { product: "nimbus_desk", kind: "order", id: "31", label: "PO-7" },
+      { product: "nimbus_desk", kind: "order", id: "32", label: "PO-7" },
+      { product: "nimbus_desk", kind: "order", id: "33", label: "A1" },
+    ];
+    const run = (text: string) => linkSeenRecords(text, labelled, names);
+    expect(run("Voir INV-0042, puis INV-0042.")).toBe("Voir [INV-0042](sagax://record/nimbus_desk/bill/9001), puis [INV-0042](sagax://record/nimbus_desk/bill/9001).");
+    expect(run("Spring Plan 2026 et PO-7 et A1 et INV-00421 et INV-0042-b")).toBe("Spring Plan 2026 et PO-7 et A1 et INV-00421 et INV-0042-b");
+    expect(run("`INV-0042` [x INV-0042](https://desk.example) https://desk.example/INV-0042")).toBe("`INV-0042` [x INV-0042](https://desk.example) https://desk.example/INV-0042");
+    const once = run("INV-0042");
+    expect(run(once)).toBe(once);
   });
 
   it("does nothing without seen records", () => {

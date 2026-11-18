@@ -18,6 +18,7 @@ const TURNS_NOTED_MAX = 4_000;
 export class SeenRecords {
   private readonly conversations = new Map<string, Map<string, SeenRecord>>();
   private readonly severalNoted = new Map<string, Set<string>>();
+  private readonly sentenceNoted = new Set<string>();
 
   private static key(principalId: string, threadId: string): string {
     return `${principalId}\u0001${threadId}`;
@@ -45,6 +46,15 @@ export class SeenRecords {
   /** The records this person's conversation saw, oldest first. */
   of(principalId: string, threadId: string): SeenRecord[] {
     return [...(this.conversations.get(SeenRecords.key(principalId, threadId))?.values() ?? [])];
+  }
+
+  /** True the first time a turn asks for the relay sentence; later lines are the link form alone. */
+  firstSentence(threadId: string, generation: string): boolean {
+    const turn = `${threadId}\u0001${generation}`;
+    if (this.sentenceNoted.has(turn)) return false;
+    this.sentenceNoted.add(turn);
+    while (this.sentenceNoted.size > TURNS_NOTED_MAX) this.sentenceNoted.delete(this.sentenceNoted.values().next().value!);
+    return true;
   }
 
   /** True the first time a turn asks for this kind's "several" line. */

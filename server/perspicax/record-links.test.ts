@@ -42,6 +42,15 @@ describe("records in a tool result", () => {
     expect(h.seen.of("p-ada", "t1").map((item) => item.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
   });
 
+  it("says the sentence once per turn; a later line is the link form alone", async () => {
+    const h = harness();
+    expect(await h.links.onRecords(turn("g1"), [ticket("481516")])).toMatch(/^In your chat reply only/);
+    expect(await h.links.onRecords(turn("g1"), [ticket("481517")])).toBe("Link: [#481517](sagax://record/nimbus_desk/ticket/481517)");
+    const project: RecordsMetaGroup = { product: "nimbus_desk", kind: "project", records: [{ id: "9", label: "Migration" }], more: 0 };
+    expect(await h.links.onRecords(turn("g1"), [ticket("1", "2"), project])).toBe("Link: [#<id>](sagax://record/nimbus_desk/ticket/<id>) Link: [Migration](sagax://record/nimbus_desk/project/9)");
+    expect(await h.links.onRecords(turn("g2"), [ticket("481518")])).toMatch(/^In your chat reply only/);
+  });
+
   it("adds nothing for a kind or a product the person's list does not describe, or when the list cannot be read", async () => {
     const h = harness();
     expect(await h.links.onRecords(turn(), [{ product: "plain_tool", kind: "ticket", records: [{ id: "1", label: "#1" }], more: 0 }])).toBeNull();
@@ -75,6 +84,16 @@ describe("the end of a bot's turn", () => {
     // another person's or another conversation's reply links nothing
     expect(h.links.finishReply("billet 481516", "p-ben", "t1")).toBe("billet 481516");
     expect(h.links.finishReply("billet 481516", "p-ada", "t2")).toBe("billet 481516");
+  });
+
+  it("links a number-like label seen for exactly one record, never a name or a shared label", async () => {
+    const h = harness();
+    const named = (kind: string, id: string, label: string): RecordsMetaGroup => ({ product: "nimbus_desk", kind, records: [{ id, label }], more: 0 });
+    await h.links.onRecords(turn(), [named("ticket", "77", "INV-2026-0031"), named("ticket", "78", "Big Job 12"), named("project", "79", "PO-5521"), named("ticket", "80", "PO-5521")]);
+    const reply = h.links.finishReply("La INV-2026-0031 est due, pas la INV-2026-00312 ni Big Job 12; PO-5521 aussi. `INV-2026-0031`", "p-ada", "t1");
+    expect(reply).toBe("La [INV-2026-0031](sagax://record/nimbus_desk/ticket/77) est due, pas la INV-2026-00312 ni Big Job 12; PO-5521 aussi. `INV-2026-0031`");
+    expect(h.links.finishReply(reply, "p-ada", "t1")).toBe(reply);
+    expect(h.links.finishReply("INV-2026-0031", "p-ben", "t1")).toBe("INV-2026-0031");
   });
 
   it("does not link an id the conversation read for two kinds", async () => {

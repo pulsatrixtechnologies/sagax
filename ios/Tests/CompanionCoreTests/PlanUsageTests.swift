@@ -29,4 +29,19 @@ final class PlanUsageTests: XCTestCase {
         XCTAssertEqual(PlanUsageRules.connected(report).map(\.id), ["claude"])
         XCTAssertTrue(PlanUsageRules.connected(nil).isEmpty)
     }
+
+    func testOneRowPerAccountFoldsTheSameAccountListedTwice() throws {
+        let json = """
+        {"providers":[
+          {"id":"a","name":"alex@example.test","plan":null,"ok":false,"error":"Could not reach Claude","state":"error","access":"subscription","fiveHour":{"available":false},"weekly":{"available":false},"extra":[]},
+          {"id":"b","name":"alex@example.test","plan":"Business","ok":true,"state":"windows","access":"subscription","fiveHour":{"available":false},"weekly":{"available":true,"remainingPercent":0,"usedPercent":100,"resetsAt":"2026-11-18T14:00:00Z"},"extra":[]},
+          {"id":"c","name":"Studio","plan":"Pro","ok":true,"state":"windows","access":"subscription","fiveHour":{"available":false},"weekly":{"available":true,"remainingPercent":40,"usedPercent":60,"resetsAt":null},"extra":[]},
+          {"id":"d","name":"Studio","plan":"Pro","ok":true,"state":"windows","access":"subscription","fiveHour":{"available":false},"weekly":{"available":true,"remainingPercent":10,"usedPercent":90,"resetsAt":null},"extra":[]}
+        ]}
+        """
+        let report = try JSONDecoder().decode(PlanUsageReport.self, from: Data(json.utf8))
+        let rows = PlanUsageRules.oneRowPerAccount(report.providers)
+        XCTAssertEqual(rows.map(\.id), ["b", "c", "d"])
+        XCTAssertEqual(rows.first?.plan, "Business")
+    }
 }

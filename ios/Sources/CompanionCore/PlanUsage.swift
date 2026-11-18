@@ -86,6 +86,32 @@ public enum PlanUsageRules {
         (report?.providers ?? []).filter(\.ok)
     }
 
+    /// `oneRowPerAccount` (desktop, 2026-11-17): the same account listed twice
+    /// (two instances on one login, one read failed or has no window, the
+    /// other has figures) is one row, the one with figures. Two rows that both
+    /// have figures stay two.
+    public static func oneRowPerAccount(_ providers: [PlanUsageReport.Provider]) -> [PlanUsageReport.Provider] {
+        func key(_ provider: PlanUsageReport.Provider) -> String {
+            provider.name.trimmingCharacters(in: .whitespaces).lowercased() + "|" + (provider.access ?? "subscription")
+        }
+        func hasFigures(_ provider: PlanUsageReport.Provider) -> Bool { provider.rowState == "windows" }
+        var rows: [PlanUsageReport.Provider] = []
+        for provider in providers {
+            if let at = rows.firstIndex(where: { key($0) == key(provider) && (!hasFigures($0) || !hasFigures(provider)) }) {
+                if hasFigures(provider) && !hasFigures(rows[at]) {
+                    var merged = provider
+                    if merged.plan == nil { merged.plan = rows[at].plan }
+                    rows[at] = merged
+                } else if rows[at].plan == nil {
+                    rows[at].plan = provider.plan
+                }
+            } else {
+                rows.append(provider)
+            }
+        }
+        return rows
+    }
+
     /// A deadline that has passed since the report: ask the providers again.
     public static func hasDueReset(_ report: PlanUsageReport, now: Date) -> Bool {
         report.providers.contains { provider in

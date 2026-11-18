@@ -12089,7 +12089,7 @@ const bookingOutcome = createBookingOutcome(store, Date.now, bookingWatchFiles(D
 bus.subscribe((event: RuntimeEvent) => bookingOutcome.observe(event));
 // a restart keeps a pressed time pending and watched (booking-outcome.ts); one no resumed turn takes over settles after a short wait
 bookingOutcome.restore();
-setInterval(() => bookingOutcome.sweep(), 60_000).unref();
+// its sweep runs on the minute timer below (#4250 timer budget)
 // R13 (parité the reference design V4, 59, 83): phone call and purchase cards
 // (server/outbound/outbound-wiring.ts); every outward action keeps its card.
 const outbound = outboundWiring({
@@ -15586,7 +15586,7 @@ const hostComputers = createHostComputerRouter({
   })?.requestId ?? null,
   log: (line) => console.warn(line),
 });
-setInterval(() => { void hostComputers.sweep().catch(reportBackgroundError); }, 60_000).unref();
+// its sweep runs on the minute timer below (#4250 timer budget)
 // The usage card (server/resource-usage/): read-only samples of a computer
 // the person already reaches, under the same rules as its terminal.
 const resourceUsage = installResourceUsage({
@@ -37909,7 +37909,14 @@ try {
 } catch (error) {
   console.warn(`attachments: startup partial cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
 }
-setInterval(() => { try { cleanupResumableUploads(Date.now(), recoverArchiveUpload); } catch { /* Retry the next sweep. */ } }, 60_000).unref();
+// The minute timer: the short sweeps that run every 60 s share one timer, so
+// the server keeps to the #4250 timer budget (server/routines/probe-engine-wiring.test.ts,
+// #4608). Each sweep fails on its own and never stops the others.
+setInterval(() => {
+  try { cleanupResumableUploads(Date.now(), recoverArchiveUpload); } catch { /* Retry the next sweep. */ }
+  try { bookingOutcome.sweep(); } catch (error) { reportBackgroundError(error); }
+  void hostComputers.sweep().catch(reportBackgroundError);
+}, 60_000).unref();
 videoGenerations.recover();
 
 // #1280: retention for per-thread event logs. Off unless configured, and

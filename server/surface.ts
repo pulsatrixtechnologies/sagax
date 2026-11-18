@@ -11,7 +11,7 @@
 import type { Surface } from "../shared/wire.ts";
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
-import { placeRowText, type PlaceRow, type PlaceSource } from "../shared/place-view.ts";
+import { PLACE_CONTROL, placeRowText, type PlaceRow, type PlaceSource } from "../shared/place-view.ts";
 export type { Surface, PlaceSource };
 
 /** The bot's "Works on" setting; undefined = Auto. */
@@ -221,9 +221,9 @@ export const HOST_SCREEN_RULE =
   + " Before your first action on their screen, say so in one line in the chat, for example \"I'm taking control of your computer to open this in Chrome.\"; Sagax then shows that you are controlling it, with a Stop button."
   + " Replaying a recorded procedure follows the same rule: out of sight in the built-in browser when it can be, otherwise announced first.";
 
-/** Where a person moves a conversation: the Computer panel is the one place
- * control both interface modes show (Simple has no composer chip). */
-const PLACE_CONTROL = "the Computer panel";
+// Where a person moves a conversation: PLACE_CONTROL (shared/place-view.ts),
+// the one place control both interface modes show (Simple has no composer
+// chip), named the same way in the failed turn's row.
 /** Without select_computer the person has to switch; with it, surfacePrompt
  * swaps exactly this phrase for the model's own switch. */
 const ASK_TO_SWITCH = `explain the mismatch and ask the user to change where this conversation works in ${PLACE_CONTROL}`;
@@ -263,14 +263,14 @@ export function surfacePrompt(
       ` Everything you do on screen happens on ${computer}, web pages included, through its own browser; there is no separate built-in browser this turn. If you need the user to sign in, tell them it is on ${computer}.`;
   } else if (mounted.browser) {
     text =
-      " Everything you do on screen happens in the built-in browser tab; there is no desktop, file or shell computer this turn. If you need the user to sign in, tell them it is in the Browser tab of the Computer panel.";
+      ` Everything you do on screen happens in the built-in browser tab; there is no desktop, file or shell computer this turn. If you need the user to sign in, tell them it is in the built-in browser, in ${PLACE_CONTROL}.`;
   }
   if (hostScreen) text += HOST_SCREEN_RULE;
   if (text) text += RESTATE_SENTENCE + (opts.canSelect
     ? SURFACE_AUTHORITY.replace(ASK_TO_SWITCH, "inspect connected choices with select_computer and select the requested available place; on a pending result end this turn so Sagax can reconnect the correct tools and continue the original request")
     : SURFACE_AUTHORITY);
   else if (!opts.note && !opts.canSelect) {
-    text = " No computer or built-in browser tools are mounted this turn. You cannot open apps, click, or inspect a screen through Sagax. If asked for screen work, explain this and ask the user to choose and connect a computer in the Computer panel; do not claim to have opened or checked it.";
+    text = ` No computer or built-in browser tools are mounted this turn. You cannot open apps, click, or inspect a screen through Sagax. If asked for screen work, explain this and ask the user to choose and connect a computer in ${PLACE_CONTROL}; do not claim to have opened or checked it.`;
   }
   if (opts.pinned) {
     text += ` This conversation is pinned to ${surfaceLabel(opts.pinned)}; changing places requires ${opts.canSelect ? "select_computer or " : ""}the user's choice in ${PLACE_CONTROL}, not a different tool name.`;

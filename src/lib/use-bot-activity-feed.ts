@@ -28,6 +28,7 @@ export function useBotActivityFeed(bot: Bot) {
   const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [now, setNow] = useState(() => Date.now());
   const request = useRef(0);
+  const shown = useRef<string | null>(null);
   const signature = activitySignature(bot.tasks);
 
   const refresh = useCallback(() => {
@@ -36,9 +37,20 @@ export function useBotActivityFeed(bot: Bot) {
       .then((next) => {
         if (id !== request.current) return;
         tracker.current?.update([...next.items, ...next.subagents]);
-        setList(next);
-        setNow(Date.now());
         setError(false);
+        // A poll or a cloud frame that brings the same list changes nothing on
+        // screen: no new state, so the bot panel that holds this feed does not
+        // render again on a background frame (#4496). Its times still move on,
+        // at the minute their labels show.
+        const seen = JSON.stringify(next);
+        const at = Date.now();
+        if (seen === shown.current) {
+          setNow((current) => (at - current >= 60_000 ? at : current));
+          return;
+        }
+        shown.current = seen;
+        setList(next);
+        setNow(at);
       })
       .catch(() => {
         if (id === request.current) setError(true);
@@ -46,6 +58,7 @@ export function useBotActivityFeed(bot: Bot) {
   }, [bot.id]);
 
   useEffect(() => {
+    shown.current = null;
     setList(null);
     setError(false);
     tracker.current?.dispose();

@@ -135,7 +135,7 @@ contract: `POST bots/{id}/messages:files` (#4632), its `files`.
   /api/bots/{id}/tasks {"hidden": true}`).
 - `wait`: 0 to 120 seconds (default 0). The request stays open until the bot
   has answered, a card waits, or the time is up.
-- `sendId`: 8 to 80 of `[A-Za-z0-9_-]`; a retry with the same id is the same
+- `sendId`: 16 to 80 of `[A-Za-z0-9_-]` (the message route's own rule); a retry with the same id is the same
   message. With `newThread: true`, a retry with the same `sendId` (same
   person and bot, for 24 h, kept as a durable receipt like `send_prompt`'s,
   so after a restart too) lands in the conversation the first send opened,

@@ -78,6 +78,7 @@ import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 import { readRouteRefusal } from "../route-refusal.ts";
 import { isRefusal, parseSendFiles, type FileInput } from "../agent-api.ts";
+import { SEND_ID_PATTERN } from "../messages/send-idempotency.ts";
 import { sensitiveEnvironmentPath } from "../safety/sensitive-path.ts";
 import { answerBotFiles, type BotAttachment, type BotFileRoot, type FilesView } from "./org-admin-files.ts";
 import { isEffortLevel, type ModelSelection } from "../../shared/model-selection.ts";
@@ -111,7 +112,6 @@ const MAX_BODY_BYTES = 64 * 1024;
  * the tool; one request is capped here. */
 const AGENT_SEND_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_TOKEN_CHARS = 8_192;
-const SEND_ID = /^[A-Za-z0-9_-]{8,80}$/;
 const THREAD_ID = /^[\w-]{1,160}$/;
 /** Lot S1: the surface bot's name, the first time it is made. */
 export const SURFACE_BOT_NAME_MAX = 80;
@@ -1787,7 +1787,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         if (input.newThread === true && input.threadId !== undefined) return fail(400, "bad_request", "Send threadId or newThread, not both.");
         const wait = input.wait === undefined ? 0 : input.wait;
         if (typeof wait !== "number" || !Number.isFinite(wait) || wait < 0 || wait > MEMBER_WAIT_MAX_SECONDS) return fail(400, "bad_request", `wait is 0 to ${MEMBER_WAIT_MAX_SECONDS} seconds.`);
-        if (input.sendId !== undefined && (typeof input.sendId !== "string" || !SEND_ID.test(input.sendId))) return fail(400, "bad_request", "sendId is 8 to 80 letters, digits, _ or -.");
+        if (input.sendId !== undefined && (typeof input.sendId !== "string" || !SEND_ID_PATTERN.test(input.sendId))) return fail(400, "bad_request", "sendId is 16 to 80 letters, digits, _ or -.");
         if (input.stream !== undefined && typeof input.stream !== "boolean") return fail(400, "bad_request", "stream is true or false.");
         if (input.hidden !== undefined && typeof input.hidden !== "boolean") return fail(400, "bad_request", "hidden is true or false.");
         const model = input.modelSelection === undefined ? null : memberModelSelection(input.modelSelection);

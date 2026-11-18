@@ -428,6 +428,10 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // once they allow it (server/mail/email-draft-send.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/email-drafts$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/email-drafts\/[\w-]+$/ },
+  // an X draft card's Post, Discard and state (server/routes/x-posts.ts, #4638):
+  // the same check as an email draft, the bot owner's act (#4781)
+  { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/x-posts\/(post|discard)$/ },
+  { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/x-posts\/[\w-]{1,80}\/[\w-]{1,64}$/ },
   // published pages: a person's own pages only (server/routes/published-pages.ts
   // checks the owner on every call; a bot's shell never publishes)
   { methods: ["GET"], path: /^\/api\/pages$/ },

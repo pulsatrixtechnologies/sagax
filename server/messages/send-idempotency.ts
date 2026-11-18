@@ -2,7 +2,10 @@ import type { Message } from "../store.ts";
 import { z } from "zod";
 import { reportBackgroundError } from "../background-error.ts";
 
-const sendIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,80}$/).optional();
+/** A send's client-generated id: 16 to 80 of [A-Za-z0-9_-]. The one rule for
+ * every route that takes one; the member API checks the same (#4604). */
+export const SEND_ID_PATTERN = /^[A-Za-z0-9_-]{16,80}$/;
+const sendIdSchema = z.string().regex(SEND_ID_PATTERN).optional();
 
 /** Parse an optional client-generated identity at the HTTP boundary. */
 export function parseSendId(value: string | null | undefined): string | undefined {

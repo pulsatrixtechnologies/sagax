@@ -118,6 +118,8 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "blocks/": "blocked",
   "journal/": "journalEntry",
   "email-drafts/": "draft",
+  // an X draft card (#4638): its message, then the draft's key inside it
+  "x-posts/": "message",
   "runs/": "codeRun",
   "cloud-agents/": "cloudAgent",
   "command-allowlist/": "allowlistEntry",
@@ -165,6 +167,8 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "design-systems/own-": "fake",
   // a page store's document, after its collection
   "{fake}/": "fake",
+  // a key inside a message (an X draft's key, #4638): rides along the message
+  "{message}/": "fake",
   "direct-grants/": "fake",
 };
 

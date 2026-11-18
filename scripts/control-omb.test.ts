@@ -2,14 +2,14 @@
 // test scripted on purpose. A real OpenAI key must never reach a fixture that
 // could send it to OpenAI.
 import { mkdtempSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { builtinPluginMcp, commandOnPath, createRuntimeCheck } from "../server/capabilities/builtin-plugin-mounts.ts";
 import { verificationServerEnvironment } from "./control-omb.ts";
 
-// This run's own folder: the environment now places a node link in it.
+// This run's own folder (the node link stays outside it).
 const dataDir = mkdtempSync(join(tmpdir(), "omb-fixture-env-"));
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 const childEnv = (parentEnv: NodeJS.ProcessEnv) => verificationServerEnvironment(parentEnv, dataDir, 9100);
@@ -24,6 +24,8 @@ describe("the fixture's PATH (#4370)", () => {
     expect(builtinPluginMcp({}, { runtimeMissing })).toEqual([]);
     // A restarted fixture reuses the same folder.
     expect(childEnv({}).PATH).toBe(env.PATH);
+    // Never inside the fixture's DATA_DIR, which a backup test archives whole (#4407).
+    expect(relative(dataDir, env.PATH!).startsWith("..")).toBe(true);
   });
 });
 

@@ -33,7 +33,7 @@ const port = Number(attach ?? arg("--port") ?? await freePort());
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
 const widths = [1280, 390];
-const scenes = ["draft", "near", "over", "sending", "failed", "posted", "single", "timeline", "neighbour"];
+const scenes = ["draft", "near", "over", "sending", "failed", "posted", "single", "timeline", "neighbour", "held"];
 
 async function waitForServer(url, ms = 180_000) {
   const start = Date.now();

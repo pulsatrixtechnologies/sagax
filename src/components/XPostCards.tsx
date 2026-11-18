@@ -208,9 +208,9 @@ function XFooter({ post }: { post: XPostView }) {
     const value = metrics[key.key];
     return value === undefined ? t(key.label, { count: "0" }) : t(key.label, { count: xCount(value, language) });
   };
-  const item = "group/m flex min-w-0 items-center gap-1 text-[13px] text-[var(--x-sub)]";
+  const item = "group/m flex min-w-0 flex-1 items-center gap-1 text-[13px] text-[var(--x-sub)]";
   return (
-    <div data-x-metrics="" className="-ms-2 mt-3 flex max-w-[425px] items-center justify-between">
+    <div data-x-metrics="" className="-ms-2 mt-3 flex w-[calc(100%+0.5rem)] items-center">
       {METRICS.map((metric) => (
         <span key={metric.key} data-x-metric={metric.key} title={label(metric)} aria-label={label(metric)} className={item}>
           <span className="flex size-[30px] items-center justify-center rounded-full transition-colors group-hover/m:bg-[#1d9bf0]/10 sm:size-[34.75px]">
@@ -219,7 +219,7 @@ function XFooter({ post }: { post: XPostView }) {
           <span className="-ms-1 min-w-4 whitespace-nowrap tabular-nums">{metrics[metric.key] === undefined ? "" : xCount(metrics[metric.key]!, language)}</span>
         </span>
       ))}
-      <span className="flex items-center">
+      <span className="ms-auto flex shrink-0 items-center">
         <span data-x-metric="bookmark" title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
           <XIcon name="bookmark" />
         </span>
@@ -363,8 +363,17 @@ function Counter({ text }: { text: string }) {
   );
 }
 
-function XDraftCardComponent({ draft: written, pending = false, threadId, botId, messageId }: {
+/** A bot's own X post call, held for the person's answer (PinnedWaitingCard): the
+ * same card, with Post answering that call (or, edited, posting the new text) and Discard refusing it. */
+export interface HeldXDraft {
+  busy?: boolean;
+  onPost: (text: string, edited: boolean) => void;
+  onDiscard: () => void;
+}
+
+function XDraftCardComponent({ draft: written, pending = false, threadId, botId, messageId, held }: {
   draft: XDraft;
+  held?: HeldXDraft;
   pending?: boolean;
   threadId?: string;
   botId?: string;
@@ -379,9 +388,9 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
   const text = edited ?? written.text;
   const name = written.name ?? (written.handle ? written.handle : t("rich.x.you"));
   const counter = xCounter(text);
-  const busy = state?.status === "asking" || state?.status === "sending";
-  const settled = state?.status === "posted" || state?.status === "discarded";
-  const canAct = Boolean(threadId && messageId) && !pending && !busy && !settled;
+  const busy = held ? held.busy === true : state?.status === "asking" || state?.status === "sending";
+  const settled = !held && (state?.status === "posted" || state?.status === "discarded");
+  const canAct = (held ? true : Boolean(threadId && messageId)) && !pending && !busy && !settled;
   const canPost = canAct && xPostText(text).length > 0 && !counter.over;
 
   useEffect(() => {
@@ -445,7 +454,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
       {pending && <p className="mt-2 text-[11px] text-ink-secondary">{t("rich.pending")}</p>}
       <div className="mt-3">
         {settled || busy ? (
-          <XText text={state?.text ?? text} className={cn("text-[15px] leading-6 text-ink", state?.status === "discarded" && "text-ink-secondary line-through decoration-ink-tertiary/60")} />
+          <XText text={state?.text ?? text} className={cn("text-[15px] leading-5 text-ink", state?.status === "discarded" && "text-ink-secondary line-through decoration-ink-tertiary/60")} />
         ) : (
           <textarea
             ref={field}
@@ -456,7 +465,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
             data-x-editor=""
             aria-label={t("rich.x.editor")}
             onChange={(event) => setEdited(event.target.value)}
-            className="block w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent text-[15px] leading-6 text-ink outline-none placeholder:text-ink-tertiary"
+            className="block w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent text-[15px] leading-5 text-ink outline-none placeholder:text-ink-tertiary"
           />
         )}
       </div>
@@ -479,7 +488,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
           <button
             type="button"
             disabled={!canAct && !(state?.status === "failed")}
-            onClick={() => void act("discard", written, text, botId)}
+            onClick={() => (held ? held.onDiscard() : void act("discard", written, text, botId))}
             data-x-discard=""
             className="inline-flex h-10 items-center justify-center rounded-full border border-hairline/60 bg-raised text-[14px] font-semibold text-ink transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default disabled:opacity-50"
           >
@@ -488,7 +497,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
           <button
             type="button"
             disabled={!canPost && !(state?.status === "failed" && xPostText(text).length > 0 && !counter.over)}
-            onClick={() => void act("post", written, text, botId)}
+            onClick={() => (held ? held.onPost(xPostText(text), xPostText(text) !== xPostText(written.text)) : void act("post", written, text, botId))}
             data-x-post-button=""
             className="inline-flex h-10 items-center justify-center rounded-full bg-ink text-[14px] font-semibold text-panel transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default disabled:opacity-50"
           >
@@ -501,5 +510,5 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
 }
 
 export const XDraftCard = memo(XDraftCardComponent, (previous, next) =>
-  previous.pending === next.pending && previous.threadId === next.threadId && previous.botId === next.botId && previous.messageId === next.messageId
+  previous.pending === next.pending && previous.threadId === next.threadId && previous.botId === next.botId && previous.messageId === next.messageId && previous.held?.busy === next.held?.busy
   && JSON.stringify(previous.draft) === JSON.stringify(next.draft));

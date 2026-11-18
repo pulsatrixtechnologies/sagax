@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   X_POST_LIMIT, isXPostTool, normalizeXDraft, parseXDraftFence, parseXPostsFence, readXPost,
-  xCount, xCounter, xDraftKey, xPostCallMatches, xPostUrlFromResult, xWeightedLength, xSiteUrl,
+  heldXDraft, xPostTextOfInput, xCount, xCounter, xDraftKey, xPostCallMatches, xPostUrlFromResult, xWeightedLength, xSiteUrl,
 } from "./x-post.ts";
 
 describe("X character count", () => {
@@ -100,5 +100,19 @@ describe("X posts a bot read", () => {
     expect(xCount(12_300)).toBe("12.3K");
     expect(xCount(128_500)).toBe("129K");
     expect(xCount(2_400_000, "fr")).toBe("2,4\u00a0M");
+  });
+});
+
+describe("a bot's own X post call, shown as the draft card (#4638)", () => {
+  it("reads the text of a held X post call, and nothing for another tool", () => {
+    expect(heldXDraft("mcp__x__create_post", JSON.stringify({ text: "Hello\n\n\n\nthere" }))).toEqual({ text: "Hello\n\nthere" });
+    expect(heldXDraft("mcp__x__create_post", JSON.stringify({ params: { status: " Hi " } }))).toEqual({ text: "Hi" });
+    expect(heldXDraft("mcp__x__search_posts", JSON.stringify({ text: "Hi" }))).toBeNull();
+    expect(heldXDraft("mcp__github__create_issue", JSON.stringify({ text: "Hi" }))).toBeNull();
+    expect(xPostTextOfInput("{}")).toBeUndefined();
+  });
+  it("shows a draft with one blank line between paragraphs", () => {
+    expect(parseXDraftFence('{"text":"One\\n\\n\\n\\nTwo"}')?.text).toBe("One\n\nTwo");
+    expect(parseXDraftFence("One\n \n \n\nTwo")?.text).toBe("One\n\nTwo");
   });
 });

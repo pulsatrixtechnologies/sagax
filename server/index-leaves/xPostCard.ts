@@ -7,7 +7,7 @@
  * own X tool call that carries exactly that text through (an organization
  * Refuse or Ask-first rule still holds it: see auto-approve.ts). When the
  * call ends, the state turns into posted (with the link) or failed. */
-import { X_POST_PASS_MS, normalizeXDraft, xDraftKey, xPostCallMatches, xPostInstruction, xPostUrlFromResult, type XPostRequest } from "../../shared/x-post.ts";
+import { X_POST_PASS_MS, isXPostTool, normalizeXDraft, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, type XPostRequest } from "../../shared/x-post.ts";
 export type Host = Record<string, any>;
 
 interface Pass { threadId: string; botId: string; messageId: string; draftKey: string; text: string; handle?: string; expires: number }
@@ -119,16 +119,38 @@ export function createXPostCard(getHost: () => Host): any {
     return true;
   }
 
-  /** The X tool call ended: posted with its link, or failed with why. */
+  /** The card that shows the published post: a bot message holding the draft fence, in the state posted. */
+  function showPosted(host: Host, threadId: string, from: any, text: string, url: string | undefined) {
+    const draftKey = xDraftKey(text);
+    host.store.appendMessage(threadId, {
+      role: "bot",
+      kind: "text",
+      text: "```x-post\n" + JSON.stringify({ text }) + "\n```",
+      from,
+      xPosts: { [draftKey]: { draftKey, text, status: "posted", ...(url ? { url } : {}), at: Date.now() } },
+    });
+  }
+
+  /** The X tool call ended: posted with its link, or failed with why. A call the person answered
+   * on the held draft card (no state yet) gets its published-post card here. */
   function finish(threadId: string, tool: string, ok: boolean, output: string | undefined, input: string | undefined) {
     const host = getHost();
     for (const row of host.store.messagesFor(threadId)) {
       for (const request of Object.values(row.xPosts ?? {}) as XPostRequest[]) {
         if (request.status !== "sending" || !xPostCallMatches(request.text, tool, input)) continue;
-        if (ok) patchState(host, threadId, row.id, request.draftKey, { status: "posted", ...(xPostUrlFromResult(output) ? { url: xPostUrlFromResult(output) } : {}) });
+        const url = xPostUrlFromResult(output);
+        if (ok) patchState(host, threadId, row.id, request.draftKey, { status: "posted", ...(url ? { url } : {}) });
         else patchState(host, threadId, row.id, request.draftKey, { status: "failed", error: String(output ?? "").replace(/\s+/g, " ").slice(0, 300) || "The X tool refused the post." });
+        // a held call's message is the approval card, not a draft fence: show the post on its own card
+        if (ok && !String(row.text ?? "").includes("```x-post")) showPosted(host, threadId, row.from, request.text, url);
         return true;
       }
+    }
+    const text = ok && isXPostTool(tool) ? xPostTextOfInput(input) : undefined;
+    const bot = text ? host.store.botByThread(threadId) : undefined;
+    if (text && bot && !host.store.groupByThread(threadId)) {
+      showPosted(host, threadId, { botId: bot.id, name: bot.name, color: bot.color }, text, xPostUrlFromResult(output));
+      return true;
     }
     return false;
   }

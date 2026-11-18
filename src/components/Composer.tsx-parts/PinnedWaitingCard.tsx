@@ -37,6 +37,9 @@ import { openThread, type Bot, type Message, type useStore } from "@/state/store
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
 import type { ServedWaitingItem } from "../../../shared/waiting-items";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
+import { XDraftCard } from "../XPostCards";
+import { heldXDraft, xDraftKey } from "../../../shared/x-post";
+import { api } from "@/state/store";
 import { QuestionCard } from "../QuestionCard";
 import { PersonRequestCard, ServedItemCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
 import { CardCloseButton } from "../AskCard";
@@ -272,6 +275,41 @@ export function PinnedWaitingCard({
             embedded
             onAnswered={() => pinned.answered(current.key)}
             onAnswerFailed={() => pinned.answerFailed(current.key)}
+          />
+        </div>
+      ) : heldXDraft(current.pending.message.card?.tool, current.pending.message.card?.toolInput) && !current.pending.message.card?.adminApproval ? (
+        // #4638: a bot's own X post call is the draft card, one card, one state: Post answers
+        // that call (edited, it refuses it and posts the new text), Discard refuses it
+        <div className="px-4 pb-3 pt-2.5" data-pinned-body="x-post">
+          <div className="mb-2 flex min-w-0 items-center gap-2">
+            {mark}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
+            {controls}
+          </div>
+          <XDraftCard
+            key={`${current.key}-x`}
+            draft={heldXDraft(current.pending.message.card?.tool, current.pending.message.card?.toolInput)!}
+            held={{
+              onDiscard: () => {
+                pinned.answered(current.key);
+                dispatch({ type: "decideRequest", threadId: current.pending.threadId ?? askedIn, requestId: current.pending.message.card?.approvalOrigin?.requestId ?? current.pending.requestId, behavior: "deny", message: "Denied by the user.", settle: { answered: "deny" }, resumes: true, onError: () => pinned.answerFailed(current.key) });
+              },
+              onPost: (text, edited) => {
+                const where = current.pending.threadId ?? askedIn;
+                const requestId = current.pending.message.card?.approvalOrigin?.requestId ?? current.pending.requestId;
+                pinned.answered(current.key);
+                if (!edited) {
+                  dispatch({ type: "decideRequest", threadId: where, requestId, behavior: "allow", settle: { answered: "allow" }, resumes: true, onError: () => pinned.answerFailed(current.key) });
+                  return;
+                }
+                // the held call carries the old text: refuse it, and post the edited one through the draft route
+                void api(`/api/threads/${encodeURIComponent(where)}/x-posts/post`, {
+                  method: "POST",
+                  body: JSON.stringify({ botId: current.pending.message.from?.botId, messageId: current.pending.message.id, draftKey: xDraftKey(heldXDraft(current.pending.message.card?.tool, current.pending.message.card?.toolInput)!.text), draft: { text } }),
+                }).catch(() => pinned.answerFailed(current.key));
+                dispatch({ type: "decideRequest", threadId: where, requestId, behavior: "deny", message: "Denied by the user: they edited the post and are sending you the new text.", settle: { answered: "deny" }, resumes: true });
+              },
+            }}
           />
         </div>
       ) : (

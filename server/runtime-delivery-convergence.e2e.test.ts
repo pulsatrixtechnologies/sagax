@@ -1093,7 +1093,7 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   const onDisk = readFileSync(pendingFile, "utf8");
   expect(onDisk).not.toContain("ROLL_SECRET_WORDS");
   expect(onDisk).not.toContain("Northwind");
-  expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) } }]);
+  expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) }, status: "pending" }]);
   expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
   await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
   const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);

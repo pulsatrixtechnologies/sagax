@@ -24,7 +24,7 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   // #3431: with the reads the yes covers in this wake (decision 3)
   const watches = batch.events.flatMap((event) => event.source === "watch" && event.watch?.domain
     ? [{ id: event.watch.id, domain: event.watch.domain, ...(event.watch.reads?.length ? { reads: [...event.watch.reads] } : {}) }] : []);
-  host.routines.enqueueProactive({
+  return host.routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => host.PROACTIVE_RUN_NAMES[source]).join(", ")}`,
     prompt: proactiveWakePrompt(batch, { accepted, screen: host.screenContextBlock?.(batch.botId) || undefined }),

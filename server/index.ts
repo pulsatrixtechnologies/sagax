@@ -141,7 +141,7 @@ import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
 import { heldSkillNames } from "./proactive/held-skills.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
-import { ProactiveProposals, ProactiveWaker, PROACTIVE_WAKE_BUDGET, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
+import { ProactiveProposals, ProactiveWaker, PROACTIVE_WAKE_BUDGET, proactivePrompt, PeerNoticeHops, ProactivePendingFile, proactiveWakeEndedOtherwise, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
 import { askedBotChange, askedChange, createSettingsActions } from "./settings-actions.ts";
 import { createCwActionPasses } from "./widgets/cw-widget-actions.ts";
@@ -20679,7 +20679,7 @@ const proactiveWaker = new ProactiveWaker({
     return bot && !bot.hidden && !bot.temporary ? bot : undefined;
   },
   log: (botId, line) => proactiveEventsLine(botId, line),
-  wake: (batch) => startProactiveWake(batch, false, batch.runAs),
+  wake: (batch) => Boolean(startProactiveWake(batch, false, batch.runAs)),
   // 2026-11-02: a teammate's notice no wake will run for is still shown
   dropped: (botId, events) => {
     for (const event of events) {
@@ -21227,6 +21227,8 @@ routines = new RoutineManager({
     syncRoutineRunToSource(run);
     routineCheckFollowUps.runChanged(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
+    // #4621 review: every other end of a wake settles its events too
+    else if (run.proactive && proactiveWakeEndedOtherwise(run)) proactiveWaker.noteWakeEnded(run.botId);
     if (run.proactive) proactiveMetrics.noteRun(run);
     void botEventSubscriptions.publish(run);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);

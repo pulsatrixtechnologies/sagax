@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 
 import { RightRailPanel } from "../components/RightRail";
 import { MemoryMapView } from "../components/memory-manager/MemoryMapView";
-import { loadLocale } from "../lib/i18n";
+import { loadLocale, t } from "../lib/i18n";
 import { seededRandom } from "../lib/memory-graph";
 import { DEFAULT_GRAPH_SETTINGS, MEMORY_GRAPH_PREF_KEY } from "../lib/memory-graph-settings";
 import type { MemoryManagerSource } from "../lib/memory-manager";
@@ -110,7 +110,7 @@ function Shell() {
       </div>
       {rail && (
         <RightRailPanel label="Explorer" onCollapse={() => {}} hideLabel="Hide" lead={<button type="button" className="flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-hairline/60 bg-app px-2.5 text-left text-[13px] text-ink-secondary"><span className="min-w-0 flex-1 truncate">{params.get("lang") === "fr" ? "Ouvrir une note" : "Open a note"}</span><kbd className="rounded border border-hairline/60 px-1 text-[11px]">⌘O</kbd></button>}>
-          <p className="p-3 text-[12px] text-ink-secondary">Lists</p>
+          <p className="p-3 text-[12px] text-ink-secondary">{t("memoryManager.lists")}</p>
         </RightRailPanel>
       )}
     </div>

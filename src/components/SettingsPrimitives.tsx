@@ -562,6 +562,8 @@ export type PillOption<T extends string> = {
   color?: string; count?: number;
   /** Listed only while a search is typed (an empty team stays findable). */
   quiet?: boolean;
+  /** What the closed control reads while this option is chosen (a short name for a long list entry). */
+  triggerLabel?: string;
 };
 
 /** The reference design's borderless pill menu ("Follow System ⌄"): the current value
@@ -589,7 +591,10 @@ export function PillSelect<T extends string>({
   placeholder,
   active,
   triggerClass,
+  leading,
 }: {
+  /** An icon at the start of the closed control. */
+  leading?: React.ReactNode;
   /** Replaces the pill look of the control (a chip of its row). */
   triggerClass?: string;
   /** The open list gets a search field once it holds more than this many options. */
@@ -648,7 +653,7 @@ export function PillSelect<T extends string>({
     // Mixed / unset: any pick counts, including one bot's current value.
     if (mixed || value === undefined || next !== value) onChange(next);
   };
-  const shown = current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value === undefined && placeholder ? placeholder : value);
+  const shown = current?.triggerLabel ?? current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value === undefined && placeholder ? placeholder : value);
   return (
     // min-w-0 / max-w-full: in a row that runs out of room the pill gives way
     // and its text ends with an ellipsis, never its neighbour's label (#4194)
@@ -676,6 +681,7 @@ export function PillSelect<T extends string>({
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
         className={triggerClass ?? (fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2", active && "bg-raised"))}
       >
+        {leading}
         <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{current?.color && <span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full align-middle" style={{ background: current.color }} />}{shown}</span>
         {current?.count !== undefined && <span className="shrink-0 tabular-nums text-ink-tertiary">{current.count}</span>}
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />

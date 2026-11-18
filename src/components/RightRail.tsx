@@ -68,7 +68,7 @@ export function RightRailPanel({ label, onCollapse, hideLabel, lead, className, 
       {onCollapse && (
         <div className={cn("relative flex shrink-0 items-center gap-1 px-2", lead ? "pt-2.5" : "pt-2")} data-right-rail-head="">
           {lead ? <div className="flex min-w-0 flex-1 items-center">{lead}</div> : null}
-          <button type="button" onClick={onCollapse} aria-label={hideLabel} title={hideLabel} className={cn("shrink-0 rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink", lead && "grid size-[34px] place-items-center p-0")} data-right-rail-hide="">
+          <button type="button" onClick={onCollapse} aria-label={hideLabel} title={hideLabel} className={cn("shrink-0 rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink", lead && "ml-1 grid size-[34px] place-items-center rounded-none border-l border-hairline/40 p-0")} data-right-rail-hide="">
             <ChevronRight size={16} aria-hidden="true" />
           </button>
         </div>

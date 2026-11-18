@@ -1,8 +1,8 @@
 // Sagax on the car's screen (docs/ios-carplay.md): a CarPlay voice-based
-// conversational app. It appears in CarPlay only with Apple's entitlement
-// (`com.apple.developer.carplay-voice-based-conversation`, iOS 26.4) and the
-// CarPlay scene in Info.plist, both added by `project-carplay.yml`; without
-// them this file is compiled and never runs.
+// conversational app. The entitlements
+// (`com.apple.developer.carplay-voice-based-conversation`, iOS 26.4, and
+// `com.apple.developer.carplay-driving-task`) and the CarPlay scene in
+// Info.plist are in `project.yml`.
 //
 // The root is a tab bar (three tabs, Apple allows four), the depth Apple
 // allows is three:

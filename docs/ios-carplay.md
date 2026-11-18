@@ -60,24 +60,17 @@ Depth two, Apple allows three. The audio session is the call's only (no
 recording outside the voice screen). An approval is answered by voice or
 waits; a call that cannot start shows its title, never "pick up the phone".
 
-The code is in every build and never runs without the entitlement. The
-build flag is a second XcodeGen spec:
-
-```sh
-cd ios && xcodegen generate --spec project-carplay.yml
-```
-
-It adds the entitlement, the CarPlay scene (`UIApplicationSceneManifest`)
-and the `SAGAX_CARPLAY` Swift condition to `project.yml`. Use it only once
-Apple has granted the entitlement and the App ID has the CarPlay
-capability: signing without a CarPlay profile fails, so it cannot ship by
-accident. Plain `xcodegen generate` stays the usual build.
+The entitlements and the CarPlay scene (`UIApplicationSceneManifest`) are in
+`ios/project.yml`, so every build carries them: automatic signing needs the
+App ID to have both CarPlay entitlements assigned by Apple (it has, checked
+2026-11-18: the Xcode-managed profile carries both keys). The manifest keeps
+`UIApplicationSupportsMultipleScenes` true, which the iPad computer window needs.
 
 ## Tabs and To answer (#4666 follow-up)
 
 Apple assigned two CarPlay entitlements to the App ID: voice-based
 conversation (the call) and driving task (`com.apple.developer.carplay-driving-task`,
-lists and information screens for simple tasks). `project-carplay.yml` declares both.
+lists and information screens for simple tasks). `project.yml` declares both.
 Whether Apple lets one app keep both categories in review is not confirmed;
 if it does not, drop the driving task key and the To answer tab with it.
 
@@ -92,15 +85,12 @@ The root is a tab bar:
    new ask, while no call runs, shows the tab and is read aloud
    (`CarSpeaker`); a notification tapped while connected opens the tab.
 
-Left to do: the default project carries the CarPlay spec only once an
-Xcode-managed profile is seen to carry both entitlements (signing check).
-
 ## Testing
 
 - `swift test --filter CarAssistTests`: names, replies, handles, the car's
   list, the driving rules, the voice screen states.
 - CarPlay screen: CarPlay Simulator (Xcode 27 Device Hub, an iPhone on USB)
-  or a car, with a build from `project-carplay.yml` and a CarPlay profile.
+  or a car, with a normal build and its CarPlay profile.
   The iOS Simulator's CarPlay window needs Simulator's I/O menu: there is no
   headless `simctl` path to it.
 - Siri: on a device, "Call <bot> with Sagax", "Send a message to <bot> with

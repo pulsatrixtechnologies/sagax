@@ -136,13 +136,18 @@ targets:
         # Siri talks to a bot (App/CarAssist, docs/ios-carplay.md): "send a
         # message to Scout with Sagax", a reply to an announced message,
         # "call Scout with Sagax". Not a request to Apple: automatic signing
-        # turns on the Siri capability of the App ID. The CarPlay
-        # entitlement is another matter: project-carplay.yml.
+        # turns on the Siri capability of the App ID.
         com.apple.developer.siri: true
         # Apple Health, read and write, for the person's own bots (phone
         # tools health_read and health_write, Settings > Santé). The App ID
         # has HealthKit on; automatic signing puts it in the profile.
         com.apple.developer.healthkit: true
+        # CarPlay (docs/ios-carplay.md): the call screen (voice-based
+        # conversation) and the To answer tab (driving task). Both are
+        # assigned to the App ID by Apple; automatic signing puts them in the
+        # profile.
+        com.apple.developer.carplay-voice-based-conversation: true
+        com.apple.developer.carplay-driving-task: true
         com.apple.security.application-groups:
           - group.ca.pulsatrix.sagax
         keychain-access-groups:
@@ -190,6 +195,14 @@ targets:
         # key iPadOS never creates another scene and `openWindow` does nothing.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+          # The car's screen is a template scene (CarPlaySceneDelegate,
+          # docs/ios-carplay.md); the app's window stays SwiftUI's (no
+          # configuration for that role).
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay
+                UISceneClassName: CPTemplateApplicationScene
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
         # Geist and Geist Mono (OFL-1.1), the interface and code faces. Listed
         # so UIKit registers them at launch; the files sit flat in the bundle.
         UIAppFonts:

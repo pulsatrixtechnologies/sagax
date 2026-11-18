@@ -6,7 +6,7 @@ const card = (extra: Record<string, unknown>) => ({ title: "t", subtitle: "s", o
 const msg = (id: string, c: Record<string, unknown>) => ({ id, at: 1, role: "bot", kind: "options", card: card(c) }) as unknown as Message;
 
 describe("expireApprovalsAfterRestart", () => {
-  it("expires open permission cards (Expired pill, nothing to answer) and logs each", () => {
+  it("keeps every open permission card after a restart (#4528)", () => {
     const rows: StaleApproval[] = [
       { threadId: "t1", message: msg("m1", { mcpTool: "sagax-environment__run_command", expiresAt: 1 }) },
       { threadId: "t2", message: msg("m2", { requestId: "r2" }) },
@@ -18,12 +18,9 @@ describe("expireApprovalsAfterRestart", () => {
     const patched: Array<[string, string, any]> = [];
     const decided: any[] = [];
     const n = expireApprovalsAfterRestart({ open: () => rows, patch: (t, m, c) => patched.push([t, m, c]), decide: (r) => decided.push(r) });
-    expect(n).toBe(2);
-    expect(patched.map(([t, m]) => `${t}/${m}`)).toEqual(["t1/m1", "t2/m2", "human/view"]);
-    expect(patched[0][2]).toMatchObject({ answered: "deny", expired: true, options: [], mcpTool: "sagax-environment__run_command" });
-    expect(decided).toEqual([
-      { threadId: "t1", requestId: "r1", tool: "other", summary: "s" },
-      { threadId: "t2", requestId: "r2", tool: "other", summary: "s" },
-    ]);
+    expect(n).toBe(0);
+    expect(patched).toEqual([]);
+    expect(decided).toEqual([]);
+    expect(rows.map((row) => row.message.card?.answered ?? null)).toEqual([null, null, "allow", null, null, null]);
   });
 });

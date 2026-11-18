@@ -24,11 +24,10 @@ export function openTurnRequestCard(card: RequestCard | null | undefined): boole
 }
 
 /** #4475: an open card a Stop of its turn would close unanswered (a
- * permission and the like; a persistent question survives the Stop). While
- * one waits on the person, their words never interrupt the turn at a safe
- * point: the answer to a sibling question card would close it silently.
- * The words wait in the queue for the turn, which goes on once the card is
- * answered. */
+ * permission and the like; a persistent question survives the Stop).
+ * #4528: the person's next message still interrupts at a safe point, and
+ * that cut keeps the permission card. A sibling question's answer does not
+ * use this preempt, so it still leaves the permission open. */
 export function stopClosesCard(card: RequestCard | null | undefined): boolean {
   return openTurnRequestCard(card) && !isPersistentQuestionCard(card);
 }

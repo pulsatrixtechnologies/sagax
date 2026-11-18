@@ -14906,6 +14906,8 @@
   "chat.restart.runNote": "Sagax a redémarré pendant cette exécution ; elle reprend au retour de Sagax",
   "chat.parallel.notStarted": "La tâche n'a pas pu démarrer",
   "chat.answer.notDelivered": "Impossible de livrer cette réponse : la demande n'est plus ouverte, alors l'action n'a pas été faite",
+  "chat.approval.lateAllow": "J'ai permis ceci une fois : {tool}. {detail} Ce n'est pas encore fait. Fais-le maintenant, une seule fois, et ne redemande pas.",
+  "chat.approval.lateDeny": "J'ai refusé ceci : {tool}. {detail} Ne le fais pas.",
   "piServers.help": "Tes propres serveurs compatibles OpenAI : oMLX, Ollama ou LM Studio sur cet ordinateur, ou un serveur distant. Leurs modèles s'affichent dans le sélecteur de modèle quand le moteur est pi. Toi seul vois tes serveurs et tes clés.",
   "piServers.loading": "Chargement de tes serveurs…",
   "piServers.addTitle": "Ajouter un serveur de modèles",

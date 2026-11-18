@@ -2,6 +2,7 @@
 /** answerRequest (#1388). Pure move from server/index.ts. */
 import { cardStandingGrants } from "../exec-target.ts";
 import { ANSWER_NOT_DELIVERED } from "../../shared/restart-words.ts";
+import { deliverLatePermission } from "./deliverLatePermission.ts";
 export type Host = Record<string, any>;
 
 export function createAnswerRequest(getHost: () => Host): any {
@@ -113,6 +114,21 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
       ? thread.find((m) => m.id === messageId)
       : thread.find((m) => m.card?.requestId === requestId);
     const persistentQuestion = host.isPersistentQuestionCard(existing?.card);
+    // #4528: the engine that asked is gone (a restart, or the turn already
+    // ended). The card is the saved ask. One new turn carries the verdict.
+    // A live engine that threw keeps the old "not delivered" row, so a
+    // second turn is not started beside a turn that may still be running.
+    const openPermission = existing?.card?.requestType === "permission"
+      && existing.card.requestId && !existing.card.answered && !existing.card.dismissed
+      && !existing.card.routineRequest && !existing.card.skillRequest
+      && !persistentQuestion;
+    const liveEngine = host.runningTurnEngines.get(threadId);
+    if (openPermission && !liveEngine && (behavior === "allow" || behavior === "deny")) {
+      const owner = (decidedFor && host.store.bot(decidedFor.id)) || host.store.botByThread(threadId);
+      if (owner && await deliverLatePermission(host, { threadId, requestId, behavior, message, cardMessage: existing, owner })) {
+        return "late-permission";
+      }
+    }
     if (existing?.card && !existing.card.answered && !persistentQuestion) {
       host.store.patchMessage(threadId, existing.id, { card: { ...existing.card, answered: "unavailable", dismissed: true } });
     }

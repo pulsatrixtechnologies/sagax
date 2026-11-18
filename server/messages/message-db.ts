@@ -1453,9 +1453,8 @@ export function workingGoalRunMessages(): Array<{ threadId: string; message: Mes
   return decodedWithThread(rows);
 }
 
-/** Approval cards still open in storage. Their live request (engine
- * process, gate broker hold) is memory-only, so after a restart nothing can
- * deliver an answer to them: startup expires them (server/approvals/approval-restart.ts). */
+/** Approval cards still open in storage. #4528: a restart keeps them. The
+ * answer starts a turn from the card. Age expiry uses its own sweep. */
 export function openApprovalCardMessages(): Array<{ threadId: string; message: Message }> {
   const rows = db()
     .prepare(

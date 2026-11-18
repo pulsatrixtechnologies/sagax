@@ -25397,6 +25397,8 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     callSid: input.progress.callSid,
     phase: input.progress.phase,
     calleeName: input.progress.calleeName,
+    personAnswered: input.progress.personAnswered,
+    personAnsweredAt: input.progress.personAnsweredAt,
     lines: input.progress.lines,
     events: input.progress.events,
   }),

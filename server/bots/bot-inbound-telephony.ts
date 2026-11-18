@@ -176,6 +176,9 @@ const callProgressSchema = z.object({
   callSid: z.string().regex(/^CA[0-9a-f]{32}$/).optional(),
   phase: z.enum(["dialing", "ringing", "on_hold", "in_call", "transferred", "ended"]).optional(),
   calleeName: oneLine(1, 80).optional(),
+  /** phase "transferred": the person picked up after a take over (#4766). */
+  personAnswered: z.boolean().optional(),
+  personAnsweredAt: z.number().int().positive().optional(),
   lines: z.array(z.object({
     speaker: z.enum(["bot", "callee", "system"]),
     text: resultText(4_000),

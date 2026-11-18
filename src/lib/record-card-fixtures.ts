@@ -15,6 +15,9 @@ export const COMPANY_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "company"
 export const PROJECT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "project", id: "7788" };
 export const INVOICE_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "invoice", id: "5150" };
 export const AGREEMENT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "agreement", id: "412" };
+export const CONTACT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "contact", id: "2204" };
+export const DEPARTMENT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "department", id: "31" };
+export const EMAIL_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "email", id: "90210" };
 export const GUID_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "ticket", id: "6f1c2a52-3b7e-4f0a-9d51-0c7a8e1b2d34" };
 
 /** The person's product list entry as the console sends it (the kinds it describes). */
@@ -30,6 +33,9 @@ export function nimbusProductRaw(): Record<string, unknown> {
       { kind: "project", name: { en: "Project", fr: "Projet" }, plural: { en: "Projects", fr: "Projets" } },
       { kind: "invoice", name: { en: "Invoice", fr: "Facture" }, plural: { en: "Invoices", fr: "Factures" } },
       { kind: "agreement", name: { en: "Agreement", fr: "Entente" }, plural: { en: "Agreements", fr: "Ententes" } },
+      { kind: "contact", name: { en: "Contact", fr: "Contact" }, plural: { en: "Contacts", fr: "Contacts" } },
+      { kind: "department", name: { en: "Department", fr: "Département" }, plural: { en: "Departments", fr: "Départements" } },
+      { kind: "email", name: { en: "Email", fr: "Courriel" }, plural: { en: "Emails", fr: "Courriels" } },
     ],
   };
 }
@@ -55,7 +61,7 @@ export function ticketCard(now: number, lang: Lang): Record<string, unknown> {
     priority: { label: T(lang, "Priorité 2 - Élevée", "Priority 2 - High"), level: "high" },
     company: { name: "Acme Fabrication", ref: { product: NIMBUS_PRODUCT, kind: "company", id: "7310" } },
     people: [
-      { role: "contact", label: "Contact", name: "Ada Lindqvist", detail: "418 555-0142" },
+      { role: "contact", label: "Contact", name: "Ada Lindqvist", detail: "418 555-0142", ref: { product: NIMBUS_PRODUCT, kind: "contact", id: "2204" } },
       { role: "owner", label: T(lang, "Responsable", "Owner"), name: "Noor Haddad" },
     ],
     dates: { opened: ago(now, 3 * DAY), updated: ago(now, 29 * MIN), due: new Date(now + 2 * DAY).toISOString() },
@@ -69,8 +75,13 @@ export function ticketCard(now: number, lang: Lang): Record<string, unknown> {
       state: "ok", total: 7,
       items: [
         { author: "Noor Haddad", at: ago(now, 29 * MIN), internal: true, text: T(lang, "Pilote réinstallé, la file se vide. À surveiller demain.", "Driver reinstalled, the queue is draining. To watch tomorrow."), more: false },
-        { author: "Ada Lindqvist", at: ago(now, 4 * HOUR), internal: false, text: T(lang, "Toujours rien ce matin, on imprime à l'étage en attendant.", "Still nothing this morning, we print upstairs meanwhile."), more: false },
+        { author: "Ada Lindqvist", at: ago(now, 4 * HOUR), internal: false, tag: "Email", text: T(lang, "Toujours rien ce matin, on imprime à l'étage en attendant.", "Still nothing this morning, we print upstairs meanwhile."), more: false },
+        { author: "Noor Haddad", at: ago(now, DAY + 3 * HOUR), internal: false, text: T(lang, "Bonjour Ada, nous regardons le pilote et le port réseau de l'imprimante.", "Hello Ada, we are looking at the printer's driver and network port."), more: false },
       ],
+    },
+    lines: {
+      state: "ok", title: T(lang, "Dernière entrée de temps", "Last time entry"), total: 4,
+      items: [{ label: T(lang, "Diagnostic du port réseau", "Network port diagnosis"), detail: "Noor Haddad", value: "1,5 h" }],
     },
     open_url: "https://desk.example/records/tickets/481516", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
   };
@@ -82,16 +93,88 @@ export function companyCard(now: number, lang: Lang): Record<string, unknown> {
     product, kind: { id: "company", name: T(lang, "Entreprise", "Company") }, id: COMPANY_REF.id, number: "Acme Fabrication",
     title: "Acme Fabrication",
     state: { label: T(lang, "Actif", "Active"), tone: "done" },
-    people: [{ role: "owner", label: T(lang, "Responsable", "Owner"), name: "Noor Haddad" }],
+    people: [
+      { role: "contact", label: T(lang, "Contact principal", "Main contact"), name: "Ada Lindqvist", detail: "418 555-0142", ref: { product: NIMBUS_PRODUCT, kind: "contact", id: "2204" } },
+      { role: "owner", label: T(lang, "Responsable", "Owner"), name: "Noor Haddad" },
+    ],
     dates: { opened: ago(now, 4 * 365 * DAY), updated: ago(now, 2 * DAY) },
     fields: [
-      { label: T(lang, "Identifiant", "Identifier"), value: "ACMEFAB" },
       { label: "Type", value: T(lang, "Client", "Customer") },
       { label: T(lang, "Téléphone", "Phone"), value: "418 555-0100" },
       { label: T(lang, "Ville", "City"), value: T(lang, "Québec", "Quebec City") },
+      { label: T(lang, "Billets ouverts", "Open tickets"), value: "7" },
+      { label: T(lang, "Ententes actives", "Active agreements"), value: "2" },
+      { label: T(lang, "Dernière activité", "Last activity"), type: "ago", at: ago(now, 29 * MIN), value: T(lang, "il y a 29 min", "29 min ago") },
     ],
     notes: { state: "none", items: [] },
     open_url: "https://desk.example/records/companies/7310", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
+  };
+}
+
+const COMPANY_ELSE = { product: NIMBUS_PRODUCT, kind: "company", id: "7310" };
+
+/** A contact: title, company, emails, phones and the last ticket, on the left pane only. */
+export function contactCard(now: number, lang: Lang): Record<string, unknown> {
+  return {
+    product, kind: { id: "contact", name: "Contact" }, id: CONTACT_REF.id, number: "Ada Lindqvist",
+    title: "Ada Lindqvist",
+    state: { label: T(lang, "Actif", "Active"), tone: "done" },
+    company: { name: "Acme Fabrication", ref: { ...COMPANY_ELSE } },
+    fields: [
+      { label: T(lang, "Titre", "Title"), value: T(lang, "Directrice des opérations", "Operations director") },
+      { label: T(lang, "Courriel", "Email"), value: "ada@acme.example" },
+      { label: T(lang, "Courriel 2", "Email 2"), value: "ada.lindqvist@acme.example" },
+      { label: T(lang, "Téléphone", "Phone"), value: "418 555-0142" },
+      { label: T(lang, "Cellulaire", "Mobile"), value: "418 555-0177" },
+      { label: T(lang, "Dernier billet", "Last ticket"), type: "ref", value: "#481516", detail: T(lang, "il y a 29 min", "29 min ago"), ref: { ...TICKET_REF } },
+      { label: T(lang, "Dernière activité", "Last activity"), type: "ago", at: ago(now, 29 * MIN), value: T(lang, "il y a 29 min", "29 min ago") },
+    ],
+    open_url: "https://desk.example/records/contacts/2204", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
+  };
+}
+
+/** A department (a team): its manager, members and open work. */
+export function departmentCard(now: number, lang: Lang): Record<string, unknown> {
+  return {
+    product, kind: { id: "department", name: T(lang, "Département", "Department") }, id: DEPARTMENT_REF.id, number: T(lang, "Soutien technique", "Technical support"),
+    title: T(lang, "Soutien technique", "Technical support"),
+    state: { label: T(lang, "Actif", "Active"), tone: "done" },
+    people: [{ role: "manager", label: T(lang, "Gestionnaire", "Manager"), name: "Noor Haddad" }],
+    fields: [
+      { label: T(lang, "Membres", "Members"), value: "6" },
+      { label: T(lang, "Billets ouverts", "Open tickets"), value: "23" },
+      { label: T(lang, "Projets ouverts", "Open projects"), value: "4" },
+      { label: T(lang, "Horaire", "Schedule"), value: T(lang, "Lun-ven 8 h à 17 h", "Mon-Fri 8 am to 5 pm") },
+    ],
+    lines: {
+      state: "ok", title: T(lang, "Membres", "Members"), total: 6,
+      items: [
+        { label: "Noor Haddad", detail: T(lang, "Gestionnaire", "Manager") },
+        { label: "Sam Example", detail: T(lang, "Technicien", "Technician") },
+        { label: "Kai Moreau", detail: T(lang, "Technicien", "Technician") },
+      ],
+    },
+    open_url: "https://desk.example/records/departments/31", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
+  };
+}
+
+/** An email: from, to, subject, date, the first lines, attachments and thread counts. */
+export function emailCard(now: number, lang: Lang): Record<string, unknown> {
+  return {
+    product, kind: { id: "email", name: T(lang, "Courriel", "Email") }, id: EMAIL_REF.id, number: T(lang, "Courriel du 17 nov.", "Email of Nov 17"),
+    title: T(lang, "Re : Imprimante de l'accueil hors ligne", "Re: Front desk printer offline"),
+    chips: [{ label: T(lang, "2 pièces jointes", "2 attachments"), tone: "open" }],
+    people: [
+      { role: "from", label: T(lang, "De", "From"), name: "Ada Lindqvist", detail: "ada@acme.example", ref: { ...CONTACT_REF } },
+      { role: "to", label: T(lang, "À", "To"), name: T(lang, "Soutien technique", "Technical support"), detail: "support@desk.example" },
+    ],
+    fields: [
+      { label: "Date", type: "ago", at: ago(now, 40 * MIN), value: T(lang, "il y a 40 min", "40 min ago") },
+      { label: T(lang, "Pièces jointes", "Attachments"), value: "2" },
+      { label: T(lang, "Fil", "Thread"), value: T(lang, "5 messages", "5 messages") },
+    ],
+    description: { text: T(lang, "Bonjour, l'imprimante affiche toujours une erreur de port ce matin. Pouvez-vous passer avant midi ? Merci d'avance.", "Hello, the printer still shows a port error this morning. Could someone stop by before noon? Thanks in advance."), more: true },
+    open_url: "https://desk.example/records/emails/90210", tz: "America/Toronto", as_of: new Date(now - 2 * MIN).toISOString(), cached: false,
   };
 }
 

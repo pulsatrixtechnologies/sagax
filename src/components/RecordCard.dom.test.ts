@@ -3,7 +3,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { agreementCard, companyCard, guidCard, GUID_REF, invoiceCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF, INVOICE_REF, AGREEMENT_REF } from "@/lib/record-card-fixtures";
+import { agreementCard, companyCard, contactCard, departmentCard, emailCard, CONTACT_REF, DEPARTMENT_REF, EMAIL_REF, guidCard, GUID_REF, invoiceCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF, INVOICE_REF, AGREEMENT_REF } from "@/lib/record-card-fixtures";
 import { parseRecordCard, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
 import { RecordCard, type RecordCardProps } from "./RecordCard";
 
@@ -52,8 +52,8 @@ describe("RecordCard", () => {
     expect(text()).toContain("Acme Fabrication");
     expect(text()).toContain("Ouvrir dans Nimbus Desk");
     expect(text()).toContain("Demander");
-    expect(host.querySelectorAll("[data-record-notes] [data-record-note]")).toHaveLength(2);
-    expect(text()).toContain("5 autres notes");
+    expect(host.querySelectorAll("[data-record-notes] [data-record-note]")).toHaveLength(3);
+    expect(text()).toContain("4 autres notes");
   });
 
   it("formats the times in the card's zone, whatever the device's", () => {
@@ -318,7 +318,7 @@ describe("RecordCard without a layout engine's help", () => {
     const row = pinned.querySelector<HTMLButtonElement>("[data-record-notes] button")!;
     expect(row.getAttribute("aria-expanded")).toBe("false");
     act(() => { row.click(); });
-    expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(2);
+    expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(3);
     // the identity rows and the description come first
     expect(pinned.textContent!.indexOf("Acme Fabrication")).toBeLessThan(pinned.textContent!.indexOf("L'imprimante du comptoir"));
     expect(pinned.textContent!.indexOf("L'imprimante du comptoir")).toBeLessThan(pinned.textContent!.indexOf("Notes (7)"));
@@ -399,28 +399,49 @@ describe("RecordCard without a layout engine's help", () => {
     },
   );
 
-  it("keeps the full priority name readable in the body of a narrow card, and names the glyph chip", () => {
+  it("never cuts the priority name in the head: the chip does not shrink and the head wraps instead", () => {
     define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
-    // the head cuts the label: its text is wider than the room it has
-    define(HTMLElement.prototype, "scrollWidth", { get() { return (this as HTMLElement).className.includes("max-w-[11rem]") ? 200 : 0; } });
     const card = show({ raw: ticketCard(NOW, "fr") });
-    expect(card.querySelector("[data-record-head] [role=img]")!.getAttribute("aria-label")).toBe("Priorité 2 - Élevée");
-    const facts = card.querySelector("[data-record-facts]")!;
-    expect(facts.textContent).toContain("Priorité");
-    expect(facts.textContent).toContain("Priorité 2 - Élevée");
-    // wide: the chip says it, the body does not repeat it
-    restore.forEach((undo) => undo()); restore = [];
-    act(() => root.unmount());
-    root = createRoot(host);
-    const wide = show({ raw: ticketCard(NOW, "fr") });
-    expect(wide.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
+    const chip = card.querySelector<HTMLElement>("[data-record-head] [role=img]")!;
+    expect(chip.getAttribute("aria-label")).toBe("Priorité 2 - Élevée");
+    expect(chip.className).toContain("shrink-0");
+    expect(chip.querySelector("span")!.className).not.toMatch(/max-w-\[/);
+    expect(card.querySelector("[data-record-head]")!.className).toContain("flex-wrap");
+    // said once: the body does not repeat it
+    expect(card.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
   });
 
-  it("says the priority in the body of a narrow card only when the head chip cuts it", () => {
-    define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
-    // the label fits: the chip says it, the body does not say it again
-    const whole = show({ raw: ticketCard(NOW, "fr") });
-    expect(whole.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
+  it("shows the last three notes with who, when and whether each is internal or external, then 'Tout voir' to the product", async () => {
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    const notes = [...card.querySelectorAll("[data-record-note]")];
+    expect(notes).toHaveLength(3);
+    expect(notes[0]!.querySelector("[data-record-note-scope=internal]")).not.toBeNull();
+    expect(notes[1]!.querySelector("[data-record-note-scope=external]")!.textContent).toBe("Externe");
+    expect(notes[1]!.querySelector("[data-record-note-tag]")!.textContent).toBe("Email");
+    expect(notes[0]!.textContent).toContain("Noor Haddad");
+    const seeAll = card.querySelector("[data-record-notes] [data-record-see-all]")!;
+    expect(seeAll.textContent).toBe("Tout voir");
+    // the last time entry, folded to one line beside the notes
+    expect(card.querySelectorAll("[data-record-line]")).toHaveLength(1);
+    expect(card.querySelector("[data-record-lines]")!.textContent).toContain("Diagnostic du port réseau");
+  });
+
+  it("folds a list to three lines hovered, all of it pinned, with 'Tout voir' for the rest", () => {
+    const hovered = show({ raw: departmentCard(NOW, "fr"), record: DEPARTMENT_REF, label: "Soutien technique" });
+    expect(hovered.querySelectorAll("[data-record-line]")).toHaveLength(3);
+    expect(hovered.querySelector("[data-record-lines]")!.textContent).toContain("3 autres lignes");
+    expect(hovered.querySelector("[data-record-lines] [data-record-see-all]")).not.toBeNull();
+  });
+
+  it.each([
+    ["company", companyCard, COMPANY_REF, "Billets ouverts"],
+    ["contact", contactCard, CONTACT_REF, "Courriel"],
+    ["department", departmentCard, DEPARTMENT_REF, "Membres"],
+    ["email", emailCard, EMAIL_REF, "Pièces jointes"],
+  ] as const)("draws a %s from the fields the product sends, with no code of its own", (_kind, make, ref, field) => {
+    const card = show({ raw: make(NOW, "fr"), record: ref, label: "x" });
+    expect(card.textContent).toContain(field);
+    expect(card.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
   });
 
   it("measures again when a text changes, not only when a row comes or goes", async () => {

@@ -254,4 +254,44 @@ describe("VideoPlayerWidget playback path", () => {
     const items = [...host.querySelectorAll('.vpc-menu-narrow [role="menuitem"]')];
     expect(items.length).toBeGreaterThanOrEqual(3);
   });
+
+  // #4752: a message's media never loads an absolute address of the app's own
+  // origin (on the desktop, the local server that grants the owner capability)
+  it("never falls back to an address of the app's own origin (media)", async () => {
+    const own = `${window.location.origin}/api/bots/index.m3u8`;
+    await mount({ kind: "vod", format: "hls", playbackUrl: "/api/media/proxy/refused.mac", directUrl: own }, false);
+    await hlsError({ fatal: true, type: "networkError", details: "manifestLoadError", response: { code: 403 } });
+    expect(hlsCalls.loadSource).toEqual(["/api/media/proxy/refused.mac"]);
+    expect(host.querySelector(".vpc-error")).not.toBeNull();
+  });
+
+  it("never loads a source of the app's own origin, natively or with hls.js", async () => {
+    const video = await mount({ kind: "vod", format: "mp4", playbackUrl: `${window.location.origin}/api/x.mp4` }, true);
+    expect(video.getAttribute("src")).toBeNull();
+    expect(hlsCalls.loadSource).toEqual([]);
+    expect(host.querySelector(".vpc-error")?.textContent).toBeTruthy();
+  });
+
+  it("refuses a playlist URI of the app's own origin in hls.js's loader (xhr)", async () => {
+    const { guardedLoader } = await import("./useMediaLoader");
+    const loaded: string[] = [];
+    class Base {
+      constructor(_config: unknown) {}
+      load(context: { url: string }) { loaded.push(context.url); }
+    }
+    const Guarded = guardedLoader(Base as never);
+    const loader = new Guarded({});
+    const errors: number[] = [];
+    const callbacks = { onError: (error: { code: number }) => errors.push(error.code) };
+    loader.load({ url: `${window.location.origin}/api/bots` }, {}, callbacks);
+    loader.load({ url: "https://cdn.example/seg0.ts" }, {}, callbacks);
+    loader.load({ url: "/api/media/proxy/seg.mac" }, {}, callbacks);
+    expect(errors).toEqual([400]);
+    expect(loaded).toEqual(["https://cdn.example/seg0.ts", "/api/media/proxy/seg.mac"]);
+  });
+
+  it("reads a playlist straight from its server with hls.js even where native HLS exists", async () => {
+    await mount({ kind: "vod", format: "hls", playbackUrl: "https://cdn.example/v/index.m3u8" }, true);
+    expect(hlsCalls.loadSource).toEqual(["https://cdn.example/v/index.m3u8"]);
+  });
 });

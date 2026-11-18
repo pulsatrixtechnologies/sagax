@@ -255,6 +255,21 @@ export function mediaUrlMayBeProxied(url: URL, policy: MediaProxyPolicy = mediaP
   return !isLocalName(host);
 }
 
+/** This machine itself: `localhost`, a loopback literal (127/8, ::1) or one
+ * written IPv4-mapped (::ffff:127.x). On the desktop that is the app's own
+ * server, whose port carries the app's owner capability: a playlist URI aimed
+ * there is never handed to the player as is. */
+export function isLoopbackMediaHost(hostname: string): boolean {
+  if (isLocalName(hostname)) return true;
+  const ip = stripBrackets(hostname.toLowerCase());
+  if (isIP(ip) === 4) return ip.startsWith("127.");
+  if (isIP(ip) !== 6) return false;
+  if (blockedAddressReason(ip) === "loopback") return true;
+  const mapped = /^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):[0-9a-f]{1,4})$/.exec(ip);
+  if (!mapped) return false;
+  return mapped[1] ? mapped[1].startsWith("127.") : parseInt(mapped[2]!, 16) >> 8 === 127;
+}
+
 /** True when the browser cannot fetch the URL by itself (a literal non-public host). */
 export function isNonPublicLiteralHost(hostname: string): boolean {
   if (isLocalName(hostname)) return true;

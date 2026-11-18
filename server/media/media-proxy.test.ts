@@ -152,7 +152,7 @@ describe("rewriteHlsPlaylist", () => {
     );
   });
 
-  it("never proxies URIs with credentials or private hosts that were not allowed", () => {
+  it("never proxies URIs with credentials or private hosts that were not allowed; loopback goes to the proxy, which refuses it (#4752)", () => {
     const playlist = [
       "#EXTM3U",
       "#EXTINF:2,",
@@ -165,7 +165,9 @@ describe("rewriteHlsPlaylist", () => {
       "ftp://files.example.test/seg4.ts",
       "",
     ].join("\n");
-    expect(rewriteHlsPlaylist(playlist, "https://media.example.test/live/index.m3u8", mint)).toBe(playlist);
+    expect(rewriteHlsPlaylist(playlist, "https://media.example.test/live/index.m3u8", mint)).toBe(
+      playlist.replace("http://localhost:8080/seg3.ts", mint("http://localhost:8080/seg3.ts")),
+    );
   });
 
   it("rewrites variant playlists of a multivariant playlist", () => {

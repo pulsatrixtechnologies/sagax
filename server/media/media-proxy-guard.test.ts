@@ -193,10 +193,22 @@ describe("playlist rewrite and the allow list", () => {
 
   it("does not turn private URIs into proxy paths when the host is not allowed", () => {
     expect(rewriteHlsPlaylist(playlist, "http://10.0.0.5/live/index.m3u8", mint, NONE)).toBe(playlist);
+  });
+
+  // #4752: a URI aimed at this machine (the desktop app's own server port)
+  // is never handed to the player as is: it goes through the proxy, whose
+  // guard refuses it.
+  it("sends loopback URIs through the proxy, which refuses them", async () => {
     const v6 = "#EXTM3U\n#EXTINF:4,\nhttp://[::1]:8080/seg.ts\n";
-    expect(rewriteHlsPlaylist(v6, "http://[::1]:8080/index.m3u8", mint, NONE)).toBe(v6);
+    expect(rewriteHlsPlaylist(v6, "http://[::1]:8080/index.m3u8", mint, NONE)).toContain(mint("http://[::1]:8080/seg.ts"));
     const local = "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n";
-    expect(rewriteHlsPlaylist(local, "http://localhost/index.m3u8", mint, NONE)).toBe(local);
+    expect(rewriteHlsPlaylist(local, "http://localhost/index.m3u8", mint, NONE)).toContain(mint("http://localhost/key"));
+    const app = "#EXTM3U\n#EXTINF:4,\nhttp://127.0.0.1:8799/api/bots\n#EXTINF:4,\nhttp://[::ffff:127.0.0.1]:8799/api/x\n";
+    const out = rewriteHlsPlaylist(app, "https://cdn.example/live/index.m3u8", mint, NONE);
+    expect(out).not.toContain("\nhttp://127.0.0.1:8799/api/bots");
+    expect(out).toContain(mint("http://127.0.0.1:8799/api/bots"));
+    expect(out).toContain(mint("http://[::ffff:7f00:1]:8799/api/x"));
+    expect(await reasonFor("http://127.0.0.1:8799/api/bots", NONE)).toBe("loopback");
   });
 
   it("rewrites them when the host is allowed", () => {

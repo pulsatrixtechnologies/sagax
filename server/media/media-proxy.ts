@@ -14,6 +14,7 @@ import {
   isNonPublicLiteralHost,
   MediaProxyBlockedError,
   mediaProxyPolicyFromEnv,
+  isLoopbackMediaHost,
   mediaUrlMayBeProxied,
   type MediaProxyPolicy,
   type MediaProxyResolver,
@@ -213,7 +214,11 @@ export function rewriteHlsPlaylist(
     }
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return raw;
     if (resolved.username || resolved.password) return raw;
-    if (!mediaUrlMayBeProxied(resolved, policy)) return raw;
+    // A private host the policy does not allow stays as written for the
+    // browser to try (#2505), except this machine itself: a loopback URI goes
+    // through the proxy too, whose guard refuses it, so the player never
+    // loads the app's own server from a playlist.
+    if (!mediaUrlMayBeProxied(resolved, policy) && !isLoopbackMediaHost(resolved.hostname)) return raw;
     return mint(resolved.href);
   };
   return text

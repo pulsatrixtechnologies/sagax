@@ -7,6 +7,7 @@ import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { isExpiredAt } from "./video-player-state";
+import { playableAddress } from "./media-source-guard";
 import { probeExpiry } from "./VideoPlayerParts";
 import { VideoPlayerWidget } from "./VideoPlayerWidget";
 
@@ -95,6 +96,11 @@ function LinkAudioPlayer({ url, title, message, onRequestRefresh }: { url: strin
       if (controller.signal.aborted) return;
       if (isExpiredAt(video.expiresAt)) {
         setState("expired");
+        return;
+      }
+      // never an absolute address of the app's own origin (#4752)
+      if (!playableAddress(video.playbackUrl)) {
+        setState("failed");
         return;
       }
       setSrc(video.playbackUrl);

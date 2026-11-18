@@ -1,11 +1,14 @@
 import { useId, useState } from "react";
 import { PillTabCount, PillTabs } from "@/components/PillTabs";
+import { TicketNotes, type TicketNote, type ScheduleEntry } from "./TicketRecordSections";
 import { t } from "@/lib/i18n";
 
-export const RELATED_TABS = ["time", "configurations", "expenses", "activities", "attachments"] as const;
+export const RELATED_TABS = ["notes", "time", "configurations", "expenses", "activities", "attachments"] as const;
 export type RelatedTab = (typeof RELATED_TABS)[number];
 
 type Lines = {
+  notes: TicketNote[];
+  schedule: ScheduleEntry[];
   time: { date: string; member: string; hours: string; note: string }[];
   configurations: { name: string; type: string; status: string }[];
   expenses: { date: string; member: string; type: string; amount: string }[];
@@ -14,11 +17,13 @@ type Lines = {
 };
 
 export type RelatedPage = {
-  [K in RelatedTab]: { tab: K; lines: Lines[K]; totalHours?: string }
-}[RelatedTab];
+  [K in keyof Lines]: { tab: K; lines: Lines[K]; totalHours?: string }
+}[keyof Lines];
 
 export interface RecordRelatedTabsProps {
   counts: Partial<Record<RelatedTab, number>>;
+  schedule?: ScheduleEntry[];
+  scheduleError?: string;
   tab: RelatedTab;
   onTab: (tab: RelatedTab) => void;
   page?: RelatedPage;
@@ -41,7 +46,7 @@ export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, co
       {(countError || notice) && <span role="status" className="px-3 text-popover-ink-secondary">{countError || notice}</span>}
       <div role="tabpanel" id={`${id}-panel-${tab}`} aria-labelledby={`${id}-tab-${tab}`}
         key={tab} tabIndex={0} aria-busy={loading} className="record-scroll min-h-0 flex-1 overflow-y-auto px-3 py-1">
-        {error ? <p role="status">{error}</p> : page?.tab === tab ? <RelatedLines page={page} /> :
+        {error ? <p role="status">{error}</p> : page?.tab === tab ? page.tab === "notes" ? <TicketNotes notes={page.lines} /> : <RelatedLines page={page} /> :
           <p role="status">{t("recordCard.loading")}</p>}
       </div>
     </section>
@@ -54,7 +59,7 @@ function TimeNote({ note }: { note: string }) {
     className={`w-full text-start text-popover-ink-secondary ${expanded ? "block whitespace-pre-wrap break-words" : "line-clamp-1"}`}>{note}</button>;
 }
 
-function RelatedLines({ page }: { page: RelatedPage }) {
+function RelatedLines({ page }: { page: Exclude<RelatedPage, { tab: "notes" | "schedule" }> }) {
   const columns = {
     time: ["date", "member", "hours", "note"],
     configurations: ["name", "type", "status"],

@@ -1,0 +1,103 @@
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { PillTabCount, PillTabs } from "./PillTabs";
+import { t } from "@/lib/i18n";
+
+export interface ScheduleEntry {
+  resource: string;
+  start: string;
+  end: string;
+  where: string;
+  done?: boolean;
+}
+
+export interface TicketNote {
+  author: string;
+  date: string;
+  timestamp: string;
+  kind: string;
+  body: string;
+}
+
+function Avatar({ name }: { name: string }) {
+  return <span aria-hidden="true" className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-popover-field text-[12px] font-medium">{Array.from(name.trim())[0]?.toLocaleUpperCase() || "?"}</span>;
+}
+
+function scheduleRange({ start, end }: ScheduleEntry) {
+  if (!start) return t("recordCard.related.unscheduled");
+  if (!end) return start;
+  const sameDay = /^\d{4}-\d{2}-\d{2} /.test(start) && end.slice(0, 11) === start.slice(0, 11);
+  return `${start} - ${sameDay ? end.slice(11) : end}`;
+}
+
+export function TicketSchedule({ entries, error }: { entries?: ScheduleEntry[]; error?: string }) {
+  return <section data-fit-row="schedule" className="min-w-0 shrink-0">
+    <h3 className="flex items-center gap-2 text-[13px] font-medium leading-4">{t("recordCard.related.schedule")}{entries && <PillTabCount count={entries.length} />}</h3>
+    {error || !entries?.length ? <p role="status" className="text-popover-ink-secondary">{error || t(entries ? "recordCard.related.empty" : "recordCard.loading")}</p> :
+      <ul className="divide-y divide-popover-hairline">{entries.map((entry, index) => {
+        const name = entry.resource || t("recordCard.related.unassigned");
+        return <li key={index} className="flex items-start gap-2 py-0.5">
+          <Avatar name={name} />
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-baseline justify-between gap-x-2 leading-[18px]"><span className="break-words font-medium">{name}</span>
+              {entry.done !== undefined && <span className="text-[12px] text-popover-ink-secondary">{t(entry.done ? "recordCard.related.done" : "recordCard.related.open")}</span>}</p>
+            <p className="text-[12px] leading-4 text-popover-ink-secondary">{[scheduleRange(entry), entry.where].filter(Boolean).join(" · ")}</p>
+          </div>
+        </li>;
+      })}</ul>}
+  </section>;
+}
+
+const filters = ["discussion", "internal", "resolution", "all"] as const;
+type Filter = typeof filters[number];
+
+function Note({ note }: { note: TicketNote }) {
+  const body = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const node = body.current;
+    if (!node || expanded) return;
+    const measure = () => setClipped(node.scrollHeight > node.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => observer?.disconnect();
+  }, [expanded, note.body]);
+  const name = note.author || t("recordCard.related.unknownAuthor");
+  return <li className="flex gap-2 py-1">
+    <Avatar name={name} />
+    <div className="min-w-0 flex-1">
+      <p className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{name}</span><span className="text-[12px] text-popover-ink-secondary">{note.date}</span></p>
+      <p dir="auto" ref={body} className={`whitespace-pre-wrap break-words leading-[18px] ${expanded ? "" : "line-clamp-3"}`}>{note.body}</p>
+      {(expanded || clipped) && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)} className="text-popover-accent hover:underline">{t(expanded ? "recordCard.related.less" : "recordCard.related.more")}</button>}
+    </div>
+  </li>;
+}
+
+export function TicketNotes({ notes }: { notes: TicketNote[] }) {
+  const id = useId();
+  const groups: Record<Filter, TicketNote[]> = { discussion: [], internal: [], resolution: [], all: [] };
+  const ordered = [...notes].sort((a, b) => {
+    if (a.timestamp && b.timestamp) {
+      const delta = Date.parse(b.timestamp) - Date.parse(a.timestamp);
+      if (Number.isFinite(delta)) return delta;
+    }
+    return b.date.localeCompare(a.date);
+  });
+  for (const note of ordered) {
+    groups.all.push(note);
+    if (note.kind === "description" || note.kind === "issue") groups.discussion.push(note);
+    else if (note.kind === "discussion" || note.kind === "resolution" || note.kind === "internal") groups[note.kind].push(note);
+  }
+  const [selected, setSelected] = useState<Filter>();
+  const tab = selected ?? (groups.discussion.length ? "discussion" : "all");
+  return <>
+    <PillTabs tabs={filters} tab={tab} onTab={setSelected} ariaLabel={t("recordCard.related.notes")} idPrefix={id}
+      label={key => t(`recordCard.related.${key}`)} after={key => <PillTabCount count={groups[key].length} />}
+      className="flex-nowrap overflow-x-auto" />
+    <div key={tab} role="tabpanel" id={`${id}-panel-${tab}`} aria-labelledby={`${id}-tab-${tab}`}>
+      {groups[tab].length ? <ul className="divide-y divide-popover-hairline">{groups[tab].map((note, index) => <Note key={`${note.timestamp || note.date}-${index}`} note={note} />)}</ul> :
+        <p className="py-2 text-popover-ink-secondary">{t("recordCard.related.empty")}</p>}
+    </div>
+  </>;
+}

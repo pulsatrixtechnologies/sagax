@@ -19106,7 +19106,20 @@
       "recordCard.edit.agreement": "2dff10f6a8b7e6985b6ad779a205a3cf95f95d5966402e50d288696519bbe2ac",
       "recordCard.edit.contact": "2b5c3d26721ae9c350cf3009318b626f0fc8a90b4a2ac0ca8099c05aa849282e",
       "recordCard.edit.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",
-      "recordCard.related.downloadFailed": "eb0c67ef0768cea07cc7cdfd29cbfd78f079f8153712d3fae99b5ca347815036"
+      "recordCard.related.downloadFailed": "eb0c67ef0768cea07cc7cdfd29cbfd78f079f8153712d3fae99b5ca347815036",
+      "recordCard.related.notes": "8a7525b1492fb84833f5c4a69b30f4bfbb134f9b666b61a2c1872d63d234c085",
+      "recordCard.related.schedule": "9d5a86a8bbfd2d0e0d8da81bf27c83bafbc11414e2a799a7c322e53e93284aca",
+      "recordCard.related.unscheduled": "b3e24789bf8dc89bfbf7652e09b94488310916306db5db24ac24bf19c87e8768",
+      "recordCard.related.done": "11a6767d5674c7e45f7e00dc525762275b3a48491ad6045427d2609cc496c516",
+      "recordCard.related.open": "ed077f3d8125d60dca1979c7133601bd187d47c73ed9975028f677e49e709942",
+      "recordCard.related.discussion": "5eb6cf647d2c5d14a044e2d103dcef4cf0cdc872434c374debc1043092bc4746",
+      "recordCard.related.internal": "2ea1842b445b0c813cc619b6d4740a41c2127a66b306a363d761ed4258862cc0",
+      "recordCard.related.resolution": "d4055fafa3794fa88b1e89e70c167d5a9575067a1442a6d94e9520d65a575378",
+      "recordCard.related.all": "a52ace420f2175d08b1577a1bea5445e36801229c074ef9ed6c55a73401fd9c2",
+      "recordCard.related.more": "d47d7cb0e4f8fd2be5ee07826694c18917d83ca77d0a01698582d05f432db996",
+      "recordCard.related.less": "ae5239ec63f28cd401ccd63e9f56e4ede8254a738a135ebcd33e844c18dd247f",
+      "recordCard.related.unassigned": "14d33bd014e6b4e7c3590a8a12e1ec4951d777593d6d6aef9ebe5faac9c8dac0",
+      "recordCard.related.unknownAuthor": "d5edd2d17cfe1574e2dc459f2e955ccaea6104598cb2646339df215d151cc772"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

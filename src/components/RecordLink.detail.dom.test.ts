@@ -82,16 +82,44 @@ afterEach(() => {
 describe("a ticket card through its chip", () => {
   it("shows the tabs with their counts, follows every page and keeps the tab order", async () => {
     await open();
-    expect(tabs().map((tab) => tab.textContent)).toEqual(["Time3", "Configurations", "Expenses", "Activities", "Attachments1"]);
+    expect(tabs().map((tab) => tab.textContent)).toEqual(["Notes0", "Time3", "Configurations", "Expenses", "Activities", "Attachments1", "Discussion0", "Internal0", "Resolution0", "All0"]);
+    expect(tabs().at(-1)?.getAttribute("aria-selected")).toBe("true");
+    await act(async () => tabs()[1]!.click());
+    await settle();
     expect(detailCalls("time").map((call) => new URL(call.url, "http://x").searchParams.get("page"))).toEqual(["1", "2"]);
     expect(document.querySelectorAll("tbody tr")).toHaveLength(3);
     expect(card()!.textContent).toContain("Total: 3 h");
     // a tab read once is not read again on return
-    await act(async () => tabs()[4]!.click());
+    await act(async () => tabs()[5]!.click());
     await settle();
-    await act(async () => tabs()[0]!.click());
+    await act(async () => tabs()[1]!.click());
     await settle();
     expect(detailCalls("time")).toHaveLength(2);
+  });
+
+  it("keeps the schedule in its pane and filters complete notes newest first", async () => {
+    detail = ((base) => (url, method, body) => {
+      const section = url.searchParams.get("section");
+      if (section === "schedule") return json({ lines: [{ member: "Dispatch", where: "Remote", doneFlag: false }] });
+      if (section === "notes") return json({ lines: [
+        { author: "Support", kind: "discussion", date: "2026-10-01", text: "First reply" },
+        { author: "Dispatch", kind: "internal", date: "2026-10-03", text: "Staff note" },
+        { author: "Support", kind: "discussion", date: "2026-10-02", text: "Latest reply" },
+      ] });
+      return base(url, method, body);
+    })(detail);
+    await open();
+    const pane = card()!.querySelector('[data-record-pane="right"]')!;
+    expect(pane.textContent).toContain("Not scheduled · Remote");
+    expect(pane.textContent).toContain("Open");
+    expect(tabs().find(tab => tab.textContent === "Discussion2")?.getAttribute("aria-selected")).toBe("true");
+    const bodies = () => [...card()!.querySelectorAll('[role="tabpanel"] li p[dir="auto"]')].map(p => p.textContent);
+    expect(bodies()).toEqual(["Latest reply", "First reply"]);
+    await act(async () => tabs().find(tab => tab.textContent === "All3")!.click());
+    expect(bodies()).toEqual(["Staff note", "Latest reply", "First reply"]);
+    await act(async () => tabs()[1]!.click());
+    await settle();
+    expect(pane.textContent).toContain("Dispatch");
   });
 
   it("downloads an attachment through the authenticated detail path", async () => {
@@ -101,7 +129,7 @@ describe("a ticket card through its chip", () => {
       : url.searchParams.get("section") === "counts" ? json({ counts: { attachments: 1 }, fields: [] })
         : json({ lines: [{ name: "print-test.txt", size: "10 B", date: "Nov 18", id: "77" }], next: null });
     await open();
-    await act(async () => tabs()[4]!.click());
+    await act(async () => tabs()[5]!.click());
     await settle();
     await act(async () => document.querySelector<HTMLButtonElement>("tbody button")!.click());
     await settle();
@@ -135,7 +163,7 @@ describe("a ticket card through its chip", () => {
     expect(document.querySelector('[aria-label="Board"]')!.textContent).toBe("Billing");
     // the card and the visible tab are read again, fresh
     expect(calls.filter((call) => !call.url.includes("/detail")).length).toBeGreaterThan(cardReadsBefore);
-    expect(calls.some((call) => call.url.includes("/detail") && call.url.includes("section=time") && call.url.includes("fresh=1"))).toBe(true);
+    expect(calls.some((call) => call.url.includes("/detail") && call.url.includes("section=notes") && call.url.includes("fresh=1"))).toBe(true);
   });
 
   it("keeps the value and says so when the write is refused", async () => {

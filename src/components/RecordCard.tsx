@@ -33,6 +33,7 @@ import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative
 import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
 import type { UseRecordCard } from "@/lib/record-cards";
 import { RecordFieldSelect, type RecordFieldEdit } from "./RecordFieldSelect";
+import { TicketSchedule } from "./TicketRecordSections";
 import { RecordRelatedTabs, type RecordRelatedTabsProps } from "./RecordRelatedTabs";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
@@ -649,7 +650,7 @@ export function RecordCard({ record, label, kindName, product, read, related, ed
   // the layout is the data's: a text, a list or an activity makes the two-pane card, none the single pane
   // a text of one short line is a row above the fields of the single-pane card, not a nearly empty pane
   const shortText = Boolean(description && !hasLines && !hasNotes && card?.fields?.length && description.length <= SHORT_TEXT_MAX && !description.includes("\n"));
-  const right = Boolean(card && ((description && !shortText) || (hasLines && !related) || hasNotes));
+  const right = Boolean(card && (related || (description && !shortText) || hasLines || hasNotes));
   // a card of typed fields sizes its field pane from what the rows need (a share of the card, not a fixed ratio)
   const sized = Boolean(card?.fields?.some((field) => field.type));
   const split = !card || right || Boolean(related);
@@ -754,14 +755,15 @@ export function RecordCard({ record, label, kindName, product, read, related, ed
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
-            {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
+            {(related ? description : shortText) && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
             <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} chipRows={chipRows} />
           </Pane>
           {right && (
-            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
-              {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", pinned ? "" : hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
+            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", related && "py-1", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+              {related && <TicketSchedule entries={related.schedule} error={related.scheduleError} />}
+              {!related && description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", pinned ? "" : hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
               {/* the latest activity comes before a list: a hovered card drops whole rows from the foot */}
-              {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
+              {!related && hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
               {!related && hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
             </Pane>
           )}

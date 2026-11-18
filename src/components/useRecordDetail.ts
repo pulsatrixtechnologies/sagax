@@ -7,7 +7,7 @@ import {
 } from "@/lib/record-detail";
 import type { RecordRef } from "../../shared/record-cards";
 import type { RecordChoice, RecordFieldEdit } from "./RecordFieldSelect";
-import type { RelatedPage, RelatedTab } from "./RecordRelatedTabs";
+import type { RelatedPage } from "./RecordRelatedTabs";
 import { useRecordRelatedTabs } from "./useRecordRelatedTabs";
 
 /** A change of one field makes the choices of these stale. */
@@ -42,7 +42,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
         if (live.current === token) setFields(read.fields);
         return read.counts;
       },
-      async page(tab: RelatedTab, fresh: boolean): Promise<RelatedPage> {
+      async page(tab: RelatedPage["tab"], fresh: boolean): Promise<RelatedPage> {
         let page = await readDetailPage(record, tab, 1, fresh, () => setDownloadError(true));
         let joined = page.page;
         let next = page.next;

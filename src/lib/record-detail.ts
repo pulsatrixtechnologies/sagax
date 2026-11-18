@@ -7,6 +7,7 @@
 // A server without the route answers 404 (or 405): `RecordDetailMissing`, and
 // the card stays the original one.
 import { api, ApiError } from "@/state/store";
+import { activeLocale } from "@/lib/i18n";
 import { downloadBlob } from "@/lib/diagram-view";
 import { recordCardLanguage } from "@/lib/record-cards";
 import { RELATED_TABS, type RelatedPage, type RelatedTab } from "@/components/RecordRelatedTabs";
@@ -68,12 +69,29 @@ export function parseDetailCounts(raw: unknown): RecordDetailCounts {
   return { counts, fields };
 }
 
+/** Newer consoles include instants. Older ones already formatted the person's local time. */
+function localMoment(instant: unknown, fallback: unknown): string {
+  const raw = text(instant);
+  if (!/(Z|[+-]\d{2}:\d{2})$/i.test(raw)) return text(fallback);
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return text(fallback);
+  return new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 /** Parse one page of a tab, a line's columns being the English keys. */
-export function parseDetailPage(tab: RelatedTab, raw: unknown, download: (id: string, name: string) => () => void): RecordDetailPage {
+export function parseDetailPage(tab: RelatedPage["tab"], raw: unknown, download: (id: string, name: string) => () => void): RecordDetailPage {
   const rows = rowsOf(raw);
   const next = isObject(raw) ? nextPage(raw.next) : null;
   const totalHours = isObject(raw) && typeof raw.totalHours === "string" && raw.totalHours ? { totalHours: raw.totalHours } : {};
   switch (tab) {
+    case "schedule": return { next, page: { tab, lines: rows.map(r => ({
+      resource: text(r.member), start: localMoment(r.startTimestamp, r.date), end: localMoment(r.endTimestamp, r.end),
+      where: text(r.where), done: typeof r.doneFlag === "boolean" ? r.doneFlag :
+        ["Yes", "Oui"].includes(text(r.done)) ? true : ["No", "Non"].includes(text(r.done)) ? false : undefined,
+    })) } };
+    case "notes": return { next, page: { tab, lines: rows.map(r => ({
+      author: text(r.author), date: localMoment(r.timestamp, r.date), timestamp: text(r.timestamp), kind: text(r.kind), body: text(r.text),
+    })) } };
     case "time": return { next, page: { tab, ...totalHours, lines: rows.map((r) => ({ date: text(r.date), member: text(r.member), hours: text(r.hours), note: text(r.note) })) } };
     case "configurations": return { next, page: { tab, lines: rows.map((r) => ({ name: text(r.name), type: text(r.type), status: text(r.status) })) } };
     case "expenses": return { next, page: { tab, lines: rows.map((r) => ({ date: text(r.date), member: text(r.member), type: text(r.type), amount: text(r.amount) })) } };
@@ -101,7 +119,7 @@ export async function downloadAttachment(ref: RecordRef, id: string, name: strin
   downloadBlob(new Blob([bytes], { type: text(body.contentType) }), text(body.name) || name);
 }
 
-export async function readDetailPage(ref: RecordRef, tab: RelatedTab, page: number, fresh: boolean, onDownloadError: () => void): Promise<RecordDetailPage> {
+export async function readDetailPage(ref: RecordRef, tab: RelatedPage["tab"], page: number, fresh: boolean, onDownloadError: () => void): Promise<RecordDetailPage> {
   const raw = await call(recordDetailPath(ref, { section: tab, page, fresh: fresh ? 1 : undefined }));
   return parseDetailPage(tab, raw, (id, name) => () => { void downloadAttachment(ref, id, name).catch(onDownloadError); });
 }

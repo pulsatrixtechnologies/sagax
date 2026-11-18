@@ -3295,7 +3295,8 @@ one centred sentence, one action. The priority chip sits in the head, not
 beside the owner: next to a long name it cut the name.
 
 A service ticket with detail support keeps this frame while its counted tabs
-switch. Time opens first. Rows scroll inside the panel and a time note expands
+switch. The schedule occupies the right pane. Notes open below the panes, with
+Discussion selected when present and All otherwise. Rows scroll inside the panel and a time note expands
 in place. The compact tabs use the bot profile's shared 26px pill tabs. A field
 picker uses the shared searchable list and keeps the card open after a choice.
 

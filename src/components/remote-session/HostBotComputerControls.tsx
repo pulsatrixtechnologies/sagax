@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { patchHostComputer } from "@/lib/host-computers";
 import { PageMenuItem } from "@/components/content-page";
-import { DEVICE_CHIP } from "./DeviceCardRow";
+import { DEVICE_CHIP } from "./ComputerTableRow";
 
 /** The bot computer items of the host row's shared "⋯" menu (DeviceCardRow). */
 export function HostBotComputerMenuItems({ hostId, host, close, onEditTags, onChanged }: {
@@ -56,7 +56,7 @@ export function HostBotComputerTags({ hostId, host, editing, onDone, onChanged }
   };
   if (editing) {
     return (
-      <div className="flex items-center gap-1.5 pl-12" data-host-bot-computer-tag-editor="">
+      <div className="flex items-center gap-1.5" data-host-bot-computer-tag-editor="">
         <input type="text" autoFocus value={value} maxLength={400}
           aria-label={t("hostComputer.editTags")} placeholder={t("hostComputer.tagsPlaceholder")}
           onChange={(event) => setDraft(event.target.value)}

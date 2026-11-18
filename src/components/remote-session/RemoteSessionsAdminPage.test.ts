@@ -13,13 +13,15 @@ function render() {
 }
 
 describe("RemoteSessionsAdminPage", () => {
-  it("renders the page chrome: title, search and both filters", () => {
+  it("renders the page chrome: title, two tabs with counts, search and the Computers filters", () => {
     setLocale("en");
     const html = render();
     expect(html).toContain("data-remote-sessions-admin");
     expect(html).toContain(t("remoteSessionsAdmin.title"));
     expect(html).toContain('type="search"');
-    expect(html).toContain('data-remote-admin-filter="off"');
+    expect(html).toContain('data-remote-tab="computers"');
+    expect(html).toContain('data-remote-tab="sessions"');
+    expect(html).toContain('data-remote-admin-filter-online="off"');
     expect(html).toContain("data-remote-admin-filter-unattended");
   });
 
@@ -40,15 +42,14 @@ describe("RemoteSessionsAdminPage", () => {
     expect(toolbar.indexOf('type="search"')).toBeLessThan(toolbar.indexOf("data-remote-admin-filter-unattended"));
   });
 
-  it("shows the empty state before any session loads", () => {
+  it("shows the empty state before any computer loads", () => {
     setLocale("en");
     const html = render();
-    expect(html).toContain("data-remote-admin-empty");
-    // a real empty state: its icon, a title, a line and an action
-    const empty = html.slice(html.indexOf("data-remote-admin-empty"));
+    expect(html).toContain("data-unattended-hosts-empty");
+    // a real empty state: its icon and a line
+    const empty = html.slice(html.indexOf("data-unattended-hosts-empty"));
     expect(empty).toMatch(/<svg[^>]*lucide-monitor/);
-    expect(empty).toMatch(/<p class="font-medium text-ink">[^<]+<\/p>/);
-    expect(empty).toContain("Add computer");
+    expect(empty).toMatch(/<p class="[^"]*">[^<]+<\/p>/);
   });
 
   it("uses translated labels, not raw keys", () => {

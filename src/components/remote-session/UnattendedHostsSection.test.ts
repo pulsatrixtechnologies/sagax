@@ -41,13 +41,13 @@ describe("UnattendedHostsSection", () => {
     expect(isOpaqueId(unattendedHostLabel({ hostname: null }))).toBe(false);
   });
 
-  it("reads like a device row: kind and presence, access on a usable host, the rest behind Details", () => {
+  it("reads like a table row: kind and presence in their columns, access on a usable host, nothing folded", () => {
     const html = render();
     expect(visible(html)).toContain(`${t("myDevices.computer")} · ${t("remoteSessionsAdmin.hosts.neverSeen")}`);
+    for (const label of [t("remoteComputers.col.name"), t("remoteComputers.col.type"), t("remoteComputers.col.status"), t("remoteComputers.col.who"), t("remoteComputers.col.access")]) expect(visible(html)).toContain(label);
     expect(html.match(/data-unattended-host-access="always"/g)).toHaveLength(2);
     expect(html.match(/data-unattended-host-more=""/g)).toHaveLength(3);
-    expect(html).toContain("data-unattended-host-details");
-    expect(html).not.toContain("data-unattended-host-facts");
+    expect(html).not.toContain("data-unattended-host-details");
     expect(html).not.toContain("data-unattended-hosts-open-off");
   });
 
@@ -63,8 +63,8 @@ describe("UnattendedHostsSection", () => {
   it("speaks French with the requested labels", () => {
     setLocale("fr");
     const html = render();
-    expect(html).toContain("Ordinateurs en accès non surveillé");
-    expect(html).toContain("Détails");
+    expect(html).toContain("Sans surveillance");
+    expect(html).toContain("Qui peut l&#x27;utiliser");
     expect(html).toContain("Toujours permettre");
     expect(html).not.toContain("remoteSessionsAdmin.hosts.");
   });

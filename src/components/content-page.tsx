@@ -168,7 +168,8 @@ export function PageSegment<T extends string | number>({ label, value, options, 
   value: T;
   options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon; title?: string; data?: DataAttributes;
     /** A small count after the label (the Run log's unread problems). */
-    badge?: number; badgeLabel?: string; /** Pressing the count itself (its segment opens too). */ onBadge?: () => void }>;
+    badge?: number; badgeLabel?: string; /** Pressing the count itself (its segment opens too). */ onBadge?: () => void;
+    /** A quiet figure after the label (Computers 8). */ count?: number }>;
   onChange: (next: T) => void;
   compact?: boolean;
   disabled?: boolean;
@@ -190,6 +191,7 @@ export function PageSegment<T extends string | number>({ label, value, options, 
               : cn("flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px]", on ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>
             {Icon && <Icon size={compact ? 12 : 14} aria-hidden="true" />}
             <span className={cn(Icon && !compact && "@max-[60rem]/page-header:sr-only")}>{option.label}</span>
+            {option.count != null && <span data-page-tab-count="" className="text-[11px] tabular-nums text-ink-secondary">{option.count}</span>}
             {option.badge ? <span data-page-tab-badge="" title={option.badgeLabel} onClick={option.onBadge} className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
           </button>
         );

@@ -50,21 +50,53 @@ export function targetsAppServer(url, serverPort) {
  * hop that answered with a redirect from another address marks the request
  * id (Chromium keeps one id through its redirects), and a request so marked
  * never carries the capability, whatever Referer it arrives with (a media
- * server answering 302 toward the app's port). Bounded: the oldest ids go.
+ * server answering 302 toward the app's port). An id stays marked until its
+ * request ends (onCompleted, onErrorOccurred: `forget`), however long it
+ * runs; no size limit, so no old id is ever dropped while its request lives.
  */
-export function createRedirectLedger(limit = 4096) {
+export function createRedirectLedger() {
   const marked = new Set();
   return {
     /** webRequest.onBeforeRedirect: `details.url` is the hop that redirected. */
     noteRedirect(details, serverPort) {
       if (!details || details.id === undefined || targetsAppServer(details.url, serverPort)) return;
-      const id = String(details.id);
-      marked.delete(id);
-      marked.add(id);
-      if (marked.size > limit) marked.delete(marked.values().next().value);
+      marked.add(String(details.id));
     },
     startedElsewhere(details) {
       return Boolean(details) && details.id !== undefined && marked.has(String(details.id));
+    },
+    /** webRequest.onCompleted / onErrorOccurred: the request is over. */
+    forget(details) {
+      if (details && details.id !== undefined) marked.delete(String(details.id));
+    },
+    get size() {
+      return marked.size;
+    },
+  };
+}
+
+/**
+ * A session takes one onCompleted and one onErrorOccurred listener: this hub
+ * is that listener for the default session, and every rule that needs the
+ * end of a request subscribes to it (the redirect ledger, the sign-in redeem
+ * watch) instead of replacing the other's listener.
+ */
+export function createRequestEndHub() {
+  const listeners = new Set();
+  return {
+    /** `listener(kind, details)`, kind "completed" or "error"; returns the unsubscribe. */
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    dispatch(kind, details) {
+      for (const listener of listeners) {
+        try {
+          listener(kind, details);
+        } catch {
+          /* one rule failing never stops the others */
+        }
+      }
     },
   };
 }

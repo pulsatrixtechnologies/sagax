@@ -512,16 +512,26 @@ function signInLog(line) {
 /** Log how the main window's redeem of a handed-over credential answers
  * (POST <origin>/api/auth/pair), once, for two minutes. Status only. */
 let redeemWatchTimer = null;
+let stopRedeemWatch = () => {};
 function watchSignInRedeem(win, origin) {
+  // the default session's end-of-request listener is shared
+  // (requestEndHub): this watch subscribes to it, never replaces it
+  const shared = win.webContents.session === session.defaultSession;
   const requests = win.webContents.session.webRequest;
+  stopRedeemWatch();
+  let unsubscribe = () => {};
   const stop = () => {
     if (redeemWatchTimer) clearTimeout(redeemWatchTimer);
     redeemWatchTimer = null;
-    try { requests.onCompleted(null); requests.onErrorOccurred(null); } catch { /* window gone */ }
+    unsubscribe();
+    if (!shared) {
+      try { requests.onCompleted(null); requests.onErrorOccurred(null); } catch { /* window gone */ }
+    }
   };
-  stop();
+  stopRedeemWatch = stop;
   const filter = { urls: [`${origin}/api/auth/pair`, `${origin}/api/auth/pair?*`] };
-  requests.onCompleted(filter, (details) => {
+  const matches = (url) => url === `${origin}/api/auth/pair` || (url ?? "").startsWith(`${origin}/api/auth/pair?`);
+  const onCompleted = (details) => {
     if (details.method !== "POST") return;
     // The /pair page's look-up of whose credential it is (?preview=1) redeems
     // nothing: keep waiting for the redeem itself.
@@ -533,11 +543,21 @@ function watchSignInRedeem(win, origin) {
     stop();
     // Signed in: the local server learns who its owner is there.
     if (details.statusCode >= 200 && details.statusCode < 300) void ownerIdentitySync.refresh("sign-in");
-  });
-  requests.onErrorOccurred(filter, (details) => {
+  };
+  const onErrorOccurred = (details) => {
     signInLog(`redeem POST ${origin}/api/auth/pair failed (${details.error})`);
     stop();
-  });
+  };
+  if (shared) {
+    unsubscribe = requestEndHub.subscribe((kind, details) => {
+      if (!matches(details?.url)) return;
+      if (kind === "completed") onCompleted(details);
+      else onErrorOccurred(details);
+    });
+  } else {
+    requests.onCompleted(filter, onCompleted);
+    requests.onErrorOccurred(filter, onErrorOccurred);
+  }
   redeemWatchTimer = setTimeout(() => {
     signInLog("no redeem request from /pair within two minutes");
     stop();
@@ -1071,7 +1091,10 @@ import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
 import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
 import { isYoutubeEmbedUrl, withYoutubeEmbedReferer } from "./youtube-referer.mjs";
-import { createRedirectLedger, isAppServerRequest } from "./desktop-owner-request.mjs";
+import { createRedirectLedger, createRequestEndHub, isAppServerRequest } from "./desktop-owner-request.mjs";
+
+// The default session's one onCompleted / onErrorOccurred listener, shared.
+const requestEndHub = createRequestEndHub();
 import { isPermissionSettingsUrl, normalizePermissionStatus, permissionAction, permissionsFor } from "./os-permissions.mjs";
 import { execFile } from "node:child_process";
 
@@ -1776,6 +1799,10 @@ function installRequestHeaderRules({ mutationHeader }) {
   // carries the capability (electron/desktop-owner-request.mjs)
   const redirects = createRedirectLedger();
   session.defaultSession.webRequest.onBeforeRedirect((details) => redirects.noteRedirect(details, SERVER_PORT));
+  // each id is forgotten when its request ends, never earlier
+  requestEndHub.subscribe((_kind, details) => redirects.forget(details));
+  session.defaultSession.webRequest.onCompleted((details) => requestEndHub.dispatch("completed", details));
+  session.defaultSession.webRequest.onErrorOccurred((details) => requestEndHub.dispatch("error", details));
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     if (isYoutubeEmbedUrl(details.url)) {
       callback({ requestHeaders: withYoutubeEmbedReferer(details, () => youtubeEmbedderPage(details)) });

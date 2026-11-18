@@ -14,7 +14,7 @@ import { contentKeysForExport, unsealDatabaseCopy } from "./content-export.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import {
   vacuumAfterSealing,
-  chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentEncryptionModeFromEnv, contentEncryptionStatus,
+  chatFollowups, checkRunCardMessages, closeMessageDb, closeMessageSearch, configureContentEncryption, contentEncryptionModeFromEnv, contentEncryptionStatus,
   contentKeyChanged, deleteThread, eraseContentOwner, flushContentIndex, hasUnprojectedSealedRows, insertMessage, latestSaidByBot, openApprovalCardMessages, openWaitingRowCandidates, reprojectSealedRows,
   readCommandReceipt, readMessageText, readThread, readThreadTail, recallMessages, recentMessages, runContentMigration, saveChatFollowup,
   searchMessages, searchMessagesAsync, setMigrationFaultForTests, threadsReferencing, unlockContentKeys, updateMessage, withCommandReceipt, type ContentOwnerResolver,
@@ -142,6 +142,46 @@ describe("waiting rows in a sealed store (#3517)", () => {
     expect(hasUnprojectedSealedRows()).toBe(false);
     expect(openWaitingRowCandidates().map((hit) => hit.message.id)).toEqual(["open"]);
     expect(readThread("t1", legacy("t1")).messages.map((message) => message.id)).toEqual(["open", "done"]);
+  });
+});
+
+describe("check-run cards in a sealed store (#4587)", () => {
+  const optionCard = (id: string, card: Record<string, unknown>) =>
+    msg(id, "", { role: "bot", kind: "options", card: { title: "t", options: ["Yes"], ...card } } as unknown as Partial<Message>);
+
+  it("selects only the cards following a run, by projection, and never the run's id in clear", () => {
+    insertMessage("t1", msg("hello", "hello zebra"));
+    insertMessage("t1", optionCard("following", { askKey: "routine-problem:r1", checkRunId: "run-secret-id" }));
+    insertMessage("t1", optionCard("other", { askKey: "routine-problem:r1" }));
+    insertMessage("t1", optionCard("unrelated", { askKey: "other:1", answered: true }));
+    insertMessage("t2", optionCard("elsewhere", { askKey: "routine-problem:r2", checkRunId: "run-2" }));
+    expect(checkRunCardMessages("t1").map((message) => message.id)).toEqual(["following"]);
+    const db = raw();
+    const json = (db.prepare("SELECT json FROM messages WHERE id = 'following'").get() as { json: string }).json;
+    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM messages WHERE thread_id = 't1' AND json_extract(json, '$.card.checkRunId') IS NOT NULL").all() as Array<{ detail: string }>;
+    db.close();
+    expect(json).not.toContain("run-secret-id");
+    expect(plan.map((row) => row.detail).join(" ")).toContain("messages_check_run_cards");
+    // a card told its line no longer follows a run
+    updateMessage("t1", optionCard("following", { askKey: "routine-problem:r1" }));
+    expect(checkRunCardMessages("t1")).toEqual([]);
+  });
+
+  it("finds an older sealed option card before the reprojection, and selectively after it", async () => {
+    insertMessage("t1", optionCard("following", { askKey: "routine-problem:r1", checkRunId: "run-1" }));
+    insertMessage("t1", optionCard("other", { askKey: "routine-problem:r1" }));
+    insertMessage("t1", msg("text", "plain"));
+    closeMessageDb();
+    // written at projection version 2: no check-run flag
+    const older = new DatabaseSync(file());
+    older.exec("UPDATE messages SET json = json_remove(json_set(json, '$.v', 2), '$.card.checkRunId')");
+    older.close();
+    expect(hasUnprojectedSealedRows()).toBe(true);
+    // the start's catch-up runs before the reprojection: both option cards are read, the text row is not
+    expect(checkRunCardMessages("t1").map((message) => message.id).sort()).toEqual(["following", "other"]);
+    expect(await reprojectSealedRows(async () => {})).toBe(2);
+    expect(hasUnprojectedSealedRows()).toBe(false);
+    expect(checkRunCardMessages("t1").map((message) => message.id)).toEqual(["following"]);
   });
 });
 

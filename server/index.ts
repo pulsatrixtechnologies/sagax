@@ -17201,8 +17201,8 @@ const routineCheckFollowUps = new RoutineCheckFollowUps({
     const place = routine ? routineProblemPlace(routine, false) : null;
     if (!place) return [];
     const key = routineProblemKey(routineId);
-    return store.messagesFor(place.threadId)
-      .filter((row) => row.kind === "options" && row.card?.askKey === key && typeof row.card.checkRunId === "string")
+    return store.checkRunCardsFor(place.threadId)
+      .filter((row) => row.card?.askKey === key)
       .map((row) => ({ routineId, threadId: place.threadId, messageId: row.id, runId: row.card!.checkRunId! }));
   },
   tell: (card, note) => {

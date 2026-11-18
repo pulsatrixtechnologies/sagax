@@ -56,3 +56,25 @@ it("announces every removal, the only row of a conversation included", () => {
   expect(removed.slice(1).map((row) => row.messageId)).toEqual([middle.id, last.id]);
   expect(store.activePath(bot.threadId).map((m) => m.id)).toEqual([first.id]);
 });
+
+// #4587: the routine check catch-up reads only the cards still following a
+// run, never the whole conversation nor every option card of it.
+it("reads only the cards following a run, without loading the conversation", () => {
+  const first = new Store(() => ({ instanceId: "personal", model: "claude-sonnet-5" }));
+  const bot = first.createBot({}, { seedMessages: false });
+  first.appendMessage(bot.threadId, { role: "user", kind: "text", text: "hello" });
+  const following = first.appendMessage(bot.threadId, { role: "bot", kind: "options", text: "", card: { askKey: "routine-problem:r1", checkRunId: "run-1" } } as never);
+  first.appendMessage(bot.threadId, { role: "bot", kind: "options", text: "", card: { askKey: "routine-problem:r1" } } as never);
+  first.appendMessage(bot.threadId, { role: "bot", kind: "options", text: "", card: { askKey: "other:1", answered: true } } as never);
+  first.appendMessage(bot.threadId, { role: "bot", kind: "text", text: "hi" });
+
+  const reloaded = new Store(() => ({ instanceId: "personal", model: "claude-sonnet-5" }));
+  const cards = reloaded.checkRunCardsFor(bot.threadId);
+  expect(cards.map((row) => row.id)).toEqual([following.id]);
+  expect(cards[0]!.card?.checkRunId).toBe("run-1");
+  // the conversation was not loaded into memory by that read
+  expect((reloaded as unknown as { threads: { get(id: string): unknown } }).threads.get(bot.threadId)).toBeUndefined();
+  // a loaded thread answers the same
+  reloaded.messagesFor(bot.threadId);
+  expect(reloaded.checkRunCardsFor(bot.threadId).map((row) => row.id)).toEqual([following.id]);
+});

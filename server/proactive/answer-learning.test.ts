@@ -313,6 +313,15 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     const note = answerLearningNote([], alwaysChoices(ledger, SCOPE))!;
     expect(note).toContain("the question \"Fermer le billet 1013 ?\" offering \"Oui\" / \"Non\": always \"Oui\"");
   });
+
+  it("#4587: a currency code stuck to an amount is a number, not an item id", () => {
+    expect(questionShape("Pay invoice USD500?")).not.toBe(questionShape("Pay invoice USD5000?"));
+    expect(questionShape("Payer la facture CAD500 ?")).not.toBe(questionShape("Payer la facture CAD900 ?"));
+    expect(questionShape("Pay invoice CLF500?")).not.toBe(questionShape("Pay invoice CLF900?"));
+    // a letter-led id that is no currency still names one item
+    expect(questionShape("Close ticket INC0012?")).toBe(questionShape("Close ticket INC0099?"));
+    expect(questionShape("Close invoice 88?")).toBe(questionShape("Close invoice 89?"));
+  });
 });
 
 describe("the lines an older version wrote into the instructions move to the preferences", () => {

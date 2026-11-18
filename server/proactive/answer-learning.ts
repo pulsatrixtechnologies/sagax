@@ -241,6 +241,12 @@ const LINK_WORDS = [
 const LINK_PARTICLES = ["を", "の", "は", "が", "に", "と", "で", "も", "的", "和", "或", "给", "給", "到", "在"];
 const ITEM_NUMBER_END = new RegExp(`^(?:\\s*$|\\s*[?!.;,:)»"'…？！。、；，：](?!\\d)|\\s+(?:${LINK_WORDS.join("|")})(?![\\p{L}\\p{N}])|(?:${LINK_PARTICLES.join("|")}))`, "u");
 
+/** DisplayNames also recognizes non-circulating ISO currencies, such as CLF. */
+const currencyNames = new Intl.DisplayNames(["en"], { type: "currency", fallback: "none" });
+function startsWithCurrency(value: string): boolean {
+  return /^[a-z]{3}\d/i.test(value) && currencyNames.of(value.slice(0, 3).toUpperCase()) !== undefined;
+}
+
 /** #4558: a question's words without what names one item, case and spacing
  * ignored. A number is set aside only:
  * - right after an explicit id mark (#1013, n° 1013), in one block;
@@ -261,7 +267,7 @@ export function questionShape(question: string): string {
       (JOINED_DIGITS.test(whole.slice(offset + match.length)) ? match : `${mark.trim()}<id>`))
     .replace(ITEM_NUMBER, (match: string, word: string, space: string, value: string, offset: number, whole: string) => {
       const after = whole.slice(offset + match.length);
-      const id = /^\d/.test(value) || (value.match(/\d/g)?.length ?? 0) >= 3;
+      const id = !startsWithCurrency(value) && (/^\d/.test(value) || (value.match(/\d/g)?.length ?? 0) >= 3);
       return id && !JOINED_DIGITS.test(after) && ITEM_NUMBER_END.test(after) ? `${word}${space}<id>` : match;
     });
 }

@@ -19079,7 +19079,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get syncRoutineRunToSource() { return syncRoutineRunToSource; },
   get takeEmailSendPass() { return takeEmailSendPass; },
   get takeXPostPass() { return (...args: [string, string, string, string | undefined]) => xPostCard().takePass(...args); },
-  get finishXPost() { return (...args: [string, string, boolean, string | undefined, string | undefined]) => xPostCard().finish(...args); },
+  get finishXPost() { return (...args: [string, string, boolean, string | undefined, string | undefined, any?]) => xPostCard().finish(...args); },
   get toolMessageByItem() { return toolMessageByItem; },
   get toolWorkingStep() { return toolWorkingStep; },
   get toolsRunning() { return toolsRunning; },

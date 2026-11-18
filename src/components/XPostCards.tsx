@@ -69,7 +69,7 @@ function XAvatar({ url, name, size = 40 }: { url?: string; name: string; size?: 
       style={{ width: size, height: size }}
       className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-raised text-[13px] font-semibold text-ink-secondary"
     >
-      {show ? <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" /> : size >= 32 ? initialsOf(name) : null}
+      {show ? <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" /> : size >= 32 ? (name ? initialsOf(name) : <XIcon name="logo" size={18} className="text-ink" />) : null}
     </span>
   );
 }
@@ -386,7 +386,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
   const [edited, setEdited] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const text = edited ?? written.text;
-  const name = written.name ?? (written.handle ? written.handle : t("rich.x.you"));
+  const name = written.name ?? written.handle ?? "";
   const counter = xCounter(text);
   const busy = held ? held.busy === true : state?.status === "asking" || state?.status === "sending";
   const settled = !held && (state?.status === "posted" || state?.status === "discarded");
@@ -396,8 +396,16 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
   useEffect(() => {
     const element = field.current;
     if (!element) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
+    const fit = () => {
+      element.style.height = "auto";
+      if (element.scrollHeight > 0) element.style.height = `${element.scrollHeight}px`;
+    };
+    fit();
+    // a card mounted while hidden (a narrow inbox shows its list first) is fitted when it shows
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [text, state?.status]);
 
   const header = (
@@ -465,7 +473,7 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
             data-x-editor=""
             aria-label={t("rich.x.editor")}
             onChange={(event) => setEdited(event.target.value)}
-            className="block w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent text-[15px] leading-5 text-ink outline-none placeholder:text-ink-tertiary"
+            className="block min-h-10 w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent text-[15px] leading-5 text-ink outline-none placeholder:text-ink-tertiary"
           />
         )}
       </div>

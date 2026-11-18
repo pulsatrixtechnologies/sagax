@@ -75,6 +75,18 @@ try {
         }
       }
     }
+    // the Approvals inbox: the same card for a held X post call (#4638)
+    for (const lang of langs) {
+      for (const { id, label } of skins) {
+        await page.goto(`http://127.0.0.1:${port}/src/gallery/approvals-page.html?${new URLSearchParams({ skin: id, lang, n: "1", xpost: "1" })}`);
+        await page.waitForSelector("[data-approval-row], [data-inbox-x-post]", { timeout: 120_000 });
+        // a narrow window lists first: open the card
+        if (!(await page.locator("[data-inbox-x-post]").first().isVisible())) await page.locator("[data-approval-row]").first().click();
+        await page.waitForSelector("[data-inbox-x-post]", { state: "visible", timeout: 20_000 });
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(outDir, `inbox-${lang}-${label}-${width}.png`), fullPage: true });
+      }
+    }
     await page.close();
   }
   console.log(`captures in ${outDir}`);

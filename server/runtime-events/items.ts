@@ -66,7 +66,7 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
           });
           host.toolMessageByItem.delete(itemKey);
           // #4638: the bot's X call for an approved draft ended: the card turns posted or failed
-          host.finishXPost(event.threadId, toolName, event.ok === true, typeof event.output === "string" ? event.output : event.resultText, existing?.input);
+          host.finishXPost(event.threadId, toolName, event.ok === true, typeof event.output === "string" ? event.output : event.resultText, existing?.input, ctx.speaker);
           // a "Connect Microsoft Teams" card's proof: whose turn made this call, on which bot
           host.connectorSetupProofs.record({ threadId: event.threadId, botId: bot?.id, principalId: host.connectorSetupSpeaker(event.threadId), name: toolName, input: existing?.input, ok: event.ok === true, at: Date.now() });
           // a part run on another engine (run_with_engine) proves the card of the conversation it came from

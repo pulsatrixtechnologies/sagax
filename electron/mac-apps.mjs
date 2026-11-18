@@ -1,5 +1,5 @@
 // The Apple apps of the person's own Mac (Messages, Mail, Calendar, Contacts,
-// Reminders, Notes, Photos) as bot tools. One module for both modes:
+// Reminders, Notes, Photos, Music) as bot tools. One module for both modes:
 // - solo: the Sagax server on this Mac runs them (server/imessage/imessage-mcp.ts);
 // - organization server: the desktop app runs them for the server's bots
 //   through the desktop bridge (action "mac_app", electron/desktop-bridge.mjs).
@@ -24,6 +24,7 @@ export const MAC_APPS = [
   { id: "reminders", name: "Reminders", bundleId: "com.apple.reminders", fullDiskAccess: false },
   { id: "notes", name: "Notes", bundleId: "com.apple.Notes", fullDiskAccess: false },
   { id: "photos", name: "Photos", bundleId: "com.apple.Photos", fullDiskAccess: false },
+  { id: "music", name: "Music", bundleId: "com.apple.Music", fullDiskAccess: false },
 ];
 export const MAC_APP_IDS = MAC_APPS.map((app) => app.id);
 
@@ -48,6 +49,8 @@ const rruleSchema = { type: "string", description: "Repeat rule in RFC 5545 form
 const alarmsSchema = { type: "array", items: { type: "number" }, description: "Alerts, in minutes before the start (0 = at the start), up to 10." };
 const labeled = (what) => ({ type: "array", items: { anyOf: [{ type: "string" }, { type: "object", properties: { label: { type: "string" }, value: { type: "string" } }, required: ["value"], additionalProperties: false }] }, description: `${what}: a value, or { label, value } (label e.g. home, work, mobile). Replaces the card's list on an update.` });
 const PRIORITIES = ["none", "low", "medium", "high"];
+const playlistSchema = { type: "string", description: "A playlist id from mac_music_list_playlists, or its name." };
+const trackIdsSchema = idsSchema("track ids from mac_music_search");
 const photoAlbumSchema = { type: "string", description: "An album id from mac_photos_list_albums, or its name." };
 const filesSchema = { type: "array", items: { type: "string" }, description: "Files to attach: paths in this bot's folder (25 MB each at most)." };
 const scopeSchema = { type: "string", enum: ["this", "future", "all"], description: "For a repeating event: this occurrence only, this one and the ones after it, or the whole series. Default: this, for an occurrence id from mac_calendar_list; all, for a series id." };
@@ -180,6 +183,26 @@ export const MAC_APP_TOOLS = [
     inputSchema: obj({ name: { type: "string" }, folder: { type: "string", description: "A folder's name in Photos." }, ids: idsSchema("photo ids from mac_photos_search to add") }, ["name"]) },
   { name: "mac_photos_add_to_album", app: "photos", kind: "write", needs: "automation", description: `Add photos ${where} Photos to an album, by their ids.`,
     inputSchema: obj({ album: photoAlbumSchema, ids: idsSchema("photo ids from mac_photos_search") }, ["album", "ids"]) },
+  { name: "mac_music_now_playing", app: "music", kind: "read", needs: "automation", description: `What plays now ${where} Music: playing, paused or stopped, the track (title, artist, album, length, its id), the position, the playlist, the volume, shuffle and repeat.`,
+    inputSchema: obj({}) },
+  { name: "mac_music_play", app: "music", kind: "write", needs: "automation", description: `Play ${where} Music: a track by its id (from mac_music_search), an album of the library (album, and artist when two albums share a name; it plays in order through a playlist named "Sagax queue", refilled each time), a playlist (its id or name), or the best song match for query. With none of them, it resumes. shuffle turns shuffle on or off first.`,
+    inputSchema: obj({ id: idSchema("A track id from mac_music_search."), album: { type: "string", description: "An album's name, as mac_music_search gives it." }, artist: { type: "string", description: "The album's artist." }, playlist: playlistSchema, query: { type: "string", description: "Words: the best song match plays." }, shuffle: { type: "boolean" } }) },
+  { name: "mac_music_pause", app: "music", kind: "write", needs: "automation", description: `Pause ${where} Music.`,
+    inputSchema: obj({}) },
+  { name: "mac_music_next", app: "music", kind: "write", needs: "automation", description: `Skip to the next track ${where} Music.`,
+    inputSchema: obj({}) },
+  { name: "mac_music_previous", app: "music", kind: "write", needs: "automation", description: `Go back to the previous track ${where} Music (or the start of this one).`,
+    inputSchema: obj({}) },
+  { name: "mac_music_set_volume", app: "music", kind: "write", needs: "automation", description: `Set the volume ${where} Music, from 0 to 100 (Music's own volume, not the Mac's).`,
+    inputSchema: obj({ volume: { type: "number", description: "0 to 100." } }, ["volume"]) },
+  { name: "mac_music_search", app: "music", kind: "read", needs: "automation", description: `Search the library ${where} Music: songs (default), albums, artists or playlists, by words. Songs come with their ids for mac_music_play and the playlist tools; albums and artists with their names for mac_music_play. A result with next has more: pass it back as cursor.`,
+    inputSchema: obj({ query: { type: "string" }, kind: { type: "string", enum: ["songs", "albums", "artists", "playlists"] }, limit: limit(100), cursor: cursorSchema }, ["query"]) },
+  { name: "mac_music_list_playlists", app: "music", kind: "read", needs: "automation", description: `List the playlists ${where} Music, with their ids, how many tracks each holds and whether it is a smart playlist (which fills itself).`,
+    inputSchema: obj({ limit: limit(200), cursor: cursorSchema }) },
+  { name: "mac_music_create_playlist", app: "music", kind: "write", needs: "automation", description: `Create a playlist ${where} Music, with tracks by their ids if wanted.`,
+    inputSchema: obj({ name: { type: "string" }, ids: trackIdsSchema }, ["name"]) },
+  { name: "mac_music_add_to_playlist", app: "music", kind: "write", needs: "automation", description: `Add tracks ${where} Music to a playlist (not a smart one), by their ids.`,
+    inputSchema: obj({ playlist: playlistSchema, ids: trackIdsSchema }, ["playlist", "ids"]) },
 ];
 
 const TOOL_BY_NAME = new Map(MAC_APP_TOOLS.map((tool) => [tool.name, tool]));
@@ -641,6 +664,31 @@ export function macAppOperation(name, args) {
       return without({ name: nameArg(a.name), folder: str(a.folder, "folder", { max: 200 }), ids: idList(a.ids, "ids", { required: false }) });
     case "mac_photos_add_to_album":
       return { album: str(a.album, "album", { max: 300, required: true }), ids: idList(a.ids) };
+    case "mac_music_now_playing":
+    case "mac_music_pause":
+    case "mac_music_next":
+    case "mac_music_previous":
+      return {};
+    case "mac_music_play": {
+      const op = without({ id: str(a.id, "id", { max: 100 }), album: str(a.album, "album", { max: 300 }), artist: str(a.artist, "artist", { max: 300 }), playlist: str(a.playlist, "playlist", { max: 300 }), query: str(a.query, "query", { max: 200 }), shuffle: optBool(a.shuffle) });
+      if (["id", "album", "playlist", "query"].filter((key) => op[key] !== undefined).length > 1) bad("give one of id, album, playlist or query");
+      if (op.artist !== undefined && op.album === undefined) bad("artist goes with album");
+      return op;
+    }
+    case "mac_music_set_volume":
+      if (typeof a.volume !== "number" || !Number.isFinite(a.volume) || a.volume < 0 || a.volume > 100) bad("volume is a number from 0 to 100");
+      return { volume: Math.round(a.volume) };
+    case "mac_music_search": {
+      const kind = a.kind === undefined || a.kind === null || a.kind === "" ? "songs" : a.kind;
+      if (!["songs", "albums", "artists", "playlists"].includes(kind)) bad("kind is songs, albums, artists or playlists");
+      return { query: str(a.query, "query", { max: 200, required: true }), kind, limit: num(a.limit, 25, 100), offset: cursor(a.cursor ?? a.offset) };
+    }
+    case "mac_music_list_playlists":
+      return { limit: num(a.limit, 100, 200), offset: cursor(a.cursor ?? a.offset) };
+    case "mac_music_create_playlist":
+      return without({ name: nameArg(a.name), ids: idList(a.ids, "ids", { required: false }) });
+    case "mac_music_add_to_playlist":
+      return { playlist: str(a.playlist, "playlist", { max: 300, required: true }), ids: idList(a.ids) };
     default:
       return bad(`unknown tool ${name}`);
   }
@@ -688,6 +736,13 @@ export function macAppTarget(name, args) {
     case "mac_notes_create_folder": return `Notes: create the folder "${a.name ?? ""}"`;
     case "mac_notes_update_folder": return `Notes: rename "${a.name ?? ""}" to "${a.newName ?? ""}"`;
     case "mac_notes_delete_folder": return `Notes: delete the folder "${a.name ?? ""}"`;
+    case "mac_music_play": return a.id !== undefined ? "Music: play a track" : a.album ? `Music: play the album "${a.album}"` : a.playlist ? `Music: play ${MUSIC_ID.test(String(a.playlist)) ? "a playlist" : `the playlist "${a.playlist}"`}` : a.query ? `Music: play "${a.query}"` : "Music: resume";
+    case "mac_music_pause": return "Music: pause";
+    case "mac_music_next": return "Music: next track";
+    case "mac_music_previous": return "Music: previous track";
+    case "mac_music_set_volume": return `Music: set the volume to ${a.volume ?? ""}`;
+    case "mac_music_create_playlist": return `Music: create the playlist "${a.name ?? ""}"${list(a.ids).length ? `, with ${counted(list(a.ids).length, "track")}` : ""}`;
+    case "mac_music_add_to_playlist": return `Music: add ${counted(list(a.ids).length, "track")} to ${typeof a.playlist === "string" && !MUSIC_ID.test(a.playlist) ? `"${a.playlist}"` : "a playlist"}`;
     case "mac_photos_create_album": return `Photos: create the album "${a.name ?? ""}"${list(a.ids).length ? `, with ${counted(list(a.ids).length, "photo")}` : ""}`;
     case "mac_photos_add_to_album": return `Photos: add ${counted(list(a.ids).length, "photo")} to ${typeof a.album === "string" && !PHOTOS_ID.test(a.album) ? `"${a.album}"` : "an album"}`;
     case "mac_mail_send":
@@ -1023,6 +1078,59 @@ function row(m){return {id:m.id(),filename:opt(m,'filename'),title:opt(m,'name')
 function addTo(al,ids){var items=[],failed=[];ids.forEach(function(id){try{items.push(itemFor(id))}catch(e){failed.push({id:id,error:'Photos has no photo with that id. Search again.'})}});
 if(items.length)P.add(items,{to:al});return {added:items.length,failed:failed}}
 `;
+// Music: tracks and playlists are named by Music's persistent ids (16 hex
+// digits, never shown on a card). Lists stop at MAC_APP_BUDGET_MS with a cursor.
+/** The playlist an album plays through (Music cannot queue an album by itself). */
+export const MUSIC_QUEUE_PLAYLIST = "Sagax queue";
+const MUSIC_ID = /^[0-9A-F]{16}$/i;
+const MUSIC = PRELUDE + `var M=Application('Music');var T0=Date.now();function late(ms){return Date.now()-T0>ms}
+function opt(e,k){try{var v=e[k]();return v===undefined||v===''?null:v}catch(x){return null}}
+function lib(){return M.libraryPlaylists[0]}
+function trackRow(t){return {id:opt(t,'persistentID'),name:opt(t,'name'),artist:opt(t,'artist'),album:opt(t,'album'),duration:opt(t,'duration'),year:opt(t,'year')}}
+function trackFor(id){var l=lib().tracks.whose({persistentID:id})();if(!l.length)throw new Error('Music has no track with that id in the library. Search again.');return l[0]}
+function playlistFor(x){var l=M.userPlaylists.whose({persistentID:x})();if(l.length)return l[0];l=M.userPlaylists.whose({name:x})();if(l.length)return l[0];throw new Error('Music has no playlist '+x+'. mac_music_list_playlists gives them.')}
+function now(){var r={state:String(opt(M,'playerState')||'stopped'),volume:opt(M,'soundVolume'),shuffle:opt(M,'shuffleEnabled'),repeat:opt(M,'songRepeat'),track:null,position:null,playlist:null};
+if(r.state!=='stopped'){try{r.track=trackRow(M.currentTrack())}catch(e){}r.position=opt(M,'playerPosition');try{r.playlist=M.currentPlaylist().name()}catch(e){}var st=opt(M,'currentStreamTitle');if(st)r.stream=st}return r}
+function addTracks(p,ids){var done=0,failed=[];ids.forEach(function(id){try{M.duplicate(trackFor(id),{to:p});done++}catch(e){failed.push({id:id,error:String(e&&e.message||e)})}});return {added:done,failed:failed}}
+`;
+const MUSIC_SCRIPTS = {
+  mac_music_now_playing: MUSIC + `function main(a){return now()}`,
+  mac_music_play: MUSIC + `function main(a){if(a.shuffle!==undefined)M.shuffleEnabled=a.shuffle;
+if(a.id){trackFor(a.id).play();return now()}
+if(a.playlist){playlistFor(a.playlist).play();return now()}
+if(a.album){var f=a.artist?{_and:[{album:a.album},{artist:a.artist}]}:{album:a.album};var sel=lib().tracks.whose(f);var ids=sel.persistentID();
+if(!ids.length)throw new Error('Music has no album '+a.album+(a.artist?' by '+a.artist:'')+' in the library. mac_music_search with kind albums gives the names.');
+var disc=sel.discNumber(),num=sel.trackNumber();var order=ids.map(function(_,i){return i});order.sort(function(x,y){return ((disc[x]||1)-(disc[y]||1))||((num[x]||0)-(num[y]||0))});
+var l=M.userPlaylists.whose({name:'${MUSIC_QUEUE_PLAYLIST}'})();var q=l.length?l[0]:M.make({new:'userPlaylist',withProperties:{name:'${MUSIC_QUEUE_PLAYLIST}'}});
+var old=q.tracks();for(var i=old.length-1;i>=0;i--){try{M.delete(old[i])}catch(e){}}
+order.forEach(function(i){M.duplicate(trackFor(ids[i]),{to:q})});q.play();var r=now();r.queued=order.length;return r}
+if(a.query){var hits=M.search(lib(),{for:a.query,only:'songs'})||[];if(!hits.length)throw new Error('Music found no song for '+a.query+' in the library.');hits[0].play();return now()}
+M.play();return now()}`,
+  mac_music_pause: MUSIC + `function main(a){M.pause();return now()}`,
+  mac_music_next: MUSIC + `function main(a){M.nextTrack();return now()}`,
+  mac_music_previous: MUSIC + `function main(a){M.previousTrack();return now()}`,
+  mac_music_set_volume: MUSIC + `function main(a){M.soundVolume=a.volume;return {volume:opt(M,'soundVolume')}}`,
+  // Songs page over Music's own search; albums and artists are the distinct
+  // ones among the songs it finds, from the cursor on.
+  mac_music_search: MUSIC + `function main(a){var out=[];var r;
+if(a.kind==='playlists'){var sel=M.userPlaylists.whose({name:{_contains:a.query}});var ids=sel.persistentID(),names=sel.name();var end=Math.min(ids.length,a.offset+a.limit);
+for(var p=a.offset;p<end;p++)out.push({id:ids[p],name:names[p]});r={playlists:out,total:ids.length};if(end<ids.length)r.next=String(end);return r}
+var hits=M.search(lib(),{for:a.query,only:a.kind==='songs'?'songs':a.kind})||[];var seen={};var i=a.offset;
+for(;i<hits.length&&out.length<a.limit;i++){if(out.length&&late(${MAC_APP_BUDGET_MS}))break;var t=hits[i];
+if(a.kind==='songs'){out.push(trackRow(t));continue}
+var artist=opt(t,'albumArtist')||opt(t,'artist');var key=a.kind==='albums'?JSON.stringify([opt(t,'album')||'',artist||'']):(artist||'');if(!key||key==='["",""]'||seen[key])continue;seen[key]=1;
+out.push(a.kind==='albums'?{album:opt(t,'album'),artist:artist,year:opt(t,'year')}:{artist:artist})}
+r={};r[a.kind]=out;r.total=hits.length;if(i<hits.length)r.next=String(i);return r}`,
+  mac_music_list_playlists: MUSIC + `function main(a){var ids=M.userPlaylists.persistentID(),names=M.userPlaylists.name(),smart=[];try{smart=M.userPlaylists.smart()}catch(e){}
+var end=Math.min(ids.length,a.offset+a.limit);var out=[];for(var i=a.offset;i<end;i++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=i;break}var o={id:ids[i],name:names[i],smart:smart[i]===true,tracks:null};
+if(!late(${HALF})){try{o.tracks=M.userPlaylists.whose({persistentID:ids[i]})()[0].tracks.length}catch(e){}}out.push(o)}
+var r={playlists:out,total:ids.length};if(end<ids.length)r.next=String(end);return r}`,
+  mac_music_create_playlist: MUSIC + `function main(a){var p=M.make({new:'userPlaylist',withProperties:{name:a.name}});var r={created:true,id:opt(p,'persistentID'),name:a.name,added:0,failed:[]};
+if(a.ids&&a.ids.length){var x=addTracks(p,a.ids);r.added=x.added;r.failed=x.failed}return r}`,
+  mac_music_add_to_playlist: MUSIC + `function main(a){var p=playlistFor(a.playlist);if(opt(p,'smart')===true)throw new Error('The playlist '+p.name()+' is a smart playlist: Music fills it by its rules. Add to another playlist.');
+var x=addTracks(p,a.ids);return {added:x.added,failed:x.failed,playlist:p.name()}}`,
+};
+
 const PHOTOS_SCRIPTS = {
   mac_photos_list_albums: PHOTOS + `function main(a){var all=walkAlbums();var end=Math.min(all.length,a.offset+a.limit);var out=[];
 for(var i=a.offset;i<end;i++){if(out.length&&late(${MAC_APP_BUDGET_MS})){end=i;break}var o=all[i];o.count=null;if(!late(${HALF})){try{o.count=P.albums.byId(o.id).mediaItems.length}catch(e){}}out.push(o)}
@@ -1186,6 +1294,7 @@ else{try{acct=N.defaultAccount()}catch(e){acct=N.accounts()[0]}}acct.folders.pus
   mac_notes_update_folder: NOTES + `function main(a){folderNamed(a.name).name=a.newName;return {updated:true,name:a.newName};}`,
   mac_notes_delete_folder: NOTES + `function main(a){N.delete(folderNamed(a.name));return {deleted:1,name:a.name};}`,
   ...PHOTOS_SCRIPTS,
+  ...MUSIC_SCRIPTS,
 };
 
 /** Light reads the setup page's Test button runs (names and counts only). */
@@ -1197,6 +1306,7 @@ export const MAC_APP_TEST_SCRIPTS = {
   notes: PRELUDE + "function main(a){var N=Application('Notes');return {names:N.folders().map(function(x){return x.name()})};}",
   messages: PRELUDE + "function main(a){var M=Application('Messages');var n=0;try{n=M.chats.length}catch(e){}return {names:[],count:n};}",
   photos: PRELUDE + "function main(a){var P=Application('Photos');return {names:P.albums.name(),count:P.mediaItems.length};}",
+  music: PRELUDE + "function main(a){var M=Application('Music');return {names:M.userPlaylists.name(),count:M.libraryPlaylists[0].tracks.length};}",
 };
 
 /** osascript's argv for one call: constant script, one JSON argument. */

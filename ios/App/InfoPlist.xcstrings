@@ -1,6 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "NSAppleMusicUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax searches Apple Music and plays the song, album or playlist a bot asked for, in the Sagax app."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax cherche dans Apple Music et fait jouer, dans l'app Sagax, la chanson, l'album ou la liste de lecture qu'un bot a demandé."
+          }
+        }
+      }
+    },
     "NSLocationWhenInUseUsageDescription": {
       "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
       "extractionState": "manual",

@@ -12359,6 +12359,22 @@
         }
       }
     },
+    "Apple Music": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Music"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Music"
+          }
+        }
+      }
+    },
     "Applies instantly and is remembered on this machine.": {
       "localizations": {
         "en": {
@@ -35921,6 +35937,22 @@
         }
       }
     },
+    "Go back to the previous song.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go back to the previous song."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à la chanson précédente."
+          }
+        }
+      }
+    },
     "Go through the steps again for %@. Everything starts filled in from the bot.": {
       "localizations": {
         "en": {
@@ -54915,6 +54947,38 @@
         }
       }
     },
+    "Pause the music.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause the music."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre la musique en pause."
+          }
+        }
+      }
+    },
+    "Play music in Sagax.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play music in Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faire jouer de la musique dans Sagax."
+          }
+        }
+      }
+    },
     "Product change": {
       "localizations": {
         "en": {
@@ -54963,6 +55027,54 @@
         }
       }
     },
+    "Resume the music.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume the music."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre la musique."
+          }
+        }
+      }
+    },
+    "Search Apple Music for “%@”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Apple Music for “%@”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chercher « %@ » dans Apple Music."
+          }
+        }
+      }
+    },
+    "See what plays in Sagax.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See what plays in Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir ce qui joue dans Sagax."
+          }
+        }
+      }
+    },
     "Send %lld photos from your library.": {
       "localizations": {
         "en": {
@@ -54991,6 +55103,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Envoyer les détails de %lld photos (date, taille, lieu)."
+          }
+        }
+      }
+    },
+    "Skip to the next song.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip to the next song."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passer à la chanson suivante."
           }
         }
       }

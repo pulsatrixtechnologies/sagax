@@ -5,7 +5,7 @@ import Foundation
 // the routes are server/routes/phone-tools.ts. Everything here is pure: the
 // requests, the card's choices, when a request may run, and the shaping of
 // each answer so the phone sends only what was asked. The iOS calls
-// (Core Location, Contacts, EventKit, Home, Alarms, Photos, PhotoKit, Shortcuts, the pasteboard)
+// (Core Location, Contacts, EventKit, Home, Alarms, Photos, PhotoKit, MusicKit, Shortcuts, the pasteboard)
 // live in the app target (Features/PhoneTools).
 
 /// The tools a bot may ask this phone for.
@@ -14,6 +14,8 @@ public enum PhoneTool: String, CaseIterable, Codable, Sendable, Identifiable {
     /// The photo library itself (PhotoKit), read with the person's own
     /// permission: albums, a search, details, and photos sent as images.
     case photoLibrary = "photo_library"
+    /// Apple Music (MusicKit): what plays in Sagax, a search, playback.
+    case music
     case shortcut, clipboard, status
     /// "Scanner avec l'iPhone" (audit row 84): only the person's own
     /// computer asks it, from the vault's New card form; never a bot.
@@ -80,7 +82,8 @@ public struct PhoneToolRequest: Decodable, Equatable, Sendable, Identifiable {
     /// Why the bot asks, as it wrote it (shown on the card).
     public var reason: String? { string("reason") }
     /// `create` on reminders, the calendar and alarms; `run` on home;
-    /// `list_albums`, `search`, `read` or `export` on the photo library; nil otherwise.
+    /// `list_albums`, `search`, `read` or `export` on the photo library;
+    /// `now_playing`, `search`, `play`, `pause`, `resume`, `next` or `previous` on music; nil otherwise.
     public var action: String? { string("action") }
     public var writes: Bool { access == "write" }
 }
@@ -302,6 +305,24 @@ public struct PhoneLibraryPhoto: Equatable, Sendable {
     }
 }
 
+/// One song, album or playlist of Apple Music.
+public struct PhoneMusicItem: Equatable, Sendable {
+    public var id: String
+    public var kind: String
+    public var title: String
+    public var artist: String?
+    public var album: String?
+    public var duration: Double?
+    public init(id: String, kind: String, title: String, artist: String? = nil, album: String? = nil, duration: Double? = nil) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.duration = duration
+    }
+}
+
 /// One album of the library: a person's own, or one iOS keeps (smart).
 public struct PhoneLibraryAlbum: Equatable, Sendable {
     public var id: String
@@ -452,6 +473,39 @@ public enum PhoneToolShaping {
         if let next { out["next"] = .string(String(next)) }
         if !failed.isEmpty { out["failed"] = .array(failed.map { .object(["id": .string(String($0.id.prefix(300))), "error": .string(String($0.error.prefix(200)))]) }) }
         return .object(out)
+    }
+
+    // MARK: Apple Music (shared/phone-tools.ts music)
+
+    public static func music(results: [PhoneMusicItem], limit: Int) -> WidgetJSON {
+        .object(["results": .array(results.prefix(Swift.min(Swift.max(limit, 1), 25)).map(musicRow))])
+    }
+
+    public static func music(played: PhoneMusicItem) -> WidgetJSON {
+        .object(["played": musicRow(played), "state": .string("playing")])
+    }
+
+    public static func music(state: String, nowPlaying: PhoneMusicItem?, position: Double?) -> WidgetJSON {
+        var out: [String: WidgetJSON] = ["state": .string(["playing", "paused", "stopped", "interrupted", "seeking"].contains(state) ? state : "stopped")]
+        if let nowPlaying {
+            var row: [String: WidgetJSON] = ["title": .string(String(nowPlaying.title.prefix(200)))]
+            if let artist = nowPlaying.artist, !artist.isEmpty { row["artist"] = .string(String(artist.prefix(200))) }
+            out["nowPlaying"] = .object(row)
+        }
+        if let position, position >= 0 { out["position"] = .number((position * 10).rounded() / 10) }
+        return .object(out)
+    }
+
+    private static func musicRow(_ item: PhoneMusicItem) -> WidgetJSON {
+        var row: [String: WidgetJSON] = [
+            "id": .string(String(item.id.prefix(200))),
+            "kind": .string(["song", "album", "playlist"].contains(item.kind) ? item.kind : "song"),
+            "title": .string(String(item.title.prefix(200))),
+        ]
+        if let artist = item.artist, !artist.isEmpty { row["artist"] = .string(String(artist.prefix(200))) }
+        if let album = item.album, !album.isEmpty { row["album"] = .string(String(album.prefix(200))) }
+        if let duration = item.duration, duration > 0 { row["duration"] = .number(duration.rounded()) }
+        return .object(row)
     }
 
     /// The longest side of an exported photo: 2048 unless the bot asked

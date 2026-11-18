@@ -42,6 +42,7 @@ import {
   macAppToolWrites,
   macAppSavesFiles,
   exportPhotos,
+  MUSIC_QUEUE_PLAYLIST,
   readMacAppSettings,
   runMacAppCall,
   testMacApp,
@@ -63,6 +64,7 @@ test("the tools: single underscore names, one script each, a kind and a need on 
     "mac_contacts_create", "mac_contacts_create_group", "mac_contacts_delete", "mac_contacts_delete_group", "mac_contacts_list_groups", "mac_contacts_read", "mac_contacts_search", "mac_contacts_update", "mac_contacts_update_group",
     "mac_mail_create_draft", "mac_mail_delete", "mac_mail_forward", "mac_mail_list_mailboxes", "mac_mail_list_rules", "mac_mail_move", "mac_mail_read", "mac_mail_read_attachment", "mac_mail_reply", "mac_mail_search", "mac_mail_send", "mac_mail_update", "mac_mail_update_rule",
     "mac_messages_list_chats", "mac_messages_read", "mac_messages_read_attachment", "mac_messages_send",
+    "mac_music_add_to_playlist", "mac_music_create_playlist", "mac_music_list_playlists", "mac_music_next", "mac_music_now_playing", "mac_music_pause", "mac_music_play", "mac_music_previous", "mac_music_search", "mac_music_set_volume",
     "mac_notes_create", "mac_notes_create_folder", "mac_notes_delete", "mac_notes_delete_folder", "mac_notes_list_folders", "mac_notes_move", "mac_notes_read", "mac_notes_search", "mac_notes_update", "mac_notes_update_folder",
     "mac_photos_add_to_album", "mac_photos_create_album", "mac_photos_export", "mac_photos_list_albums", "mac_photos_read", "mac_photos_search",
     "mac_reminders_complete", "mac_reminders_create", "mac_reminders_create_list", "mac_reminders_delete", "mac_reminders_delete_list", "mac_reminders_list", "mac_reminders_list_lists", "mac_reminders_update", "mac_reminders_update_list",
@@ -80,12 +82,12 @@ test("the tools: single underscore names, one script each, a kind and a need on 
     mac_mail_send: "send", mac_mail_reply: "send", mac_mail_forward: "send",
     mac_mail_create_draft: "write", mac_mail_list_rules: "read", mac_mail_update_rule: "write",
   });
-  // The class follows the verb: list, search, read and export read (an
+  // The class follows the verb: list, search, read, now (playing) and export read (an
   // export copies photos into the conversation, Photos is unchanged); delete
   // deletes; send, reply and forward send.
   for (const tool of MAC_APP_TOOLS) {
     const verb = tool.name.split("_")[2];
-    const expected = ["list", "search", "read", "export"].includes(verb) ? "read" : verb === "delete" ? "delete" : ["send", "reply", "forward"].includes(verb) ? "send" : "write";
+    const expected = ["list", "search", "read", "export", "now"].includes(verb) ? "read" : verb === "delete" ? "delete" : ["send", "reply", "forward"].includes(verb) ? "send" : "write";
     assert.equal(tool.kind, expected, tool.name);
   }
   assert.equal(MAC_APP_TOOLS.find((tool) => tool.name === "mac_messages_read").needs, "fullDiskAccess");
@@ -609,6 +611,16 @@ const SAMPLES = {
   mac_photos_export: { ids: ["PH-1"], maxSize: 1024 },
   mac_photos_create_album: { name: "Picks", ids: ["PH-1"] },
   mac_photos_add_to_album: { album: "Picks", ids: ["PH-1", "PH-2"] },
+  mac_music_now_playing: {},
+  mac_music_play: { album: "Blue", artist: "Joni", shuffle: false },
+  mac_music_pause: {},
+  mac_music_next: {},
+  mac_music_previous: {},
+  mac_music_set_volume: { volume: 40 },
+  mac_music_search: { query: "river", kind: "albums", cursor: "25" },
+  mac_music_list_playlists: { limit: 50 },
+  mac_music_create_playlist: { name: "Road", ids: ["0123456789ABCDEF"] },
+  mac_music_add_to_playlist: { playlist: "Road", ids: ["0123456789ABCDEF"] },
 };
 
 test("every tool has a bounded operation that validates twice to the same thing (the relay re-checks it)", () => {
@@ -1279,4 +1291,122 @@ test("Photos: an Automation refusal names Photos and the Automation pane; a time
   assert.equal(said.denied, true);
   assert.match(said.message, /control Photos.*Automation and turn on Photos under Sagax/);
   assert.match(macAppErrorText("photos", Object.assign(new Error("x"), { killed: true })).message, /Photos did not answer in time.*an album, a date range/);
+});
+
+// --- Music (2026-11-17): a stand-in for Music's scripting objects.
+function fakeMusic() {
+  const track = (id, name, album, artist, disc, number) => ({ persistentID: () => id, name: () => name, album: () => album, artist: () => artist, albumArtist: () => artist, duration: () => 200, year: () => 1971, discNumber: () => disc, trackNumber: () => number, play: () => { log.played.push(id); state.player = "playing"; state.current = id; } });
+  const log = { played: [], duplicated: [], deleted: [], made: [] };
+  const state = { player: "stopped", current: null, volume: 50 };
+  const tracks = [
+    track("00000000000000A2", "California", "Blue", "Joni", 1, 2),
+    track("00000000000000A1", "All I Want", "Blue", "Joni", 1, 1),
+    track("00000000000000B1", "River", "Blue", "Joni", 2, 1),
+    track("00000000000000C1", "River", "Other", "Someone", 1, 1),
+  ];
+  const coll = (list) => {
+    const fn = () => list.slice();
+    Object.defineProperty(fn, "length", { get: () => list.length });
+    for (const key of ["persistentID", "name", "smart", "discNumber", "trackNumber"]) Object.defineProperty(fn, key, { value: () => list.map((entry) => entry[key]?.()), writable: true, configurable: true });
+    fn.whose = (filter) => {
+      const test = (entry, f) => (f._and ? f._and.every((part) => test(entry, part)) : Object.entries(f).every(([key, value]) => (value && typeof value === "object" && value._contains !== undefined ? String(entry[key]()).includes(value._contains) : entry[key]() === value)));
+      return coll(list.filter((entry) => test(entry, filter)));
+    };
+    list.forEach((entry, index) => { fn[index] = entry; });
+    return fn;
+  };
+  const playlist = (id, name, smart = false) => { const own = []; const self = { persistentID: () => id, name: () => name, smart: () => smart, play: () => { log.played.push(name); state.player = "playing"; }, own }; self.tracks = () => own.slice(); Object.defineProperty(self.tracks, "length", { get: () => own.length }); return self; };
+  const playlists = [playlist("1111111111111111", "Road"), playlist("2222222222222222", "Top 25", true)];
+  const music = {
+    libraryPlaylists: [{ tracks: coll(tracks) }],
+    get userPlaylists() { return coll(playlists); },
+    playerState: () => state.player,
+    soundVolume: () => state.volume,
+    shuffleEnabled: () => false,
+    songRepeat: () => "off",
+    playerPosition: () => 12,
+    currentTrack: () => tracks.find((entry) => entry.persistentID() === state.current) ?? (() => { throw new Error("none"); })(),
+    currentPlaylist: () => ({ name: () => "Library" }),
+    search: (_lib, { for: words, only }) => { log.only = only; return tracks.filter((entry) => `${entry.name()} ${entry.album()}`.includes(words)); },
+    duplicate: (entry, { to }) => { log.duplicated.push([entry.persistentID(), to.name()]); to.own.push(entry); },
+    delete: (entry) => log.deleted.push(entry.persistentID()),
+    make: ({ withProperties }) => { log.made.push(withProperties.name); const made = playlist("3333333333333333", withProperties.name); playlists.push(made); return made; },
+    play: () => { state.player = "playing"; log.played.push("resume"); },
+    pause: () => { state.player = "paused"; },
+    nextTrack: () => log.played.push("next"),
+    previousTrack: () => log.played.push("previous"),
+  };
+  Object.defineProperty(music, "soundVolume", { get: () => Object.assign(() => state.volume), set: (value) => { state.volume = value; }, configurable: true });
+  Object.defineProperty(music, "shuffleEnabled", { get: () => () => false, set: (value) => { log.shuffle = value; }, configurable: true });
+  return { music, log, state };
+}
+const runMusic = (name, op, music) => JSON.parse(new Function("Application", `${MAC_APP_SCRIPTS[name]}\nreturn run;`)(() => music)([JSON.stringify(macAppScriptArgs(name, macAppOperation(name, op)))]));
+
+test("Music: an album plays in disc and track order through the queue playlist; a track, a playlist and a query play; now playing reads the state", () => {
+  const { music, log, state } = fakeMusic();
+  assert.deepEqual(runMusic("mac_music_now_playing", {}, music).state, "stopped");
+  const album = runMusic("mac_music_play", { album: "Blue", artist: "Joni", shuffle: false }, music);
+  assert.equal(album.queued, 3);
+  assert.equal(log.shuffle, false);
+  assert.deepEqual(log.made, [MUSIC_QUEUE_PLAYLIST]);
+  assert.deepEqual(log.duplicated.map(([id]) => id), ["00000000000000A1", "00000000000000A2", "00000000000000B1"]);
+  assert.deepEqual(log.played, [MUSIC_QUEUE_PLAYLIST]);
+  // A second album refills the same playlist, never a new one.
+  runMusic("mac_music_play", { album: "Blue" }, music);
+  assert.deepEqual(log.made, [MUSIC_QUEUE_PLAYLIST]);
+  assert.equal(log.deleted.length, 3);
+  assert.throws(() => runMusic("mac_music_play", { album: "Nope" }, music), /Music has no album Nope/);
+  const one = runMusic("mac_music_play", { id: "00000000000000C1" }, music);
+  assert.equal(one.track.id, "00000000000000C1");
+  assert.equal(one.state, "playing");
+  runMusic("mac_music_play", { playlist: "Road" }, music);
+  assert.equal(log.played.at(-1), "Road");
+  runMusic("mac_music_play", { query: "California" }, music);
+  assert.equal(log.played.at(-1), "00000000000000A2");
+  runMusic("mac_music_play", {}, music);
+  assert.equal(log.played.at(-1), "resume");
+  assert.equal(runMusic("mac_music_pause", {}, music).state, "paused");
+  runMusic("mac_music_next", {}, music);
+  runMusic("mac_music_previous", {}, music);
+  assert.deepEqual(log.played.slice(-2), ["next", "previous"]);
+  assert.deepEqual(runMusic("mac_music_set_volume", { volume: 30 }, music), { volume: 30 });
+  assert.equal(state.volume, 30);
+});
+
+test("Music: search gives songs with ids, distinct albums or artists, and playlists by name; playlists are made and filled, never a smart one", () => {
+  const { music, log } = fakeMusic();
+  const songs = runMusic("mac_music_search", { query: "River" }, music);
+  assert.equal(log.only, "songs");
+  assert.deepEqual(songs.songs.map((t) => t.id), ["00000000000000B1", "00000000000000C1"]);
+  const albums = runMusic("mac_music_search", { query: "River", kind: "albums" }, music);
+  assert.deepEqual(albums.albums.map((a) => [a.album, a.artist]), [["Blue", "Joni"], ["Other", "Someone"]]);
+  const paged = runMusic("mac_music_search", { query: "Blue", limit: 1 }, music);
+  assert.equal(paged.next, "1");
+  assert.deepEqual(runMusic("mac_music_search", { query: "Ro", kind: "playlists" }, music).playlists, [{ id: "1111111111111111", name: "Road" }]);
+  const lists = runMusic("mac_music_list_playlists", {}, music);
+  assert.deepEqual(lists.playlists.map((p) => [p.name, p.smart]), [["Road", false], ["Top 25", true]]);
+  const made = runMusic("mac_music_create_playlist", { name: "Trip", ids: ["00000000000000A1", "FFFFFFFFFFFFFFFF"] }, music);
+  assert.equal(made.added, 1);
+  assert.match(made.failed[0].error, /no track with that id/);
+  assert.equal(runMusic("mac_music_add_to_playlist", { playlist: "Road", ids: ["00000000000000A1"] }, music).added, 1);
+  assert.throws(() => runMusic("mac_music_add_to_playlist", { playlist: "Top 25", ids: ["00000000000000A1"] }, music), /smart playlist/);
+  assert.throws(() => runMusic("mac_music_add_to_playlist", { playlist: "Nope", ids: ["00000000000000A1"] }, music), /no playlist Nope/);
+});
+
+test("Music: operations are bounded, the card never shows an id, and reads never ask", () => {
+  assert.throws(() => macAppOperation("mac_music_play", { id: "0123456789ABCDEF", album: "Blue" }), /one of id, album, playlist or query/);
+  assert.throws(() => macAppOperation("mac_music_play", { artist: "Joni" }), /artist goes with album/);
+  assert.throws(() => macAppOperation("mac_music_set_volume", { volume: 120 }), /0 to 100/);
+  assert.throws(() => macAppOperation("mac_music_search", { query: "x", kind: "genres" }), /kind is/);
+  assert.equal(macAppOperation("mac_music_search", { query: "x" }).kind, "songs");
+  assert.equal(macAppTarget("mac_music_play", { id: "0123456789ABCDEF" }), "Music: play a track");
+  assert.equal(macAppTarget("mac_music_play", { playlist: "0123456789ABCDEF" }), "Music: play a playlist");
+  assert.equal(macAppTarget("mac_music_play", { playlist: "Road" }), 'Music: play the playlist "Road"');
+  assert.equal(macAppTarget("mac_music_play", {}), "Music: resume");
+  assert.equal(macAppTarget("mac_music_add_to_playlist", { playlist: "0123456789ABCDEF", ids: ["a", "b"] }), "Music: add 2 tracks to a playlist");
+  for (const name of ["mac_music_now_playing", "mac_music_search", "mac_music_list_playlists"]) assert.equal(macAppToolWrites(name), false, name);
+  for (const name of ["mac_music_play", "mac_music_pause", "mac_music_next", "mac_music_previous", "mac_music_set_volume", "mac_music_create_playlist", "mac_music_add_to_playlist"]) assert.equal(macAppToolWrites(name), true, name);
+  assert.ok(!MAC_APP_SCRIPTS.mac_music_search.includes("\u0000"));
+  const denied = Object.assign(new Error("Command failed"), { stderr: "execution error: Not authorized to send Apple events to Music. (-1743)" });
+  assert.match(macAppErrorText("music", denied).message, /control Music.*Automation and turn on Music under Sagax/);
 });

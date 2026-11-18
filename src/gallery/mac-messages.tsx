@@ -82,6 +82,7 @@ const GALLERY_TOOLS: Record<MacAppSetupId, Array<{ tool: string; needs: MacAppPe
   reminders: ["mac_reminders_list_lists", "mac_reminders_list", "mac_reminders_create", "mac_reminders_update", "mac_reminders_complete", "mac_reminders_delete", "mac_reminders_create_list", "mac_reminders_update_list", "mac_reminders_delete_list"].map((tool) => ({ tool, needs: "automation" as const })),
   notes: ["mac_notes_list_folders", "mac_notes_search", "mac_notes_read", "mac_notes_create", "mac_notes_update", "mac_notes_move", "mac_notes_delete", "mac_notes_create_folder", "mac_notes_update_folder", "mac_notes_delete_folder"].map((tool) => ({ tool, needs: "automation" as const })),
   photos: ["mac_photos_list_albums", "mac_photos_search", "mac_photos_read", "mac_photos_export", "mac_photos_create_album", "mac_photos_add_to_album"].map((tool) => ({ tool, needs: "automation" as const })),
+  music: ["mac_music_now_playing", "mac_music_play", "mac_music_pause", "mac_music_next", "mac_music_previous", "mac_music_set_volume", "mac_music_search", "mac_music_list_playlists", "mac_music_create_playlist", "mac_music_add_to_playlist"].map((tool) => ({ tool, needs: "automation" as const })),
 };
 
 function galleryActions(id: MacAppSetupId, permissions: Partial<Record<MacAppPermissionNeed, string>>): MacAppSetupAction[] {

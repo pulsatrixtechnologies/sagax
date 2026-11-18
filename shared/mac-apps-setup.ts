@@ -3,7 +3,7 @@
 // one setup page. The same status comes from the solo server (/api/mac-apps) or,
 // with an organization server, from the desktop app over IPC (window.ogb.macApps).
 
-export const MAC_APP_SETUP_IDS = ["messages", "mail", "calendar", "contacts", "reminders", "notes", "photos"] as const;
+export const MAC_APP_SETUP_IDS = ["messages", "mail", "calendar", "contacts", "reminders", "notes", "photos", "music"] as const;
 export type MacAppSetupId = (typeof MAC_APP_SETUP_IDS)[number];
 
 export const isMacAppSetupId = (value: unknown): value is MacAppSetupId =>

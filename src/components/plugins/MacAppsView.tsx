@@ -1,7 +1,7 @@
 // Plugins > Installed > This Mac: the Apple apps of this person's Mac, one row
-// each (Messages, Mail, Calendar, Contacts, Reminders, Notes, Photos). Each row opens
+// each (Messages, Mail, Calendar, Contacts, Reminders, Notes, Photos, Music). Each row opens
 // its setup page. Shown only in the desktop app on macOS (macAppsSectionVisible).
-import { BookUser, CalendarDays, ChevronRight, Images, ListChecks, Mail, MessageSquare, StickyNote, type LucideIcon } from "lucide-react";
+import { BookUser, CalendarDays, ChevronRight, Images, ListChecks, Mail, MessageSquare, Music, StickyNote, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -18,6 +18,7 @@ export const MAC_APP_LOOK: Record<MacAppSetupId, { icon: LucideIcon; tile: strin
   reminders: { icon: ListChecks, tile: "#FF9500" },
   notes: { icon: StickyNote, tile: "#E8B500" },
   photos: { icon: Images, tile: "#FF2D55" },
+  music: { icon: Music, tile: "#FA243C" },
 };
 
 const MAC_APP_NAME_KEYS = {
@@ -28,6 +29,7 @@ const MAC_APP_NAME_KEYS = {
   reminders: "connectApps.mac.reminders.rowTitle",
   notes: "connectApps.mac.notes.rowTitle",
   photos: "connectApps.mac.photos.rowTitle",
+  music: "connectApps.mac.music.rowTitle",
 } as const;
 
 export function macAppName(app: MacAppSetupId): string {

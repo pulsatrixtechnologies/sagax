@@ -12,6 +12,7 @@ describe("declaredToolProduct: the Apple apps", () => {
     expect(declared("bot-1", "mcp__messages__mac_notes_search")?.product).toBe("Notes");
     expect(declared("bot-1", "mcp__messages__mac_messages_send")?.product).toBe("Messages");
     expect(declared("bot-1", "mcp__messages__mac_photos_export")).toEqual({ product: "Photos", productId: "mac_photos" });
+    expect(declared("bot-1", "mcp__messages__mac_music_play")).toEqual({ product: "Music", productId: "mac_music" });
     expect(declared("bot-1", "mcp", JSON.stringify({ tool: "mac_mail_search" }))?.product).toBe("Mail");
   });
 

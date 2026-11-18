@@ -138,7 +138,7 @@ const INTERNAL = /^(?:mcp__)?(?:agents|sagax|sagax-[a-z-]+|maus|ogb|harness)(?:_
 const TARGET_MAX = 80;
 
 /** phone_tool's tools (shared/phone-tools.ts PHONE_TOOLS), each with its words. */
-const PHONE_TOOL_LABELS = new Set(["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "photo_library", "shortcut", "clipboard", "status"]);
+const PHONE_TOOL_LABELS = new Set(["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "photo_library", "music", "shortcut", "clipboard", "status"]);
 
 function oneLine(text: string, max = TARGET_MAX): string {
   const flat = text.replace(/\s+/g, " ").trim();

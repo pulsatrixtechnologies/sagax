@@ -33,7 +33,7 @@ export type ConnectorSetupProvider = "grok" | "claude" | "mac";
 /** The System Settings pane where Sagax gets Full Disk Access back (Messages). */
 export const MAC_FULL_DISK_ACCESS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 /** The System Settings pane where Sagax is allowed to control Mail, Calendar,
- * Contacts, Reminders, Notes, Photos or Messages (Apple Events). */
+ * Contacts, Reminders, Notes, Photos, Music or Messages (Apple Events). */
 export const MAC_AUTOMATION_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation";
 
 export interface ConnectorSetupTarget {
@@ -242,8 +242,8 @@ const HTTP_400 = /\bHTTP\s*(?:status\s*)?400\b|\b400\s+Bad\s+Request\b|\bstatus(
 /** The Messages tools (shared/imessage.ts MESSAGES_MCP_SERVER) and what they say without this Mac's permission. */
 const MESSAGES_TOOL = /(?:^|__|\b)(?:messages|imessage)__|^(?:mcp__)?(?:messages|imessage)\b/i;
 /** An Apple app tool of the person's Mac (mac_mail_search), and its app. */
-const MAC_APP_TOOL = /(?:^|__)mac_(messages|mail|calendar|contacts|reminders|notes|photos)_[a-z_]+$/i;
-const MAC_APP_LABEL: Record<string, string> = { messages: "Messages", mail: "Mail", calendar: "Calendar", contacts: "Contacts", reminders: "Reminders", notes: "Notes", photos: "Photos" };
+const MAC_APP_TOOL = /(?:^|__)mac_(messages|mail|calendar|contacts|reminders|notes|photos|music)_[a-z_]+$/i;
+const MAC_APP_LABEL: Record<string, string> = { messages: "Messages", mail: "Mail", calendar: "Calendar", contacts: "Contacts", reminders: "Reminders", notes: "Notes", photos: "Photos", music: "Music" };
 /** macOS refused Sagax the right to control that app (Automation, -1743). */
 const MAC_AUTOMATION_FAILURE = /\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b|\(-1743\)|\bhas\s+not\s+allowed\s+Sagax\s+to\s+control\b/i;
 const MESSAGES_ACCESS_FAILURE = /\bneeds\s+Full\s+Disk\s+Access\b|\bFull\s+Disk\s+Access\b.*\b(?:denied|missing|required|needed)\b|\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b|\bunable\s+to\s+open\s+database\s+file\b|\bauthori[sz]ation\s+denied\b|\boperation\s+not\s+permitted\b/i;

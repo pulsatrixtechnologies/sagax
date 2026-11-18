@@ -69,6 +69,9 @@ describe("phone_tool", () => {
     const offered = phoneToolDefinition(["photo_library"]);
     expect(Object.keys(offered.inputSchema.properties)).toEqual(expect.arrayContaining(["action", "album", "ids", "original", "cursor", "media", "favorite"]));
     expect(Object.keys(offered.inputSchema.properties)).not.toContain("scene");
+    const music = Object.keys(phoneToolDefinition(["music"]).inputSchema.properties);
+    expect(music).toEqual(expect.arrayContaining(["action", "query", "scope", "kind", "id", "shuffle"]));
+    expect(music).not.toContain("ids");
   });
 });
 

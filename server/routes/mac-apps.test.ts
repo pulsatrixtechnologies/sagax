@@ -61,7 +61,7 @@ describe("/api/mac-apps", () => {
 
   it("lists the apps off, then turns one on", async () => {
     const first = await (await fetch(`${base}/api/mac-apps`)).json() as { apps: { id: string; enabled: boolean }[] };
-    expect(first.apps.map((row) => row.id)).toEqual(["messages", "mail", "calendar", "contacts", "reminders", "notes", "photos"]);
+    expect(first.apps.map((row) => row.id)).toEqual(["messages", "mail", "calendar", "contacts", "reminders", "notes", "photos", "music"]);
     expect(first.apps.every((row) => !row.enabled)).toBe(true);
     const on = await put({ app: "calendar", enabled: true });
     expect(on.status).toBe(200);

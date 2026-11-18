@@ -32410,6 +32410,17 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     routineSubjectToken: (principalId) => routineConsents ? routineConsents.subjectToken(principalId) : Promise.resolve({ ok: false as const, error: "no_session" as const }),
     delegationRefused: (principalId) => routineConsents?.dropCache(principalId),
     botExists: (id) => Boolean(store.bot(id)),
+    // #4837: a tool name the relay resolved is judged where the asked one
+    // was: the confidential thread rule, then the misuse and safety review
+    judgeResolved: async ({ threadId, generation, botId, principalId, resolved, frame }) => {
+      const capability = { threadId, generation, botId, sandboxPrincipalId: principalId, desktopPrincipalId: principalId } as InternalCapabilityView;
+      const params = (frame as { params?: { arguments?: unknown } }).params;
+      const args = params?.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments) ? params.arguments as Record<string, unknown> : undefined;
+      const confidential = confidentialPerspicaxRefusal(capability, resolved, args);
+      if (confidential) return confidential;
+      const text = misuseToolFrameText(frame);
+      return text ? await perspicaxNativeReview(text, capability) : null;
+    },
     permissionGuard: ({ botId, principalId }) => {
       const person = isPrincipalId(principalId) ? principals.byId(principalId) : null;
       const env = mcpIdentityEnv({ botId, principalId, perspicaxRole: person?.perspicaxRole, teamIds: (person?.teams ?? []).map((team) => team.id), ...personOwnScope(principalId) });

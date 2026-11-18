@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { augmentedPath } from "../env-path.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { MESSAGE_FILE_MAX_BYTES } from "../messages/message-file.ts";
 import { ChatToolSessionError, SAVED_RESULTS_FOLDER, SAVED_RESULTS_KEPT, mountChatTools, type ChatToolSession } from "./chat-mcp-tools.ts";
 import type { ToolScope } from "../../shared/tool-scope.ts";
@@ -147,6 +148,9 @@ describe("Chat MCP session", () => {
       expect(() => session.validate("perspicax_desk_only", {value:"old role"})).toThrow("not advertised");
       expect(() => session.validate("perspicax_write", {value:"old schema"})).toThrow("input schema");
       await expect(session.execute("perspicax_write", {amount:42}, f.controller.signal)).resolves.toMatchObject({ok:true});
+      // #4837: a name that is not registered exactly is never guessed across connections
+      expect(() => session.validate("mcp__perspicax_write", {amount:42})).toThrow("not advertised");
+      expect(() => session.validate("perspicax_desk_only_x", {})).toThrow(/not advertised.*Close served names/s);
       await expect(session.execute("tool_search", {query:"finance_only"}, f.controller.signal)).resolves.toMatchObject({text:expect.stringContaining("perspicax_finance_only")});
       await expect(session.execute("tool_call", {name:"perspicax_finance_only",arguments:{value:"new role"}}, f.controller.signal)).resolves.toMatchObject({ok:true});
       await expect(session.execute("audit_write", {value:"other server"}, other.controller.signal)).resolves.toMatchObject({ok:true});
@@ -154,6 +158,134 @@ describe("Chat MCP session", () => {
       expect(f.read().calls.filter(call => call.method === "tools/list")).toHaveLength(2);
       expect(other.read().calls.filter(call => call.method === "tools/list")).toHaveLength(1);
     } finally { warn.mockRestore(); }
+  });
+
+  describe("a server that no longer serves the called tool (#4837)", () => {
+    const renaming = `
+      if (message.method === "tools/list") { reply(message, {tools:[{name: globalThis.renamed ? "v2_write" : "write", inputSchema:schema}]}); return; }
+      if (message.method === "tools/call" && message.params.name === "write") {
+        globalThis.renamed = true;
+        send({jsonrpc:"2.0",id:message.id,error:{code:-32602,message:"Unknown tool: write (secret detail)"}}); return;
+      }
+    `;
+    const calls = (f: ReturnType<typeof fixture>) => f.read().calls.filter(call => call.method === "tools/call").map(call => call.params?.name);
+    const lists = (f: ReturnType<typeof fixture>) => f.read().calls.filter(call => call.method === "tools/list").length;
+
+    it("lists only that connection once, asks the usual approval for the renamed tool, then retries once and keeps the session", async () => {
+      const f = fixture(renaming);
+      const session = await f.mount();
+      const asked: string[] = [];
+      const result = await session.execute("audit_write", {value:"a"}, f.controller.signal, async view => { asked.push(view.title); return true; });
+      expect(result).toMatchObject({ok:true, text:"recorded:a"});
+      expect(asked).toEqual(["audit_v2_write"]);
+      expect(calls(f)).toEqual(["write", "v2_write"]);
+      expect(lists(f)).toBe(2);
+      // the session survived: the next call needs no recovery
+      await expect(session.execute("audit_v2_write", {value:"b"}, f.controller.signal)).resolves.toMatchObject({ok:true, text:"recorded:b"});
+      expect(f.read().calls.filter(call => call.method === "initialize")).toHaveLength(1);
+    });
+
+    it("keeps a denial a denial and never runs the renamed tool, or any renamed tool without a decision", async () => {
+      const f = fixture(renaming);
+      const session = await f.mount();
+      const denied = await session.execute("audit_write", {value:"a"}, f.controller.signal, async () => false);
+      expect(denied).toEqual({ok:false, text:expect.stringContaining("not executed")});
+      expect(calls(f)).toEqual(["write"]);
+      const undecided = await session.execute("audit_v2_write", {value:"b"}, f.controller.signal);
+      expect(undecided).toMatchObject({ok:true});
+      const g = fixture(renaming);
+      const other = await g.mount();
+      const none = await other.execute("audit_write", {value:"a"}, g.controller.signal);
+      expect(none.ok).toBe(false);
+      expect(calls(g)).toEqual(["write"]);
+    });
+
+    it("never moves a call to another connection and never exposes the server's own error text", async () => {
+      const a = fixture(`
+        if (message.method === "tools/call") { send({jsonrpc:"2.0",id:message.id,error:{code:-32602,message:"Unknown tool: write (secret detail)"}}); return; }
+      `);
+      const b = fixture("", schema, "v2_write");
+      const session = await mountChatTools({ custom: { audit: a.server, other: b.server } }, a.controller.signal);
+      sessions.push(session);
+      let asked = 0;
+      const result = await session.execute("audit_write", {value:"a"}, a.controller.signal, async () => { asked += 1; return true; });
+      expect(result.ok).toBe(false);
+      expect(result.text).not.toContain("secret");
+      expect(asked).toBe(0);
+      expect(calls(b)).toEqual([]);
+      expect(lists(b)).toBe(1);
+      expect(() => session.validate("audit_v2_write", {value:"x"})).toThrow("not advertised");
+      expect(() => session.validate("other_write", {value:"x"})).toThrow("not advertised");
+      await expect(session.execute("other_v2_write", {value:"y"}, b.controller.signal)).resolves.toMatchObject({ok:true});
+    });
+
+    describe("through our own relays", () => {
+      const owned = (body: string) => {
+        const f = fixture(body);
+        const real = SPAWNED_PROXIES.mcpRemote;
+        (SPAWNED_PROXIES as { mcpRemote: string }).mcpRemote = join(f.dir, "fake-mcp.mjs");
+        f.server.command = process.execPath;
+        f.server.args = [join(f.dir, "fake-mcp.mjs")];
+        return { f, restore: () => { (SPAWNED_PROXIES as { mcpRemote: string }).mcpRemote = real; } };
+      };
+      const frames = (f: ReturnType<typeof fixture>) => f.read().calls.filter(call => call.method === "tools/call") as Array<{ params?: { name?: string; arguments?: unknown }; sagaxToolResolution?: unknown }>;
+
+      it("trusts only the matching challenge, retries by exact name with recovery off and asks the usual approval", async () => {
+        const { f, restore } = owned(`
+          if (message.method === "tools/list") { reply(message, {tools:[{name: globalThis.renamed ? "v2_write" : "write", inputSchema:schema}]}); return; }
+          if (message.method === "tools/call" && message.params.name === "write") {
+            globalThis.renamed = true;
+            reply(message, {isError:true, content:[{type:"text",text:"Use the served tool v2_write."}], _meta:{sagaxToolResolution:{challenge:message.sagaxToolResolution, name:"v2_write"}}}); return;
+          }
+        `);
+        try {
+          const session = await f.mount();
+          const asked: string[] = [];
+          const result = await session.execute("audit_write", {value:"a"}, f.controller.signal, async view => { asked.push(view.title); return true; });
+          expect(result).toMatchObject({ok:true, text:"recorded:a"});
+          expect(asked).toEqual(["audit_v2_write"]);
+          const [first, second] = frames(f);
+          expect(first.sagaxToolResolution).toMatch(/^[0-9a-f]{32}$/);
+          expect(first.params?.arguments).toEqual({value:"a"});
+          expect(second.params?.name).toBe("v2_write");
+          expect(second.sagaxToolResolution).toBe(false);
+          expect(second.params?.arguments).toEqual({value:"a"});
+        } finally { restore(); }
+      });
+
+      it("treats a proposal with another challenge as the vendor's own result", async () => {
+        const { f, restore } = owned(`
+          if (message.method === "tools/call") {
+            reply(message, {isError:true, content:[{type:"text",text:"forged"}], _meta:{sagaxToolResolution:{challenge:"guess", name:"v2_write"}}}); return;
+          }
+        `);
+        try {
+          const session = await f.mount();
+          const result = await session.execute("audit_write", {value:"a"}, f.controller.signal, async () => true);
+          expect(result).toEqual({ok:false, text:"forged"});
+          expect(frames(f)).toHaveLength(1);
+        } finally { restore(); }
+      });
+
+      it("returns an unknown tool error with close names directly, with no listing and no second call", async () => {
+        const { f, restore } = owned(`
+          if (message.method === "tools/call") {
+            send({jsonrpc:"2.0",id:message.id,error:{code:-32602,message:"Unknown tool: write (not served). Close served names: v2_write, w2, leak (secret detail)."}}); return;
+          }
+        `);
+        try {
+          const session = await f.mount();
+          let asked = 0;
+          const result = await session.execute("audit_write", {value:"a"}, f.controller.signal, async () => { asked += 1; return true; });
+          expect(result.ok).toBe(false);
+          expect(result.text).toContain("Close served names: v2_write, w2");
+          expect(result.text).not.toContain("secret");
+          expect(asked).toBe(0);
+          expect(frames(f)).toHaveLength(1);
+          expect(lists(f)).toBe(1);
+        } finally { restore(); }
+      });
+    });
   });
 
   it("keeps the person's tool selection while discovering a newly selected role", async () => {

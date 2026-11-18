@@ -610,7 +610,16 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
             });
             started = true;
             if (allowed) {
-              result = await tools.execute(call.function.name, args as Record<string, unknown>, abort.signal);
+              // #4837: a call sent again under the name the server serves now
+              // gets the same approval decision as any call of that tool
+              result = await tools.execute(call.function.name, args as Record<string, unknown>, abort.signal, async (renamed) => {
+                const renamedPreview = renamed.input === args ? inputPreview : preview(renamed.input);
+                const renamedAllowed = !renamed.ask
+                  || await approval.ask(renamed.title, renamedPreview ?? "This tool has no arguments.", renamed.grant, renamed.mcpTool);
+                abort.signal.throwIfAborted();
+                if (!renamedAllowed) denials.push(renamed.title);
+                return renamedAllowed;
+              });
               if (result.images?.length && !seesImages(turn)) {
                 const { images: _dropped, ...rest } = result;
                 result = { ...rest, text: `${rest.text}\n${TEXT_ONLY_SCREENSHOT_NOTE}` };

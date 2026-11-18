@@ -12,7 +12,7 @@ import { createRoutineWatchEvaluator, RoutineWatchStates } from "../routines/rou
 import type { RoutinePrecheckVerdict } from "../routines/routine-precheck.ts";
 import type { Routine, RoutineInput } from "../routines/routines.ts";
 import {
-  FLOW_WATCH_CHECK, FlowWatches, WatchMemory, cadenceSchedule, evaluateWhen, observeCall, parseCadence, parseWatchListing, productsForApis,
+  FLOW_WATCH_CHECK, FlowWatches, WatchMemory, cadenceSchedule, evaluateWhen, observeCall, watchReadTools, parseCadence, parseWatchListing, productsForApis,
   WATCH_RELOAD_MS, readableName, watchesForBot, watchMissing, watchRoutineInput, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchesDeps, type ObserveConnection,
 } from "./flow-watches.ts";
 import { ProactivePendingFile } from "./proactive-wake.ts";
@@ -251,6 +251,16 @@ describe("observe is a read", () => {
     expect(observeCall({ tool: "cw_psa_service_query", args: {} }, session)).toEqual({ name: "cw_psa_service_query", args: {} });
     expect(observeCall({ tool: "cw_psa_service_write", args: {} }, session)).toHaveProperty("refused");
     expect(observeCall({ tool: "not_served_list", args: {} }, session)).toHaveProperty("refused");
+    // #4837: the relay's resolver; the read check is on the resolved name
+    expect(observeCall({ tool: "mcp__x__cw_psa_service_query", args: {} }, session)).toEqual({ name: "cw_psa_service_query", args: {} });
+    expect(observeCall({ tool: "mcp__x__cw_psa_service_write", args: {} }, session)).toHaveProperty("refused");
+    // ambiguity refuses, with the close served names, and never falls to a shorter suffix
+    const twins = { tools: new Set(["ns__query", "ns-query", "query"]), readOnly: new Set(["ns__query", "ns-query", "query"]) };
+    expect(observeCall({ tool: "ns_query", args: {} }, twins)).toMatchObject({ refused: expect.stringContaining("Close served names") });
+    // the person's yes covers the tool the call sends (the same resolver)
+    const watch = { id: "w", domain: "d", tools: [], observe: { tool: "mcp__x__cw_psa_service_query", args: {} } } as never;
+    expect(watchReadTools([watch], session.readOnly, session.tools)).toEqual(["cw_psa_service_query"]);
+    expect(watchReadTools([watch], session.readOnly)).toEqual([]);
   });
   it("a Flow action is called without confirm", () => {
     const call = observeCall({ action: "dispatch-day-listing", params: { a: 1 } }, session);

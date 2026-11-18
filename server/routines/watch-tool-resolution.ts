@@ -1,11 +1,12 @@
 import type { RoutineWatchPrecheck, RoutineWatchSource } from "../../shared/routine-watch.ts";
 import { ROUTINE_WATCH_LIMITS } from "../../shared/routine-watch.ts";
 import { permissionForTool } from "../mcp/mcp-permissions.ts";
+import { foldToolName, resolveServedTool } from "../mcp/mcp-tool-resolve.ts";
 import { closeNames } from "../close-names.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
 
 export const watchRepairHint = "Use propose_routine_action with action update and changes.watch to repair this routine, then use run_routine to retry.";
-export const foldWatchName = (name: string) => name.replace(/__|-/g, "_");
+export const foldWatchName = foldToolName;
 
 export class UnmappedWatchBuiltin extends Error {}
 
@@ -15,7 +16,8 @@ export function resolveWatchSource(watch: RoutineWatchPrecheck, served: readonly
   const wanted = source.tool.replace(/^mcp__perspicax__|^mcp__/, "");
   const folded = foldWatchName(wanted);
   const matches = served.filter(name => foldWatchName(name) === folded);
-  const name = served.includes(wanted) ? wanted : matches.length === 1 ? matches[0] : undefined;
+  const resolved = resolveServedTool(wanted, served);
+  const name = resolved.kind === "none" ? undefined : resolved.name;
   if (name) {
     const refusal = watchToolRefusal(name, source.args);
     if (refusal) throw new Error(refusal);

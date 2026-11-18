@@ -21,7 +21,9 @@
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
 import { wholeToolList } from "../mcp/whole-tool-list.ts";
-import { servedSpelling, twilioToolsOf, apiNamesOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
+import { resolutionProposal, closeNamesSentence, closeServedNames, readToolPages, resolveServedTool } from "../mcp/mcp-tool-resolve.ts";
+import { classifyProactiveActionKind } from "../proactive/proactive.ts";
+import { servedSpelling, unknownToolText, withCloseNames, twilioToolsOf, apiNamesOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -155,6 +157,10 @@ export interface PerspicaxMcpOptions {
   /** Permission check for tools/call frames (server/mcp/mcp-permissions.ts). Null
    * or absent: no check. The audit hook never carries arguments or results. */
   permissionGuard?(input: { botId: string; principalId: string }): GuardOptions | null;
+  /** #4837: the layers outside the relay (confidential thread, misuse and
+   * safety review) judge the tool a frame names; for a name the relay
+   * resolved, they judge the resolved one. A refusal text stops the call. */
+  judgeResolved?(input: { threadId: string; generation: string; botId: string; principalId: string; asked: string; resolved: string; frame: unknown }): Promise<string | null>;
   /** The scope a write of this turn is made once in (server/write-once.ts),
    * or null for no guard: two unattended runs (routine passes, coordinated
    * bots) of one person that send the same write with the same arguments
@@ -519,6 +525,11 @@ interface ReopenedSession { body: Json }
 export type PerspicaxToolAnswer =
   | { ok: true; isError: boolean; value: unknown }
   | { ok: false; code: "profile_not_mounted" | "access_ended" | "unreachable" | "rpc_error"; error: string };
+
+/** The tool a tools/call frame names, or "". */
+function toolNameOf(frame: unknown): string {
+  return isObject(frame) && isObject(frame.params) && typeof frame.params.name === "string" ? frame.params.name : "";
+}
 
 /** One short-lived routine connection (withRoutineSession). */
 export interface PerspicaxRoutineSession {
@@ -1188,20 +1199,56 @@ export class PerspicaxMcp {
     try {
       await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax proactive watch (${botId}; ${randomUUID()})`, version: this.options.version } });
       await rpc("notifications/initialized", {});
-      const listed = await rpc("tools/list", {});
-      const tools = new Set(isObject(listed.result) && Array.isArray(listed.result.tools) ? listed.result.tools.filter(isObject).map((tool) => String(tool.name)) : []);
-      const readOnly = new Set([...perspicaxReadOnlyToolsOf(listed), ...[...tools].filter((name) => PERSPICAX_READ_ONLY_TOOLS.has(name))]);
+      // every page, with the read-only marks of each (a partial catalog decides no name)
+      const readCatalog = async (): Promise<{ names: Set<string>; readOnly: Set<string> }> => {
+        const pages: Json[] = [];
+        const names = new Set(await readToolPages(async (cursor) => {
+          const body = await rpc("tools/list", cursor ? { cursor } : {});
+          const result = isObject(body.result) ? body.result : null;
+          if (!result || !Array.isArray(result.tools)) throw new Error("Perspicax watch returned an invalid tool list.");
+          pages.push(body);
+          return { names: result.tools.filter(isObject).map((tool) => String(tool.name)), nextCursor: result.nextCursor };
+        }));
+        return { names, readOnly: new Set([...pages.flatMap((page) => perspicaxReadOnlyToolsOf(page)), ...[...names].filter((name) => PERSPICAX_READ_ONLY_TOOLS.has(name))]) };
+      };
+      const first = await readCatalog();
+      const tools = first.names;
+      const readOnly = first.readOnly;
+      const read = (body: Json): PerspicaxToolAnswer => {
+        if (isObject(body.error)) return { ok: false, code: "rpc_error", error: typeof body.error.message === "string" ? body.error.message : "Perspicax refused the call" };
+        const result = isObject(body.result) ? body.result : {};
+        let value: unknown = result.structuredContent;
+        if (value === undefined && Array.isArray(result.content)) {
+          const block = result.content.find((item): item is Json => isObject(item) && item.type === "text");
+          try { value = typeof block?.text === "string" ? (JSON.parse(block.text) as unknown) : null; } catch { value = block?.text ?? null; }
+        }
+        return { ok: true, isError: result.isError === true, value: value ?? null };
+      };
+      const hinted = (body: Json, close: string[]): PerspicaxToolAnswer => read(withCloseNames(body, close) as Json);
+      // #4837: the same semantics as the relay and the remote proxy. A call
+      // answered only by "unknown tool" ran nothing: the whole catalog is read
+      // again once; an exact name now served is sent once more as it is; a
+      // name it resolves to is sent once when it is a read (this session
+      // sends no write under a name it chose); a failed retry and a name
+      // that fits nothing list the close served names. Any other failure is
+      // never retried.
       const call = async (name: string, args: Json): Promise<PerspicaxToolAnswer> => {
         try {
-          const body = await rpc("tools/call", { name: servedSpelling(name, tools), arguments: args });
-          if (isObject(body.error)) return { ok: false, code: "rpc_error", error: typeof body.error.message === "string" ? body.error.message : "Perspicax refused the call" };
-          const result = isObject(body.result) ? body.result : {};
-          let value: unknown = result.structuredContent;
-          if (value === undefined && Array.isArray(result.content)) {
-            const block = result.content.find((item): item is Json => isObject(item) && item.type === "text");
-            try { value = typeof block?.text === "string" ? (JSON.parse(block.text) as unknown) : null; } catch { value = block?.text ?? null; }
+          const resolved = resolveServedTool(name, tools);
+          const sent = resolved.kind === "exact" || resolved.kind === "folded" ? resolved.name : name;
+          const body = await rpc("tools/call", { name: sent, arguments: args });
+          if (unknownToolText(body, sent) === undefined) return read(body);
+          const fresh = await readCatalog();
+          tools.clear(); for (const tool of fresh.names) tools.add(tool);
+          readOnly.clear(); for (const tool of fresh.readOnly) readOnly.add(tool);
+          const close = closeServedNames(name, tools);
+          const found = resolveServedTool(name, tools);
+          if (found.kind === "none") return hinted(body, close);
+          if (found.name !== name && !readOnly.has(found.name) && classifyProactiveActionKind({ tool: found.name }) !== "read") {
+            return { ok: false, code: "rpc_error", error: `Not sent: ${found.name} is not a read tool.${closeNamesSentence(close)}` };
           }
-          return { ok: true, isError: result.isError === true, value: value ?? null };
+          const again = await rpc("tools/call", { name: found.name, arguments: args });
+          return hinted(again, close);
         } catch (error) {
           if (signal.aborted) throw error;
           return { ok: false, code: "unreachable", error: error instanceof Error ? error.message.slice(0, 160) : "Perspicax is unavailable" };
@@ -1484,6 +1531,75 @@ export class PerspicaxMcp {
    * the call comes from callTool, whose native tool the agents proxy already
    * put through the permission check, so it is not judged (nor audited) twice. */
   async relay(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean; mapping?: boolean }): Promise<PerspicaxRelayAnswer> {
+    const gate = isObject(input.frame) ? input.frame.sagaxToolResolution : undefined;
+    if (gate !== undefined && isObject(input.frame)) {
+      const frame = { ...input.frame };
+      delete frame.sagaxToolResolution;
+      input = { ...input, frame };
+    }
+    const answer = await this.relayOnce(input);
+    if (gate === false) return answer;
+    const asked = toolNameOf(input.frame);
+    // Sagax's own calls (judged) and its mapping reads name exact tools: never resolved
+    if (!asked || input.judged || input.mapping || !isObject(input.frame) || input.frame.method !== "tools/call" || input.frame.id === undefined) return answer;
+    if (answer.status !== 200 || unknownToolText(answer.body, asked) === undefined) return answer;
+    return this.afterUnknownTool(input, asked, answer, gate);
+  }
+
+  /** #4837: the server does not serve `asked`. Nothing ran, so one more try is
+   * safe for any tool. Read the whole catalog again (every page); an exact
+   * name now served is sent once more as it is; another name it resolves to
+   * (folded, namespaced, unique suffix) is judged first by every layer that
+   * judged the asked one (judgeResolved: confidential, misuse and safety
+   * review; then relayOnce: products off, permissions, approvals) and sent
+   * once. A failed retry, like a name that fits nothing, lists the close
+   * served names. A catalog that cannot be read whole decides nothing. */
+  private async afterUnknownTool(input: { threadId: string; generation: string; botId: string; frame: unknown; mapping?: boolean }, asked: string, answer: PerspicaxRelayAnswer, gate: unknown): Promise<PerspicaxRelayAnswer> {
+    const entry = this.turnEntry(input.threadId, input.generation, input.botId);
+    if (!entry || !await this.gateOf(entry).shared(() => this.refreshCatalog(entry)) || this.turnEntry(input.threadId, input.generation, input.botId) !== entry) return answer;
+    const served = [...(entry.servedTools ?? [])];
+    const close = closeServedNames(asked, served);
+    const found = resolveServedTool(asked, served);
+    if (found.kind === "none") return { ...answer, body: withCloseNames(answer.body, close) };
+    const frame = input.frame as Json;
+    if (typeof gate === "string" && found.name !== asked) {
+      return { status: 200, body: { jsonrpc: "2.0", id: frame.id, result: resolutionProposal(gate, found.name, close) } };
+    }
+    const renamed = found.name === asked ? input : { ...input, frame: { ...frame, params: { ...(frame.params as Json), name: found.name } } };
+    if (found.name !== asked) {
+      let refusal: string | null = null;
+      try { refusal = await this.options.judgeResolved?.({ threadId: input.threadId, generation: input.generation, botId: input.botId, principalId: entry.principalId, asked, resolved: found.name, frame: renamed.frame }) ?? null; }
+      catch { refusal = "Not sent: the resolved tool could not be checked."; }
+      if (refusal) return { status: 200, body: { jsonrpc: "2.0", id: frame.id, result: { content: [{ type: "text", text: refusal }], isError: true } } };
+    }
+    const again = await this.relayOnce(renamed);
+    return again.status === 200 ? { ...again, body: withCloseNames(again.body, close) } : again;
+  }
+
+  /** The whole served catalog of this connection, read page by page; false
+   * (the catalog forgotten) when a page fails or a cursor repeats. */
+  private async refreshCatalog(entry: Entry): Promise<boolean> {
+    const bodies: unknown[] = [];
+    try {
+      const names = await readToolPages(async (cursor) => {
+        const body = await this.identityRpcSent(entry, "tools/list", cursor ? { cursor } : undefined);
+        const result = isObject(body) && isObject(body.result) ? body.result : null;
+        if (!result || !Array.isArray(result.tools)) throw new Error("invalid tools/list answer");
+        bodies.push(body);
+        return { names: result.tools.filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string").map(tool => String(tool.name)), nextCursor: result.nextCursor };
+      });
+      entry.servedTools = new Set(names);
+      entry.readOnlyTools = new Set(bodies.flatMap((body) => perspicaxReadOnlyToolsOf(body)).slice(0, 2000));
+      entry.twilioTools = new Set(bodies.flatMap((body) => twilioToolsOf(body)).slice(0, 500));
+      entry.toolsListBody = bodies.length === 1 ? bodies[0] : undefined;
+      return true;
+    } catch {
+      this.clearToolCatalog(entry);
+      return false;
+    }
+  }
+
+  private async relayOnce(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean; mapping?: boolean }): Promise<PerspicaxRelayAnswer> {
     // #4359: a product off for this bot is never called, whatever the path
     // (`mapping`: the filter's own api_list and api_describe, never filtered)
     const frame = isObject(input.frame) ? input.frame : null;

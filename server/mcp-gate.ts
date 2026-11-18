@@ -20,6 +20,8 @@
 // tool puts into the model's context.
 //
 // stdout is the MCP transport. Never log there.
+import { closeNamesSentence, resolutionProposal } from "./mcp/mcp-tool-resolve.ts";
+import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 import { randomUUID } from "node:crypto";
 import { connect, type Socket } from "node:net";
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
@@ -29,7 +31,7 @@ import { createInterface } from "node:readline";
 import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import { startGateUpstream } from "./mcp/gate-upstream.ts";
-import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { listedToolNames, parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, UPSTREAM_QUERY_TOOL_NAME, answerQuery, describeShape, exampleQuery, isNamedHandle, isUpstreamHandle } from "./mcp/mcp-shape.ts";
@@ -396,7 +398,11 @@ child.onError((error, when) => {
 });
 child.stderr.pipe(process.stderr);
 
-type Pending = { kind: "call"; tool: string; trim: boolean } | { kind: "list" | "other" };
+// Only our two local relays negotiate a renamed call. The challenge stays
+// between the gate and the relay and is never sent to the vendor.
+const resolvesTools = spec.command === process.execPath && (spec.args?.[0] === SPAWNED_PROXIES.mcpRemote || spec.args?.[0] === SPAWNED_PROXIES.perspicax);
+interface ResolutionRequest { challenge: string; frame: Json }
+type Pending = { kind: "call"; tool: string; trim: boolean; retryNames?: string[]; resolution?: ResolutionRequest } | { kind: "list" | "other" };
 
 /** The upstream tool one call runs: its own name or call_tool's target, or
  * undefined when the directory answers the call itself. */
@@ -694,7 +700,7 @@ function upstreamQueryArguments(name: unknown, args: unknown): Record<string, un
   return undefined;
 }
 
-function routeLine(line: string): void {
+function routeLine(line: string, retryNames?: string[]): void {
   let message: Json | undefined;
   if (line.trim()) {
     try {
@@ -812,7 +818,7 @@ function routeLine(line: string): void {
       const callId = message.id;
       const held = askApproval(NAME, target, params.arguments)
         .then((decision) => {
-          if (decision.behavior === "allow") return forward(line, message, id, params);
+          if (decision.behavior === "allow") return forward(line, message, id, params, retryNames);
           process.stderr.write(`mcp-gate(${NAME}): ${target} not approved; not run\n`);
           const text = decision.note?.trim() || gateDeclinedText(NAME, target);
           process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: callId, result: { content: [{ type: "text", text }], isError: true } })}\n`);
@@ -822,7 +828,7 @@ function routeLine(line: string): void {
       return;
     }
   }
-  forward(line, message, id, params);
+  forward(line, message, id, params, retryNames);
 }
 
 /** Calls waiting for an approval: the upstream's stdin closes only after them. */
@@ -837,7 +843,7 @@ function misuseGateRefusal(params: Json | undefined): string | null {
   return misuseGateBlockText(`${name}\n${args}`, mode);
 }
 
-function forward(line: string, message: Json | undefined, id: string | undefined, params: Json | undefined): void {
+function forward(line: string, message: Json | undefined, id: string | undefined, params: Json | undefined, retryNames?: string[]): void {
   if (KEPT_FILE && id && message?.method === "initialize") {
     if (answerInitializeKept(message, id, params)) return;
     keptAsks.set(id, { kind: "init", version: keptVersion(params) });
@@ -852,7 +858,9 @@ function forward(line: string, message: Json | undefined, id: string | undefined
     if (message.method === "tools/call") {
       const name = typeof params?.name === "string" ? params.name : "tool";
       const target = callTarget(name, params?.arguments);
-      pending.set(id, { kind: "call", tool: target ?? name, trim: target !== undefined });
+      const resolution = resolvesTools && !retryNames && message.sagaxToolResolution !== false && target ? { challenge: randomUUID(), frame: message } : undefined;
+      if (resolvesTools) line = JSON.stringify({ ...message, sagaxToolResolution: resolution?.challenge ?? false });
+      pending.set(id, { kind: "call", tool: target ?? name, trim: target !== undefined, retryNames, resolution });
       process.stderr.write(resolvedServerLog(NAME, target ?? name));
     } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0 || SCHEMA_PROFILE || OFFERED_FILE) && message.method === "tools/list")) {
       pending.set(id, { kind: message.method === "tools/list" ? "list" : "other" });
@@ -915,6 +923,38 @@ function relayUpstream(message: Json, line = JSON.stringify(message)): void {
   if (scope && id !== undefined && !request) fail("unrequested upstream response on a restricted connection");
   if (id !== undefined) pending.delete(id);
   const result = message.result;
+  if (request?.kind === "call" && request.resolution && isRecord(result) && result.isError === true && isRecord(result._meta)) {
+    const proposal = result._meta.sagaxToolResolution;
+    if (isRecord(proposal) && proposal.challenge === request.resolution.challenge && typeof proposal.name === "string") {
+      const original = request.resolution.frame;
+      const params = original.params;
+      if (isRecord(params)) {
+        const close = Array.isArray(proposal.close) ? proposal.close.filter((name): name is string =>
+          typeof name === "string" && !WITHHOLD.has(name) && (!scope || allowsTool(scope, { kind: "mcp", server: NAME, name }))) : [];
+        if (typeof original.sagaxToolResolution === "string") {
+          // An enclosing chat transport owns the approval. It sends the
+          // canonical name back through this gate after checking it.
+          reply(message.id, resolutionProposal(original.sagaxToolResolution, proposal.name, close));
+          return;
+        }
+        // The canonical call enters at the same point as an engine call.
+        // Selection, withheld names, misuse and approval all see the name that runs.
+        routeLine(JSON.stringify({ ...original, params: DIRECTORY && params.name === CALL_TOOL && isRecord(params.arguments)
+          ? { ...params, arguments: { ...params.arguments, name: proposal.name } } : { ...params, name: proposal.name } }), close);
+        return;
+      }
+    }
+  }
+  if (request?.kind === "call" && request.retryNames?.length) {
+    const suffix = closeNamesSentence(request.retryNames);
+    if (isRecord(message.error) && typeof message.error.message === "string") {
+      message.error.message += suffix;
+      line = JSON.stringify(message);
+    } else if (isRecord(result) && result.isError === true && Array.isArray(result.content)) {
+      result.content = [...result.content, { type: "text", text: suffix.trim() }];
+      line = JSON.stringify(message);
+    }
+  }
   // Who the server is, for the directory tools' own descriptions.
   if (id !== undefined && initializeIds.delete(id) && isRecord(result)) {
     const info = isRecord(result.serverInfo) ? result.serverInfo : {};

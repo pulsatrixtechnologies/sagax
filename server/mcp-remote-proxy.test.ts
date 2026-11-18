@@ -68,7 +68,8 @@ async function remoteFixture(mode: "http" | "event-stream" | "sse") {
           if (mode === "event-stream") return res.writeHead(200, { "content-type": "text/event-stream", "mcp-session-id": "disposable-session" }).end();
           return res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "disposable-session" }).end(JSON.stringify({ jsonrpc: "2.0", id: "not-the-request", result: {} }));
         }
-        if ((frame.params?.arguments as Record<string, unknown>)?.error) error = { code: -32000, message: TOKEN };
+        if (name === "account__read") error = { code: -32602, message: "unknown tool account__read" };
+        else if ((frame.params?.arguments as Record<string, unknown>)?.error) error = { code: -32000, message: TOKEN };
         else result = { content: [{ type: "text", text: (frame.params?.arguments as Record<string, unknown>)?.large ? "x".repeat(2_000_000) : "read completed" }] };
       } else {
         if (frame.method === "notifications/cancelled") events.emit("cancelled", frame);
@@ -175,6 +176,22 @@ describe("scoped remote MCP subprocess", () => {
     send({ method: "notifications/cancelled", params: { requestId: "held-request" } });
     expect((await cancelled)[0].params.requestId).toBe(remote.id);
     expect(await answer()).toMatchObject({ id: "held-request", error: { code: -32800 } });
+  });
+
+  it.each([true, false])("judges the served name again in the outer gate (excluded: %s)", async (excluded) => {
+    fixture = await remoteFixture("http");
+    const toolScope = { allow: ["mcp:notes:*"], deny: excluded ? ["mcp:notes:read"] : [] };
+    start(gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope })!);
+    await initialize();
+    send({ id: 3, method: "tools/call", params: { name: "account__read", arguments: {} } });
+    const reply = await answer();
+    if (excluded) {
+      expect(reply.error?.message).toContain("Tool selection excludes");
+      expect(fixture.calls).toEqual(["account__read"]);
+    } else {
+      expect(reply.result?.content[0].text).toBe("read completed");
+      expect(fixture.calls).toEqual(["account__read", "read"]);
+    }
   });
 
   it("does not expose credentials from a remote error", async () => {
@@ -411,6 +428,86 @@ describe("remote MCP tool directory", () => {
     const last = catalog.at(-1)!;
     expect(json(await call(DESCRIBE_TOOL, { name: last.name })).inputSchema).toEqual(last.inputSchema);
     expect(fake.toolsLists).toBe(8);
+  });
+
+  // #4837: an unknown tool reads every page again once, resolves, retries once
+  const notServed = (served: string[]) => (params: unknown) => {
+    const name = (params as { name?: string }).name ?? "";
+    return served.includes(name) ? undefined : { code: -32602, message: `Unknown tool: ${name}` };
+  };
+  const names = () => fake!.calls.map((entry) => (entry as { name: string }).name);
+
+  it("resolves a namespaced tool name after an unknown tool answer and calls it once more", async () => {
+    fake = await startFakeHttpMcp({ tools: [{ name: "cw_psa_query", inputSchema: { type: "object" } }], callError: notServed(["cw_psa_query"]) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    const answer = await call("mcp__perspicax__cw_psa_query", {});
+    expect(answer.result.content[0].text).toBe("remote execution recorded");
+    expect(names()).toEqual(["mcp__perspicax__cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("reads page two of a paginated catalog to resolve the name", async () => {
+    const tools = ["a_one", "a_two", "b_one", "cw_psa_query"].map((name) => ({ name, inputSchema: { type: "object" } }));
+    fake = await startFakeHttpMcp({ tools, pageSize: 2, callError: notServed(["cw_psa_query"]) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    expect((await call("srv.cw_psa_query", {})).result.content[0].text).toBe("remote execution recorded");
+    expect(names()).toEqual(["srv.cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("stops on a repeated catalog cursor and decides no name", async () => {
+    const tools = ["a_one", "a_two", "cw_psa_query"].map((name) => ({ name, inputSchema: { type: "object" } }));
+    fake = await startFakeHttpMcp({ tools, pageSize: 1, cursorLoop: true, callError: notServed(["cw_psa_query"]) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    expect((await call("srv.cw_psa_query", {})).error).toBeDefined();
+    expect(names()).toEqual(["srv.cw_psa_query"]);
+  });
+
+  it("sends the same name once more when the refreshed catalog serves it, and lists close names when that fails", async () => {
+    let known = false;
+    fake = await startFakeHttpMcp({ tools: [{ name: "cw_psa_query", inputSchema: { type: "object" } }, { name: "cw_psa_query_list", inputSchema: { type: "object" } }],
+      callError: (params) => { const name = (params as { name?: string }).name; if (name === "cw_psa_query" && !known) { known = true; return { code: -32602, message: "Unknown tool: cw_psa_query" }; } return undefined; } });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    expect((await call("cw_psa_query", {})).result.content[0].text).toBe("remote execution recorded");
+    expect(names()).toEqual(["cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("lists the close served names after a failed retry, even for a resolved name", async () => {
+    fake = await startFakeHttpMcp({ tools: [{ name: "cw_psa_query", inputSchema: { type: "object" } }, { name: "cw_psa_query_list", inputSchema: { type: "object" } }], callError: notServed([]) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    const answer = await call("cw_psa_query", {});
+    expect(answer.error?.message).toContain("Unknown tool: cw_psa_query");
+    expect(answer.error?.message).toContain("Close served names: cw_psa_query");
+    expect(names()).toEqual(["cw_psa_query", "cw_psa_query"]);
+  });
+
+  it("answers an unresolved or ambiguous name with the close served names and no retry", async () => {
+    fake = await startFakeHttpMcp({ tools: ["cw_psa_find_tickets", "ns__query", "ns-query", "query"].map((name) => ({ name, inputSchema: { type: "object" } })), callError: notServed(["cw_psa_find_tickets", "ns__query", "ns-query", "query"]) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    expect((await call("cw_psa_list_tickets", {})).error?.message).toContain("Close served names: cw_psa_find_tickets");
+    expect((await call("ns_query", {})).error?.message).toContain("Unknown tool");
+    expect(names()).toEqual(["cw_psa_list_tickets", "ns_query"]);
+  });
+
+  it("never retries an error that is not only an unknown tool answer", async () => {
+    fake = await startFakeHttpMcp({ tools: [{ name: "cw_psa_query", inputSchema: { type: "object" } }],
+      callError: () => ({ code: -32603, message: "step 2 failed: Unknown tool: cw_psa_query after the write ran" }) });
+    start(mcpStdioServer(spec(fake.url))!);
+    await initialize();
+    expect((await call("cw_psa_query", {})).error?.message).toContain("after the write ran");
+    expect(names()).toEqual(["cw_psa_query"]);
+  });
+
+  it("never sends a resolved name the bot's tool selection excludes, or replaces it by a weaker allowed match", async () => {
+    fake = await startFakeHttpMcp({ tools: ["cw_psa_query", "cw_psa_write"].map((name) => ({ name, inputSchema: { type: "object" } })), callError: notServed(["cw_psa_query", "cw_psa_write"]) });
+    start(mcpStdioServer(spec(fake.url), { directory: { name: "perspicax", toolScope: { deny: ["mcp:perspicax:cw_psa_write"] } } })!);
+    await initialize();
+    expect((await call("cw_psa__write", {})).error).toBeDefined();
+    expect(names()).not.toContain("cw_psa_write");
   });
 
   it("merges a small paginated catalog into one page", async () => {

@@ -21,6 +21,8 @@ import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLo
 import { fitToolList } from "../mcp/mcp-tool-schema.ts";
 import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { closeNamesSentence, closeServedNames, isUnknownToolText, resolveServedTool, unknownToolResultText } from "../mcp/mcp-tool-resolve.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
 import { agentsSearchedFromEnv, mcpCallToolId } from "../../shared/searched-tool-call.ts";
 
@@ -63,7 +65,11 @@ export interface ChatToolSession {
    * authorizes each of its routes itself. Its Data server asks: Sagax's
    * approval path answers what stays in the bot's workspace. */
   view(name: string, args: Record<string, unknown>): ChatToolCallView;
-  execute(name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<ChatToolResult>;
+  /** `approve` is asked, with the call as it will be shown, before a call is
+   * sent again under a name the server serves instead of the one asked
+   * (#4837): the caller applies its usual approval decision. Without it a
+   * renamed call is never sent. */
+  execute(name: string, args: Record<string, unknown>, signal: AbortSignal, approve?: (view: ChatToolCallView) => Promise<boolean>): Promise<ChatToolResult>;
   /** A kept mount writes the next turn's big results into this folder, after this scrub. */
   bindResultSave?(folder: string | undefined, scrub: (text: string) => string): void;
   /** Refresh the account catalog before reusing this session in a new turn. */
@@ -73,7 +79,7 @@ export interface ChatToolSession {
 }
 
 type Server = { command: string; args: string[]; env: Record<string, string> };
-type RegisteredTool = { client: ChatMcpClient; server: string; launch: string; builtInBrowser: boolean; agents: boolean; data: boolean; name: string; schema: ValidateFunction; searched: boolean };
+type RegisteredTool = { client: ChatMcpClient; owned: boolean; server: string; launch: string; builtInBrowser: boolean; agents: boolean; data: boolean; name: string; schema: ValidateFunction; searched: boolean };
 /** A provider-safe tool name: the server's name and the tool's, joined. */
 export function chatToolName(server: string, tool: string): string {
   return `${server}_${tool}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "mcp_tool";
@@ -121,6 +127,46 @@ export function chatMcpEnvironment(serverEnv: Record<string, string>, source: No
   const env: NodeJS.ProcessEnv = { ...source, PATH: augmentedPath() };
   stripControlPlaneEnv(env);
   return { ...env, ...serverEnv };
+}
+
+/** A JSON-RPC error answer: the server answered, so the session is intact.
+ * Its text stays in `detail` for the unknown tool check only; the message is
+ * fixed and never carries the server's words. */
+export class McpRpcFailure extends Error {
+  readonly code: unknown;
+  readonly detail: string;
+
+  constructor(code: unknown, detail: string) {
+    super("MCP request failed; inspect the configured integration");
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+/** The served name an owned relay proposes for a call, when its answer carries
+ * this call's challenge; any other answer is the vendor's own result. */
+function proposalName(result: unknown, challenge: string, asked: string | undefined): string | undefined {
+  if (!object(result) || result.isError !== true || !object(result._meta)) return undefined;
+  const proposal = result._meta.sagaxToolResolution;
+  if (!object(proposal) || proposal.challenge !== challenge) return undefined;
+  const name = proposal.name;
+  return typeof name === "string" && name && name.length <= 256 && name !== asked ? name : undefined;
+}
+
+/** The close served names an owned relay put at the end of its unknown tool
+ * error, each checked to look like a tool name; the rest of its text is dropped. */
+function namesAfterClose(detail: string): string[] {
+  const at = detail.indexOf("Close served names:");
+  if (at < 0) return [];
+  return detail.slice(at + "Close served names:".length).replace(/\.\s*$/, "").split(",").map(part => part.trim())
+    .filter(part => /^[A-Za-z0-9_.:/-]{1,128}$/.test(part)).slice(0, 5);
+}
+
+/** The launch of one of our own relays, which negotiate a renamed call. */
+function ownsToolResolution(server: Server): boolean {
+  const first = server.args[0];
+  return server.command === process.execPath
+    && (first === SPAWNED_PROXIES.mcpRemote || first === SPAWNED_PROXIES.perspicax || first === SPAWNED_PROXIES.mcpGate);
 }
 
 /** Stdio MCP client used by chat tool mounts and by saved-steps replay. */
@@ -228,14 +274,19 @@ export class ChatMcpClient {
       const entry = this.pending.get(message.id);
       if (!entry) continue;
       this.pending.delete(message.id);
-      if ("error" in message) entry.reject(new Error("MCP request failed; inspect the configured integration"));
+      if ("error" in message) {
+        const error = object(message.error) ? message.error : {};
+        entry.reject(new McpRpcFailure(error.code, typeof error.message === "string" ? error.message.slice(0, 1_000) : ""));
+      }
       else if (!("result" in message)) entry.reject(new Error("MCP response has no result"));
       else entry.resolve(message.result);
     }
     if (Buffer.byteLength(this.buffer) > this.frameBytes) this.fail(new Error("MCP response exceeds the frame limit"));
   }
 
-  async call(method: string, params: unknown, signal: AbortSignal, timeout: number): Promise<unknown> {
+  /** `extra`: top-level frame fields beside params. `keepOnRpcError`: a
+   * JSON-RPC error answer leaves the session open for the next call. */
+  async call(method: string, params: unknown, signal: AbortSignal, timeout: number, options: { extra?: Record<string, unknown>; keepOnRpcError?: boolean } = {}): Promise<unknown> {
     if (signal.aborted) { await this.close(); throw aborted(); }
     if (this.closed) throw new Error("MCP session closed");
     const id = this.nextId++;
@@ -256,11 +307,11 @@ export class ChatMcpClient {
         timer.unref();
         signal.addEventListener("abort", cancel, { once: true });
         this.pending.set(id, { resolve: (value) => finish(undefined, value), reject: (error) => finish(error) });
-        try { this.write({ jsonrpc: "2.0", id, method, params }); }
+        try { this.write({ jsonrpc: "2.0", id, method, params, ...options.extra }); }
         catch { finish(new Error("MCP request could not be sent")); }
       });
     } catch (error) {
-      await this.close();
+      if (!(options.keepOnRpcError && error instanceof McpRpcFailure)) await this.close();
       throw error;
     }
   }
@@ -465,7 +516,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const openApiWrites = new Set(openApiWriteToolNames(agentsEnv?.SAGAX_OPENAPI_TOOLS));
   type CatalogMount = {
     name: string; client: ChatMcpClient; launch: string; builtInBrowser: boolean;
-    agents: boolean; data: boolean; computer: boolean; tools: unknown[]; revision: number;
+    agents: boolean; data: boolean; computer: boolean; owned: boolean; tools: unknown[]; revision: number;
   };
   const catalogs = new Map<string, CatalogMount>();
   const includeTool = (server: string, tool: unknown) => {
@@ -479,7 +530,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   // #2189: agents bare names win over the same name on a connector.
   const agentsPreferred = new Set(integrations?.agents ? agentsPreferredToolNames((integrations.agents as { env?: Record<string, string> }).env) : []);
   const registerCatalog = (mount: CatalogMount) => {
-    const { name: server, client, launch, builtInBrowser, agents, data, tools: advertised } = mount;
+    const { name: server, client, owned, launch, builtInBrowser, agents, data, tools: advertised } = mount;
     const hostTool = builtInBrowser || mount.computer;
     const listed = server === "agents" || !agentsPreferred.size
       ? advertised
@@ -513,7 +564,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       if (!allocatedNames.has(JSON.stringify([server, tool.name]))) {
         for (let index = 2; taken(name); index += 1) { const suffix = `_${index}`; name = base.slice(0, 64 - suffix.length) + suffix; }
       }
-      staged.push({ tool: { client, server, launch, builtInBrowser, agents, data, name: tool.name, schema, searched: searchable.has(server) },
+      staged.push({ tool: { client, owned, server, launch, builtInBrowser, agents, data, name: tool.name, schema, searched: searchable.has(server) },
         candidate: { definition: { type: "function", function: { name, description, parameters } },
           tier: toolTier({ hostTool, agents, directory: searchable.has(server) && isDirectoryTool(tool.name) }) } });
     }
@@ -566,6 +617,18 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     definitions.push(...extra);
   };
   let refreshing: Promise<void> | undefined;
+  /** Every definition and deferred schema again from the catalogs read. The
+   * caller can append native tools such as ask_user to the definitions
+   * array: those stay. */
+  const rebuild = () => {
+    const extra = definitions.filter(entry => !registered.has(entry.function.name)
+      && entry.function.name !== searchName && entry.function.name !== callName);
+    for (const entry of extra) reservedNames.add(entry.function.name);
+    registered.clear();
+    candidates.length = 0;
+    for (const row of catalogs.values()) registerCatalog(row);
+    publishDefinitions(extra);
+  };
   const refreshCatalogs = async (callSignal: AbortSignal, newTurn = false): Promise<void> => {
     if (refreshing) await refreshing;
     const stale = [...catalogs.values()].filter(row => row.revision !== row.client.toolsRevision
@@ -578,15 +641,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
           searchable.has(row.name) && row.name !== "agents" ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
         row.revision = revision;
       }
-      // The caller can append native tools such as ask_user to this array.
-      // Keep those while replacing every MCP definition and deferred schema.
-      const extra = definitions.filter(entry => !registered.has(entry.function.name)
-        && entry.function.name !== searchName && entry.function.name !== callName);
-      for (const entry of extra) reservedNames.add(entry.function.name);
-      registered.clear();
-      candidates.length = 0;
-      for (const row of catalogs.values()) registerCatalog(row);
-      publishDefinitions(extra);
+      rebuild();
     })();
     try { await refreshing; }
     catch (error) {
@@ -624,7 +679,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       // grants last a turn, as a warm engine restarts for it (perTurn).
       const launch = createHash("sha256").update(JSON.stringify(descriptor)).digest("hex");
       return { name, client, launch, builtInBrowser: descriptor === integrations?.browser, agents: descriptor === integrations?.agents, data: descriptor === integrations?.data,
-        computer: descriptor === integrations?.localComputer, tools };
+        computer: descriptor === integrations?.localComputer, owned: ownsToolResolution(descriptor), tools };
     }));
     for (const [index, mount] of mounts.entries()) {
       const configured = servers[index]![0];
@@ -657,7 +712,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const validateTool = (name: string, args: unknown) => {
     if (closed || signal.aborted) throw new ChatToolSessionError("MCP session closed");
     const tool = registered.get(name);
-    if (!tool) throw new Error("The requested tool was not advertised for this turn");
+    if (!tool) throw new Error(`The requested tool was not advertised for this turn.${closeFor(name)}`);
     const excluded = (runs: string | undefined) => scope !== undefined && runs !== undefined
       && !allowsTool(scope, { kind: "mcp", server: tool.server, name: runs });
     // A searched server's directory checks its own tools' arguments and
@@ -713,13 +768,17 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (!tool?.searched || tool.name !== CALL_TOOL) return { title: name, input: args, ask: true, ...(grant ? { grant } : {}), ...(tool ? { mcpTool: `${tool.server}__${tool.name}` } : {}) };
     return { title: chatToolName(tool.server, runs), input: object(args.arguments) ? args.arguments : {}, ask: true, ...(grant ? { grant } : {}), mcpTool: `${tool.server}__${runs}` };
   };
-  /** tool_call names a deferred tool: the call it stands for. */
+  const closeFor = (name: string): string => {
+    const found = name ? resolveServedTool(name, registered.keys()) : undefined;
+    return found?.kind === "none" ? closeNamesSentence(found.close) : "";
+  };
   const deferredCall = (args: unknown): { name: string; args: Record<string, unknown> } => {
-    if (!object(args) || typeof args.name !== "string" || !registered.has(args.name)) {
-      throw new Error(`Unknown tool name; search with ${searchName} and pass a name it returned`);
+    const named = object(args) && typeof args.name === "string" ? args.name : "";
+    if (!object(args) || !named || !registered.has(named)) {
+      throw new Error(`Unknown tool name; search with ${searchName} and pass a name it returned.${closeFor(object(args) && typeof args.name === "string" ? args.name : "")}`);
     }
     if (args.arguments !== undefined && !object(args.arguments)) throw new Error("arguments must be a JSON object");
-    return { name: args.name, args: object(args.arguments) ? args.arguments : {} };
+    return { name: named, args: object(args.arguments) ? args.arguments : {} };
   };
   const search = (args: Record<string, unknown>): ChatToolResult => {
     const query = typeof args.query === "string" ? args.query.trim() : "";
@@ -734,7 +793,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     });
     return { ok: true, text: `Run one with ${callName} { "name": "<tool>", "arguments": { ... } }.\n${lines.join("\n")}` };
   };
-  const validate = (name: string, args: unknown) => {
+  const validate = (asked: string, args: unknown) => {
+    const name = asked;
     if (closed || signal.aborted) throw new ChatToolSessionError("MCP session closed");
     if (name === searchName) {
       if (!object(args) || typeof args.query !== "string") throw new Error("Pass a query string");
@@ -746,7 +806,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     }
     validateTool(name, args);
   };
-  const view = (name: string, args: Record<string, unknown>): ChatToolCallView => {
+  const view = (asked: string, args: Record<string, unknown>): ChatToolCallView => {
+    const name = asked;
     if (name === searchName) return { title: name, input: args, ask: false };
     if (name === callName && object(args) && typeof args.name === "string" && registered.has(args.name)) {
       return viewTool(args.name, object(args.arguments) ? args.arguments : {});
@@ -769,8 +830,10 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       saveScrub = nextScrub;
     },
     refresh: callSignal => refreshCatalogs(callSignal, true),
-    async execute(name, args, callSignal) {
+    async execute(asked, args, callSignal, approve) {
+      // the catalog is read again first, when its server said it changed
       await refreshCatalogs(callSignal);
+      let name = asked;
       if (name === searchName) { validate(name, args); return search(args); }
       if (name === callName) {
         validate(name, args);
@@ -780,10 +843,82 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       }
       validateTool(name, args);
       if (callSignal.aborted) { await close(); throw aborted(); }
-      const tool = registered.get(name)!;
+      let tool = registered.get(name)!;
       try {
         process.stderr.write(resolvedServerLog(tool.server, tool.name));
-        const result = await tool.client.call("tools/call", { name: tool.name, arguments: args }, AbortSignal.any([signal, callSignal]), callTimeoutMs);
+        const callSignals = AbortSignal.any([signal, callSignal]);
+        const runs = target(tool, args);
+        // #4837: our own relays answer a renamed call with a proposal that
+        // only this per-call challenge makes trusted; it never reaches a vendor.
+        const challenge = tool.owned ? randomBytes(16).toString("hex") : undefined;
+        const send = async (to: RegisteredTool, params: Record<string, unknown>, resolution?: string | false) => {
+          try {
+            return { result: await to.client.call("tools/call", params, callSignals, callTimeoutMs,
+              { keepOnRpcError: true, ...(to.owned && resolution !== undefined ? { extra: { sagaxToolResolution: resolution } } : {}) }) };
+          } catch (failure) {
+            // the server answered "unknown tool": nothing ran and the session stays
+            if (failure instanceof McpRpcFailure && runs !== undefined && isUnknownToolText(failure.detail, runs)) return { unknown: failure.detail };
+            throw failure;
+          }
+        };
+        const unknownAnswer = (close: readonly string[]): ChatToolResult =>
+          ({ ok: false, text: `The tool ${oneLine(runs ?? tool.name, 100)} is not served by ${tool.server}.${closeNamesSentence(close)}` });
+        const first = await send(tool, { name: tool.name, arguments: args }, challenge);
+        let result: unknown;
+        let proposed: string | undefined;
+        if ("result" in first) {
+          proposed = challenge ? proposalName(first.result, challenge, runs) : undefined;
+          if (proposed === undefined && (challenge || unknownToolResultText(first.result, runs ?? "") === undefined)) result = first.result;
+        } else if (challenge) {
+          // an owned relay refreshed already and found no match: its close names are the answer
+          return unknownAnswer(namesAfterClose(first.unknown));
+        }
+        if (result === undefined) {
+          // Only this connection is listed, once; the answer decides nothing until it is read whole.
+          let resolved = proposed;
+          let close: string[] = [];
+          let next = tool;
+          let nextArgs = args;
+          if (!tool.searched) {
+            const row = catalogs.get(tool.server);
+            if (!row || runs === undefined) return unknownAnswer([]);
+            // a catalog that cannot be read whole decides nothing; the answer stays "unknown"
+            try {
+              row.tools = await row.client.tools(callSignals, entry => includeTool(row.name, entry), searchable.has(row.name) && row.name !== "agents" ? REMOTE_MCP_STARTUP_MS : STARTUP_MS);
+              row.revision = row.client.toolsRevision;
+              rebuild();
+            } catch { if (callSignal.aborted) throw aborted(); return unknownAnswer([]); }
+            const served = row.tools.flatMap(entry => object(entry) && typeof entry.name === "string" ? [entry.name] : []);
+            close = closeServedNames(runs, served);
+            const found = proposed === undefined ? resolveServedTool(runs, served) : { kind: "owned" as const, name: proposed };
+            resolved = found.kind === "none" || !served.includes(found.name) ? undefined : found.name;
+          }
+          if (resolved === undefined || resolved === runs) return unknownAnswer(close);
+          // schema and tool selection judge the name that would run
+          let chatName: string | undefined;
+          if (tool.searched) {
+            if (scope !== undefined && !allowsTool(scope, { kind: "mcp", server: tool.server, name: resolved })) return { ok: false, text: "Tool selection excludes this tool" };
+            nextArgs = { ...args, name: resolved };
+          } else {
+            chatName = [...registered].find(([, entry]) => entry.client === tool.client && entry.name === resolved)?.[0];
+            if (chatName === undefined) return unknownAnswer(close);
+            try { validateTool(chatName, args); }
+            catch (failure) { return { ok: false, text: failure instanceof Error ? failure.message : "Tool arguments do not match the advertised input schema" }; }
+            next = registered.get(chatName)!;
+          }
+          // a different name is a different tool: the person's usual approval decides
+          const view = viewTool(chatName ?? name, nextArgs);
+          if (!approve) return { ok: false, text: `The server now serves this tool as ${oneLine(resolved, 100)}; it was not run.` };
+          const allowed = !view.ask || await approve(view);
+          if (callSignal.aborted) throw aborted();
+          if (!allowed) return { ok: false, text: "Permission denied or expired; the tool was not executed." };
+          process.stderr.write(resolvedServerLog(next.server, resolved));
+          // exactly one more try, with any further recovery switched off
+          const again = await send(next, { name: tool.searched ? tool.name : resolved, arguments: tool.searched ? nextArgs : args }, false);
+          if (!("result" in again) || unknownToolResultText(again.result, resolved) !== undefined) return unknownAnswer(close);
+          result = again.result;
+          tool = next;
+        }
         if (signal.aborted || callSignal.aborted) throw aborted();
         if (!object(result) || !Array.isArray(result.content) || (result.isError !== undefined && typeof result.isError !== "boolean")) throw new Error("MCP tool returned an invalid result; execution outcome may be uncertain");
         const parts: string[] = [];

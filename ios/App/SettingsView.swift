@@ -14,7 +14,7 @@ import MessageUI
 
 /// The sheet's pages.
 enum SettingsRoute: String, Hashable {
-    case account, usage, plugins, rules, approvalGrants, actionJournal, timeZone, botComputer, pages, appearance, language, haptics, general, experimental, notifications, privacy, vault, securityKeys
+    case account, usage, plugins, rules, approvalGrants, actionJournal, timeZone, botComputer, pages, appearance, language, haptics, general, experimental, notifications, privacy, vault, securityKeys, health
     // The reference app layout's pages (SettingsTree)
     case bots, privacySecurity, about
     // Settings > Bots > Reach me (#1187)
@@ -289,6 +289,7 @@ private struct SettingsRootPage: View {
         case .securityKeys: navigator.routes = privacy + [.securityKeys]
         case .bots: navigator.routes = bots
         case .myEngines: navigator.routes = [.myEngines]
+        case .health: navigator.routes = [.health]
         }
     }
 }
@@ -321,6 +322,7 @@ struct SettingsRouteView: View {
         case .privacy: PrivacySettingsView()
         case .vault: VaultSettingsView()
         case .securityKeys: SecurityKeysSettingsView()
+        case .health: HealthSettingsView()
         case .bots: BotsSettingsView()
         case .reachMe: ReachMeSettingsPage()
         case .myEngines: SettingsPage(title: "My engines") { MyEnginesSection(style: .phone) }

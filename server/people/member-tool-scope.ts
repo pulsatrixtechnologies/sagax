@@ -210,6 +210,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   vault_http_request: "own-account",
   // the person's own iPhone, which asks for its own consent (phone-tools.ts)
   phone_tool: "own-account",
+  // Apple Health on the person's own iPhone, which holds their own consent
+  health_read: "own-account",
+  health_write: "own-account",
   // the speaker's own GitHub account (device flow)
   connect_github: "own-account",
   // the agent-to-agent API: its own guard and owner checks (agent-api.ts)

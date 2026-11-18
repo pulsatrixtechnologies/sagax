@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkPhoneToolResult, isPhoneRequestKind, isPhoneToolCallName, parsePhoneToolArgs, phoneToolGrantKey, phoneToolsFrameAllowed } from "./phone-tools.ts";
+import { HEALTH_TOOLS, checkPhoneToolResult, phoneToolAccess, phoneToolSelfApproved, isPhoneRequestKind, isPhoneToolCallName, parsePhoneToolArgs, phoneToolGrantKey, phoneToolsFrameAllowed } from "./phone-tools.ts";
 
 describe("parsePhoneToolArgs", () => {
   it("refuses an unknown tool and names the known ones", () => {
@@ -128,5 +128,41 @@ describe("card scan (row 84)", () => {
     const sealed = { encapsulatedKey: enc, ciphertext: "A".repeat(80) };
     expect(checkPhoneToolResult("card_scan", {}, { number: "4111111111111111" }).ok).toBe(false);
     expect(checkPhoneToolResult("card_scan", {}, { ...sealed, number: "4111111111111111" })).toEqual({ ok: true, result: sealed });
+  });
+});
+
+describe("health tools", () => {
+  const from = "2026-11-01T00:00:00Z";
+  it("checks a health_read window and category", () => {
+    expect(parsePhoneToolArgs("health_read", { category: "steps", from, to: "2026-11-08T00:00:00Z", aggregation: "daily_sum" }).ok).toBe(true);
+    expect(parsePhoneToolArgs("health_read", { category: "blood_type", from, to: "2026-11-08T00:00:00Z" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("health_read", { category: "steps", from, to: "2027-03-08T00:00:00Z" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("health_read", { category: "steps", from: "2026-11-08T00:00:00Z", to: from }).ok).toBe(false);
+  });
+
+  it("lets a bot write only the categories an app can add", () => {
+    expect(parsePhoneToolArgs("health_write", { category: "water", value: 250 }).ok).toBe(true);
+    expect(parsePhoneToolArgs("health_write", { category: "weight", value: 71.4 }).ok).toBe(true);
+    expect(parsePhoneToolArgs("health_write", { category: "heart_rate", value: 60 }).ok).toBe(false);
+    expect(parsePhoneToolArgs("health_write", { category: "water" }).ok).toBe(false);
+    expect(parsePhoneToolArgs("health_write", { category: "workouts", workout_type: "yoga", start: from, end: "2026-11-01T01:00:00Z", note: "calme" }).ok).toBe(true);
+    expect(parsePhoneToolArgs("health_write", { category: "workouts", workout_type: "yoga" }).ok).toBe(false);
+  });
+
+  it("is a write for health_write, never a card, never a saved grant", () => {
+    expect(HEALTH_TOOLS).toEqual(["health_read", "health_write"]);
+    expect(phoneToolAccess("health_write", {})).toBe("write");
+    expect(phoneToolAccess("health_read", {})).toBe("read");
+    expect(phoneToolGrantKey("health_read", {})).toBeNull();
+    expect(phoneToolSelfApproved("health_write")).toBe(true);
+    expect(phoneToolSelfApproved("location")).toBe(false);
+    expect(isPhoneToolCallName("mcp__agents__health_read")).toBe(true);
+    expect(isPhoneToolCallName("agents_health_write")).toBe(true);
+  });
+
+  it("keeps the daily rows the phone sent and drops anything else", () => {
+    const checked = checkPhoneToolResult("health_read", {}, { category: "steps", unit: "count", aggregation: "daily_sum", days: [{ date: "2026-11-01", value: 8123, samples: 12 }], secret: "x" });
+    expect(checked).toEqual({ ok: true, result: { category: "steps", unit: "count", aggregation: "daily_sum", days: [{ date: "2026-11-01", value: 8123, samples: 12 }] } });
+    expect(checkPhoneToolResult("health_read", {}, { category: "steps", unit: "count", days: [{ date: "yesterday", value: 1 }] }).ok).toBe(false);
   });
 });

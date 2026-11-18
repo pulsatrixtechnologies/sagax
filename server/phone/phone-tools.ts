@@ -21,16 +21,19 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import {
   checkPhoneToolResult,
+  isHealthTool,
   isPhoneTool,
   PHONE_REQUEST_KINDS,
   PHONE_TOOL_REQUEST_TTL_MS,
   phoneToolAccess,
   phoneToolGrantKey,
+  phoneToolSelfApproved,
   PHONE_TOOLS_NEED_PROTECTED_TRANSPORT,
   type PhoneToolAccess,
   type PhoneTransport,
   type PhoneToolDecision,
   type PhoneRequestKind,
+  type HealthToolId,
   type PhoneToolId,
   type PhoneToolRequestWire,
 } from "../../shared/phone-tools.ts";
@@ -110,7 +113,7 @@ export interface PhoneToolBroker {
   /** What this person's phones can do right now, sorted (card_scan included). */
   availableTools(person: string): PhoneRequestKind[];
   /** The same, as a bot may ask: never card_scan. */
-  botTools(person: string): PhoneToolId[];
+  botTools(person: string): Array<PhoneToolId | HealthToolId>;
   /** A registered phone of this person (the answer route checks it). */
   hasDevice(person: string, deviceId: string): boolean;
   /** Remove a device by id (any person). Pending waits that only that device
@@ -257,7 +260,7 @@ export function createPhoneToolBroker(deps: PhoneToolBrokerDeps): PhoneToolBroke
     },
 
     botTools(person) {
-      return this.availableTools(person).filter(isPhoneTool);
+      return this.availableTools(person).filter((tool): tool is PhoneToolId | HealthToolId => isPhoneTool(tool) || isHealthTool(tool));
     },
 
     cancel(person, requestId) {
@@ -325,7 +328,7 @@ export function createPhoneToolBroker(deps: PhoneToolBrokerDeps): PhoneToolBroke
         botName: input.botName,
         threadId: input.threadId,
         allowAlways: grantKey !== null,
-        preApproved: granted(person, input.botId, grantKey),
+        preApproved: phoneToolSelfApproved(input.tool) || granted(person, input.botId, grantKey),
         createdAt,
         expiresAt: createdAt + ttlMs,
       };
@@ -380,7 +383,7 @@ export function createPhoneToolBroker(deps: PhoneToolBrokerDeps): PhoneToolBroke
       return [...requests.values()]
         .filter((row) => row.person === who && !row.outcome)
         .sort((a, b) => a.wire.createdAt - b.wire.createdAt)
-        .map((row) => ({ ...row.wire, preApproved: granted(who, row.wire.botId, row.grantKey) }));
+        .map((row) => ({ ...row.wire, preApproved: phoneToolSelfApproved(row.wire.tool) || granted(who, row.wire.botId, row.grantKey) }));
     },
 
     answer(person, deviceId, requestId, answer) {

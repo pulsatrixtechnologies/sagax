@@ -181,6 +181,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // phone asks for its own consent, server/phone/phone-tools.ts) and the speaker's
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
+  p("health:read", "own", "health_read"),
+  p("health:write", "own", "health_write"),
   p("github:connect", "own", "connect_github"),
   // #2613: search the skill catalogs the person sees (read only)
   p("skills:find", "own", "skills_find"),

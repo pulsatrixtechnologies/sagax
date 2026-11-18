@@ -24,7 +24,7 @@ export const WORDS_LEAVE_TOOLS: ReadonlySet<string> = new Set([
   // an engine or a vendor outside the app
   "run_with_engine", "launch_cloud_agent", "cloud_agent_follow_up", "make_image", "make_video", "sagax_web_search",
   // an outside API, a phone, a connector, the organization console
-  "vault_http_request", "phone_tool", "place_phone_call", "call_connector", "flow", "flow_action", "api_plan", "api_upload",
+  "vault_http_request", "phone_tool", "health_read", "health_write", "place_phone_call", "call_connector", "flow", "flow_action", "api_plan", "api_upload",
   // a live call: who is called, what is said, where it goes
   "place_call", "phone_call_owner", "phone_line_contact", "transfer",
   // a page read outside the chat

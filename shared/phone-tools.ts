@@ -24,10 +24,23 @@ export function isPhoneTool(value: unknown): value is PhoneToolId {
   return typeof value === "string" && (PHONE_TOOLS as readonly string[]).includes(value);
 }
 
+/** Apple Health on the person's own iPhone (HealthKit, read and write). Two
+ * bot tools of their own (health_read, health_write) so an organization's
+ * Refuse / Ask-first rules can name each, served through the same device
+ * link as the phone tools. The person picks the categories in Settings >
+ * Santé on the phone and grants each through the HealthKit sheet; the phone
+ * enforces that choice on every call, so these two never open a card. */
+export const HEALTH_TOOLS = ["health_read", "health_write"] as const;
+export type HealthToolId = typeof HEALTH_TOOLS[number];
+
+export function isHealthTool(value: unknown): value is HealthToolId {
+  return typeof value === "string" && (HEALTH_TOOLS as readonly string[]).includes(value);
+}
+
 /** What a phone can be asked: the bots' tools, plus card_scan, which only
  * the person's own computer asks (Settings > Vault > New card, "Scanner
  * avec l'iPhone", audit row 84) and never a bot. */
-export const PHONE_REQUEST_KINDS = [...PHONE_TOOLS, "card_scan"] as const;
+export const PHONE_REQUEST_KINDS = [...PHONE_TOOLS, ...HEALTH_TOOLS, "card_scan"] as const;
 export type PhoneRequestKind = typeof PHONE_REQUEST_KINDS[number];
 
 export function isPhoneRequestKind(value: unknown): value is PhoneRequestKind {
@@ -126,12 +139,47 @@ export const phoneToolArgsSchemas = {
 
 export type PhoneToolArgs<T extends PhoneToolId = PhoneToolId> = z.infer<typeof phoneToolArgsSchemas[T]>;
 
-export type ParsedPhoneToolArgs = { ok: true; tool: PhoneToolId; args: Record<string, unknown> } | { ok: false; error: string };
+/** The Health categories a person may open on their phone (Settings > Santé). */
+export const HEALTH_CATEGORIES = ["sleep", "steps", "exercise", "heart_rate", "resting_heart_rate", "hrv", "mindful_minutes", "water", "weight", "workouts"] as const;
+export type HealthCategory = typeof HEALTH_CATEGORIES[number];
+/** The categories a bot may add to Health (the others are measured by the phone or a watch). */
+export const HEALTH_WRITABLE_CATEGORIES = ["mindful_minutes", "water", "weight", "workouts"] as const;
+export type HealthWritableCategory = typeof HEALTH_WRITABLE_CATEGORIES[number];
+export const HEALTH_AGGREGATIONS = ["daily_sum", "daily_avg"] as const;
+/** The longest window one health_read covers. */
+export const MAX_HEALTH_WINDOW_MS = 92 * 24 * 60 * 60_000;
+
+export const healthToolArgsSchemas = {
+  health_read: z.object({
+    reason,
+    category: z.enum(HEALTH_CATEGORIES),
+    from: isoDate,
+    to: isoDate,
+    aggregation: z.enum(HEALTH_AGGREGATIONS).optional(),
+  }).strict().refine((args) => Date.parse(args.to) > Date.parse(args.from) && Date.parse(args.to) - Date.parse(args.from) <= MAX_HEALTH_WINDOW_MS, "to comes after from, at most 92 days later"),
+  health_write: z.object({
+    reason,
+    category: z.enum(HEALTH_WRITABLE_CATEGORIES),
+    /** minutes (mindful_minutes), millilitres (water), kilograms (weight), minutes (workouts) */
+    value: z.number().finite().positive().max(100_000).optional(),
+    /** when it happened; defaults to now (for a duration, it ends then) */
+    start: isoDate.optional(),
+    end: isoDate.optional(),
+    /** workouts: running, walking, cycling, swimming, yoga, strength, hiit, other */
+    workout_type: z.string().trim().min(1).max(40).optional(),
+    note: z.string().trim().max(500).optional(),
+  }).strict().refine((args) => args.category === "workouts" || args.value !== undefined, "value is needed (minutes, millilitres or kilograms)")
+    .refine((args) => args.start === undefined || args.end === undefined || Date.parse(args.end) >= Date.parse(args.start), "end is not before start")
+    .refine((args) => args.category !== "workouts" || args.value !== undefined || (args.start !== undefined && args.end !== undefined), "a workout needs value (minutes) or start and end"),
+} satisfies Record<HealthToolId, z.ZodTypeAny>;
+
+export type ParsedPhoneToolArgs = { ok: true; tool: PhoneToolId | HealthToolId; args: Record<string, unknown> } | { ok: false; error: string };
 
 /** The bot's arguments for one tool, checked and trimmed. */
 export function parsePhoneToolArgs(tool: unknown, raw: unknown): ParsedPhoneToolArgs {
-  if (!isPhoneTool(tool)) return { ok: false, error: `tool is one of ${PHONE_TOOLS.join(", ")}.` };
-  const parsed = phoneToolArgsSchemas[tool].safeParse(raw ?? {});
+  if (!isPhoneTool(tool) && !isHealthTool(tool)) return { ok: false, error: `tool is one of ${[...PHONE_TOOLS, ...HEALTH_TOOLS].join(", ")}.` };
+  const schema: z.ZodTypeAny = isHealthTool(tool) ? healthToolArgsSchemas[tool] : phoneToolArgsSchemas[tool];
+  const parsed = schema.safeParse(raw ?? {});
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
@@ -142,6 +190,7 @@ export function parsePhoneToolArgs(tool: unknown, raw: unknown): ParsedPhoneTool
 
 /** Whether a request reads the phone or changes it. */
 export function phoneToolAccess(tool: PhoneRequestKind, args: Record<string, unknown>): PhoneToolAccess {
+  if (tool === "health_write") return "write";
   if ((tool === "reminders" || tool === "calendar" || tool === "alarms") && args.action === "create") return "write";
   if (tool === "home" && args.action === "run") return "write";
   if (tool === "shortcut") return "write";
@@ -157,7 +206,7 @@ export function phoneToolAccess(tool: PhoneRequestKind, args: Record<string, unk
  * an event, running one home scene or creating an alarm, each its own key,
  * never a read. A shortcut and photos are asked each time. */
 export function phoneToolGrantKey(tool: PhoneRequestKind, args: Record<string, unknown>): string | null {
-  if (PHONE_TOOLS_ONCE_ONLY.has(tool)) return null;
+  if (PHONE_TOOLS_ONCE_ONLY.has(tool) || isHealthTool(tool)) return null;
   if ((tool === "reminders" || tool === "calendar" || tool === "alarms") && phoneToolAccess(tool, args) === "write") return `${tool}:write:create`;
   if (tool === "home" && phoneToolAccess(tool, args) === "write") return "home:write:run";
   if (phoneToolAccess(tool, args) === "write") return null;
@@ -169,9 +218,18 @@ export function phoneToolGrantKey(tool: PhoneRequestKind, args: Record<string, u
   return `${tool}:read`;
 }
 
-/** phone_tool as an engine names it (mcp__agents__phone_tool, agents_phone_tool). */
+/** phone_tool, health_read and health_write as an engine names them
+ * (mcp__agents__phone_tool, agents_health_read): their answers are never
+ * kept in the conversation's steps. */
 export function isPhoneToolCallName(name: string | undefined): boolean {
-  return typeof name === "string" && /(?:^|[_.])phone_tool$/.test(name);
+  return typeof name === "string" && /(?:^|[_.])(?:phone_tool|health_read|health_write)$/.test(name);
+}
+
+/** A health request needs no card: the person already chose the category
+ * and granted it through the HealthKit sheet on the phone, which checks
+ * both on every call. Shown to the phone as pre-approved. */
+export function phoneToolSelfApproved(tool: PhoneRequestKind): boolean {
+  return isHealthTool(tool);
 }
 
 /** What the transcript keeps of a phone_tool answer: never the data. */
@@ -215,6 +273,17 @@ const eventSchema = z.object({
 const PHOTO_MAX_BASE64 = 1_400_000;
 const imageSchema = z.object({ mimeType: z.literal("image/jpeg"), data: z.string().max(PHOTO_MAX_BASE64).regex(/^[A-Za-z0-9+/=]+$/) });
 
+const healthDay = z.object({ date: text(10).regex(/^\d{4}-\d{2}-\d{2}$/), value: z.number().finite(), samples: z.number().int().min(0).max(1_000_000).optional() });
+const healthWorkout = z.object({
+  type: text(40),
+  start: text(40),
+  end: text(40),
+  minutes: z.number().finite().min(0).max(100_000),
+  energyKcal: z.number().finite().min(0).max(100_000).optional(),
+  distanceMeters: z.number().finite().min(0).max(10_000_000).optional(),
+  note: text(500).optional(),
+});
+
 const coordinate = (limit: number) => z.number().finite().min(-limit).max(limit);
 
 export const phoneToolResultSchemas = {
@@ -234,6 +303,16 @@ export const phoneToolResultSchemas = {
   alarms: z.object({ alarms: list(alarmSchema, 50).optional(), created: alarmSchema.optional() }),
   photos: z.object({ images: list(imageSchema, 3) }),
   shortcut: z.object({ started: z.boolean() }),
+  health_read: z.object({
+    category: z.enum(HEALTH_CATEGORIES),
+    unit: text(20),
+    aggregation: z.enum(HEALTH_AGGREGATIONS).optional(),
+    days: list(healthDay, 93).optional(),
+    workouts: list(healthWorkout, 100).optional(),
+  }),
+  health_write: z.object({
+    saved: z.object({ category: z.enum(HEALTH_WRITABLE_CATEGORIES), value: z.number().finite().optional(), unit: text(20).optional(), start: text(40), end: text(40) }),
+  }),
   clipboard: z.object({ text: text(4_000).optional(), empty: z.boolean().optional() }),
   status: z.object({
     battery: z.object({ level: z.number().min(0).max(1).optional(), state: z.enum(["unknown", "unplugged", "charging", "full"]).optional() }).optional(),

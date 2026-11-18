@@ -139,6 +139,10 @@ targets:
         # turns on the Siri capability of the App ID. The CarPlay
         # entitlement is another matter: project-carplay.yml.
         com.apple.developer.siri: true
+        # Apple Health, read and write, for the person's own bots (phone
+        # tools health_read and health_write, Settings > Santé). The App ID
+        # has HealthKit on; automatic signing puts it in the profile.
+        com.apple.developer.healthkit: true
         com.apple.security.application-groups:
           - group.ca.pulsatrix.sagax
         keychain-access-groups:
@@ -255,6 +259,10 @@ targets:
           When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for.
         NSCalendarsUsageDescription: >-
           When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for.
+        NSHealthShareUsageDescription: >-
+          Your bots read and record the data you choose, for you only.
+        NSHealthUpdateUsageDescription: >-
+          Your bots read and record the data you choose, for you only.
         NSHomeKitUsageDescription: >-
           When you allow it on your phone, Sagax reads the scenes and accessories in your home, or runs the one scene a bot asked for.
         NSAlarmKitUsageDescription: >-

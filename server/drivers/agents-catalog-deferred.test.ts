@@ -17,7 +17,7 @@ const EVERYTHING = {
   SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_AGENT_API: "1", SAGAX_CLAIMS: "1", SAGAX_PERSPICAX_TOOLS: "1",
   SAGAX_SKILL_AUTHORING_ENABLED: "1", SAGAX_SHARED_COMPUTERS_ENABLED: "1", SAGAX_VOICE_NOTES: "1", SAGAX_MEETINGS: "1",
   SAGAX_ROUTE_MESSAGES: "1", SAGAX_SINGLE_STREAM: "1", SAGAX_GROUP_MEMORY: "1", SAGAX_MEMORY_ENABLED: "1",
-  SAGAX_PHONE_TOOLS: "location,status",
+  SAGAX_PHONE_TOOLS: "location,status,health_read,health_write",
 };
 
 /** The tools at the heart of a chat turn: never behind a search step. */

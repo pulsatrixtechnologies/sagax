@@ -32,6 +32,9 @@ public struct PhoneToolRequest: Decodable, Equatable, Sendable, Identifiable {
     public var id: String
     /// Nil for a tool this build does not know: the card offers Refuser only.
     public var tool: PhoneTool?
+    /// health_read and health_write (Health.swift): served by the Health
+    /// code, never by a card. Set instead of `tool`.
+    public var healthTool: HealthTool?
     public var args: [String: WidgetJSON]
     public var access: String
     public var botId: String
@@ -45,7 +48,9 @@ public struct PhoneToolRequest: Decodable, Equatable, Sendable, Identifiable {
     public init(from decoder: Decoder) throws {
         let row = try decoder.container(keyedBy: CodingKeys.self)
         id = try row.decode(String.self, forKey: .id)
-        tool = PhoneTool(rawValue: (try? row.decode(String.self, forKey: .tool)) ?? "")
+        let toolName = (try? row.decode(String.self, forKey: .tool)) ?? ""
+        tool = PhoneTool(rawValue: toolName)
+        healthTool = HealthTool(rawValue: toolName)
         args = (try? row.decode([String: WidgetJSON].self, forKey: .args)) ?? [:]
         access = (try? row.decode(String.self, forKey: .access)) ?? "read"
         botId = try row.decode(String.self, forKey: .botId)
@@ -145,6 +150,15 @@ public enum PhoneToolRules {
     /// for a tool this phone offers, and never once it expired.
     public static func runsWithoutCard(_ request: PhoneToolRequest, appActive: Bool, offered: Set<PhoneTool>, protectedTransport: Bool = true, now: Date = Date()) -> Bool {
         guard appActive, protectedTransport, request.preApproved, let tool = request.tool, !tool.onceOnly, offered.contains(tool) else { return false }
+        return !isExpired(request, now: now)
+    }
+
+    /// A health request needs no card: the person's choice in Settings >
+    /// Santé is the consent. It runs while the app is open on screen (the
+    /// phone is unlocked), over a protected connection, for a tool this phone
+    /// offers, and never once it expired.
+    public static func runsHealth(_ request: PhoneToolRequest, appActive: Bool, offered: [HealthTool], protectedTransport: Bool = true, now: Date = Date()) -> Bool {
+        guard appActive, protectedTransport, let tool = request.healthTool, offered.contains(tool) else { return false }
         return !isExpired(request, now: now)
     }
 
@@ -463,10 +477,10 @@ public enum PhoneToolShaping {
 public extension CompanionClient {
     /// What this phone can do now. Sent when the stream opens and while
     /// the app is open; the server offers a tool only while it is fresh.
-    func registerPhoneTools(deviceName: String, tools: [PhoneTool], protectedTransport: Bool) async throws {
+    func registerPhoneTools(deviceName: String, tools: [PhoneTool], health: [HealthTool] = [], protectedTransport: Bool) async throws {
         try await send(makeRequest("POST", "/api/me/phone-tools/device", body: [
             "deviceName": String(deviceName.prefix(80)),
-            "tools": tools.map(\.rawValue),
+            "tools": tools.map(\.rawValue) + health.map(\.rawValue),
             "transport": PhoneToolRules.transport(protectedTransport: protectedTransport),
         ]))
     }

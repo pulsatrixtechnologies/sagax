@@ -5621,6 +5621,14 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).error).toContain("flow_run failed");
   });
 
+  it("resolves legacy Flow instructions against the current connection at dispatch", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), prompt: "Call Flow to read the journal." });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.started[0]?.prompt).toContain("use the listed equivalent for that operation");
+    expect(h.manager.routineById(routine.id)?.prompt).toBe("Call Flow to read the journal.");
+  });
+
   // #4432: the routine sees tool titles only, never which product a
   // connection serves. A tool missing on one connection stays a problem
   // even when a tool of the same name then ran on another: every gateway

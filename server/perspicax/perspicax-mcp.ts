@@ -988,7 +988,12 @@ export class PerspicaxMcp {
       await rpc("notifications/initialized", {});
       const listed = await rpc("tools/list", {});
       if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
-      if (!listed.result.tools.some(tool => isObject(tool) && tool.name === "flow_run")) {
+      const served = new Set(listed.result.tools.flatMap(tool => isObject(tool) && typeof tool.name === "string" ? [tool.name] : []));
+      if (!served.has("flow_run") && !served.has("flow") && !served.has("flow_action")) {
+        // #4432: Flow is retired and the connection serves none of its tools:
+        // there is nothing to shadow. Report precisely what was checked.
+        result = { catalogOnly: true };
+      } else if (!served.has("flow_run")) {
         result = { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
       } else if (!input.routine) {
         // The model may choose a recipe during the real turn. With no

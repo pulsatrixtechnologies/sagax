@@ -94,6 +94,12 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
       { command: "release", args: { routine: "inbox-review", run_id: "shadow-1" } },
     ]);
   });
+  it("is not a problem when the connection serves no Flow tool at all (Flow retired, #4432)", async () => {
+    const h = fixture({ tools: ["api_list", "cw_psa_query"] });
+    expect(await h.check()).toMatchObject({ ok: true });
+    expect((await h.check()).checks.some(check => check.code === "flow_plan")).toBe(false);
+    expect(h.commands()).toEqual([]);
+  });
   it("uses a fresh client for repeated unnamed probes of the same person's bot", async () => {
     const h = fixture();
     await Promise.all([0, 1].map(() => h.mcp.probeFlowReadiness("pr_osprey", "osprey", {}, AbortSignal.timeout(5_000))));
@@ -203,8 +209,8 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(check.line.length).toBeLessThanOrEqual(500);
     expect(check.params!.error!.length).toBeLessThanOrEqual(350);
   });
-  it("reports a missing Flow tool rather than a green shadow check", async () => {
-    const h = fixture({ tools: ["api_list"] });
+  it("reports a missing flow_run while another Flow tool is served, rather than a green shadow check", async () => {
+    const h = fixture({ tools: ["api_list", "flow"] });
     expect((await h.check()).checks.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { step: "tools/list" } });
     expect(h.commands()).toEqual([]);
     expect(h.revoke).toHaveBeenCalledOnce();

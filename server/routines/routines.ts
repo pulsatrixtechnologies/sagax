@@ -1,6 +1,6 @@
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import { routineLoopStopNotice, routinePreflightNotice } from "./loop-stop-notice.ts";
-import { loadRoutineReadiness } from "./routine-readiness.ts";
+import { isFlowRoutine, loadRoutineReadiness } from "./routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
@@ -1400,6 +1400,9 @@ function composeExecutionPrompt(
   answers?: string,
 ): string {
   const parts = [prompt, retried ? retryNote(retried) : ""];
+  if (isFlowRoutine(prompt) || /(?:__flow\b|\b(?:use|call|outil|tool)\s+`?Flow\b)/i.test(prompt)) {
+    parts.push("Resolve the operations in this routine from the current tool catalog on its account connection. If the recipe names a retired Flow tool, use the listed equivalent for that operation with the same scope and approvals. If none is available, report the operation and connection that could not run.");
+  }
   // #2696: the goal and its two closing lines come right after the work.
   if (goal) parts.push(goal);
   // What the watch saw change: data, fenced like a trigger's event.

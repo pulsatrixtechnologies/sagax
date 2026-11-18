@@ -33,15 +33,15 @@
 // its tooltip naming the achievement that unlocks it. Each character keeps
 // its own skin, so switching and back finds it again. Loaded lazily with
 // the pane.
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ClipboardPaste, Lock, Shuffle } from "lucide-react";
+import { Check, Lock, Shuffle } from "lucide-react";
 import { characterLock, lockHint, reportAchievement, skinLock, useUnlocks, type LockInfo } from "@/lib/achievements";
 import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { MAUS_COLORS, mausInk, swatchStyle, type MausColor, type MausMotion } from "@/lib/mascot";
+import { MAUS_COLORS, swatchStyle, type MausColor, type MausMotion } from "@/lib/mascot";
 import { MausAvatar } from "@/components/Avatar";
 import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import type { MascotColorGroup } from "../../../shared/mascot-colors";
@@ -58,11 +58,13 @@ import { FrogMascot } from "@/components/FrogMascot";
 import { CrabMascot } from "@/components/CrabMascot";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import "@/components/skin-fx/skin-fx.css";
+import { APPEARANCE_ACTION } from "./appearance-action";
+import { PillTabs } from "@/components/PillTabs";
 import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTabs } from "./editor-tabs";
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
-import { MASCOT_HERO_BUTTON, MascotLookPreview } from "./MascotLookPreview";
+import { MascotLookPreview } from "./MascotLookPreview";
 import { useMascotHeroSlot } from "./mascot-hero-slot";
 
 export interface MascotLookPatch {
@@ -96,7 +98,6 @@ const heading = "text-[11px] font-medium text-ink-secondary";
 const card = "flex flex-col items-center justify-center gap-0.5 rounded-lg bg-inset p-1 transition-colors hover:bg-control disabled:opacity-50";
 const on = "ring-2 ring-accent-border";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
-const APPEARANCE_ACTION = cn("inline-flex items-center justify-center gap-1.5 rounded-lg border border-hairline-weak px-2.5 py-1.5 text-[13px] leading-4 text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50", focusRing);
 const chip = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] leading-4 transition-colors";
 const chipOn = "border-accent-border bg-selected text-ink";
 const chipOff = "border-hairline-weak text-ink-secondary hover:text-ink";
@@ -557,7 +558,6 @@ export default function MascotLookEditor({
   const [tabChoice, setTab] = useState<EditorTab>(initialTab);
   const tab: EditorTab = tabs.includes(tabChoice) ? tabChoice : "mascot";
   const tint = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
-  const ink = mausInk(bot.color) ?? tint;
 
   // the gallery: a chip narrows it, the shelves split what is left
   const [filter, setFilter] = useState<WardrobeFilter>("all");
@@ -623,7 +623,7 @@ export default function MascotLookEditor({
     shape: shapeName,
     color: (
       <span className="inline-flex items-center gap-1">
-        <span className="size-2 rounded-full ring-1 ring-white/40" style={{ backgroundColor: tint }} aria-hidden="true" />
+        <span className="size-2 shrink-0 self-center rounded-full ring-1 ring-white/40" style={{ backgroundColor: tint }} aria-hidden="true" />
         {paletteName}
       </span>
     ),
@@ -693,47 +693,30 @@ export default function MascotLookEditor({
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
       {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
 
-      {/* ONE row (owner 2026-11-17, save vertical space): each tab on a single line with its current value inline
-          ("Mascot · Shapes", "Color ● Clay"), the open one underlined in the bot's color; Reset and Randomize at the right,
+      {/* ONE row (owner 2026-11-17, save vertical space): the app's shared pill tabs (the reference's text tabs: borderless
+          pills, the open one on the soft fill, no divider line), each with its current value inline ("Mascot · Shapes",
+          "Color ● Clay"); Reset and Randomize at the right as quiet text-and-icon buttons on the same centre line,
           icon only when the width is short. The tabs scroll sideways rather than wrap. */}
-      <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">
-        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto" data-appearance-tabs="">
-          {tabs.map((id) => {
-            const selected = id === tab;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`appearance-tab-${id}`}
-                aria-selected={selected}
-                aria-controls="appearance-tab-panel"
-                tabIndex={selected ? 0 : -1}
-                data-appearance-tab={id}
-                onClick={() => setTab(id)}
-                onKeyDown={(event) => {
-                  const next = nextTab(tabs, tab, event.key);
-                  if (next == null) return;
-                  event.preventDefault();
-                  setTab(next);
-                  event.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-appearance-tab="${next}"]`)?.focus();
-                }}
-                style={{ borderBottomColor: selected ? ink : "transparent" }}
-                className={cn(
-                  "-mb-px flex min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-left transition-colors",
-                  focusRing,
-                  selected ? "text-ink" : "text-ink-secondary hover:text-ink",
-                )}
-              >
-                <span className="text-[14px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
-                {id !== "color" && <span aria-hidden="true" className="text-[12px] text-ink-tertiary">·</span>}
-                <span className="max-w-[9rem] truncate text-[12px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex min-w-0 items-center gap-2" data-appearance-tab-bar="">
+        <PillTabs
+          tabs={tabs}
+          tab={tab}
+          onTab={setTab}
+          idPrefix="appearance"
+          ariaLabel={t("appearance.tabs")}
+          data-appearance-tabs=""
+          className="flex-1 flex-nowrap overflow-x-auto"
+          tabAttributes={(id) => ({ "data-appearance-tab": id })}
+          label={(id) => (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium">{t(EDITOR_TAB_LABEL[id])}</span>
+              {id !== "color" && <span aria-hidden="true" className="text-ink-tertiary">·</span>}
+              <span className="inline-flex max-w-[9rem] items-center gap-1.5 truncate text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
+            </span>
+          )}
+        />
         {(tabActions || randomizeInTabRow) && (
-          <div className="flex shrink-0 items-center justify-end gap-1.5" data-appearance-tab-actions="">
+          <div className="flex shrink-0 items-center justify-end gap-0.5" data-appearance-tab-actions="">
             {tabActions}
             {randomizeInTabRow && (
               <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} title={t("appearance.randomize")} className={APPEARANCE_ACTION}>
@@ -745,7 +728,7 @@ export default function MascotLookEditor({
         )}
       </div>
 
-      <div id="appearance-tab-panel" role="tabpanel" aria-labelledby={`appearance-tab-${tab}`} data-appearance-tab-panel={tab} data-character-options={shown}>
+      <div id={`appearance-panel-${tab}`} role="tabpanel" aria-labelledby={`appearance-tab-${tab}`} data-appearance-tab-panel={tab} data-character-options={shown}>
         {tab === "mascot" && (
           <div ref={browser} data-mascot-browser="" className="flex min-w-0 flex-col gap-3">
             {picturePanel ?? (
@@ -848,11 +831,6 @@ export default function MascotLookEditor({
                 </button>
               ))}
             </div>
-            <PasteShape disabled={optionsOff} onUse={(text) => {
-              const result = pastedShapeLook(look, text);
-              if (result.ok) onPatch({ mascotLook: result.mascotLook });
-              return result;
-            }} />
           </div>
         )}
         {tab === "color" && (
@@ -861,73 +839,6 @@ export default function MascotLookEditor({
         {tab === "skin" && skinPicker}
       </div>
     </div>
-  );
-}
-
-/**
- * Paste an open-bot-avatar definition (the JSON its editor or its prompt
- * gives) as the bot's shape (#4160): a button under the Shape grid opens the
- * field; the engine checks the text and its reason shows under the field.
- */
-function PasteShape({ disabled, onUse }: { disabled?: boolean; onUse: (text: string) => { ok: true } | { ok: false; reasons: EngineAvatarReason[] } }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [error, setError] = useState<EngineAvatarReason[] | null>(null);
-  const id = useId();
-  const close = () => {
-    setOpen(false);
-    setText("");
-    setError(null);
-  };
-  if (!open) {
-    return (
-      <div className="flex">
-        <button type="button" data-shape-paste="" disabled={disabled} aria-expanded={false} onClick={() => setOpen(true)} className={MASCOT_HERO_BUTTON}>
-          <ClipboardPaste size={13} aria-hidden="true" />
-          {t("appearance.shape.paste")}
-        </button>
-      </div>
-    );
-  }
-  return (
-    <form
-      data-shape-paste-form=""
-      className="flex flex-col gap-2 rounded-xl border border-hairline-weak bg-inset p-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const result = onUse(text);
-        if (result.ok) close();
-        else setError(result.reasons);
-      }}
-    >
-      <label htmlFor={`${id}-text`} className="text-[13px] font-medium leading-5 text-ink">{t("appearance.shape.paste")}</label>
-      <p id={`${id}-hint`} className="text-[12px] leading-4 text-ink-secondary">{t("appearance.shape.pasteHint")}</p>
-      <textarea
-        id={`${id}-text`}
-        value={text}
-        rows={6}
-        spellCheck={false}
-        autoFocus
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
-        onChange={(event) => {
-          setText(event.target.value);
-          setError(null);
-        }}
-        placeholder='{ "version": 1, "id": "…", "name": "…", "body": { "path": "M…Z" }, "eyes": { "x": 50, "y": 45, "spacing": 16, "scale": 1 } }'
-        className="w-full resize-y rounded-lg border border-hairline/60 bg-raised px-3 py-2.5 font-mono text-[12px] text-ink outline-none focus:border-accent"
-      />
-      {error && (
-        <p id={`${id}-error`} role="alert" data-shape-paste-error="" className="break-words text-[12px] leading-4 text-danger">
-          {t("appearance.shape.pasteInvalid", { reason: error.map((reason) => t(PASTE_REASON_LABEL[reason])).join(" ") })}
-        </p>
-      )}
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={close} className={MASCOT_HERO_BUTTON}>{t("common.cancel")}</button>
-        <button type="submit" disabled={disabled || !text.trim()} className={MASCOT_HERO_BUTTON}>{t("appearance.shape.use")}</button>
-      </div>
-    </form>
   );
 }
 

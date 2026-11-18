@@ -48,7 +48,7 @@ export interface MascotLookPreviewProps {
    * bare hero (the mascot, the name and label under it), no card. */
   heading?: ReactNode;
   subheading?: ReactNode;
-  /** The profile page's hero: a 3px ring in the page colour (70px plate, 64px mascot) as the reference; no other mascot has it. */
+  /** The profile page's hero: a thin 3px ring in soft white, no filled disc (70px frame, 64px mascot) as the reference; no other mascot has it. */
   ringed?: boolean;
   /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
@@ -139,7 +139,7 @@ export function MascotLookPreview({
         className={cn("relative flex w-full flex-col items-start text-left", ringed ? "gap-2" : "gap-1")}
       >
         {ringed ? (
-          <span data-mascot-ring="" className="grid size-[70px] shrink-0 place-items-center rounded-full bg-app">
+          <span data-mascot-ring="" className="grid size-[70px] shrink-0 place-items-center rounded-full border-[3px] border-white/80">
             <MascotStage {...stage} size={MASCOT_RING_SIZE} pad={0} />
           </span>
         ) : (

@@ -12,6 +12,7 @@
 // enough, stacked otherwise, whatever the window's width.
 import { lazy, Suspense } from "react";
 import { RotateCcw } from "lucide-react";
+import { APPEARANCE_ACTION } from "../floating-bots/appearance-action";
 
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -35,7 +36,7 @@ export function AppearancePane({ bot, onPatch }: { bot: Bot; onPatch: (patch: Av
       onClick={resetMascot}
       data-appearance-reset=""
       title={t("botPanel.avatar.reset")}
-      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-hairline-weak px-2.5 py-1.5 text-[13px] leading-4 text-ink-secondary hover:bg-control hover:text-ink"
+      className={APPEARANCE_ACTION}
     >
       <RotateCcw size={13} aria-hidden="true" />
       <span className="sr-only @[34rem]:not-sr-only">{t("botPanel.avatar.reset")}</span>

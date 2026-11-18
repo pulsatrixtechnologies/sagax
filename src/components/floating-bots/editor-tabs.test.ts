@@ -36,7 +36,7 @@ const render = (bot: { color?: string; mascotSkin?: string; mascotLook?: unknown
     );
     if (index === 0) return html;
     // a tab this character does not offer opens Mascot, already drawn
-    return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-tab-panel"')) : "";
+    return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-panel-')) : "";
   }).join("");
 
 describe("skin tabs", () => {

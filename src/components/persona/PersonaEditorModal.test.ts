@@ -269,11 +269,12 @@ describe("bot profile page shell", () => {
     for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
     expect(card).toContain("items-start");
     expect(card).not.toContain("items-center");
-    // the reference's avatar (owner 2026-11-17): 64px mascot in a 3px ring of the page colour (70px plate), this page only
+    // the reference's avatar (owner 2026-11-17): 64px mascot in a thin 3px soft-white ring, no filled disc (70px frame), this page only
     const ring = /<span[^>]*data-mascot-ring=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(ring).toContain("size-[70px]");
     expect(ring).toContain("rounded-full");
-    expect(ring).toContain("bg-app");
+    expect(ring).toContain("border-[3px]");
+    expect(ring).not.toContain("bg-app");
     const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(stage).toContain(`width:${MASCOT_RING_SIZE}px`);
     expect(stage).not.toContain("overflow-hidden");

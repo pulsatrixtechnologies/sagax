@@ -60,14 +60,14 @@ describe("pastedShapeLook", () => {
       expect(fr).not.toMatch(/out of range|\d+\.\.\d+|must be/);
     }
     expect(t(PASTE_REASON_LABEL.eyesSize)).toContain("yeux");
-    expect(t("appearance.shape.pasteInvalid", { reason: t(PASTE_REASON_LABEL.json) })).toBe("Cette définition ne peut pas servir. Ce n'est pas un objet JSON.");
   });
 });
 
 describe("the Shape tab", () => {
-  it("offers to paste a definition", () => {
+  it("has no paste button under the grid (owner 2026-11-17); a definition still arrives as the bot's mascotLook", () => {
     const html = shapeTab({ character: "shape", shape: "star" });
-    expect(html).toContain("data-shape-paste=\"\"");
+    expect(html).not.toContain("data-shape-paste");
+    expect(html).not.toContain("<textarea");
     expect(html).not.toContain("data-own-shape");
     expect(html).toMatch(/data-character-shape="star"[^>]*aria-checked="true"|aria-checked="true"[^>]*data-character-shape="star"/);
   });

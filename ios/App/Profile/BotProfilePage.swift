@@ -279,8 +279,8 @@ struct BotProfilePage: View {
         .accessibilityHidden(true)
     }
 
-    /// The desktop's header (#4602): the mascot at 64 in a 3 pt ring of the
-    /// page colour, its middle on the banner's lower edge, then "Name · Label"
+    /// The desktop's header (#4602): the mascot at 64 in a thin 3 pt soft white ring
+    /// (no filled disc behind it), its middle on the banner's lower edge, then "Name · Label"
     /// on one line and the facts, all aligned left.
     private var hero: some View {
         let plate = mascotSize + ringWidth * 2
@@ -293,7 +293,7 @@ struct BotProfilePage: View {
                 owlHandle: owlHandle
             )
             .frame(width: plate, height: plate)
-            .background(Circle().fill(Theme.bg))
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.8), lineWidth: ringWidth))
             .contentShape(Circle())
             .onTapGesture { playMove() }
             .accessibilityElement()

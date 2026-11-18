@@ -213,7 +213,7 @@ describe("the Mascot gallery", () => {
   it("shows the Mascot, Shape, Color and Skin tabs with their values, one grid at a time", () => {
     const html = renderEditor(makeBot({ mascotLook: botMascotLook({ character: "shape", shape: "pumpkin" }) }));
     expect([...html.matchAll(/data-appearance-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["mascot", "shape", "color", "skin"]);
-    expect(html).toMatch(/aria-selected="true"[^>]*data-appearance-tab="mascot"/);
+    expect(html).toMatch(/data-appearance-tab="mascot"[^>]*aria-selected="true"/);
     expect(html.match(/data-appearance-tab-value=""/g)).toHaveLength(4);
     expect(html).toContain(">Pumpkin<");
     // only the open tab's grid is drawn
@@ -231,7 +231,7 @@ describe("the Mascot gallery", () => {
     expect(tabsOf("owl")).toEqual(["mascot", "color", "skin"]);
     expect(tabsOf("trombi")).toEqual(["mascot", "skin"]);
     // a tab the character does not offer opens Mascot
-    expect(renderEditor(makeBot(), "shape")).toMatch(/aria-selected="true"[^>]*data-appearance-tab="mascot"/);
+    expect(renderEditor(makeBot(), "shape")).toMatch(/data-appearance-tab="mascot"[^>]*aria-selected="true"/);
   });
 
   it("randomizes to an owned character, skin and color only", () => {
@@ -407,13 +407,13 @@ describe("picking in the gallery", () => {
     expect(host.querySelector("[data-mascot-detail]")?.getAttribute("data-mascot-detail")).toBe(character);
   });
 
-  it("switches tabs with the arrow keys and underlines the open one in the bot's color", async () => {
+  it("switches tabs with the arrow keys and marks the open pill", async () => {
     await mount(makeBot({ color: "green" }));
     const tab = (id: string) => host.querySelector<HTMLButtonElement>(`[data-appearance-tab="${id}"]`)!;
     await act(async () => tab("mascot").dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }) as unknown as Event));
     expect(tab("color").getAttribute("aria-selected")).toBe("true");
     expect(host.querySelector("[data-appearance-tab-panel]")?.getAttribute("data-appearance-tab-panel")).toBe("color");
-    expect(tab("color").style.borderBottomColor).not.toBe("transparent");
-    expect(tab("mascot").style.borderBottomColor).toBe("transparent");
+    expect(tab("color").querySelector("[data-tab-indicator]")).not.toBeNull();
+    expect(tab("mascot").querySelector("[data-tab-indicator]")).toBeNull();
   });
 });

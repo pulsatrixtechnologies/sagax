@@ -24,7 +24,6 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import type { BotWorkplace } from "../../shared/bot-workplace.ts";
 import { MAC_APP_SETUP_IDS, isMacAppSetupId, type MacAppSetupId } from "../../shared/mac-apps-setup.ts";
 import { MAC_APP_LEGACY_TOOLS, isMacAppTool } from "../../electron/mac-apps.mjs";
 
@@ -710,7 +709,6 @@ export type WorkplaceReason =
   | "desktop"                 // the person's connected desktop
   | "pinned-desktop"          // Works on (or the pin) is their computer, not connected
   | "server-default"          // Auto or Cloud: their server environment
-  | "routine-not-allowed"     // a routine, and the owner did not allow their PC
   | "no-person"               // nobody asked: a room follow-up, ...
   | "unknown";                // nobody known at all
 
@@ -737,8 +735,7 @@ export interface WorkplaceDecision {
  * - Room: the person whose message triggered the turn; a follow-up no
  *   person asked for never reaches anyone's computer.
  * - Routine (runs as the bot owner, unattended): the owner's server
- *   environment, unless the bot works on their computer, it is connected
- *   AND they allowed routines on it. */
+ *   environment, unless the bot works on their computer, and its execution access permits it. */
 export function resolveBotWorkplace(input: {
   organization: boolean;
   sandboxConfigured: boolean;
@@ -751,8 +748,6 @@ export function resolveBotWorkplace(input: {
   principal: string | null;
   /** A person's own message (or a hop carrying it) started this turn. */
   personAsked: boolean;
-  /** The principal's preference. */
-  preference: BotWorkplace;
   /** The principal's desktop app is connected and signed in right now. */
   desktopConnected: boolean;
 }): WorkplaceDecision {
@@ -762,10 +757,10 @@ export function resolveBotWorkplace(input: {
     ({ target: input.sandboxConfigured && principal ? "user-sandbox" : "none", principal, reason, fallback });
   if (!principal) return { target: "none", principal: null, reason: "unknown", fallback: false };
   if (input.routine) {
-    if (input.desktopTargeted && input.desktopConnected && input.preference.routines) {
+    if (input.desktopTargeted && input.desktopConnected) {
       return { target: "user-desktop", principal, reason: "desktop", fallback: false };
     }
-    return server("routine-not-allowed");
+    return server("server-default");
   }
   if (!input.personAsked) return server("no-person");
   if (input.desktopTargeted) return { target: "user-desktop", principal, reason: input.desktopConnected ? "desktop" : "pinned-desktop", fallback: false };

@@ -113,7 +113,7 @@ describe("computerSelectValue / options / title", () => {
     const bridge = {
       connected: true,
       tunnel: false,
-      workplace: { place: "computer", routines: false, network: "all" },
+      workplace: { place: "computer", network: "all" },
       activity: [],
       desktops: [{
         id: "desk-1",
@@ -171,7 +171,7 @@ describe("ComputerCard", () => {
     env.bridge = {
       connected: true,
       tunnel: false,
-      workplace: { place: "computer", routines: false, network: "all" },
+      workplace: { place: "computer", network: "all" },
       activity: [],
       desktops: [{ id: "desk-1", name: "Studio Mac", platform: "darwin", online: true, busy: false, lastSeenAt: Date.now(), capabilities: { localVm: true } }],
     };

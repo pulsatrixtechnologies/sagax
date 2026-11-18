@@ -909,8 +909,8 @@ pref("notifications.analyticsOptOut", "notifications", "omb-analytics-opt-out", 
 pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (voice, speed, language)", "Settings > Providers > Voice > Voice mode");
 // where bots run for the person (their own computer, routines, network): a
 // widening of where work goes, the person's Allow
-// #1545: read back as {place, routines, network}, the default filled in
-pref("computer.botWorkplace", "computer", "sagax.botWorkplace.v1", "object", "Where bots work for you ({place: computer|server, routines: boolean, network: all|lan}; organization server)", "Settings > Computer > Bot workplace", always("rule-change"),
+// #1545: read back as {place, network}, the default filled in
+pref("computer.botWorkplace", "computer", "sagax.botWorkplace.v1", "object", "Where bots work for you ({place: computer|server, network: all|lan|off}; organization server)", "Settings > Computer > Bot workplace", always("rule-change"),
   (value) => parseBotWorkplace(value === undefined || value === null ? null : typeof value === "string" ? value : JSON.stringify(value)));
 // the person's other computers (organization server; server/desktop/desktop-bridge.ts):
 // named by the computer's name or id, never offline-only for a rename

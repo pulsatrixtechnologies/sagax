@@ -20,7 +20,7 @@ const desktop = (id: string, name: string, online: boolean, lastSeenAt: number) 
 const bridge = (patch: Partial<DesktopBridgeStatus> = {}): DesktopBridgeStatus => ({
   connected: true,
   tunnel: false,
-  workplace: { place: "computer", routines: false, network: "lan" },
+  workplace: { place: "computer", network: "lan" },
   activity: [{ at: Date.UTC(2026, 9, 15, 12), target: "user-desktop", kind: "connect", detail: "darwin Archived desktop", ok: true }],
   desktops: [desktop("d1", "Office desktop", true, 3), desktop("d2", "Travel laptop", false, Date.UTC(2026, 9, 8, 12))],
   ...patch,
@@ -44,13 +44,12 @@ describe("Settings > Computer, the reference design's layout", () => {
     expect(html).toMatch(/<h3[^>]*text-ink-secondary[^>]*>Bots&#x27; computer<\/h3>/);
   });
 
-  it("keeps one short grey line under each label, switches for network routing and routines", () => {
+  it("keeps one short grey line under each label, one execution choice and a network switch", () => {
     const html = render(bridge());
-    expect(html).toContain("Routines on this computer");
-    expect(html).toContain("Your bots&#x27; routines may use it while it is connected.");
+    expect(html).not.toContain('data-settings-row="routines"');
     expect(html).toContain("Route traffic through this computer");
     expect(html).toContain("Local network only");
-    const off = render(bridge({ workplace: { place: "computer", routines: false, network: "off" } }));
+    const off = render(bridge({ workplace: { place: "computer", network: "off" } }));
     expect(off.slice(off.indexOf('data-settings-row="network"')).split("</button>")[0]).toContain('aria-checked="false"');
   });
 

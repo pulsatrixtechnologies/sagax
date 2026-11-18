@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { botTmpScope, desktopToolOperation, handleDesktopBridgeMcp, plainTextCommand } from "./desktop-bridge-tools.ts";
-import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../../shared/bot-workplace.ts";
+import { parseBotWorkplace, serializeBotWorkplace } from "../../shared/bot-workplace.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";
@@ -20,7 +20,7 @@ const registration = (name = "Ada's Mac"): DesktopBridgeRegistration => ({
 describe("where a turn's tools run (organization server)", () => {
   const base = {
     organization: true, sandboxConfigured: true, desktopTargeted: false, routine: false,
-    principal: ADA, personAsked: true, preference: { ...DEFAULT_BOT_WORKPLACE }, desktopConnected: true,
+    principal: ADA, personAsked: true, desktopConnected: true,
   };
   it("solo server: its own machine, unchanged", () => {
     expect(resolveBotWorkplace({ ...base, organization: false })).toMatchObject({ target: "host", reason: "solo" });
@@ -29,20 +29,16 @@ describe("where a turn's tools run (organization server)", () => {
     expect(resolveBotWorkplace(base)).toEqual({ target: "user-sandbox", principal: ADA, reason: "server-default", fallback: false });
     expect(resolveBotWorkplace({ ...base, desktopConnected: false })).toMatchObject({ target: "user-sandbox", reason: "server-default" });
     expect(resolveBotWorkplace({ ...base, sandboxConfigured: false })).toMatchObject({ target: "none" });
-    // The old per-person switch no longer decides.
-    expect(resolveBotWorkplace({ ...base, preference: { ...DEFAULT_BOT_WORKPLACE, place: "computer" } })).toMatchObject({ target: "user-sandbox" });
   });
   it("Local VM or This computer: the speaker's own computer, said when it is not connected", () => {
     expect(resolveBotWorkplace({ ...base, desktopTargeted: true })).toEqual({ target: "user-desktop", principal: ADA, reason: "desktop", fallback: false });
     expect(resolveBotWorkplace({ ...base, desktopTargeted: true, desktopConnected: false })).toMatchObject({ target: "user-desktop", reason: "pinned-desktop" });
   });
-  it("routines: the owner's sandbox unless the bot works on their computer, it is connected AND they allowed routines on it", () => {
+  it("routines: the owner's sandbox unless the bot works on their computer, it is connected and available", () => {
     const routine = { ...base, routine: true, personAsked: false, desktopTargeted: true };
-    expect(resolveBotWorkplace(routine)).toMatchObject({ target: "user-sandbox", reason: "routine-not-allowed" });
-    const allowed = { ...routine, preference: { ...DEFAULT_BOT_WORKPLACE, routines: true } };
-    expect(resolveBotWorkplace(allowed)).toMatchObject({ target: "user-desktop", reason: "desktop" });
-    expect(resolveBotWorkplace({ ...allowed, desktopConnected: false })).toMatchObject({ target: "user-sandbox" });
-    expect(resolveBotWorkplace({ ...allowed, desktopTargeted: false })).toMatchObject({ target: "user-sandbox" });
+    expect(resolveBotWorkplace(routine)).toMatchObject({ target: "user-desktop", reason: "desktop" });
+    expect(resolveBotWorkplace({ ...routine, desktopConnected: false })).toMatchObject({ target: "user-sandbox" });
+    expect(resolveBotWorkplace({ ...routine, desktopTargeted: false })).toMatchObject({ target: "user-sandbox" });
   });
   it("rooms: the person whose message triggered the turn; a follow-up nobody asked for never reaches a computer", () => {
     expect(resolveBotWorkplace({ ...base, principal: BOB, desktopTargeted: true })).toMatchObject({ target: "user-desktop", principal: BOB });
@@ -52,9 +48,10 @@ describe("where a turn's tools run (organization server)", () => {
     expect(resolveBotWorkplace({ ...base, principal: null })).toMatchObject({ target: "none", principal: null });
   });
   it("the preference reads defensively", () => {
-    expect(parseBotWorkplace(undefined)).toEqual({ place: "computer", routines: false, network: "all" });
-    expect(parseBotWorkplace("{bad")).toEqual({ place: "computer", routines: false, network: "all" });
-    expect(parseBotWorkplace(serializeBotWorkplace({ place: "server", routines: true, network: "lan" }))).toEqual({ place: "server", routines: true, network: "lan" });
+    expect(parseBotWorkplace('{"routines":false,"network":"lan"}')).toEqual({ place: "computer", network: "lan" });
+    expect(parseBotWorkplace(undefined)).toEqual({ place: "computer", network: "all" });
+    expect(parseBotWorkplace("{bad")).toEqual({ place: "computer", network: "all" });
+    expect(parseBotWorkplace(serializeBotWorkplace({ place: "server", network: "lan" }))).toEqual({ place: "server", network: "lan" });
   });
 
   it("accepts staged file offsets through the 1 GB video ceiling", () => {

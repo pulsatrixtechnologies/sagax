@@ -13,8 +13,7 @@
 // Where an Auto turn starts (autoStartTarget, 2026-10-15; routines 2026-11-01;
 // server environment first 2026-11-07, #2670): a person-asked turn starts in
 // their server environment when they have one, else on their own computer
-// when it is connected. A routine starts in the cloud by default; routinesAllowed only
-// lets computer_select choose this_computer (or local_vm) explicitly. A
+// when it is connected. A routine starts in the cloud by default and can choose this_computer (or local_vm) explicitly. A
 // thread opened with a workspace (start_thread, create_agent) starts there
 // when it is allowed, else falls back and says so.
 //
@@ -48,8 +47,6 @@ export interface AutoComputerState {
   sandboxConfigured: boolean;
   /** The desktop tools (sagax-desktop) were mounted for this turn. */
   desktopMounted: boolean;
-  /** Routines may use the owner's computer (their own preference). */
-  routinesAllowed: boolean;
   /** The built-in browser is mounted for this turn (absent: it is not). */
   browserAvailable?: boolean;
   /** Places this turn already moved to with computer_select (absent: none). */
@@ -141,9 +138,6 @@ export function autoComputerUnavailable(state: AutoComputerState, target: AutoCo
     return state.browserAvailable ? null
       : "The built-in browser is not available to this bot in this turn (it is turned off for the bot or the workspace, or this engine cannot use it).";
   }
-  if (state.routine && !state.routinesAllowed) {
-    return "This is a routine: it uses the owner's computer only when they allowed routines on it (Settings > Computer, Where bots work). It keeps working in the cloud.";
-  }
   if (!state.desktopMounted || !desktopConnected) {
     return "The person's computer is not connected: their Sagax desktop app is closed or signed out. Ask them to open it, signed in to this server, then send the request again; or work in the cloud.";
   }
@@ -224,7 +218,7 @@ export function autoComputerToolRefusal(
  * Nothing here changes from one turn to the next; where a turn starts and
  * what it can reach is the per-message line (autoComputerGuidance). */
 export const AUTO_COMPUTER_RULES = [
-  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the place the person picked in the Computer menu; else a person-asked turn: the person's computer when it is connected; a routine: the cloud). That menu choice is only the starting place: a message that names another place still moves there with computer_select, without asking the person to change the menu. Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer.",
+  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the place the person picked in the Computer menu; else a person-asked turn: the person's computer when it is connected; a routine: the cloud). That menu choice is only the starting place: a message that names another place still moves there with computer_select, without asking the person to change the menu. Routines may call computer_select for this_computer or local_vm using the owner's computer execution access.",
   "- this_computer: anything on the person's own machine: their files and folders, their apps, their local network and printers, devices plugged in (USB, camera), Docker on their computer, local dev servers (localhost), their VPN.",
   "- browser: pure web work (read a site, search, fill a web form) with the built-in browser, when nothing on their machine is needed.",
   "On this_computer, web lookups (search, read a page, find a video) stay out of sight too: browse, fetch_url or web search, with the result shown in the chat. computer_use acts on the person's own screen in front of them: use it only when they asked for work on their screen or in their own browser, or no out-of-sight way works, and say so in one line first. A question about their screen (\"where is X\", \"show me X\", \"où est\", \"montre-moi\") is work on their screen: find X with computer_use and point at it with move_cursor, never a text-only answer.",
@@ -234,7 +228,7 @@ export const AUTO_COMPUTER_RULES = [
   "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
   "Live state (a version, a deployment, a service's health, a host, a record): ask the tool that reports it directly first, in one call (the connector or Sagax tool that owns the record; a service's own health endpoint with fetch_url). Product versions in production: this Sagax server's /api/health and the Perspicax server's /healthz (the host of the Perspicax MCP URL), each one fetch_url call; host_health reports failures, latency and drift of the Pulsatrix host, never a product version. Answer with what the endpoint says, in one line; do not search for another tool. Never read state through a shell (run_command on the person's computer or in the cloud) when such a tool exists; a shell is for work on that computer, not a way to look up the state of another system.",
   "Server environment (#2670): when the person has a server environment, it is where a turn starts, with their computer connected or not. Their computer is used only when their words ask for it (\"sur mon Mac\", \"on my computer\") or the step needs their machine (their files, apps, local network, devices), through computer_select. Never run a shell or fetch_url on their computer to look something up that the server environment or a connector can read.",
-  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it); pick the place once and finish there: at most two moves per turn, and a tool failing on one place is fixed there, not a reason to move. Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
+  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it); pick the place once and finish there: at most two moves per turn, and a tool failing on one place is fixed there, not a reason to move. Never work around a refusal: a place they did not allow (a computer with execution disabled, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
 ].join("\n");
 
 /** The per-message line of an Auto turn (provider text only): where this
@@ -259,8 +253,7 @@ export interface AutoStart {
  * tested on its own.
  * - Default: a person-asked turn starts in the person's server environment
  *   when they have one (#2670), else on their own computer when their Sagax
- *   app is connected; a routine starts in the cloud. The owner
- *   preference routinesAllowed only permits an explicit computer_select to
+ *   app is connected; a routine starts in the cloud. A routine can select
  *   this_computer or local_vm (never the default start).
  * - When the person's computer is offline before the first turn, a routine
  *   never tries it: the default is already the cloud.
@@ -275,11 +268,10 @@ export function autoStartTarget(input: {
   /** A person's own message started the turn. */
   personAsked: boolean;
   desktopConnected: boolean;
-  routinesAllowed: boolean;
   sandboxConfigured: boolean;
   browserAvailable: boolean;
 }): AutoStart {
-  const desktopUsable = input.desktopConnected && (input.routine ? input.routinesAllowed : input.personAsked);
+  const desktopUsable = input.desktopConnected && (input.routine || input.personAsked);
   const usable = (target: AutoComputerTarget): boolean =>
     target === "cloud" ? input.sandboxConfigured
       : target === "browser" ? input.browserAvailable
@@ -297,8 +289,7 @@ export function autoStartTarget(input: {
   const target = order.find((candidate) => candidate !== wanted && usable(candidate)) ?? null;
   let fallback: WorkspaceFallbackReason = "unavailable";
   if (wanted === "this_computer" || wanted === "local_vm") {
-    if (input.routine && !input.routinesAllowed) fallback = "routine-not-allowed";
-    else if (!input.desktopConnected) fallback = "offline";
+    if (!input.desktopConnected) fallback = "offline";
   }
   return { target, wanted, fallback };
 }

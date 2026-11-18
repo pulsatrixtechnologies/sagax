@@ -12,7 +12,7 @@ import { defaultScreen, OrgComputerTab, type InUsePlace } from "./OrgComputerTab
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const bridge: DesktopBridgeStatus = {
-  connected: true, tunnel: false, activity: [], workplace: { place: "computer", routines: false, network: "all" },
+  connected: true, tunnel: false, activity: [], workplace: { place: "computer", network: "all" },
   desktops: [{ id: "d1", name: "Mac de Owner", platform: "darwin", online: true, busy: false, lastSeenAt: 1, capabilities: { localVm: true }, system: { os: "macOS", arch: "arm64", cpus: 8, cpuModel: "M3", cpuPercent: 1, memoryGb: 16, memoryUsedGb: 8, diskGb: 500, diskFreeGb: 200 } }],
 };
 

@@ -18,7 +18,7 @@ import { LocalVmCard } from "./OrgComputerSettings";
 const bridge: DesktopBridgeStatus = {
   connected: true,
   tunnel: false,
-  workplace: { place: "computer", routines: false, network: "lan" },
+  workplace: { place: "computer", network: "lan" },
   activity: [],
   desktops: [{ id: "d1", name: "Mac", platform: "darwin", online: true, busy: false, lastSeenAt: 1, capabilities: { localVm: true } }],
 };

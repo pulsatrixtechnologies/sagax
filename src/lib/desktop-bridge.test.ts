@@ -7,7 +7,7 @@ import { toolExecutionTarget } from "../../shared/execution-target";
 import { USER_PREFERENCE_KEYS } from "../../shared/user-preferences";
 import { BOT_WORKPLACE_PREFERENCE } from "../../shared/bot-workplace";
 
-const status = (connected: boolean): DesktopBridgeStatus => ({ connected, tunnel: connected, desktops: [], workplace: { place: "computer", routines: false, network: "all" }, activity: [] });
+const status = (connected: boolean): DesktopBridgeStatus => ({ connected, tunnel: connected, desktops: [], workplace: { place: "computer", network: "all" }, activity: [] });
 
 describe("where bots work, as the app says it", () => {
   it("speaks only when the bot works on the person's computer, and says when it is not connected", () => {
@@ -31,11 +31,11 @@ describe("where bots work, as the app says it", () => {
     expect(USER_PREFERENCE_KEYS).toContain(BOT_WORKPLACE_PREFERENCE);
     const store = new Map<string, string>();
     const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) };
-    expect(readWorkplace(storage)).toEqual({ place: "computer", routines: false, network: "all" });
-    writeWorkplace({ place: "server", routines: true, network: "lan" }, storage);
-    expect(readWorkplace(storage)).toEqual({ place: "server", routines: true, network: "lan" });
-    writeWorkplace({ place: "computer", routines: false, network: "off", networkDevice: "studio" }, storage);
-    expect(readWorkplace(storage)).toEqual({ place: "computer", routines: false, network: "off", networkDevice: "studio" });
+    expect(readWorkplace(storage)).toEqual({ place: "computer", network: "all" });
+    writeWorkplace({ place: "server", network: "lan" }, storage);
+    expect(readWorkplace(storage)).toEqual({ place: "server", network: "lan" });
+    writeWorkplace({ place: "computer", network: "off", networkDevice: "studio" }, storage);
+    expect(readWorkplace(storage)).toEqual({ place: "computer", network: "off", networkDevice: "studio" });
   });
 
   it("treats an equal bridge payload as the same status", () => {

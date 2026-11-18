@@ -2,7 +2,7 @@
 // The reference design's Computer page). Each bot's Works on decides (Auto and
 // Cloud: the person's server environment; Local VM and This computer: their
 // own computer through this desktop app); here, rows of the "Your computer"
-// group: whether routines may use it, which destinations bots may reach
+// group: its execution access, which destinations bots may reach
 // through it (with whether it is connected), the person's registered devices,
 // and, behind a discreet link, what bots recently did there (#555)
 // (src/lib/desktop-bridge.ts, server/desktop/desktop-bridge.ts).
@@ -36,7 +36,7 @@ export function BotWorkplaceSettings({ status: given }: { status?: DesktopBridge
     if (given?.workplace) return given.workplace;
     try { return readWorkplace(); } catch { return { ...DEFAULT_BOT_WORKPLACE }; }
   });
-  useEffect(() => { if (status?.workplace) setWorkplace(status.workplace); }, [status?.workplace?.routines, status?.workplace?.network, status?.workplace?.networkDevice]);
+  useEffect(() => { if (status?.workplace) setWorkplace(status.workplace); }, [status?.workplace?.network, status?.workplace?.networkDevice]);
   if (!status) return null;
   const change = (next: Partial<BotWorkplace>) => {
     const value = { ...workplace, ...next };
@@ -68,9 +68,6 @@ export function BotWorkplaceSettings({ status: given }: { status?: DesktopBridge
             }} />
         </DescribedRow>
       )}
-      <DescribedRow label={t("botWorkplace.routinesShort")} description={t("botWorkplace.routinesHint")} rowId="routines">
-        <Switch checked={workplace.routines} aria-label={t("botWorkplace.routines")} onClick={() => change({ routines: !workplace.routines })} />
-      </DescribedRow>
       <DescribedRow
         label={t("botWorkplace.routeTraffic")}
         icon={<Link2 size={14} />}

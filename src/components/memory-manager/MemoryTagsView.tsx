@@ -5,12 +5,15 @@
 // organization's vocabulary on its Perspicax server; without one those
 // tiles and cards stay out (Sagax never makes a number up). The console's
 // team directory is an organization setting with no Sagax source: not here.
+import { useState } from "react";
 import { Tags } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import type { MemoryVocabulary } from "@/lib/memory-manager";
 import type { TagStats } from "@/lib/memory-page";
 import { MemoryCard, StatStrip, TagChip, type StatTile } from "./memory-ui";
+
+const FREE_FIRST_PAGE = 24;
 
 export function MemoryTagsView({ stats, vocabulary, onTag }: {
   stats: TagStats;
@@ -24,6 +27,12 @@ export function MemoryTagsView({ stats, vocabulary, onTag }: {
   tiles.push({ id: "free", label: t("memoryManager.tags.free"), value: stats.free.length, caption: t("memoryManager.tags.freeCaption") });
   if (stats.orphans) tiles.push({ id: "orphans", label: t("memoryManager.tags.orphans"), value: stats.orphans.length, caption: t("memoryManager.tags.orphansCaption") });
   const counts = new Map(stats.free.map((entry) => [entry.tag, entry.count]));
+  // Free tags grow with use (50+ is common): a search and a first page, never a wall of chips.
+  const [freeQuery, setFreeQuery] = useState("");
+  const [freeAll, setFreeAll] = useState(false);
+  const freeNeedle = freeQuery.trim().toLowerCase();
+  const freeMatches = freeNeedle ? stats.free.filter((entry) => entry.tag.toLowerCase().includes(freeNeedle)) : stats.free;
+  const freeShown = freeAll || freeNeedle ? freeMatches : freeMatches.slice(0, FREE_FIRST_PAGE);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 sm:p-6" data-memory-tags-view="">
@@ -84,8 +93,12 @@ export function MemoryTagsView({ stats, vocabulary, onTag }: {
           )}
           <MemoryCard title={t("memoryManager.tags.freeTitle")} aside={t("memoryManager.tags.freeHint")} data-memory-tags-free="">
             {stats.free.length === 0 ? <p className="text-[13px] text-ink-secondary">{t("memoryManager.tags.freeNone")}</p> : (
+              <>
+              {stats.free.length > FREE_FIRST_PAGE && (
+                <input type="search" value={freeQuery} onChange={(event) => setFreeQuery(event.target.value)} placeholder={t("memoryManager.tags.freeFind")} aria-label={t("memoryManager.tags.freeFind")} className="mb-2 h-8 w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 text-[13px] text-ink outline-none focus:border-border-strong" data-memory-tags-free-search="" />
+              )}
               <ul className="flex flex-wrap gap-1.5">
-                {stats.free.map((entry) => (
+                {freeShown.map((entry) => (
                   <li key={entry.tag}>
                     <button type="button" onClick={() => onTag(entry.tag)} className="inline-flex items-baseline gap-1.5 rounded-full bg-raised px-2.5 py-0.5 font-mono text-[12px] text-ink hover:bg-raised-hover" data-memory-tags-free-chip={entry.tag}>
                       {entry.tag}<span className="font-sans font-semibold tabular-nums">{counts.get(entry.tag)}</span>
@@ -93,6 +106,11 @@ export function MemoryTagsView({ stats, vocabulary, onTag }: {
                   </li>
                 ))}
               </ul>
+              {!freeAll && !freeNeedle && freeMatches.length > FREE_FIRST_PAGE && (
+                <button type="button" onClick={() => setFreeAll(true)} className="mt-2 text-[12.5px] text-ink-secondary hover:text-ink" data-memory-tags-free-all="">{t("memoryManager.tags.showAll", { n: freeMatches.length })}</button>
+              )}
+              {freeNeedle && freeMatches.length === 0 && <p className="text-[13px] text-ink-secondary">{t("chat.find.noResults")}</p>}
+              </>
             )}
           </MemoryCard>
         </div>

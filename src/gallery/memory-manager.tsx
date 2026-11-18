@@ -156,6 +156,18 @@ const PX = {
   ],
 };
 
+// ?teams=N: N teams in all (the three above first), invented names, a few empty ones.
+const TEAM_COUNT = Number(new URLSearchParams(location.search).get("teams") ?? 0);
+const TEAM_WORDS = ["Harbor", "Lantern", "Quarry", "Willow", "Summit", "Meadow", "Copper", "Falcon", "Juniper", "Atlas", "Beacon", "Cedar"];
+for (let index = PX.tiers.length - 3; index < TEAM_COUNT; index++) {
+  const notes = index % 4 === 0 ? 0 : (index * 7) % 19 + 1;
+  PX.tiers.push({
+    scope: `team:gen${index}`, kind: "team", name: `${TEAM_WORDS[index % TEAM_WORDS.length]} ${["crew", "desk", "guild", "unit", "group"][index % 5]} ${index}`,
+    may_write: true, may_manage: false, trashed: 0, archived: 0, edit_mode: "review",
+    topics: notes === 0 ? [] : [{ topic: "general", count: notes, entries: Array.from({ length: notes }, (_, n) => ({ id: `g${index}-${n}`, title: `Note ${index}-${n}`, topic: "general", tags: [], updated: iso(n * D), created: iso(n * D + D), excerpt: "Invented fixture note.", author_name: "Sam Okafor" })) }],
+  } as unknown as (typeof PX.tiers)[number]);
+}
+
 function pxEntry(scope: string, id: string) {
   for (const tier of PX.tiers) {
     if (tier.scope !== scope) continue;

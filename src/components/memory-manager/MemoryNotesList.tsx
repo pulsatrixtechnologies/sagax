@@ -240,6 +240,7 @@ export function MemoryNotesList({
             {tierFacet.length > 1 && (
               <fieldset>
                 <legend className="mb-1 text-[12px] font-medium text-ink-secondary">{t("memoryManager.tier")}</legend>
+                <div className="max-h-40 overflow-y-auto">
                 {tierFacet.map((facet) => (
                   <label key={facet.value} className="flex items-center gap-2 py-0.5 text-[13px] text-ink">
                     <input type="checkbox" checked={filters.tiers.includes(facet.value)} onChange={() => toggleIn("tiers", facet.value)} />
@@ -248,12 +249,13 @@ export function MemoryNotesList({
                     <span className="text-[11px] tabular-nums text-ink-tertiary">{facet.count}</span>
                   </label>
                 ))}
+                </div>
               </fieldset>
             )}
             {tagFacet.length > 0 && (
               <fieldset>
                 <legend className="mb-1 text-[12px] font-medium text-ink-secondary">{t("memoryManager.tags")}</legend>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
                   {tagFacet.map((facet) => (
                     <button key={facet.value} type="button" aria-pressed={filters.tags.includes(facet.value)} onClick={() => toggleIn("tags", facet.value)} className={cn("rounded-full px-2 py-px text-[11px]", filters.tags.includes(facet.value) ? "bg-accent text-accent-ink" : "bg-raised text-ink")}>
                       {facet.value} <span className="tabular-nums opacity-70">{facet.count}</span>
@@ -265,6 +267,7 @@ export function MemoryNotesList({
             {authorFacet.length > 0 && (
               <fieldset>
                 <legend className="mb-1 text-[12px] font-medium text-ink-secondary">{t("memoryManager.author")}</legend>
+                <div className="max-h-40 overflow-y-auto">
                 {authorFacet.map((facet) => (
                   <label key={facet.value} className="flex items-center gap-2 py-0.5 text-[13px] text-ink">
                     <input type="checkbox" checked={filters.authors.includes(facet.value)} onChange={() => toggleIn("authors", facet.value)} />
@@ -272,6 +275,7 @@ export function MemoryNotesList({
                     <span className="text-[11px] tabular-nums text-ink-tertiary">{facet.count}</span>
                   </label>
                 ))}
+              </div>
               </fieldset>
             )}
             <label className="block">

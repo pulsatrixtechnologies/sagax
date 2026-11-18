@@ -23,6 +23,8 @@ export interface PageTier {
   kind: TierKind;
   /** A CSS colour: the swatch of the explorer, the rows and the map. */
   color: string;
+  /** One of the few fixed scopes (the viewer's own facts): a button of its own; any other team goes in the Teams select. */
+  fixed?: boolean;
 }
 
 /** One note of the page, wherever it lives. */

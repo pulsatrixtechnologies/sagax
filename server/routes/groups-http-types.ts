@@ -2,7 +2,7 @@
 import type { IncomingMessage } from "node:http";
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { SteerOutcome } from "../contracts.ts";
+import type { SteerOutcome, TurnImageInput } from "../contracts.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
 import type { GroupActor } from "../groups/group-ownership.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
@@ -125,7 +125,9 @@ export interface GroupsHttpDeps {
   resolveReplyTarget(threadId: string, value: unknown): Message | undefined;
   sendPeopleDmMessage(group: GroupRecord, auth: RequestAuth, text: string, rawSendId: unknown, rawReplyTo: unknown, rawThreadId?: unknown): unknown;
   groupSpeakerBotId(threadId: string): string | undefined;
-  runningTurnInstance(bot: BotRecord, threadId: string): { adapter: { capabilities: { queueing?: boolean }; steer?: (threadId: string, prompt: string) => Promise<SteerOutcome> } } | null | undefined;
+  runningTurnInstance(bot: BotRecord, threadId: string): { adapter: { capabilities: { queueing?: boolean }; steer?: (threadId: string, prompt: string, options?: { images?: readonly TurnImageInput[] }) => Promise<SteerOutcome> } } | null | undefined;
+  /** The engine takes pictures with a mid-turn steer (capabilities.steerImages). */
+  engineSteersImages?(instance: ReturnType<GroupsHttpDeps["runningTurnInstance"]>): boolean;
   activeGroupOperations(groupId: string): ReadonlyArray<{ threadId: string; cancelled?: boolean }>;
   drainQueuedChannelSends(): void;
   profileName(): string;

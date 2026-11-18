@@ -51,6 +51,7 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
     resolveReplyTarget,
     groupSpeakerBotId,
     runningTurnInstance,
+    engineSteersImages,
     drainQueuedChannelSends,
     profileName,
   } = deps;
@@ -99,19 +100,15 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
   // burst); Steer folds that whole group into the live turn as one.
   const headGroup = headChannelGroup(held.items);
   const [head] = headGroup;
-  // A live steer has no image side channel — the same rule as the
-  // 1:1 queue: attachment words wait for a real turn where central
-  // admission can hand the images to the engine.
-  if (headGroup.some((item) => {
-    const resolved = extractTurnImages(item.text);
-    return resolved.images.length > 0 || resolved.videos.length > 0;
-  })) {
-    restoreHeldChannelQueue(held);
-    return json(res, 200, { ok: true, queued: true, threadId: targetThreadId });
-  }
+  // Attachments steer into a speaker that takes pictures mid-turn, as
+  // native input (capabilities.steerImages); elsewhere they wait for the
+  // room's own drain, and the answer says why (blockedBy: images).
+  const attachments = headGroup.map((item) => extractTurnImages(item.text));
   const decision = admit("room-steer", {
     speakerPresent: Boolean(speaker),
     engineCanSteer: Boolean(instance?.adapter.capabilities.queueing && instance.adapter.steer),
+    carriesImages: attachments.some((resolved) => resolved.images.length > 0 || resolved.videos.length > 0),
+    engineCanSteerImages: Boolean(engineSteersImages?.(instance)),
     isQueueHead: Boolean(head && head.id === m[2]),
   });
   if (decision.action === "refuse") {
@@ -120,7 +117,7 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
   }
   if (decision.action === "queue") {
     restoreHeldChannelQueue(held);
-    return json(res, 200, { ok: true, queued: true, threadId: targetThreadId });
+    return json(res, 200, { ok: true, queued: true, threadId: targetThreadId, ...(decision.blockedBy ? { blockedBy: decision.blockedBy } : {}) });
   }
   // A reply target that cannot be resolved restores the held queue
   // before the request fails — the room's normal drain keeps the head.
@@ -136,7 +133,7 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
     foldedPrompt = headGroup
       .map((item, index) =>
         promptWithReply(
-          item.text,
+          attachments[index]!.text,
           index === 0
             ? replyTo
             : item.replyToId
@@ -150,11 +147,12 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
     restoreHeldChannelQueue(held);
     throw error;
   }
+  const images = attachments.flatMap((resolved) => resolved.images);
   // steer was offered only when a live speaker instance could take it;
   // the check carries that invariant to the type system.
   const steered: SteerOutcome = instance?.adapter.steer
     ? await instance.adapter
-        .steer(targetThreadId, foldedPrompt)
+        .steer(targetThreadId, foldedPrompt, images.length > 0 ? { images } : undefined)
         .catch((): SteerOutcome => "indeterminate")
     : "refused";
   // The steer was awaited adapter work: re-read every ownership

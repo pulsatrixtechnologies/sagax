@@ -132,6 +132,7 @@ async function runSequencedBotSend(input: {
   routableSteers: any;
   runningRequestText: any;
   runningTurnInstance: any;
+  engineSteersImages: any;
   startDuplexCallTurn: any;
   startOrQueueDirectMessage: any;
   startParallelTask: any;
@@ -145,7 +146,7 @@ async function runSequencedBotSend(input: {
     activeGroupTurnForBot, autoRoutableThread, botAtThreadCapacity, busyClassifyEngine,
     clearUnattended, computerSelectionTurns, enginesRead, handoffs, isInternalTurn,
     orgFullAccessPolicy, orgJoinsRunningTurn, parksBehindCoordination, preemptAtSafePoint,
-    refreshUnsetModelSelections, registry, routableSteers, runningRequestText, runningTurnInstance,
+    refreshUnsetModelSelections, registry, routableSteers, runningRequestText, runningTurnInstance, engineSteersImages,
     startDuplexCallTurn, startOrQueueDirectMessage, startParallelTask, startTurn, stoppingThreads,
   } = input;
 
@@ -291,6 +292,9 @@ async function runSequencedBotSend(input: {
     const steerTarget = handoffs.current(threadId);
     const busyAdmission = admit("direct-busy", {
       carriesImages,
+      // an engine that takes pictures mid-turn gets them as native input
+      // (contracts: capabilities.steerImages), the same rule as acceptDirectSend
+      engineCanSteerImages: engineSteersImages(instance),
       pendingComputerSelection: Boolean(computerSelectionTurns.get(threadId)?.selected),
       engineCanSteer: Boolean(instance?.adapter.capabilities.queueing && instance.adapter.steer)
         // someone else's words never join a running turn on an
@@ -314,10 +318,11 @@ async function runSequencedBotSend(input: {
       principalId: auth.kind === "session" ? personKey(auth.session) : undefined, auth,
     };
     if (busyAdmission.action === "steer" && instance?.adapter.steer) {
-      const words = promptWithReply(promptWithDataContext(text, dataContext), replyTo, cfg.profile?.name?.trim() || "User");
+      // The pictures go as native input, their tags out of the words (acceptDirectSend does the same).
+      const words = promptWithReply(promptWithDataContext(resolvedAttachments.text, dataContext), replyTo, cfg.profile?.name?.trim() || "User");
       if (routable) routableSteers.open(steerId, { botId: bot.id, threadId, text, context: routeContext });
       steered = await instance.adapter
-        .steer(threadId, voiceCallSteerPrompt(routable ? orchestratedSteerText(steerId, words) : words, voiceCall), { steerId })
+        .steer(threadId, voiceCallSteerPrompt(routable ? orchestratedSteerText(steerId, words) : words, voiceCall), { steerId, ...(resolvedAttachments.images.length > 0 ? { images: resolvedAttachments.images } : {}) })
         .catch((): SteerOutcome => "indeterminate");
     }
     // steer() is awaited adapter work. The turn can settle, the task can
@@ -445,7 +450,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     IDENTITY, isInternalTurn, liveTurnByThread, masteryThreadModel, messageSender, misuseActor, noteStreamSend,
     orgFullAccessPolicy, orgJoinsRunningTurn, ownPageContext, parksBehindCoordination, preemptAtSafePoint,
     recordAchievements, recordMastery, refreshUnsetModelSelections, registry, requirePinnedClientThread,
-    resolveReplyTarget, routeThreadId, routableSteers, routines, runningRequestText, runningTurnInstance,
+    resolveReplyTarget, routeThreadId, routableSteers, routines, runningRequestText, runningTurnInstance, engineSteersImages,
     sendSequencer, soloGoalReceipts, soloGoals, startDuplexCallTurn, startOrQueueDirectMessage, startParallelTask,
     idleThreads, startTurn, stoppingThreads, stopDirectThreadByPerson, store, threadBusy, usageTriggerFor, voiceCalls,
     voiceLatency, widgetPressesInFlight, feedback,
@@ -702,7 +707,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
         activeGroupTurnForBot, autoRoutableThread, botAtThreadCapacity, busyClassifyEngine,
         clearUnattended, computerSelectionTurns, enginesRead, handoffs, isInternalTurn,
         orgFullAccessPolicy, orgJoinsRunningTurn, parksBehindCoordination, preemptAtSafePoint,
-        refreshUnsetModelSelections, registry, routableSteers, runningRequestText, runningTurnInstance,
+        refreshUnsetModelSelections, registry, routableSteers, runningRequestText, runningTurnInstance, engineSteersImages,
         startDuplexCallTurn, startOrQueueDirectMessage, startParallelTask, startTurn, stoppingThreads,
       }),
     ).catch((error: unknown) => {

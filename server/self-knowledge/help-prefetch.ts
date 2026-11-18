@@ -4,6 +4,7 @@
 // The server now runs that lookup before the turn and hands the result in the
 // prompt, so the engine answers in one round and calls sagax_help only for
 // what the prefetched help does not cover.
+import { replaceAttachmentTags } from "../../shared/plain-text.ts";
 import { excerpt, helpAnswer, searchKnowledge, type HelpContext, type KnowledgeIndex } from "./self-knowledge.ts";
 
 /** A guide matching at least this score is a how-to question even when the
@@ -13,9 +14,16 @@ export const HELP_PREFETCH_GUIDE_SCORE = 40;
 
 const PRODUCT_NAME = /\b(sagax|perspicax)\b/i;
 
+/** What the person wrote, without the attachment tags Sagax adds: their
+ * paths live under `.sagax/attachments`, which named the product in every
+ * message with a picture and prefetched help for "look at this". */
+function askedWords(question: string): string {
+  return replaceAttachmentTags(question);
+}
+
 /** Whether this message asks about Sagax or Perspicax themselves. */
 export function wantsHelpPrefetch(index: KnowledgeIndex, question: string, context: Pick<HelpContext, "organization">): boolean {
-  const text = question.trim();
+  const text = askedWords(question).trim();
   if (!text) return false;
   if (PRODUCT_NAME.test(text)) return true;
   const top = searchKnowledge(index, text, 1, context)[0];
@@ -55,6 +63,7 @@ function namedSections(index: KnowledgeIndex, question: string, skip: Set<string
 /** The turn's text with the prefetched help appended, or the text unchanged
  * when the message is not about Sagax or the base has nothing for it. */
 export function withHelpPrefetch(text: string, question: string, index: KnowledgeIndex | null, context: HelpContext): { text: string; ids: string[] } {
+  question = askedWords(question);
   if (!index || !wantsHelpPrefetch(index, question, context)) return { text, ids: [] };
   const help = helpAnswer(index, question, context);
   if (!help.ids.length) return { text, ids: [] };

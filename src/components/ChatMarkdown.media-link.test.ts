@@ -21,12 +21,13 @@ vi.mock("hls.js", () => ({
   },
 }));
 
-const render = (text: string, inert = false) =>
+const MESSAGE = { threadId: "t-1", messageId: "m-1" };
+const render = (text: string, inert = false, scope: typeof MESSAGE | null = MESSAGE) =>
   renderToStaticMarkup(
     createElement(
       StoreProvider,
       null,
-      createElement(ThreadRefsContext.Provider, { value: { threads: [], currentBotId: undefined } }, createElement(ChatMarkdown, { text, inert })),
+      createElement(ThreadRefsContext.Provider, { value: { threads: [], currentBotId: undefined } }, createElement(ChatMarkdown, { text, inert, message: scope ?? undefined })),
     ),
   );
 
@@ -51,17 +52,32 @@ describe("ChatMarkdown media links", () => {
     expect(html).not.toContain("data-media-caption");
   });
 
-  it("plays an audio link with the native player and says when it expired", () => {
-    expect(render("[Écouter](https://cdn.example.test/clips/song.mp3)")).toMatch(/data-chat-media="audio"[\s\S]*<audio[^>]*src="https:\/\/cdn.example.test\/clips\/song.mp3"/);
+  it("draws an audio link as a clip card that loads nothing before Play, and says when it expired", () => {
+    const html = render("[Écouter](https://cdn.example.test/clips/song.mp3)");
+    expect(html).toContain('data-chat-media="audio"');
+    expect(html).toContain('data-media-audio="idle"');
+    expect(html).not.toContain("<audio");
     const expired = render("https://cdn.example.test/clips/song.m4a?exp=1000000000");
     expect(expired).toContain('data-media-audio="expired"');
     expect(expired).toContain("This playback link has expired.");
   });
 
-  it("titles a labeled link's player with its words and shows the address once under it", () => {
+  it("never repeats a labeled link's words in the card under it", () => {
     const html = render("[Écouter l'appel](https://cdn.example.test/clips/call.mp3)");
     expect(html).toMatch(/data-media-caption[\s\S]*>https:\/\/cdn.example.test\/clips\/call.mp3</);
-    expect(html.split(">Écouter l&#x27;appel<").length - 1).toBe(2);
+    expect(html.split(">Écouter l&#x27;appel<").length - 1).toBe(1);
+    expect(html).toContain(">call.mp3<");
+  });
+
+  it("loads no video source before Play", () => {
+    const html = render(`${LIVE_HLS}\n\nhttps://cdn.example.test/clip.mp4`);
+    expect(html.match(/<video[^>]*>/g)?.every((tag) => !/\ssrc=/.test(tag))).toBe(true);
+  });
+
+  it("keeps the address a link while the reply has no stored message yet", () => {
+    const html = render(LIVE_HLS, false, null);
+    expect(html).not.toContain("data-chat-media");
+    expect(html).toContain("data-media-pending");
   });
 
   it("plays a video file and leaves plain http and inert surfaces as links", () => {
@@ -74,8 +90,7 @@ describe("ChatMarkdown media links", () => {
 });
 
 describe("mediaLinkTitle", () => {
-  it("prefers the link's words, then a telling file name", () => {
-    expect(mediaLinkTitle("https://x.test/a/index.m3u8", "Réunion")).toBe("Réunion");
+  it("is a telling file name, never a manifest's", () => {
     expect(mediaLinkTitle("https://x.test/a/index.m3u8")).toBeUndefined();
     expect(mediaLinkTitle("https://x.test/a/Demo%20finale.mp4?sig=1")).toBe("Demo finale.mp4");
   });

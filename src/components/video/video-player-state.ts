@@ -71,15 +71,30 @@ export function isExpiredAt(expiresAt: number | undefined, now = Date.now()): bo
 }
 
 /** What an hls.js ERROR event asks the player to do. */
-export type HlsErrorPlan = "ignore" | "expired" | "reload" | "recover-media" | "fail";
+export type HlsErrorPlan = "ignore" | "expired" | "reload" | "recover-media" | "fail" | "unplayable";
+
+/** A client error the source will answer again (404 and the like): a reload
+ * or the other source cannot help. 408 and 429 are worth a retry. */
+function isDefinitiveStatus(status: number | undefined | null): boolean {
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
 
 export function planHlsError(
   data: { fatal?: boolean; type?: string; response?: { code?: number } | null; details?: string },
   attempts: { network: number; media: number },
+  /** Whether a segment of this stream ever loaded. */
+  progress: { fragmentLoaded?: boolean } = {},
 ): HlsErrorPlan {
   const status = data.response?.code;
   if (isExpiredStatus(status)) return "expired";
+  // hls.js does not count a missing segment as fatal on a single-level
+  // stream: it parks the level and waits, a black 0:00 card. A stream that
+  // never played one segment and is told one is not there cannot be played.
+  if (!data.fatal && data.details === "fragLoadError" && !progress.fragmentLoaded && isDefinitiveStatus(status)) return "unplayable";
   if (!data.fatal) return "ignore";
+  // a playlist or segment the server says is not there: say so at once
+  // instead of reloading a black card
+  if (data.type === "networkError" && isDefinitiveStatus(status)) return "unplayable";
   if (data.type === "networkError") return attempts.network < RELOAD_MAX_ATTEMPTS ? "reload" : "fail";
   if (data.type === "mediaError") return attempts.media < 2 ? "recover-media" : "fail";
   return "fail";

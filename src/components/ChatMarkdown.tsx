@@ -1393,14 +1393,12 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
           const { node: _node, children, ...rest } = props;
           return <div {...rest}>{children}</div>;
         }
-        const label = typeof data["data-media-label"] === "string" ? data["data-media-label"] : undefined;
-        // the address itself: a labeled link's words are the player's title
         const link = data["data-media-link"] === "show"
           ? <ExternalLink href={url} github={null}>{url}</ExternalLink>
           : undefined;
         // a surface that reaches no network keeps the address as a link
         if (inert) return link ? <p>{link}</p> : null;
-        return <ChatMediaLink url={url} kind={kind} label={label} link={link} onRequestRefresh={youtubeSendToBot} />;
+        return <ChatMediaLink url={url} kind={kind} link={link} message={scopedMessage} onRequestRefresh={youtubeSendToBot} />;
       },
       // markdown never emits a span itself (no raw HTML); the only
       // spans are the ones our remark plugins produced: a thread link,

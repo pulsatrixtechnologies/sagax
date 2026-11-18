@@ -183,4 +183,65 @@ describe("VideoPlayerWidget playback path", () => {
     expect(video.src).toBe("https://media.example.test/clip.mp4");
     expect(host.querySelector(".vpc-error")).toBeNull();
   });
+
+  it("says at once that a stream whose segments are missing (404) cannot be played, without trying another source", async () => {
+    await mount(
+      { kind: "vod", format: "hls", playbackUrl: "/api/media/proxy/vod.mac", directUrl: "https://media.example.test/vod/index.m3u8" },
+      false,
+    );
+    await hlsError({ fatal: true, type: "networkError", details: "fragLoadError", response: { code: 404 } });
+    expect(hlsCalls.loadSource).toEqual(["/api/media/proxy/vod.mac"]);
+    expect(host.querySelector(".vpc-error")?.textContent).toBeTruthy();
+    expect(host.querySelector('.vpc-error[data-expired="true"]')).toBeNull();
+  });
+
+  it("loads nothing before Play: twelve link cards, no source asked, no manifest, no src", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockImplementation(() => "");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const resolveSource = vi.fn(async () => ({ kind: "vod", format: "hls", playbackUrl: "/api/media/proxy/link.mac" }) as WireVideoWidget);
+    await act(async () => {
+      root.render(createElement("div", null, Array.from({ length: 12 }, (_, i) => createElement(VideoPlayerWidget, {
+        key: i,
+        video: { kind: "vod", format: "hls", playbackUrl: `https://media.example.test/v1/share/recordings/r${i}/index.m3u8` },
+        resolveSource,
+      }))));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(resolveSource).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(hlsCalls.loadSource).toEqual([]);
+    expect([...host.querySelectorAll("video")].every((v) => v.getAttribute("src") === null)).toBe(true);
+
+    // Play on the first card: its source is asked once, then loaded
+    await act(async () => {
+      (host.querySelector(".vpc-play") as HTMLButtonElement).click();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(resolveSource).toHaveBeenCalledTimes(1);
+    expect(hlsCalls.loadSource).toEqual(["/api/media/proxy/link.mac"]);
+  });
+
+  it("says a natively played stream that never starts cannot be played (segments gone, no error event)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      await mount({ kind: "vod", format: "hls", playbackUrl: "/api/media/proxy/broken.mac" }, true);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+      expect(host.querySelector(".vpc-error")).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(12_000);
+      });
+      vi.useRealTimers();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(host.querySelector(".vpc-error")?.textContent).toBeTruthy();
+      expect(host.querySelector('.vpc-error[data-expired="true"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

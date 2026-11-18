@@ -409,6 +409,7 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                 {native.seekStep ? (
                   <>
                     <ChromeIconButton
+                      className="vpc-optional"
                       label={t("video.seekBack", { seconds: native.seekStep })}
                       onClick={() => seekBy(native, -native.seekStep!)}
                     >
@@ -416,6 +417,7 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                     </ChromeIconButton>
                     {(!native.isLive || native.behindLive) && (
                       <ChromeIconButton
+                        className="vpc-optional"
                         label={t("video.seekForward", { seconds: native.seekStep })}
                         onClick={() => seekBy(native, native.seekStep!)}
                       >
@@ -464,11 +466,11 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                   aria-label={t("video.volume")}
                 />
                 {typeof document !== "undefined" && document.pictureInPictureEnabled && (
-                  <ChromeIconButton label={t("video.pip")} onClick={() => void togglePiP()}>
+                  <ChromeIconButton className="vpc-optional" label={t("video.pip")} onClick={() => void togglePiP()}>
                     <PictureInPicture2 size={18} />
                   </ChromeIconButton>
                 )}
-                <ChromeIconButton label={t("video.popOut")} onClick={popOut}>
+                <ChromeIconButton className="vpc-optional" label={t("video.popOut")} onClick={popOut}>
                   <ExternalLink size={18} />
                 </ChromeIconButton>
               </>

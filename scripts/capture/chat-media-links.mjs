@@ -7,6 +7,9 @@
  * chat (src/gallery/chat-media-links.tsx) on the gallery's own Vite; the media
  * comes from a local HTTPS test server this script starts (self-signed).
  *
+ * Nothing may load before Play (checked on the media server's log), then
+ * every card is played. Desktop and phone (390 px), dark and light.
+ *
  * Usage: node scripts/capture/chat-media-links.mjs --media DIR [--out DIR] [--port N] [--media-port N] [--lang fr|en]
  * DIR holds clip.mp4, song.mp3, picture.png, hls/index.m3u8 and its segments,
  * cert.pem and key.pem (127.0.0.1). Exits 1 when an assertion fails.
@@ -41,12 +44,17 @@ function fileFor(path) {
 }
 const media = createServer({ cert: readFileSync(join(mediaDir, "cert.pem")), key: readFileSync(join(mediaDir, "key.pem")) }, (req, res) => {
   const url = new URL(req.url ?? "/", "https://local");
-  requests.push({ path: url.pathname, cookie: req.headers.cookie ?? null });
+  requests.push({ path: url.pathname });
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-headers", "range");
   res.setHeader("access-control-expose-headers", "content-range, content-length, accept-ranges");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
   if (url.pathname.startsWith("/denied/")) return res.writeHead(403).end("forbidden");
+  // a readable playlist whose segments are gone
+  if (url.pathname.startsWith("/broken/")) {
+    if (!url.pathname.endsWith(".m3u8")) return res.writeHead(404).end();
+    return res.writeHead(200, { "content-type": TYPES[".m3u8"] }).end("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:2.0,\nseg0.ts\n#EXTINF:2.0,\nseg1.ts\n#EXT-X-ENDLIST\n");
+  }
   const rel = fileFor(url.pathname);
   if (!rel) return res.writeHead(404).end();
   const file = join(mediaDir, rel);
@@ -88,41 +96,75 @@ try {
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ channel: "chrome", headless: true });
-  const context = await browser.newContext({ viewport: { width: 1000, height: 2300 }, deviceScaleFactor: 2, ignoreHTTPSErrors: true });
-  // a Sagax-side cookie: it must never reach the media server
-  await context.addCookies([{ name: "sagax-session", value: "gallery", domain: "127.0.0.1", path: "/", sameSite: "Lax" }]);
-  const page = await context.newPage();
-  for (const [skin, label] of [["midnight", "dark"], ["daylight", "light"]]) {
-    requests.length = 0;
-    await page.goto(`${base}?skin=${skin}&lang=${lang}&media=${encodeURIComponent(mediaOrigin)}`, { waitUntil: "networkidle" });
-    await page.waitForSelector("[data-chat-media]");
-    // every player settled: videos show a frame, the live clip is ready, the refused one says so
-    await page.waitForFunction(() => {
-      const videos = [...document.querySelectorAll("[data-chat-media] video")];
-      const audio = document.querySelector('[data-media-audio="ready"] audio');
-      // the expired card keeps an idle <video> under its panel
-      return videos.filter((v) => v.readyState >= 1).length === 2 && audio && audio.readyState >= 1
-        && document.querySelector('[data-media-audio="expired"]');
-    }, null, { timeout: 30_000 }).catch(() => failures.push(`${label}: players did not settle`));
-    await page.waitForTimeout(400);
-    const facts = await page.evaluate(() => ({
-      kinds: [...document.querySelectorAll("[data-chat-media]")].map((n) => n.getAttribute("data-chat-media")),
-      expiredVideo: document.querySelectorAll('[data-chat-media="hls"] [data-expired="true"]').length,
-      expiredAudio: document.querySelectorAll('[data-media-audio="expired"]').length,
-      captions: [...document.querySelectorAll("[data-media-caption] a")].map((a) => a.getAttribute("href")),
-      picture: document.querySelectorAll("[data-bare-image] img").length,
-    }));
-    console.log(label, JSON.stringify(facts));
-    if (facts.kinds.join(",") !== "hls,video,audio,hls,audio") failures.push(`${label}: kinds ${facts.kinds}`);
-    if (facts.expiredVideo !== 1 || facts.expiredAudio !== 1) failures.push(`${label}: expired panels ${facts.expiredVideo}/${facts.expiredAudio}`);
-    if (facts.captions.length !== 3) failures.push(`${label}: captions ${facts.captions.length}`);
-    if (facts.picture !== 1) failures.push(`${label}: picture ${facts.picture}`);
-    const withCookie = requests.filter((r) => r.cookie);
-    if (withCookie.length) failures.push(`${label}: a cookie reached the media server (${withCookie.map((r) => r.path)})`);
-    if (!requests.some((r) => r.path.endsWith("index0.ts"))) failures.push(`${label}: no HLS segment loaded`);
-    const file = join(outDir, `chat-media-links-${lang}-${label}.png`);
-    await page.screenshot({ path: file, fullPage: true });
-    console.log(file);
+  const shots = [
+    { name: "desktop", viewport: { width: 1000, height: 2500 } },
+    { name: "phone", viewport: { width: 390, height: 3200 } },
+  ];
+  for (const shot of shots) {
+    const context = await browser.newContext({ viewport: shot.viewport, deviceScaleFactor: 2, ignoreHTTPSErrors: true });
+    const page = await context.newPage();
+    for (const [skin, label] of [["midnight", "dark"], ["daylight", "light"]]) {
+      const tag = `${shot.name}-${label}`;
+      requests.length = 0;
+      await page.goto(`${base}?skin=${skin}&lang=${lang}&media=${encodeURIComponent(mediaOrigin)}`, { waitUntil: "networkidle" });
+      await page.waitForSelector("[data-chat-media]");
+      await page.waitForTimeout(1500);
+      // nothing but the picture loads before a Play press
+      const early = requests.filter((r) => r.path !== "/picture.png").map((r) => r.path);
+      if (early.length) failures.push(`${tag}: ${early.length} media requests before Play (${early.slice(0, 4)})`);
+      const facts = await page.evaluate(() => ({
+        kinds: [...document.querySelectorAll("[data-chat-media]")].map((n) => n.getAttribute("data-chat-media")),
+        expiredVideo: document.querySelectorAll('[data-chat-media="hls"] [data-expired="true"]').length,
+        captions: [...document.querySelectorAll("[data-media-caption] a")].map((a) => a.getAttribute("href")),
+        picture: document.querySelectorAll("[data-bare-image] img").length,
+      }));
+      console.log(tag, JSON.stringify(facts));
+      if (facts.kinds.join(",") !== "hls,video,audio,hls,audio,hls") failures.push(`${tag}: kinds ${facts.kinds}`);
+      if (facts.expiredVideo !== 1) failures.push(`${tag}: expired panel ${facts.expiredVideo}`);
+      if (facts.captions.length !== 4) failures.push(`${tag}: captions ${facts.captions.length}`);
+      if (facts.picture !== 1) failures.push(`${tag}: picture ${facts.picture}`);
+      // Play every card that can play, the damaged stream and the refused clip included
+      const players = page.locator("[data-chat-media]");
+      for (let i = 0; i < await players.count(); i++) {
+        const card = players.nth(i);
+        if (await card.locator('[data-expired="true"]').count()) continue;
+        await card.scrollIntoViewIfNeeded();
+        const center = card.locator(".vpc-play");
+        if (await center.count()) await center.click();
+        else await card.locator("[data-media-audio] button").first().click();
+      }
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll("[data-chat-media]")];
+        const videos = cards.map((c) => c.querySelector("video")).filter((v) => v && v.currentTime > 0.3);
+        const audio = document.querySelector('[data-media-audio="playing"] audio');
+        const refused = document.querySelector('[data-media-audio="expired"]');
+        const broken = cards.at(-1)?.querySelector(".vpc-error:not([data-expired])");
+        return videos.length === 2 && audio && audio.currentTime > 0.3 && refused && broken;
+      }, null, { timeout: 30_000 }).catch(async () => {
+        const states = await page.evaluate(() => [...document.querySelectorAll("[data-chat-media]")].map((c) => {
+          const v = c.querySelector("video, audio");
+          return `${c.getAttribute("data-chat-media")}:${v ? v.currentTime.toFixed(1) : "-"}:${c.querySelector(".vpc-error, [data-media-audio]")?.textContent?.slice(0, 30) ?? ""}`;
+        }));
+        failures.push(`${tag}: players did not play or settle (${states.join(" | ")})`);
+      });
+      await page.evaluate(() => document.querySelectorAll("video, audio").forEach((m) => { m.pause(); }));
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(600);
+      if (!requests.some((r) => r.path.endsWith("index0.ts"))) failures.push(`${tag}: no HLS segment loaded`);
+      // the phone bar: the time on one line, inside the bar
+      if (shot.name === "phone") {
+        const wrapped = await page.evaluate(() => [...document.querySelectorAll(".vpc-time")].filter((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size > 1;
+        }).length);
+        if (wrapped) failures.push(`${tag}: ${wrapped} times on two lines`);
+      }
+      const file = join(outDir, `chat-media-links-${lang}-${tag}.png`);
+      await page.screenshot({ path: file, fullPage: true });
+      console.log(file);
+    }
+    await context.close();
   }
 } finally {
   await browser?.close();

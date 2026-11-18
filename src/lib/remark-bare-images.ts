@@ -27,13 +27,13 @@ const endsLine = (next: MdNode | undefined) =>
 type Figure = { url: string; node: MdNode };
 
 /** The player of one media address; `link` says whether it shows the address
- * (the text no longer does) and `label` is a link's own words. */
-function mediaFigure(url: string, kind: BareMediaKind, link: "show" | "hide", label?: string): MdNode {
+ * (the text does not: an own-line address it replaced, or a link's label). */
+function mediaFigure(url: string, kind: BareMediaKind, link: "show" | "hide"): MdNode {
   return {
     type: "paragraph",
     data: {
       hName: "div",
-      hProperties: { "data-bare-media": kind, "data-media-url": url, "data-media-link": link, ...(label ? { "data-media-label": label } : {}) },
+      hProperties: { "data-bare-media": kind, "data-media-url": url, "data-media-link": link },
     },
     children: [],
   };
@@ -49,21 +49,13 @@ function pictureAt(kids: MdNode[], i: number): Figure | null {
   return media ? { url, node: mediaFigure(url, media, "show") } : null;
 }
 
-function plainText(node: MdNode): string {
-  if (node.type === "text" || node.type === "inlineCode") return node.value ?? "";
-  return (node.children ?? []).map(plainText).join("");
-}
-
 /** The media links a paragraph still holds, in order: bare ones (the text
  * shows the address) and labeled ones (it shows the label). */
-function mediaLinks(node: MdNode, out: Array<{ url: string; kind: BareMediaKind; bare: boolean; label: string }> = []) {
+function mediaLinks(node: MdNode, out: Array<{ url: string; kind: BareMediaKind; bare: boolean }> = []) {
   for (const child of node.children ?? []) {
     if (child.type === "link" && child.url) {
       const kind = bareMediaKind(child.url);
-      if (kind) {
-        const label = plainText(child).trim();
-        out.push({ url: child.url, kind, bare: linkUrl(child) !== null, label });
-      }
+      if (kind) out.push({ url: child.url, kind, bare: linkUrl(child) !== null });
       continue;
     }
     mediaLinks(child, out);
@@ -86,7 +78,7 @@ function withPlayers(nodes: MdNode[], drawn: Set<string>): MdNode[] {
     for (const link of mediaLinks(node)) {
       if (drawn.has(link.url)) continue;
       drawn.add(link.url);
-      players.push(mediaFigure(link.url, link.kind, link.bare ? "hide" : "show", link.bare ? undefined : link.label || undefined));
+      players.push(mediaFigure(link.url, link.kind, link.bare ? "hide" : "show"));
     }
     return [node, ...players];
   });

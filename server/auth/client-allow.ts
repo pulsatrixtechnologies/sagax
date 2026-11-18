@@ -198,6 +198,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // image a bot's Markdown renders at that offset (MarkdownImagePreview). The
   // handler grants both from the message itself, the same check for both.
   { methods: ["POST", "GET"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/file$/ },
+  // the source of a media link the message shows, asked at Play (server/media/message-media-link.ts)
+  { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/media$/ },
   // a conversation's files (the bot panel's Files tab): the list and one file by id
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/files$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/files\/[a-f0-9]{24}$/ },

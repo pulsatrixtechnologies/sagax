@@ -121,7 +121,6 @@ describe("remarkBareImages media links", () => {
   it("shows the address under the player of a labeled link", () => {
     const nodes = mediaNodes("[Écouter](https://cdn.example.test/song.mp3) ou **[voir](https://cdn.example.test/clip.mp4)**");
     expect(nodes.map((n) => [n.data?.hProperties?.["data-bare-media"], n.data?.hProperties?.["data-media-link"]])).toEqual([["audio", "show"], ["video", "show"]]);
-    expect(nodes[0]!.data?.hProperties?.["data-media-label"]).toBe("Écouter");
   });
   it("draws one player per address and none for a page, a picture or plain http", () => {
     expect(mediaNodes(`${HLS}\n\nencore ${HLS}`)).toHaveLength(1);

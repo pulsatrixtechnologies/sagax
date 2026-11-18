@@ -15279,6 +15279,7 @@
   "recordCard.chipName": "{kind} {number}, {product}, press Enter for details",
   "recordCard.chipNameBare": "{kind} {number}, press Enter for details",
   "recordCard.dialogName": "{kind} {number}",
+  "recordCard.chipTitle": "Open the card",
   "recordCard.loading": "Loading the record",
   "recordCard.close": "Close",
   "recordCard.date.opened": "Opened",

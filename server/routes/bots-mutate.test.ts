@@ -345,7 +345,9 @@ describe("PATCH /api/bots/:id toolKeep, review", () => {
   });
 
   it("shows as left out only what this bot's engine leaves out up front", async () => {
-    for (const [driverKind, shown] of [["codex", ["agents/run_routine"]], ["grokAgent", ["agents/run_routine"]], ["museCode", ["agents/run_routine"]], ["openai-compat", ["agents/run_routine"]], ["claudeAgent", ["agents/run_routine", "crm/old_report"]]] as const) {
+    // #4527 lot D: a connector's tools too, but on Grok, whose own tool search serves them
+    const both = ["agents/run_routine", "crm/old_report"];
+    for (const [driverKind, shown] of [["codex", both], ["grokAgent", ["agents/run_routine"]], ["museCode", both], ["openai-compat", both], ["claudeAgent", both]] as const) {
       forgetToolKeepInMemory();
       leaveOut("pr_alice", ["agents/run_routine", "crm/old_report"]);
       const { ctx, json } = context("/api/bots/osprey", "PATCH", { toolKeep: { tool: "agents/list_bots", alwaysListed: false } });

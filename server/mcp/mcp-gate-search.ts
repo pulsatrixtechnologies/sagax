@@ -10,6 +10,7 @@
 //
 // Pure helpers only; the gate (mcp-gate.ts) runs them.
 import { isDirectoryTool, searchesCatalog, type CatalogTool } from "./mcp-directory.ts";
+import { agentsSearchedFromEnv } from "../../shared/searched-tool-call.ts";
 
 export interface GateSearch {
   /** Tools listed whole: the bot's own most used ones. */
@@ -18,6 +19,11 @@ export interface GateSearch {
    * profile's `<product>_query`, `_write`, `_action`): a bot's first turn on
    * a profile sees the profile's own tools, not only the directory. */
   pinnedSuffixes: string[];
+  /** #4527 lot D: the tools the bot's session leaves out of this server's
+   * list, by their own names. Present (even empty) means a kept listing:
+   * every tool but these is listed whole, and these stay one search_tools /
+   * call_tool away. Absent: only the pins are listed (a compact prompt). */
+  leftOut?: string[];
   /** Search a catalog with more tools than this... */
   maxTools: number;
   /** ...or longer definitions than this (JSON characters). */
@@ -31,6 +37,11 @@ export const SEARCH_MAX_CHARS = 14_000;
 const PINNED_MAX = 64;
 const SUFFIX = /^[A-Za-z0-9_-]{1,32}$/;
 const SUFFIXES_MAX = 8;
+/** At most this many left out names travel to one gate (tool-keep.ts keeps
+ * at most 2,000 tools per bot and person, every server together). */
+export const LEFT_OUT_MAX = 2_000;
+const TOOL_NAME_MAX = 200;
+const toolName = (name: unknown): name is string => typeof name === "string" && name.length > 0 && name.length <= TOOL_NAME_MAX;
 /** At most this many tools are listed whole by a suffix, shortest names
  * first: a product's own `cw_psa_query` before `cw_cpq_quoteItems_write`. */
 export const SUFFIX_PINNED_MAX = 16;
@@ -64,12 +75,32 @@ export function compactGateSearch(used: readonly string[], perspicaxBridge: bool
     : { pinned: [...used] };
 }
 
-export function gateSearchEnv(search: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number }): string {
-  const pinned = [...new Set(search.pinned ?? [])].filter((name) => typeof name === "string" && name.length > 0 && name.length <= 200).sort().slice(0, PINNED_MAX);
+/** #4527 lot D: the search setting of a connector on an engine with no tool
+ * search of its own (Codex, the ACP engines, Muse Code, Pi on a cloud model,
+ * the chat engines): every tool listed whole but the ones the bot's session
+ * leaves out of this server (`leftOut`, tool ids `server/tool`, the session's
+ * frozen verdict of server/tools/tool-keep.ts), which stay one search away. */
+export function keptGateSearch(server: string, leftOut: readonly string[]): KeptGateSearch {
+  const prefix = `${server}/`;
+  const names = leftOut.filter((id) => id.startsWith(prefix)).map((id) => id.slice(prefix.length)).filter(toolName);
+  return { leftOut: [...new Set(names)].sort() };
+}
+
+export type KeptGateSearch = { leftOut: string[] };
+
+/** Whether a search setting is a kept listing (keptGateSearch). */
+export function isKeptSearch(search: { leftOut?: readonly string[] } | undefined): boolean {
+  return Array.isArray(search?.leftOut);
+}
+
+export function gateSearchEnv(search: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; leftOut?: readonly string[]; maxTools?: number; maxChars?: number }): string {
+  const pinned = [...new Set(search.pinned ?? [])].filter(toolName).sort().slice(0, PINNED_MAX);
   const suffixes = [...new Set(search.pinnedSuffixes ?? [])].filter((suffix) => typeof suffix === "string" && SUFFIX.test(suffix)).sort().slice(0, SUFFIXES_MAX);
+  const leftOut = search.leftOut ? [...new Set(search.leftOut)].filter(toolName).sort().slice(0, LEFT_OUT_MAX) : undefined;
   return JSON.stringify({
     pinned,
     ...(suffixes.length ? { pinnedSuffixes: suffixes } : {}),
+    ...(leftOut ? { leftOut } : {}),
     ...(search.maxTools !== undefined ? { maxTools: search.maxTools } : {}),
     ...(search.maxChars !== undefined ? { maxChars: search.maxChars } : {}),
   });
@@ -84,8 +115,12 @@ export function parseGateSearch(raw: string | undefined, fail: (message: string)
   if (!value || typeof value !== "object" || Array.isArray(value)) return fail("invalid tool search setting");
   const record = value as Record<string, unknown>;
   const pinned = record.pinned;
-  if (pinned !== undefined && (!Array.isArray(pinned) || pinned.length > PINNED_MAX || !pinned.every((name) => typeof name === "string" && name.length > 0 && name.length <= 200))) {
+  if (pinned !== undefined && (!Array.isArray(pinned) || pinned.length > PINNED_MAX || !pinned.every(toolName))) {
     return fail("invalid pinned tool list");
+  }
+  const leftOut = record.leftOut;
+  if (leftOut !== undefined && (!Array.isArray(leftOut) || leftOut.length > LEFT_OUT_MAX || !leftOut.every(toolName))) {
+    return fail("invalid left out tool list");
   }
   const suffixes = record.pinnedSuffixes;
   if (suffixes !== undefined && (!Array.isArray(suffixes) || suffixes.length > SUFFIXES_MAX || !suffixes.every((suffix) => typeof suffix === "string" && SUFFIX.test(suffix)))) {
@@ -100,6 +135,7 @@ export function parseGateSearch(raw: string | undefined, fail: (message: string)
   return {
     pinned: [...new Set((pinned ?? []) as string[])].sort(),
     pinnedSuffixes: [...new Set((suffixes ?? []) as string[])].sort(),
+    ...(leftOut !== undefined ? { leftOut: [...new Set(leftOut as string[])].sort() } : {}),
     maxTools: number("maxTools", SEARCH_MAX_TOOLS),
     maxChars: number("maxChars", SEARCH_MAX_CHARS),
   };
@@ -107,9 +143,20 @@ export function parseGateSearch(raw: string | undefined, fail: (message: string)
 
 /** Whether this catalog is searched under `search`'s own thresholds (lower
  * than the remote proxy's, which serves engines that list 40 tools fine). A
- * catalog that uses a directory tool's name is always searched. */
+ * catalog that uses a directory tool's name is always searched. #4527 lot D:
+ * a kept listing is searched only when it leaves out one of this catalog's
+ * tools, and then under the same floor: a small catalog is listed whole,
+ * where the three directory tools would cost about what they save. Its
+ * catalog is otherwise listed as the engine got it before: whole, or the
+ * remote proxy's own directory over a big URL catalog. */
 export function searchedCatalog(tools: readonly CatalogTool[], search: GateSearch): boolean {
-  if (searchesCatalog(tools)) return true;
+  if (search.leftOut) {
+    // a catalog that already names a directory tool (the remote proxy's own
+    // directory over a big catalog) passes through as it did
+    if (tools.some((tool) => isDirectoryTool(tool.name))) return false;
+    const leftOut = new Set(search.leftOut);
+    if (!tools.some((tool) => leftOut.has(tool.name))) return false;
+  } else if (searchesCatalog(tools)) return true;
   if (tools.length > search.maxTools) return true;
   let chars = 0;
   for (const tool of tools) {
@@ -117,6 +164,17 @@ export function searchedCatalog(tools: readonly CatalogTool[], search: GateSearc
     if (chars > search.maxChars) return true;
   }
   return false;
+}
+
+/** The names a searched catalog lists whole: under a kept listing every
+ * tool but the left out ones (and the pins); else the pins (pinnedToolNames). */
+export function listedToolNames(tools: readonly CatalogTool[], search: Pick<GateSearch, "pinned" | "pinnedSuffixes" | "leftOut">): string[] {
+  const pinned = pinnedToolNames(tools, search);
+  if (!search.leftOut) return pinned;
+  const leftOut = new Set(search.leftOut);
+  const names = new Set(pinned);
+  for (const tool of tools) if (!leftOut.has(tool.name) && !isDirectoryTool(tool.name)) names.add(tool.name);
+  return [...names];
 }
 
 /** The names a searched catalog lists whole: the exact pins, then at most
@@ -134,4 +192,44 @@ export function pinnedToolNames(tools: readonly CatalogTool[], search: Pick<Gate
     for (const name of matched) names.add(name);
   }
   return [...names];
+}
+
+/** #4527 lot D: what a driver hands one connector's gate from the turn's
+ * `integrations.connectorsKept` (tool-keep-listing.ts keptConnectors): the
+ * kept listing when the session leaves out one of its tools (or always, with
+ * `mount`, so a gate is there to note what the server offers), and the file
+ * the gate notes the offered tools into. Nothing for a server with no entry.
+ * The Perspicax account bridge's own pins are never left out
+ * (tool-keep.ts neverPruned), so its kept listing keeps them listed. */
+export function connectorKeptGate(
+  kept: Readonly<Record<string, { leftOut: readonly string[]; offered: string }>> | undefined,
+  name: string,
+  options: { mount?: boolean } = {},
+): { search?: KeptGateSearch; offered?: string } {
+  const entry = kept && Object.hasOwn(kept, name) ? kept[name] : undefined;
+  if (!entry || typeof entry.offered !== "string") return {};
+  const search = keptGateSearch(name, entry.leftOut);
+  return { ...(search.leftOut.length || options.mount ? { search } : {}), offered: entry.offered };
+}
+
+/** #4527 lot D: the servers of a turn whose call_tool runs another tool:
+ * Sagax's agents server with a kept listing, and each connector whose gate
+ * leaves one of its tools out. Every engine reads a call_tool there as the
+ * tool it runs (shared/searched-tool-call.ts searchedServerCall). */
+export function keptSearchedServers(integrations: { agents?: { env?: Record<string, string> }; connectorsKept?: Readonly<Record<string, { leftOut: readonly string[]; offered: string }>> } | undefined): Set<string> {
+  const servers = new Set<string>(agentsSearchedFromEnv(integrations?.agents?.env) ? ["agents"] : []);
+  for (const name of Object.keys(integrations?.connectorsKept ?? {})) {
+    if (gateMaySearch(connectorKeptGate(integrations!.connectorsKept, name).search)) servers.add(name);
+  }
+  return servers;
+}
+
+/** Whether a gate's search setting may serve tools through its own
+ * search_tools / call_tool: a compact or bridge search, or a kept listing
+ * that leaves something out. A driver then reads that server's call_tool as
+ * the tool it runs. */
+export function gateMaySearch(search: object | undefined): boolean {
+  if (search === undefined) return false;
+  const leftOut = (search as { leftOut?: unknown }).leftOut;
+  return !Array.isArray(leftOut) || leftOut.length > 0;
 }

@@ -40,10 +40,16 @@ describe("toolKeepPersonFor", () => {
 
 describe("what the card says is left out, per engine family", () => {
   it.each([
-    ["codex", false], ["grokAgent", false], ["geminiAgent", false], ["museCode", false], ["piAgent", false], ["openai-compat", false], ["mistral", false],
-  ])("%s leaves out the agents tools only, a connector's stay listed", (driverKind) => {
+    ["codex"], ["geminiAgent"], ["museCode"], ["piAgent"], ["openai-compat"], ["mistral"],
+  ])("%s leaves out the agents tools and, lot D, a connector's", (driverKind) => {
     const engine = toolKeepEngine({ modelSelection: { model: "cloud-model" } }, driverKind, {});
     expect(engine.compactPrompt).toBe(false);
+    expect(engineLeavesOut("agents/run_routine", engine)).toBe(true);
+    expect(engineLeavesOut("crm/old_report", engine)).toBe(true);
+  });
+
+  it("Grok keeps a connector's tools behind its own tool search and admissible names", () => {
+    const engine = toolKeepEngine({ modelSelection: { model: "cloud-model" } }, "grokAgent", {});
     expect(engineLeavesOut("agents/run_routine", engine)).toBe(true);
     expect(engineLeavesOut("crm/old_report", engine)).toBe(false);
   });

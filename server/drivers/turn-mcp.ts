@@ -6,12 +6,16 @@
 import type { SendTurnInput } from "../contracts.ts";
 import { canUseMcpServer } from "../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { connectorKeptGate, gateMaySearch } from "../mcp/mcp-gate-search.ts";
 
 export interface TurnStdioMcpServer {
   name: string;
   command: string;
   args: string[];
   env: Record<string, string>;
+  /** #4527 lot D: the server's gate may serve tools through its own
+   * search_tools / call_tool: its call_tool is read as the tool it runs. */
+  searched?: true;
 }
 
 /** A URL server is always mounted as Sagax's remote proxy, even for an
@@ -20,6 +24,8 @@ export interface TurnStdioMcpServer {
  * client adds capability fields a strict server refuses. */
 export function turnStdioMcpServers(turn: SendTurnInput): TurnStdioMcpServer[] {
   const servers: TurnStdioMcpServer[] = [];
+  /** the person's servers already behind a gate of their own (lot D) */
+  const gated = new Set<string>();
   const add = (name: string, server: { command: string; args: string[]; env?: Record<string, string> } | undefined) => {
     if (server) servers.push({ name, command: server.command, args: server.args, env: server.env ?? {} });
   };
@@ -34,15 +40,30 @@ export function turnStdioMcpServers(turn: SendTurnInput): TurnStdioMcpServer[] {
   // this is defense in depth).
   for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
     if (servers.some((existing) => existing.name === name)) continue;
+    if (turn.toolScope !== undefined && !canUseMcpServer(turn.toolScope, name)) continue;
+    // #4527 lot D: a gate that lists every tool but the ones the bot's
+    // session leaves out (the rest one search away), and notes what the
+    // server offered, for the count; under a tool selection, the same gate
+    // applies it
+    const kept = connectorKeptGate(turn.integrations?.connectorsKept, name, { mount: true });
+    if (kept.search) {
+      const spec = gateServer({ name, server, threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, search: kept.search,
+        ...(kept.offered ? { offered: kept.offered } : {}), ...(turn.toolScope !== undefined ? { toolScope: turn.toolScope } : {}) });
+      if (!spec) continue;
+      gated.add(name);
+      servers.push({ name, command: spec.command, args: spec.args, env: spec.env, ...(gateMaySearch(kept.search) ? { searched: true as const } : {}) });
+      continue;
+    }
     const stdio = "url" in server ? mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" } }) : server;
     if (!stdio) continue;
     servers.push({ name, command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} });
   }
   if (turn.toolScope === undefined) return servers;
   return servers.filter((server) => canUseMcpServer(turn.toolScope, server.name)).map((server) => {
-    const gated = gateServer({ name: server.name, server: { command: server.command, args: server.args, env: server.env },
+    if (gated.has(server.name)) return server;
+    const spec = gateServer({ name: server.name, server: { command: server.command, args: server.args, env: server.env },
       threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" } });
-    if (!gated) throw new Error("Tool selection requires an MCP gate.");
-    return { name: server.name, command: gated.command, args: gated.args, env: gated.env };
+    if (!spec) throw new Error("Tool selection requires an MCP gate.");
+    return { name: server.name, command: spec.command, args: spec.args, env: spec.env };
   });
 }

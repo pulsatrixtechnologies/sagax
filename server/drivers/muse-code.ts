@@ -29,7 +29,7 @@ import { parseProtocolAskQuestions, questionAnswersById, type ProtocolAskQuestio
 import type { EffortLevel } from "../../shared/wire.ts";
 import { promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt, type PromptSplitReceipt } from "./prompt-split.ts";
 import { turnStdioMcpServers } from "./turn-mcp.ts";
-import { agentsSearchedCall, agentsSearchedFromEnv, prefixedToolId, toolIdParts } from "../../shared/searched-tool-call.ts";
+import { agentsSearchedFromEnv, prefixedToolId, searchedCallToolServer, searchedServerCall, toolIdParts } from "../../shared/searched-tool-call.ts";
 
 const DRIVER_KIND = "museCode";
 const PROVIDER_ID = "meta";
@@ -190,16 +190,17 @@ export function museToolStart(item: MuseItem, mounts?: MuseMounts): { title: str
  * engine names it (`<server>__<tool>`, `mcpTool`) with its own arguments, so
  * an organization or personal rule, a grant and the card read that tool. A
  * searched server's call_tool is the tool it runs. `callTool` marks a
- * call_tool on the agents server whose target cannot be read: it is never
- * allowed for the session (that would open every left out tool). Null for
- * Muse's own tools (shell, files, network). */
+ * call_tool on a searched server (agents, or a connector whose gate leaves
+ * tools out, lot D) whose target cannot be read: it is never allowed for
+ * the session (that would open every left out tool). Null for Muse's own
+ * tools (shell, files, network). */
 export function museAskedTool(approval: { toolName?: string; rawArgs?: string; subject?: { toolName?: string } }, mounts: MuseMounts | undefined, itemArgs?: string):
   { mcpTool: string; input: unknown; searched?: true } | { callTool: true } | null {
   const name = approval.toolName || approval.subject?.toolName;
   if (!name || !mounts) return null;
   const args = parseArgs(approval.rawArgs) ?? parseArgs(itemArgs);
-  if (mounts.searched.has("agents") && /^(?:mcp__)?agents(?:__|_)call_tool$/.test(name.trim())) {
-    const call = agentsSearchedCall(name, args ?? {});
+  if (searchedCallToolServer(name, mounts.searched)) {
+    const call = searchedServerCall(name, args ?? {}, mounts.searched);
     return call ? { mcpTool: call.mcpTool, input: call.input, searched: true } : { callTool: true };
   }
   const parts = toolIdParts(prefixedToolId(name, args ?? {}, mounts.names, mounts.searched));
@@ -228,7 +229,7 @@ interface Pending {
   kind: "approval" | "question";
   sessionId: string;
   approval?: MuseApproval;
-  /** #4527: the agents tool a call_tool runs: "Always allow this session"
+  /** #4527: the tool a call_tool runs: "Always allow this session"
    * is kept here for that tool, never handed to Muse for call_tool */
   searched?: string;
   /** a call_tool whose target cannot be read: allowed once at most */
@@ -517,7 +518,7 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
           emit({
             type: "request.opened", threadId, turnId: active.turnId, requestId: approval.approvalId, requestType: "permission",
             // a call_tool reads as Muse's name for the tool it runs
-            tool: searched ? `agents_${searched.slice("agents__".length)}` : approval.toolName || subject.toolName || subject.kind || "tool",
+            tool: searched ? searched.replace("__", "_") : approval.toolName || subject.toolName || subject.kind || "tool",
             summary: redactSecretsInText(searched ?? command ?? subject.path ?? subject.host ?? subject.target ?? approval.toolName ?? "Muse Code asks to continue"),
             ...(command ? { command: { command, cwd: subject.workspaceRoot ?? "" } } : {}),
             ...(mcp ? { mcpTool: mcp.mcpTool, input: askInputDetail(mcp.input) ?? "{}" } : {}),
@@ -582,7 +583,8 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
     const ensureSession = async (state: ThreadState, turn: SendTurnInput, turnId: string): Promise<{ text: string; rebuilt: boolean; started: boolean }> => {
       const cwd = turn.cwd ?? process.cwd();
       const servers = turnStdioMcpServers(turn);
-      state.mounts = { names: servers.map(server => server.name), searched: new Set(agentsSearchedFromEnv(turn.integrations?.agents?.env) ? ["agents"] : []) };
+      // #4527 lot D: a connector whose gate leaves tools out is searched too
+      state.mounts = { names: servers.map(server => server.name), searched: new Set([...(agentsSearchedFromEnv(turn.integrations?.agents?.env) ? ["agents"] : []), ...servers.filter(server => server.searched).map(server => server.name)]) };
       const mcpServers = Object.fromEntries(servers.map(server => [server.name,
         { transport: "stdio", command: server.command, args: server.args, env: server.env, mode: "optional" }]));
       const approvalMode = museApprovalMode(turn.approvalMode);

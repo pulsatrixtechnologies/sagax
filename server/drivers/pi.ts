@@ -71,7 +71,7 @@ import { createPiSendTurn } from "./pi-send-turn.ts";
 import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
 import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
-import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
+import { compactGateSearch, connectorKeptGate, gateMaySearch } from "../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../mcp/agents-tool-priority.ts";
 import { isPerspicaxBridge } from "./acp/grok-read-only-tools.ts";
 import { remoteMcpSpec } from "../mcp/mcp-http.ts";
@@ -645,11 +645,14 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     const botOwned = name in (turn.integrations?.custom ?? {});
     // a server may be named like an Object property ("constructor"): own keys only
     // #1935: the Perspicax account bridge also lists its own core whole.
+    // #4527 lot D, a cloud model: the gate lists every tool but the ones the
+    // bot's session leaves out, and notes what the server offered
+    const kept = botOwned ? connectorKeptGate(turn.integrations?.connectorsKept, name) : {};
     const search = turn.compactPrompt && botOwned && !directory
       ? compactGateSearch(Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [], isPerspicaxBridge(turn.integrations!.custom![name]))
-      : undefined;
+      : turn.compactPrompt ? undefined : kept.search;
     const withhold = withholdForConnector(name, agentsPreferred);
-    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
+    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...(kept.offered ? { offered: kept.offered } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
     const stdio = gated ?? mcpStdioServer(server, { nodeEnv: NODE_ENV_FLAG, ...(directory ? { directory: { name } } : {}) });
     if (!stdio) throw new Error("Pi MCP server configuration is invalid");
     const original = server as { scope?: string };
@@ -657,7 +660,7 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     // prompt) is reached through call_tool: the extension reads that call as
     // the tool it runs, for the tool scope and the card, as for a directory.
     // #4527 lot C: a cloud model's agents mount with a kept listing too
-    const searched = search !== undefined || (name === "agents" && (turn.compactPrompt !== undefined || agentsSearchedFromEnv((server as { env?: Record<string, string> }).env)));
+    const searched = gateMaySearch(search) || (name === "agents" && (turn.compactPrompt !== undefined || agentsSearchedFromEnv((server as { env?: Record<string, string> }).env)));
     servers[name] = { ...stdio, ...(original.scope ? { scope: original.scope } : {}), ...(directory ? { directory: true } : {}), ...(searched ? { searched: true } : {}) };
   }
   return Object.keys(servers).length ? servers : null;

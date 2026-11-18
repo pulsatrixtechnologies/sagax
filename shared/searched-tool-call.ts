@@ -193,6 +193,40 @@ export function agentsSearchedCall(title: unknown, input: unknown): { mcpTool: s
   return id ? { mcpTool: runs.name.slice("mcp__".length), id, input: runs.input } : null;
 }
 
+/** #4527 lot D: whether an engine's tool title is the call_tool of one of
+ * the `searched` servers (the agents server with a kept listing, a connector
+ * whose gate leaves tools out), in any spelling: `mcp__<server>__call_tool`,
+ * `<server>__call_tool`, or the chat engines' and Muse Code's
+ * `<server>_call_tool`. The server, or null. */
+export function searchedCallToolServer(title: unknown, searched: ReadonlySet<string>): string | null {
+  if (typeof title !== "string") return null;
+  const raw = title.trim();
+  if (searched.has(BRIDGE_SERVER)) {
+    const tool = AGENTS_SPELLING.exec(raw)?.[2] ?? CHAT_AGENTS_SPELLING.exec(raw)?.[1];
+    if (tool === SEARCH_CALL_TOOL) return BRIDGE_SERVER;
+  }
+  for (const server of searched) {
+    if (server === BRIDGE_SERVER) continue;
+    if (raw === `mcp__${server}__${SEARCH_CALL_TOOL}` || raw === `${server}__${SEARCH_CALL_TOOL}` || raw === `${server}_${SEARCH_CALL_TOOL}`) return server;
+  }
+  return null;
+}
+
+/** #4527 lot D: an engine's call_tool on any of the `searched` servers, as
+ * the tool it runs (agentsSearchedCall, for a connector too): that tool's
+ * `<server>__<tool>` name (a request's `mcpTool`), its id and its own
+ * arguments. Null for any other call, and for a call_tool that runs nothing
+ * (searchedCallToolServer then says it was one). */
+export function searchedServerCall(title: unknown, input: unknown, searched: ReadonlySet<string>): { mcpTool: string; id: string; input: unknown } | null {
+  const server = searchedCallToolServer(title, searched);
+  if (!server) return null;
+  if (server === BRIDGE_SERVER) return agentsSearchedCall(title, input);
+  const runs = searchedToolCall(`mcp__${server}__${SEARCH_CALL_TOOL}`, input, new Set([server]));
+  if (!runs.searched || runs.refused) return null;
+  const id = toolIdOf(runs.name);
+  return id ? { mcpTool: runs.name.slice("mcp__".length), id, input: runs.input } : null;
+}
+
 /** #4527: the id of a tool an engine names `<server>_<tool>` (Pi's own MCP
  * extension, lower-cased; Muse Code): the server is the longest mounted one
  * the name starts with, a searched server's call_tool is the tool it names.

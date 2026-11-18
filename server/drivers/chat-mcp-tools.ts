@@ -13,7 +13,8 @@ import { killCliTree, spawnCli } from "../procs.ts";
 import { listsComputerTool } from "../computer/computer-tool-list.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
 import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectoryTool, oneLine, type CatalogTool } from "../mcp/mcp-directory.ts";
-import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { connectorKeptGate, gateMaySearch } from "../mcp/mcp-gate-search.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
 import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLog } from "../mcp/agents-tool-priority.ts";
@@ -401,9 +402,17 @@ function chatMcpServers(integrations: SendTurnInput["integrations"], computerUse
   for (const [name, server] of Object.entries(integrations?.custom ?? {})) {
     if (!eligible(name)) continue;
     const remote = remoteMcpSpec(server) !== undefined;
-    const stdio = mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(remote ? { directory: { name, ...(scope ? { toolScope: scope } : {}) } } : {}) });
+    // #4527 lot D: a gate lists every tool but the ones the bot's session
+    // leaves out (the rest behind its own search_tools / call_tool, read as
+    // the tool it runs), and notes what the server offered, for the count.
+    // A URL server keeps the proxy's directory over a big catalog.
+    const kept = connectorKeptGate(integrations?.connectorsKept, name, { mount: true });
+    const stdio = kept.search
+      ? gateServer({ name, server, threadId: `chat-${name}`, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, search: kept.search, directory: remote,
+        ...(kept.offered ? { offered: kept.offered } : {}), ...(scope ? { toolScope: scope } : {}) })
+      : mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(remote ? { directory: { name, ...(scope ? { toolScope: scope } : {}) } } : {}) });
     if (!stdio) throw new Error("MCP server configuration is invalid");
-    if (remote) searchable.add(name);
+    if (remote || gateMaySearch(kept.search)) searchable.add(name);
     servers.push([name, { command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} }]);
   }
   if (servers.length > 32) throw new Error("MCP server count exceeds the 32-server limit");

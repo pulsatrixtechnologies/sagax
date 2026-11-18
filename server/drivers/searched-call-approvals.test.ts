@@ -390,3 +390,149 @@ describe("a tool selection that excludes a left out tool still excludes it throu
     expect(() => chat.kept.validate("agents_call_tool", { name: "list_rooms", arguments: {} })).not.toThrow();
   });
 });
+
+// #4527 lot D: a connector's tool the session leaves out is reached through
+// that connector's own call_tool (its gate's search), and that call is under
+// exactly the approvals the tool had listed, on every engine.
+describe("#4527 lot D: a connector's left out tool through call_tool, per engine", () => {
+  const KEPT_CRM = { crm: { leftOut: ["crm/old_report"], offered: join(tmpdir(), "omb-kept-offered", "crm.json") } };
+  const CRM_ARGS = { report_id: "q3", path: "~/.ssh/id_rsa" };
+  const crmRule = (behavior: CustomRule["behavior"], org: boolean): CustomRule => ({ ...rule(behavior, org), when: "utiliser l'outil crm__old_report" });
+  /** A connector with 14 tools and old_report: past the floor of a searched catalog. */
+  function fakeCrm() {
+    const dir = mkdtempSync(join(tmpdir(), "omb-kept-crm-"));
+    dirs.push(dir);
+    const script = join(dir, "crm.mjs");
+    const object = { type: "object", properties: {}, additionalProperties: true };
+    const tools = [...Array.from({ length: 14 }, (_, i) => ({ name: `crm_tool_${i}`, description: `CRM tool ${i}`, inputSchema: object })), { name: "old_report", description: "Old report", inputSchema: object }];
+    writeFileSync(script, `#!/usr/bin/env node
+      const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+      let buffer = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        buffer += chunk;
+        let newline;
+        while ((newline = buffer.indexOf("\\n")) !== -1) {
+          const message = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1);
+          if (message.method === "initialize") send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} } } });
+          else if (message.method === "tools/list") send({ jsonrpc: "2.0", id: message.id, result: { tools: ${JSON.stringify(tools)} } });
+          else if (message.id !== undefined) send({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "ran " + (message.params && message.params.name) } ] } });
+        }
+      });
+    `);
+    chmodSync(script, 0o755);
+    return { command: script, args: [], env: {} as Record<string, string> };
+  }
+
+  it("ACP: the card, the rules and Always allow read the tool it runs; an unread target is never allowed for the session", () => {
+    const sessionAllows = new Map<string, Set<string>>();
+    const sent: any[] = [];
+    const events: any[] = [];
+    const handler = createPermissionHandler({
+      support: {} as never, DRIVER_KIND: "geminiAgent", DENY_TIMEOUT_NOTE: "", QUESTION_NO_MATCH_NOTE: "",
+      threadId: "t-acp-crm", commandCwd: undefined, send: (message) => sent.push(message), emit: (event) => events.push(event),
+      base: () => ({}), sessionAllows, handleClientFileRequest: async () => {},
+      getSession: () => ({ sessionId: "s-acp" }) as never, active: new Map(),
+    });
+    const current = {
+      turnId: "turn-acp", state: {}, flushAssistantText: () => {}, asks: new Map(), mountedServers: new Set(["crm"]),
+      turn: { integrations: { connectorsKept: KEPT_CRM }, approvalMode: "ask" }, turnConfig: { fullAuto: false },
+    };
+    const options = [{ optionId: "once", kind: "allow_once" }, { optionId: "always", kind: "allow_always" }, { optionId: "no", kind: "reject_once" }];
+    let id = 0;
+    const ask = (title: string, rawInput: unknown) => {
+      const before = events.length;
+      const sentBefore = sent.length;
+      handler({ jsonrpc: "2.0", id: ++id, method: "session/request_permission", params: { toolCall: { toolCallId: `c-${id}`, kind: "other", title, rawInput }, options } }, current as never);
+      return { opened: events.slice(before).find((event) => event.type === "request.opened"), answered: sent.slice(sentBefore)[0]?.result?.outcome?.optionId };
+    };
+    const answer = (opened: any, behavior: string, always?: boolean) => {
+      const sentBefore = sent.length;
+      (current.asks.get(opened.requestId) as (behavior: string, source: string, message?: string, always?: boolean) => unknown)(behavior, "user", undefined, always);
+      return sent.slice(sentBefore)[0]?.result?.outcome?.optionId;
+    };
+    const direct = ask("crm__old_report", CRM_ARGS);
+    const searched = ask("crm__call_tool", { name: "old_report", arguments: CRM_ARGS });
+    expect(searched.opened).toMatchObject({ mcpTool: "crm__old_report", allowSession: true });
+    expect(`${searched.opened.summary}`).not.toMatch(/call_tool/);
+    for (const [behavior, org] of [["deny", true], ["ask", true], ["deny", false]] as const) {
+      expect(decided(searched.opened, [crmRule(behavior, org)])).toBe(behavior);
+      expect(decided(searched.opened, [crmRule(behavior, org)])).toBe(decided(direct.opened, [crmRule(behavior, org)]));
+    }
+    expect(mcpAllowKey(searched.opened.mcpTool)).toBe("mcp:crm__old_report");
+    expect(searched.opened.input).toContain("~/.ssh/id_rsa");
+    // Always allow: the engine once, the driver keeps that one tool
+    expect(answer(searched.opened, "allow", true)).toBe("once");
+    expect(ask("crm__call_tool", { name: "old_report", arguments: { report_id: "q4" } })).toMatchObject({ opened: undefined, answered: "once" });
+    expect(ask("crm__call_tool", { name: "crm_tool_3", arguments: {} }).opened).toMatchObject({ mcpTool: "crm__crm_tool_3" });
+    // a call_tool that names nothing is allowed once at most
+    const unread = ask("crm__call_tool", { arguments: {} });
+    expect(answer(unread.opened, "allow", true)).toBe("once");
+    expect(ask("crm__call_tool", { arguments: {} }).opened).toBeDefined();
+  });
+
+  it("Muse Code: the connector is mounted behind its kept gate, and its call_tool asks as the tool it runs", async () => {
+    const instance = await MuseCodeDriver.create({ instanceId: "muse-crm", displayName: undefined, environment: {}, enabled: true, config: { cli: "muse" } } as never);
+    const events: any[] = [];
+    instance.adapter.onEvent((event: any) => events.push(event));
+    const before = muse.commands.length;
+    await instance.adapter.sendTurn({ threadId: "t-muse-crm", text: "go", cwd: tmpdir(), approvalMode: "ask", integrations: { custom: { crm: fakeCrm() }, connectorsKept: KEPT_CRM } } as never);
+    for (let n = 0; n < 50 && !muse.commands.slice(before).some((command) => command.method === "turn/start"); n++) await sleep(5);
+    const started = muse.commands.slice(before).find((command) => command.method === "session/start");
+    const mounted = JSON.stringify(started?.params ?? {});
+    expect(mounted).toContain("SAGAX_GATE_SEARCH");
+    expect(mounted).toContain("old_report");
+    const ask = async (name: string, args: unknown, n: number) => {
+      const rawArgs = JSON.stringify(args);
+      const at = events.length;
+      const commandsBefore = muse.commands.length;
+      muse.notify!({ method: "item/started", params: { sessionId: "s-1", item: { itemId: `ci-${n}`, kind: "toolCall", status: "inProgress", turnId: "native-1", tool: name, args: rawArgs } } });
+      muse.notify!({ method: "approval/requested", params: {
+        approvalId: `ca-${n}`, sessionId: "s-1", itemId: `ci-${n}`, toolName: name, rawArgs, currentRequirementId: { approvalId: `ca-${n}`, sourceIndex: 0 },
+        subject: { kind: "tool", toolName: name },
+        availableChoices: [
+          { choiceId: "c-once", label: "Allow", decision: "approved", scope: "once" },
+          { choiceId: "c-session", label: "Allow for session", decision: "approvedForSession", scope: "session" },
+        ],
+      } });
+      await sleep(1);
+      return { opened: events.slice(at).find((event) => event.type === "request.opened"), answered: muse.commands.slice(commandsBefore).find((command) => command.method === "approval/decide")?.params.choiceId };
+    };
+    const searched = await ask("crm_call_tool", { name: "old_report", arguments: CRM_ARGS }, 1);
+    expect(searched.opened).toMatchObject({ mcpTool: "crm__old_report", tool: "crm_old_report", allowSession: true });
+    expect(decided(searched.opened, [crmRule("deny", true)])).toBe("deny");
+    const commandsBefore = muse.commands.length;
+    await instance.adapter.respondToRequest("t-muse-crm", searched.opened.requestId, { behavior: "allow", always: true } as never);
+    expect(muse.commands.slice(commandsBefore).find((command) => command.method === "approval/decide")?.params.choiceId).toBe("c-once");
+    expect(await ask("crm_call_tool", { name: "old_report", arguments: {} }, 2)).toMatchObject({ opened: undefined, answered: "c-once" });
+    expect((await ask("crm_call_tool", { name: "crm_tool_1", arguments: {} }, 3)).opened).toMatchObject({ mcpTool: "crm__crm_tool_1" });
+    expect((await ask("crm_call_tool", { arguments: {} }, 4)).opened).toMatchObject({ allowSession: false });
+  });
+
+  it("a chat-completions engine lists every connector tool but the left out one, and reads its call_tool as that tool", async () => {
+    const controller = new AbortController();
+    const session = await mountChatTools({ custom: { crm: fakeCrm() }, connectorsKept: KEPT_CRM } as never, controller.signal);
+    chatSessions.push(session);
+    const names = session.definitions.map((definition) => definition.function.name);
+    expect(names).toEqual(expect.arrayContaining(["crm_crm_tool_0", "crm_crm_tool_13", "crm_search_tools", "crm_call_tool"]));
+    expect(names).not.toContain("crm_old_report");
+    const view = session.view("crm_call_tool", { name: "old_report", arguments: CRM_ARGS });
+    expect(view).toMatchObject({ ask: true, mcpTool: "crm__old_report", toolId: "crm/old_report" });
+    expect((await session.execute("crm_call_tool", { name: "old_report", arguments: {} }, controller.signal)).text).toBe("ran old_report");
+    const scoped = await mountChatTools({ custom: { crm: fakeCrm() }, connectorsKept: KEPT_CRM } as never, controller.signal, false, { deny: ["mcp:crm:old_report"] } as never);
+    chatSessions.push(scoped);
+    // a tool selection that excludes the left out tool: its gate drops it
+    // from the catalog, so it is neither listed nor one search away
+    expect(scoped.definitions.map((definition) => definition.function.name)).not.toContain("crm_old_report");
+    expect(() => scoped.validate("crm_call_tool", { name: "old_report", arguments: {} })).toThrow();
+    expect(() => scoped.validate("crm_old_report", {})).toThrow();
+  });
+
+  it("Pi on a cloud model: the connector's gate keeps its listing and the mount reads call_tool's target", () => {
+    const servers = buildMcpServers({ threadId: "t-pi-crm", text: "", integrations: { custom: { crm: { command: "node", args: ["crm.js"], env: {} } }, connectorsKept: KEPT_CRM } } as never)! as Record<string, { env: Record<string, string>; searched?: boolean; scope?: string }>;
+    expect(servers.crm!.searched).toBe(true);
+    expect(servers.crm!.scope).toBe("custom");
+    expect(JSON.parse(servers.crm!.env.SAGAX_GATE_SEARCH!)).toEqual({ pinned: [], leftOut: ["old_report"] });
+    expect(servers.crm!.env.SAGAX_GATE_OFFERED).toBe(KEPT_CRM.crm.offered);
+  });
+});

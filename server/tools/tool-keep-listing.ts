@@ -7,12 +7,18 @@
 //   model, the chat-completions engines) lists the agents tools but the ones
 //   the session leaves out; those stay behind search_tools / call_tool on the
 //   same server (agents-proxy.ts), through the same checks and approvals;
-// - the external runtime's fixed profile is never pruned.
+// - the external runtime's fixed profile is never pruned;
+// - lot D, a connector (a server the person added, the Perspicax account):
+//   on the same engines its gate lists every tool but the ones the session
+//   leaves out (mcp-gate-search.ts keptGateSearch), the rest behind its own
+//   search_tools / call_tool, read as the tool it runs. Grok keeps its own
+//   tool search (search_tool, use_tool) and its gate's admissible names.
 // The tools a session really lists are recorded (toolKeepOffered), so a tool
 // the bot never calls is counted as unused.
+import { readFileSync } from "node:fs";
 import { availableTools, catalogProfileFromEnv, keptToolsEnv } from "../drivers/agents-catalog.ts";
 import { toolIdParts } from "../../shared/searched-tool-call.ts";
-import { toolKeepOffered } from "./tool-keep.ts";
+import { connectorOfferedFile, toolKeepOffered } from "./tool-keep.ts";
 
 type AgentsMount = { env: Record<string, string> };
 
@@ -21,13 +27,59 @@ export type ListingEngine = { driverKind: string; compactPrompt: boolean };
 
 /** Whether this engine's up-front list really leaves out a tool its session
  * leaves out: Claude Code (its own tool search) and a compact prompt leave
- * out any server's tool; every other engine only the agents server's (lot C;
- * a connector's tools stay listed there until lot D). The one answer for
- * what a turn lists and what the tool selection card says is left out. */
+ * out any server's tool; every other engine the agents server's (lot C) and
+ * a connector's (lot D), but Grok's connectors, which its own tool search
+ * and admissible names serve. The one answer for what a turn lists and what
+ * the tool selection card says is left out. */
 export function engineLeavesOut(id: string, engine: ListingEngine): boolean {
   const parts = toolIdParts(id);
   if (!parts) return false;
-  return engine.driverKind === "claudeAgent" || engine.compactPrompt || parts.server === "agents";
+  return engine.driverKind === "claudeAgent" || engine.compactPrompt || parts.server === "agents" || engine.driverKind !== GROK_ACP;
+}
+
+const GROK_ACP = "grokAgent";
+
+/** Whether this engine's connectors are listed by their gate's kept listing
+ * (lot D), rather than by the engine's own search or the compact pins. */
+function gateKeepsConnectors(engine: ListingEngine): boolean {
+  return engine.driverKind !== "claudeAgent" && !engine.compactPrompt && engine.driverKind !== GROK_ACP;
+}
+
+/** #4527 lot D: one connector of a turn, as its gate gets it: the session's
+ * left out tools of that server (ids), and the file the gate notes what it
+ * offered into. Empty `leftOut` where the engine's own search or a compact
+ * prompt decides what is listed (Claude Code, a local model, Grok). */
+export interface KeptConnector { leftOut: string[]; offered: string }
+
+/** The kept listing of each connector of a turn (`integrations.connectorsKept`). */
+export function keptConnectors(botId: string, person: string, servers: Iterable<string>, leftOut: readonly string[], engine: ListingEngine): Record<string, KeptConnector> {
+  const kept: Record<string, KeptConnector> = {};
+  const gate = gateKeepsConnectors(engine);
+  for (const server of servers) {
+    if (server === "agents" || Object.hasOwn(kept, server)) continue;
+    const prefix = `${server}/`;
+    kept[server] = { leftOut: gate ? leftOut.filter((id) => id.startsWith(prefix) && toolIdParts(id) !== null).sort() : [], offered: connectorOfferedFile(botId, person, server) };
+  }
+  return kept;
+}
+
+/** Records what each connector's gate last offered this bot and person (the
+ * names it noted, mcp-gate.ts SAGAX_GATE_OFFERED) in the session: a
+ * connector tool the bot never calls then counts as unused, as an agents
+ * tool does. The last list noted stands for this session's: a connector's
+ * catalog seldom changes between two conversations. */
+export function offerConnectorCatalogs(botId: string, person: string, threadId: string, kept: Readonly<Record<string, KeptConnector>> | undefined): void {
+  const offered: string[] = [];
+  for (const [server, connector] of Object.entries(kept ?? {})) {
+    let names: unknown;
+    try { names = (JSON.parse(readFileSync(connector.offered, "utf8")) as { tools?: unknown }).tools; } catch { continue; }
+    if (!Array.isArray(names)) continue;
+    for (const name of names.slice(0, 2_000)) {
+      const id = typeof name === "string" ? `${server}/${name}` : "";
+      if (toolIdParts(id)) offered.push(id);
+    }
+  }
+  if (offered.length) toolKeepOffered(botId, person, threadId, offered);
 }
 
 /** The agents mount of a turn with its session's kept listing, or the mount

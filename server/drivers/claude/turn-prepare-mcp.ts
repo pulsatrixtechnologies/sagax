@@ -10,7 +10,7 @@ import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../context/
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
 import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
-import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
+import { compactGateSearch, connectorKeptGate } from "../../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { harnessMcpHttpSpec, loopbackNoProxy } from "../../mcp/harness-mcp-http.ts";
@@ -237,7 +237,10 @@ for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServ
   const search = turn.compactPrompt && botOwned.has(name) ? compactGateSearch(used, profile) : undefined;
   if (search) searchedMounts.add(name);
   const withhold = withholdForConnector(name, agentsPreferred);
-  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
+  // #4527 lot D: Claude Code's own tool search leaves a connector's unused
+  // tools out; its gate only notes what the server offered, for the count
+  const { offered } = connectorKeptGate(turn.integrations?.connectorsKept, name);
+  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...(offered ? { offered } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
   if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };
 }
 // an allowed name is mcp__<server> or mcp__<server>__<tool> (agentsAllowedTools)

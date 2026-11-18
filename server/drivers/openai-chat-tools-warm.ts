@@ -63,6 +63,8 @@ export function chatToolsFingerprint(
     toolLimit: opts.toolLimit,
     callTimeoutMs: opts.callTimeoutMs ?? null,
     schemaProfile: opts.schemaProfile ?? null,
+    // #4527 lot D: a new session's kept listing mounts its connectors again
+    connectorsKept: integrations?.connectorsKept ?? null,
   };
   return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }

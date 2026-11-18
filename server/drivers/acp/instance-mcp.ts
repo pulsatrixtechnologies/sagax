@@ -10,6 +10,7 @@ import type { SendTurnInput } from "../../contracts.ts";
 import { takeSafetyNote } from "../../safety/safety-review.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
+import { connectorKeptGate } from "../../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { TOOL_SCHEMA_PROFILE_ENV, toolSchemaProfileFor } from "../../tool-schema-profile.ts";
 import type { GateAnswer, GateAsk } from "../../approvals/mcp-gate-approval.ts";
@@ -203,9 +204,10 @@ export function createAcpMcp(deps: AcpMcpDeps) {
         // Under a schema profile the person's stdio server goes through the
         // gate that fits each tool list; a URL server already rides the
         // remote proxy, which reads the same profile from its env.
+        // (a connector whose gate keeps a listing gets that one gate below)
         const stdio = "url" in server
           ? mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" } })
-          : schemaProfile && turn.toolScope === undefined && !approvalGated
+          : schemaProfile && turn.toolScope === undefined && !approvalGated && !connectorKeptGate(turn.integrations?.connectorsKept, name).search
             ? gateServer({ name, server, threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, schemaProfile }) ?? server
             : server;
         if (!stdio) {
@@ -246,16 +248,22 @@ export function createAcpMcp(deps: AcpMcpDeps) {
         const where = typeof spec?.url === "string" ? spec.url : [spec?.command ?? null, spec?.args ?? null];
         return JSON.stringify(["acp", support.driverKind, turn.botId ?? null, turn.principalId ?? null, name, where]);
       };
-      if (turn.toolScope === undefined && !servers.some(renames) && !approvalGated && !servers.some(needsWithhold)) return servers.map(withProfile);
+      // #4527 lot D: a connector whose session leaves tools out rides a gate
+      // that lists every other tool (the rest one search away); a gated one
+      // notes what its server offered, for the count
+      const keptOf = (name: string) => custom.has(name) ? connectorKeptGate(turn.integrations?.connectorsKept, name) : {};
+      if (turn.toolScope === undefined && !servers.some(renames) && !approvalGated && !servers.some(needsWithhold) && !servers.some((server) => keptOf(server.name).search)) return servers.map(withProfile);
       return servers.filter((server) => turn.toolScope === undefined || canUseMcpServer(turn.toolScope, server.name)).map((server) => {
         const withhold = withholdForConnector(server.name, agentsPreferred);
-        if (turn.toolScope === undefined && !renames(server) && !approvalGated && !withhold.length) return withProfile(server);
+        const kept = keptOf(server.name);
+        if (turn.toolScope === undefined && !renames(server) && !approvalGated && !withhold.length && !kept.search) return withProfile(server);
         const original = { command: server.command, args: server.args, env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])) };
         const gated = gateServer({ name: server.name, server: original, threadId: turn.threadId, budget: 0,
           toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(toolNames && renames(server) ? { toolNames } : {}),
           ...(approvalGated ? { approval: approvalFor(server) } : {}), ...(withhold.length ? { withhold } : {}),
-          ...(schemaProfile ? { schemaProfile } : {}), ...(keptKey(server.name) ? { kept: keptKey(server.name) } : {}) });
-        if (!gated) throw new Error(turn.toolScope === undefined && !approvalGated && !withhold.length ? "Tool names require an MCP gate." : "Tool selection requires an MCP gate.");
+          ...(schemaProfile ? { schemaProfile } : {}), ...(keptKey(server.name) ? { kept: keptKey(server.name) } : {}),
+          ...(kept.search ? { search: kept.search } : {}), ...(kept.offered ? { offered: kept.offered } : {}) });
+        if (!gated) throw new Error(turn.toolScope === undefined && !approvalGated && !withhold.length && !kept.search ? "Tool names require an MCP gate." : "Tool selection requires an MCP gate.");
         return withProfile({ name: server.name, command: gated.command, args: gated.args, env: acpEnv(gated.env) });
       });
     };

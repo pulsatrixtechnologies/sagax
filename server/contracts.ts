@@ -384,6 +384,11 @@ export interface SendTurnInput {
      * default (mcp-gate-config.ts resultBudget). Kept apart from the specs so
      * a server mounted as it is never carries a field its engine rejects. */
     customResultBudgets?: Record<string, number>;
+    /** #4527 lot D: each `custom` server's kept listing for this turn's
+     * session (server/tools/tool-keep-listing.ts keptConnectors): the tools
+     * its gate leaves out (ids `server/tool`) and the file the gate notes
+     * what it offered into. A name missing here is mounted as before. */
+    connectorsKept?: Record<string, { leftOut: string[]; offered: string }>;
   };
   cwd?: string;
   /** Engines with no working folder (the chat drivers): where an MCP result too big for the model is saved whole; a folder attach_file can deliver from. */

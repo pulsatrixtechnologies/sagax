@@ -648,6 +648,13 @@ export function toolKeepOffered(botId: string, person: string, threadId: string,
   applyToOpen({ botId, person, threadId }, (current) => ({ ...current, offered: list }));
 }
 
+/** #4527 lot D: where a connector's gate notes the tools it offered one bot
+ * and person (mcp-gate.ts SAGAX_GATE_OFFERED): inside the bot's own folder,
+ * so it goes with the bot. Names only. */
+export function connectorOfferedFile(botId: string, person: string, server: string): string {
+  return join(botDir(botId), "offered", `${hashOf(`${personKey(person)}\u0000${server}`)}.json`);
+}
+
 /** Lot E: the person's state for one bot (read only). */
 export function readToolKeep(botId: string, person: string): ToolKeepState {
   return load(botId, person);

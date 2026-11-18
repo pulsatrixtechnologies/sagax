@@ -1,6 +1,8 @@
 // @ts-nocheck
 /** notify (#1388). Pure move from server/index.ts. */
 import { quietForCall } from "../notify.ts";
+import { isPttTurn } from "../push/ptt.ts";
+import { sendToPttSink } from "../push/ptt-sink.ts";
 import { CONFIDENTIAL_NOTICE_BODY } from "../threads/confidential-threads.ts";
 export type Host = Record<string, any>;
 
@@ -24,6 +26,12 @@ function notify(notification: Notification | null) {
   if (notification && host.notificationInAgentConversation(notification)) return;
   // Routine and MCP decisions reach the person on every device (#1984).
   if (notification && host.notificationQuietOnPhones(notification)) notification = { ...notification, quietOnPhones: true };
+  // Push to Talk: the answer to a turn held from the lock screen is spoken
+  // back as an incoming PTT push (server/push/ptt.ts); the banner stays quiet.
+  if (notification && notification.kind === "done" && notification.botId && isPttTurn(host.lastPersonMessage(notification.threadId))) {
+    const text = host.lastReply?.get?.(notification.threadId) || notification.body || "";
+    void sendToPttSink({ botId: notification.botId, threadId: notification.threadId, text });
+  }
   // the conversation on a live voice call is heard, not buzzed (notify.ts)
   if (notification && quietForCall(notification, host.lastPersonMessage(notification.threadId), Date.now(), Boolean(host.voiceCalls.active(notification.threadId)))) return;
   if (notification && host.QUIET_TURN_NEWS.has(notification.kind) && host.quietTurnThreads.has(notification.threadId)) return;

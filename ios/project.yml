@@ -79,6 +79,7 @@ targets:
       - package: CompanionCore
         product: CompanionCore
       - sdk: Intents.framework
+      - sdk: PushToTalk.framework
       - target: SagaxWidgetExtension
       - target: SagaxShareExtension
       - target: SagaxNotificationService
@@ -124,6 +125,10 @@ targets:
         # The App ID needs the Push Notifications capability. The widget and
         # share extensions get no pushes and keep their own entitlements.
         aps-environment: development
+        # Push to Talk: hold to talk to a bot from the lock screen and the
+        # Dynamic Island (PushToTalkController.swift). The App ID needs the
+        # Push to Talk capability; automatic signing adds it to the profile.
+        com.apple.developer.push-to-talk: true
         # Communication Notifications: the banner names the bot (or person)
         # and shows their avatar instead of the Sagax app icon. The App ID
         # `ca.pulsatrix.sagax` needs this capability in the Apple Developer
@@ -238,6 +243,8 @@ targets:
           - audio
           # a push wakes the app for a moment to recount the icon badge
           - remote-notification
+          # Push to Talk: a PTT push wakes the app to speak the bot's answer
+          - push-to-talk
         # Required for communication notifications (INSendMessageIntent),
         # and a Siri call to a bot continuing in the app (INStartCallIntent).
         NSUserActivityTypes:

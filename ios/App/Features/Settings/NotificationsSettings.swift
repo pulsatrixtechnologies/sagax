@@ -178,6 +178,8 @@ struct NotificationsSettingsView: View {
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
     @AppStorage(LiveActivityPrefs.key) private var liveActivities = false
     @AppStorage(ConnectionNoticePrefs.key) private var connectionNotices = ConnectionNoticePrefs.defaultValue
+    @ObservedObject private var talk = PushToTalkController.shared
+    @State private var talkBotId = PushToTalkPrefs().botId
 
     var body: some View {
         SettingsPage(title: "Notifications") {
@@ -251,6 +253,44 @@ struct NotificationsSettingsView: View {
                     })),
                     identifier: "settings-live-activities"
                 )
+            }
+            SettingsSpacer(SettingsMetrics.cardGap)
+            SettingsCard {
+                SettingsRow(
+                    title: "Push to Talk",
+                    subtitle: "Hold to talk to a bot from the lock screen and the Dynamic Island. Its answer is spoken back.",
+                    accessory: .toggle(Binding(get: { talk.phase != .off }, set: { value in
+                        Task { if value { await talk.enable() } else { await talk.disable() } }
+                    })),
+                    identifier: "settings-push-to-talk"
+                )
+                if talk.phase != .off {
+                    CardHairline(leadingInset: SettingsMetrics.rowInset)
+                    Menu {
+                        ForEach(session.state.bots) { bot in
+                            Button {
+                                talkBotId = bot.id
+                                talk.prefs.botId = bot.id
+                                Task { await talk.botChanged() }
+                            } label: {
+                                if PrimaryBotChoice.bot(chosenId: talkBotId, bots: session.state.bots)?.id == bot.id {
+                                    Label(bot.name, systemImage: "checkmark")
+                                } else {
+                                    Text(verbatim: bot.name)
+                                }
+                            }
+                        }
+                    } label: {
+                        SettingsRow(
+                            title: "Talks to",
+                            accessory: .valueChevron(PrimaryBotChoice.bot(chosenId: talkBotId, bots: session.state.bots)?.name ?? String(localized: "a bot"))
+                        )
+                    }
+                    .accessibilityIdentifier("settings-push-to-talk-bot")
+                }
+            }
+            if let problem = talk.problem {
+                SettingsFooter(text: LocalizedStringKey(problem))
             }
             SettingsSpacer(SettingsMetrics.cardGap)
             SettingsCard {

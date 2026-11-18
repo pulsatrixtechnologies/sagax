@@ -1,23 +1,24 @@
 import type { Message } from "@/state/store";
 import type { Pending } from "@/components/PendingApproval";
 import { formatQuestionAnswers } from "../../shared/ask-question";
+import { isFirstRunQuizCard, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card";
 import type { PersonAttentionCard } from "../../shared/person-attention";
 import type { ServedWaitingItem } from "../../shared/waiting-items";
 
-/** Open question cards on a thread (a bot's structured ask), oldest first.
- * Answered, dismissed and expired ones drop out. Permission cards are not
- * questions: they keep taking over the composer (see PendingApproval). */
-export function pendingQuestions(messages: readonly Message[]): Message[] {
-  return messages.filter(
-    (m) =>
-      m.kind === "options" &&
-      m.card?.requestId &&
-      m.card.questionRequest &&
-      !m.card.tool &&
-      !m.card.answered &&
-      !m.card.dismissed &&
-      !m.card.expired,
-  );
+/** Open structured requests in transcript order. The pinned card can also
+ * draw flat option lists with their original answer and dismissal actions. */
+export function pendingQuestions(messages: readonly Message[], includeFlatChoices = false): Message[] {
+  const lastReply = includeFlatChoices ? messages.findLastIndex((message) => message.role === "user" && message.kind === "text") : -1;
+  return messages.filter((message, index) => {
+    const card = message.card;
+    if (message.kind !== "options" || !card || card.tool || card.answered || card.dismissed || card.expired) return false;
+    if (card.requestId && card.questionRequest) return true;
+    if (!includeFlatChoices || card.proactiveProposal) return false;
+    if (card.requestType === "question") return true;
+    // create_options_card predates typed questions. Its passive cards are
+    // identifiable by their author and, like the inline copy, retire on reply.
+    return message.from?.botId === WATCHER_OPTIONS_CARD_BOT_ID && isFirstRunQuizCard(card) && index > lastReply;
+  });
 }
 
 /** #3512: open offer and proposal cards a bot posted on its own (a

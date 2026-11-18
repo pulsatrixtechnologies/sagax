@@ -121,6 +121,7 @@ export function PinnedWaitingCard({
   threadId,
   bot,
   botFor,
+  groupId,
   nameFor,
   onCancelTurn,
   locale,
@@ -129,6 +130,7 @@ export function PinnedWaitingCard({
   threadId: string;
   /** this conversation's bot (a room has none: each item names its own) */
   bot?: Bot;
+  groupId?: string;
   /** who asked an approval: "always allow" is remembered against them */
   botFor: (pending: Pending) => Bot | undefined;
   /** who waits, for the header line */
@@ -185,7 +187,8 @@ export function PinnedWaitingCard({
     </button>
   ) : null;
   // #3471: one quiet skip at the end of the top row, for every kind
-  const skip = pinnedItemSkip(current, askedIn, current.item.botId, dispatch);
+  const cardBotId = current.kind === "question" ? bot?.id ?? current.item.botId : current.item.botId;
+  const skip = pinnedItemSkip(current, askedIn, cardBotId, dispatch, groupId);
   const skipButton = skip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
   const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
@@ -265,15 +268,19 @@ export function PinnedWaitingCard({
             <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
             {controls}
           </div>
-          <QuestionCard
-            key={current.key}
-            threadId={askedIn}
-            bot={questionBot(current.message, bot, name)}
-            message={current.message}
-            embedded
-            onAnswered={() => pinned.answered(current.key)}
-            onAnswerFailed={() => pinned.answerFailed(current.key)}
-          />
+          {!current.message.card?.questionRequest ? (
+            <OptionCard key={current.key} botId={cardBotId} groupId={groupId} threadId={askedIn} message={current.message} embedded />
+          ) : (
+            <QuestionCard
+              key={current.key}
+              threadId={askedIn}
+              bot={questionBot(current.message, bot, name)}
+              message={current.message}
+              embedded
+              onAnswered={() => pinned.answered(current.key)}
+              onAnswerFailed={() => pinned.answerFailed(current.key)}
+            />
+          )}
         </div>
       ) : heldXDraftOf(current.pending.message) ? (
         // #4638: a bot's own X post call is the draft card, one card, one state
@@ -332,7 +339,7 @@ export function PinnedWaitingCard({
 
 /** How the pinned item is skipped (#3471): an approval or a question by its
  * request, a question in words by its card. Closed as skipped, never denied. */
-export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBotId: string | undefined, dispatch: ReturnType<typeof useStore>["dispatch"]): (() => void) | undefined {
+export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBotId: string | undefined, dispatch: ReturnType<typeof useStore>["dispatch"], groupId?: string): (() => void) | undefined {
   // a kind this app does not know is answered in its conversation; #4440:
   // one the server settles by its one route (a routine run's form) is
   // skipped from here, whatever the app draws for it
@@ -347,7 +354,8 @@ export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBo
   }
   if (item.kind === "question") {
     const requestId = item.message.card?.requestId;
-    return requestId ? () => dispatch({ type: "skipCard", threadId: askedIn, requestId }) : undefined;
+    if (requestId) return () => dispatch({ type: "skipCard", threadId: askedIn, requestId });
+    return () => dispatch({ type: "dismissCard", botId: conversationBotId ?? "", threadId: askedIn, messageId: item.message.id, groupId });
   }
   // #3512: an offer is skipped by its proposal, closed as skipped
   if (item.kind === "offer") {

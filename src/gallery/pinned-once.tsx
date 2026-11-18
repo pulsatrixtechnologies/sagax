@@ -81,6 +81,11 @@ const taskMessages: Message[] = [
 const taskItem = { id: `thread:${taskThread}`, kind: "session", botId: "iris", botName: "Iris", title: fr ? "Trier le tableau de soutien" : "Sort the help desk board", status: "waiting", startedAt: at, updatedAt: at + 60_000, threadId: taskThread, steps: [], stepsTruncated: false, files: [], children: [], canStop: false };
 
 const messages: Message[] = windowed ? [person, words, after]
+  : which === "tickets" ? [person, ...[101, 102, 103].map((ticket): Message => ({
+    id: `ticket-${ticket}`, role: "bot", kind: "options", at: at + ticket * 1000,
+    card: { requestType: "question", title: fr ? `Nouveau billet #${ticket} sans plage` : `Unscheduled ticket #${ticket}`,
+      subtitle: fr ? "Que veux-tu faire?" : "What would you like to do?", options: fr ? ["Je m’en occupe", "Me le rappeler demain"] : ["I'll handle it", "Remind me tomorrow"] },
+  }))]
   : which === "two" ? [person, words, question(), second(), after]
   : which === "approval" ? [person, words, approval(), after]
   : which === "answered" ? [person, words, question(CHOICES[1]), approval("allow"), after]

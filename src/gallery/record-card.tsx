@@ -16,6 +16,8 @@ import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { LinkPreviewCard } from "../components/LinkHoverCard";
+import { RELATED_TABS, type RelatedTab } from "../components/RecordRelatedTabs";
+import { RECORD_EDIT_FIELDS } from "../lib/record-detail";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
 import { NIMBUS_MARK, NIMBUS_PRODUCT, agreementCard, companyCard, contactCard, departmentCard, emailCard, guidCard, invoiceCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, AGREEMENT_REF, COMPANY_REF, CONTACT_REF, DEPARTMENT_REF, EMAIL_REF, GUID_REF, INVOICE_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
@@ -47,6 +49,21 @@ function read(raw: RecordCardAnswer | RecordCardMiss) {
     loading: false, at: NOW - 120_000, refresh: noop,
   };
 }
+
+const relatedPages = {
+  time: { tab: "time", totalHours: "3.5 h", lines: [
+    { date: "Nov 18", member: "Support", hours: "1.5 h", note: "Reinstalled the printer driver and verified the queue on both workstations." },
+    { date: "Nov 17", member: "Service desk", hours: "2 h", note: "Traced the connection and checked the network settings." },
+  ] },
+  configurations: { tab: "configurations", lines: [{ name: "Reception printer", type: "Printer", status: "Active" }] },
+  expenses: { tab: "expenses", lines: [{ date: "Nov 17", member: "Support", type: "Travel", amount: "$12.50" }] },
+  activities: { tab: "activities", lines: [{ subject: "Confirm print quality", type: "Follow-up", date: "Nov 19", assigned: "Service desk" }] },
+  attachments: { tab: "attachments", lines: [{ name: "print-test.txt", size: "10 B", date: "Nov 18", id: "42" }] },
+};
+const relatedCounts = Object.fromEntries(RELATED_TABS.map(key => [key, relatedPages[key].lines.length]));
+
+const statuses = [{ value: "1", label: lang === "fr" ? "En cours" : "In progress" }, { value: "2", label: lang === "fr" ? "En attente" : "Waiting" }];
+let status = statuses[0]!;
 
 function Card({ record, label, answerOf, pinned, miss, loading }: { record: RecordRef; label: string; answerOf?: Record<string, unknown>; pinned?: boolean; miss?: RecordCardMiss; loading?: boolean }) {
   const value = miss ?? (answerOf ? parseRecordCardAnswer(answer(answerOf)) : null);
@@ -162,11 +179,33 @@ window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/perspicax/products")) return json({ products: [nimbusProductRaw()] });
+  if (url.includes("/detail?")) {
+    if (scene !== "related") return new Response(null, { status: 404 });
+    const query = new URL(url, window.location.href).searchParams;
+    if (init?.method === "POST") {
+      const change = JSON.parse(String(init.body));
+      status = statuses.find(choice => choice.value === change.value) ?? status;
+      return json({ updated: true });
+    }
+    switch (query.get("section")) {
+      case "counts": return json({ counts: relatedCounts, fields: RECORD_EDIT_FIELDS });
+      case "choices": return json({ choices: statuses, next: null });
+      case "download": return json({ name: "print-test.txt", contentType: "text/plain", base64: btoa("Print test") });
+      default: return json({ ...relatedPages[query.get("section") as RelatedTab], next: null });
+    }
+  }
   const match = /\/api\/me\/records\/nimbus_desk\/(\w+)\/([^?]+)/.exec(url);
   if (match) {
     const mode = params.get("answer");
     if (mode) return json({ state: mode, ...(mode === "busy" ? { retryAfter: 10 } : {}) });
     const make = { ticket: ticketCard, company: companyCard, project: projectCard, invoice: invoiceCard, agreement: agreementCard, contact: contactCard, department: departmentCard, email: emailCard }[match[1]!];
+    if (scene === "related" && match[1] === "ticket") {
+      const card = ticketCard(Date.now(), lang);
+      const fields = (card.fields as Array<Record<string, unknown>>).map((field, index) => ({
+        ...field, edit_key: ["board", "type"][index],
+      }));
+      return json(answer({ ...card, fields, state: { label: status.label, tone: "open" } }));
+    }
     return json(make ? answer(make(Date.now(), lang)) : { state: "unknown" });
   }
   return realFetch(input, init);
@@ -181,7 +220,7 @@ function Label({ children }: { children: string }) {
 }
 
 function Page() {
-  if (scene === "chat") {
+  if (scene === "chat" || scene === "related") {
     return (
       <Frame>
         <div className="max-w-[44rem] pt-[22rem] text-[15px] leading-6" data-gallery-chat>

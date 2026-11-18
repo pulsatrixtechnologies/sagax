@@ -32,6 +32,8 @@ import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
 import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
 import type { UseRecordCard } from "@/lib/record-cards";
+import { RecordFieldSelect, type RecordFieldEdit } from "./RecordFieldSelect";
+import { RecordRelatedTabs, type RecordRelatedTabsProps } from "./RecordRelatedTabs";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
 import type { RecordCard as Card, RecordCardMiss, RecordField, RecordLevel, RecordRef, RecordTone } from "../../shared/record-cards";
@@ -59,6 +61,8 @@ export interface RecordCardProps {
   kindName?: string;
   product?: RecordCardProduct;
   read: Pick<UseRecordCard, "card" | "miss" | "loading" | "at" | "refresh">;
+  related?: RecordRelatedTabsProps;
+  edits?: Readonly<Record<string, RecordFieldEdit>>;
   pinned?: boolean;
   onClose?: () => void;
   /** put the record in the open conversation's composer (absent: no action) */
@@ -94,6 +98,8 @@ const ICON_BUTTON = "inline-flex size-7 shrink-0 items-center justify-center rou
 
 /** Hovered, the card is a tooltip: it holds no control in the tab order until
  * it is pinned (a dialog). Every button reads this. */
+const EditContext = createContext<RecordCardProps["edits"]>(undefined);
+
 const TabContext = createContext<number | undefined>(undefined);
 
 /** The product's page of the record: the target of every "See all" (absent: no such action). */
@@ -283,12 +289,15 @@ function useStacked(ref: RefObject<HTMLElement | null>, below = RECORD_CARD_STAC
 function PersonLine({ role, label, name, detail, personRef }: { role?: string; label?: string; name: string; detail?: string; personRef?: RecordRef }) {
   const Icon = role === "owner" || role === "manager" ? UserCheck : UserRound;
   const open = useOpenRef(personRef);
+  const edits = useContext(EditContext);
+  const edit = role ? edits?.[role] : undefined;
   return (
     <>
       <Icon size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
       {label && <span className="sr-only">{label}: </span>}
       {/* the name gives way, the number beside it does not */}
-      {personRef && open ? <RecordRefChip name={name} refTo={personRef} onOpen={open} /> : <span dir="auto" className="min-w-0 truncate">{name}</span>}
+      {edit ? <RecordFieldSelect edit={edit} current={name} label={label ?? name} /> : personRef && open ? <RecordRefChip name={name} refTo={personRef} onOpen={open} /> : <span dir="auto" className="min-w-0 truncate">{name}</span>}
+      {edit && personRef && open && <button type="button" onClick={() => open(personRef, name)} aria-label={t("recordCard.open")} className="text-popover-ink-secondary hover:text-popover-ink"><ArrowUpRight size={14} /></button>}
       {detail && <span dir="ltr" className="shrink-0 whitespace-nowrap text-popover-ink-secondary [unicode-bidi:isolate]">{detail}</span>}
     </>
   );
@@ -340,6 +349,12 @@ function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> })
  * field is about: `value` is the product's own ready text, shown as sent. */
 function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label: string; now: number; lang: string; tz: string | undefined }) {
   const open = useOpenRef(field.ref);
+  const edits = useContext(EditContext);
+  const edit = field.editKey ? edits?.[field.editKey] : undefined;
+  if (edit) return <span className="inline-flex min-w-0 items-center gap-1">
+    <RecordFieldSelect edit={edit} current={field.value} label={label} />
+    {open && field.ref && <button type="button" aria-label={t("recordCard.open")} onClick={() => open(field.ref!, field.value)}><ArrowUpRight size={14} /></button>}
+  </span>;
   switch (field.type) {
     case "money":
       // the product's number and currency as sent, never computed; left in the value column
@@ -376,6 +391,7 @@ function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label
 
 /** The dates and key fields as one description list. */
 function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; chipRows?: NonNullable<Card["chips"]> }) {
+  const edits = useContext(EditContext);
   const tz = card.tz;
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
@@ -405,6 +421,16 @@ function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; n
       value: <FieldValue field={field} label={field.label} now={now} lang={lang} tz={tz} />,
       gap: dateCount > 0 && index === 0,
     });
+  });
+  // an editable field the card carries no value for (or none it shows) is still a choice to make
+  const placed = new Set<string>([
+    ...(card.state ? ["status"] : []), ...(card.priority ? ["priority"] : []),
+    ...(card.people ?? []).map((person) => person.role),
+    ...(card.fields ?? []).flatMap((field) => [field.editKey, field.role].filter((key): key is string => Boolean(key))),
+  ]);
+  Object.entries(edits ?? {}).filter(([key]) => !placed.has(key)).forEach(([key, edit], index) => {
+    const label = t(`recordCard.edit.${key}` as "recordCard.edit.board");
+    rows.push({ key: `edit-${key}`, label, value: <RecordFieldSelect edit={edit} current={t("recordCard.edit.notSet")} label={label} />, gap: dateCount > 0 && index === 0 && !(card.fields ?? []).length });
   });
   const shown = part === "all" ? rows : part === "dates" ? rows.slice(0, dateCount) : rows.slice(dateCount).map((row) => ({ ...row, gap: false }));
   if (!shown.length) return null;
@@ -524,6 +550,7 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
 
 function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
   const tab = useContext(TabContext);
+  const edits = useContext(EditContext);
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
   // a number that is the title, or begins it (a company's or a project's name), is said once; a GUID never
@@ -539,8 +566,8 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
       {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex max-w-full flex-wrap items-center justify-end gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="truncate">{card.state.label}</span></Chip>}
-        {card?.priority && <PriorityChip priority={card.priority} />}
+        {edits?.status && card?.state ? <RecordFieldSelect edit={edits.status} current={card.state.label} leading={<span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} />} label={t("recordCard.related.status")} triggerClass={cn(BUTTON_BASE, "h-5 rounded-full", TONE_CLASS[card.state.tone])} /> : card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="truncate">{card.state.label}</span></Chip>}
+        {edits?.priority && card?.priority ? <RecordFieldSelect edit={edits.priority} current={card.priority.label} leading={(card.priority.level === "urgent" || card.priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={LEVEL_GLYPH[card.priority.level]} />} label={t("recordCard.edit.priority")} triggerClass={cn(BUTTON_BASE, "h-5 rounded-full", LEVEL_CLASS[card.priority.level])} /> : card?.priority && <PriorityChip priority={card.priority} />}
         {chips.map((chip, index) => (
           <Chip key={index} className={cn(TONE_CLASS[chip.tone], "shrink-0")} title={chip.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[chip.tone])} /><span className="min-w-0 truncate">{chip.label}</span></Chip>
         ))}
@@ -606,7 +633,7 @@ function Shell({ wrap, width, frameClass, data, busy, children }: { wrap: RefObj
   );
 }
 
-export function RecordCard({ record, label, kindName, product, read, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
+export function RecordCard({ record, label, kindName, product, read, related, edits, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const stacked = useStacked(wrap);
   // below this a head has no room for a second chip: its words move into the body
@@ -622,10 +649,10 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   // the layout is the data's: a text, a list or an activity makes the two-pane card, none the single pane
   // a text of one short line is a row above the fields of the single-pane card, not a nearly empty pane
   const shortText = Boolean(description && !hasLines && !hasNotes && card?.fields?.length && description.length <= SHORT_TEXT_MAX && !description.includes("\n"));
-  const right = Boolean(card && ((description && !shortText) || hasLines || hasNotes));
+  const right = Boolean(card && ((description && !shortText) || (hasLines && !related) || hasNotes));
   // a card of typed fields sizes its field pane from what the rows need (a share of the card, not a fixed ratio)
   const sized = Boolean(card?.fields?.some((field) => field.type));
-  const split = !card || right;
+  const split = !card || right || Boolean(related);
   // wider than tall, never taller than wide: stacked (a narrow space), the
   // card is no taller than it is wide
   const frame = "flex w-full max-h-[min(20rem,var(--hover-card-room,calc(100vh-1rem)))] @max-[34rem]:max-h-[min(100cqw,var(--hover-card-room,calc(100vh-1rem)))] flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)] text-[13px] leading-5 text-popover-ink";
@@ -703,12 +730,13 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   return (
     <TabContext.Provider value={tab}>
       <RefContext.Provider value={{ open: onOpenRecord, can: canOpenRecord }}>
+      <EditContext.Provider value={edits}>
       <SeeAllContext.Provider value={{ url: openUrl, product: productLabel }}>
-      <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy={loading}>
+      <Shell wrap={wrap} width={width} frameClass={cn(frame, related && "h-[20rem]")} data={data} busy={loading}>
         <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} chips={headChips} />
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
-        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
+        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className={cn("flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col", related && "max-h-[38%]")} data-record-panes="">
           <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? cn(sized ? "@min-[34rem]:flex-[0_1_auto] @min-[34rem]:min-w-[45%] @min-[34rem]:max-w-[60%]" : "@min-[34rem]:flex-[2_1_0%]", "@min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline") : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
             {showPeopleBlock && (
               <div className="flex flex-col gap-1">
@@ -734,16 +762,17 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
               {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", pinned ? "" : hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
               {/* the latest activity comes before a list: a hovered card drops whole rows from the foot */}
               {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
-              {hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
+              {!related && hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
             </Pane>
           )}
           {/* a card not wider than tall says who and what it says first; the key fields come last (and are the first dropped) */}
-          {stacked && right && card.fields?.length ? (
+          {stacked && right && (card.fields?.length || (edits && Object.keys(edits).length)) ? (
             <div className="flex shrink-0 flex-col gap-2 border-t border-popover-hairline px-3 py-2 [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden">
               <Facts card={card} now={now} lang={lang} part="fields" />
             </div>
           ) : null}
         </Pane>
+        {related && <RecordRelatedTabs {...related} />}
         <div className="flex shrink-0 flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
           {openUrl && (
             <button type="button" tabIndex={tab} className={cn(BUTTON_PRIMARY, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} {...first} data-record-open>
@@ -768,6 +797,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
         </div>
       </Shell>
       </SeeAllContext.Provider>
+      </EditContext.Provider>
       </RefContext.Provider>
     </TabContext.Provider>
   );

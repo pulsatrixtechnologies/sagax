@@ -22,9 +22,9 @@ const card = (id = "481516", extra: Record<string, unknown> = {}) => ({
 
 type Answer = { ok: boolean; status: number; body?: unknown; error?: string };
 function fakeConsole(answer: (path: string, token: string) => Answer | Promise<Answer> = () => ({ ok: true, status: 200, body: card() })) {
-  const calls: Array<{ method: string; path: string; token: string }> = [];
-  const call: PersonProductsCall = async (method, path, _body, limits) => {
-    calls.push({ method, path, token: limits.subjectToken });
+  const calls: Array<{ method: string; path: string; token: string; body?: unknown }> = [];
+  const call: PersonProductsCall = async (method, path, body, limits) => {
+    calls.push({ method, path, token: limits.subjectToken, ...(body !== undefined ? { body } : {}) });
     const out = await answer(path, limits.subjectToken);
     if (out.ok) return { ok: true, status: out.status, body: out.body };
     // the link answers a 403 as "link", the rest as "refused" (perspicax-link.ts linkJson)
@@ -56,7 +56,7 @@ function harness(options: {
     language: () => options.language ?? "fr-CA",
   };
   const route = createRecordCardsRoutes(deps);
-  const request = async (path: string, auth: RequestAuth = ADA, method = "GET") => {
+  const request = async (path: string, auth: RequestAuth = ADA, method = "GET", payload?: unknown) => {
     const headers: Record<string, string> = {};
     let status = 0;
     let body: unknown;
@@ -65,7 +65,7 @@ function harness(options: {
       req: {} as never, res: { setHeader: (name: string, value: string) => { headers[name] = value; } } as never,
       url, path: url.pathname, method, auth,
       json: ((_res: unknown, code: number, payload: unknown) => { status = code; body = payload; }) as never,
-      readBody: (async () => undefined) as never,
+      readBody: (async () => payload) as never,
     });
     return { out, status, body: body as Record<string, any>, headers };
   };
@@ -73,6 +73,25 @@ function harness(options: {
 }
 
 describe("record card route", () => {
+  it("sends a chosen field to the person's own ticket and surfaces a refused write", async () => {
+    for (const status of [200, 403]) {
+      const h = harness({ answer: () => ({ ok: status === 200, status, body: { updated: true } }) });
+      const answer = await h.request(PATH + "/detail", BEN, "POST", { field: "priority", value: "2" });
+      expect(answer.status).toBe(status);
+      expect(answer.body).toEqual(status === 200 ? { updated: true } : { state: "unavailable" });
+      expect(h.calls).toEqual([{ method: "POST", path: "/api/v1/pulsabot/people/me/products/nimbus_desk/records/ticket/481516/detail?lang=fr", token: "token-of-p-ben", body: { field: "priority", value: "2" } }]);
+    }
+  });
+
+  it("keeps the old console's missing detail route distinguishable from a refused write", async () => {
+    const legacy = harness({ answer: () => ({ ok: false, status: 404 }) });
+    expect((await legacy.request(PATH + "/detail?section=counts")).status).toBe(404);
+    const denied = harness({ rule: { kind: "deny", rule: { id: "deny", text: "rule" } } });
+    const answer = await denied.request(PATH + "/detail", ADA, "POST", { field: "owner", value: "3" });
+    expect(answer.status).toBe(403);
+    expect(denied.calls).toEqual([]);
+  });
+
   it("reads as the session's own person, with their own sign-in token and language", async () => {
     const h = harness();
     const answer = await h.request(PATH);

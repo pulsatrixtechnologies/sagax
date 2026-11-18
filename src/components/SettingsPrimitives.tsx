@@ -580,6 +580,8 @@ export function PillSelect<T extends string>({
   value,
   options,
   onChange,
+  onOpen,
+  emptyLabel,
   ariaLabel,
   disabled,
   mixed = false,
@@ -607,6 +609,8 @@ export function PillSelect<T extends string>({
   value: T | undefined;
   options: ReadonlyArray<PillOption<T>>;
   onChange: (next: T) => void;
+  onOpen?: () => void;
+  emptyLabel?: string;
   ariaLabel: string;
   disabled?: boolean;
   /** Bulk edit: bots differ; no choice looks selected (#1701). */
@@ -643,6 +647,7 @@ export function PillSelect<T extends string>({
     items[(index + items.length) % items.length]?.focus();
   };
   const show = () => {
+    if (!open) onOpen?.();
     setOpen(true);
     const selected = Math.max(0, options.findIndex((option) => option.value === value));
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => (searchOn ? searchRef.current?.focus() : focusOption(selected)));
@@ -733,7 +738,7 @@ export function PillSelect<T extends string>({
               </label>
             </li>
           )}
-          {listed.length === 0 && <li role="presentation" className="px-2 py-1.5 text-[13px] text-ink-secondary">{t("chat.find.noResults")}</li>}
+          {listed.length === 0 && <li role="presentation" className="px-2 py-1.5 text-[13px] text-ink-secondary">{emptyLabel ?? t("chat.find.noResults")}</li>}
           {listed.map((option, index) => {
             const selected = option.value === value;
             const heading = option.group && option.group !== listed[index - 1]?.group ? option.group : null;

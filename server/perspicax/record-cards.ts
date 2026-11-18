@@ -31,10 +31,14 @@ import { parseRecordCard, recordKey, type RecordCard, type RecordCardMiss, type 
 export const RECORD_CARD_TIMEOUT_MS = 15_000;
 export const RECORD_CARD_MAX_BYTES = 64 * 1024;
 
+// The connector's existing 100 MiB download limit, encoded as base64 in JSON.
+const RECORD_DOWNLOAD_RESPONSE_BYTES = 4 * Math.ceil(100 * 1024 * 1024 / 3) + RECORD_CARD_MAX_BYTES;
+
 export type RecordCardLanguage = "fr" | "en";
 export type RecordCardRead = { ok: true; card: RecordCard } | ({ ok: false } & RecordCardMiss);
 
 export interface RecordCardsClient {
+  detail(subjectToken: string, ref: RecordRef, query: URLSearchParams, change?: { field: string; value: string }): Promise<LinkPostResult>;
   /** One card for the person; `fresh` skips the console's cache. */
   get(principalId: string, subjectToken: string, ref: RecordRef, lang: RecordCardLanguage, fresh?: boolean): Promise<RecordCardRead>;
 }
@@ -92,6 +96,12 @@ export function createRecordCardsClient(deps: { call: PersonProductsCall }): Rec
     return { ok: true, card };
   };
   return {
+    detail(subjectToken, ref, query, change) {
+      const [base] = recordCardPath(ref, "en").split("?");
+      return deps.call(change ? "POST" : "GET", `${base}/detail?${query}`, change, {
+        subjectToken, timeoutMs: 30_000, maxBytes: query.get("section") === "download" ? RECORD_DOWNLOAD_RESPONSE_BYTES : 4 * 1024 * 1024,
+      });
+    },
     get(principalId, subjectToken, ref, lang, fresh = false) {
       // one read in flight per person, record and language; a fresh read
       // is shared only with other fresh reads

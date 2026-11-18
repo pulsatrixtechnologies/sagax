@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { agreementCard, companyCard, contactCard, departmentCard, emailCard, CONTACT_REF, DEPARTMENT_REF, EMAIL_REF, guidCard, GUID_REF, invoiceCard, projectCard, ticketCard, TICKET_REF, COMPANY_REF, PROJECT_REF, INVOICE_REF, AGREEMENT_REF } from "@/lib/record-card-fixtures";
 import { parseRecordCard, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
+import type { RelatedPage, RelatedTab } from "./RecordRelatedTabs";
+import { useRecordRelatedTabs } from "./useRecordRelatedTabs";
 import { RecordCard, type RecordCardProps } from "./RecordCard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -585,5 +587,75 @@ describe("RecordCard draws any kind by field type", () => {
     raw.number = GUID_REF.id;
     show({ raw, record: INVOICE_REF, label: GUID_REF.id });
     expect(text()).not.toContain(GUID_REF.id);
+  });
+});
+
+it("shows every time entry, expands its note and keeps the ticket actions", () => {
+  const note = "The full note on the final entry";
+  const select = vi.fn();
+  show({ pinned: true, raw: ticketCard(NOW, "fr"), related: {
+    counts: { time: 12, configurations: 0, expenses: 1, activities: 3, attachments: 1 },
+    tab: "time", onTab: select, loading: false, page: {
+      tab: "time", totalHours: "12 h", lines: Array.from({ length: 12 }, (_, i) => ({
+        member: "Support", hours: "1 h", date: "18 nov.", note: i === 11 ? note : "Test",
+      })),
+    },
+  } });
+  expect(host.querySelectorAll('[role="tab"]')).toHaveLength(5);
+  expect(host.querySelector('[aria-selected="true"]')?.textContent).toBe("Temps12");
+  expect(host.querySelectorAll("tbody tr")).toHaveLength(12);
+  const last = host.querySelector<HTMLButtonElement>("tbody tr:last-child button")!;
+  act(() => last.click());
+  expect(last.getAttribute("aria-expanded")).toBe("true");
+  expect(last.textContent).toBe(note);
+  expect(text()).toContain("Total : 12 h");
+  act(() => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[4]!.click());
+  expect(select).toHaveBeenCalledWith("attachments");
+  expect(host.querySelector("[data-record-refresh]")).not.toBeNull();
+});
+
+describe("ticket field choices", () => {
+  it("loads on open, shows the selected value during the write and restores the saved value on refusal", async () => {
+    let refuse!: () => void;
+    const save = vi.fn(() => new Promise<void>((_, reject) => { refuse = reject; }));
+    const load = vi.fn(async () => [{ value: "4", label: "En cours" }, { value: "6", label: "En attente" }]);
+    show({ pinned: true, raw: ticketCard(NOW, "fr"), edits: { status: { selected: "4", load, save } } });
+    const pill = host.querySelector<HTMLButtonElement>("[data-pill-select]")!;
+    expect(load).not.toHaveBeenCalled();
+    await act(async () => pill.click());
+    const options = document.body.querySelectorAll<HTMLElement>('[role="option"]');
+    await act(async () => options[1]!.click());
+    expect(save).toHaveBeenCalledWith("6");
+    expect(pill.textContent).toBe("En attente");
+    await act(async () => refuse());
+    expect(pill.textContent).toBe("En cours");
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Impossible d’enregistrer la modification.");
+    await act(async () => pill.click());
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("related record reads", () => {
+  it("loads counts once, reads each opened tab on demand and refreshes the active tab", async () => {
+    const source = {
+      counts: vi.fn(async (_fresh: boolean) => ({ time: 2, expenses: 1 })),
+      page: vi.fn(async (tab: RelatedTab, fresh: boolean): Promise<RelatedPage> => {
+        if (tab === "time") return { tab, lines: [], totalHours: fresh ? "3" : "2" };
+        if (tab === "expenses") return { tab, lines: [] };
+        throw Error("unexpected tab");
+      }),
+    };
+    let view!: ReturnType<typeof useRecordRelatedTabs>;
+    function Probe() { view = useRecordRelatedTabs(source); return null; }
+    await act(async () => root.render(createElement(Probe)));
+    expect(source.page.mock.calls).toEqual([["time", false]]);
+    await act(async () => view.related!.onTab("expenses"));
+    await act(async () => view.related!.onTab("time"));
+    expect(source.page.mock.calls).toEqual([["time", false], ["expenses", false]]);
+    expect(source.counts.mock.calls).toHaveLength(1);
+    await act(async () => view.refresh());
+    expect(source.counts).toHaveBeenLastCalledWith(true);
+    expect(source.page.mock.calls).toEqual([["time", false], ["expenses", false], ["time", true]]);
+    expect(view.related!.page?.totalHours).toBe("3");
   });
 });

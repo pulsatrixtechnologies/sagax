@@ -258,6 +258,15 @@ describe("record card contract", () => {
     expect(parsed.dates!.due).toBeUndefined();
   });
 
+  it("preserves the editable field, product link and vendor timestamp through the server and app parsers", () => {
+    const wire = { ...card, fields: [{ label: "Board", value: "Support", edit_key: "board" }] };
+    const server = parseRecordCard(wire)!;
+    expect(parseRecordCard(server)).toMatchObject({
+      fields: [{ label: "Board", value: "Support", editKey: "board" }],
+      openUrl: wire.open_url, asOf: wire.as_of,
+    });
+  });
+
   it("enforces the caps again", () => {
     const parsed = parseRecordCard({ ...card, title: "T".repeat(300) })!;
     expect(parsed.title.length).toBeLessThanOrEqual(200);

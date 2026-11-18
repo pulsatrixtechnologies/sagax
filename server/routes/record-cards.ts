@@ -21,10 +21,10 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RecordCardLanguage, RecordCardsClient } from "../perspicax/record-cards.ts";
 import { factsForCall } from "../rules/custom-rules-review.ts";
 import { evaluateCustomRules, type CustomRule } from "../../shared/custom-rules.ts";
-import { validRecordRef, type RecordCardAnswer, type RecordRef } from "../../shared/record-cards.ts";
+import { validRecordRef, type RecordRef } from "../../shared/record-cards.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
-export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})$/;
+export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)?$/;
 
 /** The organization's decision on a person's read of one record. */
 export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: string; text: string } };
@@ -35,11 +35,11 @@ export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: stri
  * read only), with the product named by its id and its name. Only enabled
  * organization rules count.
  */
-export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, productName?: string, home?: string): RecordReadRule {
+export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, productName?: string, home?: string, change?: {field: string; value: string}): RecordReadRule {
   const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior === "deny");
   if (!org.length) return { kind: "none" };
-  const tool = `${ref.product}_query`;
-  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify({ kind: ref.kind, id: ref.id }), hints: { readOnly: true } }, home);
+  const tool = `${ref.product}_${change ? "tickets_write" : "query"}`;
+  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify({ kind: ref.kind, id: ref.id, ...(change ? { action: "update", set: { [change.field]: { id: change.value } } } : {}) }), hints: { readOnly: !change } }, home);
   if (!facts.products.includes(ref.product)) facts.products.push(ref.product);
   const decision = evaluateCustomRules(org, facts, {
     products: [{ id: ref.product, ...(productName ? { name: productName } : {}) }],
@@ -58,7 +58,7 @@ export interface RecordCardsRouteDeps {
   subjectToken(principalId: string): Promise<string | null>;
   client: RecordCardsClient;
   /** The organization's rule on this read (recordReadOrgRule). */
-  orgRule(principalId: string, subjectToken: string, ref: RecordRef): Promise<RecordReadRule> | RecordReadRule;
+  orgRule(principalId: string, subjectToken: string, ref: RecordRef, change?: {field: string; value: string}): Promise<RecordReadRule> | RecordReadRule;
   /** The person's app language. */
   language(auth: RequestAuth): string;
 }
@@ -69,11 +69,11 @@ export function recordCardLanguage(asked: string | null, fallback: string): Reco
 }
 
 export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandler {
-  return async ({ res, url, path, method, auth, json }) => {
-    if (method !== "GET") return PASS;
+  return async ({ req, readBody, res, url, path, method, auth, json }) => {
     const match = RECORD_CARD_ROUTE.exec(path);
-    if (!match) return PASS;
-    const send = (status: number, body: RecordCardAnswer | { error: string }) => {
+    if (!match || (method !== "GET" && !(method === "POST" && match[4]))) return PASS;
+    const detail = Boolean(match[4]);
+    const send = (status: number, body: unknown) => {
       res.setHeader("cache-control", "private, no-store");
       return json(res, status, body);
     };
@@ -84,14 +84,31 @@ export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandle
       return send(400, { error: "not a record link" });
     }
     if (!validRecordRef(ref)) return send(400, { error: "not a record link" });
-    if (!deps.organization()) return send(200, { state: "unavailable" });
+    if (!deps.organization()) return send(detail ? 404 : 200, { state: "unavailable" });
     const person = deps.person(auth);
-    if (!person) return send(200, { state: "unavailable" });
+    if (!person) return send(detail ? 403 : 200, { state: "unavailable" });
     const token = await deps.subjectToken(person.principalId);
-    if (!token) return send(200, { state: "sign_in" });
-    const rule = await deps.orgRule(person.principalId, token, ref);
-    if (rule.kind === "deny") return send(200, { state: "org_refused", rule: rule.rule });
+    if (!token) return send(detail ? 403 : 200, { state: "sign_in" });
+    let change: { field: string; value: string } | undefined;
+    if (method === "POST") {
+      let body;
+      try { body = await readBody(req); } catch { return send(400, { error: "invalid field change" }); }
+      if (typeof body?.field !== "string" || !/^[a-z]{1,32}$/.test(body.field) || typeof body.value !== "string" || !/^[1-9][0-9]*$/.test(body.value)) return send(400, { error: "invalid field change" });
+      change = { field: body.field, value: body.value };
+    }
+    const rule = await deps.orgRule(person.principalId, token, ref, change);
+    if (rule.kind === "deny") return send(detail ? 403 : 200, { state: "org_refused", rule: rule.rule });
     const lang = recordCardLanguage(url.searchParams.get("lang"), deps.language(auth));
+    if (detail) {
+      const query = new URLSearchParams({ lang });
+      for (const key of ["section", "field", "page", "fresh"]) {
+        const value = url.searchParams.get(key);
+        if (value !== null) query.set(key, value);
+      }
+      const result = await deps.client.detail(token, ref, query, change);
+      if (result.ok) return send(200, result.body);
+      return send(result.status && result.status >= 400 ? result.status : 502, { state: "unavailable" });
+    }
     const read = await deps.client.get(person.principalId, token, ref, lang, url.searchParams.get("fresh") === "1");
     if (read.ok) return send(200, { card: read.card });
     const { ok: _ok, ...miss } = read;

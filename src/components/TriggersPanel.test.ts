@@ -113,8 +113,9 @@ describe("Triggers / Automations > Webhooks view", () => {
   it("reads as a sentence on the page: When [source] → [bot] should", () => {
     const { html, nodes: tree } = render();
     expect(html).toContain('data-triggers-view=""');
-    expect(html).toContain(">Triggers</h2>");
-    expect(html).toContain("Start a task the moment something happens, without asking.");
+    // the page's tab is the heading (its tooltip carries the explanation): no second title inside
+    expect(html).not.toContain(">Triggers</h2>");
+    expect(html).not.toContain("Start a task the moment something happens, without asking.");
     expect(html).not.toContain("glass-surface");
     expect(html).not.toContain("data-dialog-close");
     expect(html).not.toContain('role="dialog"');

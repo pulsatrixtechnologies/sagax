@@ -477,4 +477,29 @@ describe("Automations header", () => {
     await act(async () => { tab("logs").click(); });
     expect(container.querySelector('section[aria-label="Run logs"]')!.className).not.toMatch(/max-w-|mx-auto/);
   });
+
+  it("the Run logs and Webhooks tabs leave no empty row, repeat no heading, and keep their explanation as the tab's tooltip", async () => {
+    await mount();
+    const tab = (name: string) => container.querySelector<HTMLButtonElement>(`[data-page-tab="${name}"]`)!;
+    await act(async () => { tab("logs").click(); });
+    // no toolbar row under the tabs holding a lone Filters button, and no Filters button beside the inline selects
+    expect(container.querySelector("[data-routines-toolbar]")).toBeNull();
+    expect(container.querySelector("[data-automations-filters]")).toBeNull();
+    // the tab label is the heading: no second "Run logs" title or description inside the tab
+    expect([...container.querySelectorAll("main h2")].map((h) => h.textContent)).not.toContain("Run logs");
+    expect(tab("logs").title).toMatch(/saved runs/i);
+    // the filters are one row: search, selects, then the quiet actions; every control 36px (h-9)
+    const bar = container.querySelector("[data-logs-toolbar]")!;
+    expect(bar.querySelector("label")!.className).toMatch(/max-w-\[320px\]/);
+    for (const el of bar.querySelectorAll("select, label")) expect(el.className).toContain("h-9");
+    expect(container.querySelectorAll("[data-logs-bot]").length).toBeLessThanOrEqual(1);
+    // one Filters popover holds the selects (never a select on the row), one state filter, and the actions sit right
+    expect(bar.querySelectorAll(":scope > select")).toHaveLength(0);
+    expect(bar.querySelectorAll("[data-logs-filters]")).toHaveLength(1);
+    expect([...bar.querySelectorAll("select")].filter((x) => /status/i.test(x.getAttribute("aria-label") ?? ""))).toHaveLength(1);
+    await act(async () => { tab("webhooks").click(); });
+    expect(container.querySelector("[data-routines-toolbar]")).toBeNull();
+    expect(container.querySelector("[data-triggers-view] header")).toBeNull();
+    expect(tab("webhooks").title).toBeTruthy();
+  });
 });

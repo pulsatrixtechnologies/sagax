@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleAlert, FileText, Loader2, CirclePause, Search } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PAGE_FIELD_LABEL, PageFilters } from "@/components/content-page";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { isRoutineProblemRun, routineRunMatchesStatus, type RoutineRun, type RoutineRunStatusFilter } from "@/lib/routines";
@@ -12,11 +13,14 @@ import { runActivityStatus } from "./RoutineRunDetail";
 
 /** 2026-10-29: the period a person narrows the logs to. */
 export type RoutineLogPeriod = "all" | "day" | "week" | "month";
-const SELECT = "min-w-0 max-w-[200px] truncate rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink";
+/** Every control of the filter row is 36px tall, the height of the header's buttons; focus shows on the keyboard only. */
+const SELECT = "h-9 min-w-0 max-w-[200px] truncate rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
+/** Mark all as read and Clear logs: quiet buttons at the row's right end. */
+const QUIET = "h-9 shrink-0 rounded-lg px-3 text-[12px] text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40 disabled:hover:bg-transparent";
 import type { Bot } from "@/state/store";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
 
-export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, error, routineId, status, onStatusChange, onClearRoutine, onRoutineChange, onClearLogs, onMarkAllSeen, initialPeriod = "all", onOpen, now = Date.now() }: {
+export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, error, routineId, status, onStatusChange, onClearRoutine, onRoutineChange, onClearLogs, onMarkAllSeen, botId: botIdGiven, onBotChange, botChoices: botChoicesGiven, scopeControl, scopeActive = 0, initialPeriod = "all", onOpen, now = Date.now() }: {
   runs: RoutineRun[];
   bots: Bot[];
   /** A wider scope (2026-10-09): the owner and bot of a run's routine; the
@@ -36,6 +40,13 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   onClearLogs?: () => void;
   /** Marks every problem run read; the button shows while one is unread (2026-11-17: it left the page menu). */
   onMarkAllSeen?: () => void;
+  /** The page's bot filter (one state, shared with the other tabs; "" is every bot) and the bots it offers. */
+  botId?: string;
+  onBotChange?: (botId: string) => void;
+  botChoices?: ReadonlyArray<{ id: string; name: string }>;
+  /** The page's scope control (Mine, My teams, Everyone, Owner, Team), drawn inline or stacked in the popover; and how many of its popover filters (Owner, Team) are on. */
+  scopeControl?: (part: "scope" | "fields") => ReactNode;
+  scopeActive?: number;
   /** The period the log opens on ("View failed runs" keeps the Overview's). */
   initialPeriod?: RoutineLogPeriod;
   onOpen: (run: RoutineRun) => void;
@@ -43,26 +54,40 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(50);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [botId, setBotId] = useState<string>("");
+  const [botLocal, setBotLocal] = useState("");
+  const botId = botIdGiven ?? botLocal;
+  const setBot = onBotChange ?? setBotLocal;
   const [period, setPeriod] = useState<RoutineLogPeriod>(initialPeriod);
   // The routines and bots the logs can narrow to: the ones that ran, a
   // deleted routine included (its runs stay, #1567).
   const routineChoices = [...new Map(runs.map((run) => [run.routineId, run.routineName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const botChoices = [...new Set(runs.map((run) => run.botId))].map((id) => ({ id, name: bots.find((bot) => bot.id === id)?.name ?? ownerOf?.(runs.find((run) => run.botId === id)!)?.bot?.name ?? t("routines.unavailableBot") })).sort((a, b) => a.name.localeCompare(b.name));
+  const botChoices = botChoicesGiven ?? [...new Set(runs.map((run) => run.botId))].map((id) => ({ id, name: bots.find((bot) => bot.id === id)?.name ?? ownerOf?.(runs.find((run) => run.botId === id)!)?.bot?.name ?? t("routines.unavailableBot") })).sort((a, b) => a.name.localeCompare(b.name));
   const since = period === "all" ? -Infinity : now - RUNS_PERIOD_MS[period];
   const filtered = runs.filter((run) => (!routineId || run.routineId === routineId) && (!botId || run.botId === botId) && routineRunTime(run) >= since && routineRunMatchesStatus(run, status)
     && `${run.routineName} ${bots.find((bot) => bot.id === run.botId)?.name ?? ""} ${run.output ?? ""} ${run.error ?? ""} ${run.attention ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => routineRunTime(b) - routineRunTime(a));
-  return <section className="w-full space-y-4 px-6 py-6 max-sm:px-4" aria-label={t("routines.logs")}>
-    <div><h2 className="text-[17px] font-semibold text-ink">{t("routines.logs")}</h2><p className="mt-1 text-[12px] text-ink-secondary">{t("routines.logsHint")}</p></div>
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-ink-secondary focus-within:border-focus"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>
-      <select aria-label={t("routines.filterStatus")} value={status} onChange={(event) => { onStatusChange(event.target.value as RoutineRunStatusFilter); setLimit(50); }} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink"><option value="all">{t("routines.allStatuses")}</option><option value="problems">{t("routines.status.problems")}</option>{(["queued", "running", "waiting", "completed", "failed", "blocked", "missed", "nothing_to_report", "cancelled"] as const).map((value) => <option key={value} value={value}>{t(`routines.status.${value}`)}</option>)}</select>
-      {onRoutineChange && routineChoices.length > 1 && <select data-logs-routine aria-label={t("routines.logs.filterRoutine")} value={routineId ?? ""} onChange={(event) => { onRoutineChange(event.target.value || undefined); setLimit(50); }} className={SELECT}><option value="">{t("routines.logs.allRoutines")}</option>{routineChoices.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>}
-      {botChoices.length > 1 && <select data-logs-bot aria-label={t("routines.logs.filterBot")} value={botId} onChange={(event) => { setBotId(event.target.value); setLimit(50); }} className={SELECT}><option value="">{t("approvals.filter.allBots")}</option>{botChoices.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select>}
-      <select data-logs-period aria-label={t("routines.logs.period")} value={period} onChange={(event) => { setPeriod(event.target.value as RoutineLogPeriod); setLimit(50); }} className={SELECT}>{(["all", "day", "week", "month"] as const).map((value) => <option key={value} value={value}>{t(`routines.logs.period.${value}`)}</option>)}</select>
-      {onMarkAllSeen && runs.some((run) => isRoutineProblemRun(run) && !run.seenAt) && <button type="button" data-logs-mark-all onClick={onMarkAllSeen} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink hover:bg-raised">{t("routines.markAllSeen")}</button>}
-      {onClearLogs && <button type="button" disabled={runs.length === 0} onClick={() => setConfirmClear(true)} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink hover:bg-raised disabled:opacity-40">{t("routines.clearLogs")}</button>}
+  const statusSelect = (stacked: boolean) => <select aria-label={t("routines.filterStatus")} value={status} onChange={(event) => { onStatusChange(event.target.value as RoutineRunStatusFilter); setLimit(50); }} className={cn(SELECT, stacked && "w-full max-w-none")}><option value="all">{t("routines.allStatuses")}</option><option value="problems">{t("routines.status.problems")}</option>{(["queued", "running", "waiting", "completed", "failed", "blocked", "missed", "nothing_to_report", "cancelled"] as const).map((value) => <option key={value} value={value}>{t(`routines.status.${value}`)}</option>)}</select>;
+  const routineSelect = (stacked: boolean) => onRoutineChange && routineChoices.length > 1 ? <select data-logs-routine aria-label={t("routines.logs.filterRoutine")} value={routineId ?? ""} onChange={(event) => { onRoutineChange(event.target.value || undefined); setLimit(50); }} className={cn(SELECT, stacked && "w-full max-w-none")}><option value="">{t("routines.logs.allRoutines")}</option>{routineChoices.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select> : null;
+  const botSelect = (stacked: boolean) => botChoices.length > 1 ? <select data-logs-bot aria-label={t("routines.logs.filterBot")} value={botId} onChange={(event) => { setBot(event.target.value); setLimit(50); }} className={cn(SELECT, stacked && "w-full max-w-none")}><option value="">{t("approvals.filter.allBots")}</option>{botChoices.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select> : null;
+  const periodSelect = (stacked: boolean) => <select data-logs-period aria-label={t("routines.logs.period")} value={period} onChange={(event) => { setPeriod(event.target.value as RoutineLogPeriod); setLimit(50); }} className={cn(SELECT, stacked && "w-full max-w-none")}>{(["all", "day", "week", "month"] as const).map((value) => <option key={value} value={value}>{t(`routines.logs.period.${value}`)}</option>)}</select>;
+  const activeCount = scopeActive + (status !== "all" ? 1 : 0) + (routineId ? 1 : 0) + (botId ? 1 : 0) + (period !== "all" ? 1 : 0);
+  const field = (label: string, control: ReactNode) => control && <div className="block"><span className={PAGE_FIELD_LABEL}>{label}</span>{control}</div>;
+  // The log's one set of filters: the scope segment inline, the rest in one Filters popover with a count.
+  return <section className="w-full space-y-4 px-6 pb-6 pt-4 max-sm:px-4" aria-label={t("routines.logs")}>
+    <div data-logs-toolbar="" className="relative flex flex-wrap items-center gap-2">
+      <label className="flex h-9 min-w-[200px] max-w-[320px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 text-ink-secondary focus-within:ring-2 focus-within:ring-accent/60"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>
+      {scopeControl?.("scope")}
+      <div className="max-sm:[&_details]:static max-sm:[&_details>div]:left-0 max-sm:[&_details>div]:right-0 max-sm:[&_details>div]:w-auto"><PageFilters name="logs" labelled activeCount={activeCount}>
+        {scopeControl && <div>{scopeControl("fields")}</div>}
+        {field(t("routines.filterStatus"), statusSelect(true))}
+        {field(t("routines.logs.filterRoutine"), routineSelect(true))}
+        {field(t("routines.logs.filterBot"), botSelect(true))}
+        {field(t("routines.logs.period"), periodSelect(true))}
+      </PageFilters></div>
+      <div className="ml-auto flex items-center gap-1">
+        {onMarkAllSeen && runs.some((run) => isRoutineProblemRun(run) && !run.seenAt) && <button type="button" data-logs-mark-all onClick={onMarkAllSeen} className={QUIET}>{t("routines.markAllSeen")}</button>}
+        {onClearLogs && <button type="button" disabled={runs.length === 0} onClick={() => setConfirmClear(true)} className={QUIET}>{t("routines.clearLogs")}</button>}
+      </div>
       {onClearLogs && <ConfirmDialog open={confirmClear} title={t("routines.clearLogsTitle")} body={t("routines.clearLogsBody")} confirmLabel={t("routines.clearLogsConfirm")} onCancel={() => setConfirmClear(false)} onConfirm={() => { setConfirmClear(false); onClearLogs(); }} />}
     </div>
     {routineId && <div className="flex items-center gap-2 text-[12px] text-ink-secondary">{t("routines.filteredRoutine")}<button type="button" onClick={onClearRoutine} className="text-accent hover:underline">{t("routines.showAll")}</button></div>}

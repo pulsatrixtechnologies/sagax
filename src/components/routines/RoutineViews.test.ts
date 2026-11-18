@@ -100,7 +100,8 @@ describe("central routine logs", () => {
     const markup = logs({ runs: statuses.map((status, index) => ({ ...run, id: `run-${status}`, routineId: `removed-${index}`, routineName: `Routine ${status}`, status })) });
     for (const status of statuses) expect(markup).toContain(`Open Routine ${status} run:`);
     expect(markup).toContain("Bot unavailable");
-    expect(markup).toContain("Recent saved runs");
+    // the tab label is the heading; its explanation is the tab's tooltip, not a second title in the logs
+    expect(markup).not.toContain("Recent saved runs");
   });
 
   it("filters failed and missed runs together through the shared Problems view", () => {

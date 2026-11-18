@@ -185,8 +185,8 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               <PageSegment label={t("routines.view.label")} value={tab} onChange={selectTab} data-routines-tabs="" options={[
                 { value: "overview", label: t("routinesOverview.tab.overview"), icon: LayoutList, data: { "data-page-tab": "overview" } },
                 { value: "calendar", label: t("connectApps.capabilities.calendar"), icon: CalendarDays, data: { "data-page-tab": "calendar" } },
-                { value: "logs", label: t("routines.logs"), icon: ScrollText, data: { "data-page-tab": "logs" }, badge: unseenFailures, badgeLabel: t("routineCalendar.openProblemLogs"), onBadge: () => setStatusFilter("problems") },
-                ...(routinesOnly ? [] : [{ value: "webhooks" as const, label: t("routines.webhooks"), icon: Webhook, data: { "data-page-tab": "webhooks" } }]),
+                { value: "logs", label: t("routines.logs"), title: t("routines.logsHint"), icon: ScrollText, data: { "data-page-tab": "logs" }, badge: unseenFailures, badgeLabel: t("routineCalendar.openProblemLogs"), onBadge: () => setStatusFilter("problems") },
+                ...(routinesOnly ? [] : [{ value: "webhooks" as const, label: t("routines.webhooks"), title: t("triggers.subtitle"), icon: Webhook, data: { "data-page-tab": "webhooks" } }]),
               ]} />
             </div>}
         actions={<>
@@ -194,16 +194,14 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
             {automationActions}
           </>}
         below={<>
-        {/* The page's own controls on a row under the header, on the header's edges: the calendar's week and Filters, the log's Filters. */}
-        {section !== "webhooks" && !overviewShown && <div data-routines-toolbar="" className="mt-3 flex min-w-0 flex-wrap items-center gap-2" style={windowNoDragStyle}>
-          {section === "calendar" && scheduleView === "calendar" && <>
+        {/* The page's own controls on a row under the header, on the header's edges: the calendar's week and Filters. The logs' own filters sit in the tab, under the tabs. */}
+        {calendarGrid && <div data-routines-toolbar="" className="mt-3 flex min-w-0 flex-wrap items-center gap-2" style={windowNoDragStyle}>
             <div className="flex shrink-0 items-center">
               <button type="button" onClick={() => setAnchor((current) => addDays(current, -viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.previous")} title={t("routines.previous")}><ChevronLeft size={16} /></button>
               <button type="button" onClick={goToday} className="rounded-md border border-hairline/50 px-2.5 py-1 text-[12px] font-medium text-ink hover:bg-raised">{t("routines.today")}</button>
               <button type="button" onClick={() => setAnchor((current) => addDays(current, viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.next")} title={t("routines.next")}><ChevronRight size={16} /></button>
             </div>
             <div data-automations-range className="min-w-0 truncate text-[14px] font-medium text-ink">{calendarRangeLabel(rangeStart, viewDays)}</div>
-          </>}
           {filtersMenu && <div className="ml-auto">{filtersMenu}</div>}
         </div>}
         {scopeShown && scoped.error && <p role="alert" className="mt-1 text-[12px] text-danger">{t("routines.scope.loadError")}</p>}
@@ -225,7 +223,7 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
       <RoutineWakeBar />
 
       {section === "webhooks" ? <TriggersPanel bots={visibleBots} createRequest={webhookCreateRequest} onCreateHandled={handleWebhookCreateHandled} /> : section === "logs" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs key={state.routinesFocus.nonce} initialPeriod={state.routinesFocus.period} onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })} runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs key={state.routinesFocus.nonce} botId={botFilter === "all" ? "" : botFilter} onBotChange={(next) => { setBotFilter(next || "all"); setRoutineFilter(undefined); }} scopeActive={(scoped.prefs.ownerId ? 1 : 0) + (scoped.scope !== "mine" && scoped.prefs.teamId ? 1 : 0)} scopeControl={scopeShown ? (part) => <RoutineScopeBar only={part} stacked={part === "fields"} prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} /> : undefined} botChoices={botChoices} initialPeriod={state.routinesFocus.period} onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })} runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
       ) : scheduleView === "list" ? (
         <div className={PAGE_SCROLL}><div className={PAGE_FULL}>
           <RoutinesOverview trendRuns={state.routineTrendRuns} routines={filteredRoutines} runs={botFilter === "all" ? scopedRuns : scopedRuns.filter((run) => run.botId === botFilter)} bots={state.bots} viewerPrincipalId={viewerId}

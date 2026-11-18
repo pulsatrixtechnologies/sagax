@@ -37,20 +37,20 @@ describe("the avatar menu's starred subscription (2026-11-03)", () => {
   const codex = row({ id: "codex", name: "Codex", plan: "Business", fiveHour: open(100) });
 
   it("shows the starred plan's own percent and its short name, not the highest", () => {
-    expect(usageSummary([codex, grok], "grok")).toEqual({ percent: 87, name: "Grok" });
-    expect(usageSummary([codex, grok], "codex")).toEqual({ percent: 100, name: "Codex" });
+    expect(usageSummary([codex, grok], "grok")).toEqual({ percent: 87, name: "Grok", account: "Grok" });
+    expect(usageSummary([codex, grok], "codex")).toEqual({ percent: 100, name: "Codex", account: "Codex" });
   });
 
   it("keeps the highest plan, unnamed, with no favorite", () => {
-    expect(usageSummary([grok, codex], null)).toEqual({ percent: 100, name: null });
-    expect(usageSummary([], null)).toEqual({ percent: null, name: null });
+    expect(usageSummary([grok, codex], null)).toEqual({ percent: 100, name: null, account: "Codex" });
+    expect(usageSummary([], null)).toEqual({ percent: null, name: null, account: null });
   });
 
   it("falls back to the highest once the favorite is gone or reports no window", () => {
     // signed out: connectedPlanRows leaves the row out
-    expect(usageSummary([codex], "grok")).toEqual({ percent: 100, name: null });
-    expect(usageSummary([codex, row({ id: "grok", name: "Grok", state: "no-windows" })], "grok")).toEqual({ percent: 100, name: null });
-    expect(usageSummary([codex, row({ id: "grok", name: "Grok" })], "grok")).toEqual({ percent: 100, name: null });
+    expect(usageSummary([codex], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok", state: "no-windows" })], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok" })], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
   });
 });
 

@@ -12009,7 +12009,6 @@
       "pdf.tooLarge": "46ad1b63ab6ace831834e88da8ee3150e687fb5eaead57b66d2c7e3d6832015c",
       "pdf.tooLargeSolo": "fcb661fe7a2d78f98774a361e130a69578aef2bf5cb34f90ee8601d01eaf5548",
       "sidebar.account.usage": "8d59829c1e15afe1a7fae93e8e5e32d8511bec5fd598a09f4fea6033b31e8a66",
-      "sidebar.account.usageFavorite": "f8987f264bf375c23cb713401b7e5eaaaa2912e7ea9fc842f18455d552236c7f",
       "sidebar.account.monthCost": "ed9fa2a8bf519fac5506cc2268b2814f16c1102987dafeb3b19a450a3fbd88aa",
       "sidebar.account.viewUsage": "2e4ae39a4ee5a0280ead9b65a47f3aafa0eddf25382cd52895b97dda7532015d",
       "sidebar.account.mobile": "ac8c5d7dbe7542dcd3c0424934feca475c98874fa621162292a1239ac62cb483",
@@ -19270,7 +19269,9 @@
       "remoteSessions.dur.dh": "64a6ac2a25ab8f5577894d09a2f06d15e887cde3ccb65415a86a03258fe4b3a0",
       "planUsage.note.rateLimited": "e543f7711735261f4dd7566c3bf5f7849e57c263afce06b6ddb7c599830e886c",
       "planUsage.asOf": "7941c8b5c613dc940a04ad02ba66bd5e11afb6eebf8347b00d3906357b8f41b9",
-      "usage.personal.included": "3a3912d950b429463372edddadf437292dc9898aed4980104973c93fc83f6cff"
+      "usage.personal.included": "3a3912d950b429463372edddadf437292dc9898aed4980104973c93fc83f6cff",
+      "sidebar.account.usageTooltip": "df264814eb476e513d77d7daceaed5661205a24519a86186c0d1168cb48c8b5d",
+      "sidebar.account.usageTooltipBare": "89838f73b4a5ecfe9847fc2083342db7a9453e29e9df19e88727fe4bd6b5f8a8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

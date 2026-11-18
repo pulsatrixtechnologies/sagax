@@ -9366,7 +9366,6 @@
   "pdf.tooLarge": "Ce PDF est trop volumineux pour la visionneuse de l'application (25 Mo). Enregistre une copie pour l'ouvrir dans une autre application.",
   "pdf.tooLargeSolo": "Ce PDF est trop volumineux pour la visionneuse de l'application (90 Mo). Enregistre une copie pour l'ouvrir dans une autre application.",
   "sidebar.account.usage": "Utilisation",
-  "sidebar.account.usageFavorite": "{name} {used} %",
   "sidebar.account.monthCost": "Coût ce mois-ci",
   "sidebar.account.viewUsage": "Voir l'utilisation",
   "sidebar.account.mobile": "Obtenir Sagax sur mobile",
@@ -15445,5 +15444,7 @@
   "recordCard.lines.other": "{count} autres lignes",
   "planUsage.note.rateLimited": "{name} limite les requêtes, nouvel essai sous peu",
   "planUsage.asOf": "à {time}",
-  "usage.personal.included": "Inclus dans le forfait"
+  "usage.personal.included": "Inclus dans le forfait",
+  "sidebar.account.usageTooltip": "Utilisation · {account} · {percent} %",
+  "sidebar.account.usageTooltipBare": "Utilisation · {percent} %"
 }

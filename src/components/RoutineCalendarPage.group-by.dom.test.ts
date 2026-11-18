@@ -490,9 +490,13 @@ describe("Automations header", () => {
     expect(tab("logs").title).toMatch(/saved runs/i);
     // the filters are one row: search, selects, then the quiet actions; every control 36px (h-9)
     const bar = container.querySelector("[data-logs-toolbar]")!;
-    expect(bar.querySelector("label")!.className).toMatch(/max-w-\[360px\]/);
+    expect(bar.querySelector("label")!.className).toMatch(/max-w-\[320px\]/);
     for (const el of bar.querySelectorAll("select, label")) expect(el.className).toContain("h-9");
     expect(container.querySelectorAll("[data-logs-bot]").length).toBeLessThanOrEqual(1);
+    // one Filters popover holds the selects (never a select on the row), one state filter, and the actions sit right
+    expect(bar.querySelectorAll(":scope > select")).toHaveLength(0);
+    expect(bar.querySelectorAll("[data-logs-filters]")).toHaveLength(1);
+    expect([...bar.querySelectorAll("select")].filter((x) => /status/i.test(x.getAttribute("aria-label") ?? ""))).toHaveLength(1);
     await act(async () => { tab("webhooks").click(); });
     expect(container.querySelector("[data-routines-toolbar]")).toBeNull();
     expect(container.querySelector("[data-triggers-view] header")).toBeNull();

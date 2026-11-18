@@ -58,6 +58,11 @@ const measure = (tab) => {
   if (tab === "logs") {
     const bar = document.querySelector("[data-logs-toolbar]");
     for (const el of bar?.querySelectorAll("select, label, summary, button") ?? []) { if (el.matches("[role=radio]") || el.closest("details > div")) continue; /* segmented scope: 36px as a whole; popover fields are the popover's */ const h = Math.round(el.getBoundingClientRect().height); if (h && h !== 36) problems.push(`a log filter control is ${h}px tall: ${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 20)}`); }
+    const tops = [...(bar?.children ?? [])].filter((c) => c.getClientRects().length && c.getBoundingClientRect().height > 0).map((c) => Math.round(c.getBoundingClientRect().top));
+    if (vw >= 1024 && Math.max(...tops) - Math.min(...tops) > 2) problems.push(`the log filters take more than one row: ${tops.join(",")}`);
+    if (bar?.querySelectorAll(":scope > select").length) problems.push("a select sits on the row; they belong in the Filters popover");
+    const states = [...(bar?.querySelectorAll("select") ?? [])].filter((x) => /state|status|état/i.test(x.getAttribute("aria-label") || ""));
+    if (states.length > 1) problems.push(`${states.length} state selects`);
     const search = bar?.querySelector("label")?.getBoundingClientRect().width ?? 0;
     if (search > 361) problems.push(`the search is ${Math.round(search)}px wide`);
   }

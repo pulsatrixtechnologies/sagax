@@ -358,7 +358,12 @@ export function useRoutinesPage({ onBack, onOpenRoom, embedded = false, fill = f
   const scopeShown = section !== "webhooks" && scoped.available;
   const calendarGrid = section === "calendar" && scheduleView === "calendar";
   const overviewShown = section === "calendar" && scheduleView === "list";
-  const hideStatus = calendarGrid;
+  // The calendar shows plans and the logs have their own run Status filter: the routine status filter is one state filter too many there.
+  const hideStatus = calendarGrid || section === "logs";
+  // ...so a routine status chosen on the Overview must not keep narrowing the logs unseen.
+  useEffect(() => {
+    if (section === "logs" && scoped.prefs.status) scoped.setPrefs({ ...scoped.prefs, status: undefined });
+  }, [section, scoped.prefs, scoped.setPrefs]);
   const scopeFilters = scopeShown
     ? (scoped.scope !== "mine" ? 1 : 0)
       + (scoped.scope !== "mine" && scoped.prefs.teamId ? 1 : 0)

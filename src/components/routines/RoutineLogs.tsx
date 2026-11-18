@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleAlert, FileText, Loader2, CirclePause, Search } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PAGE_FIELD_LABEL, PageFilters } from "@/components/content-page";
@@ -17,8 +17,6 @@ export type RoutineLogPeriod = "all" | "day" | "week" | "month";
 const SELECT = "h-9 min-w-0 max-w-[200px] truncate rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
 /** Mark all as read and Clear logs: quiet buttons at the row's right end. */
 const QUIET = "h-9 shrink-0 rounded-lg px-3 text-[12px] text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40 disabled:hover:bg-transparent";
-/** Under this width of the page the selects fold into one Filters popover (a ResizeObserver; the width is unknown, 0, in a test, so wide). */
-const NARROW_PX = 720;
 import type { Bot } from "@/state/store";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
 
@@ -46,8 +44,8 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   botId?: string;
   onBotChange?: (botId: string) => void;
   botChoices?: ReadonlyArray<{ id: string; name: string }>;
-  /** The page's scope control (Mine, My teams, Everyone, Owner, Team), drawn inline or stacked in the popover; and how many of its filters are on. */
-  scopeControl?: (stacked: boolean) => ReactNode;
+  /** The page's scope control (Mine, My teams, Everyone, Owner, Team), drawn inline or stacked in the popover; and how many of its popover filters (Owner, Team) are on. */
+  scopeControl?: (part: "scope" | "fields") => ReactNode;
   scopeActive?: number;
   /** The period the log opens on ("View failed runs" keeps the Overview's). */
   initialPeriod?: RoutineLogPeriod;
@@ -59,15 +57,6 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   const [botLocal, setBotLocal] = useState("");
   const botId = botIdGiven ?? botLocal;
   const setBot = onBotChange ?? setBotLocal;
-  const root = useRef<HTMLElement>(null);
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const node = root.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => { const width = entry?.contentRect.width ?? 0; setNarrow(width > 0 && width < NARROW_PX); });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
   const [period, setPeriod] = useState<RoutineLogPeriod>(initialPeriod);
   // The routines and bots the logs can narrow to: the ones that ran, a
   // deleted routine included (its runs stay, #1567).
@@ -83,19 +72,18 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   const periodSelect = (stacked: boolean) => <select data-logs-period aria-label={t("routines.logs.period")} value={period} onChange={(event) => { setPeriod(event.target.value as RoutineLogPeriod); setLimit(50); }} className={cn(SELECT, stacked && "w-full max-w-none")}>{(["all", "day", "week", "month"] as const).map((value) => <option key={value} value={value}>{t(`routines.logs.period.${value}`)}</option>)}</select>;
   const activeCount = scopeActive + (status !== "all" ? 1 : 0) + (routineId ? 1 : 0) + (botId ? 1 : 0) + (period !== "all" ? 1 : 0);
   const field = (label: string, control: ReactNode) => control && <div className="block"><span className={PAGE_FIELD_LABEL}>{label}</span>{control}</div>;
-  // The log's one set of filters: inline selects while there is room, the same controls in one Filters popover when narrow.
-  return <section ref={root} className="w-full space-y-4 px-6 pb-6 pt-4 max-sm:px-4" aria-label={t("routines.logs")}>
-    <div data-logs-toolbar="" className="flex flex-wrap items-center gap-2">
-      <label className="flex h-9 min-w-[220px] max-w-[360px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 text-ink-secondary focus-within:ring-2 focus-within:ring-accent/60"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>
-      {narrow
-        ? <PageFilters name="logs" labelled activeCount={activeCount}>
-            {scopeControl && <div>{scopeControl(true)}</div>}
-            {field(t("routines.filterStatus"), statusSelect(true))}
-            {field(t("routines.logs.filterRoutine"), routineSelect(true))}
-            {field(t("routines.logs.filterBot"), botSelect(true))}
-            {field(t("routines.logs.period"), periodSelect(true))}
-          </PageFilters>
-        : <>{scopeControl?.(false)}{statusSelect(false)}{routineSelect(false)}{botSelect(false)}{periodSelect(false)}</>}
+  // The log's one set of filters: the scope segment inline, the rest in one Filters popover with a count.
+  return <section className="w-full space-y-4 px-6 pb-6 pt-4 max-sm:px-4" aria-label={t("routines.logs")}>
+    <div data-logs-toolbar="" className="relative flex flex-wrap items-center gap-2">
+      <label className="flex h-9 min-w-[200px] max-w-[320px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 text-ink-secondary focus-within:ring-2 focus-within:ring-accent/60"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>
+      {scopeControl?.("scope")}
+      <div className="max-sm:[&_details]:static max-sm:[&_details>div]:left-0 max-sm:[&_details>div]:right-0 max-sm:[&_details>div]:w-auto"><PageFilters name="logs" labelled activeCount={activeCount}>
+        {scopeControl && <div>{scopeControl("fields")}</div>}
+        {field(t("routines.filterStatus"), statusSelect(true))}
+        {field(t("routines.logs.filterRoutine"), routineSelect(true))}
+        {field(t("routines.logs.filterBot"), botSelect(true))}
+        {field(t("routines.logs.period"), periodSelect(true))}
+      </PageFilters></div>
       <div className="ml-auto flex items-center gap-1">
         {onMarkAllSeen && runs.some((run) => isRoutineProblemRun(run) && !run.seenAt) && <button type="button" data-logs-mark-all onClick={onMarkAllSeen} className={QUIET}>{t("routines.markAllSeen")}</button>}
         {onClearLogs && <button type="button" disabled={runs.length === 0} onClick={() => setConfirmClear(true)} className={QUIET}>{t("routines.clearLogs")}</button>}

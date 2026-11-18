@@ -146,7 +146,7 @@ export function TriggersPanel({
   };
 
   return (
-    <div data-triggers-view="" className="min-h-0 flex-1 overflow-y-auto px-6 py-6 max-sm:px-4">
+    <div data-triggers-view="" role="region" aria-label={t("triggers.title")} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 max-sm:px-4">
       <div className="flex w-full flex-col gap-4">
         <form
           data-trigger-builder

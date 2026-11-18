@@ -2,7 +2,7 @@
 // folded, how many it hides, and that a row that needs the person is never hidden.
 import { describe, expect, it } from "vitest";
 
-import { foldItems } from "./ShowMoreFold";
+import { foldItems, foldMoreLabel } from "./ShowMoreFold";
 
 const names = (count: number) => Array.from({ length: count }, (_, index) => `s${index + 1}`);
 
@@ -27,5 +27,12 @@ describe("foldItems (#4104)", () => {
     const { head, rest } = foldItems(names(9), 4, (name) => keep.has(name));
     expect(head).toEqual(["s2", "s5", "s6", "s8", "s9"]);
     expect(rest).toEqual(["s1", "s3", "s4", "s7"]);
+  });
+});
+
+describe("foldMoreLabel", () => {
+  it("says Show N more, with its own line for one", () => {
+    expect(foldMoreLabel(13)).toBe("Show 13 more");
+    expect(foldMoreLabel(1)).toBe("Show 1 more");
   });
 });

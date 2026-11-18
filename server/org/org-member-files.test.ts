@@ -362,10 +362,10 @@ describe("member API: the files of the person's own bots (#4625)", () => {
           expect(read.status, `${cwd} ${path}`).toBe(409);
           expect(read.raw.toString()).not.toContain("Memory of b2");
         }
-        const walked = JSON.stringify(await walkAll("b1", {}));
-        expect(walked, cwd).not.toContain("SOMEONE ELSE");
-        expect(walked.match(/MEMORY\.md/g)?.length ?? 0, cwd).toBe(1);
-        expect(walked, cwd).not.toContain("private.md");
+        const everything = await walkAll("b1", {});
+        expect(everything.filter((entry: any) => entry.root === "project"), cwd).toEqual([]);
+        expect(everything.filter((entry: any) => entry.name === "MEMORY.md"), cwd).toHaveLength(1);
+        expect(JSON.stringify(everything), cwd).not.toContain("private.md");
       }
       projectCwd = join(home, "workspaces", "b1", "reports");
       const own = await walkAll("b1", { root: "project" });

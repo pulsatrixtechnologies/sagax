@@ -1,12 +1,14 @@
-// The bot profile hero's editable parts on the iPad main column (#1939,
-// round 7), twins of the desktop BotProfilePage.tsx header (#2313, #2398):
+// The bot profile hero's editable parts on the iPad main column and the
+// iPhone page (#1939, round 7), twins of the desktop BotProfilePage.tsx
+// header (#2313, #2398, #4602):
 //
-// - the name at 28 and the label under it, both edited in place
-//   (`InlineEditableText`; never "Name · Label" on one line);
+// - the name and the label on ONE line "Name · Label" (the label after the
+//   separator, secondary and regular), both edited in place
+//   (`PersonaInlineText`); the line wraps under itself only when it does not fit;
 // - a picture dropped on the hero, or pasted on it, becomes the bot's
 //   avatar (`useAvatarSources().upload`);
-// - who sees the bot, its owner and the Primary Bot badge, then the short
-//   description typed in place.
+// - who sees the bot, its owner and the Primary Bot badge. No description
+//   line: the bot keeps its own description and changes it when asked.
 //
 // Every write is `Session.updateProfile` / `Session.uploadAvatar`, the same
 // calls Edit bot > Identity and Appearance send.
@@ -17,50 +19,74 @@ import UniformTypeIdentifiers
 
 // MARK: - Name and label
 
-/// `heroTitle` / `heroLabel`: the name alone on its line, the label under it.
+/// `heroTitle` of the desktop: "Name · Label" on one line, aligned left.
 struct BotProfileHeroIdentity: View {
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     let bot: Bot
-    /// The desktop's header (#3030): name and label centred under the mascot.
-    var centered = false
 
     private var canName: Bool { session.canEditBotField(bot, "name") }
     private var canLabel: Bool { session.canEditBotField(bot, "title") }
     private var hasLabel: Bool { !bot.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var showsLabel: Bool { hasLabel || canLabel }
+
+    private var name: some View {
+        PersonaInlineText(
+            value: bot.name, placeholder: nil, required: true, maxLength: 100,
+            size: 26, weight: .medium, line: 32, muted: false,
+            label: "Edit name", identifier: "bot-profile.hero.name",
+            onSave: canName ? { name in
+                var patch = BotProfilePatch()
+                patch.name = name
+                save(patch)
+            } : nil
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile-name")
+    }
+
+    private var separator: some View {
+        DesktopText(verbatim: "\u{00B7}", size: 26, weight: .regular, line: 32, color: \.inkSecondary)
+            .accessibilityHidden(true)
+    }
+
+    private var label: some View {
+        PersonaInlineText(
+            value: bot.title, placeholder: "Add a label", required: false, maxLength: 200,
+            size: 26, weight: .regular, line: 32, muted: true,
+            label: "Edit label", identifier: "bot-profile.hero.title",
+            onSave: canLabel ? { title in
+                var patch = BotProfilePatch()
+                patch.title = title
+                save(patch)
+            } : nil
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile-title")
+    }
 
     var body: some View {
-        VStack(alignment: centered ? .center : .leading, spacing: 2) {
-            PersonaInlineText(
-                value: bot.name, placeholder: nil, required: true, maxLength: 100,
-                size: 28, weight: .regular, line: 36, muted: false,
-                label: "Edit name", identifier: "bot-profile.hero.name",
-                onSave: canName ? { name in
-                    var patch = BotProfilePatch()
-                    patch.name = name
-                    save(patch)
-                } : nil
-            )
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("bot-profile-name")
-            if hasLabel || canLabel {
-                PersonaInlineText(
-                    value: bot.title, placeholder: "Add a label", required: false, maxLength: 200,
-                    size: 15, weight: .regular, line: 20, muted: true,
-                    label: "Edit label", identifier: "bot-profile.hero.title",
-                    onSave: canLabel ? { title in
-                        var patch = BotProfilePatch()
-                        patch.title = title
-                        save(patch)
-                    } : nil
-                )
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("bot-profile-title")
+        // One line when it fits; otherwise the dot ends the name's line and
+        // the label takes the next (the desktop's phone wrap).
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                name.layoutPriority(1)
+                if showsLabel {
+                    separator
+                    label
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    name
+                    if showsLabel { separator }
+                }
+                if showsLabel { label }
             }
         }
         // The in-place control pads its text by 6: keep the text on the column's edge.
-        .padding(.leading, centered ? 0 : -6)
-        .multilineTextAlignment(centered ? .center : .leading)
-        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+        .padding(.leading, -6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile.hero.identity")
     }
@@ -181,24 +207,17 @@ enum BotProfileHeroImage {
     }
 }
 
-// MARK: - Audience and description
+// MARK: - Audience
 
-/// Under the hero: who sees the bot, its owner, the Primary Bot badge, then
-/// the short description typed in place (`data-bot-profile-description`).
+/// Under the hero: who sees the bot, its owner and the Primary Bot badge.
 struct BotProfileHeroDetails: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @ObservedObject private var directory = PeopleDirectory.shared
     let bot: Bot
     let audience: String
-    /// The desktop's header (#3030): facts and description centred.
-    var centered = false
 
-    @State private var blurb = ""
     @State private var viewerId = "local-owner"
-    @FocusState private var blurbFocused: Bool
-
-    private var canDescribe: Bool { session.canEditBotField(bot, "description") }
 
     /// The owner's name, only when it is someone else (`owner` of the desktop page).
     private var owner: String {
@@ -209,31 +228,20 @@ struct BotProfileHeroDetails: View {
     }
 
     var body: some View {
-        VStack(alignment: centered ? .center : .leading, spacing: 12) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) { facts }
-                VStack(alignment: centered ? .center : .leading, spacing: 4) { facts }
-            }
-            .font(.system(size: 13.5))
-            .foregroundStyle(theme.inkSecondary)
-            description
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { facts }
+            VStack(alignment: .leading, spacing: 4) { facts }
         }
-        .multilineTextAlignment(centered ? .center : .leading)
-        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+        .font(.system(size: 13.5))
+        .foregroundStyle(theme.inkSecondary)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile.hero.details")
         .task(id: bot.id) {
-            blurb = bot.description
             viewerId = PrimaryBotRules.viewerId(config: await session.configStatus())
             await directory.load(session)
         }
-        .onValueChange(of: bot.description) { now in
-            if !blurbFocused { blurb = now }
-        }
-        .onValueChange(of: blurbFocused) { focused in
-            if !focused { commitBlurb() }
-        }
-        .onDisappear { commitBlurb() }
     }
 
     @ViewBuilder
@@ -265,49 +273,5 @@ struct BotProfileHeroDetails: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("bot-profile.hero.primary")
         }
-    }
-
-    @ViewBuilder
-    private var description: some View {
-        if canDescribe {
-            TextField(
-                "",
-                text: $blurb,
-                prompt: Text("One line on what this bot is for").foregroundColor(theme.inkSecondary),
-                axis: .vertical
-            )
-            .font(.system(size: 14))
-            .foregroundStyle(theme.ink)
-            .lineSpacing(6)
-            .lineLimit(1...12)
-            .focused($blurbFocused)
-            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
-            .onValueChange(of: blurb) { now in
-                if now.count > NewBotRules.descriptionLimit { blurb = String(now.prefix(NewBotRules.descriptionLimit)) }
-            }
-            .accessibilityLabel(Text("Short description"))
-            .accessibilityIdentifier("bot-profile.hero.description")
-        } else {
-            Group {
-                let shown = bot.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                if shown.isEmpty {
-                    Text("No description yet.").foregroundStyle(theme.inkSecondary)
-                } else {
-                    Text(verbatim: shown).foregroundStyle(theme.ink)
-                }
-            }
-            .font(.system(size: 14))
-            .lineSpacing(6)
-            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
-            .accessibilityIdentifier("bot-profile.hero.description")
-        }
-    }
-
-    private func commitBlurb() {
-        guard let next = DesktopInlineEdit.commit(draft: blurb, current: bot.description, required: false) else { return }
-        var patch = BotProfilePatch()
-        patch.description = next
-        let target = bot
-        Task { _ = await session.updateProfile(patch, for: target) }
     }
 }

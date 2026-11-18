@@ -184,7 +184,7 @@ describe("the Appearance gallery", () => {
       const html = renderToStaticMarkup(createElement(MascotLookEditor, { bot: { color: "blue", mascotSkin: mascotSkin as never, mascotLook: botMascotLook(mascotLook) }, onPatch: () => undefined, initialTab }));
       if (index === 0) return html;
       // a tab this character does not offer opens Mascot, already drawn
-      return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-tab-panel"')) : "";
+      return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-panel-')) : "";
     }).join("");
   const enforce = (rewards: string[]) => resetAchievementsForTests({ status: "ready", snapshot: { rewards, items: [] } as unknown as AchievementSnapshot });
 

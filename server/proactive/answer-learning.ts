@@ -241,15 +241,10 @@ const LINK_WORDS = [
 const LINK_PARTICLES = ["を", "の", "は", "が", "に", "と", "で", "も", "的", "和", "或", "给", "給", "到", "在"];
 const ITEM_NUMBER_END = new RegExp(`^(?:\\s*$|\\s*[?!.;,:)»"'…？！。、；，：](?!\\d)|\\s+(?:${LINK_WORDS.join("|")})(?![\\p{L}\\p{N}])|(?:${LINK_PARTICLES.join("|")}))`, "u");
 
-/** #4587: ISO 4217 codes, lower case (what `same` gives). */
-const CURRENCY_CODES: ReadonlySet<string> = new Set(
-  (typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["USD", "CAD", "EUR", "GBP", "JPY", "CNY", "CHF", "AUD", "MXN", "BRL", "INR"])
-    .map((code) => code.toLowerCase()),
-);
-/** #4587: a value that starts with a three-letter currency code and digits
- * ("usd500") is an amount, never an item's id. */
+/** DisplayNames also recognizes non-circulating ISO currencies, such as CLF. */
+const currencyNames = new Intl.DisplayNames(["en"], { type: "currency", fallback: "none" });
 function startsWithCurrency(value: string): boolean {
-  return /^\p{L}{3}\d/u.test(value) && CURRENCY_CODES.has(value.slice(0, 3));
+  return /^[a-z]{3}\d/i.test(value) && currencyNames.of(value.slice(0, 3).toUpperCase()) !== undefined;
 }
 
 /** #4558: a question's words without what names one item, case and spacing

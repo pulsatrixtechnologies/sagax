@@ -128,3 +128,40 @@ describe("headerless views", () => {
     },
   );
 });
+
+// Owner bug 2026-11-17 (solo layout): the title bar's buttons often did not
+// react. Blink takes a -webkit-app-region box from the untransformed layout,
+// so a control (or a wrapper of one) moved by a CSS transform keeps its
+// no-drag box where it was before the move and the drag region eats the click.
+// Every button in a title bar is cut out of the drag by the styles.css rule,
+// and nothing in the bar is placed by a transform.
+describe.each([
+  ["chat", () => createElement(ChatView, { bot })],
+  ["room", () => createElement(GroupView, { group: room })],
+] as const)("%s title bar hit areas", (_name, view) => {
+  it.each<Chrome>(["mac-inset", "win-caption"])("has no transformed element and only no-drag buttons on %s", (chrome) => {
+    fixture.chrome = chrome;
+    const bar = dom(view()).querySelector("[data-chat-header-bar]")!;
+    expect(bar).not.toBeNull();
+    const buttons = [...bar.querySelectorAll("button")] as unknown as DomNode[];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.matches(noDragSelector) || region(button) === "no-drag").toBe(true);
+    }
+    for (const element of [bar, ...bar.querySelectorAll("*")]) {
+      expect(String((element as { className?: unknown }).className ?? "")).not.toMatch(/(^|\s)-?(translate|scale|rotate|skew)-|(^|\s)transform(\s|$)/);
+    }
+  });
+});
+
+describe("the sidebar head", () => {
+  it("keeps its buttons outside any transform and under the drag opt-out", () => {
+    const source = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
+    const head = source.slice(source.indexOf("<div data-sidebar-head"), source.indexOf("{/* Bot list."));
+    expect(head).toContain('className="window-drag shrink-0"');
+    expect(head).not.toMatch(/(^|[\s"'])-?(translate|scale|rotate|skew)-/);
+    // `.window-drag` buttons are cut out by the stylesheet rule, for every button the head draws
+    expect(css).toContain(".window-no-drag,\n.app-resize-handle,\n:is(.window-drag, .content-topbar) :is(button,");
+    expect(head).toContain("window-no-drag");
+  });
+});

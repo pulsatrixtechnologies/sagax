@@ -106,8 +106,9 @@ describe("a section's pill", () => {
       const header = host.querySelector(`[data-split-pane="${pane}"] [data-split-pane-header]`)!;
       const centered = header.querySelector<HTMLElement>("[data-split-pane-pill]")!;
       const center = centered.closest<HTMLElement>("[data-chat-header-center]")!;
-      expect(center.className).toContain("left-1/2");
-      expect(center.className).toContain("-translate-x-1/2");
+      expect(center.className).toContain("inset-0");
+      expect(center.className).toContain("m-auto");
+      expect(center.className).not.toMatch(/translate/);
       expect(header.hasAttribute("data-chat-header-bar")).toBe(true);
       expect(header.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
       const button = centered.querySelector("[data-bot-header-pill]")!;

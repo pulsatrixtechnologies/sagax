@@ -158,11 +158,11 @@ describe("createTeamMapRoutes", () => {
       }));
       const first = ctx("/api/team-map");
       await hidden(first.context);
-      expect((first.sent[0]?.body as { handoffs: unknown[] }).handoffs).toEqual([]);
+      expect((first.sent[0]!.body as { handoffs: unknown[] }).handoffs).toEqual([]);
       const none = createTeamMapRoutes(deps());
       const second = ctx("/api/team-map");
       await none(second.context);
-      expect((second.sent[0]?.body as { handoffs: unknown[] }).handoffs).toEqual([]);
+      expect((second.sent[0]!.body as { handoffs: unknown[] }).handoffs).toEqual([]);
     });
   });
 });

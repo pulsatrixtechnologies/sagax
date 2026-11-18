@@ -17,7 +17,7 @@ import { z } from "zod";
 
 import { isSealedCard } from "./phone-card-seal.ts";
 
-export const PHONE_TOOLS = ["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "shortcut", "clipboard", "status"] as const;
+export const PHONE_TOOLS = ["location", "contacts", "reminders", "calendar", "home", "alarms", "photos", "photo_library", "shortcut", "clipboard", "status"] as const;
 export type PhoneToolId = typeof PHONE_TOOLS[number];
 
 export function isPhoneTool(value: unknown): value is PhoneToolId {
@@ -74,6 +74,11 @@ export const CONTACT_FIELDS = ["phone", "email", "address", "birthday", "organiz
 export type ContactField = typeof CONTACT_FIELDS[number];
 
 const MAX_CALENDAR_WINDOW_MS = 31 * 24 * 60 * 60_000;
+/** A photo or an album of the phone's library: PhotoKit's own identifier. */
+const photoId = z.string().trim().min(1).max(300);
+const photoCursor = z.string().trim().regex(/^\d{1,9}$/, "the next value of the previous result").optional();
+/** How many photos one export sends back as images (the answer's size). */
+export const PHOTO_LIBRARY_EXPORT_MAX = 3;
 
 export const phoneToolArgsSchemas = {
   location: z.object({ reason, precise: z.boolean().optional() }).strict(),
@@ -132,6 +137,26 @@ export const phoneToolArgsSchemas = {
     }).strict(),
   ]),
   photos: z.object({ reason, max: z.number().int().min(1).max(3).optional() }).strict(),
+  // 2026-11-17: the phone's photo library (PhotoKit), read with the person's
+  // own permission (all photos or the ones they chose): albums, a search by
+  // album, dates, favorite and kind, details by id, and up to 3 photos sent
+  // as images.
+  photo_library: z.discriminatedUnion("action", [
+    z.object({ action: z.literal("list_albums"), reason, limit: z.number().int().min(1).max(200).optional(), cursor: photoCursor }).strict(),
+    z.object({
+      action: z.literal("search"),
+      reason,
+      album: z.string().trim().min(1).max(300).optional(),
+      from: isoDate.optional(),
+      to: isoDate.optional(),
+      favorite: z.boolean().optional(),
+      media: z.enum(["photo", "video", "any"]).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: photoCursor,
+    }).strict().refine((args) => !args.from || !args.to || Date.parse(args.to) > Date.parse(args.from), "to comes after from"),
+    z.object({ action: z.literal("read"), reason, ids: z.array(photoId).min(1).max(50) }).strict(),
+    z.object({ action: z.literal("export"), reason, ids: z.array(photoId).min(1).max(PHOTO_LIBRARY_EXPORT_MAX), original: z.boolean().optional() }).strict(),
+  ]),
   shortcut: z.object({ reason, name: z.string().trim().min(1).max(120), input: z.string().max(1_000).optional() }).strict(),
   clipboard: z.object({ reason }).strict(),
   status: z.object({ reason }).strict(),
@@ -272,6 +297,27 @@ const eventSchema = z.object({
 /** One picked photo, downscaled on the phone: base64 JPEG, about 1 MB at most. */
 const PHOTO_MAX_BASE64 = 1_400_000;
 const imageSchema = z.object({ mimeType: z.literal("image/jpeg"), data: z.string().max(PHOTO_MAX_BASE64).regex(/^[A-Za-z0-9+/=]+$/) });
+/** One exported photo of the library: up to 3 fit the phone's answer (6 MB). */
+const LIBRARY_PHOTO_MAX_BASE64 = 1_900_000;
+const libraryImageSchema = z.object({
+  id: text(300),
+  mimeType: z.literal("image/jpeg"),
+  data: z.string().max(LIBRARY_PHOTO_MAX_BASE64).regex(/^[A-Za-z0-9+/=]+$/),
+  width: z.number().int().min(0).max(100_000).optional(),
+  height: z.number().int().min(0).max(100_000).optional(),
+});
+const libraryPhotoSchema = z.object({
+  id: text(300),
+  date: text(40).optional(),
+  filename: short.optional(),
+  width: z.number().int().min(0).max(100_000).optional(),
+  height: z.number().int().min(0).max(100_000).optional(),
+  favorite: z.boolean().optional(),
+  media: z.enum(["photo", "video", "audio", "unknown"]).optional(),
+  duration: z.number().min(0).max(1_000_000).optional(),
+  location: z.object({ latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180) }).optional(),
+});
+const libraryAlbumSchema = z.object({ id: text(300), name: short, count: z.number().int().min(0).optional(), smart: z.boolean().optional() });
 
 const healthDay = z.object({ date: text(10).regex(/^\d{4}-\d{2}-\d{2}$/), value: z.number().finite(), samples: z.number().int().min(0).max(1_000_000).optional() });
 const healthWorkout = z.object({
@@ -302,6 +348,15 @@ export const phoneToolResultSchemas = {
   }),
   alarms: z.object({ alarms: list(alarmSchema, 50).optional(), created: alarmSchema.optional() }),
   photos: z.object({ images: list(imageSchema, 3) }),
+  photo_library: z.object({
+    albums: list(libraryAlbumSchema, 200).optional(),
+    photos: list(libraryPhotoSchema, 100).optional(),
+    images: list(libraryImageSchema, PHOTO_LIBRARY_EXPORT_MAX).optional(),
+    failed: list(z.object({ id: text(300), error: short }), 50).optional(),
+    total: z.number().int().min(0).optional(),
+    next: text(12).optional(),
+    limited: z.boolean().optional(),
+  }),
   shortcut: z.object({ started: z.boolean() }),
   health_read: z.object({
     category: z.enum(HEALTH_CATEGORIES),
@@ -390,6 +445,14 @@ export function checkPhoneToolResult(tool: PhoneRequestKind, args: Record<string
   if (tool === "alarms" && args.action === "list" && Array.isArray(result.alarms)) {
     const limit = typeof args.limit === "number" ? args.limit : 20;
     return { ok: true, result: { alarms: result.alarms.slice(0, limit) } };
+  }
+  if (tool === "photo_library") {
+    const limit = typeof args.limit === "number" ? args.limit : args.action === "list_albums" ? 100 : 30;
+    const out: Record<string, unknown> = { ...result };
+    if (Array.isArray(result.albums)) out.albums = result.albums.slice(0, limit);
+    if (Array.isArray(result.photos)) out.photos = result.photos.slice(0, args.action === "read" ? 50 : limit);
+    if (Array.isArray(result.images)) out.images = result.images.slice(0, Array.isArray(args.ids) ? args.ids.length : PHOTO_LIBRARY_EXPORT_MAX);
+    return { ok: true, result: out };
   }
   if (tool === "photos") {
     const max = typeof args.max === "number" ? args.max : 1;

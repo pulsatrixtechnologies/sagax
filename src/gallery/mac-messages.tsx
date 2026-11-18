@@ -81,6 +81,7 @@ const GALLERY_TOOLS: Record<MacAppSetupId, Array<{ tool: string; needs: MacAppPe
   contacts: ["mac_contacts_search", "mac_contacts_read", "mac_contacts_create", "mac_contacts_update", "mac_contacts_delete", "mac_contacts_list_groups", "mac_contacts_create_group", "mac_contacts_update_group", "mac_contacts_delete_group"].map((tool) => ({ tool, needs: "automation" as const })),
   reminders: ["mac_reminders_list_lists", "mac_reminders_list", "mac_reminders_create", "mac_reminders_update", "mac_reminders_complete", "mac_reminders_delete", "mac_reminders_create_list", "mac_reminders_update_list", "mac_reminders_delete_list"].map((tool) => ({ tool, needs: "automation" as const })),
   notes: ["mac_notes_list_folders", "mac_notes_search", "mac_notes_read", "mac_notes_create", "mac_notes_update", "mac_notes_move", "mac_notes_delete", "mac_notes_create_folder", "mac_notes_update_folder", "mac_notes_delete_folder"].map((tool) => ({ tool, needs: "automation" as const })),
+  photos: ["mac_photos_list_albums", "mac_photos_search", "mac_photos_read", "mac_photos_export", "mac_photos_create_album", "mac_photos_add_to_album"].map((tool) => ({ tool, needs: "automation" as const })),
 };
 
 function galleryActions(id: MacAppSetupId, permissions: Partial<Record<MacAppPermissionNeed, string>>): MacAppSetupAction[] {

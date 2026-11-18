@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { callTool, type ToolCallContext } from "./agents-call.ts";
 import { availableTools, catalogProfileFromEnv, DEFERRED_AGENT_TOOL_NAMES, type CatalogProfile } from "./agents-catalog.ts";
 import type { HarnessClient } from "./agents-client.ts";
-import { healthOutcomeText, phoneOutcomeText } from "./agents-phone-tools.ts";
+import { healthOutcomeText, phoneOutcomeText, phoneToolDefinition } from "./agents-phone-tools.ts";
 
 const PROFILE: CatalogProfile = { externalRuntime: false, coordinating: false, ownThreadCreation: false, skillAuthoring: false, sharedComputers: false, voiceNotes: false, cloudHome: false, chief: false, botId: "bot-scout" };
 
@@ -53,6 +53,22 @@ describe("phone_tool", () => {
     expect(phoneOutcomeText({ status: "expired" }).isError).toBe(true);
     const photos = phoneOutcomeText({ status: "done", tool: "photos", result: { images: [{ mimeType: "image/jpeg", data: "AAAA" }] } });
     expect(photos.passthrough).toEqual({ content: [{ type: "text", text: "The person picked 1 photo on their phone." }, { type: "image", data: "AAAA", mimeType: "image/jpeg" }] });
+  });
+
+  // 2026-11-17: exported photos of the phone's library come as images, each named by its id in order
+  it("passes exported library photos as images, with their ids and what failed", () => {
+    const out = phoneOutcomeText({ status: "done", tool: "photo_library", result: { images: [{ id: "P1", mimeType: "image/jpeg", data: "AAAA", width: 2, height: 1 }], failed: [{ id: "P2", error: "video" }] } });
+    const content = (out.passthrough as { content: Array<{ type: string; text?: string; data?: string }> }).content;
+    expect(content[1]).toEqual({ type: "image", data: "AAAA", mimeType: "image/jpeg" });
+    expect(content[0]!.text).toContain('"id":"P1"');
+    expect(content[0]!.text).toContain('"P2"');
+    expect(content[0]!.text).not.toContain("AAAA");
+    const list = phoneOutcomeText({ status: "done", tool: "photo_library", result: { albums: [{ id: "A1", name: "Trips" }] } });
+    expect(list.passthrough).toBeUndefined();
+    expect(list.text).toContain("Trips");
+    const offered = phoneToolDefinition(["photo_library"]);
+    expect(Object.keys(offered.inputSchema.properties)).toEqual(expect.arrayContaining(["action", "album", "ids", "original", "cursor", "media", "favorite"]));
+    expect(Object.keys(offered.inputSchema.properties)).not.toContain("scene");
   });
 });
 

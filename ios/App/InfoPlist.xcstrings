@@ -37,6 +37,24 @@
         }
       }
     },
+    "NSPhotoLibraryUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax finds the photos a bot asked about in your library and sends only those, as you let it see all your photos or only the ones you choose."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax trouve dans votre photothèque les photos qu'un bot a demandées et n'envoie que celles-là, selon que vous lui laissez voir toutes vos photos ou seulement celles que vous choisissez."
+          }
+        }
+      }
+    },
     "NSRemindersFullAccessUsageDescription": {
       "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
       "extractionState": "manual",

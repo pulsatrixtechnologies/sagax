@@ -40,6 +40,7 @@ const WHAT: Record<PhoneToolId, string> = {
   home: "home: action list (homes, their scenes and accessories, optionally one home by name) or run (one scene by its exact name). Running a scene can turn things on or off in that home.",
   alarms: "alarms: action list or create (label, hour 0-23, minute 0-59). Creates one alarm. It does not change the others.",
   photos: "photos: the person picks up to max photos (default 1, max 3) on the phone; you receive them as images.",
+  photo_library: "photo_library: the phone's photo library (all photos, or only the ones the person chose to share with Sagax: limited true says so). action list_albums (album ids and names), search (album id or name, from and to as ISO dates, favorite, media photo or video; newest first; ids for read and export; pass next back as cursor), read (details of ids: date, file name, size, favorite, position), or export (up to 3 ids, sent to you as images, resized; original true sends the largest that fits). iOS gives no search by person, place name or keyword: use the person's Mac (mac_photos_search) for those.",
   shortcut: "shortcut: run one of the person's Shortcuts by its exact name, with optional text input. You only learn that it started.",
   clipboard: "clipboard: the text on the phone's clipboard. Ask only when the person told you to read it.",
   status: "status: battery, Low Power Mode, network and whether a Focus is on.",
@@ -65,7 +66,7 @@ export function phoneToolDefinition(tools: readonly PhoneToolId[]) {
         query: { type: "string" },
         fields: { type: "array", items: { type: "string", enum: ["phone", "email", "address", "birthday", "organization"] } },
         limit: { type: "integer", minimum: 1, maximum: 100 },
-        action: { type: "string", enum: ["list", "create", "run"] },
+        action: { type: "string", enum: ["list", "create", "run", "list_albums", "search", "read", "export"] },
         scene: { type: "string" },
         home: { type: "string", description: "Home name, when the phone has more than one." },
         label: { type: "string" },
@@ -81,6 +82,12 @@ export function phoneToolDefinition(tools: readonly PhoneToolId[]) {
         end: { type: "string" },
         location: { type: "string" },
         max: { type: "integer", minimum: 1, maximum: 3 },
+        album: { type: "string", description: "An album id from list_albums, or its name." },
+        favorite: { type: "boolean" },
+        media: { type: "string", enum: ["photo", "video", "any"] },
+        ids: { type: "array", items: { type: "string" }, description: "Photo ids from search." },
+        original: { type: "boolean" },
+        cursor: { type: "string", description: "The next value of the previous result." },
         name: { type: "string" },
         input: { type: "string" },
         request_id: { type: "string", description: "Keep waiting on an earlier request (its other fields are ignored)." },
@@ -98,6 +105,7 @@ const ARG_KEYS: Record<PhoneToolId, readonly string[]> = {
   home: ["reason", "action", "home", "scene", "limit"],
   alarms: ["reason", "action", "label", "hour", "minute", "limit"],
   photos: ["reason", "max"],
+  photo_library: ["reason", "action", "album", "from", "to", "favorite", "media", "limit", "cursor", "ids", "original"],
   shortcut: ["reason", "name", "input"],
   clipboard: ["reason"],
   status: ["reason"],
@@ -113,6 +121,12 @@ export function phoneOutcomeText(outcome: Outcome): ToolCallResult {
       if (outcome.tool === "photos" && Array.isArray(result.images)) {
         const images = (result.images as Array<{ data?: unknown; mimeType?: unknown }>).filter((image) => typeof image.data === "string");
         const text = images.length ? `The person picked ${images.length} photo${images.length > 1 ? "s" : ""} on their phone.` : "The person picked no photo.";
+        return { text, passthrough: { content: [{ type: "text", text }, ...images.map((image) => ({ type: "image", data: String(image.data), mimeType: "image/jpeg" }))] } };
+      }
+      if (outcome.tool === "photo_library" && Array.isArray(result.images)) {
+        const images = (result.images as Array<{ id?: unknown; data?: unknown; width?: unknown; height?: unknown }>).filter((image) => typeof image.data === "string");
+        const rest = { ...result, images: images.map((image) => ({ id: image.id, width: image.width, height: image.height })) };
+        const text = `${images.length} photo${images.length === 1 ? "" : "s"} from the person's phone library, in this order: ${JSON.stringify(rest)}`;
         return { text, passthrough: { content: [{ type: "text", text }, ...images.map((image) => ({ type: "image", data: String(image.data), mimeType: "image/jpeg" }))] } };
       }
       if (outcome.tool === "shortcut") return { text: "The shortcut started on the person's phone. You do not get its output." };

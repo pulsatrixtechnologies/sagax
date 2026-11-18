@@ -1,4 +1,4 @@
-// Plugins > This Mac > Mail, Calendar, Contacts, Reminders or Notes: the same
+// Plugins > This Mac > Mail, Calendar, Contacts, Reminders, Notes or Photos: the same
 // setup page as Messages (MessagesSetupView): what bots can do, the macOS
 // permission with its Open System Settings button, a test, the On/Off switch.
 // Solo reads the local server; an organization server reads this Mac over IPC.
@@ -69,6 +69,13 @@ const COPY = {
     readBody: "connectApps.mac.notes.readBody",
     writeTitle: "connectApps.mac.notes.writeTitle",
     writeBody: "connectApps.mac.notes.writeBody",
+  },
+  photos: {
+    intro: "connectApps.mac.photos.intro",
+    readTitle: "connectApps.mac.photos.readTitle",
+    readBody: "connectApps.mac.photos.readBody",
+    writeTitle: "connectApps.mac.photos.writeTitle",
+    writeBody: "connectApps.mac.photos.writeBody",
   },
 } as const;
 

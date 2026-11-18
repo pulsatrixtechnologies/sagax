@@ -5,12 +5,16 @@ import Foundation
 // the routes are server/routes/phone-tools.ts. Everything here is pure: the
 // requests, the card's choices, when a request may run, and the shaping of
 // each answer so the phone sends only what was asked. The iOS calls
-// (Core Location, Contacts, EventKit, Home, Alarms, Photos, Shortcuts, the pasteboard)
+// (Core Location, Contacts, EventKit, Home, Alarms, Photos, PhotoKit, Shortcuts, the pasteboard)
 // live in the app target (Features/PhoneTools).
 
 /// The tools a bot may ask this phone for.
 public enum PhoneTool: String, CaseIterable, Codable, Sendable, Identifiable {
-    case location, contacts, reminders, calendar, home, alarms, photos, shortcut, clipboard, status
+    case location, contacts, reminders, calendar, home, alarms, photos
+    /// The photo library itself (PhotoKit), read with the person's own
+    /// permission: albums, a search, details, and photos sent as images.
+    case photoLibrary = "photo_library"
+    case shortcut, clipboard, status
     /// "Scanner avec l'iPhone" (audit row 84): only the person's own
     /// computer asks it, from the vault's New card form; never a bot.
     case cardScan = "card_scan"
@@ -75,7 +79,8 @@ public struct PhoneToolRequest: Decodable, Equatable, Sendable, Identifiable {
     public func flag(_ key: String) -> Bool { args[key]?.bool ?? false }
     /// Why the bot asks, as it wrote it (shown on the card).
     public var reason: String? { string("reason") }
-    /// `create` on reminders, the calendar and alarms; `run` on home; nil otherwise.
+    /// `create` on reminders, the calendar and alarms; `run` on home;
+    /// `list_albums`, `search`, `read` or `export` on the photo library; nil otherwise.
     public var action: String? { string("action") }
     public var writes: Bool { access == "write" }
 }
@@ -271,6 +276,46 @@ public struct PhoneAlarm: Equatable, Sendable {
     }
 }
 
+/// One photo or video of the library, as PhotoKit gave it.
+public struct PhoneLibraryPhoto: Equatable, Sendable {
+    public var id: String
+    public var date: Date?
+    public var filename: String?
+    public var width: Int
+    public var height: Int
+    public var favorite: Bool
+    public var media: String
+    public var duration: Double?
+    public var latitude: Double?
+    public var longitude: Double?
+    public init(id: String, date: Date? = nil, filename: String? = nil, width: Int = 0, height: Int = 0, favorite: Bool = false, media: String = "photo", duration: Double? = nil, latitude: Double? = nil, longitude: Double? = nil) {
+        self.id = id
+        self.date = date
+        self.filename = filename
+        self.width = width
+        self.height = height
+        self.favorite = favorite
+        self.media = media
+        self.duration = duration
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+}
+
+/// One album of the library: a person's own, or one iOS keeps (smart).
+public struct PhoneLibraryAlbum: Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var count: Int?
+    public var smart: Bool
+    public init(id: String, name: String, count: Int? = nil, smart: Bool = false) {
+        self.id = id
+        self.name = name
+        self.count = count
+        self.smart = smart
+    }
+}
+
 /// Each answer cut down to what the request asked for, before it leaves
 /// the phone. The server cuts it again (shared/phone-tools.ts).
 public enum PhoneToolShaping {
@@ -374,6 +419,76 @@ public enum PhoneToolShaping {
     public static func photos(_ jpegs: [Data], max: Int?) -> WidgetJSON {
         let limit = Swift.min(Swift.max(max ?? 1, 1), 3)
         return .object(["images": .array(jpegs.prefix(limit).map { .object(["mimeType": .string("image/jpeg"), "data": .string($0.base64EncodedString())]) })])
+    }
+
+    // MARK: Photo library (shared/phone-tools.ts photo_library)
+
+    /// Where a list starts and how much it holds: the bot's cursor and limit.
+    public static func libraryWindow(_ request: PhoneToolRequest, defaultLimit: Int, max: Int) -> (offset: Int, limit: Int) {
+        let offset = request.string("cursor").flatMap { Int($0) }.map { Swift.max($0, 0) } ?? 0
+        return (offset, Swift.min(Swift.max(request.int("limit") ?? defaultLimit, 1), max))
+    }
+
+    /// The ids an action names, in order, without repeats.
+    public static func libraryIds(_ request: PhoneToolRequest, max: Int) -> [String] {
+        var seen = Set<String>()
+        return (request.args["ids"]?.array ?? []).compactMap(\.string).filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(max).map { $0 }
+    }
+
+    public static func libraryAlbums(_ all: [PhoneLibraryAlbum], offset: Int, limit: Int, limited: Bool) -> WidgetJSON {
+        let end = Swift.min(all.count, offset + limit)
+        let rows: [WidgetJSON] = offset < end ? all[offset..<end].map { album in
+            var row: [String: WidgetJSON] = ["id": .string(String(album.id.prefix(300))), "name": .string(String(album.name.prefix(200))), "smart": .bool(album.smart)]
+            if let count = album.count { row["count"] = .number(Double(Swift.max(count, 0))) }
+            return .object(row)
+        } : []
+        var out: [String: WidgetJSON] = ["albums": .array(rows), "total": .number(Double(all.count)), "limited": .bool(limited)]
+        if end < all.count { out["next"] = .string(String(end)) }
+        return .object(out)
+    }
+
+    public static func libraryPhotos(_ page: [PhoneLibraryPhoto], total: Int, next: Int?, limited: Bool, failed: [(id: String, error: String)] = []) -> WidgetJSON {
+        var out: [String: WidgetJSON] = ["photos": .array(page.map(libraryPhotoRow)), "total": .number(Double(total)), "limited": .bool(limited)]
+        if let next { out["next"] = .string(String(next)) }
+        if !failed.isEmpty { out["failed"] = .array(failed.map { .object(["id": .string(String($0.id.prefix(300))), "error": .string(String($0.error.prefix(200)))]) }) }
+        return .object(out)
+    }
+
+    /// The longest side of an exported photo: 2048 unless the bot asked
+    /// for the original (then the largest that fits the answer).
+    public static func libraryExportSide(original: Bool) -> Double { original ? 8_192 : 2_048 }
+
+    /// The most one exported photo may weigh as base64 (3 fit the answer).
+    public static let libraryImageMaxBase64 = 1_900_000
+
+    public static func fitsLibraryImage(_ jpeg: Data) -> Bool {
+        (jpeg.count + 2) / 3 * 4 <= libraryImageMaxBase64
+    }
+
+    public static func libraryImages(_ images: [(id: String, jpeg: Data, width: Int, height: Int)], failed: [(id: String, error: String)], limited: Bool) -> WidgetJSON {
+        let rows: [WidgetJSON] = images.prefix(3).map { image in
+            .object(["id": .string(String(image.id.prefix(300))), "mimeType": .string("image/jpeg"), "data": .string(image.jpeg.base64EncodedString()), "width": .number(Double(image.width)), "height": .number(Double(image.height))])
+        }
+        var out: [String: WidgetJSON] = ["images": .array(rows), "limited": .bool(limited)]
+        if !failed.isEmpty { out["failed"] = .array(failed.map { .object(["id": .string(String($0.id.prefix(300))), "error": .string(String($0.error.prefix(200)))]) }) }
+        return .object(out)
+    }
+
+    private static func libraryPhotoRow(_ photo: PhoneLibraryPhoto) -> WidgetJSON {
+        var row: [String: WidgetJSON] = [
+            "id": .string(String(photo.id.prefix(300))),
+            "width": .number(Double(Swift.max(photo.width, 0))),
+            "height": .number(Double(Swift.max(photo.height, 0))),
+            "favorite": .bool(photo.favorite),
+            "media": .string(["photo", "video", "audio"].contains(photo.media) ? photo.media : "unknown"),
+        ]
+        if let date = photo.date { row["date"] = .string(iso(date)) }
+        if let filename = photo.filename, !filename.isEmpty { row["filename"] = .string(String(filename.prefix(200))) }
+        if let duration = photo.duration, duration > 0 { row["duration"] = .number((duration * 10).rounded() / 10) }
+        if let latitude = photo.latitude, let longitude = photo.longitude, (-90...90).contains(latitude), (-180...180).contains(longitude) {
+            row["location"] = .object(["latitude": .number(latitude), "longitude": .number(longitude)])
+        }
+        return .object(row)
     }
 
     /// The longest side a picked photo keeps: enough to read a receipt.

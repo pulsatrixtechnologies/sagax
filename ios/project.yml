@@ -289,6 +289,8 @@ targets:
           When you allow it on your phone, Sagax reads the scenes and accessories in your home, or runs the one scene a bot asked for.
         NSAlarmKitUsageDescription: >-
           When you allow it on your phone, Sagax reads your alarms or adds the one alarm a bot asked for.
+        NSPhotoLibraryUsageDescription: >-
+          When you allow it on your phone, Sagax finds the photos a bot asked about in your library and sends only those, as you let it see all your photos or only the ones you choose.
         NSFocusStatusUsageDescription: >-
           When you allow it on your phone, Sagax tells the bot that asked whether a Focus is on, so it can wait before disturbing you.
         NSBonjourServices:

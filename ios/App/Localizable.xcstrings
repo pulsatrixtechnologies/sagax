@@ -33289,6 +33289,22 @@
         }
       }
     },
+    "Find photos in your library and send their details (date, size, place).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find photos in your library and send their details (date, size, place)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver des photos dans votre photothèque et envoyer leurs détails (date, taille, lieu)."
+          }
+        }
+      }
+    },
     "Finish": {
       "localizations": {
         "en": {
@@ -54927,6 +54943,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Changement dans un produit : %@"
+          }
+        }
+      }
+    },
+    "Read the names of your photo albums.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the names of your photo albums."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire les noms de vos albums photo."
+          }
+        }
+      }
+    },
+    "Send %lld photos from your library.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send %lld photos from your library."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer %lld photos de votre photothèque."
+          }
+        }
+      }
+    },
+    "Send the details of %lld photos (date, size, place).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the details of %lld photos (date, size, place)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer les détails de %lld photos (date, taille, lieu)."
           }
         }
       }

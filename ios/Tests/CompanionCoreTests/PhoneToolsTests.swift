@@ -168,4 +168,42 @@ final class PhoneToolsTests: XCTestCase {
         XCTAssertEqual(PhoneToolShaping.scannedCard(number: "4111111111111111", expMonth: 13, expYear: nil, holder: nil).object?.keys.sorted(), ["number"])
         XCTAssertEqual(PhoneToolShaping.maskedNumber("4111111111111111"), "•••• 1111")
     }
+
+    // 2026-11-17: the photo library (PhotoKit) through the same phone tool path.
+    func testThePhotoLibraryIsAReadToolThatMayBeAlwaysAllowed() throws {
+        let search = try wire(tool: "photo_library", args: #"{"action":"search","favorite":true,"limit":500,"cursor":"30"}"#)
+        XCTAssertEqual(search.tool, .photoLibrary)
+        XCTAssertEqual(PhoneToolRules.choices(for: search), [.deny, .always, .once])
+        XCTAssertFalse(PhoneTool.photoLibrary.onceOnly)
+        let window = PhoneToolShaping.libraryWindow(search, defaultLimit: 30, max: 100)
+        XCTAssertEqual(window.offset, 30)
+        XCTAssertEqual(window.limit, 100)
+        XCTAssertTrue(PhoneTool.allCases.contains(.photoLibrary))
+    }
+
+    func testLibraryRowsPagesAndExportsAreShapedForTheWire() throws {
+        let albums = [PhoneLibraryAlbum(id: "A1", name: "Trips", count: 3), PhoneLibraryAlbum(id: "A2", name: "Favorites", count: 1, smart: true)]
+        guard case let .object(page) = PhoneToolShaping.libraryAlbums(albums, offset: 0, limit: 1, limited: true) else { return XCTFail("object") }
+        XCTAssertEqual(page["albums"]?.array?.count, 1)
+        XCTAssertEqual(page["next"]?.string, "1")
+        XCTAssertEqual(page["limited"]?.bool, true)
+        let photo = PhoneLibraryPhoto(id: "P1/L0/001", date: Date(timeIntervalSince1970: 0), filename: "IMG_1.HEIC", width: 4032, height: 3024, favorite: true, media: "photo", latitude: 45.5, longitude: -73.6)
+        guard case let .object(found) = PhoneToolShaping.libraryPhotos([photo], total: 9, next: 1, limited: false, failed: [(id: "P9", error: "gone")]) else { return XCTFail("object") }
+        guard case let .object(row) = found["photos"]?.array?.first else { return XCTFail("row") }
+        XCTAssertEqual(row["id"]?.string, "P1/L0/001")
+        XCTAssertEqual(row["date"]?.string, "1970-01-01T00:00:00Z")
+        XCTAssertEqual(row["media"]?.string, "photo")
+        XCTAssertNotNil(row["location"])
+        XCTAssertEqual(found["next"]?.string, "1")
+        XCTAssertEqual(found["failed"]?.array?.count, 1)
+        let ids = PhoneToolShaping.libraryIds(try wire(tool: "photo_library", args: #"{"action":"export","ids":["a","b","a","c","d"]}"#), max: 3)
+        XCTAssertEqual(ids, ["a", "b", "c"])
+        guard case let .object(sent) = PhoneToolShaping.libraryImages([(id: "a", jpeg: Data([1, 2, 3]), width: 2, height: 1)], failed: [], limited: false) else { return XCTFail("object") }
+        guard case let .object(image) = sent["images"]?.array?.first else { return XCTFail("image") }
+        XCTAssertEqual(image["mimeType"]?.string, "image/jpeg")
+        XCTAssertEqual(image["data"]?.string, "AQID")
+        XCTAssertTrue(PhoneToolShaping.fitsLibraryImage(Data(count: 1_400_000)))
+        XCTAssertFalse(PhoneToolShaping.fitsLibraryImage(Data(count: 1_500_000)))
+        XCTAssertEqual(PhoneToolShaping.libraryExportSide(original: false), 2_048)
+    }
 }

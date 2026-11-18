@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/i18n", () => ({ t: (key: string) => key }));
 
+import { MAC_APP_SETUP_IDS } from "../../../shared/mac-apps-setup.ts";
 import { MacAppsInstalledSection } from "./MacAppsView";
 import { CARD_GRID, PLUGINS } from "./plugins-style";
 
@@ -30,7 +31,7 @@ describe("MacAppsInstalledSection", () => {
     expect(host.querySelector("[data-mac-app] svg.lucide-chevron-right, [data-mac-app] svg:last-child")).toBeTruthy();
     expect(host.querySelector("[data-mac-app]")?.className).toContain("w-full");
     expect(host.querySelector("[data-mac-app]")?.className).toContain("rounded-2xl");
-    expect(host.querySelectorAll("[data-mac-app]").length).toBe(6);
+    expect(host.querySelectorAll("[data-mac-app]").length).toBe(MAC_APP_SETUP_IDS.length);
     await act(async () => root.unmount());
     host.remove();
   });

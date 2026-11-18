@@ -150,6 +150,7 @@ enum PhoneToolWords {
         case .home: "house"
         case .alarms: "alarm"
         case .photos: "photo.on.rectangle"
+        case .photoLibrary: "photo.stack"
         case .shortcut: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
         case .status: "battery.75percent"
@@ -167,6 +168,7 @@ enum PhoneToolWords {
         case .home: String(localized: "Home")
         case .alarms: String(localized: "Alarms")
         case .photos: String(localized: "Photos")
+        case .photoLibrary: String(localized: "Photo library")
         case .shortcut: String(localized: "Shortcuts")
         case .clipboard: String(localized: "Clipboard")
         case .status: String(localized: "Battery, network and Focus")
@@ -201,6 +203,14 @@ enum PhoneToolWords {
             return String(localized: "Read your alarms.")
         case .photos:
             return String(localized: "Pick up to \(max(1, min(request.int("max") ?? 1, 3))) photos to send.")
+        case .photoLibrary:
+            let count = PhoneToolShaping.libraryIds(request, max: 50).count
+            switch request.action {
+            case "list_albums": return String(localized: "Read the names of your photo albums.")
+            case "read": return String(localized: "Send the details of \(count) photos (date, size, place).")
+            case "export": return String(localized: "Send \(count) photos from your library.")
+            default: return String(localized: "Find photos in your library and send their details (date, size, place).")
+            }
         case .shortcut:
             return String(localized: "Run your shortcut “\(request.string("name") ?? "")”.")
         case .clipboard:

@@ -203,4 +203,28 @@ describe("#4158: what a Mac runs, as its desktop app reports it", () => {
     expect(out.onMac).toBe("/tmp/Sagax/attachments/abc-report.pdf");
     expect(seen.filter((operation) => operation.action === "read_file")).toHaveLength(2);
   });
+
+  // 2026-11-17: exported photos come back as a list, each copied into the conversation's folder
+  it("copies every photo the Mac exported into the conversation's folder; one that does not copy moves to failed", async () => {
+    const request = async (operation: DesktopBridgeOperation) => {
+      if (operation.action === "read_file") {
+        if (String(operation.path).endsWith("gone.jpg")) return { content: [{ type: "text", text: "No such file" }], isError: true };
+        return { content: [{ type: "text", text: Buffer.from(`bytes of ${operation.path}`).toString("base64") }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ files: [
+        { id: "PH-1", path: "/tmp/Sagax/attachments/aa-one.jpg", name: "one.jpg", mime: "image/jpeg", bytes: 10 },
+        { id: "PH-2", path: "/tmp/Sagax/attachments/bb-gone.jpg", name: "gone.jpg", mime: "image/jpeg", bytes: 10 },
+      ], failed: [{ id: "PH-3", error: "Photos could not export it" }], next: "3" }) }] };
+    };
+    const saveDir = mkdtempSync(join(tmpdir(), "sagax-conversation-"));
+    const result = await relayMacAppCall(request, "mac_photos_export", { ids: ["PH-1", "PH-2", "PH-3", "PH-4"] }, macAppRelayFiles(saveDir));
+    expect(result.isError).toBeUndefined();
+    const out = JSON.parse((result.content[0] as { text: string }).text);
+    expect(out.files).toHaveLength(1);
+    expect(out.files[0].id).toBe("PH-1");
+    expect(out.files[0].path.startsWith(saveDir)).toBe(true);
+    expect(readFileSync(out.files[0].path, "utf8")).toBe("bytes of /tmp/Sagax/attachments/aa-one.jpg");
+    expect(out.failed.map((row: { id: string }) => row.id)).toEqual(["PH-3", "PH-2"]);
+    expect(out.next).toBe("3");
+  });
 });

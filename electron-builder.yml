@@ -170,7 +170,7 @@ mac:
     NSAccessibilityUsageDescription: Sagax uses Accessibility when you let a bot control this Mac.
     NSScreenCaptureUsageDescription: Sagax uses Screen Recording so bots can see this Mac before acting.
     NSAudioCaptureUsageDescription: Sagax records the sound this Mac plays when you ask a bot to listen to a conversation with you.
-    NSAppleEventsUsageDescription: Sagax controls Messages, Mail, Calendar, Contacts, Reminders and Notes when you let your bots use them.
+    NSAppleEventsUsageDescription: Sagax controls Messages, Mail, Calendar, Contacts, Reminders, Notes and Photos when you let your bots use them.
   # Notarization runs manually after the build (notarytool + staple),
   # mirroring the BlueyLite ship_release.sh flow.
   notarize: false

@@ -120,6 +120,7 @@ export function MessagesListItem({
   getState,
   dispatch,
   latestPageVersionById,
+  pinnedHistory,
   eager: eagerAsked,
 }: {
   /** Draws its content at once: the visible tail, the focused and the
@@ -143,6 +144,7 @@ export function MessagesListItem({
   lookups: TranscriptLookups;
   canRetryLast: boolean;
   pinnedMessageId?: string;
+  pinnedHistory?: boolean;
   editingId: string | null;
   emergingId?: string | null;
   lastBotTextId: string | undefined;
@@ -361,6 +363,10 @@ export function MessagesListItem({
     };
   };
   const row = (() => {
+    if (pinnedHistory && m.card) {
+      const text = m.card.title || m.card.questionRequest?.questions[0]?.question || m.card.subtitle || m.card.tool;
+      return <p data-waiting-history="" className="truncate text-[13px] text-ink-secondary" title={text}>{text}</p>;
+    }
     // A client abort is a stop, not a failure. Legacy rows still store
     // the provider's sentence or an error row; both read as this line.
     if (isCancelledTranscriptRow(m)) {

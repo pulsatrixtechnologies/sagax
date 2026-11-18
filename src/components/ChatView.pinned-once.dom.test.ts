@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 // #3681, the owner's rule (2026-11-11): an ask that waits is drawn once.
 // While the pinned card over the composer holds it, the conversation draws
-// no card for it (the bot's words around it stay); once it is settled its
+// its compact history line (the surrounding words stay); once it is settled its
 // record is back at its place in the conversation. Mounted through the real
 // chat (ChatView: transcript, composer and its pinned card).
 import { createElement, type ComponentProps } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { createAgentCard, type AgentCardStore } from "../../server/widgets/chat-widgets";
+import { ASK_CHOICE_TOOL, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
 import type { ApprovalModeSelector } from "./ApprovalModeSelector";
@@ -86,7 +88,6 @@ async function render(messages: Message[]) {
 }
 const transcript = () => host.querySelector('[role="log"]')!;
 const pinned = () => host.querySelector("[data-pinned-waiting]");
-const occurrences = (text: string) => (host.textContent ?? "").split(text).length - 1;
 
 beforeEach(() => {
   fixture.dispatch.mockClear();
@@ -109,16 +110,52 @@ describe("an ask that waits is drawn once (#3681)", () => {
     await render([person, words, question(), approval(), after]);
     expect(pinned()).not.toBeNull();
     // one card each: none in the conversation
-    expect(transcript().querySelector('[data-mid="q1"]')).toBeNull();
-    expect(transcript().querySelector('[data-mid="a1"]')).toBeNull();
+    expect(transcript().querySelector('[data-mid="q1"] [data-waiting-history]')).not.toBeNull();
+    expect(transcript().querySelector('[data-mid="a1"] [data-waiting-history]')).not.toBeNull();
     expect(transcript().querySelector('[data-ask-card="pending"]')).toBeNull();
-    expect(occurrences(QUESTION)).toBe(1);
     expect(pinned()!.textContent).toContain(QUESTION);
     // both wait: the pinned card steps through them
     expect(pinned()!.textContent).toMatch(/1\s*(of|sur)\s*2/);
     // the bot's own words before and after stay
     expect(transcript().textContent).toContain("Two things before I start.");
     expect(transcript().textContent).toContain("I will wait for you.");
+  });
+
+  it("pages three unanswered chat choices above the composer", async () => {
+    const tickets: Message[] = [];
+    const store: AgentCardStore = {
+      groupByThread: () => undefined,
+      messagesFor: () => [],
+      patchMessage: () => null,
+      appendMessage: (_thread, row) => {
+        const ticket = 101 + tickets.length;
+        const saved = { ...row, id: `ticket-${ticket}`, at: ticket };
+        tickets.push(saved as Message);
+        return saved;
+      },
+    };
+    for (const ticket of [101, 102, 103]) {
+      const legacy = ticket === 103;
+      const result = createAgentCard({ store, threadId: bot.threadId, bot: { id: WATCHER_OPTIONS_CARD_BOT_ID, name: bot.name, color: "green" },
+        input: { ...(legacy ? {} : { tool: ASK_CHOICE_TOOL, question: "What should I do?" }), title: `Unscheduled ticket #${ticket}`,
+          subtitle: "What should I do?", options: ["I'll handle it", "Remind me tomorrow"] } });
+      expect(result.ok).toBe(true);
+    }
+    await render(tickets);
+    expect(transcript().querySelectorAll("[data-waiting-history]")).toHaveLength(3);
+    expect(transcript().querySelectorAll('[data-ask-card="pending"]')).toHaveLength(0);
+    expect(host.querySelectorAll("[data-pinned-waiting]")).toHaveLength(1);
+    expect(pinned()!.textContent).toMatch(/1\s*(of|sur)\s*3/);
+    const next = pinned()!.querySelectorAll<HTMLButtonElement>("[data-approval-stepper] button")[1]!;
+    await act(async () => next.click());
+    expect(pinned()!.textContent).toContain("Unscheduled ticket #102");
+    await act(async () => pinned()!.querySelector<HTMLButtonElement>("[data-ask-choice]")!.click());
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "answerCard", botId: bot.id, threadId: "main", messageId: "ticket-102" }));
+    await act(async () => pinned()!.querySelector<HTMLButtonElement>("[data-card-skip]")!.click());
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "dismissCard", botId: bot.id, threadId: "main", messageId: "ticket-102" }));
+    await render([tickets[0]!, { ...tickets[1]!, card: { ...tickets[1]!.card!, answered: "I'll handle it" } }, tickets[2]!, person]);
+    expect(pinned()!.textContent).toContain("Unscheduled ticket #101");
+    expect(pinned()!.querySelector("[data-approval-stepper]")).toBeNull();
   });
 
   it("puts the record back at its place once the ask is settled", async () => {

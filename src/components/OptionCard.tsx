@@ -120,6 +120,14 @@ export function OptionCard({
   const terminalChoice = terminalPick || (terminal ? terminalDestinationKey(terminal) : "");
   const answer = (text: string) => {
     if (!text.trim()) return;
+    // A flat request in an earlier topic may only be present in the waiting
+    // response. Answer its own request without looking it up in the open topic.
+    if (embedded && threadId && card.requestType === "question" && card.requestId) {
+      dispatch({ type: "decideRequest", threadId, requestId: card.requestId, behavior: "answer",
+        message: text.trim(), settle: { answered: "answer", answeredText: text.trim() } });
+      returnFocusToComposer();
+      return;
+    }
     const picked = terminal ? terminalAnswerPick(terminal, terminalPick, text) : undefined;
     // #4489: the first-run quiz hides on the click. The pick is the person's
     // message, so it is drawn at once under this sendId.
@@ -193,7 +201,7 @@ export function OptionCard({
       title={title}
       settled={settled}
       embedded={embedded}
-      onDismiss={dismiss}
+      onDismiss={embedded ? undefined : dismiss}
       dismissLabel={skip ? t("waitingCard.skipAria") : t("onboarding.card.dismiss")}
       onKeyDown={settled ? undefined : sheetKeyHandler(choices.length, (index) => pick(choices[index]!.id ?? choices[index]!.label))}
     >

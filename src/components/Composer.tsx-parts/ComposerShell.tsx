@@ -165,6 +165,7 @@ export function ComposerShell({
           />
         )}
         <ComposerPendingStrip
+          groupId={group?.id}
           bot={bot}
           pinned={pinned}
           threadId={threadId}

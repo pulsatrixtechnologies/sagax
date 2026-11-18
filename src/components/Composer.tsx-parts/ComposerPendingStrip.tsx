@@ -6,6 +6,7 @@ import { PinnedWaitingCard, type PinnedWaiting } from "./PinnedWaitingCard";
 
 export function ComposerPendingStrip({
   bot,
+  groupId,
   pinned,
   threadId,
   storeBots,
@@ -13,6 +14,7 @@ export function ComposerPendingStrip({
   onCancelTurn,
 }: {
   bot?: Bot;
+  groupId?: string;
   pinned: PinnedWaiting;
   threadId: string;
   storeBots: readonly Bot[];
@@ -35,6 +37,7 @@ export function ComposerPendingStrip({
       pinned={pinned}
       threadId={threadId}
       bot={bot}
+      groupId={groupId}
       botFor={approvalBotFor}
       nameFor={nameFor}
       onCancelTurn={onCancelTurn}

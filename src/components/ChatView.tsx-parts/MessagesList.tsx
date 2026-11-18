@@ -133,7 +133,7 @@ export const MessagesList = memo(function MessagesList({
     // #4201: the first run a stored count names leaves with the count
     const counted = routineRunsCounted(transcript);
     const kept = withoutDeadThreadChips(messages, owners).filter((message) =>
-      !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !held.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
+      !repeats.has(message.id) && !drawnElsewhere.has(message.id) && (message.kind === "options" || !held.has(message.id)) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
       // (TransientNotice), never a row (shared/transient-notices.ts)
       && !isTransientChatNotice(message)
@@ -208,6 +208,7 @@ export const MessagesList = memo(function MessagesList({
   // where the bot asked, since the ask has no row while it waits
   useEffect(() => {
     if (!focusedId || !held.has(focusedId)) return;
+    if (transcript.some((message) => message.id === focusedId && message.kind === "options")) return;
     const target = pinnedJumpTarget(transcript, focusedId, held);
     if (target !== focusedId) dispatch({ type: "focusMessage", threadId, messageId: target });
   }, [focusedId, held, transcript, threadId, dispatch]);
@@ -286,6 +287,7 @@ export const MessagesList = memo(function MessagesList({
       {items.map((item, i) => withCloudAgents(i, (
         <MessagesListItem
           item={item}
+          pinnedHistory={item.kind === "message" && held.has(item.message.id)}
           index={i}
           eager={i >= eagerFrom || i === dividerIndex || (focusedId !== null && listedItemMessages(item).some((row) => row.id === focusedId))}
           items={items}

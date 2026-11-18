@@ -166,15 +166,15 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   avec flèches. Le corps est la carte standard de la conversation (QuestionSheet ou
   panneau d'approbation), jamais une boîte à part. Une demande qui attend n'est dessinée
   qu'une fois (#3681, le propriétaire 2026-11-11) : tant que la carte épinglée la tient,
-  la conversation ne dessine aucune carte pour elle, ni carte vide ni ligne « en attente » ;
-  les mots du bot avant et après restent. Une fois répondue, passée ou expirée, sa trace
+  le chat direct garde une ligne compacte pour chaque carte à choix ou d’approbation.
+  Les mots du bot avant et après restent. Une fois répondue, passée ou expirée, sa trace
   revient à sa place dans la conversation (la question avec la réponse donnée, le reçu de
   l'approbation avec sa pastille). Une seule règle, lue par les deux surfaces dans la même
   liste (`pinnedHeldIds`, `src/lib/pinned-waiting.ts`), au chat direct comme au salon. Là
   où aucune carte épinglée ne peut la tenir (vue sans compositeur, conversation en lecture
   seule, page Approbations, sorte de demande que l'app ne sait pas dessiner), la
   conversation garde sa carte. « Voir dans la conversation » mène à l'endroit où le bot a
-  demandé (ses mots juste avant la demande), dans le sujet plus ancien au besoin, sans
+  demandé (sa ligne compacte ou les mots qui la précèdent), dans le sujet plus ancien au besoin, sans
   panneau de fil. Test : `src/components/ChatView.pinned-once.dom.test.ts` (une carte
   par demande, dans les tests de garde).
 - Ligne de travail : sous le dernier message, la mascotte, des points animés et l'étape

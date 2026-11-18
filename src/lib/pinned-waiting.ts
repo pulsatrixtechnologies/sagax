@@ -54,7 +54,7 @@ function drawnAs(item: ServedWaitingItem, message: Message | undefined, threadId
     if (!pending) return null;
     return { kind: "approval", pending: pending.threadId || item.threadId === threadId ? pending : { ...pending, threadId: item.threadId } };
   };
-  const asQuestion = (): Drawn => (pendingQuestions([message]).length ? { kind: "question", message } : null);
+  const asQuestion = (): Drawn => (pendingQuestions([message], true).length ? { kind: "question", message } : null);
   switch (item.kind) {
     case "approval":
     case "question":
@@ -151,14 +151,14 @@ export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: s
   // #3681: a question of this conversation the list does not carry yet is
   // pinned the same way: the conversation leaves it to the pinned card from
   // its first frame, never drawn there for a moment and then taken away.
-  for (const message of pendingQuestions(fresh)) {
+  for (const message of pendingQuestions(fresh, true)) {
     if (items.some((item) => item.messageId === message.id || (item.threadId === threadId && item.id === message.card?.requestId))) continue;
     const key = `${threadId}:${message.card?.requestId ?? message.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const first = message.card?.questionRequest?.questions[0];
     const title = first?.question || message.card?.title || "";
-    const options = (first?.options ?? []).map((option) => option.label);
+    const options = first ? (first.options ?? []).map((option) => option.label) : message.card?.options ?? [];
     const item: ServedWaitingItem = {
       id: message.card?.requestId ?? message.id, kind: "question", botId: message.from?.botId ?? "", botName: message.from?.name ?? "",
       threadId, messageId: message.id, at: message.at, ageMs: 0, title, text: title,

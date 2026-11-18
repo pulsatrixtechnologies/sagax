@@ -67,6 +67,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { readHandoffs } from "../testing/handoff-rows.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 import { ZipReader } from "../zip.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -215,16 +216,9 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  // The shared readiness wait (60 s): a cold boot on a busy build host took
+  // over 20 s (2026-11-17). Any healthy answer is this server's.
+  await waitForServerReady(child, BASE, () => log, () => true);
 }
 
 posixOnly("confidential thread of a person on a team bot someone else owns", () => {
@@ -313,7 +307,7 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     }
     ana = await signIn(ANA);
     carl = await signIn(CARL);
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     child?.kill("SIGTERM");
@@ -475,7 +469,21 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     expect(filesText(claudeProjects(plain)[0]!)).toContain("ENGINE-ORDINARY first");
     await turnWithoutError(ana, plain, "ENGINE-CONFIDENTIAL third");
 
-    // deleting the confidential thread removes its transcripts and nothing else's
+    // deleting the confidential thread removes its transcripts and nothing else's.
+    // When the secret thread's own last turn ran after the plain thread's and
+    // carried it (its "Recent work"), making plain confidential rightly purged
+    // the secret thread's session too (#4407, makeThreadConfidential carriers):
+    // on a busy build host that order happened in about half the runs. A turn
+    // of its own now gives it a session that carries nothing else.
+    await turnWithoutError(ana, secret, `${SECRET}-ENGINE again`);
+    // the same purge took the secret thread's Codex rollout and state row
+    // (found by its folder): put them back, as its Codex would write them
+    mkdirSync(join(codex, "sessions", "2026", "10", "18"), { recursive: true });
+    if (!existsSync(rollout(codexSecret))) writeFileSync(rollout(codexSecret), `${SECRET}-ENGINE rollout\n`);
+    const again = new DatabaseSync(join(codex, "state_5.sqlite"), { timeout: 5_000 });
+    try {
+      again.prepare("INSERT OR IGNORE INTO threads VALUES (?, ?, ?)").run(codexSecret, join(data, "task-workspaces", botId, secret), `${SECRET}-ENGINE title`);
+    } finally { again.close(); }
     // (its own transcript is written by the engine process: wait for it rather
     // than read it once, a loaded machine wrote it late and failed here)
     await waitFor(async () => claudeProjects(secret).length === 1);
@@ -486,7 +494,14 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     await waitFor(async () => claudeProjects(secret).length === 0 && !existsSync(rollout(codexSecret)));
     expect(claudeHistory()).not.toContain(`${SECRET}-ENGINE`);
     expect(existsSync(rollout(codexSecret))).toBe(false);
-    const after = new DatabaseSync(join(codex, "state_5.sqlite"), { readOnly: true });
+    // One purge, in order: the files, the database rows, the compaction of
+    // the file (VACUUM, which holds its lock), then the record kept for one
+    // more pass. Reading the database between those steps got "database is
+    // locked", and reading the record before it was written got ENOENT, on a
+    // busy build host (2026-11-17): wait for the purge's last step.
+    // (the deletion's record names the deleted thread among its keys)
+    await waitFor(async () => existsSync(join(data, "confidential-engine-purge.json")) && readFileSync(join(data, "confidential-engine-purge.json"), "utf8").includes(secret));
+    const after = new DatabaseSync(join(codex, "state_5.sqlite"), { readOnly: true, timeout: 5_000 });
     try { expect(after.prepare("SELECT COUNT(*) AS n FROM threads").get()).toEqual({ n: 0 }); } finally { after.close(); }
     expect(claudeProjects(plain)).toHaveLength(1);
     // kept for one more pass at the next start (an engine that outlived the deletion), ids only

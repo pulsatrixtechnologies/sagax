@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..", "..");
@@ -212,25 +213,21 @@ beforeAll(async () => {
   });
   child.stderr!.on("data", (chunk) => (stderr += chunk));
 
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}: ${stderr}`);
-    try {
-      if ((await fetch(`${base}/api/health`)).status === 200) break;
-    } catch {
-      // Still starting.
-    }
-    if (Date.now() >= deadline) throw new Error(`server never became healthy: ${stderr}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}, 30_000);
+  // The shared readiness wait (60 s): a cold strip-types boot on a busy
+  // build host took over 20 s here, and the boot's model catalog probe
+  // blocked the loop for a second at a time.
+  await waitForServerReady(child, base, () => stderr);
+}, 90_000);
 
 afterAll(async () => {
   if (child) await waitForExit(child, { signal: "SIGTERM" });
   if (home) await removeTempDir(home);
 });
 
-describe("goal-driven channel runs", () => {
+// Each run waits on fake engine processes the server spawns: on a busy
+// build host one turn alone can take seconds. Every poll names its wait, and
+// a run of several turns gets room for them.
+describe("goal-driven channel runs", { timeout: 60_000 }, () => {
   it("returns to the lead until the goal is completed and appends a clean receipt", async () => {
     const lead = (await api("POST", "/api/bots", {
       name: "Lead",
@@ -295,7 +292,7 @@ describe("goal-driven channel runs", () => {
       await expect.poll(async () => {
         const state = (await api("GET", "/api/bots?messages=0")).body;
         return state.bots.find((bot: { id: string }) => bot.id === lead.id)?.busy;
-      }).toBe(true);
+      }, { timeout: 10_000 }).toBe(true);
 
       expect((await api("POST", `/api/groups/${room.id}/messages`, {
         text: "Complete this goal after your current work",
@@ -313,7 +310,7 @@ describe("goal-driven channel runs", () => {
           turnCount: cards[0]?.goalRun?.turnCount,
           busyBotId: current?.busyBotId,
         };
-      }).toMatchObject({
+      }, { timeout: 10_000 }).toMatchObject({
         count: 1,
         status: "working",
         detail: expect.stringMatching(/finishing another conversation/i),
@@ -380,7 +377,7 @@ describe("goal-driven channel runs", () => {
       await expect.poll(async () => {
         const state = (await api("GET", "/api/bots?messages=0")).body;
         return state.bots.find((bot: { id: string }) => bot.id === worker.id)?.busy;
-      }).toBe(true);
+      }, { timeout: 10_000 }).toBe(true);
 
       expect((await api("POST", `/api/groups/${room.id}/messages`, {
         text: "Research and resolve the team question",
@@ -398,7 +395,7 @@ describe("goal-driven channel runs", () => {
           roomBusyBotId: current?.busyBotId,
           workerDirectBusy: state.bots.find((bot: { id: string }) => bot.id === worker.id)?.busy,
         };
-      }).toMatchObject({
+      }, { timeout: 10_000 }).toMatchObject({
         status: "working",
         detail: expect.stringMatching(/Busy specialist is finishing another conversation/i),
         turnCount: 1,
@@ -479,7 +476,7 @@ describe("goal-driven channel runs", () => {
       await expect.poll(async () => {
         const state = (await api("GET", "/api/bots?messages=0")).body;
         return state.bots.find((bot: { id: string }) => bot.id === lead.id)?.busy;
-      }).toBe(true);
+      }, { timeout: 10_000 }).toBe(true);
 
       // ordinary chat: the round parks on the busy lead — visibly working,
       // nobody named as speaker, one neutral note, and no skip
@@ -488,7 +485,7 @@ describe("goal-driven channel runs", () => {
         const state = (await api("GET", "/api/bots?messages=30")).body;
         const current = state.groups.find((group: { id: string }) => group.id === room.id);
         return { working: current?.working, busyBotId: current?.busyBotId, ...chips(current?.messages ?? []) };
-      }).toEqual({ working: true, busyBotId: null, waiting: true, skipped: false, replies: 0 });
+      }, { timeout: 10_000 }).toEqual({ working: true, busyBotId: null, waiting: true, skipped: false, replies: 0 });
 
       // Stop releases the parked chat round quietly: no reply, no skip chip,
       // and the lead's unrelated direct turn is untouched
@@ -501,7 +498,7 @@ describe("goal-driven channel runs", () => {
           directBusy: state.bots.find((bot: { id: string }) => bot.id === lead.id)?.busy,
           ...chips(current?.messages ?? []),
         };
-      }).toEqual({ working: false, directBusy: true, waiting: true, skipped: false, replies: 0 });
+      }, { timeout: 10_000 }).toEqual({ working: false, directBusy: true, waiting: true, skipped: false, replies: 0 });
 
       expect((await api("POST", `/api/groups/${room.id}/messages`, {
         text: "Wait and run this as a goal",
@@ -518,7 +515,7 @@ describe("goal-driven channel runs", () => {
           detail: card?.goalRun?.detail,
           turnCount: card?.goalRun?.turnCount,
         };
-      }).toMatchObject({
+      }, { timeout: 10_000 }).toMatchObject({
         roomWorking: true,
         roomBusyBotId: null,
         status: "working",
@@ -538,7 +535,7 @@ describe("goal-driven channel runs", () => {
           turnCount: cards[0]?.goalRun?.turnCount,
           directBusy: state.bots.find((bot: { id: string }) => bot.id === lead.id)?.busy,
         };
-      }).toEqual({
+      }, { timeout: 10_000 }).toEqual({
         roomWorking: false,
         cards: 1,
         status: "stopped",
@@ -763,7 +760,7 @@ describe("goal-driven channel runs", () => {
       await expect.poll(async () => {
         const state = (await api("GET", "/api/bots?messages=0")).body;
         return state.bots.find((bot: { id: string }) => bot.id === worker.id)?.busy;
-      }).toBe(true);
+      }, { timeout: 10_000 }).toBe(true);
 
       const created = await api("POST", "/api/routines", {
         name: "Worker-gated scheduled goal",
@@ -828,7 +825,7 @@ describe("goal-driven channel runs", () => {
             message.text?.includes("This is unrelated direct work and should be stopped.")
           ),
         };
-      }).toEqual({ busy: true, directReplyStarted: true });
+      }, { timeout: 10_000 }).toEqual({ busy: true, directReplyStarted: true });
 
       // The ordinary bot Stop belongs to the direct claim made above. The
       // coordinator is no longer an active participant in the waiting room
@@ -937,7 +934,7 @@ describe("goal-driven channel runs", () => {
           ),
           working: backgroundRoom?.working,
         };
-      }).toMatchObject({
+      }, { timeout: 10_000 }).toMatchObject({
         status: "running",
         threadId: expect.any(String),
         activeThreadId: originalThreadId,
@@ -1022,10 +1019,12 @@ describe("goal-driven channel runs", () => {
     const card = initial.body.messages.find((message: { kind: string }) => message.kind === "goal.run");
     expect(card).toMatchObject({ id: expect.any(String) });
 
+    // thirteen turns, each a fake engine process the server spawns: on a busy
+    // build host one alone can take two seconds (2026-11-17, 2 of 20 runs)
     await expect.poll(async () => {
       const page = await api("GET", `/api/threads/${started.body.threadId}/messages?around=${card.id}&limit=1`);
       return page.body.messages[0]?.goalRun;
-    }, { timeout: 15_000 }).toMatchObject({ status: "limit-reached", turnCount: 13, maxTurns: 13 });
+    }, { timeout: 45_000 }).toMatchObject({ status: "limit-reached", turnCount: 13, maxTurns: 13 });
   });
 
   it("never treats a failed provider turn as a completed goal", async () => {
@@ -1051,7 +1050,7 @@ describe("goal-driven channel runs", () => {
       return current?.messages.find((message: { kind: string }) => message.kind === "goal.run")?.goalRun;
     // the failed attempt is retried once, and a retry is a model call that
     // costs a turn like any other — so the honest count is two, still failed
-    }, { timeout: 10_000 }).toMatchObject({ status: "failed", turnCount: 2 });
+    }, { timeout: 30_000 }).toMatchObject({ status: "failed", turnCount: 2 });
   });
 
   it("validates mode and binds it to the send id", async () => {
@@ -1094,7 +1093,7 @@ describe("goal-driven channel runs", () => {
     await expect.poll(async () => {
       const state = (await api("GET", "/api/bots?messages=0")).body;
       return state.groups.find((candidate: { id: string }) => candidate.id === room.id)?.working;
-    }).toBe(true);
+    }, { timeout: 10_000 }).toBe(true);
 
     const queuedBody = { text: "second request", sendId: secondSendId };
     const queued = await api("POST", `/api/groups/${room.id}/messages`, queuedBody);

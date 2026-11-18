@@ -13,7 +13,7 @@ import { act, createElement, type ReactNode } from "react";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import type { Routine } from "../../shared/routines";
 
@@ -86,6 +86,16 @@ const pick = (scope: ParentNode, ariaLabel: string, option: string) => {
 const setValue = (input: HTMLInputElement, value: string) => flushSync(() => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+// The person's zone is the host's (personTimeZone), and the fixtures are a
+// Toronto person's routines: a UTC build host otherwise reads "· Toronto
+// time" in Advanced's summary, rightly, for a routine on another zone.
+const hostZone = process.env.TZ;
+beforeAll(() => { process.env.TZ = "America/Toronto"; });
+afterAll(() => {
+  if (hostZone === undefined) delete process.env.TZ;
+  else process.env.TZ = hostZone;
 });
 
 beforeEach(() => {
@@ -177,6 +187,25 @@ describe("the routine panel, view mode", () => {
     expect(section.querySelector("[data-webhook-header]")?.textContent).toBe("Authorization: Bearer whsec_fullKey123");
     await act(async () => { section.querySelector<HTMLButtonElement>("[data-copy=header]")!.click(); });
     expect(writeText).toHaveBeenLastCalledWith("Authorization: Bearer whsec_fullKey123");
+  });
+
+  it("a copied mark leaves no timer behind once the panel closes", async () => {
+    // Gate flake (2026-11-17): the mark's clear timer outlived the panel and
+    // fired after the DOM environment was gone ("window is not defined").
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: async () => {} } });
+    fixture.webhooks = [{ id: "w1", endpointId: "wh_abc", routineId: "r1", name: "Weekly digest", prompt: "", botId: bot.id, runOn: "maus", enabled: true, createdAt: 1, updatedAt: 1, deliveryCount: 2, tokenLast4: "k3Yz" }];
+    vi.useFakeTimers();
+    try {
+      mount(routine({ type: "webhook" }));
+      const section = host.querySelector("[data-routine-editor-section=webhook]")!;
+      await act(async () => { section.querySelector<HTMLButtonElement>("[data-copy=url]")!.click(); });
+      expect(section.querySelector("[data-copy=url] .text-accent")).not.toBeNull();
+      flushSync(() => root.unmount());
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      root = createRoot(host);
+    }
   });
 
   it("Delete asks through the app's confirmation, then deletes", async () => {

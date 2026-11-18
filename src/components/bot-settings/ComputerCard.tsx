@@ -11,14 +11,14 @@
 // row cannot hold (Start it now, Wake it now, Sleep, Replace, the Local VM's
 // Start, the cloud and team place actions, the Mac Screen Recording
 // recovery, Linux local control, a USB Android phone, an organization's
-// Screen | Browser chips and usage) is Computer details, the last row of the
-// "..." menu, in a window of its own (ComputerPanel). The section label carries a
-// PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
-// Computer menu / LocalComputerSection (`computerChoices`); picking one
-// changes the bot's Works on and refreshes the card.
+// Screen | Browser chips and usage) has no entry here any more (the
+// Computer details window was removed). The "..." menu lists the same
+// computers as the chat Computer menu / LocalComputerSection
+// (`computerChoices`); picking one changes the bot's Works on and refreshes
+// the card. A viewer who may not change it sees no "...".
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Settings2, Sparkles } from "lucide-react";
+import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -66,7 +66,6 @@ import {
   useComputerThumbnail,
 } from "@/lib/computer-thumbnail";
 import { MENU_ROW, MENU_SURFACE, MenuDivider, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
-import { ComputerPanel } from "../lazy-screens";
 
 type ComputerSelectValue = "auto" | "cloud" | "local" | "vm" | "browser";
 
@@ -254,9 +253,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
   const [broken, setBroken] = useState<string | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const thumbButton = useRef<HTMLButtonElement>(null);
-  const moreButton = useRef<HTMLButtonElement>(null);
   // Bot computers (#2726): a marked host the bot works on, chosen here.
   const hostComputer = useBotHostComputer(readOnly ? null : bot.id);
   const chosenHost = hostComputer.hostId ? hostComputer.hosts.find((host) => host.hostId === hostComputer.hostId) ?? null : null;
@@ -332,7 +329,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
     : view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
   const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
-  const moreLabel = t(menuEnabled ? "botPanel.computerCard.choose" : "botPanel.computerCard.details");
+  const moreLabel = t("botPanel.computerCard.choose");
   const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number; right: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useMenuInWindow(menuRef, menu && { left: menu.x, top: menu.y, right: menu.right });
@@ -354,11 +351,10 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
       <div className="flex items-center gap-2">
         <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 flex-1 truncate")}>{t("botPanel.tab.computer")}</h3>
         {/* JC 2026-11-06: the same bare "..." as Upcoming, on the section header row, always visible. */}
-        {/* Always there: Computer details is open to whoever sees the row;
-            the Works on choices only to whoever may change them. */}
-        <button ref={moreButton} type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={moreLabel} title={moreLabel}
+        {/* Only for whoever may change the Works on choice: nothing else is in the menu. */}
+        {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={moreLabel} title={moreLabel}
           onClick={(event) => openMenu(event.currentTarget)}
-          className="ui-icon-button"><MoreHorizontal size={15} /></button>
+          className="ui-icon-button"><MoreHorizontal size={15} /></button>}
       </div>
       <div className={PANEL_CARD}>
         {/* JC 2026-11-06: same row as Upcoming (RoutineList): the thumbnail card
@@ -435,22 +431,8 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
               <HostChoiceItem key={host.hostId} host={host} checked={host.hostId === hostComputer.hostId}
                 onPick={() => { closeMenu(); if (host.hostId !== hostComputer.hostId) void hostComputer.select(host.hostId); }} />
             ))}
-            {menuEnabled && <MenuDivider />}
-            <button type="button" role="menuitem" data-computer-card-details="" autoFocus={!menuEnabled}
-              onClick={() => { closeMenu(false); setDetailsOpen(true); }} className={MENU_ROW}>
-              <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-ink-secondary"><Settings2 size={14} /></span>
-              <span className="min-w-0 flex-1 truncate">{t("botPanel.computerCard.details")}</span>
-            </button>
           </div>
         </div>, document.body)}
-      {detailsOpen && (
-        <ViewerDialog title={`${t("botPanel.computerCard.details")} \u00b7 ${bot.name}`} size="compact" onClose={() => setDetailsOpen(false)} returnFocus={moreButton.current}
-          bodyClassName="overflow-y-auto px-4 pt-3">
-          <div data-computer-details="">
-            <ComputerPanel bot={bot} onOpenVmWorkspace={onOpenVmWorkspace} />
-          </div>
-        </ViewerDialog>
-      )}
       {previewOpen && thumbnail.fullSrc && (
         <ViewerDialog title={capturedLabel ? `${caption} \u00b7 ${capturedLabel}` : caption} onClose={() => setPreviewOpen(false)} returnFocus={thumbButton.current}
           bodyClassName="flex items-center justify-center bg-black/80 p-4">

@@ -21,7 +21,6 @@ export const CodePage = lazyScreen("CodePage", async () => (await import("./code
 export const CommandPalette = lazyScreen("CommandPalette", async () => (await import("./CommandPalette")).CommandPalette);
 export const ApprovalsPage = lazyScreen("ApprovalsPage", async () => (await import("./approvals/ApprovalsPage")).ApprovalsPage);
 export const RemoteSessionsAdminPage = lazyScreen("RemoteSessionsAdminPage", async () => (await import("./remote-session/RemoteSessionsAdminPage")).RemoteSessionsAdminPage);
-export const ComputerPanel = lazyScreen("ComputerPanel", async () => (await import("./ComputerPanel")).ComputerPanel);
 export const InspectorPanel = lazyScreen("InspectorPanel", async () => (await import("./InspectorPanel")).InspectorPanel);
 export const KeyboardShortcutsModal = lazyScreen("KeyboardShortcutsModal", async () => (await import("./KeyboardShortcutsModal")).KeyboardShortcutsModal);
 export const LocalVmWorkspace = lazyScreen("LocalVmWorkspace", async () => (await import("./LocalVmWorkspace")).LocalVmWorkspace);
@@ -39,7 +38,7 @@ export const TeamMapPage = lazyScreen("TeamMapPage", async () => (await import("
 export const TriggersPanel = lazyScreen("TriggersPanel", async () => (await import("./TriggersPanel")).TriggersPanel);
 
 const SCREENS = [
-  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BotWizard, BulkEditBotsDialog, CodePage, CommandPalette, ComputerPanel, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, MemoryManagerPanel, NewBotDialog,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BotWizard, BulkEditBotsDialog, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, MemoryManagerPanel, NewBotDialog,
   OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, StagedOrgImport, TeamMapPage, TriggersPanel,
 ];
 

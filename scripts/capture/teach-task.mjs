@@ -17,7 +17,7 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "teach-task"));
 const port = Number(arg("--port") ?? 5331);
 const prefix = arg("--prefix") ?? "after";
-const CASES = (arg("--cases") ?? "chooser,recording,steps,computer-menu,computer-details,learn-before,learn-after").split(",");
+const CASES = (arg("--cases") ?? "chooser,recording,steps,computer-menu,learn-before,learn-after").split(",");
 const SKINS = [["daylight", "light"], ["midnight", "dark"]];
 
 async function waitForServer(url, ms = 180_000) {

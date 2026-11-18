@@ -7,9 +7,7 @@
  * - steps: Stop leads to the recorded steps, ready to save as a skill;
  * - steps-window: the same steps inside the screen window that recorded
  *   them (#4208), drawn with the detail panel's rows;
- * - computer-menu / computer-details: the bot panel's Computer section, its
- *   "..." menu with Computer details last, then that window (what the old
- *   side panel held);
+ * - computer-menu: the bot panel's Computer section with its "..." menu open;
  * - learn-before / learn-after: a /learn the bot cannot settle alone, before
  *   (it guessed in its reply) and after (its question pinned over the box). */
 import { StrictMode, useEffect, useRef, useState } from "react";
@@ -149,14 +147,12 @@ function Learn({ after }: { after: boolean }) {
   );
 }
 
-/** The bot panel's Computer section, with its "..." menu open, then (for
- * computer-details) Computer details open from it. */
-function ComputerSection({ details }: { details: boolean }) {
+/** The bot panel's Computer section, with its "..." menu open. */
+function ComputerSection() {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       box.current?.querySelector<HTMLButtonElement>("[data-computer-card-more]")?.click();
-      if (details) window.setTimeout(() => document.querySelector<HTMLButtonElement>("[data-computer-card-details]")?.click(), 150);
     }, 150);
     return () => window.clearTimeout(timer);
   }, []);
@@ -174,7 +170,7 @@ function Gallery() {
       {which === "recording" && <Recording />}
       {which === "steps-window" && <Recording review />}
       {which === "steps" && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={STEPS} recordedAt={new Date(Date.now() - 60_000).toISOString()} onClose={() => {}} />}
-      {(which === "computer-menu" || which === "computer-details") && <ComputerSection details={which === "computer-details"} />}
+      {which === "computer-menu" && <ComputerSection />}
       {(which === "learn-before" || which === "learn-after") && <Learn after={which === "learn-after"} />}
     </div>
   );

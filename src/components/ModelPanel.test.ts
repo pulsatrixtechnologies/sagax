@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ModelMenuRow, ModelMenuSection } from "@/lib/model-menu";
+import { ProviderMonogram } from "./ProviderIcons";
 import { ModelPanel, PANEL_SEARCH_FROM, initialPanelView, rowDescription, type ModelPanelProps } from "./ModelPanel";
 
 const row = (id: string, extra: Partial<ModelMenuRow> = {}): ModelMenuRow => ({ key: `e\u0000${id}`, kind: "model", instanceId: "e", modelId: id, label: id, current: false, ...extra });
@@ -69,5 +70,31 @@ describe("the model panel", () => {
     expect(markup).toContain("Its own tool");
     expect(markup).toContain("data-model-manage");
     expect(markup).toContain("Manage models");
+  });
+
+  it("folds a long list to its first three rows, the model in use kept in view", () => {
+    const markup = html({ sections: sections(10, "m7") });
+    const rows = [...markup.matchAll(/data-model-panel-row="e\u0000(m\d+)"/g)].map((match) => match[1]);
+    expect(rows).toEqual(["m7", "m0", "m1"]);
+    expect(markup).toContain('data-model-panel-fold="more"');
+    expect(markup).toContain("Show 7 more");
+  });
+
+  it("draws every model row one line tall, the same height, whatever it knows about the model", () => {
+    const markup = html({ sections: sections(3) });
+    const heights = [...markup.matchAll(/<div class="group flex (h-\d+)/g)].map((match) => match[1]);
+    expect(heights).toHaveLength(3);
+    expect(new Set(heights).size).toBe(1);
+  });
+
+  it("gives servers with no logo different letters, never one shared glyph", () => {
+    const first = renderToStaticMarkup(createElement(ProviderMonogram, { label: "Azure Foundry" }));
+    const second = renderToStaticMarkup(createElement(ProviderMonogram, { label: "Home lab" }));
+    expect(first).toContain('data-provider-monogram="AF"');
+    expect(second).toContain('data-provider-monogram="HL"');
+  });
+
+  it("says one model off in the singular", () => {
+    expect(html({ manage: { onManage: vi.fn(), turnedOff: 1, openProviders: vi.fn() } })).toContain("1 off");
   });
 });

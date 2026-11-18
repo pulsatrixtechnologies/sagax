@@ -74,7 +74,10 @@ describe("model picker in Simple mode", () => {
     expect(markup).toContain(">Claude<");
     // the models of the provider in use, flat, in one list (no submenu, no step)
     expect(markup).toContain('data-model-panel-row="claude\u0000claude-opus"');
-    expect(markup).toContain("Extra three");
+    // six models: the first three, the rest under "Show 3 more" (the model in use is never folded away)
+    expect(markup).not.toContain("Extra three");
+    expect(markup).toContain('data-model-panel-fold="more"');
+    expect(markup).toContain("Show 3 more");
     // never the tool's name, never a harness step
     expect(markup).not.toContain("Claude Code");
     expect(markup).not.toContain("data-model-harness");
@@ -91,7 +94,7 @@ describe("model picker in Simple mode", () => {
     const markup = html();
     expect(markup).toContain("Opus");
     expect(markup).not.toContain("data-model-show-more");
-    expect(markup).toContain("Extra three");
+    expect(markup).toContain('data-model-panel-fold="more"');
     expect(markup).not.toContain("Suggested");
     expect(markup).not.toContain("data-model-effort");
     expect(markup).not.toContain("data-model-add-api-keys");
@@ -137,14 +140,16 @@ describe("model picker in Simple mode", () => {
       { id: "desk8002abc::Twin-Model", label: "Twin-Model", server: ":8002", custom: true, local: true, anthropic: true },
     );
     fixture.instances = [instance];
+    // the list shows its first three rows and the model in use; each case puts the row it reads in use
     const markup = html(onModel("desk8000abc::Ornith-1.5-122B-oQ4e-mtp"));
     expect(markup).toContain("Ornith-1.5-122B-oQ4e-mtp");
     expect(markup).not.toContain(":8000:");
     expect(markup).toContain("oMLX");
-    expect(markup).toContain(":8002");
-    // who shares it: a second line under the whole name, not appended to it
-    expect(markup).toMatch(/Shared-Model-With-A-Long-Name<\/span>.*data-model-panel-description[^>]*>Shared by Camille Tremblay</s);
-    expect(markup).not.toContain("Shared-Model-With-A-Long-Name (Shared by");
+    // who shares it: its own label beside the whole name, not appended to it
+    const shared = html(onModel("desk8000cd::Shared-Model-With-A-Long-Name"));
+    expect(shared).toMatch(/Shared-Model-With-A-Long-Name<\/span><\/span><span data-model-panel-description[^>]*>Shared by Camille Tremblay</s);
+    expect(shared).not.toContain("Shared-Model-With-A-Long-Name (Shared by");
+    expect(html(onModel("desk8002abc::Twin-Model"))).toContain(":8002");
     // the full technical id stays in the tooltip
     expect(markup).toContain("desk8000abc::Ornith-1.5-122B-oQ4e-mtp");
   });

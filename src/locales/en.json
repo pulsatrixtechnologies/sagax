@@ -4560,6 +4560,7 @@
   "model.engines.all": "All",
   "model.manage": "Manage models",
   "model.manageOff": "{count} off",
+  "model.manageOffOne": "{count} off",
   "model.manager.title": "Models",
   "model.manager.subtitle": "Pick the engine, then the model. It applies to the bot and all its conversations.",
   "model.manager.connect": "Connect a provider",

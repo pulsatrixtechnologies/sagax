@@ -22,7 +22,7 @@ import { useMyEngineModels, useMyEngines, usePerspicaxOrg } from "@/lib/perspica
 import { orgRefusesEngine } from "./OrgHostToolsNote";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { ModelNoEngineNotice } from "./ModelNoEngineNotice";
-import { InstanceProviderMark, PresetProviderMark } from "./ProviderIcons";
+import { InstanceProviderMark, PresetProviderMark, ProviderMonogram, hasOwnProviderMark } from "./ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../shared/provider-icon";
 import { COMPUTER_PROVIDER_ID } from "../../shared/model-provider";
 import { openModelWindow } from "@/lib/model-window";
@@ -385,6 +385,8 @@ export function ModelPicker({
     const section = menuSections.find((candidate) => candidate.key === key);
     const instanceId = section?.rows.find((row) => row.instanceId)?.instanceId ?? key;
     const instance = key === COMPUTER_PROVIDER_ID ? undefined : state.instances.find((candidate) => candidate.instanceId === instanceId);
+    // a server with no logo of its own gets its letters, never a glyph another provider shares
+    if (instance && !hasOwnProviderMark(instance)) return <ProviderMonogram label={section?.label ?? instance.displayName} size={14} />;
     return instance ? <InstanceProviderMark instance={instance} size={14} /> : <Monitor size={14} aria-hidden="true" />;
   };
   // #2963: the chat bar menu's footer opens the models window for this bot.

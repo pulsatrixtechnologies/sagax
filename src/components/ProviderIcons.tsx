@@ -216,6 +216,30 @@ export function PresetProviderMark({ preset, size = 16, className }: IconProps &
   }
 }
 
+const OWN_MARK_DRIVERS = new Set([
+  "grok", "grokAgent", "claudeAgent", "mistral", "meta", "museCode", "codex", "kimiAgent", "droidAgent", "cursorAgent",
+  "antigravityAgent", "opencodeGo", "qwenAgent", "hermesAgent", "deepseekAgent", "piAgent", "copilotAgent",
+]);
+
+/** Whether the instance has a logo of its own (an override or a known driver), not the generic server or key glyph. */
+export function hasOwnProviderMark(instance: Pick<InstanceInfo, "driverKind" | "icon">): boolean {
+  return Boolean(instance.icon) || OWN_MARK_DRIVERS.has(instance.driverKind);
+}
+
+/** A provider with no logo of its own (a server added by address): its first letters in a small tile, so two such
+ * providers never share one generic glyph. */
+export function ProviderMonogram({ label, size = 16, className }: IconProps & { label: string }) {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const letters = (words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? "?").slice(0, 2)).toUpperCase();
+  return (
+    <span aria-hidden="true" data-provider-monogram={letters}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+      className={cn("inline-flex shrink-0 items-center justify-center rounded-[22%] bg-popover-field font-semibold leading-none text-ink-secondary", className)}>
+      {letters}
+    </span>
+  );
+}
+
 export function InstanceProviderMark({ instance, size = 16, className }: IconProps & {
   instance: Pick<InstanceInfo, "driverKind" | "icon">;
 }) {

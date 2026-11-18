@@ -20,6 +20,9 @@ import type { EffortLevel } from "../../shared/wire";
 import { filterModelSections, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
 import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
+import { foldItems } from "./ShowMoreFold";
+import { SHOW_MORE_ROW } from "@/lib/grouped-card";
+import { MODELS_SHOWN } from "./settings/ModelSwitchesSettings";
 
 /** A provider with more models than this gets a search field over its list. */
 export const PANEL_SEARCH_FROM = 8;
@@ -106,6 +109,7 @@ export function ModelPanel(props: ModelPanelProps) {
   const favoriteRows = sections.find((section) => section.key === "favorites")?.rows ?? [];
   const [chosen, setView] = useState<ViewKey>(() => initialPanelView(sections, autoOn));
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   // no useId or useRef: the interaction harness runs this function outside React
   const modelsId = "model-panel-models";
@@ -128,6 +132,9 @@ export function ModelPanel(props: ModelPanelProps) {
   const typed = searchable ? query.trim() : "";
   const shownRows = typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
   const lead = view === AUTO_VIEW || typed ? [] : leadRows;
+  // the first rows, then "Show N more"; the model in use is never folded away, a search lists every match
+  const fold = typed ? { head: shownRows, rest: [] as ModelMenuRow[] } : foldItems(shownRows, MODELS_SHOWN, (candidate) => candidate.current);
+  const listedRows = expanded ? [...fold.head, ...fold.rest] : fold.head;
 
   // the focus lands on the model in use (or the search field of a long list)
   useEffect(() => {
@@ -144,29 +151,32 @@ export function ModelPanel(props: ModelPanelProps) {
   const switchView = (key: ViewKey) => {
     setView(key);
     setQuery("");
+    setExpanded(false);
   };
 
+  // every row is one line, the same height: the name and its markers at the left,
+  // what the app knows (context size, origin, a warning) muted at the right
   const modelRow = (row: ModelMenuRow) => {
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
     return (
-      <div key={`${view}:${row.key}`} className="group flex items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
+      <div key={`${view}:${row.key}`} className="group flex h-9 items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
         <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
-          disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title}
-          tabIndex={row.current || (!viewRows.some((candidate) => candidate.current) && row === shownRows[0]) ? 0 : -1}
+          disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title ?? (description ? `${row.label} · ${description}` : undefined)}
+          tabIndex={row.current || (!viewRows.some((candidate) => candidate.current) && row === listedRows[0]) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(row)}
-          className={cn("flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[13px] text-popover-ink">{row.label}</span>
-              {row.tags?.map((tag) => (
-                <span key={tag} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink-secondary">{tag}</span>
-              ))}
-            </span>
-            {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="truncate text-[12px] leading-4 text-popover-ink-secondary">{description}</span>}
+          className={cn("flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="truncate text-[13px] text-popover-ink">{row.label}</span>
+            {row.tags?.map((tag) => (
+              <span key={tag} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink-secondary">{tag}</span>
+            ))}
           </span>
-          {row.current && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
+          {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="max-w-[45%] shrink-0 truncate text-[12px] text-popover-ink-secondary">{description}</span>}
+          <span className="flex size-3.5 shrink-0 items-center justify-center">
+            {row.current && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
+          </span>
         </button>
         {row.kind === "model" && (
           <button type="button" aria-pressed={starred} data-model-favorite={row.key}
@@ -236,6 +246,7 @@ export function ModelPanel(props: ModelPanelProps) {
             className="w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none" />
         </label>
       )}
+      <div className="flex max-h-[min(264px,36dvh)] min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1" data-model-panel-scroll>
       <div ref={listRef} role="radiogroup" aria-labelledby={modelsId} data-model-panel-list
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" && searchable && document.activeElement === listRef.current?.querySelector("[data-model-panel-row]")) {
@@ -246,7 +257,7 @@ export function ModelPanel(props: ModelPanelProps) {
           }
           arrowRadios(event, "[data-model-panel-row]", "vertical");
         }}
-        className={cn("max-h-[min(264px,36dvh)] min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1", shownRows.length + lead.length > 3 && "min-h-[132px]")}>
+        className="shrink-0">
         {view === AUTO_VIEW ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
@@ -268,7 +279,7 @@ export function ModelPanel(props: ModelPanelProps) {
         ) : (
           <>
             {lead.map(modelRow)}
-            {shownRows.map(modelRow)}
+            {listedRows.map(modelRow)}
             {shownRows.length === 0 && !(typed && custom) && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
             {typed && custom && (
               <button type="button" data-model-panel-custom onMouseDown={(event) => event.preventDefault()} onClick={() => custom.onPick(typed)}
@@ -278,6 +289,13 @@ export function ModelPanel(props: ModelPanelProps) {
             )}
           </>
         )}
+      </div>
+      {view !== AUTO_VIEW && fold.rest.length > 0 && (
+        <button type="button" data-model-panel-fold={expanded ? "less" : "more"} aria-expanded={expanded}
+          onMouseDown={(event) => event.preventDefault()} onClick={() => setExpanded((open) => !open)} className={cn(SHOW_MORE_ROW, "text-popover-ink-secondary hover:text-popover-ink")}>
+          {expanded ? t("fold.showLess") : t("fold.showMore", { count: fold.rest.length })}
+        </button>
+      )}
       </div>
 
       {hasReasoning && (
@@ -351,7 +369,7 @@ export function ModelPanel(props: ModelPanelProps) {
                 <button type="button" data-model-manage onClick={manage.onManage}
                   className="flex min-h-7 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus">
                   <span>{t("model.manage")}</span>
-                  {manage.turnedOff > 0 && <span data-model-manage-off>{t("model.manageOff", { count: manage.turnedOff })}</span>}
+                  {manage.turnedOff > 0 && <span data-model-manage-off>{t(manage.turnedOff === 1 ? "model.manageOffOne" : "model.manageOff", { count: manage.turnedOff })}</span>}
                 </button>
               ) : (
                 <>

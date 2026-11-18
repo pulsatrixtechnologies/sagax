@@ -102,7 +102,7 @@ export interface ActivityMessage {
   turnTerminal?: boolean;
   /** A note for teammates, never drawn in the person's chat. */
   teamNote?: unknown;
-  tool?: { name: string; ok?: boolean; summary?: string; itemId?: string; files?: string[]; setup?: boolean; input?: unknown; output?: unknown; parentItemId?: string };
+  tool?: { name: string; ok?: boolean; summary?: string; itemId?: string; files?: string[]; setup?: boolean; input?: unknown; output?: unknown; parentItemId?: string; product?: string };
   digest?: { access?: { via: BotActivityDetail["via"] & string; payer: BotActivityDetail["payer"] & string } };
   sender?: { name?: string } | null;
   /** The message it answers (null at the top); a Regenerate's fork shares
@@ -788,6 +788,7 @@ function activityDetailMethods(state: BotActivityState, listed: ReturnType<typeo
         ...(tool.files?.length ? { files: tool.files } : {}),
         ...(input ? { input } : {}),
         ...(error ? { error } : {}),
+        ...(tool.product ? { product: tool.product } : {}),
         ...(parentId ? { parentId } : {}),
         ...(subagent ? { subagent } : {}),
       });

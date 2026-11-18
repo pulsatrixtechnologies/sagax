@@ -48,6 +48,26 @@ describe("routineRunToExchange", () => {
     expect(messages.some((message) => message.kind === "activity" && message.tool?.ok === false)).toBe(true);
   });
 
+  // 2026-11-17: an Apple Mail routine's failed steps opened as "The tool
+  // failed and returned no error message" and "Could not use Messages": the
+  // step's error and declared app never reached the row.
+  it("gives a failed step its error and its declared app", () => {
+    const messages = routineRunExchangeMessages({
+      run, routine, bot,
+      detail: {
+        steps: [
+          { id: "s1", name: "mcp__messages__mac_mail_list_mailboxes", ok: false, at: run.startedAt!, error: "Mail did not answer within 60 s.", product: "Mail" },
+          { id: "s2", name: "mcp__messages__mac_mail_search", ok: true, at: run.startedAt! + 1, error: "ignored on a success", product: "Mail" },
+        ],
+        stepsTruncated: false, files: [], children: [], canStop: false,
+      } as never,
+    });
+    const [failed, done] = messages.filter((message) => message.kind === "activity");
+    expect(failed?.tool?.output).toBe("Mail did not answer within 60 s.");
+    expect(failed?.tool?.product).toBe("Mail");
+    expect(done?.tool?.output).toBeUndefined();
+  });
+
   // #4437: "Pourquoi le texte de la bulle s'update ... ça devrait plutôt en
   // écrire plusieurs": each text the run's turn wrote is its own bubble
   describe("#4437: every text of the run is its own bubble, in order", () => {

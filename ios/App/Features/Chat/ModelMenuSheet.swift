@@ -1,13 +1,13 @@
-// The model menu (desktop ModelMenu.tsx, #477, #478, #518): Auto, the
-// bot's model, the model in use, the person's favorites, then one row per
-// provider that opens its models; in Simple mode one "All models ›" row
-// opens the providers. Only the models that can run a turn are listed; the
-// one in use stays, saying it does not respond. A search lists every
-// provider's matches flat. Every model row carries a star.
+// The model menu (desktop ModelPanel.tsx, #4966): short by default. Auto at
+// the top (with "Optimize for" under it while Auto is on), the bot's model,
+// the person's favorites, the model in use when it is none of them, then
+// "All models": a segment per provider, every model with a star. Only the
+// models that can run a turn are listed; the one in use stays, saying it
+// does not respond. A search lists every provider's matches flat.
 //
-// The favorites and the Simple or Advanced choice are the person's synced
-// preferences on an organization server (`sagax.modelFavorites.v1`,
-// `sagax.interfaceMode.v1`); elsewhere the favorites stay on this device.
+// The favorites are the person's own list on the server (`favoriteModels` of
+// `GET`/`PUT /api/me/models`), the one the desktop reads and writes; the
+// Simple or Advanced choice is a synced preference (`sagax.interfaceMode.v1`).
 // A pick runs this thread and becomes the bot's model (#261).
 import SwiftUI
 import CompanionCore
@@ -15,55 +15,56 @@ import CompanionCore
 @MainActor
 final class ModelFavoritesStore: ObservableObject {
     static let shared = ModelFavoritesStore()
-    @Published private(set) var keys: [String] = ModelFavorites.parse(UserDefaults.standard.string(forKey: ModelFavorites.preferenceKey))
-    /// The providers pinned to the menu (at most 3), as stored; the menu reads the effective ones.
-    @Published private(set) var pins: [String] = ModelProviderPins.parse(UserDefaults.standard.string(forKey: ModelProviderPins.preferenceKey))
-    /// The person's record on an organization server; nil keeps them on this device.
+    /// This device's copy of the server's list, shown before the server answers.
+    private static let cacheKey = "sagax.modelFavoriteKeys.cache"
+    @Published private(set) var keys: [String] = ModelFavoritesStore.cached()
+    /// The server answered for this person: every star is sent to it.
     private var synced = false
+    private var saving: Task<Void, Never>?
 
-    /// Reads the server's record when there is one; answers the stored
-    /// Simple or Advanced choice, if any.
-    func load(_ session: Session) async -> String? {
-        guard let record = try? await session.settingsClient?.sidebarPreferenceRecord() else {
-            synced = false
-            return UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey)
-        }
-        synced = true
-        if let raw = record.preferences[ModelFavorites.preferenceKey] {
-            keys = ModelFavorites.parse(raw)
-            UserDefaults.standard.set(raw, forKey: ModelFavorites.preferenceKey)
-        }
-        if let raw = record.preferences[ModelProviderPins.preferenceKey] {
-            pins = ModelProviderPins.parse(raw)
-            UserDefaults.standard.set(raw, forKey: ModelProviderPins.preferenceKey)
-        }
-        return record.preferences[ModelMenu.interfaceModeKey] ?? UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey)
+    private static func cached() -> [String] {
+        ModelFavorites.clean(UserDefaults.standard.stringArray(forKey: cacheKey) ?? [])
     }
 
-    fileprivate func setPins(_ next: [String], session: Session) {
-        pins = next
-        let raw = ModelProviderPins.serialize(next)
-        UserDefaults.standard.set(raw, forKey: ModelProviderPins.preferenceKey)
-        guard synced, let client = session.settingsClient else { return }
-        Task { _ = try? await client.saveSidebarPreferences([ModelProviderPins.preferenceKey: raw]) }
+    /// Reads the person's list on the server (`favoriteModels` of
+    /// `GET /api/me/models`, the desktop's own); a list this device kept from
+    /// before is sent when the server has none. Answers the stored Simple or
+    /// Advanced choice, if any.
+    func load(_ session: Session) async -> String? {
+        if let client = session.settingsClient, let list = try? await client.modelFavorites() {
+            synced = true
+            let legacy = ModelFavorites.parseLegacy(UserDefaults.standard.string(forKey: ModelFavorites.legacyPreferenceKey))
+            let local = ModelFavorites.clean(Self.cached() + legacy)
+            if list.isEmpty, !local.isEmpty {
+                keys = local
+                send(session)
+            } else {
+                keys = list
+            }
+            UserDefaults.standard.set(keys, forKey: Self.cacheKey)
+            UserDefaults.standard.removeObject(forKey: ModelFavorites.legacyPreferenceKey)
+        } else {
+            synced = false
+        }
+        let record = try? await session.settingsClient?.sidebarPreferenceRecord()
+        return record?.preferences[ModelMenu.interfaceModeKey] ?? UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey)
     }
 
     func toggle(_ key: String, session: Session) {
         keys = ModelFavorites.toggled(keys, key)
-        let raw = ModelFavorites.serialize(keys)
-        UserDefaults.standard.set(raw, forKey: ModelFavorites.preferenceKey)
-        guard synced, let client = session.settingsClient else { return }
-        Task { _ = try? await client.saveSidebarPreferences([ModelFavorites.preferenceKey: raw]) }
+        UserDefaults.standard.set(keys, forKey: Self.cacheKey)
+        send(session)
     }
-}
 
-extension ModelFavoritesStore {
-    /// Pins or unpins a provider, from the pins in effect (what the person sees);
-    /// false when it would be a fourth.
-    func togglePin(_ key: String, effective: [String], session: Session) -> Bool {
-        guard case let .pins(next) = ModelProviderPins.toggled(effective, key) else { return false }
-        setPins(next, session: session)
-        return true
+    /// Sends the whole list, one request after the other so the last star wins.
+    private func send(_ session: Session) {
+        guard synced, let client = session.settingsClient else { return }
+        let previous = saving
+        saving = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            _ = try? await client.saveModelFavorites(self.keys)
+        }
     }
 }
 
@@ -80,16 +81,16 @@ struct ModelMenuSheet: View {
     var choose: ((ModelSelection) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
-    private enum Page: Hashable { case root, all, provider(String) }
+    private enum Page: Hashable { case root, all }
 
     @State private var instances: [Instance] = []
     @State private var config: ConfigStatus?
-    @State private var simple = false
     @State private var loaded = false
     @State private var page: Page = .root
     @State private var query = ""
     @State private var saving = false
-    @State private var pinNote = false
+    /// The provider segment "All models" shows.
+    @State private var segment: String?
 
     private var organization: Bool { session.surfaceGate.allows(.people) }
     private var profile: Bot { session.state.bot(bot.id) ?? bot }
@@ -136,8 +137,7 @@ struct ModelMenuSheet: View {
                 } else {
                     switch page {
                     case .root: root
-                    case .all: providers(back: .root)
-                    case let .provider(id): provider(id)
+                    case .all: allModels
                     }
                 }
             }
@@ -157,8 +157,7 @@ struct ModelMenuSheet: View {
         .task {
             instances = await session.modelInstances()
             config = await session.configStatus()
-            let stored = await favorites.load(session)
-            simple = ModelMenu.isSimple(stored: stored)
+            _ = await favorites.load(session)
             loaded = true
         }
         .accessibilityIdentifier("model-menu")
@@ -170,7 +169,10 @@ struct ModelMenuSheet: View {
     private var root: some View {
         let menu = ModelMenu.root(sections, favorites: favorites.keys)
         Section {
-            ForEach(menu.top) { row(row: $0, id: "model-row.\($0.key)") }
+            ForEach(menu.top) { top in
+                row(row: top, id: "model-row.\(top.key)")
+                if top.kind == .auto, top.current { optimizeRow }
+            }
             if let current = menu.current { row(row: current, id: "model-row.current") }
         }
         if !menu.favorites.isEmpty {
@@ -180,78 +182,57 @@ struct ModelMenuSheet: View {
         }
         if !menu.providers.isEmpty {
             Section {
-                if simple {
-                    pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
-                } else {
-                    // at most three pinned providers (and the one in use); "All models" opens the rest
-                    let shown = pinnedProviders(menu.providers)
-                    providerRows(shown)
-                    if shown.count < menu.providers.count {
-                        pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
-                    }
-                }
+                pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
             }
         }
     }
 
+    /// "Optimize for" under Auto: Intelligence, Balance or Cost (#2106).
+    private var optimizeRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Optimize for").font(.footnote).foregroundStyle(Theme.textSecondary)
+            Picker("Optimize for", selection: Binding(
+                get: { selection.autoOptimize ?? .balance },
+                set: { setAutoOptimize($0) }
+            )) {
+                ForEach(ModelAutoOptimize.allCases, id: \.self) { Text(LocalizedStringKey($0.labelKey)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("model-auto-optimize")
+        }
+    }
+
+    /// "All models": a segment per provider, then that provider's models, each with a star.
     @ViewBuilder
-    private func providers(back: Page) -> some View {
-        Section { backButton(to: back) }
+    private var allModels: some View {
         let all = ModelMenu.root(sections, favorites: favorites.keys).providers
-        let pins = effectivePins(all)
-        Section(header: Text("All models"), footer: pinNote ? Text("Three providers are pinned. Unpin one first.") : nil) {
-            ForEach(all) { provider in
-                HStack(spacing: 8) {
-                    pageButton(provider.section.label ?? provider.id, id: "model-provider.\(provider.id)", current: provider.current) {
-                        page = .provider(provider.id)
+        let shown = all.first { $0.id == segment } ?? all.first { $0.current } ?? all.first
+        Section { backButton(to: .root) }
+        if let shown {
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(all) { provider in
+                            let on = provider.id == shown.id
+                            Button { segment = provider.id } label: {
+                                Text(verbatim: provider.section.label ?? provider.id)
+                                    .font(.subheadline.weight(on ? .semibold : .regular))
+                                    .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
+                                    .padding(.horizontal, 12)
+                                    .frame(height: 32)
+                                    .background(on ? Theme.inset : .clear, in: Capsule())
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(on ? .isSelected : [])
+                            .accessibilityIdentifier("model-provider.\(provider.id)")
+                        }
                     }
-                    .buttonStyle(.plain)
-                    let pinned = pins.contains(provider.id)
-                    Button {
-                        pinNote = !favorites.togglePin(provider.id, effective: pins, session: session)
-                    } label: {
-                        Image(systemName: pinned ? "pin.fill" : "pin")
-                            .foregroundStyle(pinned ? Theme.accent : Theme.textTertiary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(pinned ? Text("Unpin \(provider.section.label ?? provider.id)") : Text("Pin \(provider.section.label ?? provider.id) to the model menu"))
-                    .accessibilityIdentifier("model-pin.\(provider.id)")
                 }
+                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
             }
-        }
-    }
-
-    /// The pins in effect: the person's own, else the bot's provider and the most starred.
-    private func effectivePins(_ providers: [ModelMenuProvider]) -> [String] {
-        ModelProviderPins.effective(stored: favorites.pins, candidates: providers.map { provider in
-            .init(key: provider.id, starred: provider.section.rows.filter { favorites.keys.contains($0.key) }.count, current: provider.current)
-        })
-    }
-
-    /// The providers the root lists: the pinned ones in the order pinned, then the one in use.
-    private func pinnedProviders(_ providers: [ModelMenuProvider]) -> [ModelMenuProvider] {
-        guard providers.count > ModelProviderPins.max else { return providers }
-        let pins = effectivePins(providers)
-        let pinned = pins.compactMap { key in providers.first { $0.id == key } }
-        return pinned + providers.filter { $0.current && !pins.contains($0.id) }
-    }
-
-    private func providerRows(_ providers: [ModelMenuProvider]) -> some View {
-        ForEach(providers) { provider in
-            pageButton(provider.section.label ?? provider.id, id: "model-provider.\(provider.id)", current: provider.current) {
-                page = .provider(provider.id)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func provider(_ id: String) -> some View {
-        Section { backButton(to: simple ? .all : .root) }
-        if let section = sections.first(where: { $0.key == id }) {
-            Section(header: Text(verbatim: section.label ?? "")) {
-                ForEach(section.rows) { row(row: $0, id: "model-row.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
+            Section(header: Text(verbatim: shown.section.label ?? "")) {
+                ForEach(shown.section.rows) { row(row: $0, id: "model-row.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
             }
         }
     }
@@ -349,6 +330,8 @@ struct ModelMenuSheet: View {
             guard selection.auto != true || choose != nil else { return finish() }
             var next = selection
             next.auto = true
+            // Absent means Balance; store it so Optimize for shows the live choice.
+            next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
         case .follow:
             guard follows == false, choose == nil else { return finish() }
@@ -360,16 +343,23 @@ struct ModelMenuSheet: View {
         }
     }
 
-    private func apply(_ next: ModelSelection, updateBotDefault: Bool) {
+    private func setAutoOptimize(_ value: ModelAutoOptimize) {
+        var next = selection
+        next.auto = true
+        next.autoOptimize = value
+        apply(next, updateBotDefault: true, keepOpen: true)
+    }
+
+    private func apply(_ next: ModelSelection, updateBotDefault: Bool, keepOpen: Bool = false) {
         if let choose {
             choose(next)
-            return finish()
+            return keepOpen ? () : finish()
         }
         saving = true
         Task {
             _ = await session.updateModel(next, for: current, updateBotDefault: updateBotDefault)
             saving = false
-            finish()
+            if !keepOpen { finish() }
         }
     }
 }

@@ -67,7 +67,7 @@ final class ModelMenuTests: XCTestCase {
         let menu = sections(selection: ModelSelection(instanceId: "claude", model: "opus"), follows: false)
         let opus = ModelFavorites.key(instanceId: "claude", modelId: "opus")
         let sonnet = ModelFavorites.key(instanceId: "claude", modelId: "sonnet")
-        var root = ModelMenu.root(menu, favorites: [sonnet, "gone\u{0}model"])
+        var root = ModelMenu.root(menu, favorites: [sonnet, "gone/model"])
         XCTAssertEqual(root.top.map(\.key), ["auto", "follow"])
         XCTAssertEqual(root.current?.key, opus, "the current model shows when no top row is checked")
         XCTAssertEqual(root.favorites.map(\.key), [sonnet], "a favorite that is gone is not shown")
@@ -89,14 +89,21 @@ final class ModelMenuTests: XCTestCase {
         XCTAssertEqual(ModelMenu.fold("Élevé"), "eleve")
     }
 
-    func testFavoritesRoundTripAndToggle() {
+    func testFavoritesAreTheServersKeysAndToggle() {
         let key = ModelFavorites.key(instanceId: "claude", modelId: "opus")
-        XCTAssertEqual(ModelFavorites.serialize([key]), #"[["claude","opus"]]"#)
-        XCTAssertEqual(ModelFavorites.parse(#"[["claude","opus"],["claude","opus"],["x"],5,["",""]]"#), [key])
-        XCTAssertEqual(ModelFavorites.parse("not json"), [])
+        XCTAssertEqual(key, "claude/opus", "the desktop's modelKey")
+        XCTAssertEqual(ModelFavorites.clean(["claude/opus", "claude/opus", "nosep", "/x", "x/", "or/vendor/model"]), ["claude/opus", "or/vendor/model"])
+        XCTAssertEqual(ModelFavorites.clean((0..<50).map { "e/m\($0)" }).count, ModelFavorites.max)
+        XCTAssertEqual(ModelFavorites.clean((0..<50).map { "e/m\($0)" }).last, "e/m49", "the newest are kept")
         XCTAssertEqual(ModelFavorites.toggled([], key), [key])
         XCTAssertEqual(ModelFavorites.toggled([key], key), [])
         XCTAssertEqual(ModelFavorites.toggled([], "no-separator"), [])
+    }
+
+    func testTheDevicesOldRecordMovesToServerKeys() {
+        XCTAssertEqual(ModelFavorites.parseLegacy(#"[["claude","opus"],["claude","opus"],["x"],5,["",""]]"#), ["claude/opus"])
+        XCTAssertEqual(ModelFavorites.parseLegacy("not json"), [])
+        XCTAssertEqual(ModelFavorites.parseLegacy(nil), [])
     }
 
     func testAdvancedIsTheDefaultForEveryone() {
@@ -135,28 +142,5 @@ final class ModelMenuTests: XCTestCase {
             labels: labels, engineLabel: { $0.instanceId }
         )
         XCTAssertEqual(menu.filter { $0.key == "compat" }.flatMap(\.rows).map(\.modelId), ["vendor/small"])
-    }
-
-    func testProviderPinsParseKeepThreeAndDropBrokenEntries() {
-        XCTAssertEqual(ModelProviderPins.parse(#"["a","b","a",5,"","c","d"]"#), ["a", "b", "c"])
-        XCTAssertEqual(ModelProviderPins.parse("nope"), [])
-        XCTAssertEqual(ModelProviderPins.serialize(["a", "b", "c", "d"]), #"["a","b","c"]"#)
-    }
-
-    func testProviderPinsDefaultToTheCurrentThenTheMostStarred() {
-        let candidates: [ModelProviderPins.Candidate] = [
-            .init(key: "a", starred: 0, current: false), .init(key: "b", starred: 2, current: false),
-            .init(key: "c", starred: 0, current: true), .init(key: "d", starred: 2, current: false),
-        ]
-        XCTAssertEqual(ModelProviderPins.defaults(candidates), ["c", "b", "d"])
-        // the person's own pins win, minus a provider that is gone
-        XCTAssertEqual(ModelProviderPins.effective(stored: ["gone", "a"], candidates: candidates), ["a"])
-        XCTAssertEqual(ModelProviderPins.effective(stored: ["gone"], candidates: candidates), ["c", "b", "d"])
-    }
-
-    func testAFourthPinIsRefusedAndAPinTogglesOff() {
-        XCTAssertEqual(ModelProviderPins.toggled(["a", "b"], "c"), .pins(["a", "b", "c"]))
-        XCTAssertEqual(ModelProviderPins.toggled(["a", "b", "c"], "d"), .full)
-        XCTAssertEqual(ModelProviderPins.toggled(["a", "b", "c"], "b"), .pins(["a", "c"]))
     }
 }

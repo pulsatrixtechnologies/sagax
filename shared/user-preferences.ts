@@ -118,10 +118,6 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.routineScope.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
-  // retired on desktop (the model menu shows favorites, 2026-11-19); kept in the
-  // allow-list while iOS still reads it, then to be dropped with its last reader
-  // (the person's favorites are `favoriteModels` of /api/me/models)
-  "sagax.modelProviderPins.v1",
   // the subscription starred in Usage ›, whose percent the account menu's
   // Usage row shows (src/lib/usage-favorite.ts)
   "sagax.usageFavorite.v1",

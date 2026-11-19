@@ -119,6 +119,23 @@ public extension CompanionClient {
         try await send(makeRequest("GET", "/api/me/preferences"), as: UserPreferences.self)
     }
 
+    /// `GET /api/me/models`, the `favoriteModels` field: the person's starred
+    /// models as `"<engine>/<model>"`, oldest first. Nil where the server has
+    /// no such record for this session (404 or 403): the stars stay on the device.
+    public func modelFavorites() async throws -> [String]? {
+        do {
+            let answer = try await send(makeRequest("GET", "/api/me/models"), as: ModelFavoritesAnswer.self)
+            return ModelFavorites.clean(answer.favoriteModels ?? [])
+        } catch let APIError.status(code, _) where code == 404 || code == 403 {
+            return nil
+        }
+    }
+
+    /// `PUT /api/me/models` with `{ favoriteModels }`: the whole list replaces the old one.
+    public func saveModelFavorites(_ list: [String]) async throws {
+        _ = try await send(makeRequest("PUT", "/api/me/models", encodedBody: ModelFavoritesAnswer(favoriteModels: ModelFavorites.clean(list))), as: ModelFavoritesAnswer.self)
+    }
+
     /// `PUT /api/me/preferences`: replaces the person's record with these keys.
     public func putPreferences(_ preferences: [String: String]) async throws -> UserPreferences {
         try await send(
@@ -202,4 +219,10 @@ extension CompanionClient {
     static func validThreadFileID(_ value: String) -> Bool {
         value.utf8.count == 24 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
     }
+}
+
+/// The one field of `/api/me/models` the favorites read and write (the answer
+/// carries more: the switches, the harness per provider).
+struct ModelFavoritesAnswer: Codable {
+    var favoriteModels: [String]?
 }

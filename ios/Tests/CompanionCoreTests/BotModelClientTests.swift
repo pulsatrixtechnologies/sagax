@@ -97,6 +97,22 @@ final class BotModelClientTests: XCTestCase {
         XCTAssertNil(updated.modelSelection.effort)
     }
 
+    func testFavoritesAreReadAndWrittenInTheServersFavoriteModelsField() async throws {
+        BotModelRequestStub.responseBody = Data(#"{"org":[],"mine":["claude/haiku"],"favoriteModels":["claude/opus","claude/opus","bad"]}"#.utf8)
+        let read = try await client.modelFavorites()
+        XCTAssertEqual(BotModelRequestStub.capturedRequest?.httpMethod, "GET")
+        XCTAssertEqual(BotModelRequestStub.capturedRequest?.url?.path, "/api/me/models")
+        XCTAssertEqual(read, ["claude/opus"])
+
+        BotModelRequestStub.responseBody = Data(#"{"favoriteModels":["claude/opus","codex/gpt"]}"#.utf8)
+        try await client.saveModelFavorites(["claude/opus", "codex/gpt"])
+        XCTAssertEqual(BotModelRequestStub.capturedRequest?.httpMethod, "PUT")
+        XCTAssertEqual(BotModelRequestStub.capturedRequest?.url?.path, "/api/me/models")
+        let sent = try JSONSerialization.jsonObject(with: XCTUnwrap(BotModelRequestStub.capturedBody)) as? [String: Any]
+        XCTAssertEqual(sent?["favoriteModels"] as? [String], ["claude/opus", "codex/gpt"])
+        XCTAssertEqual(sent?.keys.sorted(), ["favoriteModels"], "no other field is written")
+    }
+
     func testThreadModelWriteStaysPinnedWhenTheServerSelectsAnotherThread() async throws {
         BotModelRequestStub.responseBody = Data(#"""
         {"bot":{

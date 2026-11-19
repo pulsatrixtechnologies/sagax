@@ -1004,7 +1004,7 @@ public enum VaultZip {
         guard endAt >= 0 else { throw VaultReadError.notAZip }
         let count = u16(endAt + 10)
         let dirOffset = u32(endAt + 16)
-        if count == 0xffff || dirOffset == 0xffff_ffff { throw VaultReadError.zip64 }
+        if count == 0xffff || Int64(dirOffset) == 0xffff_ffff { throw VaultReadError.zip64 }
         if count > maxEntries { throw VaultReadError.tooManyFiles(maxEntries) }
         var entries: [VaultZipEntry] = []
         var names = Set<String>()
@@ -1025,7 +1025,7 @@ public enum VaultZip {
             if path.hasSuffix("/") { continue }
             if flags & 0x1 != 0 { throw VaultReadError.encrypted }
             if method != 0 && method != 8 { throw VaultReadError.unsupportedCompression }
-            if size == 0xffff_ffff || compressed == 0xffff_ffff || localOffset == 0xffff_ffff { throw VaultReadError.zip64 }
+            if Int64(size) == 0xffff_ffff || Int64(compressed) == 0xffff_ffff || Int64(localOffset) == 0xffff_ffff { throw VaultReadError.zip64 }
             if !names.insert(path).inserted { throw VaultReadError.duplicate }
             let tooBig = size > maxEntryBytes || (compressed > 0 && size / compressed > maxRatio && size > 1_000_000)
             entries.append(VaultZipEntry(path: path, size: size) {

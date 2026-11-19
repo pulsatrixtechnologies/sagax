@@ -451,7 +451,8 @@ public enum DesktopConfigChange: Equatable, Sendable {
     public static let retentionDays = 1...3_650
     public static let defaultRetentionDays = 30
     public static let capStepBytes = 256 * 1_024
-    public static let capBytes = (256 * 1_024)...(4 * 1_024 * 1_024 * 1_024)
+    // 4 GiB, clamped to Int.max where Int is 32 bits (watchOS arm64_32).
+    public static let capBytes = (256 * 1_024)...Int(min(Int64(4) << 30, Int64(Int.max)))
     public static let defaultCapMiB = 50.0
     public static let mcpMinutes = 1...60
     public static let defaultMcpMinutes = 10

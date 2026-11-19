@@ -657,7 +657,11 @@ export function openSpeechStream(
 /** wss://api.x.ai/v1/realtime for one call (server/voice/realtime-call.ts): the
  * key in the Authorization header, never in the URL. A refused handshake
  * comes back on `onerror` as this file's own words (key, credits, rate
- * limit), so the call can say which key to fix. */
+ * limit), so the call can say which key to fix. That reason is the last
+ * word: ending the refused request makes `ws` report a network error of its
+ * own, which once replaced it, so a key out of credits (402) or rejected
+ * (401, 403) read as "xAI is down", was never remembered as refused and was
+ * tried again on every call. */
 export function openRealtimeSocket(key: string, url: string): {
   readonly readyState: number;
   onopen: ((event: unknown) => void) | null;
@@ -681,10 +685,14 @@ export function openRealtimeSocket(key: string, url: string): {
   socket.on("message", (data: Buffer, binary: boolean) => adapter.onmessage?.({ data: binary ? data : data.toString("utf8") }));
   // the close code says why a call ended (realtimeDropReason)
   socket.on("close", (code: number) => adapter.onclose?.({ code }));
-  socket.on("error", (error) => adapter.onerror?.({ message: socketFailure(error) }));
-  socket.on("unexpected-response", (_request, response) => {
-    adapter.onerror?.({ message: refusal(response.statusCode ?? 0) });
-    socket.terminate();
+  let refused = false;
+  socket.on("error", (error) => {
+    if (!refused) adapter.onerror?.({ message: socketFailure(error) });
+  });
+  // the status and xAI's own reason (an invalid key answers 400), read before the request is ended
+  onRefused(socket as unknown as WebSocket, (message) => {
+    refused = true;
+    adapter.onerror?.({ message });
   });
   return adapter;
 }

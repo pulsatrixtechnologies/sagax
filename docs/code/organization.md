@@ -414,6 +414,15 @@ rules, covered by `server/org/org-link-routes.test.ts` and
   like any restored sign-in). Never a second copy, never the refresh token.
 - Codes: `unknown_person` 404, `user_inactive` 409, `no_sign_in` 404,
   `sign_in_refused` 409. The value is never logged, stored or cached.
+- A phone line's voice keys (2026-11-19): the same route with
+  `"voice_keys": true` answers what `resolveVoiceKeys`
+  (`server/voice/voice-mode.ts`) gives for that person, the function behind
+  every voice route of the app: `{voice_keys: [{source, auth, key}]}` in the
+  app's order, or an empty list with the app's refusal `cause`. The line
+  tries them in that order, so its order is never written a second time and
+  the rights are the app's (`serverKeyAllowed`, a person turned off). Never
+  add a second route or a second order for a line. Names of sources in the
+  log, never a value. Tests: `server/org/org-link-routes.test.ts`.
 
 ## Automations scope (organization mode, 2026-10-09)
 

@@ -61,6 +61,16 @@ export function keyLast4(key: string): string | null {
   return key.length >= 12 ? key.slice(-4) : null;
 }
 
+/** How a credential is presented to xAI: a connected Grok account speaks
+ * through the CLI voice host with its token header, every other source is
+ * an API key on api.x.ai (server/tts/grok.ts withVoiceAuth). One rule for
+ * the app's own voice and for the keys a phone line is given
+ * (server/org/org-link-routes.ts). */
+export type VoiceKeyAuth = "grok-account" | "api-key";
+export function voiceKeyAuth(candidate: { source: string }): VoiceKeyAuth {
+  return candidate.source === "grok-account" ? "grok-account" : "api-key";
+}
+
 /** A refusal xAI gave one key, remembered for a while. */
 export interface VoiceKeyRefusal extends VoiceKeyRef {
   failure: GrokVoiceFailure;
@@ -83,6 +93,8 @@ export function voiceKeyFailureIsFinal(failure: GrokVoiceFailure): boolean {
  * another key serves. Memory only, never a key, never written. */
 export class VoiceKeyRefusals {
   private readonly refused = new Map<string, { failure: GrokVoiceFailure; at: number; ttl: number }>();
+  /** What a person was already told of a key of theirs (`untold`). */
+  private readonly told = new Map<string, GrokVoiceFailure>();
   private readonly ttl: number;
   private readonly now: () => number;
 
@@ -103,6 +115,23 @@ export class VoiceKeyRefusals {
   /** xAI took this key: whatever it was refused for is over. */
   forget(who: string, candidate: VoiceKeyRef): void {
     this.refused.delete(this.id(who, candidate));
+    this.told.delete(this.id(who, candidate));
+  }
+
+  /** The refusals of `refusals` the person has a move to make on (credits,
+   * the key itself) and was not told yet: a key that stays out of credits is
+   * said once, at the first call that had to go on over another key, not at
+   * every call. It is said again when it is refused for another reason, or
+   * after it served again (`forget`). Memory only: a restart says it once more. */
+  untold(who: string, refusals: readonly VoiceKeyRefusal[]): VoiceKeyRefusal[] {
+    return refusals.filter((refusal) => {
+      if (!voiceKeyFailureIsFinal(refusal.failure)) return false;
+      const id = this.id(who, refusal);
+      if (this.told.get(id) === refusal.failure) return false;
+      if (this.told.size >= 10_000) this.told.clear();
+      this.told.set(id, refusal.failure);
+      return true;
+    });
   }
 
   failure(who: string, candidate: VoiceKeyRef): GrokVoiceFailure | null {

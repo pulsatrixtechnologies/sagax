@@ -56,12 +56,40 @@
 //     engine could not renew it;
 //   - the value is never logged, stored or cached here: the log line says the
 //     outcome code only. `cache-control: no-store` on every answer.
+//
+// The same route, asked with `"voice_keys": true` (the owner's decision of
+// 2026-11-19): a phone line speaks on the credentials the app's own voice
+// would use for the person who owns the line, in the app's order and with
+// the app's rights. The answer is then what `resolveVoiceKeys`
+// (server/voice/voice-mode.ts) gives for that person, the function behind
+// every voice route of the app: their connected Grok account, their own
+// voice key, their own xAI key in Perspicax, then the organization's xAI key
+// when it was given to them. One order, written once, here.
+//
+//   - request: JSON `{"sub": "<Perspicax user id>", "voice_keys": true}`;
+//     the same caller check, the same person rules (404 `unknown_person`,
+//     409 `user_inactive`);
+//   - 200 `{provider: "xai", voice_keys: [{source, auth, key}]}`, in the
+//     order to try them: `source` as the app names it (`grok-account`,
+//     `voice-key`, `perspicax-key`, `org-key`, `server`), `auth` how it is
+//     presented to xAI (`grok-account`: the CLI voice host and its token
+//     header; `api-key`: api.x.ai);
+//   - no key serves that person: 200 with an empty `voice_keys` and `cause`,
+//     the app's own refusal cause (`no_credentials`,
+//     `server_engine_not_allowed`, `payer_disabled`, `perspicax_unreachable`);
+//   - 503 `{error: "voice_keys_unavailable"}` when the keys could not be
+//     resolved: the caller falls back on its own;
+//   - only that person's keys, never another person's; no value is logged,
+//     stored or cached: the log line names the sources only;
+//   - without the field the route answers the sign-in alone, as before (an
+//     older Perspicax).
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { readBody } from "../harness/http.ts";
 import type { GrokLiveAccess } from "../engines/principal-engine-logins.ts";
+import { candidateProvider, voiceKeyAuth, type VoiceKeys } from "../voice/voice-keys.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
 export const DIRECTORY_REFRESH_PATH = "/api/org/link/directory-refresh";
@@ -183,6 +211,10 @@ export interface OrgLinkRoutesOptions {
   person?: (sub: string) => { principalId: string; active: boolean } | null;
   /** #4192: that person's own Grok sign-in for a live call. */
   grokSignIn?: (principalId: string) => Promise<GrokLiveAccess>;
+  /** The xAI credentials the app's own voice would use for that person, in
+   * its order (server/voice/voice-mode.ts resolveVoiceKeys), for a phone line
+   * they own. Absent: the route answers the sign-in alone. */
+  voiceKeys?: (principalId: string) => Promise<VoiceKeys>;
   limiter?: AuthFailureLimiter;
   now?: () => number;
   log?: (line: string) => void;
@@ -211,13 +243,35 @@ export function createOrgLinkRoutes(options: OrgLinkRoutesOptions) {
   const now = options.now ?? Date.now;
   const log = options.log ?? ((line: string) => console.log(line));
   let accepted: number[] = [];
+  /** The person's voice keys as the app would try them: sources in the log,
+   * values in the answer only. */
+  const voiceKeys = async (res: ServerResponse, principalId: string): Promise<true> => {
+    let resolved: VoiceKeys;
+    try {
+      resolved = await options.voiceKeys!(principalId);
+    } catch {
+      log("org link: voice keys for a phone line (failed)");
+      return send(res, 503, { error: "voice_keys_unavailable" });
+    }
+    // the line's realtime voice is xAI's: another provider's key is not one of its credentials
+    const keys = resolved.ok ? resolved.keys.filter((candidate) => candidateProvider(candidate) === "xai") : [];
+    const cause = resolved.ok ? "no_credentials" : resolved.cause;
+    log(`org link: voice keys for a phone line (${keys.length ? keys.map((candidate) => candidate.source).join(", ") : `none: ${cause}`})`);
+    return send(res, 200, {
+      provider: "xai",
+      voice_keys: keys.map((candidate) => ({ source: candidate.source, auth: voiceKeyAuth(candidate), key: candidate.key })),
+      ...(keys.length ? {} : { cause }),
+    });
+  };
   const grokSignIn = async (req: IncomingMessage, res: ServerResponse): Promise<true> => {
     const body: unknown = await readBody(req, GROK_SIGN_IN_BODY_MAX).catch(() => null);
-    const sub = body && typeof body === "object" && !Array.isArray(body) ? (body as { sub?: unknown }).sub : undefined;
+    const fields = body && typeof body === "object" && !Array.isArray(body) ? (body as { sub?: unknown; voice_keys?: unknown }) : undefined;
+    const sub = fields?.sub;
     if (typeof sub !== "string" || !SUB.test(sub)) return send(res, 400, { error: "invalid_request" });
     const person = options.person!(sub);
     if (!person) return send(res, 404, { error: "unknown_person" });
     if (!person.active) return send(res, 409, { error: "user_inactive" });
+    if (fields?.voice_keys === true && options.voiceKeys) return voiceKeys(res, person.principalId);
     let access: GrokLiveAccess;
     try {
       access = await options.grokSignIn!(person.principalId);

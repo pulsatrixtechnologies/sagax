@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeVoiceKey, VOICE_KEY_REFUSAL_TTL_MS, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate } from "./voice-keys.ts";
+import { describeVoiceKey, VOICE_KEY_REFUSAL_TTL_MS, voiceKeyAuth, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate } from "./voice-keys.ts";
 
 // Fake keys only.
 const MINE: VoiceKeyCandidate = { key: "xai-MINEfake9Qa2Ws4Ed6Rf8", via: "speaker-key", source: "voice-key", last4: "6Rf8", payerPrincipalId: "p-ada" };
@@ -119,5 +119,30 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
 
   it("names the provider of a key that is not xAI's", () => {
     expect(describeVoiceKey({ source: "voice-key", last4: "n4Mm", provider: "elevenlabs" })).toBe("person's voice key (ElevenLabs) ···n4Mm");
+  });
+
+  it("tells a person once that a key of theirs is out of credits or rejected, not at every call", () => {
+    const refusals = new VoiceKeyRefusals();
+    const dry = { source: "perspicax-key" as const, last4: "c0Je", failure: "quota" as const };
+    expect(refusals.untold("p-ada", [dry])).toEqual([dry]);
+    // the same key, still dry, at the next calls: nothing more to say
+    expect(refusals.untold("p-ada", [dry])).toEqual([]);
+    expect(refusals.untold("p-ada", [dry])).toEqual([]);
+    // another person's key is their own news
+    expect(refusals.untold("p-bob", [dry])).toEqual([dry]);
+    // refused for another reason: said, once
+    const rejected = { ...dry, failure: "key" as const };
+    expect(refusals.untold("p-ada", [rejected])).toEqual([rejected]);
+    expect(refusals.untold("p-ada", [rejected])).toEqual([]);
+    // it served again: a later refusal is news again
+    refusals.forget("p-ada", dry);
+    expect(refusals.untold("p-ada", [dry])).toEqual([dry]);
+    // nothing to do about xAI being down or busy: never said as a key to fix
+    expect(refusals.untold("p-ada", [{ ...dry, last4: "0000", failure: "down" }, { ...dry, last4: "1111", failure: "busy" }])).toEqual([]);
+  });
+
+  it("presents a connected Grok account through the CLI voice host, every other source as an API key", () => {
+    expect(voiceKeyAuth({ source: "grok-account" })).toBe("grok-account");
+    for (const source of ["voice-key", "perspicax-key", "org-key", "server"]) expect(voiceKeyAuth({ source })).toBe("api-key");
   });
 });

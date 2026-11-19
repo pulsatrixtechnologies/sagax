@@ -216,6 +216,18 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   only for an admin; never stored in a thread or sent as a live frame); a
   disabled person is refused. Solo: the server's key. Each request is booked
   with its `access`.
+- One order for every voice (2026-11-19): `resolveVoiceKeys` is the only
+  place the order of a person's xAI credentials is written. The app's routes
+  call it, and so does a phone line of Perspicax Voice, through
+  `POST /api/org/link/grok-sign-in` with `voice_keys`
+  (`server/org/org-link-routes.ts`): never write that order a second time.
+- A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
+  `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
+  only a failure of xAI is `down`. A key refused for itself is remembered,
+  gives way to the next key, and is said to the person once
+  (`VoiceKeyRefusals.untold`, the `ready` frame's `skipped`, the pill's
+  `voiceMode.keyFallback`). Test:
+  `server/voice/realtime-key-fallback.e2e.test.ts`.
 - Every route names a bot the person may use (and a thread they may post
   to); the spoken text goes through the normal send route, never a voice
   route, so attribution and private threads stay those of a typed message.

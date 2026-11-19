@@ -56,15 +56,27 @@ export function claudeToolSearchValue(value: string | undefined): string {
 }
 
 /** ENABLE_TOOL_SEARCH in a settings file's `env`, or undefined when the file is missing, not JSON or silent. */
-function settingsValue(file: string): string | undefined {
+function settingsValue(file: string, name = "ENABLE_TOOL_SEARCH"): string | undefined {
   const text = smallFile(file);
   if (text === null) return undefined;
   try {
-    const value = (JSON.parse(text) as { env?: Record<string, unknown> } | null)?.env?.ENABLE_TOOL_SEARCH;
+    const env = (JSON.parse(text) as { env?: unknown } | null)?.env;
+    const value = env && typeof env === "object" && !Array.isArray(env) && Object.hasOwn(env, name) ? (env as Record<string, unknown>)[name] : undefined;
     return typeof value === "string" ? value : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** An env value the turn's own folder sets in the settings Claude Code reads there itself (project,
+ * then local unless the launch loads project settings only), or undefined (upstream #5817). */
+export function folderSettingsEnv(cwd: string, name: string, projectOnly = false): string | undefined {
+  let found: string | undefined;
+  for (const file of projectOnly ? ["settings.json"] : ["settings.json", "settings.local.json"]) {
+    const value = settingsValue(join(cwd, ".claude", file), name);
+    if (value !== undefined) found = value;
+  }
+  return found;
 }
 
 /** The main checkout of a folder holding `.git`, else null. A worktree's `.git` file points at

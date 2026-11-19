@@ -36,6 +36,12 @@ export function loadLimits(refresh = false): Promise<void> {
   return loading;
 }
 
+/** "Try again now" (upstream #5199): the server ends the engine's limit hold, so the next turn goes to it; a refusal
+ * holds it again. */
+export async function releaseLimit(engine: string): Promise<void> {
+  rememberLimits(await api<EngineLimitsReport>("/api/limit-resets/release", { method: "POST", body: JSON.stringify({ engine }) }));
+}
+
 /** Every engine's limit, kept fresh while something on screen shows it. */
 export function useEngineLimits(): EngineLimit[] {
   const [engines, setEngines] = useState<EngineLimit[]>(() => report?.engines ?? []);

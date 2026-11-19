@@ -4,6 +4,7 @@
 //   POST /api/limit-resets/continue     {botId, threadId}: the stopped turn's "Continue when your limit resets";
 //                                       while the conversation's message is held for the reset, no second run ({held})
 //   POST /api/limit-resets/after-reset  {routineId, engine}: move only that automation's next run past the reset
+//   POST /api/limit-resets/release      {engine}: "Try again now", end the engine's limit hold at once (upstream #5199)
 import { AFTER_RESET_MS, type LimitResetSchedule } from "../../shared/limit-reset.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { LimitResetView } from "../usage/limit-reset-host.ts";
@@ -87,6 +88,14 @@ export function createLimitResetRoutes(deps: LimitResetRouteDeps): RouteHandler 
         const status = (error as { status?: unknown }).status;
         return json(res, typeof status === "number" ? status : 400, { error: error instanceof Error ? error.message : String(error) });
       }
+    }
+    if (path === "/api/limit-resets/release" && method === "POST") {
+      const body = await readBody(req, 4096) as Record<string, unknown> | null;
+      const engine = text(body?.engine, 128);
+      if (!engine) return json(res, 400, { error: "engine is required" });
+      const limits = deps.limits(auth);
+      limits.release(engine);
+      return json(res, 200, limits.report());
     }
     if (path === "/api/limit-resets/after-reset" && method === "POST") {
       const body = await readBody(req, 4096) as Record<string, unknown> | null;

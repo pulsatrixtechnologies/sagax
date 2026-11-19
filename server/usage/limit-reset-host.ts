@@ -25,6 +25,8 @@ export interface LimitResetView {
   ensureFresh(maxAgeMs?: number): Promise<void>;
   report(): EngineLimitsReport;
   resetAt(engine: string): number | null;
+  /** "Try again now" (upstream #5199): end the engine's limit hold on the clock that pays this person's turns on it. */
+  release(engine: string): boolean;
 }
 
 export function createLimitResetHost(options: LimitClockOptions & {
@@ -95,6 +97,9 @@ export function createLimitResetHost(options: LimitClockOptions & {
         },
         resetAt(engine) {
           return clockFor(scopeFor(engine) || SERVER_LIMIT_SCOPE).resetAt(engine);
+        },
+        release(engine) {
+          return clockFor(scopeFor(engine) || SERVER_LIMIT_SCOPE).release(engine);
         },
       };
     },

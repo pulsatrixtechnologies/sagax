@@ -47,6 +47,8 @@ export const SPAWNED_PROXIES = {
   mcpGate: resolveProxy("mcp-gate"),
   mcpRemote: resolveProxy("mcp-remote-proxy"),
   phone: resolveProxy("drivers/phone-proxy"),
+  // Codex's auth.command for a ChatGPT plan (upstream #4063)
+  chatgptPlanToken: resolveProxy("drivers/chatgpt-plan-token-command"),
   messages: resolveProxy("drivers/imessage-proxy"),
   hook: resolveProxy("hooks/omb-hook"),
   // Loaded by the external `pi` process via `-e`, not by this server — but

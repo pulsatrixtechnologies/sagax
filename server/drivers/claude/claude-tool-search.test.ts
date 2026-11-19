@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { removeTempDir } from "../../testing/cleanup.ts";
-import { claudeToolSearchSetting, claudeToolSearchValue } from "./claude-tool-search.ts";
+import { claudeToolSearchSetting, claudeToolSearchValue, folderSettingsEnv } from "./claude-tool-search.ts";
 
 describe("claudeToolSearchValue", () => {
   it("turns unset and auto on", () => {
@@ -94,5 +94,23 @@ describe("claudeToolSearchSetting", () => {
     // The root's file wins over one an older Claude Code left in the launch folder.
     settingsFile(nested, "settings.local.json", "auto");
     expect(claudeToolSearchSetting(nested, env)).toBe("off");
+  });
+});
+
+// upstream #5817: an MCP output limit the turn's own folder sets is kept.
+describe("folderSettingsEnv", () => {
+  it("reads the project settings, then the local ones unless the launch loads project settings only", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "sagax-folder-env-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      expect(folderSettingsEnv(cwd, "MAX_MCP_OUTPUT_TOKENS")).toBeUndefined();
+      writeFileSync(join(cwd, ".claude", "settings.json"), JSON.stringify({ env: { MAX_MCP_OUTPUT_TOKENS: "30000" } }));
+      writeFileSync(join(cwd, ".claude", "settings.local.json"), JSON.stringify({ env: { MAX_MCP_OUTPUT_TOKENS: "40000" } }));
+      expect(folderSettingsEnv(cwd, "MAX_MCP_OUTPUT_TOKENS")).toBe("40000");
+      expect(folderSettingsEnv(cwd, "MAX_MCP_OUTPUT_TOKENS", true)).toBe("30000");
+      expect(folderSettingsEnv(cwd, "toString")).toBeUndefined();
+    } finally {
+      await removeTempDir(cwd);
+    }
   });
 });

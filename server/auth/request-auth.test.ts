@@ -180,6 +180,7 @@ describe("scopes", () => {
       ["POST", "/api/routines/folders"], // routine folders: the handler applies the routine edit rights
       // Limit-reset: Continue card, near-limit banner, calendar markers (person's own bots)
       ["GET", "/api/limit-resets"], ["POST", "/api/limit-resets/continue"], ["POST", "/api/limit-resets/after-reset"],
+      ["POST", "/api/limit-resets/release"], // upstream #5199: Try again now on the person's own engine
       ["POST", "/api/routine-runs/seen-all"], ["DELETE", "/api/routine-runs"],
       // #1482: scheduled calls, the handler narrows them to the member's bots
       ["GET", "/api/calendar-calls"], ["POST", "/api/calendar-calls"], ["PATCH", "/api/calendar-calls/c"],

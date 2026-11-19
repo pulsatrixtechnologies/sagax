@@ -49,6 +49,19 @@ export function engineLimitsFromUsage(row: PlanProviderRow): EngineLimit[] {
   return [limit, ...others.map((engine) => ({ ...limit, engine }))];
 }
 
+/** How far apart a refusal's reset and its window's own reset can be: a refusal names its minute, usage the second. */
+const SAME_RESET_MS = 5 * 60_000;
+
+/** A refusal's hold that fresh usage shows is over (upstream #5199): no window at its limit and none resetting at the
+ * hold's time, so the window that refused is gone (a plan upgrade, a reset moved early or done outside the app). Every
+ * new turn goes to another AI while the engine is held, so no turn could end the hold. If the engine still refuses on a
+ * limit these windows do not show, that refusal holds it again. */
+function holdGone(row: PlanProviderRow, limit: EngineLimit, held: number | undefined): boolean {
+  if (held === undefined || limit.blocked || limit.usedPercent === null || limit.usedPercent >= 100) return false;
+  const windows = [windowLine("5-hour", row.fiveHour), windowLine("weekly", row.weekly)];
+  return windows.every((line) => line === null || (line.resetsAt !== null && Math.abs(line.resetsAt - held) > SAME_RESET_MS));
+}
+
 const PRODUCT_NAMES: Record<string, string> = { claudeAgent: "Claude", codex: "Codex", grokAgent: "Grok" };
 
 /** "Claude", "Codex", or the name the person gave that engine. */
@@ -140,7 +153,11 @@ export class LimitResetClock {
     for (const engine of this.refusals.keys()) {
       const until = this.blockedUntil(engine);
       const known = engines.get(engine);
-      if (until !== null) engines.set(engine, { ...(known ?? this.unnamed(engine)), blocked: true, usedPercent: 100, resetsAt: until });
+      if (until === null) continue;
+      const limit: EngineLimit = { ...(known ?? this.unnamed(engine)), blocked: true, usedPercent: 100, resetsAt: until };
+      // Blocked only by the refusal's hold, which "Try again now" can end (upstream #5199).
+      if (!known?.blocked) limit.held = true;
+      engines.set(engine, limit);
     }
     return { checkedAt: this.checkedAt, engines: [...engines.values()] };
   }
@@ -197,15 +214,41 @@ export class LimitResetClock {
   noteUsage(report: PlanUsageReport): void {
     const next = new Map<string, EngineLimit>();
     const siblings = new Map<string, string[]>();
+    const parsed = Date.parse(report.fetchedAt);
+    const fetchedAt = Number.isFinite(parsed) ? parsed : this.now();
+    let released = false;
     for (const row of report.providers) {
       const limits = engineLimitsFromUsage(row);
-      for (const limit of limits) next.set(limit.engine, limit);
+      for (const limit of limits) {
+        next.set(limit.engine, limit);
+        // upstream #5199: a reading taken after the hold began that shows room ends it.
+        if (fetchedAt >= (this.heldAt.get(limit.engine) ?? 0) && holdGone(row, limit, this.refusals.get(limit.engine))) {
+          this.refusals.delete(limit.engine);
+          this.heldAt.delete(limit.engine);
+          released = true;
+        }
+      }
       if (limits.length > 1) for (const limit of limits) siblings.set(limit.engine, limits.map((one) => one.engine));
     }
     this.usage = next;
     this.siblings = siblings;
     this.checkedAt = this.now();
+    if (released) this.saveHolds();
     this.options.onChange?.();
+  }
+
+  /** The person's "Try again now" (upstream #5199): the engine's hold ends at once, with every instance folded on its
+   * login, so the next turn goes to it. A refusal holds it again. */
+  release(engine: string): boolean {
+    let released = false;
+    for (const id of this.sameLogin(engine)) {
+      this.heldAt.delete(id);
+      if (this.refusals.delete(id)) released = true;
+    }
+    if (!released) return false;
+    this.saveHolds();
+    this.options.onChange?.();
+    return true;
   }
 
   /** Reads usage again when what is known is older than `maxAgeMs`; one read at a time. */
@@ -232,7 +275,8 @@ export class LimitResetClock {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { if (this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000).catch(reportBackgroundError); }, 60_000);
+    // While an engine is held its usage is read every few minutes too, so a limit that reset early ends the hold (upstream #5199).
+    this.timer = setInterval(() => { if (this.holding() || this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000).catch(reportBackgroundError); }, 60_000);
     this.timer.unref?.();
   }
 
@@ -247,6 +291,11 @@ export class LimitResetClock {
     const fixture = process.env.SAGAX_TEST_PLAN_USAGE_FILE;
     if (fixture) return Promise.resolve(fixtureUsage(fixture, this.now()));
     return loadPlanUsage({ accounts, refresh: force });
+  }
+
+  /** Whether any hold is still live; reading each one drops a hold that ran out, so polling stops with the last. */
+  private holding(): boolean {
+    return [...this.refusals.keys()].some((engine) => this.refusal(engine) !== null);
   }
 
   private refusal(engine: string): number | null {

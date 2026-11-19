@@ -43,11 +43,14 @@ import type { PreparedCodexLaunch } from "./turn-types.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { turnSwitches, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "../spawn-contract.ts";
 import { CodexSessions, codexAccountFiles, codexContractKey, codexFileContract } from "./sessions.ts";
+import { PLAN_TOKEN_BRIDGE_ENV } from "./plan-token.ts";
 
 export type PrepareLaunchDeps = {
   childEnv: () => Record<string, string | undefined>;
   chatgptTurn: boolean;
   planToken: string | undefined;
+  /** upstream #4063: the plan's token bridge env (plan-token.ts) when this Codex renews its token; null otherwise. */
+  planBridge?: Record<string, string> | null;
   turn: SendTurnInput;
   plan: boolean;
   config: CodexConfig;
@@ -76,7 +79,9 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     turn = { ...turn, integrations };
   }
   const env = childEnv();
-  if (planToken) env.SAGAX_CHATGPT_TOKEN = planToken;
+  const planBridge = plan ? deps.planBridge ?? null : null;
+  if (planBridge) Object.assign(env, planBridge);
+  else if (planToken) env.SAGAX_CHATGPT_TOKEN = planToken;
   // Desktop bridge: this turn's network traffic leaves through the
   // person's computer (never the model traffic: NO_PROXY).
   if (turn.networkProxy) Object.assign(env, networkProxyEnvironment(turn.networkProxy, env));
@@ -84,7 +89,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // plan sign-in, which wins over a managed or local provider.
   const launch = codexAccessLaunch(env, turn.access);
   const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
-  const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs() : config.managed ? managedCodexArgs(config.managed) : codexLocalProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
+  const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs(planBridge !== null) : config.managed ? managedCodexArgs(config.managed) : codexLocalProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
     // Native snapshots can restore inherited variables after the shell
     // policy has filtered them. Scoped MCP gate settings must stay private.
     ...(turn.toolScope === undefined ? [] : ["-c", "features.shell_snapshot=false"]),
@@ -310,6 +315,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     && (name === "ELECTRON_RUN_AS_NODE" || baseEnv.get(name) !== env[name]));
   const privateEnv = [...new Set([
     ...(turn.toolScope !== undefined ? ["SAGAX_GATE_CONFIG_*"] : []),
+    // upstream #4063: the bridge's socket and secret never reach the agent's shell
+    ...(planBridge ? PLAN_TOKEN_BRIDGE_ENV.filter((name) => env[name] !== undefined) : []),
     ...PRIVATE_ENV_FAMILIES.filter((family) => mountedEnv.some((name) => name.startsWith(family))).map((family) => `${family}*`),
     ...mountedEnv.filter((name) => !PRIVATE_ENV_FAMILIES.some((family) => name.startsWith(family))).sort(),
   ])];
@@ -317,7 +324,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // never run without proof that snapshots are off. The rest was there
   // before that guarantee, so a Codex that cannot say keeps working,
   // only with the exclusions.
-  const provenPrivateEnv = turn.toolScope !== undefined || directoryMounts.size > 0;
+  const provenPrivateEnv = turn.toolScope !== undefined || directoryMounts.size > 0 || planBridge !== null;
   if (privateEnv.length && turn.toolScope === undefined) appServerArgs.push("-c", "features.shell_snapshot=false");
 
   const selectionConfig: { config?: Record<string, unknown> } = turn.toolScope === undefined ? {} : { config: { mcp_servers: Object.fromEntries(

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
+import { limitLine, nearLimit, releaseLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
 import { openModelWindow } from "@/lib/model-window";
 import type { Routine } from "@/lib/routines";
 import { api, type Bot } from "@/state/store";
@@ -100,6 +100,21 @@ export function EngineLimitIndicator({
               className={MENU_ROW}
             >
               {continueAt.label}
+            </button>
+          )}
+          {limit?.held && (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="engine-limit-release"
+              onClick={() => {
+                setOpen(false);
+                void releaseLimit(limit.engine)
+                  .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
+              }}
+              className={MENU_ROW}
+            >
+              {t("chat.limit.tryAgainNow")}
             </button>
           )}
           {botId && (

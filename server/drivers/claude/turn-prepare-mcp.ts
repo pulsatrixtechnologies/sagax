@@ -9,7 +9,7 @@ import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
 import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../context/compact-prompt.ts";
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
-import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
+import { customServerGate, gateQueryTools, gateServer, limitUngatedOutput } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch, connectorKeptGate } from "../../mcp/mcp-gate-search.ts";
 import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
@@ -23,7 +23,7 @@ import {
 import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
 import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
-import { claudeToolSearchSetting } from "./claude-tool-search.ts";
+import { claudeToolSearchSetting, folderSettingsEnv } from "./claude-tool-search.ts";
 import { withDesignRedirectHook } from "./design-redirect.ts";
 import { applyClaudeContextSize } from "./config.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
@@ -379,6 +379,10 @@ if (authSettingsPath) args.push("--settings", authSettingsPath);
 // boundary. Native background workers cannot outlive that boundary;
 // parallel bot work must use the harness's durable delegate_bot path.
 env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+// upstream #5817: a bot's untrimmed URL server has the CLI save a big result
+// to a file read in parts; a limit the turn's folder sets is kept.
+limitUngatedOutput(env, mcpServers, botOwned, turn.integrations?.customResultBudgets,
+  turn.guestConfined ? undefined : folderSettingsEnv(cwd, "MAX_MCP_OUTPUT_TOKENS", args.includes("--setting-sources")));
 // #2038: sub-agents (Agent tool, Flow workers) run on turn.subagentModel
 // (routine override, routine model, or the bot's fast model), never the
 // CLI's default (Opus on a subscription) when one was resolved upstream.
@@ -425,6 +429,8 @@ const contract = {
   hooks: Boolean(hooks),
   // ENABLE_TOOL_SEARCH in --settings: a changed choice restarts the process
   toolSearch,
+  // upstream #5817: the MCP output limit is part of what makes a process
+  mcpOutputTokens: env.MAX_MCP_OUTPUT_TOKENS ?? null,
   // #1276: a compact prompt is another launch (memory folder, tool search)
   compact: turn.compactPrompt ? { memoryDir: turn.compactPrompt.memoryDir ?? null } : null,
   // Slice 4: another person's credentials never reuse this process.

@@ -417,7 +417,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(panel.textContent).not.toContain(t("botSettings.sharing.empty"));
     // one person signs in: the bot has nobody to be seen by, and Shared with is no row anywhere
     expect(panel.querySelector('[data-bot-profile-subpage-open="sharing"]')).toBeNull();
-    expect(panel.textContent).not.toContain(t("botProfile.v6.page.sharing.title"));
+    expect(panel.textContent).not.toContain("Shared with");
   });
 
   it("draws no team chat row where the server offers no Slack link, and keeps it where it does", async () => {
@@ -476,7 +476,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(panel.querySelector('[data-bot-profile-subpage-open="personality"]'), "no Personality row").toBeNull();
     expect(panel.querySelector('[data-bot-profile-subpage-open="sharing"]'), "no Shared with row").toBeNull();
     expect(panel.textContent).not.toContain(t("botProfile.v6.page.personality.desc"));
-    expect(panel.textContent).not.toContain(t("botProfile.v6.page.sharing.desc"));
+    expect(panel.textContent).not.toContain("Who can talk to it, who sets it up");
     mascot!.focus();
     await click(mascot, "the mascot");
     await until(() => document.querySelector("[data-appearance-reset]"));

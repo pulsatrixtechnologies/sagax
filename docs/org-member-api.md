@@ -90,7 +90,8 @@ any other shape, so the plan's `clients.bots.read` is written
 ```
 
 A `METHOD path:feature` entry says the route takes more than its first
-contract: `POST bots/{id}/messages:files` (#4632), its `files`.
+contract: `POST bots/{id}/messages:files` (#4632), its `files`;
+`POST bots/{id}/messages:toolScope`, its `toolScope`.
 
 ### `GET bots`
 
@@ -209,6 +210,22 @@ contract: `POST bots/{id}/messages:files` (#4632), its `files`.
     or `..`, a file without `content_base64`), `413 file_too_large` (one file
     over 25 MiB), `413 too_large` (the body over 64 MiB), `404 not_found`
     (a bot the person does not reach).
+- `toolScope` (optional, with `newThread: true` only): the tool selection
+  of the conversation this send opens, in the bot editor's grammar
+  (`{ "allow": ["mcp:<server>:<tool>", "native:<tool>"], "deny": [...] }`).
+  The server applies it before the conversation's first turn, on top of the
+  bot's own selection: the turn is offered only what both allow (never a
+  widening; `allow: []` is no tool at all), and so is every later turn of
+  that conversation. A host product uses it for a helper that may only read
+  (its read tools, and nothing else). It is saved before anything is sent,
+  again on a retry with the same `sendId`; never on an existing
+  conversation, and clients never see it.
+  - Discovery: `GET capabilities` lists `POST bots/{id}/messages:toolScope`
+    when the server narrows a conversation's tools; a host product that does
+    not find it sends no `toolScope` (and runs no helper).
+  - Errors: `400 bad_request` (an invalid selection, or `toolScope` without
+    `newThread: true`), `501 not_supported` (a server that cannot narrow),
+    `502 not_started` (the narrowing could not be saved: nothing was sent).
 
 ```json
 {

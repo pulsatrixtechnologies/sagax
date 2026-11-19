@@ -93,6 +93,32 @@ describe("Store", () => {
     expect(new Store(selection).bot(bot.id)).not.toHaveProperty("toolScope");
   });
 
+  it("narrows one conversation's tools on top of its bot's, across a restart, and never widens", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Helper host" }, { seedMessages: false });
+    store.patchBot(bot.id, { toolScope: { allow: ["native:read", "mcp:host:*"] } } as never);
+    const helper = store.createTask(bot.id, "Helper", false)!;
+    const scope = { allow: ["mcp:host:tickets_query", "native:bash"] };
+    expect(store.narrowTaskTools(bot.id, helper.threadId, scope)).toBe(true);
+    for (const s of [store, new Store(selection)]) {
+      const projected = s.projectBotForTask(bot.id, helper.threadId)!;
+      expect(allowsTool(projected.toolScope, { kind: "mcp", server: "host", name: "tickets_query" })).toBe(true);
+      // the bot never allowed it, the conversation cannot bring it
+      expect(allowsTool(projected.toolScope, { kind: "native", name: "bash" })).toBe(false);
+      // the bot allows it, the conversation left it out
+      expect(allowsTool(projected.toolScope, { kind: "mcp", server: "host", name: "tickets_write" })).toBe(false);
+      expect(allowsTool(projected.toolScope, { kind: "native", name: "read" })).toBe(false);
+      // the bot's other conversations keep the bot's own selection
+      expect(allowsTool(s.projectBotForTask(bot.id, bot.threadId)!.toolScope, { kind: "native", name: "read" })).toBe(true);
+    }
+    // a second narrowing narrows again, never widens
+    store.narrowTaskTools(bot.id, helper.threadId, { allow: ["mcp:host:tickets_write"] });
+    expect(allowsTool(store.projectBotForTask(bot.id, helper.threadId)!.toolScope, { kind: "mcp", server: "host", name: "tickets_write" })).toBe(false);
+    // clients never see it; no such conversation: false
+    expect(toWireTask(store.taskByThread(bot.id, helper.threadId)!, selection())).not.toHaveProperty("toolScope");
+    expect(store.narrowTaskTools(bot.id, "no-such-thread", scope)).toBe(false);
+  });
+
   it.each([undefined, { allow: ["native:read"] }, { deny: ["native:bash"] }])("does not activate a wider tool selection when saving %j fails", (toolScope) => {
     const store = new Store(selection);
     const bot = store.createBot();

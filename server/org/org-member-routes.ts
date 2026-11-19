@@ -68,6 +68,7 @@ import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
 import { APPROVAL_EN, type ApprovalTranslate } from "../../shared/approval-describe.ts";
 import { buildNotificationContext } from "../../shared/notification-context.ts";
 import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } from "../../shared/permissions.ts";
+import { parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { redactSecretsInText as redactNumbered, restoredInstructions } from "../redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
@@ -239,6 +240,10 @@ export interface OrgMemberRouteDeps {
    * the person may send to, and answer the text with the note that names
    * them (agentPromptWithFiles). */
   stageSendFiles?(person: MemberPerson, botId: string, text: string, files: FileInput[]): Promise<{ text: string; staged: string[] } | { status: number; code: string; message: string }>;
+  /** A send's `toolScope`: narrow the conversation it opens before its first
+   * turn (a host product's helper agent that only reads). False: no such
+   * conversation. */
+  narrowThreadTools?(botId: string, threadId: string, scope: ToolScope): boolean;
   /** #4632: remove files staged for a send that was then refused. */
   removeStagedFiles?(botId: string, paths: readonly string[]): void;
   /** #4632: the conversation keeps the files the server staged for its send
@@ -1781,12 +1786,13 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
     },
     {
       method: "POST", path: "bots/{id}/messages", permission: "clients.botsMessage",
-      // #4632: `files`, on send_prompt's path, where the server stages them
-      features: () => (deps.stageSendFiles ? ["files"] : []),
+      // #4632: `files`, on send_prompt's path, where the server stages them;
+      // `toolScope`, a fresh conversation's tools narrowed before it runs
+      features: () => [...(deps.stageSendFiles ? ["files"] : []), ...(deps.narrowThreadTools ? ["toolScope"] : [])],
       async handle({ person, params, body }) {
         const input = objectOf(body);
         if (!input) return fail(400, "bad_request", "Send { \"text\": \"...\" }.");
-        const extra = Object.keys(input).filter((key) => !["text", "threadId", "newThread", "wait", "sendId", "stream", "hidden", "modelSelection", "files"].includes(key));
+        const extra = Object.keys(input).filter((key) => !["text", "threadId", "newThread", "wait", "sendId", "stream", "hidden", "modelSelection", "files", "toolScope"].includes(key));
         if (extra.length) return fail(400, "bad_request", `Unknown field: ${extra[0]}.`);
         const text = typeof input.text === "string" ? input.text.trim() : "";
         if (!text || text.length > MEMBER_TEXT_MAX) return fail(400, "bad_request", `text is 1 to ${MEMBER_TEXT_MAX} characters.`);
@@ -1804,6 +1810,14 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         const files = input.files === undefined ? [] : parseSendFiles(input.files);
         if (isRefusal(files)) return fail(files.status, files.code, files.message, files.extra?.details ? { details: files.extra.details } : {});
         if (files.length && !deps.stageSendFiles) return fail(501, "not_supported", "This server does not take files with a message.");
+        // `toolScope` narrows the conversation this send opens, before its
+        // first turn, on the server: the engine is never offered what it
+        // leaves out (a host product's read-only helper). Never a widening,
+        // never an existing conversation.
+        const toolScope = input.toolScope === undefined ? undefined : parseToolScope(input.toolScope);
+        if (toolScope && !toolScope.ok) return fail(400, "bad_request", "toolScope is { allow?: [...], deny?: [...] } of native:<tool> and mcp:<server>:<tool> selectors.");
+        if (toolScope && input.newThread !== true) return fail(400, "bad_request", "toolScope narrows the conversation this send opens: pass newThread true.");
+        if (toolScope && !deps.narrowThreadTools) return fail(501, "not_supported", "This server does not narrow a conversation's tools.");
         const botId = params.id!;
         const surface = deps.surfaceBot?.(botId) === true;
         let threadId = input.threadId as string | undefined;
@@ -1838,6 +1852,10 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // with this sendId, after a restart too, lands in it, and the
         // message route's own sendId check never runs the work twice
         if (sendKey && opening && threadId) deps.newThreadReceipt?.put(sendKey, threadId);
+        // narrowed before anything is sent, again on a retry (it only narrows)
+        if (toolScope?.ok && toolScope.scope && (!threadId || !deps.narrowThreadTools!(botId, threadId, toolScope.scope))) {
+          return fail(502, "not_started", "The conversation's tools could not be narrowed: nothing was sent.");
+        }
         // Lot S1: the member API's sends of one conversation go one at a
         // time, in order (any bot). A send that changes the conversation's
         // model (set the way the app's model picker sets it, same checks as

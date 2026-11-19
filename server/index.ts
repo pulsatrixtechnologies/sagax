@@ -14,7 +14,7 @@ import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
 import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-refusal.ts";
 import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
-import { canUseMcpServer, parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
+import { canUseMcpServer, narrowToolScope, parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { withRequiredComputer } from "../shared/routine-readiness.ts";
 import { stripRequesterAddress } from "../shared/relay-reply.ts";
 import { RequestLanguages, requestLanguage } from "./people/request-language.ts";
@@ -13753,12 +13753,16 @@ function threadHasMessages(_ownerId: string, threadId: string): boolean {
   }
 }
 
-function toolScopeForTurn(botId: string) {
+/** The tools a turn may use: its bot's selection, narrowed by its
+ * conversation's own (a host product's helper conversation, the member
+ * API's `toolScope`). */
+function toolScopeForTurn(botId: string, threadId?: string) {
   const bot = store.bot(botId);
   if (!bot) throw Object.assign(new Error("no such bot"), { status: 404 });
   const parsed = parseToolScope(bot.toolScope);
   if (!parsed.ok) throw Object.assign(new Error("This bot's tool selection is invalid. Open Access settings and save a valid selection before starting a turn."), { status: 409, code: "tool_scope" });
-  return parsed.scope;
+  const own = threadId ? store.taskByThread(botId, threadId)?.toolScope : undefined;
+  return own === undefined ? parsed.scope : narrowToolScope(parsed.scope, own);
 }
 
 /** The correlated private response carries the requested value so Electron
@@ -35273,6 +35277,8 @@ const orgMember = createOrgMemberRoutes({
   stageSendFiles: stageMemberSendFiles,
   removeStagedFiles: removeBotStagedFiles,
   recordStagedFiles: (botId, threadId, paths) => store.addStagedFiles(botId, threadId, paths),
+  // a host product's helper conversation: its tools narrowed before its first turn
+  narrowThreadTools: (botId, threadId, scope) => store.narrowTaskTools(botId, threadId, scope),
   sentText: (botId, threadId, sendId) => store.messagesFor(threadId).find((message) => message.sendId === sendId && message.role === "user")?.text
     ?? queuedSteeredMessage(botId, threadId, sendId)?.text ?? null,
   threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,

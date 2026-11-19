@@ -10,6 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { createAgentCard, type AgentCardStore } from "../../server/widgets/chat-widgets";
 import { ASK_CHOICE_TOOL, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseWidgetInput } from "../../shared/widget";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
 import type { ApprovalModeSelector } from "./ApprovalModeSelector";
 import type { ModelPicker } from "./ModelPicker";
@@ -156,6 +157,51 @@ describe("an ask that waits is drawn once (#3681)", () => {
     await render([tickets[0]!, { ...tickets[1]!, card: { ...tickets[1]!.card!, answered: "I'll handle it" } }, tickets[2]!, person]);
     expect(pinned()!.textContent).toContain("Unscheduled ticket #101");
     expect(pinned()!.querySelector("[data-approval-stepper]")).toBeNull();
+  });
+
+  it("draws a routine's checklist form (checkbox rows, two actions) on the pinned card only", async () => {
+    const drafts = ["Reply to @alice", "Reply to @bob", "Post: shipping notes", "Post: weekly recap", "Reply to @carol", "Post: tips"];
+    const form: Message = {
+      id: "form1", role: "bot", kind: "options", at: 3_000, text: "", from,
+      card: { title: "Tonight on @handle", subtitle: "Six drafts are ready.", options: [], requestId: "req-form1", requestType: "question", noHold: true, askKey: "routine:x-drafts",
+        questionRequest: { version: 1, questions: [{ question: "Six drafts are ready.", kind: "multi", multiSelect: true, options: drafts.map((label) => ({ label, description: `Draft: ${label}` })), checked: drafts, actions: ["Post selected", "Skip tonight"] }] } },
+    } as unknown as Message;
+    await render([person, words, form, after]);
+    expect(pinned()).not.toBeNull();
+    const row = transcript().querySelector('[data-mid="form1"]')!;
+    expect(row.querySelector("[data-waiting-history]")).not.toBeNull();
+    // never a second interactive copy: no checkbox, no action button, no rows
+    expect(row.querySelectorAll('input[type="checkbox"], [role="checkbox"], button')).toHaveLength(0);
+    expect(row.textContent).not.toContain("Reply to @alice");
+    expect(row.textContent).not.toContain("Skip tonight");
+    expect(transcript().querySelector('[data-ask-card="pending"]')).toBeNull();
+    expect(pinned()!.textContent).toContain("Skip tonight");
+  });
+
+  it("draws a routine run's widget form (title, subtitle, checkboxes, two actions) on the pinned card only, a compact line at the run's row", async () => {
+    const drafts = ["Reply to @alice", "Reply to @bob", "Post: shipping notes", "Post: weekly recap", "Reply to @carol", "Post: tips"];
+    const tree = parseWidgetInput({
+      type: "Card", title: "Tonight on @handle", caption: "Six drafts are ready.",
+      children: drafts.map((label, index) => ({ type: "Checkbox", name: `d${index}`, label, defaultChecked: true })),
+      confirm: { label: "Post selected", action: { type: "drafts.post" } },
+      cancel: { label: "Skip tonight", action: { type: "drafts.skip" } },
+    });
+    if (!tree.ok) throw new Error(tree.error);
+    const widget = { id: "w1", role: "bot", kind: "widget", at: 3_000, text: "Tonight on @handle", from, widget: { v: 1, root: tree.value } } as unknown as Message;
+    const run = { id: "run1", role: "bot", kind: "routine.run", at: 3_001, text: "X daily post and reply drafts", from,
+      routineRun: { v: 1, runId: "r1", routineId: "rt1", routineName: "X daily post and reply drafts", status: "completed", startedAt: 2_900, summary: "Six drafts are ready.", widgetId: "w1" } } as unknown as Message;
+    fixture.waiting = [{ id: "form:w1", kind: "form", botId: "bot", botName: "Atlas", threadId: "main", messageId: "w1", at: 3_000, ageMs: 0, title: "Tonight on @handle", text: "Tonight on @handle",
+      options: [], answerWith: "text", freeText: true, skippable: true, message: widget }];
+    await act(async () => { root.render(createElement(ChatView, { bot: { ...bot, messages: [person, widget, run, after] } })); });
+    await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
+    expect(pinned()).not.toBeNull();
+    expect(pinned()!.textContent).toContain("Skip tonight");
+    const log = transcript();
+    // never a second interactive copy in the conversation
+    expect(log.querySelectorAll('input[type="checkbox"], [role="checkbox"]')).toHaveLength(0);
+    expect(log.textContent).not.toContain("Reply to @alice");
+    expect(log.textContent).not.toContain("Skip tonight");
+    expect(log.querySelector("[data-routine-run-widget] [data-waiting-history]")).not.toBeNull();
   });
 
   it("puts the record back at its place once the ask is settled", async () => {

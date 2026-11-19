@@ -62,7 +62,8 @@ import type { EffectivePlace } from "@/lib/place";
 import type { TranscriptLookups } from "@/lib/transcript-derivations";
 import type { Dispatch } from "react";
 import type { AppState } from "@/state/store";
-import { ActivityChip, AttentionRow, RoutineRunRow } from "./chips";
+import { ActivityChip, AttentionRow, RoutineRunRow, WaitingHistoryLine } from "./chips";
+import { usePinnedHeld } from "@/lib/pinned-waiting";
 import { routineRunWidgetRow } from "@/lib/routine-result-stack";
 import { Bubble } from "./Bubble";
 import { FailedTurnRow } from "./ErrorRows";
@@ -365,7 +366,7 @@ export function MessagesListItem({
   const row = (() => {
     if (pinnedHistory && m.card) {
       const text = m.card.title || m.card.questionRequest?.questions[0]?.question || m.card.subtitle || m.card.tool;
-      return <p data-waiting-history="" className="truncate text-[13px] text-ink-secondary" title={text}>{text}</p>;
+      return <WaitingHistoryLine text={text} />;
     }
     // A client abort is a stop, not a failure. Legacy rows still store
     // the provider's sentence or an error row; both read as this line.
@@ -469,7 +470,7 @@ export function MessagesListItem({
         return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} /></MessageBoundary>;
       case "routine.run":
         // #4234: its widget, from the transcript the list hid it from
-        return <RoutineRunRow message={m} botId={botId} threadId={threadId} widget={routineRunWidgetRow(transcript, m)} />;
+        return <RunRowWithHeldWidget message={m} botId={botId} threadId={threadId} widget={routineRunWidgetRow(transcript, m)} />;
       case "routines":
         return <ConversationRoutineToggle message={m} />;
       case "call":
@@ -618,6 +619,14 @@ export function MessagesListItem({
       </div>
     </VirtualRow>
   );
+}
+
+/** A routine run's row draws its form at its place (#4234); while the pinned
+ * card over the composer holds that form, the row keeps only the compact
+ * history line, never a second live copy. */
+function RunRowWithHeldWidget({ message, botId, threadId, widget }: { message: Message; botId: string; threadId: string | undefined; widget: Message | undefined }) {
+  const held = usePinnedHeld();
+  return <RoutineRunRow message={message} botId={botId} threadId={threadId} widget={widget} widgetHeld={Boolean(widget && held.has(widget.id))} />;
 }
 
 // A call record and a status line follow the turn (a live call, a step still

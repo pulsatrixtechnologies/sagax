@@ -145,7 +145,18 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
  * watches too); the thumbs and « Moins de ça » stay. */
 const WATCH_FEEDBACK = ["up", "down", "less"] as const;
 
-export function RoutineRunRow({ message, botId, threadId, onResume, widget }: { message: Message; botId: string; threadId?: string; onResume?: () => void; widget?: Message }) {
+/** The compact history line of an ask the pinned card over the composer
+ * holds: its title and that it waits, never a second live copy. */
+export function WaitingHistoryLine({ text }: { text: string | undefined }) {
+  return (
+    <p data-waiting-history="" className="truncate text-[13px] text-ink-secondary" title={text}>
+      {text ? `${text} \u00b7 ` : null}
+      <span className="text-ink-tertiary">{t("question.status.waiting")}</span>
+    </p>
+  );
+}
+
+export function RoutineRunRow({ message, botId, threadId, onResume, widget, widgetHeld }: { message: Message; botId: string; threadId?: string; onResume?: () => void; widget?: Message; widgetHeld?: boolean }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
@@ -185,7 +196,9 @@ export function RoutineRunRow({ message, botId, threadId, onResume, widget }: { 
   return (
     <div className="flex min-w-0 flex-col gap-1">
     <RoutineRunCard
-      widget={widget ? <MessageBoundary fallbackText={widget.text ?? ""}><WidgetMessage botId={botId} threadId={threadId} message={widget} /></MessageBoundary> : undefined}
+      widget={widget ? (widgetHeld
+        ? <WaitingHistoryLine text={widget.text || (widget.widget?.root as { title?: string } | undefined)?.title} />
+        : <MessageBoundary fallbackText={widget.text ?? ""}><WidgetMessage botId={botId} threadId={threadId} message={widget} /></MessageBoundary>) : undefined}
       message={message}
       bot={owner}
       folded={folded}

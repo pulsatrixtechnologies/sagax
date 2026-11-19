@@ -157,11 +157,11 @@ it("a barge-in cuts the answer being written, and lines said meanwhile become on
       const asked = all.findIndex((m) => m.role === "user" && m.text === "stop, what time is it");
       return asked >= 0 && all.slice(asked + 1).some((m) => m.role === "bot" && m.kind === "text" && String(m.text ?? "").trim());
     }, { timeout: 20_000 }).toBe(true);
-    // the cut story never gets the answer it was holding (the fake CLI writes
-    // it as "reply to: ..." once its gate opens), even when the gate opens
-    // after the cut: what the cut turn wrote before the cut stays as written,
-    // and its last words are that turn's answer (markTerminalAssistantMessage
-    // in server/store.ts keeps commentary as the visible fallback)
+    // the cut story never gets a written answer of its own (#4923, liberty
+    // audit 2026-11-19 T5: #4907 had let its commentary become its answer),
+    // not the one it was holding (the fake CLI writes it as "reply to: ..."
+    // once its gate opens) even when the gate opens after the cut, nor what
+    // it wrote before the cut, which stays as written and never turnTerminal
     t.open("first");
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     const all = await t.messages();
@@ -169,6 +169,7 @@ it("a barge-in cuts the answer being written, and lines said meanwhile become on
     const next = all.findIndex((m) => m.role === "user" && m.text === "stop, what time is it");
     expect(story).toBeGreaterThanOrEqual(0);
     expect(next).toBeGreaterThan(story);
+    expect(all.slice(story + 1, next).filter((m) => m.role === "bot" && m.kind === "text" && m.turnTerminal && String(m.text ?? "").trim())).toHaveLength(0);
     expect(all.filter((m) => m.role === "bot" && m.kind === "text" && /reply to:[\s\S]*long story/.test(String(m.text ?? "")))).toHaveLength(0);
 
     // no pile-up: lines said while a turn is being stopped are answered by

@@ -67,6 +67,20 @@ export interface PeopleDeps {
   connectionListing(principalId: string): unknown;
   /** 2026-10-09: the person's effective permissions (server/org/org-permissions.ts). */
   permissions?(principalId: string): PersonPermissions;
+  /** Perspicax #2220: what the person has in their own place (their Me
+   * plugins and skills, on or off) and what Perspicax's default installs
+   * posed or could not pose yet (server/org/default-installs.ts). */
+  installed?(principalId: string): PersonInstalled;
+}
+
+/** What GET people/{principal} says of the person's own plugins and skills. */
+export interface PersonInstalled {
+  plugins: Array<{ key: string; name: string; marketplace: string; enabled: boolean; version?: string }>;
+  skills: Array<{ name: string; enabled: boolean }>;
+  defaultInstalls: {
+    posed: Array<{ kind: "plugin" | "skill"; source: string; name: string; at: number }>;
+    failed: Array<{ kind: "plugin" | "skill"; source: string; name: string; at: number; reason: string }>;
+  };
 }
 
 /** What GET people/{principal} says of a person's permissions. */
@@ -185,6 +199,7 @@ export function peopleRoutes(deps: PeopleDeps): ConsoleRoute[] {
           connections: deps.connections(principalId),
           routinesAsRunner: deps.routines().filter((routine) => routine.runAs === principalId).map(({ id, name, botId }) => ({ id, name, botId })),
           ...(deps.permissions ? { permissions: deps.permissions(principalId) } : {}),
+          ...(deps.installed ? { installed: deps.installed(principalId) } : {}),
         });
       },
     },

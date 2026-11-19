@@ -741,7 +741,10 @@ export class BotPlugins {
   }
 
   /** Install (or update) one plugin of a marketplace of the one list. */
-  install(botId: string, input: { marketplace: string; plugin: string }, actor: string | undefined): Promise<InstalledBotPlugin> {
+  /** `options.enabled`: a first install's switch (on by default); a plugin
+   * already installed keeps its own (Perspicax's default installs pose one
+   * switched off, server/org/default-installs.ts). */
+  install(botId: string, input: { marketplace: string; plugin: string }, actor: string | undefined, options: { enabled?: boolean } = {}): Promise<InstalledBotPlugin> {
     return this.withLock(botId, async () => {
       const state = this.read(botId);
       const market = this.options.marketplaces.record(input.marketplace);
@@ -824,7 +827,7 @@ export class BotPlugins {
         ...(entry.description ? { description: entry.description } : {}),
         ...(entry.version ? { version: entry.version } : {}),
         ...(revision ? { revision } : {}),
-        enabled: previous?.enabled ?? true,
+        enabled: previous?.enabled ?? options.enabled ?? true,
         installedAt: previous?.installedAt ?? now,
         ...(previous?.installedBy ?? actor ? { installedBy: previous?.installedBy ?? actor } : {}),
         updatedAt: now,

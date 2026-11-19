@@ -31,7 +31,10 @@ export interface ConnectionsView {
   engines: Array<{ id: string; name: string; installed: boolean; version: string | null; orgKey: boolean; people: number }>;
   people: Array<{ person: AdminPerson; engines: Array<{ id: string; via: EngineVia; ok: boolean | null; checkedAt: number | null }>; mcpServers: number }>;
   mcpServers: Array<{ id: string; name: string; scope: "org" | "person"; owner: AdminPerson | null; transport: "remote" | "stdio"; state: string }>;
-  marketplaces: Array<{ id: string; name: string; url: string; allowed: boolean; plugins: number }>;
+  /** `visibility` and `items` (Perspicax #2220): shared with everyone or one
+   * person's own, and the plugins it lists, the catalogue of Perspicax's
+   * Installés par défaut. */
+  marketplaces: Array<{ id: string; name: string; url: string; allowed: boolean; plugins: number; visibility: "org" | "private"; items: Array<{ name: string; description?: string; version?: string }> }>;
   skills: Array<{ id: string; name: string; source: string | null; version: string | null; bots: number }>;
 }
 

@@ -95,6 +95,17 @@ const KINDS = rows({
   ],
 });
 
+// #4967: a follow-up row with `when` stays hidden until the option that
+// triggers it is picked; same card as `f-when` in ios/App/FormCardsPreview.json
+const WHEN = rows({
+  question: FR ? "Choisis la durée. On la demande seulement si tu l'entres toi-même." : "Pick how long it lasted. The length is asked only when you enter it yourself.",
+  questions: [
+    { question: FR ? "Revue de design avec Ada : combien de temps ?" : "Design review with Ada: how long?", header: FR ? "Durée" : "Duration", kind: "choice", options: FR ? [{ label: "Selon l'horaire", description: "Durée du calendrier" }, { label: "Je l'entre", description: "À saisir ci-dessous" }, { label: "Ne pas facturer", description: "Aucune entrée" }] : [{ label: "As scheduled", description: "Calendar length" }, { label: "Enter it", description: "Type it below" }, { label: "Do not bill", description: "No entry" }] },
+    { question: FR ? "Durée réelle" : "Real length", kind: "duration", when: { question: FR ? "Durée" : "Duration", option: FR ? "Je l'entre" : "Enter it" } },
+    { question: FR ? "Facturable ?" : "Billable?", kind: "yes_no" },
+  ],
+});
+
 function card(id: string, questions: AskQuestion[], title: string, subtitle: string, more: Partial<NonNullable<Message["card"]>> = {}): Message {
   return {
     id, role: "bot", kind: "options", at: 1,
@@ -200,6 +211,9 @@ function Preview() {
         </Sample>
         <Sample id="control-kinds" label={FR ? "Chaque type de contrôle" : "Each control kind"} lead={FR ? "Il me manque quelques détails pour réserver la salle." : "I need a few details to book the room."}>
           <QuestionCard threadId="t" bot={bot} message={card("ck", KINDS, FR ? "Réservation de salle" : "Room booking", FR ? "Un rang par type de réponse." : "One row per kind of answer.")} />
+        </Sample>
+        <Sample id="when-follow-up" label={FR ? "Suivi conditionnel : caché tant que l'option n'est pas choisie" : "Conditional follow-up: hidden until its option is picked"} lead={FR ? "Voici l'entrée de temps à confirmer." : "Here is the time entry to confirm."}>
+          <QuestionCard threadId="t" bot={bot} message={card("wf", WHEN, FR ? "Entrée de temps à confirmer" : "Time entry to confirm", FR ? "Choisis la durée. On la demande seulement si tu l'entres toi-même." : "Pick how long it lasted. The length is asked only when you enter it yourself.")} />
         </Sample>
         <Sample id="time-settled" label={FR ? "Formulaire répondu" : "Form answered"} lead={timeLead}>
           <QuestionCard threadId="t" bot={bot} message={card("ts", TIME, time.title, time.question, { answered: "answer", answeredText: TIME_ANSWER })} />

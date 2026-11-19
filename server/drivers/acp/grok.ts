@@ -36,7 +36,7 @@ import { turnTrace } from "../../turns/turn-trace.ts";
 import { grokMcpServerWaiting, grokMcpWaitClock, grokMountedServer } from "./grok-mcp-wait-parts.ts";
 export { grokToolScopeProfile, grokInheritedProfile, allowsRegisteredTool } from "./grok-tool-scope.ts";
 import {
-  MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
+  MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, QUESTION_UNANSWERED_NOTE, questionAnswersById, repeatsQuestionText,
 } from "../../../shared/ask-question.ts";
 
 /** Fallback only, for when the engine cannot be asked (not installed, or no
@@ -914,6 +914,19 @@ export const GROK_ASK_USER_QUESTION: AcpQuestionRequest = {
         }
         if (!Object.keys(answers).length) return null;
         return { outcome: "accepted", answers, ...(Object.keys(annotations).length ? { annotations } : {}) };
+      },
+      // #5032: Grok's cancelled outcome carries no words, so a timed-out
+      // question rides the one channel that reaches the model: "Other" with
+      // the no-answer note on every question, no option picked
+      unanswered() {
+        const answers: Record<string, string[]> = Object.create(null);
+        const annotations: Record<string, { notes: string }> = Object.create(null);
+        for (const { id } of parsed) {
+          const text = (raw[Number(id)] as { question: string }).question;
+          answers[text] = ["Other"];
+          annotations[text] = { notes: QUESTION_UNANSWERED_NOTE };
+        }
+        return { outcome: "accepted", answers, annotations };
       },
     };
   },

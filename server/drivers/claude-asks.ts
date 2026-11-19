@@ -15,7 +15,6 @@ export type AskResolutionSource = "user" | "timeout" | "system";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";
-export const QUESTION_TIMEOUT_NOTE = "Sagax: nobody answered in time. Use your best judgment and continue.";
 export const DUPLICATE_ASK_ID_NOTE = "Sagax: duplicate ask id — skipping this request.";
 
 /** The system-source reply for an ask that outlives the turn — used both to

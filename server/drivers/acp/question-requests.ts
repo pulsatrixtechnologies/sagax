@@ -4,8 +4,10 @@ import { askQuestionSummary, MAX_QUESTIONS, questionChoices, type AskQuestion } 
 
 /** A vendor request that blocks the agent until a person answers structured questions. No approval level answers it. */
 export interface AcpQuestionRequest {
-  /** null when the params carry no answerable question; `answered` returns null when the reply maps to no answer. */
-  parse(params: unknown): { questions: AskQuestion[]; answered(message: string): unknown } | null;
+  /** null when the params carry no answerable question; `answered` returns null when the reply maps to no answer.
+   * `unanswered` (#5032) is the reply when the timer ran out: the vendor's channel to the model carrying
+   * QUESTION_UNANSWERED_NOTE, never an option picked. */
+  parse(params: unknown): { questions: AskQuestion[]; answered(message: string): unknown; unanswered(): unknown } | null;
   /** The reply when nobody answered: the turn ended or it arrived between turns. */
   cancelled: unknown;
 }
@@ -20,8 +22,9 @@ export function questionRequestFor(
   return typeof method === "string" && requests && Object.hasOwn(requests, method) ? requests[method] : undefined;
 }
 
-/** One question card for the whole set, open until the person answers or the turn ends. Only the person's own reply answers it; anything else sends the vendor's
- * cancelled reply, so the agent is never left blocked and no system note reads as an answer. */
+/** One question card for the whole set, open until the person answers or the turn ends. Only the person's own reply answers it. A timeout sends
+ * the vendor's no-answer reply (#5032: the model reads that nobody answered and must not choose; the card stays open); anything else sends the
+ * vendor's cancelled reply, so the agent is never left blocked. */
 export function openQuestionRequest(
   msg: { id?: unknown; params?: unknown },
   request: AcpQuestionRequest,
@@ -44,7 +47,7 @@ export function openQuestionRequest(
       ? parsed.answered(message)
       : null;
     const answered = reply !== null && reply !== undefined;
-    send({ jsonrpc: "2.0", id: msg.id, result: answered ? reply : request.cancelled });
+    send({ jsonrpc: "2.0", id: msg.id, result: answered ? reply : source === "timeout" ? parsed.unanswered() : request.cancelled });
     emit({ ...base(), type: "request.resolved", requestId, behavior: answered ? "answer" : "deny", source });
     return answered ? "answered" : "rejected";
   };

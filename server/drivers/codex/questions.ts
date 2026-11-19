@@ -1,5 +1,5 @@
 import {
-  askQuestionSummary, parseAsyncQuestions, questionAnswersById, questionChoices, type AskQuestion, type ProtocolAskQuestion,
+  askQuestionSummary, parseAsyncQuestions, QUESTION_UNANSWERED_NOTE, questionAnswersById, questionChoices, type AskQuestion, type ProtocolAskQuestion,
 } from "../../../shared/ask-question.ts";
 import { newId, type RequestOutcome, type SteerOutcome } from "../../contracts.ts";
 
@@ -46,13 +46,19 @@ export function openAsyncQuestion(
   });
 }
 
-/** requestUserInput's reply. Only the person's reply is filed: system notes never occupy the slot the model reads as their words. */
+/** requestUserInput's reply. Only the person's reply is filed as their words; turn teardown sends empty answers.
+ * #5032: a question that ran out of time carries the shared note on every id, the one place Codex hands the model
+ * words: no answer is never an answer, and empty answers left the model to pick for the person. */
 export function codexQuestionReply(
   behavior: "allow" | "deny" | "answer", message: string | undefined, source: "user" | "timeout" | "system", questions: ProtocolAskQuestion[],
 ): { answers: Record<string, { answers: string[] }> } {
-  const mapped = behavior === "answer" && source === "user" && typeof message === "string" ? questionAnswersById(message, questions) : {};
   // Null prototype: an id like __proto__ must not hit the inherited setter.
   const answers: Record<string, { answers: string[] }> = Object.create(null);
+  if (source === "timeout") {
+    for (const { id } of questions) answers[id] = { answers: [QUESTION_UNANSWERED_NOTE] };
+    return { answers };
+  }
+  const mapped = behavior === "answer" && source === "user" && typeof message === "string" ? questionAnswersById(message, questions) : {};
   for (const [id, answer] of Object.entries(mapped)) answers[id] = { answers: [answer] };
   return { answers };
 }

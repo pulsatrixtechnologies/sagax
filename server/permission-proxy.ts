@@ -25,7 +25,7 @@
 // stdout is the MCP channel — never console.log here.
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
-import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "../shared/ask-question.ts";
+import { parseAskQuestions, QUESTION_UNANSWERED_NOTE, questionAnswersByQuestion, type AskQuestion } from "../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
 import { preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
 import { reportBackgroundError } from "./background-error.ts";
@@ -188,7 +188,9 @@ async function handle(msg: any) {
     const picksSeveral = isQuestion ? multiSelectQuestion(args) : null;
     if (isQuestion) {
       const answer: any = await askBroker({ t: "ask", id: askId, kind: "question", tool: "ask_user", input: { question: args.question, choices: args.choices, ...(picksSeveral ? { questions: picksSeveral } : {}) } });
-      let text = answer.message || "No answer was given: use your best judgment.";
+      // #5032: a timeout (or an answer with no words) is no answer, never
+      // a pick: the model reads the shared note, whatever the broker sent
+      let text = answer.source === "timeout" || !answer.message ? QUESTION_UNANSWERED_NOTE : answer.message;
       // The card answers in its Q:/A: form; hand back just the picks, the way
       // a one-tap answer arrives. Only the person's own words are unpacked.
       if (picksSeveral && answer.source === "user" && typeof answer.message === "string") {

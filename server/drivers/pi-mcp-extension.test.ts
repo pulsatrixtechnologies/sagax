@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { removeTempDir } from "../testing/cleanup.ts";
+import { QUESTION_UNANSWERED_NOTE } from "../../shared/ask-question.ts";
 import { STABLE_ACK, STABLE_CWD_NOTE, STABLE_END_MARKER, splitStableMessages, stableCwdTurn } from "./pi-mcp-extension.ts";
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
@@ -944,11 +945,12 @@ describe("Pi ask_user tool", () => {
 
   it("says plainly when nobody answered, and stops at the first unanswered question", async () => {
     const tool = (await load({ askUser: true }))!;
-    await expect(tool.execute("call-3", QUESTIONS, undefined, undefined, dialogs([undefined]).ctx)).rejects.toThrow(/did not answer/);
+    // #5032: the shared no-answer note, never a pick of the model's own
+    await expect(tool.execute("call-3", QUESTIONS, undefined, undefined, dialogs([undefined]).ctx)).rejects.toThrow(QUESTION_UNANSWERED_NOTE);
     const partial = dialogs(["Blue", undefined]);
     const result = await tool.execute("call-4", QUESTIONS, undefined, undefined, partial.ctx);
     expect(partial.asked).toHaveLength(2);
-    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Q: Which color?\nA: Blue\n\nThe person did not answer the other questions.") });
+    expect(result.content[0]).toMatchObject({ text: `The user answered your questions.\n\nQ: Which color?\nA: Blue\n\n${QUESTION_UNANSWERED_NOTE}` });
   });
 
   it("refuses multi-select and malformed calls with words the model can act on", async () => {

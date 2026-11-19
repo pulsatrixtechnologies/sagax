@@ -13,8 +13,8 @@ import { titleCaseModelId } from "../../contracts.ts";
 import { execCli } from "../../procs.ts";
 import { createAcpDriver, type AcpQuestionRequest, type AcpSupport } from "./core.ts";
 import {
-  capAnswerEcho, formatQuestionAnswers, MAX_QUESTIONS, parseChoices, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById,
-  repeatsQuestionText,
+  capAnswerEcho, formatQuestionAnswers, MAX_QUESTIONS, parseChoices, parseProtocolAskQuestions, pickedOptionLabels, QUESTION_UNANSWERED_NOTE,
+  questionAnswersById, repeatsQuestionText,
 } from "../../../shared/ask-question.ts";
 import { sagaxReviewsAuto } from "../sagax-reviewer.ts";
 
@@ -469,6 +469,9 @@ export const CURSOR_ASK_QUESTION: AcpQuestionRequest = {
         }
         return answers.length ? { outcome: { outcome: "answered", answers } } : null;
       },
+      // #5032: a timed-out question is skipped with the no-answer note as
+      // the reason, which Cursor hands the model verbatim; nothing picked
+      unanswered: () => ({ outcome: { outcome: "skipped", reason: QUESTION_UNANSWERED_NOTE } }),
     };
   },
 };

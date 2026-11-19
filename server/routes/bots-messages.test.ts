@@ -193,6 +193,29 @@ describe("createBotsMessagesRoutes", () => {
       expect(again.sent?.status).toBe(409);
     });
 
+    // #5032: the engine's timer gave the model the no-answer note and let the
+    // question go, its card still open: the person's answer reaches the bot
+    // through the kept-card path, as their next message (#4626, #4947)
+    it.each(["/api/threads/work/respond", "/api/bots/worker/respond"])("%s: the answer to a question the engine timed out reaches the bot as the person's next message", async path => {
+      const rows = [{ id: "q1", role: "bot", kind: "options", card: { requestId: "request-1", requestType: "question", title: "Write these time entries?", options: ["Yes, all", "No"] } }];
+      const sourceBot = { ...bot, id: "worker", threadId: "work", modelSelection: { instanceId: "claude", model: "fake" } };
+      const deps = approvalDeps({
+        originApprovals: { sourceFor: () => null },
+        store: { ...baseDeps().store, bot: (id: string) => (id === "worker" ? sourceBot : null), botByThread: () => sourceBot, messagesFor: () => rows },
+        requestedTaskBot: () => sourceBot,
+        // the engine no longer holds the request once its timer ran out
+        answerRequest: vi.fn(async () => "unavailable"),
+        deliverLateQuestionAnswer: vi.fn(async () => ({ queued: false })),
+        teamSetupApplyRefusal: () => null, cloudOwnerSession: () => null, commandRememberRefusal: () => null,
+        resolveAndSendTeamSetup: () => false, resolveAndSendModel: () => false, resolveAndSendProfile: () => false, resolveAndSendRoutine: () => false, resolveAndSendRule: () => false,
+        sendSkillResolution: () => false, resolveSkillRequest: () => null, routineActor: () => null, routineKeyReveal: () => false,
+      });
+      const result = await call(deps, { path, body: { threadId: "work", requestId: "request-1", behavior: "answer", message: "No" } });
+      expect(result.sent).toEqual({ status: 200, body: { ok: true, outcome: "answered", late: true } });
+      expect(deps.deliverLateQuestionAnswer).toHaveBeenCalledOnce();
+      expect(deps.deliverLateQuestionAnswer).toHaveBeenCalledWith(sessionOwner, "work", "request-1", "No", rows[0], sourceBot, undefined, undefined, false);
+    });
+
     // #3471: a skip is never a deny: the card closes as skipped through its
     // own path, no rule is saved and the engine is never answered allow
     it("a skip closes the card as skipped, saves no rule and answers nothing", async () => {

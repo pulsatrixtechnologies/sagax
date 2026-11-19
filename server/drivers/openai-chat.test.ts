@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
+import { QUESTION_UNANSWERED_NOTE } from "../../shared/ask-question.ts";
 import type { RuntimeEvent, SendTurnInput } from "../contracts.ts";
 import { GrokDriver } from "./grok.ts";
 import { MinimaxDriver } from "./minimax.ts";
@@ -508,7 +509,7 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       const toolMessage = (bodies[1].messages as any[]).at(-1);
       expect(JSON.parse(toolMessage.content)).toEqual({
         ok: true,
-        result: "The person did not answer this question. Do not guess an answer; ask again later or proceed without it.",
+        result: QUESTION_UNANSWERED_NOTE,
       });
     } finally {
       await instance.dispose();

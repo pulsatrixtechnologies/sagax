@@ -125,9 +125,10 @@ describe("instructions holding a credential (upstream #5907)", () => {
   it("refuses instruction replacement after redaction without changing other fields, and allows a plain rename", async () => {
     const { routines, service } = harness(undefined, undefined, undefined, () => "self");
     const prompt = "Review the queue.\n".repeat(180) + "Use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789.";
-    const created = await service.submit({ botId: "bot-a", threadId: "thread", proposal: createProposal({ instructions: prompt }) });
-    expect(created.state).toBe("applied");
-    const id = routines.listRoutines()[0]!.id;
+    // Saved in the calendar, where instructions are kept as written (a bot's
+    // own proposal is scrubbed before it is saved).
+    const input: RoutineInput = { botId: "bot-a", name: "Private instructions", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } };
+    const id = routines.create(input).id;
     const before = structuredClone(routines.listRoutines());
     const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
     await expect(submit({ name: "Must not apply", instructions: "Only the visible text." })).rejects.toMatchObject({ status: 409 });

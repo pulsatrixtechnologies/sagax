@@ -162,6 +162,7 @@ export function QuestionCard({
   onAnswered,
   onAnswerFailed,
   embedded = false,
+  onCollapse,
 }: {
   /** answered by THREAD, so a question raised inside a room settles the
    * same way as one in a 1:1 chat */
@@ -175,6 +176,8 @@ export function QuestionCard({
   onAnswerFailed?: () => void;
   /** drawn inside the pinned card over the composer (#3214): no frame of its own */
   embedded?: boolean;
+  /** Esc in a form folds the pinned card (#4910) */
+  onCollapse?: () => void;
 }) {
   const { state, dispatch } = useStore();
   const card = message.card;
@@ -234,6 +237,7 @@ export function QuestionCard({
         onSend={deliver}
         onDismiss={forOther || embedded || !card.requestId ? undefined : skipCard}
         dismissLabel={t("waitingCard.skipAria")}
+        onCollapse={onCollapse}
       />
     );
   }

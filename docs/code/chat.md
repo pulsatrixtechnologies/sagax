@@ -34,9 +34,13 @@ now means the section of that title in one of the files of `docs/code/`.
   (`Q: row` / `A: answer`; a duration as `N min`, yes / no as `yes` / `no`), a checklist adds
   `Q: Action` / `A: <button>`.
 - `src/components/QuestionForm.tsx` draws them (from `QuestionCard` when `isFormCard`): title,
-  one line of context, the rows with their controls, then Submit or the checklist's buttons; a
-  long list scrolls inside the card; the settled card shows each row's answer and the button
-  pressed. Gallery `src/gallery/question-forms.html`, captures `scripts/capture/question-forms.mjs`.
+  one line of context, then (#4910) one question per step (a chip bar, a numbered answer list with
+  an "Other, specify" row, Back / Next, a review, Submit) or the checklist's buttons; a follow-up
+  row with `when: {question, option}` shows only under that answer (`followUpParent`,
+  `formSteps`, `formRowsShown` in `shared/ask-question.ts`; an old card's optional text row after
+  a choice row hangs under it, always shown, and a row its answer never asked is not sent); a
+  long list scrolls inside the card; Esc folds the pinned card; the settled card shows each row's answer and the button
+  pressed. Gallery `src/gallery/question-forms.html`, captures `scripts/capture/question-forms.mjs`; the wizard: `src/gallery/pinned-card.html?case=form-wizard` (and `form-wizard-old`), captures `scripts/capture/question-wizard.mjs`.
 - The two cards the owner was shown are rebuilt in `shared/card-rules.fixtures.ts` (invented words).
 
 ## Background threads stay out of thread mode (#2015, 2026-11-05)

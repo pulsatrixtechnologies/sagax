@@ -79,6 +79,10 @@ export interface AskQuestion {
   checked?: string[];
   /** #4490: a checklist's buttons; the one pressed is sent with the picks. */
   actions?: string[];
+  /** #4910: a follow-up row shown only under the answer that needs it: the
+   * text of an earlier choice row and one of its option ids (or labels).
+   * Never picked, never sent. */
+  when?: { question: string; option: string };
   /** false when the provider can only take one of `options` back (an ACP
    * permission-style question answers with an option id, never text). The
    * card then offers no free-text "Other". Absent means free text is fine. */
@@ -182,11 +186,15 @@ function parseQuestion(value: unknown): AskQuestion | null {
   const actions = Array.isArray(value.actions)
     ? [...new Set(value.actions.map((entry) => text(entry, MAX_ACTION_LABEL)).filter((entry): entry is string => Boolean(entry)))].slice(0, MAX_ACTIONS)
     : [];
+  const whenRaw = isRecord(value.when) ? value.when : undefined;
+  const whenQuestion = text(whenRaw?.question, MAX_QUESTION_TEXT);
+  const whenOption = text(whenRaw?.option, MAX_LABEL);
   return {
     question,
     ...(header ? { header } : {}),
     ...(value.multiSelect === true ? { multiSelect: true } : {}),
     ...(kind ? { kind } : {}),
+    ...(whenQuestion && whenOption ? { when: { question: whenQuestion, option: whenOption } } : {}),
     ...(value.optional === true ? { optional: true as const } : {}),
     ...(checked.length ? { checked } : {}),
     ...(actions.length ? { actions } : {}),
@@ -365,6 +373,77 @@ export const LEFT_EMPTY = "(left empty)";
  * rather than an engine's own question set. */
 export function isFormCard(questions: readonly AskQuestion[]): boolean {
   return questions.some((question) => question.kind !== undefined || Boolean(question.actions?.length));
+}
+
+/** #4910: the row a follow-up hangs under. A row with `when` hangs under the
+ * earlier choice row it names and shows only under that answer. A card
+ * written before `when` existed carries an optional text row right after a
+ * choice row: it hangs under that row, always shown (we cannot know which
+ * answer it was for). null: the row is a step of its own. */
+export function followUpParent(
+  questions: readonly AskQuestion[],
+  index: number,
+): { parent: number; conditional: boolean } | null {
+  const row = questions[index];
+  if (!row) return null;
+  if (row.when) {
+    for (let at = 0; at < index; at += 1) {
+      const candidate = questions[at]!;
+      if ((candidate.question === row.when.question || candidate.header === row.when.question) && candidate.options.length) {
+        return { parent: at, conditional: true };
+      }
+    }
+    return null;
+  }
+  const previous = questions[index - 1];
+  const inWords = row.kind === "text" || row.kind === "long_text";
+  if (index > 0 && row.optional && inWords && previous && previous.kind !== undefined && CHOICE_KINDS.has(previous.kind) && !previous.actions?.length) {
+    return { parent: index - 1, conditional: false };
+  }
+  return null;
+}
+
+/** #4910: one step of a form: the row that asks, then its follow-ups
+ * (nested ones included) in card order. */
+export interface FormStep {
+  head: number;
+  followUps: number[];
+}
+
+export function formSteps(questions: readonly AskQuestion[]): FormStep[] {
+  const steps: FormStep[] = [];
+  const stepOf: number[] = [];
+  questions.forEach((_, index) => {
+    const link = followUpParent(questions, index);
+    if (!link) {
+      stepOf[index] = steps.length;
+      steps.push({ head: index, followUps: [] });
+      return;
+    }
+    stepOf[index] = stepOf[link.parent]!;
+    steps[stepOf[index]!]!.followUps.push(index);
+  });
+  return steps;
+}
+
+/** #4910: which rows are on screen given what each row has picked (option
+ * ids). A follow-up shows when its parent shows and, if conditional, the
+ * parent holds the answer it was written for. */
+export function formRowsShown(
+  questions: readonly AskQuestion[],
+  picksOf: (index: number) => readonly string[],
+): boolean[] {
+  const shown: boolean[] = [];
+  questions.forEach((row, index) => {
+    const link = followUpParent(questions, index);
+    if (!link) { shown[index] = true; return; }
+    if (!shown[link.parent]) { shown[index] = false; return; }
+    if (!link.conditional) { shown[index] = true; return; }
+    const parent = questions[link.parent]!;
+    const wanted = new Set(parent.options.filter((option) => (option.id ?? option.label) === row.when!.option || option.label === row.when!.option).map((option) => option.id ?? option.label));
+    shown[index] = picksOf(link.parent).some((key) => wanted.has(key));
+  });
+  return shown;
 }
 
 /** #4490: the checklist button an answer was sent with, or undefined. */

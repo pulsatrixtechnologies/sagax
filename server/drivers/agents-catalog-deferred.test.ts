@@ -111,7 +111,8 @@ describe("deferred rare agents tools", () => {
     const DIRECT = { SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_SKILL_AUTHORING_ENABLED: "1", SAGAX_SHARED_COMPUTERS_ENABLED: "1", SAGAX_VOICE_NOTES: "1" };
     const budgets = [
       // 2026-11-08 (#2954): +1.5 KB for make_image, always loaded so an image edit is one call.
-      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 34_500 },
+      // 2026-11-19 (#4910): +0.3 KB for the form follow-up link (when) and the per-option details of ask_choice.
+      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 34_800 },
       { name: "everything", env: EVERYTHING, maxTools: 66, maxBytes: 66_000 },
     ];
     for (const budget of budgets) {

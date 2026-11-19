@@ -55,7 +55,8 @@
                 },
                 "header": {
                   "type": "string",
-                  "maxLength": 40
+                  "maxLength": 40,
+                  "description": "Chip, 12 chars max."
                 },
                 "kind": {
                   "type": "string",
@@ -81,8 +82,36 @@
                   },
                   "description": "choice and multi: 2-8."
                 },
+                "details": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "description": "Per option: what it does."
+                },
                 "optional": {
                   "type": "boolean"
+                },
+                "when": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Show only under one answer: an EARLIER choice row's question or header, and its option.",
+                  "properties": {
+                    "question": {
+                      "type": "string",
+                      "maxLength": 240
+                    },
+                    "option": {
+                      "type": "string",
+                      "maxLength": 120
+                    }
+                  },
+                  "required": [
+                    "question",
+                    "option"
+                  ]
                 }
               },
               "required": [

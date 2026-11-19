@@ -159,3 +159,18 @@ describe("the tool and the prompt teach the rules (#4490)", () => {
     expect(prompt).toMatch(/checklist/);
   });
 });
+
+describe("ask_choice teaches the wizard form (#4910)", () => {
+  const row = (ASK_CHOICE_DEF.inputSchema.properties.questions.items as { properties: Record<string, { description?: string; properties?: unknown; required?: string[] }> }).properties;
+  it("names the follow-up link and its two fields", () => {
+    expect(row.when!.required).toEqual(["question", "option"]);
+    expect(row.when!.description).toMatch(/EARLIER choice row/);
+  });
+  it("takes the header chip and the detail of each option", () => {
+    expect(row.header!.description).toMatch(/12 chars/);
+    expect(row.details!.description).toMatch(/what it does/);
+  });
+  it("tells every bot in its system prompt", () => {
+    expect(buildSystemPrompt("You are Nimbus.", "", []).stable).toMatch(/12-char header[\s\S]*options\+details[\s\S]*best first[\s\S]*follow-up: when row/);
+  });
+});

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   X_POST_LIMIT, isXPostTool, normalizeXDraft, parseXDraftFence, parseXPostsFence, readXPost,
   heldXDraft, xPostTextOfInput, xCount, xCounter, xDraftKey, xPostCallMatches, xPostUrlFromResult, xWeightedLength, xSiteUrl,
-  isXAccountTool, xAccountFromOutput, xAvatarSized, xReplyFromInput,
+  isXAccountTool, xAccountFromOutput, xAvatarSized, xReplyFromInput, parseXIdentity, isXSitePage, isXurlWhoAmI,
 } from "./x-post.ts";
 
 describe("X character count", () => {
@@ -136,5 +136,24 @@ describe("who posted (#4640)", () => {
     const posts = parseXPostsFence(JSON.stringify({ posts: [{ text: "Hi", posted: true, replyTo: { handle: "example_two" } }] }));
     expect(posts?.[0]).toMatchObject({ posted: true, handle: "", replyTo: { handle: "example_two" } });
     expect(parseXPostsFence(JSON.stringify({ posts: [{ text: "Hi" }] }))).toBeNull();
+  });
+});
+
+describe("the account of a signed-in x.com session (#4895)", () => {
+  const eval_ = (value: unknown) => ({ content: [{ type: "text", text: JSON.stringify(JSON.stringify(value)) }] });
+  it("reads the page's answer, keeping only X's own picture host", () => {
+    expect(parseXIdentity(eval_({ handle: "sample", name: "Sample Account", verified: true, avatarUrl: "https://pbs.twimg.com/profile_images/1/s_normal.jpg" })))
+      .toEqual({ handle: "sample", name: "Sample Account", verified: true, avatarUrl: "https://pbs.twimg.com/profile_images/1/s_normal.jpg" });
+    expect(parseXIdentity(eval_({ handle: "sample", name: "", avatarUrl: "https://evil.example/a.png" }))).toEqual({ handle: "sample", name: "sample", verified: false });
+    expect(parseXIdentity(eval_(null))).toBeNull();
+    expect(parseXIdentity(eval_({ handle: "not a handle!" }))).toBeNull();
+    expect(parseXIdentity({ isError: true, content: [] })).toBeNull();
+  });
+  it("runs only on x.com over https, and knows xurl whoami", () => {
+    expect(isXSitePage("https://x.com/home")).toBe(true);
+    expect(isXSitePage("https://x.com.evil.example/")).toBe(false);
+    expect(isXSitePage("http://x.com/")).toBe(false);
+    expect(isXurlWhoAmI(JSON.stringify({ command: "xurl whoami" }))).toBe(true);
+    expect(isXurlWhoAmI(JSON.stringify({ command: "xurl post hello" }))).toBe(false);
   });
 });

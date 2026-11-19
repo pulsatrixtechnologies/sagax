@@ -390,14 +390,21 @@ export function XPostCard({ post, accountPicture, style, className }: { post: XP
 
 const FAN_DEPTH = 3;
 const SWIPE_PX = 56;
+/** Room the cards behind need around the front one, so their turned edges show on every side. */
+const DECK_PAD_X = 24;
+const DECK_PAD_Y = 46;
+/** How long the front card flies off before it goes to the back (ms). */
+const FLY_MS = 200;
 
-/** Where the card at `depth` behind the front one sits: a little lower, turned, smaller. */
+/** Where the card at `depth` behind the front one sits, like photos in an iMessage stack: it is
+ * turned a few degrees, alternately right and left, shifted a little, and slightly smaller, so its
+ * edges show at the sides and the top as well as the bottom. */
 export function xFanStyle(depth: number, reduced: boolean): CSSProperties {
   if (depth === 0) return { transform: "none", zIndex: 10 };
   const side = depth % 2 === 1 ? 1 : -1;
-  if (depth > FAN_DEPTH) return { transform: `translateY(${FAN_DEPTH * 15}px) scale(0.86)`, opacity: 0, zIndex: 0, pointerEvents: "none" };
-  const turn = reduced ? 0 : side * depth * 1.8;
-  return { transform: `translate(${side * depth * 5}px, ${depth * 15}px) rotate(${turn}deg) scale(${1 - depth * 0.045})`, zIndex: 10 - depth, pointerEvents: "none" };
+  if (depth > FAN_DEPTH) return { transform: `translate(0px, ${-FAN_DEPTH * 6}px) scale(${1 - (FAN_DEPTH + 1) * 0.03})`, opacity: 0, zIndex: 0, pointerEvents: "none" };
+  const turn = reduced ? 0 : side * (3.5 + depth * 2.2);
+  return { transform: `translate(${side * depth * 10}px, ${-depth * 6 + (reduced ? depth * 10 : 0)}px) rotate(${turn}deg) scale(${1 - depth * 0.03})`, zIndex: 10 - depth, pointerEvents: "none" };
 }
 
 function useReducedMotion(): boolean {
@@ -421,7 +428,17 @@ export function XPostStack({ posts, accountPicture }: { posts: XPostView[]; acco
   const reduced = useReducedMotion();
   const gesture = useRef<{ x: number; moved: boolean } | null>(null);
   const swallow = useRef(false);
-  const go = useCallback((step: number) => setFront((current) => (current + step + count) % count), [count]);
+  const [leaving, setLeaving] = useState(0);
+  const flying = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flying.current) clearTimeout(flying.current); }, []);
+  const move = useCallback((step: number) => setFront((current) => (current + step + count) % count), [count]);
+  /** Next sends the front card off to the side, then to the back of the stack, as iMessage does. */
+  const go = useCallback((step: number) => {
+    if (flying.current) return;
+    if (step < 0 || reduced) { move(step); return; }
+    setLeaving(1);
+    flying.current = setTimeout(() => { flying.current = null; setLeaving(0); move(step); }, FLY_MS);
+  }, [move, reduced]);
 
   const begin = (event: React.PointerEvent) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
@@ -457,7 +474,6 @@ export function XPostStack({ posts, accountPicture }: { posts: XPostView[]; acco
     else if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
   };
 
-  const behind = Math.min(count - 1, FAN_DEPTH);
   return (
     <section data-x-stack="" data-x-expanded={expanded ? "" : undefined} aria-label={t("rich.x.list.aria", { count: String(count) })} className="x-post my-2 min-w-0 max-w-[36rem] text-left">
       <div className="mb-2 flex items-center gap-1 text-[13px] text-ink-secondary">
@@ -492,16 +508,17 @@ export function XPostStack({ posts, accountPicture }: { posts: XPostView[]; acco
           onPointerDown={begin}
           onClickCapture={(event) => { if (swallow.current) { event.preventDefault(); event.stopPropagation(); } }}
           data-x-stack-deck=""
-          style={{ paddingBottom: behind * 17 + (behind ? 14 : 0), touchAction: "pan-y" }}
+          style={{ padding: `${DECK_PAD_Y}px ${DECK_PAD_X}px`, touchAction: "pan-y" }}
           className="relative rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d9bf0]/60"
         >
           {posts.map((post, index) => {
             const depth = (index - front + count) % count;
             const top = depth === 0;
-            const room = behind * 17 + (behind ? 14 : 0);
-            const style: CSSProperties = top && drag
-              ? { transform: `translateX(${drag}px) rotate(${reduced ? 0 : drag / 40}deg)`, zIndex: 10, transition: "none", userSelect: "none" }
-              : { ...xFanStyle(depth, reduced), ...(top ? {} : { bottom: room }) };
+            const style: CSSProperties = top && leaving
+              ? { transform: `translateX(-62%) rotate(${reduced ? 0 : -9}deg)`, opacity: 0.0, zIndex: 11, transition: `transform ${FLY_MS}ms ease-in, opacity ${FLY_MS}ms ease-in` }
+              : top && drag
+                ? { transform: `translateX(${drag}px) rotate(${reduced ? 0 : drag / 40}deg)`, zIndex: 11, transition: "none", userSelect: "none" }
+                : { ...xFanStyle(depth, reduced), ...(top ? {} : { top: DECK_PAD_Y, bottom: DECK_PAD_Y, left: DECK_PAD_X, right: DECK_PAD_X }) };
             return (
               <div
                 key={post.id ?? `${post.handle}-${index}`}
@@ -509,7 +526,7 @@ export function XPostStack({ posts, accountPicture }: { posts: XPostView[]; acco
                 aria-hidden={top ? undefined : true}
                 {...(top ? {} : { inert: true })}
                 style={style}
-                className={cn("x-stack-card", top ? "relative" : "absolute inset-x-0 top-0 overflow-hidden rounded-2xl", !top && "h-auto [&>article>*]:invisible")}
+                className={cn("x-stack-card", top ? "relative" : "absolute overflow-hidden rounded-2xl [&>article>*]:invisible")}
               >
                 <XPostCard post={post} accountPicture={accountPicture} className={top ? undefined : "h-full"} />
               </div>

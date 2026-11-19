@@ -137,10 +137,23 @@ describe("the posted card and the stack (#4640)", () => {
   });
   it("fans the cards back with a turn and an offset, and keeps them straight under reduced motion", () => {
     expect(xFanStyle(0, false).transform).toBe("none");
-    expect(String(xFanStyle(1, false).transform)).toMatch(/rotate\(1\.8deg\)/);
-    expect(String(xFanStyle(2, false).transform)).toMatch(/rotate\(-3\.6deg\)/);
+    expect(String(xFanStyle(1, false).transform)).toMatch(/rotate\(5\.7deg\)/);
+    expect(String(xFanStyle(2, false).transform)).toMatch(/rotate\(-7\.9deg\)/);
     expect(String(xFanStyle(2, true).transform)).toContain("rotate(0deg)");
     expect(xFanStyle(6, false).opacity).toBe(0);
+  });
+  it("shows the cards behind on both sides and above, alternating, each smaller than the one before", () => {
+    const x = (depth: number) => Number(/translate\((-?\d+)px/.exec(String(xFanStyle(depth, false).transform))?.[1]);
+    const y = (depth: number) => Number(/translate\(-?\d+px, (-?\d+)px/.exec(String(xFanStyle(depth, false).transform))?.[1]);
+    const scale = (depth: number) => Number(/scale\(([\d.]+)\)/.exec(String(xFanStyle(depth, false).transform))?.[1]);
+    expect(x(1)).toBeGreaterThan(0);
+    expect(x(2)).toBeLessThan(0);
+    expect(x(3)).toBeGreaterThan(0);
+    expect(y(1)).toBeLessThan(0);
+    expect(scale(1)).toBeGreaterThan(scale(2));
+    expect(scale(2)).toBeGreaterThan(scale(3));
+    // reduced motion keeps the cards visible behind (offset), without any turn
+    expect(String(xFanStyle(1, true).transform)).toContain("rotate(0deg)");
   });
   it("writes the time the way the timeline does", () => {
     const now = Date.parse("2026-11-18T12:00:00Z");

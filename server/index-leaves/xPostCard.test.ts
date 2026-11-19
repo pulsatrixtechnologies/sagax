@@ -136,6 +136,18 @@ describe("the posted card carries the account that posted (#4640)", () => {
     expect(host.DATA_DIR).toBe(dir);
   });
 
+  it("learns the account a shell tool's `xurl whoami` answers, and the browser path keeps it with its picture (#4895)", () => {
+    const { card, rows } = turn();
+    card.finish("t1", "Bash", true, ME, JSON.stringify({ command: "xurl whoami" }));
+    expect(card.account({}, "t1", "b1").body.account).toMatchObject({ handle: "sample", name: "Sample Account", verified: true });
+    const other = turn();
+    other.card.learnAccount("b1", { handle: "demo_two", name: "Demo Two", verified: false, avatarUrl: "https://pbs.twimg.com/profile_images/2/demo_normal.jpg" });
+    expect(other.card.account({}, "t1", "b1").body.account).toMatchObject({ handle: "demo_two", name: "Demo Two" });
+    other.card.finish("t1", TOOL, true, '{"data":{"id":"1234567890125"}}', JSON.stringify({ text: "Three" }));
+    expect(fenceOf(other.rows[0])[0]).toMatchObject({ handle: "demo_two", name: "Demo Two", url: "https://x.com/demo_two/status/1234567890125" });
+    expect(rows).toHaveLength(0);
+  });
+
   it("names the account from the post's own answer", () => {
     const { card, rows } = turn();
     const answer = JSON.stringify({ data: { id: "1234567890124", text: "x" }, includes: { users: [{ id: "42", username: "sample", name: "Sample Account" }] } });

@@ -500,6 +500,64 @@ export function xAccountFromOutput(output: string | undefined, whoAmI = false): 
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// The account of a signed-in x.com session (a bot posting through the browser)
+
+/** Whether a page address is x.com's own: the only page the identity script is run on. */
+export function isXSitePage(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === "x.com" || host === "www.x.com" || host === "twitter.com" || host === "www.twitter.com" || host === "mobile.twitter.com";
+  } catch {
+    return false;
+  }
+}
+
+/** Run in the signed-in x.com page: reads the account menu at the foot of the side bar (the
+ * picture, the name, the @handle and the verified badge the person sees) and, failing that, the
+ * profile link of the tab bar. It reads the page and nothing else: no request, no third party. */
+export const X_IDENTITY_SCRIPT = String.raw`(() => {'use strict';
+const button = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+const profile = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+if (!button && !profile) return JSON.stringify(null);
+const lines = button ? String(button.innerText || '').split('\n').map((line) => line.trim()).filter(Boolean) : [];
+let handle = (lines.find((line) => /^@[A-Za-z0-9_]{1,15}$/.test(line)) || '').slice(1);
+if (!handle && profile) { const match = /^\/([A-Za-z0-9_]{1,15})\/?$/.exec(profile.getAttribute('href') || ''); if (match) handle = match[1]; }
+const container = button && button.querySelector('[data-testid^="UserAvatar-Container-"]');
+if (!handle && container) handle = String(container.getAttribute('data-testid')).slice('UserAvatar-Container-'.length);
+const name = lines.find((line) => line[0] !== '@' && line !== '\u00b7' && line !== '...') || '';
+const image = (container || button || document).querySelector('img[src*="profile_images"]');
+return JSON.stringify({ handle, name, verified: Boolean(button && button.querySelector('[data-testid="icon-verified"], svg[aria-label*="erified"]')), avatarUrl: image ? image.src : '' });
+})()`;
+
+/** The account out of the answer of X_IDENTITY_SCRIPT (an engine eval answer, a JSON string or its parse). */
+export function parseXIdentity(result: unknown): XAccount | null {
+  const answer = result as { content?: unknown; isError?: unknown } | null;
+  if (!answer || answer.isError === true || !Array.isArray(answer.content)) return null;
+  const part = (answer.content as unknown[]).find((item) => typeof (item as { text?: unknown } | null)?.text === "string") as { text: string } | undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(part?.text ?? "");
+    if (typeof value === "string") value = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!isRow(value)) return null;
+  const handle = handleOf(value.handle);
+  if (!handle) return null;
+  const name = text(value.name)?.slice(0, 80) ?? handle;
+  const picture = httpsUrl(value.avatarUrl);
+  return { handle, name, verified: value.verified === true, ...(picture && isXMediaHost(picture) ? { avatarUrl: picture } : {}) };
+}
+
+/** `xurl whoami` (the xurl CLI's own "who am I") run by a bot's shell tool. */
+export function isXurlWhoAmI(input: string | undefined): boolean {
+  return Boolean(input && /(^|[^\w-])xurl\s+(whoami|\/2\/users\/me)\b/.test(input));
+}
+
 /** What a post call replies to, out of its arguments (X API v2 `reply.in_reply_to_tweet_id` and the usual flat names). */
 export function xReplyFromInput(input: string | undefined): { id?: string; handle?: string } | null {
   const parsed = jsonOf(input);

@@ -147,9 +147,6 @@ function Preview() {
         <Row id="ask-answered" label="AskUserQuestion, répondue">
           <QuestionCard threadId="t" bot={bot} message={ask("b", [WEBHOOKS], { answered: "answer", answeredText: "Oui, mets-les en pause" })} />
         </Row>
-        <Row id="ask-answered-in-chat" label="Question fermée : la personne a écrit dans le chat (port OpenMausBot #5593)">
-          <QuestionCard threadId="t" bot={bot} message={ask("ic", [WEBHOOKS], { expired: true, options: [], answeredInChat: true })} />
-        </Row>
         <Row id="ask-409-allow" label="Carte de mémoire d'équipe d'une version précédente, réglée ailleurs (409), acceptée par quelqu'un d'autre">
           <QuestionCard threadId="t" bot={bot} message={settledElsewhere("h409a", "allowed-once")} />
         </Row>

@@ -72,8 +72,6 @@ export interface OptionCardData {
    * a superseding request). Nothing can answer it; a fresh proposal is
    * needed, and clients must not offer its options. */
   expired?: boolean;
-  /** The person wrote a new line instead of answering (shared/wire.ts). */
-  answeredInChat?: boolean;
   /** catalog key for `held` when it is a fixed note, so it reads in the
    * viewer's language; absent for free-text errors and older cards */
   heldCode?: string;

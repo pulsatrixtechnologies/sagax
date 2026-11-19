@@ -396,7 +396,6 @@ export type StartTurnHost = {
   settleDirectFollowup: any,
   settleInputRequests: any,
   answerSignInsInChat: any,
-  answerQuestionsInChat: any,
   isBotActSend: any,
   settleTrackedRequest: any,
   settlingResourceOwners: any,

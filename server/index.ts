@@ -178,7 +178,7 @@ import { BrowserCleanupCoordinator, BrowserSweep, browserIdleMs, engineBrowsers 
 import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
-import { closeQuestionsAnsweredInChat, retireOpenQuestions } from "./approvals/retire-open-questions.ts";
+import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
 import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
 import { serverCardKind } from "../shared/fix-card-keys.ts";
@@ -6502,7 +6502,6 @@ bindLeafHost({
   get sameBotOwner() { return sameBotOwner; },
   get settleInputRequests() { return settleInputRequests; },
   get answerSignInsInChat() { return answerSignInsInChat; },
-  get answerQuestionsInChat() { return answerQuestionsInChat; },
   get groupUsageReader() { return groupUsageReader; },
   get publicGroupState() { return publicGroupState; },
   get announcedProfiles() { return announcedProfiles; },
@@ -23248,22 +23247,6 @@ function answerSignInsInChat(botId: string, threadId: string): void {
   releaseCardNode(threadId, card, "The person answered in the chat");
 }
 
-/** port of OpenMausBot #5593: the person typed a new line in a bot's own
- * conversation instead of tapping an answer. The bot's earlier question
- * cards that no work waits on any more close as answered in the chat, so the
- * conversation stops showing it waits on them. A keyed card (a durable ask,
- * #4205) stays open until it is answered; a room's cards are its own. */
-function answerQuestionsInChat(threadId: string): void {
-  if (store.groupByThread(threadId)) return;
-  const parked = coordinator.parkedDirect(threadId);
-  closeQuestionsAnsweredInChat({
-    messagesFor: (id) => store.messagesFor(id),
-    parkedOn: (messageId) => Boolean(parked?.cards?.includes(messageId)),
-    patch: (id, rowId, card) => { store.patchMessage(id, rowId, { card }); },
-    forget: (id, requestId) => { askMessageByRequest.delete(`${id}:${requestId}`); },
-  }, threadId);
-}
-
 /** The node parked on this card ends without running again: the only live
  * work in the thread, with no teammate still working under it. */
 function releaseCardNode(threadId: string, messageId: string, reason: string): void {
@@ -37906,7 +37889,6 @@ const startTurnRunner = createStartTurn({
   settleDirectFollowup,
   settleInputRequests,
   answerSignInsInChat,
-  answerQuestionsInChat,
   isBotActSend,
   settleTrackedRequest,
   settlingResourceOwners,

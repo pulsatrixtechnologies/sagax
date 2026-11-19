@@ -159,6 +159,24 @@ describe("an ask that waits is drawn once (#3681)", () => {
     expect(pinned()!.querySelector("[data-approval-stepper]")).toBeNull();
   });
 
+  it("bounds a long open ask so the transcript above it stays reachable (M-20261119-007)", async () => {
+    // a flat chat choice whose words are long: the pinned card holds them,
+    // opened with "Show less", and the dock floats over the transcript, so
+    // an unbounded card covers the whole chat and nothing scrolls
+    const report = Array.from({ length: 60 }, (_, index) => `Line ${index} of the status report.`).join("\n");
+    const flat: Message = {
+      id: "flat1", role: "bot", kind: "options", at: 3_000, text: "", from,
+      card: { title: "Status report", subtitle: report, options: ["Continue", "Stop here"], requestId: "req-flat1", requestType: "question" },
+    } as unknown as Message;
+    await render([person, words, flat]);
+    const card = pinned()!;
+    expect(card.textContent).toContain("Line 59");
+    const classes = card.className.split(/\s+/);
+    expect(classes.some((name) => name.startsWith("max-h-"))).toBe(true);
+    expect(classes).toContain("overflow-y-auto");
+    expect(classes).not.toContain("overflow-hidden");
+  });
+
   it("draws a routine's checklist form (checkbox rows, two actions) on the pinned card only", async () => {
     const drafts = ["Reply to @alice", "Reply to @bob", "Post: shipping notes", "Post: weekly recap", "Reply to @carol", "Post: tips"];
     const form: Message = {

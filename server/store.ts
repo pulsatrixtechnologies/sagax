@@ -3382,6 +3382,59 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return moves;
   }
 
+  /** An account the person removes or signs out of (2026-11-18): each of its
+   * bots takes the engine and backups its move says (account-moves.ts), in
+   * one save. A bot with no engine left keeps its old choice, so it reads
+   * "no engine" until the person picks one. A conversation's own model on
+   * the account goes: it follows its bot again. A level the new engine would
+   * have to confirm goes back to Ask, as on every engine switch. `forget`
+   * (a removal) drops the account's resume cursors too. */
+  moveAccountUsers(leaving: ReadonlySet<string>, moves: readonly { botId: string; to: ModelSelection | null; fallback?: ModelSelection[] }[], options: {
+    driverOf: (instanceId: string) => string | undefined;
+    forget: boolean;
+  }): number {
+    const byBot = new Map(moves.map((move) => [move.botId, move]));
+    const on = (selection?: { instanceId: string } | null) => Boolean(selection && leaving.has(selection.instanceId));
+    const without = <T>(record: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(record).filter(([key]) => !leaving.has(key)));
+    const touches = (record?: Record<string, unknown>) => Boolean(record && Object.keys(record).some((key) => leaving.has(key)));
+    const changes: Array<{ bot: BotRecord; patch: Partial<BotRecord>; tasks: Partial<TaskRecord>[] }> = [];
+    for (const bot of this.bots) {
+      const move = byBot.get(bot.id);
+      const patch: Partial<BotRecord> = {};
+      const tasks = (bot.tasks ?? []).map((): Partial<TaskRecord> => ({}));
+      if (move?.to && (move.to.instanceId !== bot.modelSelection.instanceId || move.to.model !== bot.modelSelection.model)) {
+        if (modelSwitchNeedsAsk(approvalModeFor(bot), options.driverOf(bot.modelSelection.instanceId), options.driverOf(move.to.instanceId))) {
+          Object.assign(patch, { approvalMode: "ask" as const, autoApprove: false, alwaysAllow: [] as string[] });
+        }
+        patch.modelSelection = structuredClone(move.to);
+      }
+      if (move && move.fallback !== undefined) patch.fallback = move.fallback.length ? structuredClone(move.fallback) : undefined;
+      else if (bot.fallback?.some(on)) {
+        const kept = bot.fallback.filter((candidate) => !on(candidate));
+        patch.fallback = kept.length ? kept : undefined;
+      }
+      if (options.forget && touches(bot.resumeCursors)) patch.resumeCursors = without(bot.resumeCursors);
+      (bot.tasks ?? []).forEach((task, index) => {
+        const taskPatch = tasks[index]!;
+        if (on(task.modelSelection)) taskPatch.modelSelection = undefined;
+        if (options.forget && touches(task.resumeCursors)) taskPatch.resumeCursors = without(task.resumeCursors);
+        if (options.forget && task.handedMessages && touches(task.handedMessages)) taskPatch.handedMessages = without(task.handedMessages);
+      });
+      if (Object.keys(patch).length || tasks.some((taskPatch) => Object.keys(taskPatch).length)) changes.push({ bot, patch, tasks });
+    }
+    if (!changes.length) return 0;
+    const next = new Map(changes.map(({ bot, patch, tasks }) => [bot, {
+      ...bot, ...patch, tasks: bot.tasks?.map((task, index) => ({ ...task, ...tasks[index] })),
+    }]));
+    this.saveBots(this.bots.map((bot) => next.get(bot) ?? bot));
+    for (const { bot, patch, tasks } of changes) {
+      bot.tasks?.forEach((task, index) => Object.assign(task, tasks[index]));
+      Object.assign(bot, patch);
+      this.emit({ type: "bot", botId: bot.id });
+    }
+    return changes.length;
+  }
+
   setResumeCursor(botId: string, instanceId: string, cursor: unknown, threadId?: string) {
     const bot = this.bot(botId);
     if (!bot) return;

@@ -53,8 +53,9 @@ export function paysWithText(
 /** The person's own subscription on this engine signs out (Disconnect, here
  * and on the model window's provider row); `account` "second" is their
  * second sign-in on it (2026-10-29). */
-export async function signOutMyEngine(instanceId: string, account?: "second"): Promise<void> {
-  await api(`/api/me/engines/${encodeURIComponent(instanceId)}/login/sign-out${account ? `?account=${account}` : ""}`, { method: "POST", body: "{}" });
+export async function signOutMyEngine(instanceId: string, account?: "second", options: { move?: boolean } = {}): Promise<void> {
+  // `move`: the bots on the account move first, as the confirmation showed (2026-11-18)
+  await api(`/api/me/engines/${encodeURIComponent(instanceId)}/login/sign-out${account ? `?account=${account}` : ""}`, { method: "POST", body: JSON.stringify(options.move ? { move: true } : {}) });
 }
 
 /** What a Grok sign-in is called on its row: what the sign-in itself says

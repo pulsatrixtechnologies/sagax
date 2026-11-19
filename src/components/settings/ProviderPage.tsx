@@ -45,6 +45,7 @@ import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
 import { EngineSetup } from "../EngineSetup";
 import { signOutMyEngine } from "../EngineConnect";
+import { useConfirm, type ConfirmRequest } from "../ConfirmProvider";
 import { InstanceProviderMark, PresetProviderMark } from "../ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
 import { ConfirmPill, CountPill, DescribedRow, FIELD, HelpTip, PILL, SettingsGroup, peekRequestedSettingsCard } from "../SettingsPrimitives";
@@ -504,6 +505,63 @@ export function accountRemovalError(cause: unknown): string {
   return readableError(cause);
 }
 
+/** Where each bot on an account goes when it is removed or signed out of
+ * (server/engines/account-moves.ts, 2026-11-18). */
+export type AccountMoveView = { botId: string; name: string; via: "account" | "fallback" | "default" | "stays" | "none"; engine?: string };
+export type AccountMovesView = { moves: AccountMoveView[]; defaultModel?: { via: AccountMoveView["via"]; engine?: string }; noEngine: boolean };
+
+const MOVE_KEY: Record<AccountMoveView["via"], LocaleKey> = {
+  account: "providers.account.moves.toAccount",
+  fallback: "providers.account.moves.toFallback",
+  default: "providers.account.moves.toDefault",
+  stays: "providers.account.moves.stays",
+  none: "providers.account.moves.none",
+};
+
+/** What one bot's line says: where it goes, in the person's words. */
+export function accountMoveWords(move: Pick<AccountMoveView, "via" | "engine">): string {
+  return move.engine || move.via === "none" ? t(MOVE_KEY[move.via], { engine: move.engine ?? "" }) : t(MOVE_KEY.none);
+}
+
+/** The bots, one per line, and where each goes (the confirmation's list). */
+export function AccountMovesList({ plan }: { plan: AccountMovesView }) {
+  const lines = [
+    ...plan.moves.map((move) => ({ key: move.botId, name: move.name, words: accountMoveWords(move), none: move.via === "none" })),
+    ...(plan.defaultModel ? [{ key: "default-model", name: t("providers.account.moves.default"), words: accountMoveWords(plan.defaultModel), none: plan.defaultModel.via === "none" }] : []),
+  ];
+  if (!lines.length) return null;
+  return (
+    <ul data-account-moves="" className="flex flex-col divide-y divide-hairline/40 overflow-hidden rounded-[10px] border border-hairline/40 text-left">
+      {lines.map((line) => (
+        <li key={line.key} data-account-move={line.key} className="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+          <span className="truncate text-[13px] leading-[18px] text-ink">{line.name}</span>
+          <span className={cn("text-[12px] leading-4 [overflow-wrap:anywhere]", line.none ? "text-warning" : "text-ink-secondary")}>{line.words}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The one confirmation of a Remove or a Sign out: the bots on the account
+ * and where each goes, and a plain line when no other engine exists. */
+export function accountMovesRequest(plan: AccountMovesView, verb: "remove" | "signOut", name: string, hint?: string): ConfirmRequest {
+  const used = plan.moves.length > 0 || Boolean(plan.defaultModel);
+  const body = [
+    used ? t(verb === "remove" ? "providers.account.moves.removeBody" : "providers.account.moves.signOutBody") : t("providers.account.moves.removeEmpty"),
+    used && plan.noEngine ? t("providers.account.moves.noEngine") : "",
+    hint ?? "",
+  ].filter(Boolean).join(" ");
+  return {
+    title: t(verb === "remove" ? "providers.account.moves.removeTitle" : "providers.account.moves.signOutTitle", { name }),
+    body,
+    confirmLabel: used
+      ? t(verb === "remove" ? "providers.account.moves.removeAction" : "providers.account.moves.signOutAction")
+      : t(verb === "remove" ? "providers.do.remove" : "providers.do.signOut"),
+    tone: "danger",
+    ...(used ? { extra: <AccountMovesList plan={plan} /> } : {}),
+  };
+}
+
 /** The engine an account row acts on, and its driver: the person's own on an
  * organization server, else the server's. */
 function accountLead(row: ProviderRow, list: ProviderList): { instanceId: string; driver: string } | null {
@@ -562,12 +620,30 @@ function AccountLine({ row, group, list, index, total, open, show }: {
     setError(null);
     work().then(refresh).catch((cause: unknown) => setError(accountRemovalError(cause))).finally(() => setBusy(false));
   };
+  const confirm = useConfirm();
+  // 2026-11-18 (owner rule): never a block. Remove and Sign out read where
+  // each bot on the account goes, show it in one confirmation, and one click
+  // moves them and does it.
+  const movesOf = async (id: string): Promise<AccountMovesView> => {
+    const path = list.organization || mine ? `/api/me/engines/${encodeURIComponent(id)}/moves` : `/api/instances/${encodeURIComponent(id)}/moves`;
+    const plan = await api(path).catch(() => null) as AccountMovesView | null;
+    return plan && Array.isArray(plan.moves) ? plan : { moves: [], noEngine: false };
+  };
   const signOut = () => run(async () => {
-    if (mine) { await signOutMyEngine(mine.instanceId, row.slot); return; }
-    const { instances } = await api(`/api/instances/${encodeURIComponent(lead!)}/auth/sign-out`, { method: "POST", body: "{}" });
+    const id = mine?.instanceId ?? lead!;
+    // a second sign-in (Grok) is never what a bot names
+    const plan = row.slot ? { moves: [], noEngine: false } : await movesOf(id);
+    const move = plan.moves.length > 0 || Boolean(plan.defaultModel);
+    if (move && !(await confirm(accountMovesRequest(plan, "signOut", name)))) return;
+    if (mine) { await signOutMyEngine(mine.instanceId, row.slot, { move }); return; }
+    const { instances } = await api(`/api/instances/${encodeURIComponent(lead!)}/auth/sign-out`, { method: "POST", body: JSON.stringify(move ? { move: true } : {}) });
     if (instances) dispatch({ type: "instances", instances });
   });
   const remove = () => run(async () => {
+    const plan = await movesOf(lead!);
+    // what a Claude account's removal keeps (its folder and login on disk), said as before
+    const hint = !list.organization && driver === "claudeAgent" ? t("engines.account.removeHint") : undefined;
+    if (!(await confirm(accountMovesRequest(plan, "remove", name, hint)))) return;
     if (list.organization) { await api(`/api/me/engines/${encodeURIComponent(lead!)}`, { method: "DELETE" }); return; }
     const { instances } = await api(`/api/instances/${encodeURIComponent(lead!)}`, { method: "DELETE" });
     if (instances) dispatch({ type: "instances", instances });
@@ -603,10 +679,12 @@ function AccountLine({ row, group, list, index, total, open, show }: {
               )}
               {removable && (
                 <span data-provider-action="remove" data-provider-action-row={row.id} className="flex">
-                  <ConfirmPill label={t(ACTION_KEY.remove)} confirmLabel={t("common.confirmRemove")} ariaLabel={`${t(ACTION_KEY.remove)} · ${name}`}
+                  <button type="button" data-provider-remove={row.id} disabled={busy} onClick={remove} aria-label={`${t(ACTION_KEY.remove)} · ${name}`}
                     // what a Claude account's removal keeps (its folder and login on disk), said as before
                     {...(!list.organization && driver === "claudeAgent" ? { title: t("engines.account.removeHint") } : {})}
-                    onConfirm={remove} disabled={busy} pillClass={pluginActionClass("fill")} />
+                    className={pluginActionClass("fill")}>
+                    {t(ACTION_KEY.remove)}
+                  </button>
                 </span>
               )}
             </span>

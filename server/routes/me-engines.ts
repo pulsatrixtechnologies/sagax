@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { PASS, type RouteHandler } from "./table.ts";
 import { cleanAccountName } from "../engines/account-names.ts";
-import { accountInUseRefusal } from "../engines/account-users.ts";
+import type { AccountMovesHost } from "../engines/account-moves.ts";
 import { ONLY_ACCOUNT_ERROR, addedAccount, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 
 /** The person's sign-in folder of an engine, or null when it keeps none
@@ -121,36 +121,56 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     deps.accountNames.set(principalId, instanceId, name);
     return json(res, 200, { ok: true, ...(name ? { displayName: name } : {}) });
   }
+  const driverOf = (candidate: any): string => candidate.shadow?.driverKind ?? candidate.live?.driverKind ?? "";
+  /** One of the person's accounts: its engines (one sign-in may stand for
+   * two, Codex and the ChatGPT plan), and their other accounts of the same
+   * tool. Null: not on their list. */
+  const accountOf = (instanceId: string) => {
+    const listed = deps.orgOfferedEngines(deps.registry.entries(), principalId)
+      .filter((candidate: any) => deps.personalProviderInstances.visible(candidate.instanceId, principalId) && !deps.accountNames?.removed?.(principalId, candidate.instanceId));
+    const entry = listed.find((candidate: any) => candidate.instanceId === instanceId);
+    if (!entry) return null;
+    const driver = driverOf(entry);
+    const signsIn = Boolean(deps.isLoginDriver(driver) && !deps.keyOnlyInstance?.(instanceId));
+    const folder = signsIn ? signInFolder(deps, principalId, driver, instanceId) : null;
+    // a key engine of the same tool is a key, not an account
+    const same = listed.filter((candidate: any) => driverOf(candidate) === driver && !deps.keyOnlyInstance?.(candidate.instanceId));
+    const account: any[] = folder ? same.filter((candidate: any) => signInFolder(deps, principalId, driver, candidate.instanceId) === folder) : [entry];
+    const others: string[] = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any): string => candidate.instanceId);
+    return { entry, driver, signsIn, account, ids: account.map((candidate: any): string => candidate.instanceId), others };
+  };
+  const moves: AccountMovesHost | undefined = deps.accountMoves;
+  // 2026-11-18: GET /api/me/engines/:id/moves, where each of the person's
+  // bots on the account goes if they remove it or sign out of it
+  const movesOf = method === "GET" ? /^\/api\/me\/engines\/([\w.-]+)\/moves$/.exec(path) : null;
+  if (movesOf) {
+    const found = accountOf(movesOf[1]);
+    if (!found) return json(res, 404, { error: "unknown account" });
+    const own = deps.personalProviderInstances.ownerOf?.(movesOf[1]) === principalId.toLowerCase();
+    const plan = moves ? await moves.plan({ person: principalId, leaving: found.ids, sameProvider: found.others, moveDefault: own }) : { moves: [], noEngine: false };
+    return json(res, 200, plan);
+  }
   // #4415, #4426: DELETE /api/me/engines/:id takes one of the person's
   // accounts off their own list, the first one too while the provider keeps
   // another, and signs them out of it in the same gesture. The organization's
   // engine stays for everyone else. A person's own account (#4435) leaves
-  // the fleet too. Refused, with the bots to move, while one still uses it.
+  // the fleet too. 2026-11-18 (owner rule): its bots move first, as the one
+  // confirmation showed (server/engines/account-moves.ts), never a refusal.
   const removing = method === "DELETE" ? /^\/api\/me\/engines\/([\w.-]+)$/.exec(path) : null;
   if (removing) {
     const instanceId = removing[1];
-    const driverOf = (candidate: any): string => candidate.shadow?.driverKind ?? candidate.live?.driverKind ?? "";
-    const listed = deps.orgOfferedEngines(deps.registry.entries(), principalId)
-      .filter((candidate: any) => deps.personalProviderInstances.visible(candidate.instanceId, principalId) && !deps.accountNames?.removed?.(principalId, candidate.instanceId));
-    const entry = listed.find((candidate: any) => candidate.instanceId === instanceId);
-    if (!entry) return json(res, 404, { error: "unknown account" });
-    const driver = driverOf(entry);
-    const signsIn = Boolean(deps.isLoginDriver(driver) && !deps.keyOnlyInstance?.(instanceId));
-    const folder = signsIn ? signInFolder(deps, principalId, driver, instanceId) : null;
+    const found = accountOf(instanceId);
+    if (!found) return json(res, 404, { error: "unknown account" });
     // one sign-in is one account: the engines reading the same folder (Codex
     // and the ChatGPT plan) go together, as the page lists them in one row.
-    // A key engine of the same tool is a key, not an account.
-    const same = listed.filter((candidate: any) => driverOf(candidate) === driver && !deps.keyOnlyInstance?.(candidate.instanceId));
-    const account = folder ? same.filter((candidate: any) => signInFolder(deps, principalId, driver, candidate.instanceId) === folder) : [entry];
-    const others = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any): string => candidate.instanceId);
+    const { driver, signsIn, account, others } = found;
     // a key engine is removed with its key, never as an account
     if (deps.keyOnlyInstance?.(instanceId) || !(addedAccount(instanceId, driver) || removableAccount(instanceId, others))) return json(res, 400, { error: ONLY_ACCOUNT_ERROR });
-    const users: string[] = [...new Set<string>(account.flatMap((candidate: any): string[] => deps.accountUsers?.(principalId, candidate.instanceId) ?? []))];
-    if (users.length) return json(res, 409, accountInUseRefusal(users, false));
     // #4435: the person's own account goes for good (its entry, its sign-in
     // folder); the organization's stays for everyone else, off this list only
     const own = deps.personalProviderInstances.ownerOf?.(instanceId) === principalId.toLowerCase();
-    if (own && deps.cfg.defaultModelSelection?.instanceId === instanceId) return json(res, 409, accountInUseRefusal([], true));
+    const plan = moves ? await moves.plan({ person: principalId, leaving: found.ids, sameProvider: others, moveDefault: own }) : null;
+    const move = () => { if (plan) moves!.apply(plan, found.ids, { forget: true, moveDefault: own }); };
     const owner = auth.kind === "session" ? auth.session.id : "loopback";
     // its sign-in goes with it, connected or not, in this one gesture
     const signOut = async () => {
@@ -165,15 +185,16 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       // the removal of the instance routes (server/routes/instances.ts
       // removeAddedAccount): a turn in flight on it waits, then the person
       // signs out and the entry goes
-      const removed = await deps.removeAccountEntry(instanceId, signOut);
+      const removed = await deps.removeAccountEntry(instanceId, async () => { move(); await signOut(); });
       if (!removed.ok) return json(res, removed.status, removed.body);
       if (separateAccountInstance(instanceId)) rmSync(join(deps.DATA_DIR, "principals", principalId, "accounts", instanceId), { recursive: true, force: true });
       deps.accountNames.set(principalId, instanceId, "");
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
     }
+    move();
     await signOut();
     for (const candidate of account) deps.accountNames.remove(principalId, candidate.instanceId);
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
   }
   const status = /^\/api\/me\/engines\/([\w.-]+)\/login\/status$/.exec(path);
   const action = /^\/api\/me\/engines\/([\w.-]+)\/login\/(start|complete|cancel|sign-out)$/.exec(path);
@@ -205,6 +226,15 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       return json(res, 200, { auth: started });
     }
     if (verb === "sign-out") {
+      // 2026-11-18: the confirmation's one click moves the bots on the
+      // account first (a second sign-in is never what a bot names)
+      const body = await readBody(req, 4096).catch(() => null);
+      const found = body?.move === true && moves && slot !== "second" ? accountOf(instanceId) : null;
+      if (found) {
+        const own = deps.personalProviderInstances.ownerOf?.(instanceId) === principalId.toLowerCase();
+        const plan = await moves!.plan({ person: principalId, leaving: found.ids, sameProvider: found.others, moveDefault: own });
+        moves!.apply(plan, found.ids, { forget: false, moveDefault: own });
+      }
       await deps.logins.signOut(principalId, instanceId, owner, slot);
       return json(res, 200, { ok: true });
     }

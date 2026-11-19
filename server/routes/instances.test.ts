@@ -262,21 +262,52 @@ describe("instances routes", () => {
     expect(cfg.instances?.[id]).toBeUndefined();
   });
 
-  it("names the bots that still use an account it refuses to remove (#4415)", async () => {
+  it("moves the bots on an account, then removes it, never a refusal (2026-11-18)", async () => {
     const id = "chatgpt-00000002-aaaa-4bbb-8ccc-dddddddddddd";
-    const { call, cfg } = harness({
-      bots: () => [
-        { id: "b1", name: "Scout", modelSelection: { instanceId: id, model: "m" } },
-        { id: "b2", name: "Atlas", modelSelection: { instanceId: "claude", model: "m" }, fallback: [{ instanceId: id, model: "m" }] },
-        { id: "b3", name: "Juniper", modelSelection: { instanceId: "claude", model: "m" } },
-      ],
-    });
+    const bots = [
+      { id: "b1", name: "Scout", modelSelection: { instanceId: id, model: "m" } },
+      { id: "b2", name: "Atlas", modelSelection: { instanceId: "claude", model: "m" }, fallback: [{ instanceId: id, model: "m" }] },
+    ];
+    const plan = { moves: [{ botId: "b1", name: "Scout", via: "default" as const, to: { instanceId: "claude", model: "m" } }], noEngine: false };
+    const order: string[] = [];
+    const accountMoves = {
+      plan: vi.fn(async () => { order.push("plan"); return plan; }),
+      apply: vi.fn(() => { order.push("apply"); }),
+    };
+    const { call, cfg, deps } = harness({ bots: () => bots, accountMoves });
     cfg.instances![id] = { driver: "codex", displayName: "Side plan", config: { authMode: "chatgpt-plan" } };
-    expect((await call("DELETE", `/api/instances/${id}`)).sent).toEqual({
-      status: 409,
-      body: { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"] },
-    });
-    expect(cfg.instances?.[id]).toBeDefined();
+    vi.mocked(deps.persistProviderInstance).mockImplementation(async (_id, next) => { order.push("persist"); cfg.instances = next; });
+    // the confirmation reads the plan first
+    const preview = await call("GET", `/api/instances/${id}/moves`);
+    expect(preview.sent).toEqual({ status: 200, body: plan });
+    // the built-in ChatGPT plan is the other account of the same tool
+    expect(accountMoves.plan).toHaveBeenLastCalledWith({ person: null, leaving: [id], sameProvider: ["chatgpt"], moveDefault: true });
+    order.length = 0;
+    const removed = await call("DELETE", `/api/instances/${id}`);
+    expect(removed.sent?.status).toBe(200);
+    expect(removed.sent?.body).toMatchObject({ moved: plan.moves, noEngine: false });
+    expect(cfg.instances?.[id]).toBeUndefined();
+    expect(accountMoves.apply).toHaveBeenCalledWith(plan, [id], { forget: true, moveDefault: true });
+    expect(order).toEqual(["plan", "apply", "persist"]);
+  });
+
+  it("offers the person's other account of the same provider, never another person's own (2026-11-18)", async () => {
+    const accountMoves = { plan: vi.fn(async () => ({ moves: [], noEngine: false })), apply: vi.fn() };
+    const { call, cfg } = harness({ accountMoves });
+    cfg.instances!["claude-other"] = { driver: "claudeAgent", displayName: "Theirs", ownerPrincipalId: "member@example.com" };
+    await call("GET", "/api/instances/claude-extra/moves");
+    expect(accountMoves.plan).toHaveBeenLastCalledWith(expect.objectContaining({ sameProvider: ["claude"] }));
+  });
+
+  it("signs out with the bots moved first when the confirmation asks it (2026-11-18)", async () => {
+    const plan = { moves: [], noEngine: true };
+    const accountMoves = { plan: vi.fn(async () => plan), apply: vi.fn() };
+    const { call, deps } = harness({ accountMoves });
+    expect((await call("POST", "/api/instances/claude/auth/sign-out", { body: {} })).sent?.status).toBe(200);
+    expect(accountMoves.apply).not.toHaveBeenCalled();
+    expect((await call("POST", "/api/instances/claude/auth/sign-out", { body: { move: true } })).sent?.status).toBe(200);
+    expect(accountMoves.apply).toHaveBeenCalledWith(plan, ["claude"], { forget: false, moveDefault: true });
+    expect(deps.providerAuthSessions.signOut).toHaveBeenCalledTimes(2);
   });
 
   it("removes an added Claude account when unused", async () => {

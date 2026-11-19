@@ -32,6 +32,8 @@ const fixture = vi.hoisted(() => ({
   /** #4415: the answers of one test (a sign-in's verbs, a refused removal) */
   answer: null as null | ((path: string, init?: RequestInit) => unknown),
   contextByProvider: {} as Record<string, number>,
+  /** 2026-11-18: where each bot on an account goes (GET .../moves) */
+  moves: { moves: [], noEngine: false } as { moves: Array<{ botId: string; name: string; via: string; engine?: string }>; defaultModel?: { via: string; engine?: string }; noEngine: boolean },
 }));
 
 const answers = (path: string, init?: RequestInit): unknown => {
@@ -43,6 +45,7 @@ const answers = (path: string, init?: RequestInit): unknown => {
     if (body.contextByProvider) fixture.contextByProvider = { ...fixture.contextByProvider, ...body.contextByProvider };
     return { mine: body.disabledModels ?? [], harnessByProvider: fixture.harnessByProvider, contextByProvider: fixture.contextByProvider };
   }
+  if (path.endsWith("/moves")) return fixture.moves;
   if (path.startsWith("/api/instances/")) return { instances: fixture.instances };
   if (/^\/api\/me\/engines\/[^/]+\/name$/.test(path)) return { ok: true };
   if (path === "/api/me/providers") {
@@ -85,10 +88,11 @@ vi.mock("../DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capa
 vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => createElement("div", { "data-harness-connectors": "" }) }));
 
 const { ProvidersSettings, addChoices } = await import("./ProvidersSettings");
-const { api: apiMock, ApiError } = await import("@/state/store");
+const { api: apiMock } = await import("@/state/store");
 const { forgetContextDefaults } = await import("@/lib/context-size");
 const apiCalls = (method: string) => vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === method).map(([path, init]) => [path, (init as RequestInit).body ?? null]);
 const { ProviderPage } = await import("./ProviderPage");
+const { ConfirmProvider } = await import("../ConfirmProvider");
 const { resetSettingsCards, requestSettingsCard } = await import("../SettingsPrimitives");
 
 let host: HTMLDivElement;
@@ -102,7 +106,10 @@ async function render(element: Parameters<Root["render"]>[0] = createElement(Pro
   await settle();
   return host;
 }
-const page = (providerId: string) => render(createElement(ProviderPage, { providerId }));
+// the app's one confirmation (Remove and Sign out read it, 2026-11-18)
+const page = (providerId: string) => render(createElement(ConfirmProvider, null, createElement(ProviderPage, { providerId })));
+const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+const confirmDialog = () => click(document.querySelector('[data-confirm-action]'));
 const click = async (el: Element | null | undefined) => { await act(async () => { (el as HTMLElement).click(); }); await settle(); };
 /** What the person reads without opening anything: hidden blocks left out. */
 function visibleText(node: Element): string {
@@ -137,6 +144,7 @@ beforeEach(() => {
   fixture.harnessByProvider = {};
   fixture.answer = null;
   fixture.contextByProvider = {};
+  fixture.moves = { moves: [], noEngine: false };
   forgetContextDefaults();
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
@@ -975,8 +983,9 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       await page("openai");
       const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
       await click(remove);
-      expect(remove.textContent, "armed first, as a key's Remove").toBe("Confirm removal");
-      await click(remove);
+      expect(dialog()!.textContent, "one confirmation first").toContain("No bot uses this account.");
+      expect(apiCalls("DELETE")).toEqual([]);
+      await confirmDialog();
       expect(vi.mocked(apiMock).mock.calls.some(([path, init]) => path === `/api/me/engines/${id}` && (init as RequestInit | undefined)?.method === "DELETE")).toBe(true);
     });
 
@@ -996,8 +1005,8 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       expect([...first.querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut", "remove"]);
       const remove = first.querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
       await click(remove);
-      expect(remove.textContent, "the page's one confirm").toBe("Confirm removal");
-      await click(remove);
+      expect(dialog(), "the page's one confirm").not.toBeNull();
+      await confirmDialog();
       expect(vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "DELETE").map(([path]) => path)).toEqual(["/api/me/engines/codex"]);
       expect(posts().some(([path]) => String(path).endsWith("/login/sign-out")), "no sign-out first").toBe(false);
     });
@@ -1027,7 +1036,7 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       vi.mocked(apiMock).mockClear();
       const remove = line("account:claude").querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
       await click(remove);
-      await click(remove);
+      await confirmDialog();
       expect(apiCalls("DELETE").map(([path]) => path)).toEqual(["/api/instances/claude"]);
       await page("anthropic");
       // the account the person added can still be removed (the server accepts it, #4426)
@@ -1071,38 +1080,82 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       expect(line("account:chatgpt").querySelector("[data-sign-in-state]")).not.toBeNull();
     });
 
-    it("Claude, a refused removal says which bots to move, in plain words", async () => {
+    it("Claude, Remove lists the bots on the account and where each goes; one click moves them and removes it (2026-11-18)", async () => {
       const id = `claude-${uuid(6)}`;
       fixture.instances = [
         instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
         instance(id, "claudeAgent", "Work", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "work@example.com" } } }),
       ];
-      fixture.answer = (path, init) => {
-        if (path === `/api/instances/${id}` && init?.method === "DELETE") {
-          throw new ApiError("refused", 409, { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"], defaultModel: true });
-        }
-        return undefined;
+      fixture.moves = {
+        moves: [
+          { botId: "b1", name: "Scout", via: "account", engine: "Claude Code" },
+          { botId: "b2", name: "Atlas", via: "fallback", engine: "Codex" },
+          { botId: "b3", name: "Juniper", via: "stays", engine: "Codex" },
+        ],
+        defaultModel: { via: "account", engine: "Claude Code" },
+        noEngine: false,
       };
       await page("anthropic");
-      const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
-      await click(remove);
-      await click(remove);
-      const refusal = line(`account:${id}`).querySelector<HTMLElement>(`[data-account-error="account:${id}"]`)!;
-      expect(refusal.textContent).toBe("Scout and Atlas still use this account. Choose another account for them, then remove it. It is also the default model for new bots: choose another one first.");
-      // the row stays usable: never a dead button
-      expect((line(`account:${id}`).querySelector('[data-provider-action="remove"] button') as HTMLButtonElement).disabled).toBe(false);
+      vi.mocked(apiMock).mockClear();
+      await click(line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button'));
+      expect(vi.mocked(apiMock).mock.calls.map(([path]) => path)).toEqual([`/api/instances/${id}/moves`]);
+      const card = dialog()!;
+      expect(card.querySelector("#confirm-dialog-title")!.textContent).toBe("Remove Work?");
+      // what a Claude account's removal keeps, said as before
+      expect(card.querySelector("#confirm-dialog-body")!.textContent).toBe("These bots use this account. Each one moves as shown, then the account is removed. This removes the account from Sagax only. Its login credentials and files stay on disk; it does not sign out of Claude.");
+      expect([...card.querySelectorAll("[data-account-move]")].map((row) => row.textContent)).toEqual([
+        "ScoutMoves to Claude Code, your other account",
+        "AtlasMoves to Codex, its next backup",
+        "JuniperKeeps Codex; its backup on this account goes",
+        "Default model for new botsMoves to Claude Code, your other account",
+      ]);
+      expect(card.querySelector("[data-confirm-action]")!.textContent).toBe("Move and remove");
+      expect(apiCalls("DELETE"), "nothing before the click").toEqual([]);
+      await confirmDialog();
+      expect(apiCalls("DELETE").map(([path]) => path)).toEqual([`/api/instances/${id}`]);
+      expect(line(`account:${id}`).querySelector("[data-account-error]"), "never a block").toBeNull();
     });
 
-    it("says the refusal and the sign-in in Quebec French", async () => {
+    it("says plainly when no other engine exists, and removes anyway (2026-11-18)", async () => {
+      const id = `claude-${uuid(10)}`;
+      fixture.instances = [
+        instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true } }),
+        instance(id, "claudeAgent", "Work", { access: "subscription", snapshot: { state: "available", authenticated: true } }),
+      ];
+      fixture.moves = { moves: [{ botId: "b1", name: "Scout", via: "none" }], noEngine: true };
+      await page("anthropic");
+      await click(line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button'));
+      expect(dialog()!.querySelector("#confirm-dialog-body")!.textContent).toContain("No other engine is available: these bots have no engine until you choose one.");
+      expect(dialog()!.querySelector("[data-account-move]")!.textContent).toBe("ScoutNo engine until you choose one");
+      await confirmDialog();
+      expect(apiCalls("DELETE").map(([path]) => path)).toEqual([`/api/instances/${id}`]);
+    });
+
+    it("Sign out moves the bots on the account in the same confirmation (2026-11-18)", async () => {
+      const id = `claude-${uuid(11)}`;
+      fixture.instances = [
+        instance("claude", "claudeAgent", "Claude Code", { access: "subscription", authentication: { method: "paste-code", signOut: true }, snapshot: { state: "available", authenticated: true } }),
+        instance(id, "claudeAgent", "Work", { access: "subscription", snapshot: { state: "available", authenticated: true } }),
+      ];
+      fixture.moves = { moves: [{ botId: "b1", name: "Scout", via: "account", engine: "Work" }], noEngine: false };
+      await page("anthropic");
+      await click(line("account:claude").querySelector('[data-provider-action="signOut"]'));
+      expect(dialog()!.querySelector("#confirm-dialog-title")!.textContent).toBe("Sign out of Account 1?");
+      expect(dialog()!.querySelector("[data-confirm-action]")!.textContent).toBe("Move and sign out");
+      expect(apiCalls("POST")).toEqual([]);
+      await confirmDialog();
+      expect(apiCalls("POST")).toEqual([["/api/instances/claude/auth/sign-out", JSON.stringify({ move: true })]]);
+    });
+
+    it("says the moves and the sign-in in Quebec French", async () => {
       setLocale("fr");
       const id = `claude-${uuid(7)}`;
       fixture.instances = [
         instance("claude", "claudeAgent", "Claude Code", { ...signedOut, authentication: { method: "paste-code" } }),
         instance(id, "claudeAgent", "Travail", { access: "subscription", snapshot: { state: "available", authenticated: true } }),
       ];
-      fixture.answer = (path, init) => {
+      fixture.answer = (path) => {
         if (path === "/api/instances/claude/auth/start") return { auth: { phase: "waiting", flowId: "flow-6", authorizationUrl: "https://claude.ai/oauth/authorize", expiresAt: later() } };
-        if (path === `/api/instances/${id}` && init?.method === "DELETE") throw new ApiError("refused", 409, { error: "x", code: "account_in_use", bots: ["Scout", "Atlas"] });
         return undefined;
       };
       await page("anthropic");
@@ -1110,10 +1163,14 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       const steps = line("account:claude").querySelector<HTMLElement>("[data-sign-in-steps]")!;
       expect(visibleText(steps)).toContain("Colle seulement un code d'une connexion lancée ici; tes bots partagent les limites de cet abonnement.");
       expect(line("account:claude").querySelector("[data-sign-in-state]")!.textContent).toContain("En attente de la connexion");
-      const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
-      await click(remove);
-      await click(remove);
-      expect(line(`account:${id}`).querySelector(`[data-account-error]`)!.textContent).toBe("Scout et Atlas utilisent encore ce compte. Choisis-leur un autre compte, puis retire celui-ci.");
+      fixture.moves = { moves: [{ botId: "b1", name: "Scout", via: "default", engine: "Codex" }, { botId: "b2", name: "Atlas", via: "none" }], noEngine: false };
+      await click(line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button'));
+      expect(dialog()!.querySelector("#confirm-dialog-title")!.textContent).toBe("Retirer Travail ?");
+      expect([...dialog()!.querySelectorAll("[data-account-move]")].map((row) => row.textContent)).toEqual([
+        "ScoutVa sur Codex, ton moteur par défaut",
+        "AtlasAucun moteur tant que tu n'en choisis pas un",
+      ]);
+      expect(dialog()!.querySelector("[data-confirm-action]")!.textContent).toBe("Déplacer et retirer");
     });
   });
 });

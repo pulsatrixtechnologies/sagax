@@ -203,17 +203,48 @@ describe("createMeEnginesRoutes", () => {
     expect(deps.logins.signOut).not.toHaveBeenCalled();
   });
 
-  it("refuses with the person's bots that still use it, and lists no removed account (#4415)", async () => {
+  it("moves the person's bots on the account, then removes it, and lists no removed account (2026-11-18)", async () => {
     const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";
     const remove = vi.fn();
-    const route = createMeEnginesRoutes(personDeps({ accountUsers: () => ["Scout"], accountNames: { removed: () => false, remove } }));
-    const refused = ctx(`/api/me/engines/${id}`, "DELETE");
-    await route(refused.context);
-    expect(refused.sent[0]).toEqual({ status: 409, body: { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout"] } });
-    expect(remove).not.toHaveBeenCalled();
+    const plan = { moves: [{ botId: "b1", name: "Scout", via: "account", to: { instanceId: "codex", model: "m" } }], noEngine: false };
+    const accountMoves = { plan: vi.fn(async () => plan), apply: vi.fn() };
+    const route = createMeEnginesRoutes(personDeps({ accountMoves, accountNames: { removed: () => false, remove } }));
+    const preview = ctx(`/api/me/engines/${id}/moves`, "GET");
+    await route(preview.context);
+    expect(preview.sent[0]).toEqual({ status: 200, body: plan });
+    // its own sign-in folder: one engine; Codex and the ChatGPT plan are the other account
+    expect(accountMoves.plan).toHaveBeenLastCalledWith({ person: "pr_1", leaving: [id], sameProvider: ["codex", "chatgpt"], moveDefault: false });
+    const removed = ctx(`/api/me/engines/${id}`, "DELETE");
+    await route(removed.context);
+    expect(removed.sent[0]).toEqual({ status: 200, body: { ok: true, moved: plan.moves, noEngine: false } });
+    expect(accountMoves.apply).toHaveBeenCalledWith(plan, [id], { forget: true, moveDefault: false });
+    expect(remove).toHaveBeenCalledWith("pr_1", id);
     const hidden = createMeEnginesRoutes(personDeps({ accountNames: { removed: (_p: string, instanceId: string) => instanceId === id, remove } }));
     const listed = ctx("/api/me/engines", "GET");
     await hidden(listed.context);
     expect((listed.sent[0]!.body as { engines: Array<{ instanceId: string }> }).engines.map((engine) => engine.instanceId)).toEqual(["codex", "chatgpt"]);
   });
+
+  it("moves the bots before a sign-out the confirmation asked for, never on a plain one (2026-11-18)", async () => {
+    const plan = { moves: [], noEngine: true };
+    const accountMoves = { plan: vi.fn(async () => plan), apply: vi.fn() };
+    const deps = personDeps({
+      accountMoves,
+      subscriptionDriver: () => true,
+      loginSlotOf: () => "primary",
+      registry: { entries: () => [{ instanceId: "codex", live: { driverKind: "codex" } }], get: () => null },
+    });
+    const route = createMeEnginesRoutes(deps);
+    const plain = ctx("/api/me/engines/codex/login/sign-out", "POST", {});
+    await route(plain.context);
+    expect(plain.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    expect(accountMoves.apply).not.toHaveBeenCalled();
+    const moved = ctx("/api/me/engines/codex/login/sign-out", "POST", { move: true });
+    await route(moved.context);
+    expect(moved.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    // Codex and the ChatGPT plan read one sign-in: both leave together
+    expect(accountMoves.apply).toHaveBeenCalledWith(plan, ["codex", "chatgpt"], { forget: false, moveDefault: false });
+    expect(deps.logins.signOut).toHaveBeenCalledTimes(2);
+  });
+
 });

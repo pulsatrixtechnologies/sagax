@@ -24,7 +24,7 @@ import {
   newClaudeAccount,
 } from "../engines/claude-accounts.ts";
 import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../engines/claude-update.ts";
-import { accountInUseRefusal, accountUserNames } from "../engines/account-users.ts";
+import type { AccountMovesHost } from "../engines/account-moves.ts";
 import { ONLY_ACCOUNT_ERROR, addedAccount, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 import {
   engineLaunches,
@@ -125,6 +125,19 @@ export interface InstancesRouteDeps {
   activeGroupTurnForBot: (botId: string) => boolean;
   isProxied?: (req: IncomingMessage) => boolean;
   isLoopbackHost?: (host: string | undefined) => boolean;
+  /** 2026-11-18: where an account's bots go when it is removed or signed
+   * out of (server/engines/account-moves.ts); never a refusal. */
+  accountMoves?: AccountMovesHost;
+}
+
+/** The other accounts of `instanceId`'s provider a viewer may move bots to:
+ * same tool, not a key, not another person's own. */
+function sameProviderAccounts(cfg: AppConfig, instanceId: string, viewer: string | null): string[] {
+  const instances = persistableInstanceConfigs(cfg);
+  const entry = instances[instanceId];
+  if (!entry) return [];
+  return Object.keys(instances).filter((id) => id !== instanceId && instances[id]?.driver === entry.driver && instances[id]?.access !== "api"
+    && (!instances[id]?.ownerPrincipalId || instances[id]?.ownerPrincipalId === viewer));
 }
 
 /** Selections of engines that currently have a turn in flight. */
@@ -472,6 +485,13 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
         if (action === "auth/sign-out") {
           const instance = deps.registry.get(instanceId);
           if (!instance) return json(res, 404, { error: "unknown instance" });
+          // 2026-11-18: the confirmation's one click moves its bots first
+          const body = await readBody(req, 4096).catch(() => null);
+          if (body?.move === true && deps.accountMoves) {
+            const viewer = viewerOf(auth);
+            const plan = await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true });
+            deps.accountMoves.apply(plan, [instanceId], { forget: false, moveDefault: true });
+          }
           await deps.providerAuthSessions.signOut(instance, owner);
           deps.registry.forgetSnapshots();
           return json(res, 200, { instances: await deps.instancesForViewer(viewerOf(auth)) });
@@ -605,18 +625,32 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       }
     }
 
+    // 2026-11-18: GET /api/instances/:id/moves, where each bot on the
+    // account goes if it is removed or signed out of (the one confirmation)
+    const movesOf = method === "GET" ? /^\/api\/instances\/([\w.-]+)\/moves$/.exec(path) : null;
+    if (movesOf) {
+      const instanceId = movesOf[1];
+      if (!Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)) return json(res, 404, { error: "unknown instance" });
+      const viewer = viewerOf(auth);
+      const plan = deps.accountMoves
+        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true })
+        : { moves: [], noEngine: false };
+      return json(res, 200, plan);
+    }
+
     if (method === "DELETE" && instancePatch) {
       const instanceId = instancePatch[1];
+      // #4415 refused while a bot used it; 2026-11-18 (owner rule): its bots
+      // move as the confirmation showed, then it goes, in one gesture
+      const viewer = viewerOf(auth);
+      const plan = deps.accountMoves && Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)
+        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true })
+        : null;
       const removed = await removeAddedAccount(deps, instanceId, {
-        inUse: () => {
-          // #4415: the refusal names the bots to move (the page says it in the person's words)
-          const users = accountUserNames(deps.bots(), deps.tasks, instanceId);
-          const defaultModel = deps.cfg.defaultModelSelection?.instanceId === instanceId;
-          return users.length || defaultModel ? { ok: false, status: 409, body: accountInUseRefusal(users, defaultModel) } : undefined;
-        },
+        beforeRemove: async () => { if (plan) deps.accountMoves!.apply(plan, [instanceId], { forget: true, moveDefault: true }); },
       });
       if (!removed.ok) return json(res, removed.status, removed.body);
-      return json(res, 200, { instances: await deps.instancesForViewer(viewerOf(auth)) });
+      return json(res, 200, { instances: await deps.instancesForViewer(viewer), ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
     }
 
     return PASS;

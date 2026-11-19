@@ -920,7 +920,7 @@ import { EmailOtpStore } from "./mail/email-otp.ts";
 import { resolveMailSettings } from "./mail/mail-config.ts";
 import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
-import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
+import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, resolveVoiceKeys, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
 import { soloGrokVoiceToken } from "./voice/grok-account-voice.ts";
 import { botSpeech, VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
 import { keyLast4 } from "./voice/voice-keys.ts";
@@ -1012,7 +1012,7 @@ import { compatServers, compatServerOwner, compatServerVisible } from "./openai-
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import { providersOfDriver, providersOfInstance, resolveEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
 import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
-import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
+import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type GrokLiveAccess, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
 import {
   createSectionChannelRoutes,
@@ -31834,6 +31834,18 @@ function voiceSpeakerOf(principalId: string): VoiceSpeaker {
   return { principalId, ...(sub ? { sub } : {}), ...(person.disabledAt !== undefined && person.disabledAt !== null ? { disabled: true } : {}) };
 }
 
+/** A person's own Grok sign-in for one live use (#4192, #4567), read once
+ * for the app's voice and for a phone line they own: their first working
+ * Grok account as a person-level use (#2384). A renewal goes through the
+ * sign-in recheck, so a refused sign-in it renews is restored there (marker,
+ * held runs, cards). The value is never logged. */
+async function grokLiveAccessOf(principalId: string): Promise<GrokLiveAccess> {
+  if (!engineLogins) return { ok: false, error: "no_sign_in" };
+  const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+  const restore = (person: string, driver: LoginDriver, instance: string) => signInRecheck?.restore(person, driver, instance) ?? Promise.resolve(false);
+  return instanceId ? engineLogins.grokLiveAccess(principalId, instanceId, restore) : { ok: false, error: "no_sign_in" };
+}
+
 const voiceModeDeps: VoiceModeDeps = {
   organization: IDENTITY.kind === "perspicax",
   notice: (threadId, message) => publishVoiceNotice(threadId, message),
@@ -31867,11 +31879,9 @@ const voiceModeDeps: VoiceModeDeps = {
   grokAccount: async (speaker) => {
     if (speaker.disabled) return undefined;
     if (IDENTITY.kind === "perspicax") {
-      if (!speaker.principalId || !engineLogins) return undefined;
-      const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(speaker.principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
-      const restore = (person: string, driver: LoginDriver, instance: string) => signInRecheck?.restore(person, driver, instance) ?? Promise.resolve(false);
-      const access = instanceId ? await engineLogins.grokLiveAccess(speaker.principalId, instanceId, restore) : undefined;
-      return access?.ok ? access.accessToken : undefined;
+      if (!speaker.principalId) return undefined;
+      const access = await grokLiveAccessOf(speaker.principalId);
+      return access.ok ? access.accessToken : undefined;
     }
     return soloGrokVoiceToken();
   },
@@ -34172,15 +34182,12 @@ const orgLink = createOrgLinkRoutes({
     if (!person) return null;
     return { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) };
   },
-  grokSignIn: async (principalId) => {
-    if (!engineLogins) return { ok: false, error: "no_sign_in" };
-    // #2384: the person's first working Grok account, as a person-level use
-    const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
-    // #4192: a renewal goes through the sign-in recheck, so a refused
-    // sign-in it renews is restored there (marker, held runs, cards)
-    const restore = (person: string, driver: LoginDriver, instance: string) => signInRecheck?.restore(person, driver, instance) ?? Promise.resolve(false);
-    return instanceId ? engineLogins.grokLiveAccess(principalId, instanceId, restore) : { ok: false, error: "no_sign_in" };
-  }
+  grokSignIn: (principalId) => grokLiveAccessOf(principalId),
+  // The owner's decision of 2026-11-19: a phone line speaks on the keys the
+  // app's own voice would use for the person who owns it. The same function
+  // as every voice route of the app, called for that person: the same order,
+  // the same rights (`serverKeyAllowed` included), never another person's key.
+  voiceKeys: (principalId) => resolveVoiceKeys(voiceModeDeps, voiceSpeakerOf(principalId))
 });
 /** Lot C.3: the words each bot is writing now, for the member API's
  * streamed turn (server/people/member-live-text.ts). */

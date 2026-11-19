@@ -1027,6 +1027,25 @@ remembered (`keys[].refused`) and the one the next request starts with
 (`key`). If Perspicax cannot be reached, the person's own voice key still
 serves; `perspicax_unreachable` is refused only when no other key exists.
 
+A realtime call (`GET /voice/realtime`) follows the same rule since
+2026-11-19. A refused handshake keeps the reason xAI gave: no credits (402),
+a rejected key (401, 403, xAI's 400 "Incorrect API key") or a failure of xAI
+itself (`server/tts/grok.ts` `openRealtimeSocket`). It used to read as "xAI
+is down" whatever the status, because ending the refused request made the
+socket report a network error that replaced the reason: the key was never
+remembered as refused, was tried again at every call, and the person was
+never told. The `ready` frame names the key that serves and, once, the key of
+theirs that gave way (`skipped`, `VoiceKeyRefusals.untold`): once for as long
+as that key stays refused for the same reason, not at every call. The call's
+pill says it in its own line (`voiceMode.keyFallback`), like the other voice
+sockets. Test: `server/voice/realtime-key-fallback.e2e.test.ts`.
+
+A phone line (Perspicax Voice) speaks on the same keys, in the same order:
+Perspicax asks this server for them, for the person who owns the line
+(`POST /api/org/link/grok-sign-in` with `voice_keys`,
+`server/org/org-link-routes.ts`), and gets what `resolveVoiceKeys` gives for
+that person. The order is written once, here.
+
 Since 2026-10-14 Grok voice has no key of its own: it uses the xAI key, the
 one bots on Grok use. A Grok voice key saved by an older build
 (`config.tts.xaiKey`, `SAGAX_XAI_VOICE_KEY`, the desktop's `xaiVoiceKey`)

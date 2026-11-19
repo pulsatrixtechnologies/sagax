@@ -2,6 +2,8 @@
 // socket said only "The call dropped. Try again.").
 import { describe, expect, it } from "vitest";
 
+import { onVoiceKeyEvent, type VoiceKeyEvent } from "./api";
+import { voiceKeyFallbackNote } from "./failure";
 import { REALTIME_DROP_TEXT, RealtimeVoiceCall, realtimeDrop, realtimeRefusalText, realtimeStatusUrl } from "./realtime-call";
 
 class FakeSocket {
@@ -96,6 +98,29 @@ describe("realtime call drop reasons", () => {
     expect(realtimeRefusalText("realtime_key_refused", english)).toBe(english);
     expect(realtimeRefusalText("realtime_key_refused", french)).toBe(french);
     expect(realtimeRefusalText("realtime_key_refused", "xAI rejected the key.")).toBe("The realtime voice key was refused. Fix it in Settings > Voice.");
+  });
+
+  it("a call that went on over another key says which key was refused and why, as the other voice sockets do", () => {
+    const told: VoiceKeyEvent[] = [];
+    const off = onVoiceKeyEvent((event) => told.push(event));
+    try {
+      const { notes, frame } = call();
+      frame({ type: "ready", sampleRate: 24_000, key: { source: "org-key", last4: "t6Yb" }, skipped: [{ source: "perspicax-key", last4: "c0Je", failure: "quota" }] });
+      expect(told).toEqual([{ used: { source: "org-key", last4: "t6Yb" }, skipped: [{ source: "perspicax-key", last4: "c0Je", failure: "quota" }] }]);
+      // the pill's own sentence: the key refused, why, the key that serves now
+      const said = voiceKeyFallbackNote(told[0]!, (key, params) => `${key} ${JSON.stringify(params ?? {})}`);
+      expect(said).toContain("voiceMode.keyFallback");
+      expect(said).toContain("voiceMode.keyRefused.quota");
+      // it is a notice, never a failure of the call
+      expect(notes).toEqual([]);
+      // a call that opened on its first key, or one the server has nothing new to say about, says nothing
+      const quiet = call();
+      quiet.frame({ type: "ready", sampleRate: 24_000, key: { source: "org-key", last4: "t6Yb" } });
+      quiet.frame({ type: "ready", sampleRate: 24_000 });
+      expect(told).toHaveLength(1);
+    } finally {
+      off();
+    }
   });
 
   it("a hang-up by the person or the bot is no drop", () => {

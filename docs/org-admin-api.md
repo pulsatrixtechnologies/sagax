@@ -1256,7 +1256,7 @@ assertion. Code: `server/org/org-link-routes.ts`.
 | Method and path | Credential | What |
 |---|---|---|
 | `POST /api/org/link/directory-refresh` | link token | read the directory now |
-| `POST /api/org/link/grok-sign-in` | link token | a person's Grok sign-in for one live call |
+| `POST /api/org/link/grok-sign-in` | link token | a person's Grok sign-in for one live call, or with `voice_keys` every xAI credential the app's voice would use for them, in order |
 
 ### `POST /api/org/link/directory-refresh`
 
@@ -1328,6 +1328,42 @@ refused it before. It is the reverse of how a person's model key travels
   for `directory-refresh`. `Cache-Control: no-store` on every answer.
 - The value is never logged, stored or cached by Sagax: the log line says
   the outcome code only.
+
+**The voice keys of a phone line.** The same request with `"voice_keys": true`
+asks for every xAI credential the app's own voice would use for that person,
+in the app's order, so a line speaks on the same keys as the app and the order
+is written once (`resolveVoiceKeys`, `server/voice/voice-mode.ts`):
+
+```http
+POST /api/org/link/grok-sign-in
+Authorization: Bearer pxat1.<link token>
+Content-Type: application/json
+
+{"sub": "<Perspicax user id>", "voice_keys": true}
+```
+
+- `200 {"provider": "xai", "voice_keys": [{"source": "...", "auth": "...", "key": "..."}]}`,
+  in the order to try them: the person's connected Grok account
+  (`grok-account`), their own voice key saved in Sagax (`voice-key`), their own
+  xAI key in Perspicax (`perspicax-key`), then the organization's xAI key
+  (`org-key`) when it was given to them. `auth` says how a credential is
+  presented to xAI: `grok-account` (the CLI voice host and its token header)
+  or `api-key` (`api.x.ai`).
+- No key serves that person: `200` with an empty `voice_keys` and `cause`, the
+  app's own refusal cause (`no_credentials`, `server_engine_not_allowed`,
+  `payer_disabled`, `perspicax_unreachable`).
+- The rights are the app's: the organization's key only for a person it was
+  given to, nothing for a person turned off. Only the keys of the person `sub`
+  names, never another person's.
+- `503 {"error": "voice_keys_unavailable"}`: the keys could not be resolved;
+  the caller falls back on its own order.
+- `404 unknown_person`, `409 user_inactive`, `400`, `401`, `429`, `405` as
+  above. No value is logged, stored or cached: the log line names the sources
+  only.
+- Without the field, or on a Sagax older than this, the answer is the
+  sign-in alone, as above.
+- A call placed on these keys is not booked in the usage ledger here yet:
+  the line reports its calls to Perspicax only.
 
 ## Not offered yet
 

@@ -9,7 +9,9 @@ import { endCall } from "@/lib/call";
 import type { CallState } from "@/lib/voice-mode/call-machine";
 import { readCallSettings } from "@/lib/voice-mode/call-settings";
 import { readVoiceModeSettings } from "@/lib/voice-mode/settings";
-import { voiceModeRealtimeUrl } from "@/lib/voice-mode/api";
+import { onVoiceKeyEvent, voiceModeRealtimeUrl } from "@/lib/voice-mode/api";
+import { voiceKeyFallbackNote } from "@/lib/voice-mode/failure";
+import { t } from "@/lib/i18n";
 import { publishLiveCall, retractLiveCall, type LiveCallData, type LiveCallMetrics, type LiveCallTranscriptLine } from "@/lib/voice-mode/live-call-store";
 import { RealtimeVoiceCall } from "@/lib/voice-mode/realtime-call";
 import { noteVoiceCallEnded, noteVoiceCallRunning } from "@/lib/voice-call-clock";
@@ -22,6 +24,7 @@ export function RealtimeCallEngine({ bot }: { bot: Bot }) {
   const [call, setCall] = useState<RealtimeVoiceCall | null>(null);
   const [state, setState] = useState<CallState | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<LiveCallTranscriptLine[]>([]);
   const [metrics, setMetrics] = useState<LiveCallMetrics>({});
   const [startedAt] = useState(() => Date.now());
@@ -36,6 +39,10 @@ export function RealtimeCallEngine({ bot }: { bot: Bot }) {
     const offs = [
       engine.on("state", (next) => setState(next)),
       engine.on("note", (text) => setNote(text)),
+      // the voice went on over another key (one of the person's own is out
+      // of credits or rejected): said once in the pill's own line, as the
+      // older pipeline's call does; the server names it once, not per call
+      onVoiceKeyEvent((event) => setNotice(voiceKeyFallbackNote(event, t))),
       engine.on("firstAudio", (ms) => setMetrics((previous) => ({ ...previous, firstAudioMs: ms }))),
       engine.on("transcript", (line) => setTranscript((previous) => {
         const at = previous.findIndex((entry) => entry.id === line.id && entry.who === line.who);
@@ -61,13 +68,13 @@ export function RealtimeCallEngine({ bot }: { bot: Bot }) {
   const data = useMemo<LiveCallData | null>(
     () => call && state
       ? {
-        botId: bot.id, call, state, startedAt, heard, caption, note, notice: null, transcript, metrics, realtime: true,
+        botId: bot.id, call, state, startedAt, heard, caption, note, notice, transcript, metrics, realtime: true,
         // a refusal (no realtime voice, a refused key) is said and stays: no retry pretends otherwise
         noteRetry: !call.refused,
         retry: () => { setNote(null); call.retry(); },
       }
       : null,
-    [bot.id, call, state, startedAt, heard, caption, note, transcript, metrics],
+    [bot.id, call, state, startedAt, heard, caption, note, notice, transcript, metrics],
   );
   useEffect(() => {
     noteVoiceCallRunning({ botId: bot.id, callId, startedAt });

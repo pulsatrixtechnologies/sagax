@@ -11,6 +11,7 @@
 //
 // The public surface is the one the call pill and the mascot use
 // (CallControls in live-call-store.ts).
+import { noteVoiceKeyFrame } from "./api";
 import { EchoGuard } from "./echo";
 import { INITIAL_CALL, type CallState } from "./call-machine";
 import { callAudioConstraints } from "./call";
@@ -315,6 +316,10 @@ export class RealtimeVoiceCall {
       case "ready":
         this.ready = true;
         this.set({ phase: "listening" });
+        // the call went on over another key (one of the person's own is out
+        // of credits or rejected): told to the pill's listeners, as the
+        // other voice sockets do, never a silent switch
+        noteVoiceKeyFrame(frame);
         return;
       case "hearing":
         this.set({ phase: "hearing" });

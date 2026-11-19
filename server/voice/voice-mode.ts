@@ -111,6 +111,7 @@ import {
   VoiceKeyFailure,
   VoiceKeyRefusals,
   VOICE_PROVIDER_REFUSAL_TTL_MS,
+  voiceKeyAuth,
   voiceKeyFailureIsFinal,
   voiceKeyRef,
   withVoiceKeys,
@@ -325,7 +326,7 @@ type KeyDeps = Pick<VoiceModeDeps, "organization" | "serverKey" | "hasOwnKey" | 
 /** A connected Grok account speaks through the CLI voice host. Every other
  * source stays an API key on api.x.ai. */
 function onThisKey<T>(candidate: { source: string }, run: () => T): T {
-  return withVoiceAuth(candidate.source === "grok-account" ? "grok-account" : "api-key", run);
+  return withVoiceAuth(voiceKeyAuth(candidate), run);
 }
 
 /** Every key that may serve this person, in the order above (their connected
@@ -671,7 +672,10 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
     refusals.forget(who, voiceKeyRef(candidate));
     bridge = attempt;
     live = true;
-    page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(tried.length ? { skipped: tried } : {}) }));
+    // a key of theirs out of credits or rejected: the page says it once in
+    // the call's own line (`voiceMode.keyFallback`), never at every call
+    const skipped = refusals.untold(who, tried);
+    page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(skipped.length ? { skipped } : {}) }));
     for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
     return;
   }

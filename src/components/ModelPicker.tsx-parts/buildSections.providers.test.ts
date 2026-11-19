@@ -127,3 +127,66 @@ describe("the chat bar menu by provider (#4329)", () => {
     expect(section(menuSections, "favorites").rows.map((row) => [row.instanceId, row.modelId])).toEqual([["claudeApi", "claude-sonnet-5"]]);
   });
 });
+
+// M-20261119-015: two Claude accounts, each with its own live list. Every
+// row says its account, a model both offer can move to the other, and one
+// only the team account offers wears "Special access".
+describe("a person's Claude accounts in the menu (M-20261119-015)", () => {
+  const personal = engine("claude-personal", "claudeAgent", "Claude Code", [
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    { id: "claude-fable-5-2", label: "Claude Fable 5.2" },
+  ], { snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } } as Partial<InstanceInfo>);
+  const team = engine("claude-team", "claudeAgent", "Team", [
+    { id: "claude-mythos-5-2", label: "Claude Mythos 5.2" },
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    { id: "claude-fable-5-2", label: "Claude Fable 5.2" },
+  ]);
+
+  it("names the account of every row and badges the model only one account offers", () => {
+    const { menuSections } = buildModelPickerSections(input([personal, team], { instanceId: "claude-personal", model: "claude-opus-5-5" }));
+    const claude = section(menuSections, "anthropic");
+    const byModel = new Map(claude.rows.map((row) => [row.modelId, row]));
+    // offered by both: the account the bot is on is the one a pick takes
+    expect(byModel.get("claude-opus-5-5")).toMatchObject({ instanceId: "claude-personal", account: "ada@example.com" });
+    expect(byModel.get("claude-opus-5-5")?.badge).toBeUndefined();
+    expect(byModel.get("claude-opus-5-5")?.accountRows?.map((row) => [row.instanceId, row.account])).toEqual([
+      ["claude-personal", "ada@example.com"], ["claude-team", "Team"],
+    ]);
+    // offered by the team account alone: it runs there, and says so
+    expect(byModel.get("claude-mythos-5-2")).toMatchObject({ instanceId: "claude-team", account: "Team", badge: { label: "Special access", title: "Only Team offers this model" } });
+    expect(byModel.get("claude-mythos-5-2")?.accountRows).toBeUndefined();
+  });
+
+  it("a favorite on the other account keeps its account in the short list", () => {
+    const { menuSections } = buildModelPickerSections(input([personal, team], { instanceId: "claude-personal", model: "claude-opus-5-5" }, ["claude-team\u0000claude-opus-5-5", "claude-team\u0000claude-mythos-5-2"]));
+    expect(section(menuSections, "favorites").rows.map((row) => [row.instanceId, row.modelId, row.account, row.badge?.label])).toEqual([
+      ["claude-team", "claude-opus-5-5", "Team", undefined],
+      ["claude-team", "claude-mythos-5-2", "Team", "Special access"],
+    ]);
+  });
+
+  it("one account, or one sign-in with a key: no account words and no badge", () => {
+    const alone = buildModelPickerSections(input([team], { instanceId: "claude-team", model: "claude-opus-5-5" }));
+    expect(section(alone.menuSections, "anthropic").rows.every((row) => row.account === undefined && row.badge === undefined)).toBe(true);
+    const keyed = buildModelPickerSections(input([team, claudeApi], { instanceId: "claude-team", model: "claude-opus-5-5" }));
+    expect(section(keyed.menuSections, "anthropic").rows.every((row) => row.account === undefined && row.badge === undefined)).toBe(true);
+  });
+
+  it("one connected account beside a signed-out one the bot still runs on: never a badge on every model", () => {
+    // the signed-out account keeps only the bot's model in the menu; the
+    // badge reads the accounts' own lists, so the team account's other
+    // models (both accounts offer them) are not its alone
+    const signedOut = engine("claude-old", "claudeAgent", "Old", team.models.options.filter((option) => option.id !== "claude-mythos-5-2"),
+      { snapshot: { state: "available", authenticated: false } } as Partial<InstanceInfo>);
+    const { menuSections } = buildModelPickerSections(input([signedOut, team], { instanceId: "claude-old", model: "claude-opus-5-5" }));
+    const rows = section(menuSections, "anthropic").rows;
+    expect(rows.filter((row) => row.badge).map((row) => row.modelId)).toEqual([]);
+    // the accounts are still named apart
+    expect(rows.find((row) => row.modelId === "claude-fable-5-2")).toMatchObject({ instanceId: "claude-team", account: "Team" });
+  });
+
+  it("Codex and the ChatGPT plan are one sign-in, never two accounts", () => {
+    const { menuSections } = buildModelPickerSections(input([codex, { ...chatgpt, snapshot: { ...chatgpt.snapshot, chatgptPlan: true } }], { instanceId: "codex", model: "gpt-5.6" }));
+    expect(section(menuSections, "openai").rows.every((row) => row.account === undefined && row.badge === undefined)).toBe(true);
+  });
+});

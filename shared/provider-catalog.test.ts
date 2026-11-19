@@ -123,3 +123,43 @@ describe("the provider catalog (#4329)", () => {
     expect(providerCatalog({ instances: [], place: "solo" })).toEqual({ providers: [] });
   });
 });
+
+// M-20261119-015: a person with two Claude accounts, each with its own list
+describe("the accounts that offer each model", () => {
+  const personal = instance({ instanceId: "claude-personal", driverKind: "claudeAgent", access: "subscription", displayName: "Personal",
+    snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }, ["claude-opus-5-5", "claude-fable-5-2"]);
+  const team = instance({ instanceId: "claude-team", driverKind: "claudeAgent", access: "subscription", displayName: "Team",
+    snapshot: { state: "available", authenticated: true, account: { email: "ada@acme.test" } } }, ["claude-mythos-5-2", "claude-opus-5-5", "claude-fable-5-2"]);
+  const claudeOf = (input: Parameters<typeof providerCatalog>[0]) => providerCatalog(input).providers.find((provider) => provider.id === "anthropic")!;
+
+  it("keeps every account that offers a model, and the one account a model comes from alone", () => {
+    const claude = claudeOf({ instances: [personal, team], place: "solo" });
+    const byId = new Map(claude.models.map((model) => [model.id, model]));
+    expect(byId.get("claude-opus-5-5")).toMatchObject({ accounts: ["claude-personal", "claude-team"] });
+    expect(byId.get("claude-opus-5-5")?.onlyAccount).toBeUndefined();
+    expect(byId.get("claude-mythos-5-2")).toMatchObject({ accounts: ["claude-team"], onlyAccount: "claude-team" });
+  });
+
+  it("one account: nothing to tell apart", () => {
+    const claude = claudeOf({ instances: [team], place: "solo" });
+    expect(claude.models.find((model) => model.id === "claude-mythos-5-2")).toMatchObject({ accounts: ["claude-team"] });
+    expect(claude.models.some((model) => model.onlyAccount)).toBe(false);
+  });
+
+  it("reads the person's own sign-in on an organization server, not the instance's", () => {
+    // the server's own state says signed out; the person's own sign-ins are on
+    const signedOut = [personal, team].map((entry) => ({ ...entry, snapshot: { ...entry.snapshot, authenticated: false } }));
+    const off = claudeOf({ instances: signedOut, place: "organization" });
+    expect(off.models.some((model) => model.onlyAccount)).toBe(false);
+    const mine = claudeOf({ instances: signedOut, place: "organization", accountConnected: () => true });
+    expect(mine.models.find((model) => model.id === "claude-mythos-5-2")?.onlyAccount).toBe("claude-team");
+  });
+
+  it("two tools of one sign-in (Codex and the ChatGPT plan) are never two accounts", () => {
+    const codex = instance({ instanceId: "codex", driverKind: "codex", access: "subscription", displayName: "Codex", snapshot: { state: "available", authenticated: true } }, ["gpt-6"]);
+    const plan = instance({ instanceId: "chatgpt", driverKind: "codex", access: "subscription", displayName: "ChatGPT plan", snapshot: { state: "available", authenticated: true, chatgptPlan: true } }, ["gpt-6", "gpt-6-pro"]);
+    const openai = providerCatalog({ instances: [codex, plan], place: "solo" }).providers.find((provider) => provider.id === "openai")!;
+    expect(openai.models.find((model) => model.id === "gpt-6-pro")).toMatchObject({ accounts: ["chatgpt"] });
+    expect(openai.models.some((model) => model.onlyAccount)).toBe(false);
+  });
+});

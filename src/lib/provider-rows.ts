@@ -25,7 +25,8 @@ import type { PersonalVoiceKeyProvider, PersonalVoiceKeysView } from "../../shar
 import { PERSONAL_VOICE_KEY_PROVIDERS } from "../../shared/person-voice-keys";
 import { PERSONAL_PROVIDER_NAMES, type ProviderAccountsView, type PersonalProviderServer } from "../../shared/provider-accounts";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
-import { HARNESS_TOOL_NAME, keyProvidersOfDriver } from "../../shared/harness-matrix";
+import { keyProvidersOfDriver } from "../../shared/harness-matrix";
+import { isToolName } from "../../shared/model-accounts";
 import { compareProviders, COMPUTER_PROVIDER_ID, COMPUTER_PROVIDER_LABEL, providerOfInstance, vendorLabel, vendorOfEngineName } from "../../shared/model-provider";
 
 /** Who pays: the person, the organization, or nobody (a model of this computer). */
@@ -413,11 +414,9 @@ export function connectionAction(row: Pick<ProviderRow, "kind" | "state" | "mana
 }
 
 /** A tool's own name (Codex, Claude Code, the xAI tool) never names a line
- * of the first level (#4329 C): the account's email, else the provider. */
-const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(HARNESS_TOOL_NAME).map((name) => name.toLowerCase()));
-export function isToolName(name: string): boolean {
-  return TOOL_NAMES.has(name.trim().toLowerCase());
-}
+ * of the first level (#4329 C): the account's email, else the provider.
+ * One rule with the model menu's account words (shared/model-accounts.ts). */
+export { isToolName };
 
 /** The words of one line (#4329 B1): the account's email, a plan's own name
  * ("ChatGPT plan"), else the provider's name; a server's own name. */

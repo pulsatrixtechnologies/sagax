@@ -85,6 +85,10 @@ export interface ProviderCatalogDeps {
   /** The server's engine instance map (server/config.ts instanceConfigs,
    * workspace address defaults merged), to tell an Azure resource. */
   instanceConfigs?(): Readonly<Record<string, { driver: string; config?: unknown }>>;
+  /** M-20261119-015: on an organization server, whether this caller's own
+   * sign-in of an account is connected (the instance's own state is the
+   * server's). Undefined: the instances' own state. */
+  accountConnected?(auth: RequestAuth): ((instanceId: string) => boolean | undefined) | undefined;
 }
 
 /** One list by provider for this caller, for the phone, for bots and for
@@ -100,6 +104,7 @@ export async function providerCatalogFor(catalog: ProviderCatalogDeps, accounts:
     })) ?? [],
     azureInstances: azureAddressInstances(catalog.instanceConfigs?.() ?? {}),
     botsLink: catalog.botsLink?.(auth) ?? null,
+    accountConnected: catalog.accountConnected?.(auth),
   });
 }
 

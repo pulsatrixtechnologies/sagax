@@ -46,6 +46,68 @@ final class ModelMenuTests: XCTestCase {
         XCTAssertEqual(menu[2].rows.first?.detail, "DwarfStar")
     }
 
+    // M-20261119-015: two Claude accounts, each with its own list: every row
+    // says its account, and a model only one of them offers wears the badge
+    func testTwoAccountsNameTheirRowsAndAModelOnlyOneOffersWearsTheBadge() {
+        func account(_ id: String, name: String, email: String?, models: [(String, String)]) -> Instance {
+            Instance(
+                instanceId: id, driverKind: "claudeAgent", displayName: name,
+                snapshot: ProviderSnapshot(state: "available", authenticated: true, account: email.map { ProviderSnapshotAccount(email: $0) }),
+                models: ModelCatalog(default: models.first?.0 ?? "", options: models.map { ModelOption(id: $0.0, label: $0.1) })
+            )
+        }
+        let personal = account("claude-personal", name: "Claude Code", email: "ada@example.com", models: [("opus", "Opus"), ("fable", "Fable")])
+        let team = account("claude-team", name: "Team", email: "ada@acme.test", models: [("mythos", "Mythos"), ("opus", "Opus"), ("fable", "Fable")])
+        let menu = ModelMenu.sections(
+            instances: [personal, team], selection: ModelSelection(instanceId: "claude-personal", model: "opus"),
+            botModel: ModelSelection(instanceId: "claude-personal", model: "opus"), botName: "Ara", follows: nil,
+            organization: false, allowedEngines: nil, labels: labels, engineLabel: { _ in "Claude" }
+        )
+        let personalRows = menu.first { $0.key == "claude-personal" }!.rows
+        let teamRows = menu.first { $0.key == "claude-team" }!.rows
+        // a tool's name never names an account: the address does
+        XCTAssertEqual(Set(personalRows.map(\.account)), ["ada@example.com"])
+        XCTAssertEqual(Set(teamRows.map(\.account)), ["Team"])
+        XCTAssertEqual(menu.first { $0.key == "claude-team" }?.label, "Claude · Team")
+        // offered by both: no badge; offered by the team account alone: the badge
+        XCTAssertNil(teamRows.first { $0.modelId == "opus" }?.badge)
+        XCTAssertNil(personalRows.first { $0.modelId == "opus" }?.badge)
+        XCTAssertEqual(teamRows.first { $0.modelId == "mythos" }?.badge, "Special access")
+        XCTAssertEqual(teamRows.first { $0.modelId == "mythos" }?.badgeHint, "Only Team offers this model")
+        XCTAssertEqual(ModelMenu.accountLabel(team, among: [personal, team], labels: labels, engineLabel: { _ in "Claude" }), "Team")
+        // one account: nothing to tell apart
+        let alone = ModelMenu.sections(
+            instances: [team], selection: ModelSelection(instanceId: "claude-team", model: "opus"),
+            botModel: ModelSelection(instanceId: "claude-team", model: "opus"), botName: "Ara", follows: nil,
+            organization: false, allowedEngines: nil, labels: labels, engineLabel: { _ in "Claude" }
+        )
+        XCTAssertTrue(alone.flatMap(\.rows).allSatisfy { $0.account == nil && $0.badge == nil })
+    }
+
+    // M-20261119-015: one connected account beside a signed-out one the bot
+    // still runs on: the badge reads the accounts' own lists, never on every model
+    func testOneConnectedAccountBesideASignedOutOneBadgesNothing() {
+        let models = [ModelOption(id: "opus", label: "Opus"), ModelOption(id: "fable", label: "Fable"), ModelOption(id: "sonnet", label: "Sonnet")]
+        let old = Instance(
+            instanceId: "claude-old", driverKind: "claudeAgent", displayName: "Old",
+            snapshot: ProviderSnapshot(state: "available", authenticated: false),
+            models: ModelCatalog(default: "opus", options: models)
+        )
+        let team = Instance(
+            instanceId: "claude-team", driverKind: "claudeAgent", displayName: "Team",
+            snapshot: ProviderSnapshot(state: "available", authenticated: true),
+            models: ModelCatalog(default: "opus", options: models)
+        )
+        let menu = ModelMenu.sections(
+            instances: [old, team], selection: ModelSelection(instanceId: "claude-old", model: "opus"),
+            botModel: ModelSelection(instanceId: "claude-old", model: "opus"), botName: "Ara", follows: nil,
+            organization: false, allowedEngines: nil, labels: labels, engineLabel: { _ in "Claude" }
+        )
+        let rows = menu.flatMap(\.rows).filter { $0.kind == .model }
+        XCTAssertTrue(rows.allSatisfy { $0.badge == nil }, rows.map { "\($0.instanceId ?? ""):\($0.modelId ?? "")=\($0.badge ?? "-")" }.joined(separator: ", "))
+        XCTAssertEqual(menu.first { $0.key == "claude-team" }?.rows.first?.account, "Team")
+    }
+
     func testASharedLocalModelNamesWhoSharesIt() {
         let option = ModelOption(id: "d::ornith", label: "Ornith-1.5-122B-oQ4e-mtp", custom: true, local: true, sharedBy: "Camille Tremblay")
         XCTAssertEqual(option.label, "Ornith-1.5-122B-oQ4e-mtp", "the name stays whole, no suffix")

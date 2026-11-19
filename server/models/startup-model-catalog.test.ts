@@ -11,7 +11,7 @@ import type { ModelCatalog, ProviderDriver, ProviderInstance, SendTurnInput } fr
 import { createAcpDriver, type AcpSupport } from "../drivers/acp/core.ts";
 import { ProviderRegistry } from "../harness/registry.ts";
 import * as procs from "../procs.ts";
-import { openStartupModelCatalog, readStartupModelCache, writeStartupModelCache } from "./startup-model-catalog.ts";
+import { accountModelCachePath, openStartupModelCatalog, readAccountModelCache, readStartupModelCache, writeAccountModelCache, writeStartupModelCache } from "./startup-model-catalog.ts";
 
 const CACHED: ModelCatalog = {
   default: "cached-model",
@@ -206,5 +206,24 @@ describe("startup model catalogs", () => {
     expect(instance.models).toEqual(FRESH);
     expect(spawn).toHaveBeenCalled();
     await instance.dispose();
+  });
+});
+
+// M-20261119-015: one account's last list survives a restart, under a
+// one-way name (no path, id or token in the file name).
+describe("account model cache", () => {
+  it("keeps one account's list by a fingerprint and reads it back", () => {
+    const key = "claude-login:/data/principals/ada/accounts/claude-team/claude";
+    const path = accountModelCachePath(key);
+    try {
+      expect(path).not.toContain("ada");
+      expect(path).not.toContain("claude-team");
+      expect(readAccountModelCache(key)).toBeNull();
+      writeAccountModelCache(key, { default: "claude-mythos-5-2", options: [{ id: "claude-mythos-5-2", label: "Claude Mythos 5.2", contextWindow: 1_000_000 }] });
+      expect(readAccountModelCache(key)?.options.map((option) => option.id)).toEqual(["claude-mythos-5-2"]);
+      expect(readAccountModelCache("claude-login:/data/principals/nimbus/accounts/claude-team/claude")).toBeNull();
+    } finally {
+      rmSync(path, { force: true });
+    }
   });
 });

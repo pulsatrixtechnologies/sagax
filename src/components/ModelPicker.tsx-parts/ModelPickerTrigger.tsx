@@ -31,13 +31,15 @@ export function listChipLabel({ autoOn, autoRecord, active, selection }: {
 
 /** The account that pays, shown under the list chip only when the provider
  * has several accounts to choose from. */
-export function listChipPayer({ autoOn, active, showActiveAccount }: {
+export function listChipPayer({ autoOn, active, showActiveAccount, accountLabel }: {
   autoOn: boolean;
   active: InstanceInfo | undefined;
   showActiveAccount: boolean;
+  /** M-20261119-015: the account's words in the menu (its name, else its address). */
+  accountLabel?: string;
 }): string | undefined {
   if (autoOn || !active || !showActiveAccount) return undefined;
-  return active.displayName;
+  return accountLabel ?? active.displayName;
 }
 
 export function ModelPickerTrigger({
@@ -61,6 +63,7 @@ export function ModelPickerTrigger({
   autoInstance,
   active,
   showActiveAccount,
+  accountLabel,
   selectedVariantLabel,
   advanced,
   locked = false,
@@ -88,6 +91,8 @@ export function ModelPickerTrigger({
   autoInstance: InstanceInfo | undefined;
   active: InstanceInfo | undefined;
   showActiveAccount: boolean;
+  /** M-20261119-015: the account the model runs on, as the menu names it. */
+  accountLabel?: string;
   selectedVariantLabel: string | undefined;
   advanced: boolean;
   /** True when the model must not change (busy with no reasoning row). */
@@ -98,7 +103,8 @@ export function ModelPickerTrigger({
 }) {
   // headless outside the composer (#2050, Settings > Models "Set model for
   // n bots"): no chip at all, the menu opens from `menuControl`.
-  const payer = listChip ? listChipPayer({ autoOn, active, showActiveAccount }) : undefined;
+  const payer = listChip ? listChipPayer({ autoOn, active, showActiveAccount, accountLabel }) : undefined;
+  const accountWordsShown = accountLabel ?? active?.displayName;
   return windowOnly ? null : headless ? (inComposer ? (
   // no chip: the + menu's Model row reads it; the Retro 98 status bar reads this
   <span hidden data-composer-model={composerLabel} />
@@ -176,12 +182,12 @@ export function ModelPickerTrigger({
   >
     {autoInstance && <InstanceProviderMark instance={autoInstance} size={14} />}
     {!contained && active && showActiveAccount && (
-      <span data-model-account-compact className="hidden max-w-20 truncate @max-4xl/chathead:inline">{active.displayName}</span>
+      <span data-model-account-compact className="hidden max-w-20 truncate @max-4xl/chathead:inline">{accountWordsShown}</span>
     )}
     <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
       <span className={"max-w-[160px] truncate"}>
         {chooseLabel === undefined && active && showActiveAccount && !autoOn && (
-          <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
+          <span data-model-account className="text-ink-secondary">{accountWordsShown} · </span>
         )}
         {chooseLabel !== undefined ? chooseLabel : autoOn ? <span data-model-auto-chip>{autoChipLabel(autoRecord)}</span> : modelLabel(active, selection.model)}
         {chooseLabel === undefined && !autoOn && active && modelProvider(active, selection.model) && (

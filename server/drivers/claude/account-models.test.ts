@@ -7,8 +7,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CLAUDE_KEYCHAIN_SERVICE } from "../../usage/plan-usage.ts";
 import {
+  accountModelsOrKept,
   claudeCatalogFromLive,
   claudeEnvironmentAuth,
+  claudeLoginAccountKey,
   claudeLoginAuth,
   claudeLoginKeychainService,
   readClaudeAccountModels,
@@ -133,5 +135,42 @@ describe("how a Claude environment signs in", () => {
     });
     expect(auth).toEqual({ kind: "bearer", token: "b".repeat(40), oauth: true });
     expect(asked).toEqual([claudeLoginKeychainService("/data/principals/p1/claude", { HOME: "/home/x" })]);
+  });
+});
+
+// M-20261119-015: each connected account keeps its own list; a read that
+// cannot be made (an access token past its life, no network, a restart)
+// serves the list that account gave last, never the written one.
+describe("accountModelsOrKept", () => {
+  const team = { default: "claude-mythos-5-2", options: [{ id: "claude-mythos-5-2", label: "Claude Mythos 5.2" }, { id: "claude-opus-5-5", label: "Claude Opus 5.5" }] };
+  const memory = () => {
+    const kept = new Map<string, typeof team>();
+    return { kept, store: { read: (key: string) => kept.get(key) ?? null, write: (key: string, catalog: typeof team) => { kept.set(key, catalog); } } };
+  };
+
+  it("keeps a good read for the account and serves it when the next read fails", async () => {
+    const { kept, store } = memory();
+    const key = claudeLoginAccountKey("/data/principals/ada/accounts/claude-team/claude");
+    expect(await accountModelsOrKept(key, async () => team, store)).toEqual(team);
+    expect(kept.get(key)).toEqual(team);
+    // the sign-in's access token expired: Mythos stays on this account
+    expect(await accountModelsOrKept(key, async () => null, store)).toEqual(team);
+    expect(await accountModelsOrKept(key, async () => { throw new Error("offline"); }, store)).toEqual(team);
+  });
+
+  it("keeps each account apart: one account's list never serves another", async () => {
+    const { store } = memory();
+    const teamKey = claudeLoginAccountKey("/data/principals/ada/accounts/claude-team/claude");
+    const personalKey = claudeLoginAccountKey("/data/principals/ada/accounts/claude-personal/claude");
+    const otherPerson = claudeLoginAccountKey("/data/principals/nimbus/accounts/claude-team/claude");
+    await accountModelsOrKept(teamKey, async () => team, store);
+    expect(await accountModelsOrKept(personalKey, async () => null, store)).toBeNull();
+    expect(await accountModelsOrKept(otherPerson, async () => null, store)).toBeNull();
+  });
+
+  it("never keeps an empty answer", async () => {
+    const { kept, store } = memory();
+    expect(await accountModelsOrKept("k", async () => ({ default: "", options: [] }), store)).toBeNull();
+    expect(kept.size).toBe(0);
   });
 });

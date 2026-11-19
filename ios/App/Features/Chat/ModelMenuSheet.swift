@@ -105,7 +105,10 @@ struct ModelMenuSheet: View {
             useBotModel: { String(localized: "Use \($0)'s model") },
             local: String(localized: "Local"),
             defaultTag: String(localized: "Default"),
-            loadedTag: String(localized: "Loaded")
+            loadedTag: String(localized: "Loaded"),
+            specialAccess: String(localized: "Special access"),
+            specialAccessHint: { String(localized: "Only \($0) offers this model") },
+            accountNumbered: { String(localized: "Account \($0)") }
         )
         return ModelMenu.sections(
             instances: instances, selection: selection, botModel: profile.modelSelection, botName: profile.name,
@@ -287,6 +290,22 @@ struct ModelMenuSheet: View {
                                     .padding(.vertical, 1)
                                     .background(Theme.inset, in: RoundedRectangle(cornerRadius: 4))
                             }
+                            // M-20261119-015: only this account of the person's offers the model
+                            if let badge = row.badge {
+                                Text(verbatim: badge)
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.accent)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Theme.inset, in: RoundedRectangle(cornerRadius: 4))
+                                    .accessibilityHint(Text(verbatim: row.badgeHint ?? ""))
+                                    .accessibilityIdentifier("model-badge.\(row.instanceId ?? "").\(row.modelId ?? "")")
+                            }
+                        }
+                        // M-20261119-015: the account it runs on, while the provider has several
+                        if let account = row.account {
+                            Text(verbatim: account).font(.footnote).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                .accessibilityIdentifier("model-account.\(row.instanceId ?? "").\(row.modelId ?? "")")
                         }
                         if let detail = row.detail {
                             Text(verbatim: detail).font(.footnote).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)

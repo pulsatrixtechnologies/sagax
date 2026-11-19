@@ -28,6 +28,7 @@ import {
   type ProviderModelFacts,
   type ProviderRef,
 } from "./model-provider.ts";
+import { onlyAccountOffering } from "./model-accounts.ts";
 
 /** One engine instance as GET /api/instances lists it (the fields read here). */
 export interface CatalogInstance extends ProviderInstanceFacts {
@@ -36,6 +37,8 @@ export interface CatalogInstance extends ProviderInstanceFacts {
     state: "available" | "unavailable";
     authenticated?: boolean;
     account?: { email?: string };
+    /** A ChatGPT plan sign-in (beside the Codex tool on the same vendor). */
+    chatgptPlan?: boolean;
   };
   models: { options: ReadonlyArray<ProviderModelFacts & { label: string; anthropic?: boolean }> };
 }
@@ -58,6 +61,10 @@ export interface CatalogInput {
    * installation's named servers) whose address is an Azure resource. */
   azureInstances?: readonly string[];
   botsLink?: CatalogBotsLink | null;
+  /** M-20261119-015: whether the person's own sign-in of an account is
+   * connected (an organization server, where the instance's own state is
+   * the server's); undefined keeps the instance's state. */
+  accountConnected?: (instanceId: string) => boolean | undefined;
 }
 
 export type CatalogConnectionKind = "account" | "key" | "address" | "computer" | "botsLink";
@@ -97,6 +104,14 @@ export interface CatalogModel {
   id: string;
   label: string;
   engines: CatalogEngine[];
+  /** M-20261119-015: the provider's own accounts and keys that offer it
+   * (the engine instances of its connections of kind account or key, each
+   * read with that account's own list), in the connections' order. Absent
+   * when no account or key of the provider lists it (pi, this computer). */
+  accounts?: string[];
+  /** M-20261119-015: the one sign-in account, of two or more connected,
+   * that offers it (the "Special access" badge, shared/model-accounts.ts). */
+  onlyAccount?: string;
 }
 
 export type CatalogProviderKind = "account" | "key" | "server" | "computer" | "other";
@@ -235,6 +250,35 @@ export function providerCatalog(input: CatalogInput): ProviderCatalog {
   const link = input.botsLink;
   if (link && botsLinkShown(link)) {
     draft(vendorProvider("xai")).connections.push({ kind: "botsLink", label: BOTS_LINK_LABEL, state: botsLinkState(link), harnesses: [], recommended: null });
+  }
+
+  // M-20261119-015: each model keeps the accounts and keys that offer it,
+  // and the one sign-in account of several that alone offers it. The
+  // accounts are the sign-ins of one tool (several Claude accounts, several
+  // ChatGPT plans), never two tools of one sign-in (Codex and the ChatGPT plan).
+  const byId = new Map(input.instances.map((instance) => [instance.instanceId, instance]));
+  const signInKind = (instanceId: string) => {
+    const instance = byId.get(instanceId);
+    return instance ? `${instance.driverKind}:${instance.snapshot.chatgptPlan ? "plan" : "tool"}` : instanceId;
+  };
+  for (const entry of drafts.values()) {
+    const ways = entry.connections.filter((connection) => (connection.kind === "account" || connection.kind === "key") && connection.instanceId);
+    if (ways.length === 0) continue;
+    const order = ways.map((connection) => connection.instanceId!);
+    const connected = ways.filter((connection) => connection.kind === "account"
+      && (input.accountConnected?.(connection.instanceId!) ?? connection.state === "connected")).map((connection) => connection.instanceId!);
+    const kinds = new Map<string, string[]>();
+    for (const instanceId of connected) kinds.set(signInKind(instanceId), [...(kinds.get(signInKind(instanceId)) ?? []), instanceId]);
+    for (const model of entry.models.values()) {
+      const offering = new Set(model.engines.map((engine) => engine.instanceId));
+      const accounts = order.filter((instanceId) => offering.has(instanceId));
+      if (accounts.length === 0) continue;
+      model.accounts = accounts;
+      for (const group of kinds.values()) {
+        const only = onlyAccountOffering(accounts, group);
+        if (only) model.onlyAccount = only;
+      }
+    }
   }
 
   const providers = [...drafts.values()].map((entry): CatalogProvider & { rank: number } => {

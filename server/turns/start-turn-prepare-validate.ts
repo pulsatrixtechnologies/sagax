@@ -2,7 +2,8 @@
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
-import { resolveModelAccount } from "../models/resolve-model-account.ts";
+import { accountsOpenTo, resolveModelAccount } from "../models/resolve-model-account.ts";
+import { accountOwnerOf } from "../engines/account-owner.ts";
 import { activeEngineRefusal } from "../engines/engine-refusals.ts";
 import { pluginKey, pluginsNamedIn, type AccountCreditState } from "../../shared/model-account-pool.ts";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
@@ -48,6 +49,7 @@ export function createPrepareValidateStartTurn(
     namesEngine,
     noEngineError,
     orgEngineTurnRefusal,
+    peerOwnerPrincipal,
     peerThreadFor,
     policyModelRefusal,
     providerInstancesChanging,
@@ -71,6 +73,7 @@ export function createPrepareValidateStartTurn(
     turnAnswers,
     turnModelRequested,
     turnModelSwitches,
+    turnPayer,
     turnSurfacePlan,
     turnTrace,
     viewerBotOverrideStore,
@@ -395,8 +398,27 @@ export function createPrepareValidateStartTurn(
         if (refusal.cause === "usage_limit") return "rate_limited";
         return "unknown";
       };
-      const accounts = registry.instances()
-        .filter((inst) => inst.driverKind === home.driverKind && registry.access(inst.instanceId) !== "api")
+      // M-20261119-015: only the organization's accounts and the payer's own.
+      // The payer is engine-credentials.ts turnPayer, the one resolveEngineAccess
+      // judges the account with (orgEngineInput): the owner when the owner pays
+      // for the people who write to the bot, a routine's bot owner, a peer hop's.
+      const switchSpeaker = IDENTITY.kind === "perspicax" ? resolveTurnSpeaker({
+        speaker: state.opts?.speaker,
+        sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
+        peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
+        trigger: state.opts?.trigger,
+        automationSource: state.opts?.automationSource
+      }) : undefined;
+      const person = switchSpeaker ? turnPayer({
+        speaker: switchSpeaker,
+        owner: { principalId: effectiveBotOwner(state.bot) ?? "" },
+        peerOwnerPrincipalId: peerOwnerPrincipal(switchSpeaker),
+        payerMode: speakerPayerMode(state.bot, switchSpeaker),
+      }).principalId : null;
+      const ownerOf = (instanceId: string) => IDENTITY.kind === "perspicax" ? accountOwnerOf(cfg.instances, instanceId) : undefined;
+      const siblings = registry.instances()
+        .filter((inst) => inst.driverKind === home.driverKind && registry.access(inst.instanceId) !== "api");
+      const accounts = accountsOpenTo(siblings, ownerOf, person, selection.instanceId)
         .map((inst) => ({
           instanceId: inst.instanceId,
           models: (inst.models?.options ?? []).map((option: { id: string }) => option.id),

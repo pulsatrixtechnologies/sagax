@@ -285,7 +285,6 @@ model.payer.subscription
 model.payer.title
 model.provider
 model.settings.contextTitle
-model.simple.apiKey
 model.simple.effort
 model.simple.manage
 model.simple.model

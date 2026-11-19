@@ -40,6 +40,16 @@ export interface ModelMenuRow {
    * pooled out of sight under this row (one model, one row). "Runs with"
    * picks among them; a favorite starred on one of them still shows. */
   alternatives?: ModelMenuRow[];
+  /** M-20261119-015: the account this row runs on (the name the person gave
+   * it in Providers, else its address), set while the provider has two or
+   * more accounts in the menu. */
+  account?: string;
+  /** M-20261119-015: the same model on each account that offers it, this
+   * row's first (two or more): the menu's "Account" line picks one. */
+  accountRows?: ModelMenuRow[];
+  /** M-20261119-015: the "Special access" badge: only this account of the
+   * person's sign-in accounts offers the model (shared/model-accounts.ts). */
+  badge?: { label: string; title: string };
 }
 
 export interface ModelMenuSection {
@@ -64,7 +74,7 @@ export function filterModelSections(sections: readonly ModelMenuSection[], query
   if (words.length === 0) return sections.filter((section) => section.rows.length > 0);
   return sections.flatMap((section) => {
     const rows = section.rows.filter((row) => {
-      const haystack = foldSearch([section.label, row.label, row.detail, row.subtext, ...(row.tags ?? []), row.keywords, row.modelId].filter(Boolean).join(" "));
+      const haystack = foldSearch([section.label, row.label, row.detail, row.subtext, ...(row.tags ?? []), row.keywords, row.modelId, row.account, row.badge?.label].filter(Boolean).join(" "));
       return words.every((word) => haystack.includes(word));
     });
     return rows.length > 0 ? [{ ...section, rows }] : [];

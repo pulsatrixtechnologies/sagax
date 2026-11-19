@@ -30936,6 +30936,17 @@ const providerCatalogDeps: ProviderCatalogDeps = {
   },
   // an Azure resource behind an address row is served by the built in runtime only
   instanceConfigs: () => providerConfigs(),
+  // M-20261119-015: the caller's own sign-in of each account, never another person's
+  accountConnected: (auth) => {
+    const person = sessionPrincipal(auth);
+    const logins = engineLogins;
+    if (IDENTITY.kind !== "perspicax" || !logins || !person) return undefined;
+    return (instanceId) => {
+      const driver = instanceConfigs(cfg)[instanceId]?.driver;
+      if (!driver || !isLoginDriver(driver)) return undefined;
+      return logins.signedIn(person, driver, "primary", instanceId) && !logins.expired(person, driver, "primary", instanceId);
+    };
+  },
 };
 // 2026-10-30 (lot 2): the person's own model switches (Settings > Models)
 ROUTES.push(createModelSwitchRoutes({

@@ -45,7 +45,10 @@ struct DesktopModelMenu: View {
             useBotModel: { String(localized: "Use \($0)'s model") },
             local: String(localized: "Local"),
             defaultTag: String(localized: "Default"),
-            loadedTag: String(localized: "Loaded")
+            loadedTag: String(localized: "Loaded"),
+            specialAccess: String(localized: "Special access"),
+            specialAccessHint: { String(localized: "Only \($0) offers this model") },
+            accountNumbered: { String(localized: "Account \($0)") }
         )
         return ModelMenu.sections(
             instances: instances, selection: selection, botModel: profile.modelSelection, botName: profile.name,
@@ -197,6 +200,20 @@ struct DesktopModelMenu: View {
                                         .padding(.vertical, 1)
                                         .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                                 }
+                                // M-20261119-015: only this account of the person's offers the model
+                                if let badge = row.badge {
+                                    Text(verbatim: badge)
+                                        .font(theme.font(10.5))
+                                        .foregroundStyle(theme.accent)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                        .accessibilityHint(Text(verbatim: row.badgeHint ?? ""))
+                                }
+                            }
+                            // M-20261119-015: the account it runs on, while the provider has several
+                            if let account = row.account {
+                                Text(verbatim: account).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
                             }
                             if let detail = row.detail {
                                 Text(verbatim: detail).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)

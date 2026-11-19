@@ -111,6 +111,7 @@ export function ModelPanel(props: ModelPanelProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   // no useId or useRef: the interaction harness runs this function outside React
   const modelsId = "model-panel-models";
   const [listRef] = useState(() => ({ current: null as HTMLDivElement | null }));
@@ -161,27 +162,43 @@ export function ModelPanel(props: ModelPanelProps) {
   };
 
   // every row is one line, the same height: the name and its markers at the left,
-  // what the app knows (context size, origin, a warning) muted at the right
+  // what the app knows (context size, origin, a warning) muted at the right;
+  // M-20261119-015: a row that names its account takes that second line
   const rovingRows = all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
   const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
   const rovingFirst = rovingRows[0];
   const modelRow = (row: ModelMenuRow) => {
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
+    const nameLine = (
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-[13px] text-popover-ink">{row.label}</span>
+        {row.tags?.map((tag) => (
+          <span key={tag} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink-secondary">{tag}</span>
+        ))}
+      </span>
+    );
     return (
-      <div key={`${all ? view : "short"}:${row.key}`} className="group flex h-9 items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
+      <div key={`${all ? view : "short"}:${row.key}`} className={cn("group flex", row.account ? "min-h-11 py-0.5" : "h-9", "items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover")}>
         <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
-          disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title ?? (description ? `${row.label} · ${description}` : undefined)}
+          disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? ([row.title ?? (description ? `${row.label} · ${description}` : undefined), row.account].filter(Boolean).join(" · ") || undefined)}
           tabIndex={row.current || (!rovingHasCurrent && row === rovingFirst) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(row)}
           className={cn("flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
-          <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="truncate text-[13px] text-popover-ink">{row.label}</span>
-            {row.tags?.map((tag) => (
-              <span key={tag} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink-secondary">{tag}</span>
-            ))}
-          </span>
+          {row.account ? (
+            // M-20261119-015: the account this row runs on, under its name, while the provider has several
+            <span className="flex min-w-0 flex-1 flex-col justify-center">
+              {nameLine}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span data-model-row-account className="truncate text-[11.5px] leading-4 text-popover-ink-secondary">{row.account}</span>
+                {/* only this account of the person's offers the model */}
+                {row.badge && (
+                  <span data-model-badge title={row.badge.title} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-accent">{row.badge.label}</span>
+                )}
+              </span>
+            </span>
+          ) : nameLine}
           {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="max-w-[45%] shrink-0 truncate text-[12px] text-popover-ink-secondary">{description}</span>}
           <span className="flex size-3.5 shrink-0 items-center justify-center">
             {row.current && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
@@ -208,6 +225,10 @@ export function ModelPanel(props: ModelPanelProps) {
   const hasReasoning = showSettings && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
+  // M-20261119-015: the model in use is offered by several of the person's
+  // accounts: the one it runs on, and the others to move it to
+  const inUse = autoOn ? undefined : providers.flatMap((candidate) => candidate.rows).find((candidate) => candidate.current);
+  const accountChoices = inUse?.accountRows && inUse.accountRows.length > 1 ? inUse.accountRows : undefined;
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
@@ -371,6 +392,36 @@ export function ModelPanel(props: ModelPanelProps) {
       )}
 
       <div data-model-panel-footer className="shrink-0 border-t border-popover-hairline px-1.5 py-1">
+        {accountChoices && inUse && (
+          <>
+            {accountOpen && (
+              <div role="radiogroup" aria-label={t("model.account")} data-model-line-choices="account" className="pb-0.5"
+                onKeyDown={(event) => arrowRadios(event, "[data-model-account-choice]", "vertical")}>
+                {accountChoices.map((choice) => {
+                  const on = choice.instanceId === inUse.instanceId;
+                  return (
+                    <button key={choice.key} type="button" role="radio" aria-checked={on} disabled={disabled || Boolean(choice.unavailable)}
+                      data-model-account-choice={choice.instanceId} onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (!on) onPick({ ...choice, current: false });
+                        setAccountOpen(false);
+                      }}
+                      className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+                      <span className="truncate">{choice.account}</span>
+                      {on && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button type="button" data-model-line="account" aria-expanded={accountOpen} disabled={disabled} onClick={() => setAccountOpen((open) => !open)}
+              className="flex min-h-7 w-full min-w-0 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+              <span className="shrink-0">{t("model.account")}</span>
+              <span data-model-line-value className="truncate text-popover-ink">{inUse.account ?? ""}</span>
+              <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", accountOpen && "rotate-90")} />
+            </button>
+          </>
+        )}
         {runsShown && runsOpen && (
           <div role="radiogroup" aria-label={t("model.runsWith")} data-model-line-choices="runs-with" className="pb-0.5"
             onKeyDown={(event) => arrowRadios(event, "[data-model-line-choice]", "vertical")}>

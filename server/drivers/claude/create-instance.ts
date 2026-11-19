@@ -15,7 +15,7 @@ import type {
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
 import { decodeInjectId } from "../local-inject.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
+import { openStartupModelCatalog, readAccountModelCache, writeAccountModelCache, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { cliVersionReader, execCli, killCliTree } from "../../procs.ts";
 import {
   claudeSubscriptionHomeKey,
@@ -28,12 +28,16 @@ import { DRIVER_KIND, STATIC_CLAUDE_MODELS, type ClaudeCliVersion, type ClaudeCo
 import { createKeyModelCatalogs } from "../../models/key-model-catalogs.ts";
 import { liveModelListsEnabled } from "../../models/live-model-lists.ts";
 import {
+  accountModelsOrKept,
   ANTHROPIC_API_BASE,
   CLAUDE_MODELS_TTL_MS,
   claudeAuthKey,
   claudeEnvironmentAuth,
+  claudeLoginAccountKey,
   claudeLoginAuth,
   readClaudeAccountModels,
+  type AccountModelStore,
+  type ClaudeModelsAuth,
 } from "./account-models.ts";
 import { createClaudeSessionRuntime } from "./create-instance-session.ts";
 import { createSendTurn } from "./turn-send.ts";
@@ -117,12 +121,16 @@ export async function createClaudeInstance(
   let liveOfficial: ModelCatalog | null = null;
   let liveReadAt = 0;
   let refreshing: Promise<void> | null = null;
+  // M-20261119-015: a failed read (an expired sign-in, a restart) keeps the
+  // list this account gave last, never the written one
+  const accountStore: AccountModelStore = { read: readAccountModelCache, write: writeAccountModelCache };
   const readLiveOfficial = async () => {
     if (!liveModelListsEnabled()) return;
-    const found = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
-    if (!found) return;
-    const live = await readClaudeAccountModels(found.auth, STATIC_CLAUDE_MODELS, { baseUrl: found.baseUrl });
-    if (live) liveOfficial = live;
+    const kept = await accountModelsOrKept(`claude-instance:${instanceId}`, async () => {
+      const found = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
+      return found ? readClaudeAccountModels(found.auth, STATIC_CLAUDE_MODELS, { baseUrl: found.baseUrl }) : null;
+    }, accountStore);
+    if (kept) liveOfficial = kept;
   };
   const refreshModels = async () => {
     if (config.managed) return;
@@ -164,14 +172,28 @@ export async function createClaudeInstance(
   const modelsForAccess = async (access: TurnAccessInput): Promise<ModelCatalog> => {
     if (config.managed || !liveModelListsEnabled()) return models;
     const env = environment(null, access);
-    const own = access.via === "subscription" && access.claudeConfigDir
-      ? await claudeLoginAuth(access.claudeConfigDir, env).then((auth) => auth ? { auth, baseUrl: ANTHROPIC_API_BASE } : null)
-      : await claudeEnvironmentAuth(env, undefined);
-    if (!own) return models;
-    const ownAuth = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
-    if (ownAuth && claudeAuthKey(ownAuth.auth) === claudeAuthKey(own.auth)) return models;
-    const cacheKey = access.via === "subscription" ? `subscription:${access.identity}` : claudeAuthKey(own.auth);
-    return perAccount.forKey(cacheKey, async () => {
+    const sameAsInstance = async (auth: ClaudeModelsAuth) => {
+      const ownAuth = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
+      return Boolean(ownAuth && claudeAuthKey(ownAuth.auth) === claudeAuthKey(auth));
+    };
+    const loginDir = access.via === "subscription" ? access.claudeConfigDir : undefined;
+    if (loginDir) {
+      // M-20261119-015: the person's own sign-in folder of this account; a
+      // token past its life serves the list this folder gave last
+      const login = await claudeLoginAuth(loginDir, env).catch(() => null);
+      if (login && await sameAsInstance(login)) return models;
+      const accountKey = claudeLoginAccountKey(loginDir);
+      return perAccount.forKey(accountKey, async () => {
+        const live = await accountModelsOrKept(accountKey, async () => {
+          const auth = login ?? await claudeLoginAuth(loginDir, env).catch(() => null);
+          return auth ? readClaudeAccountModels(auth, STATIC_CLAUDE_MODELS, { baseUrl: ANTHROPIC_API_BASE }) : null;
+        }, accountStore);
+        return live ? mergeLocalInject(readClaudeModelCatalog(env, live), env) : null;
+      });
+    }
+    const own = await claudeEnvironmentAuth(env, undefined);
+    if (!own || await sameAsInstance(own.auth)) return models;
+    return perAccount.forKey(claudeAuthKey(own.auth), async () => {
       const live = await readClaudeAccountModels(own.auth, STATIC_CLAUDE_MODELS, { baseUrl: own.baseUrl });
       return live ? mergeLocalInject(readClaudeModelCatalog(env, live), env) : null;
     });

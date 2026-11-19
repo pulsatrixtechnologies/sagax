@@ -1478,7 +1478,7 @@ import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./bots/cloud-only-bots.ts";
 import { TypingPrewakeThrottle } from "./sandbox/sandbox-typing-prewake.ts";
-import { AUTO_COMPUTER_RULES, autoComputerToolRefusal, autoStartLine, autoStartTarget, parseAutoComputerTarget, type AutoComputerState, type AutoComputerTarget, type AutoStart, type FixedWorksOn } from "./computer/auto-computer.ts";
+import { AUTO_COMPUTER_MCP_NAME, AUTO_COMPUTER_RULES, autoComputerToolRefusal, autoStartLine, autoStartTarget, parseAutoComputerTarget, type AutoComputerState, type AutoComputerTarget, type AutoStart, type FixedWorksOn } from "./computer/auto-computer.ts";
 import { parseWorkspaceLine, workspaceLineName } from "../shared/workspace-line.ts";
 import { computerSelectTarget } from "../shared/execution-target.ts";
 import { attachDesktopTerminal, attachDesktopTunnel, createBridgeAudit, createDesktopBridgeRoutes } from "./desktop/desktop-bridge-routes.ts";
@@ -28885,11 +28885,15 @@ function mountedDestinationOf(bot: BotRecord, threadId: string, tool: string | u
  * cloud computer, their computer, the choice among them) Sagax mounted for
  * this bot's turn when the tool is on one of those servers, or null when
  * no record of the mount is left (engine-access.ts memberBotAdminReason
- * reads null as the person's own). */
+ * reads null as the person's own). The cloud computer and the computer are
+ * the record mountedDestinationOf already reads; the choice among places is
+ * the turn's computer_select mount (TurnWorkplace.computerChoice). */
 function personPlaceOwnerOf(bot: BotRecord, threadId: string, tool: string | undefined): string | null {
-  if (!personPlaceServer(tool)) return null;
+  const server = personPlaceServer(tool);
+  if (!server) return null;
+  if (server !== AUTO_COMPUTER_MCP_NAME) return mountedDestinationOf(bot, threadId, tool);
   const workplace = turnWorkplaces.get(threadId);
-  if (workplace?.botId !== bot.id) return null;
+  if (workplace?.botId !== bot.id || !workplace.computerChoice) return null;
   return workplace.decision.principal?.trim().toLowerCase() || null;
 }
 /** Whether `person` wrote this turn themselves (member-environment.ts

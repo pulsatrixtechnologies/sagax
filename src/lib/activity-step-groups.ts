@@ -127,7 +127,39 @@ function groupsWithMerge(
     buffer.push(step);
   }
   flush();
-  return groups;
+  return foldSameSteps(groups, previousWhere);
+}
+
+/** The same action anywhere in the run reads once with its total (JC
+ * 2026-11-19: "Ran a command ×38", not twenty rows): one row per label and
+ * phase, in the order of the first appearance. A running step and a
+ * sub-agent never fold, a failure stays apart from the successes. The
+ * detail of every call stays inside the row. */
+function foldSameSteps(groups: ActivityStepGroup[], previousWhere: BotActivityStep["where"] | undefined): ActivityStepGroup[] {
+  const first = new Map<string, ActivityStepGroup>();
+  const out: ActivityStepGroup[] = [];
+  for (const group of groups) {
+    if (group.subagent || group.phase === "running") { out.push(group); continue; }
+    const key = `${group.label}\u0000${group.phase}`;
+    const head = first.get(key);
+    if (!head) {
+      const copy = { ...group, steps: [...group.steps] };
+      first.set(key, copy);
+      out.push(copy);
+      continue;
+    }
+    head.steps.push(...group.steps);
+    head.count = head.steps.length;
+    if (head.summary !== group.summary) delete head.summary;
+    delete head.title;
+    if (!head.where && group.where) head.where = group.where;
+  }
+  let lastWhere = previousWhere;
+  return out.map((group) => {
+    const whereChanged = group.where !== undefined && group.where !== lastWhere;
+    if (group.where !== undefined) lastWhere = group.where;
+    return { ...group, whereChanged };
+  });
 }
 
 /** The top-level steps grouped, each sub-agent's calls grouped under it.

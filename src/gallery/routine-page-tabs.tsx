@@ -26,7 +26,7 @@ const webhook = kind.startsWith("webhook");
 const bot = { id: "pepper", threadId: "t1", name: "Pepper", title: "Pepper", description: "", notifications: false, color: "green", unread: false, messages: [], modelSelection: { instanceId: "local", model: "local" } } as unknown as Bot;
 const prompt = "Read the shared inbox and the open requests board.\n\nPost the three items that need an answer today, each with who asked and by when. Skip anything already answered.\n\nEnd with one line on what changed since yesterday.";
 const routine = {
-  id: "r1", name: webhook ? "New order received" : "Evening wrap-up", prompt, target: "bot", botId: "pepper", runOn: "maus", enabled: true,
+  id: "r1", name: params.get("name") ?? (webhook ? "New order received" : "Evening wrap-up"), prompt, target: "bot", botId: "pepper", runOn: "maus", enabled: true,
   schedule: webhook ? { type: "webhook" } : { type: "cron", expression: "15 20 * * 1-5", timeZone: "America/Toronto" },
   ...(webhook ? {} : { mailAlias: "wrapup", precheck: { kind: "watch", source: { type: "files", path: "~/Inbox" } } }),
   nextRunAt: webhook ? null : NOW + 3 * HOUR, durationMinutes: 30, createdAt: 1, updatedAt: 1, canRun: true, postResults: true,

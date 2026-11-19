@@ -155,6 +155,21 @@ describe("grouped steps", () => {
     expect(html.match(/aria-expanded="false"/g)).toHaveLength(4);
   });
 
+  it("a row folded from both places names both, and each call says where it ran (#4988)", () => {
+    const steps = [routine("r1", true), routine("r2", true, "computer"), routine("r3", true)];
+    const groups = groupActivitySteps(steps);
+    expect(groups).toHaveLength(1);
+    const row = renderToStaticMarkup(createElement(ActivityStepGroups, { steps }));
+    expect(row.match(/data-activity-where="server"/g)).toHaveLength(1);
+    expect(row.match(/data-activity-where="computer"/g)).toHaveLength(1);
+    const open = renderToStaticMarkup(createElement(GroupDetail, { group: groups[0]! }));
+    expect(open.match(/data-activity-where="server"/g)).toHaveLength(2);
+    expect(open.match(/data-activity-where="computer"/g)).toHaveLength(1);
+    // one place only: the call list does not repeat it
+    const one = groupActivitySteps([routine("r1", true), routine("r3", true)]);
+    expect(renderToStaticMarkup(createElement(GroupDetail, { group: one[0]! }))).not.toContain("data-activity-where");
+  });
+
   it("an opened failed step says its error, and an opaque id in its arguments reads as \"…\" (2026-11-02)", () => {
     const messageId = "AAMkAGI2NGVhZTVlLTI1OGMtNDI4My1iZmE5LTA5OGJiZGEzMzQ0NwBGAAAAAAA-xfvW_8d3SL=";
     const steps: BotActivityStep[] = [

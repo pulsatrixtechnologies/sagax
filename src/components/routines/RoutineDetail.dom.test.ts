@@ -121,6 +121,14 @@ describe("the side panel's status rows (2026-11-06, the owner)", () => {
     flushSync(() => root.render(createElement(RoutineStateBadge, { routine, runs: [] })));
     expect(host.querySelector("[data-routine-state-badge]")).toBeNull();
   });
+  it("does not say Running in the header: the run card and the button already do", () => {
+    const live = [{ routineId: routine.id, status: "running" }] as unknown as RoutineRun[];
+    flushSync(() => root.render(createElement(RoutineStateBadge, { routine, runs: live })));
+    expect(host.querySelector("[data-routine-state-badge]")).toBeNull();
+    const waiting = [{ routineId: routine.id, status: "waiting" }] as unknown as RoutineRun[];
+    flushSync(() => root.render(createElement(RoutineStateBadge, { routine, runs: waiting })));
+    expect(host.querySelector("[data-routine-state-badge=info]")).not.toBeNull();
+  });
 });
 
 describe("the routine page's runs (#4357)", () => {

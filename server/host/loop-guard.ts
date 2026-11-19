@@ -234,7 +234,7 @@ function loopNote(call: string, streak: number): string {
 
 /** A call the provider already refused for this person, called again. */
 function refusedNote(tool: string, reason: string): string {
-  return `[Sagax: ${quoteInNote(tool, CALL_QUOTE_MAX).replace(/[“”]/g, '"')} was already refused for this person: ${quoteInNote(reason, CALL_QUOTE_MAX * 2).replace(/[“”]/g, '"')}. Calling it again will not help. Use another way, or tell the person in one plain sentence why it is refused and what would change it.]`;
+  return `[Sagax: ${quoteInNote(tool, CALL_QUOTE_MAX).replace(/[“”]/g, '"')} was refused for this person before too: ${quoteInNote(reason, CALL_QUOTE_MAX * 2).replace(/[“”]/g, '"')}. If the task needs it, say in one plain sentence why it is refused and what access would make it answer (signing in to the connector again picks up a new grant).]`;
 }
 
 function loopCause(call: string, streak: number): string {

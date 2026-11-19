@@ -147,8 +147,8 @@ describe("what the model is told", () => {
     memory.record("ada@example.com", "github", "create_issue", permissionRefusalOf(GITHUB_SCOPE, 10)!);
     const lines = refusalLines(memory.list("ada@example.com"));
     expect(lines).toEqual([
-      "github refused for this person (insufficient_scope), never call or retry: create_issue.",
-      "X refused for this person (billing-scope-missing), never call or retry: get_users_by_username. Instead: search_users with the handle, then get_users_posts with its id",
+      "github last refused create_issue for this person (insufficient_scope) at 00:00 UTC; its access may have changed since, call it when the task needs it.",
+      "X last refused get_users_by_username for this person (billing-scope-missing) at 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id",
     ]);
     registerReachProvider("tool-refusals", ({ speakerPrincipalId, room }) => {
       if (room || !speakerPrincipalId) return null;
@@ -156,8 +156,8 @@ describe("what the model is told", () => {
       return refused.length ? { lines: refusalLines(refused), refused: refused.map((row) => `${row.connector}/${row.tool}`) } : null;
     });
     const reach = reachContributions({ speakerPrincipalId: "ada@example.com" });
-    expect(reach.lines[1]).toContain("never call or retry: get_users_by_username");
-    expect(reach.lines[0]).toContain("github refused for this person");
+    expect(reach.lines[1]).toContain("X last refused get_users_by_username for this person");
+    expect(reach.lines[0]).toContain("github last refused create_issue for this person");
     expect(reach.refused).toEqual(["github/create_issue", "x/get_users_by_username"]);
     expect(reachContributions({ speakerPrincipalId: "zed@example.com" }).lines).toEqual([]);
     expect(reachContributions({ speakerPrincipalId: "ada@example.com", room: true }).lines).toEqual([]);
@@ -205,8 +205,31 @@ describe("what the model is told", () => {
     play(X_TITLE, false);
     play(X_TITLE, false);
     expect(steers).toHaveLength(1);
-    expect(steers[0]).toContain("was already refused for this person: X answered billing-scope-missing, needs developer.billing.write");
+    expect(steers[0]).toContain("was refused for this person before too: X answered billing-scope-missing, needs developer.billing.write");
     expect(steers[0]).toContain("Instead: search_users with the handle, then get_users_posts with its id.");
+    // #4919: the note says why, never that calling again is useless
+    expect(steers[0]).not.toMatch(/will not help|never (?:call|retry)/i);
+  });
+});
+
+describe("a refusal is told, never an order not to call (#4919)", () => {
+  // Liberty audit 2026-11-19 G1: #4737 told every bot of the person "never
+  // call or retry" a refused tool for 24 h, on every connector, with no owner
+  // decision (owner 2026-11-09: no block without a decision; 2026-11-18: the
+  // bots give up too fast). The reason, the way around and the reconnect
+  // invitation stay; nothing tells a bot not to call the tool again.
+  const FORBIDDING = /never (?:call|retry)|not call|do not retry|will not help|don't call/i;
+
+  it("the reach line, the person's row and the loop guard note never forbid calling again", () => {
+    const r = rig();
+    r.call("chat-a", { title: X_TITLE }, { ok: false, output: X_BILLING });
+    r.call("chat-a", { title: "mcp__github__create_issue" }, { ok: false, output: GITHUB_SCOPE });
+    const lines = refusalLines(r.memory.list("ada@example.com"));
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line).not.toMatch(FORBIDDING);
+    expect(lines.join("\n")).toContain("billing-scope-missing");
+    for (const row of r.told) expect(row.name).not.toMatch(FORBIDDING);
+    expect(r.told.map((row) => row.name).join("\n")).toContain("github refused create_issue for your access (insufficient_scope");
   });
 });
 
@@ -232,7 +255,7 @@ describe("second review (#4720)", () => {
     });
     const { lines } = reachContributions({ connectorPrincipalId: "ada@example.com" });
     expect(lines).toEqual(refusalLines(memory.list("ada@example.com")));
-    expect(lines[1]).toBe("X refused for this person (billing-scope-missing), never call or retry: get_usage_credits, get_users_by_id, get_users_by_username, get_users_by_usernames, search_posts_all. Instead: search_users with the handle, then get_users_posts with its id");
+    expect(lines[1]).toBe("X last refused get_usage_credits, get_users_by_id, get_users_by_username, get_users_by_usernames, search_posts_all for this person (billing-scope-missing) at 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id");
   });
 
   it("is kept for whoever's connections the turn uses: a routine run as B on A's bot uses A's", () => {

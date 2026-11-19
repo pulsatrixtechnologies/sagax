@@ -200,6 +200,9 @@ export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = 
  * Active toggle is gone, Pause is in the bar): failing, paused by itself,
  * suspended, running. Nothing when all is well, paused or finished. */
 export function RoutineStateBadge({ routine, runs }: { routine: Routine; runs: RoutineRun[] }) {
+  // Running is told once, by the run's card and the Running... button (JC
+  // 2026-11-19); Waiting and Queued have no other word, they stay here.
+  if (runs.some((run) => run.routineId === routine.id && run.status === "running")) return null;
   const state = routineState(routine, runs);
   if (state.tone !== "warning" && state.tone !== "info") return null;
   return <span data-routine-state-badge={state.tone} title={state.label} className={cn("inline-flex min-w-0 max-w-[45%] shrink items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", STATE_TONES[state.tone])}>

@@ -9,13 +9,22 @@ const routine = (id: string, ok: boolean | undefined, where: "server" | "compute
 });
 
 describe("groupActivitySteps", () => {
+  it("folds the same action anywhere in the run into one row with its total, in order of first appearance", () => {
+    const bash = (id: string): BotActivityStep => ({ id, name: "Bash", at: NOW, ok: true, summary: `cmd ${id}` });
+    const read = (id: string): BotActivityStep => ({ id, name: "Read", at: NOW, ok: true, summary: `f ${id}` });
+    const groups = groupActivitySteps([bash("b1"), read("x1"), bash("b2"), read("x2"), bash("b3"), { ...bash("bf"), ok: false }]);
+    expect(groups.map((group) => [group.id, group.count, group.phase])).toEqual([["b1", 3, "done"], ["x1", 2, "done"], ["bf", 1, "failed"]]);
+    expect(groups[0]!.steps.map((step) => step.id)).toEqual(["b1", "b2", "b3"]);
+    expect(groups[0]!.summary).toBeUndefined();
+  });
+
   it("merges the same step repeated back to back and keeps a failure apart", () => {
     const groups = groupActivitySteps([
       routine("r1", true), routine("r2", true), routine("r3", true),
       routine("rf", false),
       routine("r4", true), routine("r5", true),
     ]);
-    expect(groups.map((group) => [group.count, group.phase])).toEqual([[3, "done"], [1, "failed"], [2, "done"]]);
+    expect(groups.map((group) => [group.count, group.phase])).toEqual([[5, "done"], [1, "failed"]]);
     expect(groups[0]!.id).toBe("r1");
     expect(groups[0]!.summary).toBe("Next routine action");
     expect(countFailedSteps(groups)).toBe(1);
@@ -30,9 +39,9 @@ describe("groupActivitySteps", () => {
       routine("r3", true, "computer"), routine("rx", undefined, "computer"),
     ]);
     // r1 and r2 share a label, so mergeSteps folds them (place mark stays on the first)
-    expect(groups.map((group) => group.id)).toEqual(["r1", "a1", "r3", "rx"]);
-    expect(groups[0]!.count).toBe(2);
-    expect(groups[3]!.phase).toBe("running");
+    expect(groups.map((group) => group.id)).toEqual(["r1", "a1", "rx"]);
+    expect(groups[0]!.count).toBe(3);
+    expect(groups[2]!.phase).toBe("running");
     expect(groups[1]!.subagent).toBe(true);
     expect(groups[1]!.substeps!.map((group) => group.count)).toEqual([2]);
   });
@@ -69,7 +78,8 @@ describe("groupActivitySteps", () => {
       routine("r2", true, "computer"), { id: "s2", name: "Read", at: NOW, ok: true, where: "computer" },
       routine("r3", true), { id: "s3", name: "Read", at: NOW, ok: true },
     ]);
-    expect(groups.map((group) => group.whereChanged)).toEqual([true, false, true, false, true, false]);
+    // the same action folds into one row (first place), so the mark shows once on each
+    expect(groups.map((group) => [group.count, group.whereChanged])).toEqual([[3, true], [3, false]]);
   });
 
   it("drops a summary that differs inside a group", () => {

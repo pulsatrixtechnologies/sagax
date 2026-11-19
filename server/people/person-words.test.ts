@@ -33,6 +33,8 @@ describe("#3515: a line the server stored, in the reader's language", () => {
     expect(serverLineIn("fr-CA", "notice: Workspace: In the cloud")).toBe("Dans l'infonuagique");
     expect(serverLineIn("fr", "Asked by Beta")).toBe("Beta a demandé");
     expect(serverLineIn("fr", "Resuming after a restart")).toBe((fr as Record<string, string>)["step.resuming"]);
+    expect(serverLineIn("fr", "Could not confirm this step after the restart, so it was not run again: GMAIL_SEND_EMAIL"))
+      .toBe("Impossible de confirmer cette étape après le redémarrage, alors elle n'a pas été refaite : GMAIL_SEND_EMAIL");
     expect(serverLineIn("fr", "the bot's own words")).toBe("the bot's own words");
   });
 

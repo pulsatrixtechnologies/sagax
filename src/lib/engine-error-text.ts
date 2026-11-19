@@ -33,6 +33,7 @@ export function restartSentence(text: string): string | null {
     case "restart.cut": return t("chat.restart.cut");
     case "restart.resumeFailed": return t("chat.restart.resumeFailed", { detail: known.detail });
     case "restart.outward": return t("chat.restart.outward", { detail: outwardDetailIn(known, (key, vars) => t(key as LocaleKey, vars)) });
+    case "restart.outwardUnknown": return t("chat.restart.outwardUnknown", { detail: known.detail });
     case "restart.cutTwice": return t("chat.restart.cutTwice");
     case "restart.notResumed": return t("chat.restart.notResumed");
     case "restart.notResumedNewer": return t("chat.restart.notResumedNewer");

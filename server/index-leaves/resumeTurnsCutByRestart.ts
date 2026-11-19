@@ -1,11 +1,10 @@
 // @ts-nocheck
 /** resumeTurnsCutByRestart (#1388). Pure move from server/index.ts. */
 import { failedTurnTool } from "../../shared/failed-turn.ts";
-import { TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/restart-words.ts";
+import { outwardUnknownSentence, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/restart-words.ts";
 import { DATA_DIR } from "../config.ts";
 import { ROUTINE_RESTARTED, ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
 import { migrateLegacyHeldSteers, takeHeldSteersForThread, resumePromptWithHeld } from "../turns/held-steers.ts";
-import { outwardDetail } from "../runtime/tree.ts";
 import { cutTurnContext, cutTurnResumePrompt, directResumeStep, type DirectResumeStep, RUNTIME_RESUME_GRACE_MS, runtimeResumeVerdict, takeInterruptedTurns, TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
@@ -52,8 +51,7 @@ function resumeTurnsCutByRestart(): void {
     }
     // A newer request already runs here: the cut turn is not resumed, and the conversation says so.
     if (host.threadBusy(turn.botId, turn.threadId)) { failed(turn.threadId, TURN_NOT_RESUMED_NEWER); continue; }
-    const prompt = resumePromptFor(host, turn, failed);
-    if (prompt === null) continue;
+    const prompt = resumePromptFor(host, turn);
     host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
     // Messages accepted into the cut turn stay answered once: fold them into
     // this resume (D2), then drop the durable rows so crash recovery does not
@@ -80,14 +78,18 @@ type DirectResume = { botId: string; threadId: string; at: number; prompt: strin
   /** The runtime accounts for this turn (it resumes it itself): only watched until it is seen lost. */
   runtime?: boolean; runtimeHeld?: boolean };
 
-/** #3217: the prompt that resumes a cut chat turn: the request it answers
- * and the steps it already did (cutTurnResumePrompt). A cut turn that
- * already sent, posted, pushed or paid is not run again, as the runtime's
- * restart policy does (contract §5): its conversation says what it did, and
- * the answer is null. */
-function resumePromptFor(host: Host, turn: { threadId: string; at: number }, failed: (threadId: string, why: string) => void): string | null {
+/** #3217: the prompt that resumes a cut chat turn: the request it answers,
+ * the steps it already did, and the outward steps that were looked up
+ * (cutTurnResumePrompt). A step whose result cannot be confirmed is told
+ * to the person and is not run again. The rest of the turn still starts. */
+function resumePromptFor(host: Host, turn: { threadId: string; at: number }): string {
   const context = cutTurnContext(host.store.messagesFor(turn.threadId) ?? [], turn.at);
-  if (context.outward.length) { failed(turn.threadId, outwardDetail(context.outward)); return null; }
+  if (context.unknownOutward.length) {
+    host.store.appendMessage(turn.threadId, {
+      role: "bot", kind: "activity",
+      tool: { name: outwardUnknownSentence(context.unknownOutward), ok: true },
+    });
+  }
   return cutTurnResumePrompt(context);
 }
 
@@ -128,8 +130,7 @@ export function watchDirectResumes(host: Host, turns: DirectResume[], failed: (t
       if (step === "wait") waiting.push(turn);
       else if (step === "relaunch") {
         if (!host.store.taskByThread(turn.botId, turn.threadId)) continue;
-        const prompt = turn.prompt || resumePromptFor(host, turn, failed);
-        if (prompt === null) continue;
+        const prompt = turn.prompt || resumePromptFor(host, turn);
         console.error(`[restart-resume] thread=${turn.threadId} cut turn has no answer: starting it again`);
         host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
         const again: DirectResume = { ...turn, prompt, relaunched: true, runtime: false };

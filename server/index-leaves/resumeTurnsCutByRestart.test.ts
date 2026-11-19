@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { RESTART_TURN_NOTE } from "../../shared/restart-words.ts";
-import { INTERRUPTED_OUTWARD } from "../runtime/tree.ts";
-import { RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
+import { repeatedOutward, RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
 import { ENGINE_EXITED_SENTENCE } from "../../shared/engine-exit-words.ts";
 import { createResumeTurnsCutByRestart, watchDirectResumes } from "./resumeTurnsCutByRestart.ts";
 import { isPersonOwnLine } from "../turns/start-turn-prepare-admit.ts";
@@ -88,11 +87,13 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
 
   /** The conversation as the stop left it: the person's request, the bot's
    * first words, a step already done, then the stop's note. */
-  function cutConversation(step: { name: string; output?: string }) {
+  function cutConversation(step: { name: string; output?: string; itemId?: string | null }): any[] {
+    const tool: Record<string, unknown> = { name: step.name, ok: true, ...(step.output ? { output: step.output } : {}) };
+    if (step.itemId !== null) tool.itemId = step.itemId ?? "call-1";
     return [
       { id: "u1", role: "user", kind: "text", text: "Lis le réglage de sauvegarde et dis-moi sa valeur", at: 90_000 },
       { id: "b1", role: "bot", kind: "text", text: "Je lis le réglage sans rien modifier.", at: 91_000 },
-      { id: "s1", role: "bot", kind: "activity", tool: { name: step.name, ok: true, itemId: "call-1", ...(step.output ? { output: step.output } : {}) }, at: 92_000 },
+      { id: "s1", role: "bot", kind: "activity", tool, at: 92_000 },
       { id: "n1", role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true }, at: 95_500 },
     ];
   }
@@ -186,17 +187,37 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
     expect(messages.filter((m) => m.tool?.name === "Resuming after a restart")).toHaveLength(1);
   });
 
-  it("a cut turn that already sent something is not run again and says what it did", async () => {
+  it("a cut turn that already sent something resumes once and does not send it again", async () => {
     const messages = cutConversation({ name: "GMAIL_SEND_EMAIL" });
     saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
     const host = bootHost(messages);
     createResumeTurnsCutByRestart(() => host)();
     await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 3);
-    expect(host.startTurn).not.toHaveBeenCalled();
-    const lines = messages.filter((m) => m.tool?.ok === false).map((m) => String(m.tool!.name));
-    expect(lines).toEqual([failedTurnTool(lines[0].slice("error: ".length)).name]);
-    expect(lines[0]).toContain(INTERRUPTED_OUTWARD);
-    expect(lines[0]).toContain("GMAIL_SEND_EMAIL");
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+    const prompt = String((host.startTurn.mock.calls[0] as unknown[])[1]);
+    expect(prompt).toContain("Lis le réglage de sauvegarde et dis-moi sa valeur");
+    expect(prompt).toContain("Outward steps looked up as already done. Do not run them again: GMAIL_SEND_EMAIL");
+    expect(messages.filter((m) => m.tool?.name === "GMAIL_SEND_EMAIL")).toHaveLength(1);
+    expect(repeatedOutward(messages, "GMAIL_SEND_EMAIL")).toBe("done");
+    expect(messages.some((m) => m.tool?.ok === false)).toBe(false);
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("a cut send that cannot be confirmed is told to the person and is not run again", async () => {
+    const messages = cutConversation({ name: "GMAIL_SEND_EMAIL", itemId: null });
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
+    const host = bootHost(messages);
+    createResumeTurnsCutByRestart(() => host)();
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 3);
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+    const prompt = String((host.startTurn.mock.calls[0] as unknown[])[1]);
+    expect(prompt).toContain("Lis le réglage de sauvegarde et dis-moi sa valeur");
+    expect(prompt).toContain("Outward steps that could not be confirmed. Do not run them again: GMAIL_SEND_EMAIL");
+    const notice = messages.find((m) => typeof m.tool?.name === "string" && m.tool.name.startsWith("Could not confirm this step"));
+    expect(notice?.tool).toMatchObject({ ok: true });
+    expect(messages.filter((m) => m.tool?.name === "GMAIL_SEND_EMAIL")).toHaveLength(1);
+    expect(repeatedOutward(messages, "GMAIL_SEND_EMAIL")).toBe("unknown");
+    expect(messages.some((m) => m.tool?.ok === false)).toBe(false);
   });
 });
 

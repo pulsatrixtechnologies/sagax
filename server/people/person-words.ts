@@ -52,6 +52,7 @@ const RESTART_KEYS: Record<NonNullable<ReturnType<typeof restartSentenceKey>>["k
   "restart.cut": "chat.restart.cut",
   "restart.resumeFailed": "chat.restart.resumeFailed",
   "restart.outward": "chat.restart.outward",
+  "restart.outwardUnknown": "chat.restart.outwardUnknown",
   "restart.cutTwice": "chat.restart.cutTwice",
   "restart.notResumed": "chat.restart.notResumed",
   "restart.notResumedNewer": "chat.restart.notResumedNewer",
@@ -85,7 +86,8 @@ export function serverLineIn(language: string | undefined, text: string): string
   const known = restartSentenceKey(words);
   if (!known) return text;
   if (known.key === "restart.outward") return say(RESTART_KEYS[known.key], { detail: outwardDetailIn(known, say) });
-  return say(RESTART_KEYS[known.key], known.key === "restart.resumeFailed" ? { detail: known.detail } : undefined);
+  const detail = known.key === "restart.resumeFailed" || known.key === "restart.outwardUnknown" ? known.detail : undefined;
+  return say(RESTART_KEYS[known.key], detail !== undefined ? { detail } : undefined);
 }
 
 /** #3515: a bot row that ended on a failed or partial status line (kept as

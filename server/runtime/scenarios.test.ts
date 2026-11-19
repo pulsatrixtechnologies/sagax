@@ -2033,10 +2033,11 @@ describe("§2/§5 every turn a root", () => {
 });
 
 // ── §5 outward / §2 loop guard ─────────────────────────────────────────
-// Reruns everywhere except where a rerun could repeat something outward,
-// and long work continues until it stops making progress. The host says
-// what a cut turn already did (TurnRunner.outward) and what each continued
-// execution showed (TurnEvidence); the runtime decides from that alone.
+// A cut turn reruns once. Outward steps the host names are listed in the
+// restart note so they are not run again. A second cut still ends. Long
+// work continues until it stops making progress. The host says what a cut
+// turn already did (TurnRunner.outward) and what each continued execution
+// showed (TurnEvidence); the runtime decides from that alone.
 
 describe("§5 outward / §2 loop guard", () => {
   const NO_PROGRESS = { okToolCalls: 0, toolCalls: 2 };
@@ -2070,60 +2071,54 @@ describe("§5 outward / §2 loop guard", () => {
     invariants(w);
   });
 
-  it("R-S9 a cut turn that already acted outward is not rerun: failed(interrupted) with what it did, reported; a root into its own conversation, a child to its requester with the restart note", async () => {
+  it("R-S9 a cut turn that already acted outward resumes once with those steps named; a rerun cut again ends with what it did", async () => {
     // a root cut during its own turn, after it had sent an email and pushed
     const w = world();
     const root = beginChief(w);
     w.runner.setOutward(root.id, ["GMAIL_SEND_EMAIL", "git push"]);
     reopen(w);
-    const ended = get(w, root.id);
-    expect(ended).toMatchObject({ status: "failed", outcome: "interrupted", restarts: 0, executions: 1 });
-    expect(ended.restart).toBeUndefined();
-    expect(ended.outcomeDetail).toBe(`${INTERRUPTED_OUTWARD} sent an email (GMAIL_SEND_EMAIL), pushed (git push); not resumed, so nothing is done twice.`);
-    expect(ended.outcomeDetail!.startsWith("Interrupted by a Sagax restart after it already")).toBe(true);
-    expect(ended.result).toBe(ended.outcomeDetail);
-    expect(kinds(w, root.id)).toEqual(["enqueued", "started", "restart_reconciled", "settled", "reported"]);
-    expect(w.store.events(root.id).map((e) => e.detail)).toEqual(["queued: root", "running: turn 1 (host), level auto", "failed: outward action done",
-      `failed: interrupted — ${ended.outcomeDetail}`, "reported"]);
+    const resumed = get(w, root.id);
+    expect(resumed).toMatchObject({ status: "queued", restart: "rerun", restarts: 1, executions: 1 });
+    expect(resumed.evidence?.outward).toEqual(["GMAIL_SEND_EMAIL", "git push"]);
+    expect(resumed.outcome).toBeUndefined();
+    expect(w.store.events(root.id).find((e) => e.kind === "restart_reconciled")?.detail).toBe("queued: rerun 1");
     expect(w.runner.callsOf("outward").map((c) => c.id)).toEqual([root.id]);
-    // the host's root report hook shows the interrupted line; nobody is woken
-    expect(w.runner.reports(root.id)).toHaveLength(1);
-    expect(w.runner.reports(root.id)[0].parent).toBeUndefined();
-    expect(w.runner.reports(root.id)[0].a!.outcomeDetail).toBe(ended.outcomeDetail);
-    expect(w.store.inbox(chiefOwner, false)).toEqual([]);
     invariants(w);
     await drain(w);
-    expect(w.runner.runs(root.id)).toHaveLength(0);
-    expect(get(w, root.id).status).toBe("failed");
+    const runs = w.runner.runs(root.id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].input!.turn).toBe("rerun");
+    expect(runs[0].input!.restartNote).toContain("GMAIL_SEND_EMAIL");
+    expect(runs[0].input!.restartNote).toContain("git push");
+    expect(runs[0].input!.restartNote).toContain("do not run them again");
+    expect(get(w, root.id)).toMatchObject({ status: "completed", restarts: 1, executions: 2 });
     invariants(w);
 
-    // a child cut mid-turn after it posted: its requester hears it like any failed child, and its restart note names it
+    // a child cut mid-turn after it posted: one resume names the post, and the requester hears that resume
     const v = world();
     const vroot = beginChief(v);
     const child = ok(enqueueFrom(v, vroot, workFor("dev", "Announce the release")));
-    v.runner.script("dev", hang(), complete("never"));
+    v.runner.script("dev", hang(), complete("sent"));
     v.runner.script("chief", complete("reviewed"));
     v.rt.end(vroot.id, { ok: true, text: "" });
     await drain(v);
     expect(get(v, child.id).status).toBe("running");
     v.runner.setOutward(child.id, ["SLACK_SEND_MESSAGE"]);
     reopen(v);
-    const cut = get(v, child.id);
-    expect(cut).toMatchObject({ status: "failed", outcome: "interrupted", restarts: 0, executions: 1 });
-    expect(cut.outcomeDetail).toBe(`${INTERRUPTED_OUTWARD} sent a message (SLACK_SEND_MESSAGE); not resumed, so nothing is done twice.`);
-    expect(v.store.events(child.id).find((e) => e.kind === "restart_reconciled")?.detail).toBe("failed: outward action done");
-    expect(v.runner.reports(child.id)).toHaveLength(1);
-    expect(v.runner.reports(child.id)[0].parent?.id).toBe(vroot.id);
-    expect(v.store.inbox(chiefOwner, false).map((i) => [i.assignmentId, i.kind])).toEqual([[child.id, "settled"]]);
+    expect(get(v, child.id)).toMatchObject({ status: "queued", restart: "rerun", restarts: 1, executions: 1, evidence: { outward: ["SLACK_SEND_MESSAGE"] } });
+    expect(v.store.events(child.id).find((e) => e.kind === "restart_reconciled")?.detail).toBe("queued: rerun 1");
     expect(get(v, vroot.id)).toMatchObject({ status: "waiting", restart: "teammates" });
     invariants(v);
     await drain(v);
-    expect(v.runner.runs(child.id)).toHaveLength(1);
+    const childRuns = v.runner.runs(child.id);
+    expect(childRuns).toHaveLength(2);
+    expect(childRuns[1].input!.restartNote).toContain("SLACK_SEND_MESSAGE");
+    expect(childRuns[1].input!.restartNote).toContain("do not run them again");
+    expect(get(v, child.id)).toMatchObject({ status: "completed", result: "sent", restarts: 1 });
     const resume = v.runner.runs(vroot.id);
     expect(resume).toHaveLength(1);
     expect(resume[0].input!.turn).toBe("resume");
-    expect(resume[0].input!.settled?.map((a) => [a.id, a.outcome, a.outcomeDetail])).toEqual([[child.id, "interrupted", cut.outcomeDetail]]);
-    expect(resume[0].input!.restartNote).toBe("A restart cut these teammates' turns: Dev (cut after an outward action, not resumed: see its result). Check their results as usual.\n");
+    expect(resume[0].input!.restartNote).toContain("Dev (resumed once in place and told to check what it had already done)");
     expect(get(v, vroot.id)).toMatchObject({ status: "completed", result: "reviewed" });
     invariants(v);
 

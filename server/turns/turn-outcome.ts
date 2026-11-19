@@ -139,10 +139,10 @@ const toolRows = (rows: readonly Message[]) =>
 /** The outward actions a turn's activity rows show it completed — sends,
  * posts, publishes, invites, payments (shared/outbound.ts) and shell
  * commands that committed, pushed or paid — as short labels, each once, in
- * order. The one classifier: the restart policy reads it to decide that a
- * cut turn must not run again (docs/runtime-contract.md §5), and every
- * turn's evidence carries it. Only rows that did not fail count: a refused
- * send sent nothing. */
+ * order. The one classifier: a first restart resumes and names these so
+ * they are not run again, and a second cut ends with them
+ * (docs/runtime-contract.md §5). Every turn's evidence carries it. Only
+ * rows that did not fail count: a refused send sent nothing. */
 export function outwardActions(rows: readonly Message[]): string[] {
   const labels: string[] = [];
   const add = (label: string) => { if (!labels.includes(label)) labels.push(label); };
@@ -156,6 +156,36 @@ export function outwardActions(rows: readonly Message[]): string[] {
     for (const money of command.matchAll(MONEY_OUTWARD)) add(money[1]!.toLowerCase());
   }
   return labels;
+}
+
+/** The same scan as outwardActions, split by whether the row can be looked
+ * up again. Confirmed (ok true and an item id) is done. A row outwardActions
+ * would still name, but whose result cannot be looked up, is unknown. A
+ * label in both lists is done. The scans stay separate on purpose: the
+ * order outwardActions returns is already locked by its tests. */
+export function lookupOutward(rows: readonly Message[]): { done: string[]; unknown: string[] } {
+  const done: string[] = [];
+  const unknown: string[] = [];
+  const add = (list: string[], label: string) => { if (!list.includes(label)) list.push(label); };
+  const gitPattern = new RegExp(GIT_OUTWARD.source, "g");
+  const moneyPattern = new RegExp(MONEY_OUTWARD.source, "gi");
+  for (const row of toolRows(rows)) {
+    const tool = row.tool!;
+    if (tool.ok === false) continue;
+    const labels: string[] = [];
+    if (isOutboundTool(tool.name)) labels.push(tool.name);
+    else if (SHELL_TOOL.test(tool.name)) {
+      const command = [tool.input, tool.summary].filter((text): text is string => typeof text === "string").join("\n");
+      gitPattern.lastIndex = 0;
+      moneyPattern.lastIndex = 0;
+      for (const git of command.matchAll(gitPattern)) labels.push(`git ${git[1]}`);
+      for (const money of command.matchAll(moneyPattern)) labels.push(money[1]!.toLowerCase());
+    }
+    if (labels.length === 0) continue;
+    const confirmed = tool.ok === true && tool.itemId !== undefined;
+    for (const label of labels) add(confirmed ? done : unknown, label);
+  }
+  return { done, unknown: unknown.filter((label) => !done.includes(label)) };
 }
 
 /** What the harness observed of one execution, from its activity rows:

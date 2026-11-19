@@ -15009,6 +15009,7 @@
   "chat.restart.outward.posted": "posted ({label})",
   "chat.restart.outward.other": "completed an outward action ({label})",
   "chat.restart.outward.more": "and {count} more",
+  "chat.restart.outwardUnknown": "Could not confirm this step after the restart, so it was not run again: {detail}",
   "chat.restart.cutTwice": "Interrupted by another Sagax restart after resuming once; not resumed again. Some of its steps may already have taken effect.",
   "chat.restart.notResumed": "Turn interrupted: Sagax restarted and this turn did not resume. Send your request again",
   "chat.restart.notResumedNewer": "Turn interrupted: Sagax restarted and a newer request took this conversation, so the cut turn did not resume. Send it again if it is still needed",

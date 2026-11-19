@@ -38,7 +38,7 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
     for (const action of batchModelActions(others, next)) dispatch(action);
   };
 
-  const pick = (instance: InstanceInfo, model: string, keepOpen = false) => {
+  const pick = (instance: InstanceInfo, model: string, keepOpen = false, pinAccount = false) => {
     if (choose) {
       if (instance.policy || notAllowed(instance)) return;
       choose.onPick({ instanceId: instance.instanceId, model });
@@ -53,7 +53,9 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
       if (!keepOpen) closeAll();
       return;
     }
-    const next = modelSelectionForPick(selection, instance, model);
+    const picked = modelSelectionForPick(selection, instance, model);
+    // #5014: the Account line's choice stays; any other pick leaves it to the strategy
+    const next: ModelSelection = pinAccount ? { ...picked, accountPinned: true } : picked;
     if (!bot.busy && !viewerLocal) {
       dispatch({
         type: "setModel",

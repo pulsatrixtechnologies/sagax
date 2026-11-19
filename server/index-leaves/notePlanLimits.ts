@@ -15,6 +15,8 @@ function notePlanLimits(report: PlanUsageReport, scope: string) {
     // #0867: every instance folded on this row's login shares its plan, so the
     // quick pick and the same-provider rotation skip all of them together.
     const ids = new Set([row.instanceId ?? row.id, ...(row.instanceIds ?? [])].filter(Boolean));
+    // #5014: each window's reading, for the account strategy (account-meter.ts)
+    if (row.state === undefined || row.state === "windows") host.accountMeter?.notePlan(payer, [...ids], row);
     for (const id of ids) {
       const key = `${payer}\u0000${id}`;
       if (until !== null && until > now) host.spentPlans.set(key, until);
@@ -44,6 +46,8 @@ export function createPlanWorked(getHost: () => Host): (payer: string, instanceI
     const host = getHost();
     const key = `${payer}\u0000${instanceId}`;
     const ids = new Set([instanceId, ...(host.planSiblings?.get(key) ?? [])]);
+    // #5014: a reading that said the window was used up was wrong; the others stand
+    host.accountMeter?.worked(payer, [...ids]);
     for (const id of ids) {
       const sibling = `${payer}\u0000${id}`;
       host.spentPlans.delete(sibling);

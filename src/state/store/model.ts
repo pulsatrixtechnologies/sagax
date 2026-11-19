@@ -14,6 +14,7 @@ import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
 import type { MessageReaction } from "../../../shared/reactions";
 import type { AutoModelRecord } from "../../../shared/auto-model";
+import type { AccountPick } from "../../../shared/account-switch";
 import type { PanelTab } from "@/components/bot-settings/panel-tabs";
 import type { BusySendRequest, ParallelTaskRef, TaskParallelOf } from "../../../shared/parallel-tasks";
 import type { ToolScope } from "../../../shared/tool-scope";
@@ -333,6 +334,8 @@ export interface ModelSelection {
    * Cost). Absent means Balance. Cleared when a model is pinned. */
   autoOptimize?: "intelligence" | "balance" | "cost";
   fast?: { instanceId: string; model: string };
+  /** #5014: forced on the Account line; the account strategy leaves it. */
+  accountPinned?: true;
 }
 
 /** One of a bot's separate contexts: its own thread, transcript and
@@ -378,6 +381,8 @@ export interface Task {
   modelSelection?: ModelSelection;
   /** Auto: the model the last turn here ran on, and why. Server-derived. */
   autoModel?: AutoModelRecord;
+  /** #5014: the account its provider's strategy took for the last turn, and why. */
+  accountPick?: AccountPick;
   /** true: runs on its bot's model and moves with it; false: a model a person
    * picked in this thread. Absent from servers older than the field. */
   followsBotModel?: boolean;

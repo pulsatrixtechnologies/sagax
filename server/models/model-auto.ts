@@ -9,6 +9,7 @@
 // facts are passed in as data. Nothing here reads the registry, the network
 // or the clock, so the same inputs always give the same pick.
 import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
+import type { AccountPick } from "../../shared/account-switch.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../../shared/auto-model.ts";
 import { autoOptimizeOf } from "../../shared/model-auto-optimize.ts";
@@ -185,6 +186,9 @@ export interface AutoPick {
   fromEngineLabel?: string;
   /** This pick first, then what a refusal climbs to. */
   chain: AutoChainEntry[];
+  /** #5014: the account of the model's provider the person's account
+   * strategy took (server/index.ts autoAccountFor), when several offer it. */
+  account?: { instanceId: string; pick: AccountPick; moved: boolean };
 }
 
 export interface AutoRequest {

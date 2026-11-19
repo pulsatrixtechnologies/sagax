@@ -294,7 +294,10 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     // bot is idle, as for a person (checkedModelSelection: not while it works)
     await expect.poll(async () => ((await api("GET", "/api/bots?messages=0")).body.bots as Array<{ id: string; busy?: boolean }>)
       .find((candidate) => candidate.id === bot.id)?.busy ?? false, { timeout: 30_000 }).toBe(false);
-    const picked = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: instanceOf(row, scenario), model: row.model } });
+    // #5014: each scenario runs on its own instance of the row's tool (`-read`,
+    // `-send`, two accounts of one provider): forced, as the Account line
+    // forces one, so the account strategy leaves the turn on it
+    const picked = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: instanceOf(row, scenario), model: row.model, accountPinned: true } });
     expect(picked.status, JSON.stringify(picked.body)).toBe(200);
   };
   const level = async (bot: { id: string; threadId: string }, approvalMode: "ask" | "full") => {

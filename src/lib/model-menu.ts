@@ -50,6 +50,9 @@ export interface ModelMenuRow {
   /** M-20261119-015: the "Special access" badge: only this account of the
    * person's sign-in accounts offers the model (shared/model-accounts.ts). */
   badge?: { label: string; title: string };
+  /** #5014: picked on the "Account" line: the person forces this account,
+   * so the provider's account strategy leaves the conversation on it. */
+  pinAccount?: true;
 }
 
 export interface ModelMenuSection {

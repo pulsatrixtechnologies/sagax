@@ -4,14 +4,15 @@
 // through deps, so the rules are tested here without a server
 // (server/usage/limit-failover-host.test.ts) and through it in
 // server/usage/limit-failover.e2e.test.ts.
-import { NEAR_LIMIT_PERCENT } from "../../shared/limit-reset.ts";
+import { DEFAULT_ACCOUNT_STRATEGY, DEFAULT_ACCOUNT_THRESHOLD, type AccountPick } from "../../shared/account-switch.ts";
 import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { isEngineExhaustedRefusal } from "../drivers/openai-chat.ts";
 import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
-import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
+import { pickAccountByRule } from "./account-strategy.ts";
+import { billsEachUse, limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -89,9 +90,23 @@ export interface LimitFailoverHostDeps {
    * accounts rotate on the report too (#2192). */
   planLimitUntil?: (payer: string, instanceId: string) => number | null;
   /** #2192: fullest window used-percent (0–100) from the last plan usage
-   * report for this payer and instance; null when unknown. Near-limit
-   * rotation (≥ NEAR_LIMIT_PERCENT) picks the sibling with more headroom. */
+   * report for this payer and instance; null when unknown. A backup of
+   * another provider is ranked by it (more headroom first). */
   planUsedPercent?: (payer: string, instanceId: string) => number | null;
+  /** #5014: which of the accounts of the conversation's provider that offer
+   * its model (`pool`, in the order of Providers) runs this turn, and why,
+   * by the person's strategy for that provider (account-switch-host.ts).
+   * Absent: High-water's simple rule on the plan report's used percent. */
+  accountChoice?: (input: {
+    botId: string; threadId: string; speaker: unknown; payer: string;
+    driverKind: string; current: string; pool: string[];
+  }) => { instanceId: string; pick: AccountPick } | null;
+  /** #5014: the same provider's accounts with room, best first, by the
+   * person's strategy: the order a limit's backup tries them in. */
+  accountRank?: (payer: string, driverKind: string, pool: string[]) => string[];
+  /** #5014: the account a conversation's turn took and why, in one line (the
+   * model chip and the turn's activity). `moved`: the account changed. */
+  noteAccountPick?: (botId: string, threadId: string, pick: AccountPick, moved: boolean) => void;
   /** A turn on this engine just worked for this payer: a plan window Sagax
    * read as spent for it is not (extra-usage credits, a plan upgrade, an
    * early reset), so Sagax's own picks may land on it again. */
@@ -146,6 +161,8 @@ export interface LimitFailoverHostDeps {
 }
 
 export interface LimitFailoverHost {
+  /** #5014: what this thread's latest turn ran on and who pays, while it runs. */
+  dispatchOf(threadId: string): LimitDispatch | undefined;
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
   /** The engines Sagax must not pick for this payer now: one a refusal holds
@@ -326,6 +343,28 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       return null;
     }
   };
+  /** #5014: the order the same provider's accounts are tried in, by the
+   * person's strategy; nothing when no strategy is wired. */
+  const rankFor = (payer: string, from: LimitEngine, candidates: readonly LimitCandidate[]): { rank?: string[] } => {
+    if (!deps.accountRank) return {};
+    try {
+      const pool = candidates.filter((candidate) => sameProvider(from, candidate) && candidate.instanceId !== from.instanceId).map((candidate) => candidate.instanceId);
+      return pool.length > 1 ? { rank: deps.accountRank(payer, from.driverKind, pool) } : {};
+    } catch {
+      return {};
+    }
+  };
+  /** #5014: without the strategy wired, High-water's simple rule on the plan
+   * report's used percent (the rotation of #2192, from its threshold). */
+  const ruleChoice = (payer: string, current: string, pool: readonly string[], blocked: (instanceId: string) => boolean): { instanceId: string; pick: AccountPick } | null => {
+    const accounts = pool.map((instanceId) => ({
+      instanceId, label: deps.engineName(instanceId), blocked: blocked(instanceId),
+      fiveHour: { usedPercent: usedOf(payer, instanceId), resetsAt: null }, weekly: { usedPercent: null, resetsAt: null },
+    }));
+    const pick = pickAccountByRule({ strategy: DEFAULT_ACCOUNT_STRATEGY, threshold: DEFAULT_ACCOUNT_THRESHOLD, now: deps.now(), accounts, current, fresh: false });
+    if (!pick) return null;
+    return { instanceId: pick.instanceId, pick: { instanceId: pick.instanceId, account: deps.engineName(pick.instanceId), why: pick.why, strategy: DEFAULT_ACCOUNT_STRATEGY, at: deps.now() } };
+  };
   /** A line's reset for this engine is only Sagax's estimate when the hold
    * that sets it says so; `fallback` when no hold sets that time. */
   const estimatedFor = (payer: string, instanceId: string, at: number, fallback: boolean): boolean => {
@@ -345,6 +384,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       from, preferred, candidates, config: deps.config,
       blocked: (instanceId) => out.has(instanceId) || Boolean(deps.refusal?.(botId, threadId, speaker, instanceId)),
       usedPercent: (instanceId) => usedOf(payer, instanceId),
+      ...rankFor(payer, from, candidates),
       ...(options?.skip ? { skip: options.skip } : {}),
       ...(options?.sameProviderOnly ? { sameProviderOnly: true } : {}),
     });
@@ -445,6 +485,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       blocked: (instanceId) => out.has(instanceId),
       config: deps.config,
       usedPercent: (instanceId) => usedOf(dispatch.payer, instanceId),
+      ...rankFor(dispatch.payer, dispatch.engine, candidates),
     });
   };
   /** Auto has another model to pick for this payer (as Auto picks:
@@ -808,6 +849,10 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       }
     },
 
+    dispatchOf(threadId) {
+      return dispatches.get(threadId);
+    },
+
     noteDispatch(threadId, dispatch) {
       dispatches.set(threadId, dispatch);
       errors.delete(threadId);
@@ -1087,9 +1132,9 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           }
         }
         // The thread's engine is known to be at its limit for this payer: a
-        // backup takes the turn before it is refused. Near the limit (#2192):
-        // rotate silently to another account of the same provider with more
-        // headroom before the turn starts.
+        // backup takes the turn before it is refused. Otherwise (#5014) the
+        // person's account strategy picks which account of the same provider
+        // runs it, before the turn starts.
         const selection = deps.threadSelection(botId, threadId);
         if (!selection || (selection.auto === true && !resolvedSelection)) return null;
         const instanceId = resolvedSelection?.instanceId ?? selection.instanceId;
@@ -1104,23 +1149,60 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         const standing = store.failover(botId, threadId);
         const ownHeld = standing && same(standing.to, selection) ? ownModelHolds(standing) : undefined;
         if (until === null) {
-          const used = usedOf(payer, instanceId);
-          if (used === null || used < NEAR_LIMIT_PERCENT) return null;
-          return pick(botId, threadId, speaker, from, payer, ownHeld, { sameProviderOnly: true }).then((backup) => {
-            if (!backup || !same(deps.threadSelection(botId, threadId), selection)) return;
-            const siblingUsed = usedOf(payer, backup.instanceId);
-            // Only move when the sibling has more headroom (or unknown).
-            if (siblingUsed !== null && siblingUsed >= used) return;
-            if (deps.switchThread(botId, threadId, backup)) return;
-            // Pool rotation stays put: no return timer. Events lens only.
-            deps.note(threadId, {
-              kind: "switched", from: deps.engineName(selection.instanceId), to: deps.engineName(backup.instanceId),
-              resetsAt: deps.now(), estimated: true,
-              ...(deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {}),
-            });
-          }).catch((failure) => {
-            console.warn(`[limit-failover] near-limit ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
-          });
+          // #5014: the account strategy, among the accounts of this provider
+          // that offer the model. The Account line of the model menu is the
+          // person's own choice and wins; Auto ranks engines itself.
+          if (selection.auto === true || selection.accountPinned === true) return null;
+          // without the strategy wired, the rule has only the report's used
+          // percent: under the threshold the conversation keeps its account
+          if (!deps.accountChoice) {
+            const used = usedOf(payer, instanceId);
+            if (used === null || used < DEFAULT_ACCOUNT_THRESHOLD) return null;
+          }
+          const decide = (candidates: readonly LimitCandidate[]) => {
+            if (!same(deps.threadSelection(botId, threadId), selection)) return;
+            // never onto an account that bills each use: the limit failover's
+            // own rule for a catalog backup (billsEachUse, 3ed90a037)
+            const pool = candidates
+              .filter((candidate) => sameProvider(from, candidate) && (candidate.instanceId === instanceId
+                || (candidate.models.includes(selection.model) && !billsEachUse(deps.config(candidate.instanceId)))))
+              .map((candidate) => candidate.instanceId);
+            if (!pool.includes(instanceId)) pool.unshift(instanceId);
+            if (pool.length < 2) return;
+            const out = outOf(payer, candidates, false, [from]);
+            if (ownHeld) out.add(ownHeld);
+            const blocked = (id: string) => id !== instanceId && (out.has(id) || Boolean(limitRefusal(botId, threadId, speaker, id)));
+            const choice = deps.accountChoice
+              ? deps.accountChoice({ botId, threadId, speaker, payer, driverKind: from.driverKind, current: instanceId, pool })
+              : ruleChoice(payer, instanceId, pool, blocked);
+            if (!choice) return;
+            if (choice.instanceId === instanceId) {
+              deps.noteAccountPick?.(botId, threadId, choice.pick, false);
+              return;
+            }
+            if (blocked(choice.instanceId)) return;
+            const { accountPinned: _pinned, ...rest } = selection;
+            const refused = deps.switchThread(botId, threadId, { ...rest, instanceId: choice.instanceId });
+            if (refused) {
+              console.warn(`[limit-failover] account ${threadId}: could not move to ${choice.instanceId}: ${refused}`);
+              return;
+            }
+            // Stays put: no return timer. The pick's one line says why.
+            deps.noteAccountPick?.(botId, threadId, choice.pick, true);
+          };
+          const failed = (failure: unknown) => {
+            console.warn(`[limit-failover] account ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+          };
+          // What is known now, so a turn never waits on a probe for this
+          if (deps.candidatesNow) {
+            try {
+              decide(deps.candidatesNow(botId, threadId, speaker));
+            } catch (failure) {
+              failed(failure);
+            }
+            return null;
+          }
+          return deps.candidates(botId, threadId, speaker).then(decide).catch(failed);
         }
         return pick(botId, threadId, speaker, from, payer, ownHeld).then((backup) => {
           // Nothing awaited after the pick: the thread is read again here.

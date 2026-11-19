@@ -304,6 +304,15 @@ export type RuntimeEvent = RuntimeEventBase &
       limitScope?: "model";
       /** The refusal binds the whole engine (every model of it). */
       limit?: "engine" }
+    /** #5014: the provider's limit headers for this account after a
+     * response, as Claude Code reports them (`rate_limit_event`): the window,
+     * its utilization (a share, 0-1), its reset (epoch seconds) and whether
+     * it refuses. The account meter (server/usage/account-meter.ts) reads it;
+     * nothing is shown. */
+    | {
+        type: "account.rate-limit";
+        info: { status?: string; rateLimitType?: string; resetsAt?: number; utilization?: number };
+      }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
     | {

@@ -25,6 +25,8 @@ export function applyStoredGalleryNames(api: Api): void {
 /** "Runs with" defaults saved in this page (#4384). */
 let galleryHarness: Record<string, string> | null = null;
 let galleryContext: Record<string, number> = {};
+/** #5014: the person's account strategy per provider (Providers > a provider > Accounts). */
+let galleryAccountSwitch: Record<string, { strategy: string; threshold: number }> = {};
 
 const parse = (init?: RequestInit): Record<string, unknown> => {
   try { return typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {}; } catch { return {}; }
@@ -89,6 +91,17 @@ export function answerGalleryWrite(api: Api, url: URL, init?: RequestInit): unkn
     }
     galleryContext = next;
     return { mine: config.myDisabledModels ?? [], contextByProvider: next };
+  }
+
+  // #5014: the account strategy on a provider's page, the person's own
+  if (method === "PUT" && url.pathname === "/api/me/models" && body.accountSwitchByProvider && typeof body.accountSwitchByProvider === "object") {
+    const next = { ...galleryAccountSwitch };
+    for (const [provider, setting] of Object.entries(body.accountSwitchByProvider as Record<string, { strategy: string; threshold: number } | null>)) {
+      if (setting === null) delete next[provider];
+      else next[provider] = { strategy: setting.strategy ?? "high-water", threshold: setting.threshold ?? 80 };
+    }
+    galleryAccountSwitch = next;
+    return { mine: config.myDisabledModels ?? [], accountSwitchByProvider: next };
   }
 
   // the person's own key for a provider

@@ -40,4 +40,8 @@ export interface ModelSelection {
   /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
    * Cost). Absent means Balance. Cleared when a model is pinned. */
   autoOptimize?: "intelligence" | "balance" | "cost";
+  /** #5014: the person forced this account on the model menu's Account line
+   * (#5002): the account strategy leaves it there; only a usage limit moves
+   * it. Only true is stored; picking a model by its row clears it. */
+  accountPinned?: true;
 }

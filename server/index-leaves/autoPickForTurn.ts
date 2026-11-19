@@ -32,6 +32,22 @@ function autoPickForTurn(input: {
   const engines = open.length ? open : offered;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
   const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}) };
+  // #5014: among the accounts of the picked model's provider that offer it,
+  // the person's account strategy says which one runs it (its chain follows)
+  const onAccount = (pick: AutoPick): AutoPick => {
+    const account = host.autoAccountFor?.({ botId: bot.id, threadId: input.threadId, payer, selection: pick.selection, engines });
+    if (!account) return pick;
+    if (account.instanceId === pick.selection.instanceId) return { ...pick, account };
+    const to = account.instanceId;
+    const from = pick.selection;
+    const moved = pick.chain.findIndex((entry) => entry.instanceId === from.instanceId && entry.model === from.model);
+    return {
+      ...pick,
+      account,
+      selection: { ...from, instanceId: to },
+      chain: moved < 0 ? [{ instanceId: to, model: from.model }, ...pick.chain] : pick.chain.map((entry, index) => index === moved ? { ...entry, instanceId: to } : entry),
+    };
+  };
   if (input.role === "continue") {
     const record = host.store.taskByThread(bot.id, input.threadId)?.autoModel;
     if (record && host.autoRecordUsable(record, engines, skip)) {
@@ -59,10 +75,10 @@ function autoPickForTurn(input: {
       try { bytes = item.path ? statSync(item.path).size : undefined; } catch { bytes = undefined; }
       return { kind: item.kind, ...(item.name ? { name: item.name } : {}), ...(bytes !== undefined ? { bytes } : {}) };
     });
-    return { payer, pick: pickWorkerModel({ ...request, task: { text: parsed.text, attachments, ...(role ? { role } : {}) } }) };
+    return { payer, pick: onAccount(pickWorkerModel({ ...request, task: { text: parsed.text, attachments, ...(role ? { role } : {}) } })) };
   }
   const quick = host.parsedQuickTask(input.text);
-  return { payer, pick: pickOrchestrationModel(request, quick) };
+  return { payer, pick: onAccount(pickOrchestrationModel(request, quick)) };
 
 }
   return autoPickForTurn;

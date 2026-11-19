@@ -75,6 +75,57 @@ owner's accounts when the owner pays for the people who write to the bot). Tests
 `startup-model-catalog.test.ts`, `resolve-model-account.test.ts`,
 `ios/Tests/CompanionCoreTests/ModelMenuTests.swift`.
 
+## Switching between a person's accounts of one provider (#5014, 2026-11-19)
+
+M-20261119-016, D-20261119-048, D-20261119-050. When a model is offered by
+several of the person's connected accounts of one provider and no account is
+forced on the model menu's Account line (`ModelSelection.accountPinned`, set
+only by that line), the person's strategy for the provider picks the account:
+High-water by default (a conversation keeps its account, for its prompt
+cache, until 80 % of its 5-hour window, adjustable, or earlier when another
+account is about to lose 30 % or more unused at a reset within the hour),
+Most-free (a new conversation takes the account with the most left) or
+Fill-up (the order of Providers). The weekly guard puts last an account using
+its week faster than time passes. The setting is the person's own, per
+provider, never per bot: `accountSwitchByProvider` on GET/PUT
+`/api/me/models` (person settings, the installation's config when solo),
+drawn under the Accounts list of Providers > a provider
+(`src/components/settings/AccountSwitchRows.tsx`) with two accounts or more.
+
+The rule is `server/usage/account-strategy.ts` (pure). The windows come from
+what Sagax already reads (`server/usage/account-meter.ts`): the plan usage
+report (`notePlanLimits`), Claude Code's `rate_limit_event` (the provider's
+limit headers, the `account.rate-limit` runtime event) and a turn that
+worked (`planWorked`); it never sends anything to open a window. High-water
+plans with `server/usage/account-planner.ts` once the forecast
+(`server/usage/usage-forecast.ts`, an EWMA per bot and UTC hour of the day of
+the ledger's cost) has 7 days of history: a small linear program
+(`server/usage/lp-simplex.ts`, dense simplex, Bland's rule, no dependency)
+over the next 8 hours maximizes served demand, then quota used before a
+reset would lose it, under each 5-hour window's and the week's room; only the
+first hour's decision applies, cached per conversation for 5 minutes. It
+falls back on the rule without history, without a known scale (points of the
+window per unit of demand, learned between two readings), with no demand
+expected, on a failed solve or past 50 ms.
+
+`server/usage/account-switch-host.ts` joins them: isolation first (the
+organization's accounts and the person's own, never another person's), then
+the holds of the limit failover. It switches nothing while no account of the
+pool has a reading yet (the conversation stays where it is), and never puts a
+conversation on an account that bills each use (`billsEachUse`, the limit
+failover's own rule). `limit-failover-host.ts` `beforeTurn` asks
+it before a turn (instead of the old near-limit rotation) and moves the
+conversation with `switchThread`; a limit's backup among the same provider's
+accounts follows its ranking (`accountRank`, `pickLimitBackup` `rank`). Auto
+asks it for the model it picked (`autoAccountFor`). The account taken and why
+is `WireTask.accountPick`, said on the model chip's tooltip
+(`src/lib/account-pick.ts`) and once in the Events lens (`runtime.notice`),
+never a row or a banner in the chat. Tests: `account-strategy.test.ts`,
+`account-planner.test.ts`, `lp-simplex.test.ts`, `account-meter.test.ts`,
+`usage-forecast.test.ts`, `account-switch-host.test.ts`,
+`limit-failover-host.test.ts` ("the account strategy before a turn"),
+`model-switches.test.ts`, `shared/account-switch.test.ts`.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via
@@ -454,9 +505,9 @@ the key test lists deployments. Tests: `server/drivers/openai-compat-azure.test.
 When a model or engine reaches its usage limit (or runs out of credits, or
 hits a rate limit) the person sees nothing: the same turn goes on at once on
 a model that works. Accounts of the same provider are a silent pool (#2192):
-Sagax rotates to the next account (more headroom first) before trying another
-provider, and before the turn when a plan report shows the account near its
-limit (`NEAR_LIMIT_PERCENT`). On Auto, `limit-failover-host.ts` (`failed`,
+Sagax rotates to the next account (by the person's account strategy, #5014)
+before trying another provider, and before the turn the strategy picks the
+account (above). On Auto, `limit-failover-host.ts` (`failed`,
 `auto`) skips the limited model until its reset (`autoRefuse`, and
 `autoExcluded` for an engine-wide limit) and sends the message again; Auto
 picks the next model. A chosen model moves to a backup as before. Either way

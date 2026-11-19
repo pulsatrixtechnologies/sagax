@@ -93,4 +93,26 @@ describe("GET/PUT /api/me/models", () => {
     expect((await call(handler, "PUT", { contextByProvider: { anthropic: "1M" } }))?.status).toBe(400);
     expect(sizes.get("p1")).toEqual({ anthropic: 200_000 });
   });
+  // #5014 (D-20261119-050): the person's account strategy per provider, beside the others
+  it("reads and writes the account strategy per provider, the person's own only", async () => {
+    const kept = new Map<string, Record<string, { strategy: "high-water" | "most-free" | "fill-up"; threshold: number }>>();
+    const handler = createModelSwitchRoutes({
+      org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
+      favorites: () => [], saveFavorites: () => {},
+      accountSwitchDefaults: { read: (owner) => kept.get(owner) ?? {}, save: (owner, map) => { kept.set(owner, map); } },
+    });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ accountSwitchByProvider: {} });
+    expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: { strategy: "most-free" } } }))?.body)
+      .toMatchObject({ accountSwitchByProvider: { anthropic: { strategy: "most-free", threshold: 80 } } });
+    // the fields sent change, the rest stays
+    expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: { threshold: 65 } } }))?.body)
+      .toMatchObject({ accountSwitchByProvider: { anthropic: { strategy: "most-free", threshold: 65 } } });
+    // another person reads and writes their own
+    expect((await call(handler, "GET", undefined, { who: "p2" }))?.body).toMatchObject({ accountSwitchByProvider: {} });
+    expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: { strategy: "random" } } }))?.status).toBe(400);
+    expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: { threshold: 5 } } }))?.status).toBe(400);
+    expect(kept.get("p1")).toEqual({ anthropic: { strategy: "most-free", threshold: 65 } });
+    // null gives the provider back its default (High-water at 80 %)
+    expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: null } }))?.body).toMatchObject({ accountSwitchByProvider: {} });
+  });
 });

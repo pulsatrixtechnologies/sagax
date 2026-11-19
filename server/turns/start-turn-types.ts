@@ -1,5 +1,7 @@
 // #1388 wave 4 step 3: host bag for startTurn phases. Never imports server/index.ts.
 // Injected from index.ts. Loose field types keep the phase split mechanical.
+import type { AccountPick } from "../../shared/account-switch.ts";
+
 export type StartTurnHost = {
   AUTO_COMPUTER_RULES: any,
   proactiveAskForTurn: any,
@@ -348,6 +350,8 @@ export type StartTurnHost = {
   registry: any,
   /** #2106: managed MCP plugin names a subscription account holds. */
   accountManagedPlugins?: (instanceId: string) => readonly string[],
+  /** #5014: the account a turn took by the person's account strategy, and why. */
+  noteAccountPick?: (botId: string, threadId: string, pick: AccountPick, moved: boolean) => void,
   releaseBootEngineSlot: any,
   releaseLocalVmThread: any,
   releasePlain: any,

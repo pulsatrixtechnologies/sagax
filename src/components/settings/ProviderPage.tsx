@@ -5,7 +5,8 @@
 // plain heading and absent when it has nothing to show:
 // - Accounts: the sign-ins only, each named (the person renames it in
 //   place), its sign-in address and state under the name, one button (Sign
-//   in, Sign out), "Add an account" at the end;
+//   in, Sign out), "Add an account" at the end, then, with two accounts or
+//   more, how Sagax switches between them and its threshold (#5014);
 // - API key: whether a key is saved, Add, Replace, Remove;
 // - Your bots there (the xAI provider only);
 // - Runs with (#4329 lot 6, #4384): what runs the person's bots with this
@@ -61,6 +62,7 @@ import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelS
 import { RunsWith, runsWithShown, useProviderRunsWith } from "../RunsWith";
 import { ContextSize, contextSizeShown, useProviderContextSizes } from "../ContextSize";
 import { accountAddress, accountName, accountRows } from "./provider-summary";
+import { AccountSwitchRows } from "./AccountSwitchRows";
 import { SignInState, SignInSteps, signInWay, useAccountSignIn } from "./AccountSignIn";
 import {
   PI_SERVER_PREFIX,
@@ -714,6 +716,8 @@ function AccountsSection({ group, list, open, show }: { group: ProviderGroup; li
         {accounts.map((row, index) => <AccountLine key={row.id} row={row} group={group} list={list} index={index} total={accounts.length} open={open === row.id} show={show} />)}
       </ul>
       {adders.map((instance) => <div key={instance.instanceId} data-provider-add-account="" className="px-3.5 pb-2"><AddAnotherAccount instance={instance} /></div>)}
+      {/* #5014: which account runs a turn when several offer the model (two accounts or more) */}
+      {accounts.length > 1 && <AccountSwitchRows providerId={group.id} />}
     </SettingsGroup>
   );
 }

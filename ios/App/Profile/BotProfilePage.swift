@@ -1,5 +1,5 @@
 // Bot profile page, the desktop's BotProfilePage (#2127, #2313, #3030) on
-// iPhone and iPad: the mascot's colour wash, the outlined 64 pt mascot on its lower edge (a tap plays a move), the name and
+// iPhone and iPad: the mascot's colour wash, the 64 pt mascot on its lower edge (a tap plays a move), the name and
 // title on one line "Name · Title" (#4602), who sees it, the owner and the
 // Primary badge, name and title edited in place; no description line. A top bar that condenses on scroll
 // (mascot 26, name 14), Private / Shared as a label, Share and the "…"
@@ -257,17 +257,24 @@ struct BotProfilePage: View {
     // MARK: Header
 
     /// `.bot-profile-banner`: the mascot's colour mixed into the base,
-    /// 58 % at the top (the bar's colour), 36 % at the bottom.
-    private var washColor: Color { MausPalette.color(current.color) }
-    private var washBase: Color {
-        if fillsMain { return themePalette.isDark ? Color(hex: "#F4F4F4") : .white }
-        return themePalette.isDark ? Color(hex: "#2A2A2A") : .white
+    /// 58 % at the top (the bar's colour), 36 % at the bottom, then kept apart
+    /// from the mascot's body colour (`ProfileBanner`).
+    private var washBaseHex: String {
+        if fillsMain { return themePalette.isDark ? "#F4F4F4" : "#FFFFFF" }
+        return themePalette.isDark ? "#2A2A2A" : "#FFFFFF"
     }
-    private var bannerTop: Color { DesktopMemoryPage.mix(washColor, washBase, 0.58) }
+    private var wearsPicture: Bool { (current.avatarCrop ?? .mascot) != .mascot && current.avatarUrl != nil }
+    private var bannerColors: (from: Color, to: Color) {
+        let accent = MausColors.hex(for: current.color) ?? "#8E8E93"
+        let body = wearsPicture ? nil : MascotDominant.color(look: current.resolvedMascotLook, color: current.color, owlSkin: current.resolvedMascotSkin)
+        let colors = ProfileBanner.colors(accent: accent, mascot: body, base: washBaseHex)
+        return (Color(hex: colors.from), Color(hex: colors.to))
+    }
+    private var bannerTop: Color { bannerColors.from }
 
     private var banner: some View {
         LinearGradient(
-            colors: [bannerTop, DesktopMemoryPage.mix(washColor, washBase, 0.36)],
+            colors: [bannerColors.from, bannerColors.to],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -278,19 +285,8 @@ struct BotProfilePage: View {
         .accessibilityHidden(true)
     }
 
-    /// Some shape skins already draw their own silhouette.
-    private var heroContour: Color {
-        let look = current.resolvedMascotLook
-        let picture = (current.avatarCrop ?? .mascot) != .mascot && current.avatarUrl != nil
-        if !picture && look.character == .shape && [.night, .neon, .circuit, .outline].contains(look.shapeSkin) {
-            return .clear
-        }
-        return ink.opacity(0.8)
-    }
-
     private var hero: some View {
-        let edge = heroContour
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             BotMascotView(
                 bot: current,
                 size: mascotSize,
@@ -300,10 +296,7 @@ struct BotProfilePage: View {
             )
             .environment(\.mascotShadow, nil)
             .compositingGroup()
-            .shadow(color: edge, radius: 0, x: 1, y: 0)
-            .shadow(color: edge, radius: 0, x: -1, y: 0)
-            .shadow(color: edge, radius: 0, x: 0, y: 1)
-            .shadow(color: edge, radius: 0, x: 0, y: -1)
+            .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
             .frame(width: heroFrameSize, height: heroFrameSize)
             .contentShape(Circle())
             .onTapGesture { playMove() }

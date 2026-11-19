@@ -253,21 +253,19 @@ describe("bot profile page shell", () => {
     }
   });
 
-  it("traces each character and shape once, preserving skins with their own contour", () => {
-    function check(look: MascotLook, needsContour: boolean, mascotSkin?: Bot["mascotSkin"]) {
+  it("every character and shape wears the one soft shadow and no outline", () => {
+    function check(look: MascotLook, mascotSkin?: Bot["mascotSkin"]) {
       const html = render("overview", { bots: [{ ...bot, mascotSkin, mascotLook: look }] });
       expect(html).toContain('data-mascot-frame=""');
-      expect(html.includes("profile-mascot-contour"), JSON.stringify(look)).toBe(needsContour);
+      expect(html.match(/profile-mascot-shadow/g)?.length, JSON.stringify(look)).toBe(1);
+      expect(html).not.toContain("profile-mascot-contour");
     }
-    for (const shape of MASCOT_SHAPES) check({ character: "shape", shape }, true);
+    for (const shape of MASCOT_SHAPES) check({ character: "shape", shape });
     for (const character of MASCOT_CHARACTERS) {
       if (character === "owl") {
-        for (const skin of MASCOT_SKIN_IDS) check({ character }, true, skin);
+        for (const skin of MASCOT_SKIN_IDS) check({ character }, skin);
       } else {
-        for (const skin of CHARACTER_PAINT[character].skins) {
-          const hasEdge = character === "shape" && ["night", "neon", "circuit", "outline"].includes(skin);
-          check({ character, skins: { [character]: skin } }, !hasEdge);
-        }
+        for (const skin of CHARACTER_PAINT[character].skins) check({ character, skins: { [character]: skin } });
       }
     }
   });
@@ -280,7 +278,7 @@ describe("bot profile page shell", () => {
     const banner = at(html, 'data-bot-profile-banner=""');
     expect(banner).toBeGreaterThan(0);
     expect(banner).toBeLessThan(hero);
-    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner h-\[124px\] /i);
+    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-from:#[0-9a-f]{6};--bot-profile-banner-to:#[0-9a-f]{6}" class="bot-profile-banner h-\[124px\] /i);
     // the mascot over the banner's lower edge, at the left of the column
     expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[35px\] flex flex-col items-start/);
     const heroHtml = html.slice(hero, audience);
@@ -294,7 +292,8 @@ describe("bot profile page shell", () => {
     const frame = /<span[^>]*data-mascot-frame=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(frame).toContain("size-[70px]");
     expect(frame).not.toMatch(/rounded|border|bg-/);
-    expect(heroHtml).toContain("profile-mascot-contour");
+    expect(heroHtml).toContain("profile-mascot-shadow");
+    expect(heroHtml).not.toContain("profile-mascot-contour");
     const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(stage).toContain(`width:${MASCOT_PROFILE_SIZE}px`);
     expect(stage).not.toContain("overflow-hidden");

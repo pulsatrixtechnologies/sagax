@@ -79,6 +79,9 @@ const bot = {
   grants: [{ target: "user:pr_sam", level: "use" }, { target: "user:pr_jordan", level: "edit" }, { target: "user:pr_casey", level: "run" }],
   // ?shape=sprout dresses Scout as that shape (header captures per mascot).
   ...(params.get("shape") ? { mascotLook: { character: "shape", shape: params.get("shape") } } : {}),
+  // ?color=<bot colour> ?character=<character> ?cskin=<that character's skin> (banner contrast captures).
+  ...(params.get("color") ? { color: params.get("color") } : {}),
+  ...(params.get("character") ? { mascotLook: { character: params.get("character"), ...(params.get("shape") ? { shape: params.get("shape") } : {}), ...(params.get("cskin") ? { skins: { [params.get("character")!]: params.get("cskin") } } : {}) } } : {}),
   // Header captures: ?name= ?title= (an empty title too), ?picture=1 (a picture instead of the mascot), ?reader=1 (a member who cannot edit this bot).
   ...(params.has("name") ? { name: params.get("name") } : {}),
   ...(params.has("title") ? { title: params.get("title") } : {}),
@@ -587,6 +590,11 @@ function Open() {
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
     dispatch({ type: "openPersonaEditor", botId: bot.id, section });
+    // ?top=1: the header captures start at the very top of the page.
+    if (params.get("top")) {
+      const reset = setInterval(() => document.querySelector("[data-bot-profile-scroll]")?.scrollTo(0, 0), 150);
+      return () => clearInterval(reset);
+    }
   }, [dispatch]);
   return null;
 }

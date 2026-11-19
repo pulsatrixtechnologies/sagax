@@ -1,0 +1,50 @@
+// The composer mode picker (Fast, Expert, Heavy, Build) lives in the Perspicax
+// console, not in Sagax. A saved `mode` is dropped on load; a thread pinned to
+// the model an Auto bot falls back on does not follow the bot into Auto.
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { DATA_DIR } from "../config.ts";
+import type { ModelSelection } from "../contracts.ts";
+import { Store } from "../store.ts";
+import { sameModelSelection } from "../../shared/thread-model.ts";
+
+const BOTS_FILE = (): string => join(DATA_DIR, "bots.json");
+const base = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
+
+describe("sameModelSelection and Auto", () => {
+  it("a thread on the model an Auto bot falls back on is not following the bot", () => {
+    expect(sameModelSelection(base(), { ...base(), auto: true })).toBe(false);
+    expect(sameModelSelection({ ...base(), auto: true }, { ...base(), auto: true })).toBe(true);
+    expect(sameModelSelection(base(), base())).toBe(true);
+  });
+});
+
+describe("stored data that carries a mode", () => {
+  beforeEach(() => {
+    rmSync(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("loads cleanly and drops the field from the bot and its threads", () => {
+    const store = new Store(base);
+    const bot = store.createBot({ name: "Wren" }, { seedMessages: false });
+    const other = store.createTask(bot.id, "Other", false)!;
+    store.switchTaskModel(bot.id, bot.tasks![0]!.threadId, { ...base(), auto: true }, true);
+    store.switchTaskModel(bot.id, other.threadId, { instanceId: "codex", model: "gpt-6-astra", auto: true }, false);
+    const saved = JSON.parse(JSON.stringify(store.bots));
+    saved[0].modelSelection.mode = "heavy";
+    const task = saved[0].tasks.find((t: { threadId: string }) => t.threadId === other.threadId);
+    task.modelSelection.mode = "expert";
+    mkdirSync(dirname(BOTS_FILE()), { recursive: true });
+    writeFileSync(BOTS_FILE(), JSON.stringify(saved));
+
+    const reloaded = new Store(base);
+    const loaded = reloaded.bot(bot.id)!;
+    expect(loaded.modelSelection).toMatchObject({ auto: true });
+    expect("mode" in loaded.modelSelection).toBe(false);
+    const loadedTask = reloaded.taskByThread(bot.id, other.threadId)!;
+    expect(loadedTask.modelSelection).toMatchObject({ model: "gpt-6-astra", auto: true });
+    expect("mode" in loadedTask.modelSelection!).toBe(false);
+  });
+});

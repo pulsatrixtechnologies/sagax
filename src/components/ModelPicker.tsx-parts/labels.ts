@@ -7,7 +7,6 @@ import { t } from "@/lib/i18n";
 import { modelLabel, modelProvider } from "./helpers";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 import { foldSearch } from "@/lib/model-menu";
-import { modeName, modeOfSelection } from "@/lib/model-mode";
 
 export function modelPickerSummary(opts: {
   autoOn: boolean;
@@ -18,7 +17,7 @@ export function modelPickerSummary(opts: {
   advanced: boolean;
 }): string {
   const { autoOn, autoRecord, active, selection, selectedVariantLabel, advanced } = opts;
-  if (autoOn) return autoRecord && autoRecord.mode === selection.mode ? autoReasonSentence(autoRecord) : autoChipLabel(null, selection);
+  if (autoOn) return autoRecord ? autoReasonSentence(autoRecord) : autoChipLabel(null);
   if (!active) return selection.model;
   return `${active.displayName} · ${modelLabel(active, selection.model)}${
     modelProvider(active, selection.model) ? ` · ${modelProvider(active, selection.model)}` : ""
@@ -33,11 +32,8 @@ export function modelPickerComposerLabel(opts: {
   selectedVariantLabel: string | undefined;
   /** #4329: the provider of the model in use (Claude, OpenAI, a server, this computer). */
   providerLabel?: string;
-  /** #4900: the chat bar shows the mode's name ("Expert"), never a model. */
-  modes?: boolean;
 }): string {
-  const { autoOn, active, selection, selectedVariantLabel, providerLabel, modes } = opts;
-  if (autoOn && modes) return modeName(modeOfSelection(selection) ?? "auto");
+  const { autoOn, active, selection, selectedVariantLabel, providerLabel } = opts;
   // #2106: "Auto Balance" / "Claude Fable 5.1 High" in the chat bar.
   if (autoOn) return `Auto ${t(`model.auto.optimize.${autoOptimizeOf(selection.autoOptimize)}`)}`;
   const model = [

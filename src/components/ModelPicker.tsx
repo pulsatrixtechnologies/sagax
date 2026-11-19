@@ -64,8 +64,6 @@ import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 import { currentProvider } from "@/lib/model-menu-steps";
-import { modeOfSelection } from "@/lib/model-mode";
-import type { ModeMenuProps } from "./ModeMenu";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -147,7 +145,6 @@ export function ModelPicker({
   fallbackAnchor,
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
-  modes = true,
 }: {
   /** Omitted with `choose`. */
   bot?: Bot;
@@ -178,9 +175,6 @@ export function ModelPicker({
   /** Headless: what the menu opens above when no row asked (the mascot). */
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
-  /** #4900: in the composer the menu is the mode menu (Auto, Fast, Expert, Heavy,
-   * Build). `false` keeps the model panel there. */
-  modes?: boolean;
 }) {
   const dispatch = useStoreDispatch();
   const { refreshInstances, refreshModels: refreshInstanceModels } = useStoreCommands();
@@ -324,7 +318,7 @@ export function ModelPicker({
     dispatch({ type: "setModel", botId: bot.id, threadId: threadId ?? bot.threadId, updateBotDefault: true, selection: profile.modelSelection });
   };
 
-  const { pick, setEffort, chooseAuto, chooseMode, setAutoOptimize } = makeModelPickerActions({
+  const { pick, setEffort, chooseAuto, setAutoOptimize } = makeModelPickerActions({
     getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll,
   });
 
@@ -366,16 +360,7 @@ export function ModelPicker({
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
   // #4329: the chip names the provider of the model in use (never a tool)
   const providerLabel = currentProvider(menuSections)?.section.label;
-  // #4900: the chat bar's menu is the mode menu (Auto, Fast, Expert, Heavy, Build); the
-  // model list stays one row away, in the models window
-  const modeUi = modes && inComposer && !choose && !viewerLocal && !windowOnly;
-  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, modes: modeUi });
-  const modeMenu: Omit<ModeMenuProps, "manage"> | undefined = modeUi ? {
-    current: modeOfSelection(selection),
-    pinnedLabel: modelLabel(active, selection.model),
-    resolutions: autoStatus?.modes,
-    onPick: chooseMode,
-  } : undefined;
+  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel });
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
@@ -485,7 +470,6 @@ export function ModelPicker({
       runsWith={choose || viewerLocal ? undefined : runsWith}
       contextSize={choose || viewerLocal ? undefined : contextSize}
       customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
-      modeMenu={modeMenu}
     />
   );
 }
@@ -532,7 +516,6 @@ function ModelPickerShell({
   runsWith,
   contextSize,
   customModel,
-  modeMenu,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
@@ -576,8 +559,6 @@ function ModelPickerShell({
   runsWith?: readonly RunsWithChoice[];
   contextSize?: readonly ContextSizeChoice[];
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
-  /** #4900: the chat bar's mode menu in place of the model panel. */
-  modeMenu?: Omit<ModeMenuProps, "manage">;
 }) {
   return (
     <div ref={rootRef} className={cn(contained || listChip ? "w-full min-w-0" : "relative", className)}>
@@ -674,7 +655,6 @@ function ModelPickerShell({
         runsWith,
         contextSize,
         customModel,
-        modeMenu,
       }))}
     </div>
   );

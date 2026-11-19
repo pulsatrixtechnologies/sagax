@@ -118,9 +118,7 @@ describe("a bot's character and its look", () => {
       // an achievement reward's skin preview (the toast, the achievements page), not a bot
       "RewardPreview.tsx",
       // the retro assistant dialogs preview the owl look being picked, not a bot
-      "RetroAssistantDialogs.tsx",
-      // a Heavy run's agents (#4901): the owl in a plumage each, never a bot and never its look
-      "HeavyTeamRow.tsx", "ThoughtsPanel.tsx"]);
+      "RetroAssistantDialogs.tsx"]);
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {

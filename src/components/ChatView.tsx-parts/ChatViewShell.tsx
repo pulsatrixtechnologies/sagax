@@ -38,7 +38,6 @@ import { ChatViewHeader } from "./ChatViewHeader";
 import { ChatViewPagePanel } from "./ChatViewPagePanel";
 import { ChatViewSheets } from "./ChatViewSheets";
 import { ChatEdgeFade } from "@/components/ChatEdgeFade";
-import { ThoughtsPanelHost } from "../ThoughtsPanel";
 import { useState } from "react";
 import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 
@@ -263,8 +262,6 @@ export function ChatViewShell(m: Record<string, any>) {
       </div>
 
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
-      {/* #4901: the Thoughts panel of a Heavy run, docked in the right-hand slot */}
-      <ThoughtsPanelHost messages={messages} busy={Boolean(busy)} />
 
       {/* #2149: the dev context pods (</>) live only in a coding window
           (CodingChat), never in the plain chat. */}

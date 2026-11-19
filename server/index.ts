@@ -1780,7 +1780,6 @@ import { createAttachTeamBoat } from "./index-leaves/attachTeamBoat.ts";
 import { createAttributeSandboxEntries } from "./index-leaves/attributeSandboxEntries.ts";
 import { createAutoComputerStateFor } from "./index-leaves/autoComputerStateFor.ts";
 import { createAutoPickForTurn } from "./index-leaves/autoPickForTurn.ts";
-import { createRunHeavyTeam } from "./index-leaves/runHeavyTeam.ts";
 import { createCancelDirectTurnDispatch } from "./index-leaves/cancelDirectTurnDispatch.ts";
 import { createCancelGroupTurnOperations } from "./index-leaves/cancelGroupTurnOperations.ts";
 import { createCardAnswerRefusal } from "./index-leaves/cardAnswerRefusal.ts";
@@ -8198,7 +8197,6 @@ const autoRefusalsFor = createAutoRefusalsFor(getLeafHost);
 const autoEnginesFor = createAutoEnginesFor(getLeafHost);
 const relayEnginesFor = createRelayEnginesFor(getLeafHost);
 const autoPickForTurn = createAutoPickForTurn(getLeafHost);
-const runHeavyTeam = createRunHeavyTeam(getLeafHost);
 const voicePickForTurn = createVoicePickForTurn(getLeafHost);
 const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
 const orgTurnAccess = createOrgTurnAccess(getLeafHost);
@@ -37559,7 +37557,6 @@ const startTurnRunner = createStartTurn({
   autoModelRecord,
   autoPayerKey,
   autoPickForTurn,
-  runHeavyTeam,
   autoRecallEnabled,
   autoRecallPrompt,
   autoStartTarget,

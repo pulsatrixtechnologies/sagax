@@ -5,7 +5,6 @@ import { dismissNotice, noticeDismissed } from "@/lib/usage-notices";
 import { isHiddenStatusActivity, sandboxWakeElapsed, sandboxWakeLineText, sandboxWakeLiveLine, statusActivity } from "@/lib/activity-runs";
 import type { Message } from "@/state/store";
 import { CancelledTurnRow } from "./CancelledTurnRow";
-import { HeavyTeamRow } from "./HeavyTeamRow";
 
 /** An engine's own word about this conversation: automatic recovery moved it
  * to another engine, or the engine runs another model than the one saved.
@@ -26,8 +25,6 @@ export function StatusActivityRow({ message, transcript, busy = false }: { messa
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [ticking]);
-  // #4901: a Heavy run is no notice to close: its own row, the panel's door
-  if (message.tool?.team) return <HeavyTeamRow message={message} busy={busy} />;
   if (closed || isHiddenStatusActivity(message)) return null;
   const status = live
     ? { kind: "notice" as const, text: sandboxWakeLineText(live, now) }

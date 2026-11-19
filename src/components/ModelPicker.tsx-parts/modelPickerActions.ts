@@ -3,7 +3,6 @@ import { isDesktopModelId, localRowUnavailable } from "@/lib/local-models";
 import { batchModelActions } from "@/lib/batch-bot-model";
 import type { Bot, InstanceInfo, ModelSelection, useStore } from "@/state/store";
 import type { EffortLevel } from "../../../shared/wire";
-import { modeOfSelection, selectionForMode, type ModelMode } from "../../../shared/model-mode";
 import { MENU_WIDTH as BASE_MENU_WIDTH, modelSelectionForPick, saveViewerChoice } from "./helpers";
 import { windowOnlyMenuPlace } from "./ModelPickerMenu";
 
@@ -28,7 +27,7 @@ export interface ModelPickerActionsCtx {
 
 /** The pick / effort / auto handlers of ModelPicker (plain closures, no hooks). */
 export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
-  const { getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, busyUpdatesBotDefault, notAllowed, closeAll } = ctx;
+  const { getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll } = ctx;
   const applyToOthers = (next: ModelSelection) => {
     if (!alsoApplyTo?.length) return;
     const others = alsoApplyTo.flatMap((id) => {
@@ -85,11 +84,13 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
   const chooseAuto = () => {
     if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
     closeAll();
-    // plain Auto, not one of the composer modes (#4900), which also ride the Auto flag
-    const plainAuto = modeOfSelection(selection) === "auto";
-    if (plainAuto && !alsoApplyTo?.length) return;
-    const next = selectionForMode(selection, "auto");
-    if (!bot.busy && !viewerLocal && !plainAuto) {
+    if (autoOn && !alsoApplyTo?.length) return;
+    const next = {
+      ...selection,
+      auto: true as const,
+      autoOptimize: selection.autoOptimize ?? "balance",
+    };
+    if (!bot.busy && !viewerLocal && !autoOn) {
       dispatch({
         type: "setModel",
         botId: bot.id,
@@ -101,24 +102,9 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
     applyToOthers(next);
   };
 
-  /** #4900: a composer mode. Like a model pick it writes the bot's choice for every thread. */
-  const chooseMode = (mode: ModelMode) => {
-    if (bot.busy || viewerLocal || choose) return;
-    closeAll();
-    if (modeOfSelection(selection) === mode) return;
-    dispatch({
-      type: "setModel",
-      botId: bot.id,
-      threadId: threadId ?? bot.threadId,
-      updateBotDefault: true,
-      selection: selectionForMode(selection, mode),
-    });
-  };
-
   const setAutoOptimize = (autoOptimize: "intelligence" | "balance" | "cost") => {
     if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
-    // Optimize belongs to plain Auto: choosing it leaves a composer mode (#4900)
-    const next = { ...selectionForMode(selection, "auto"), autoOptimize };
+    const next = { ...selection, auto: true as const, autoOptimize };
     if (!bot.busy && !viewerLocal) {
       dispatch({
         type: "setModel",
@@ -130,7 +116,7 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
     }
     applyToOthers(next);
   };
-  return { pick, setEffort, chooseAuto, chooseMode, setAutoOptimize };
+  return { pick, setEffort, chooseAuto, setAutoOptimize };
 }
 
 export interface MenuToggleCtx {

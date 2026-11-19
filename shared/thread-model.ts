@@ -4,11 +4,11 @@
 // app and the phones read one effective model either way.
 import type { ModelSelection } from "./wire.ts";
 
-/** The same engine, model, effort and variant, and the same Auto and mode: a
- * thread pinned to the model an Auto bot falls back on is not the bot's own
- * selection (it would run Auto again, and a Heavy team's agents would too). */
+/** The same engine, model, effort and variant, and the same Auto: a thread
+ * pinned to the model an Auto bot falls back on is not the bot's own
+ * selection (it would run Auto again). */
 export function sameModelSelection(a: ModelSelection | undefined, b: ModelSelection | undefined): boolean {
   if (!a || !b) return a === b;
   return a.instanceId === b.instanceId && a.model === b.model && a.effort === b.effort && a.variant === b.variant
-    && (a.auto === true) === (b.auto === true) && a.mode === b.mode;
+    && (a.auto === true) === (b.auto === true);
 }

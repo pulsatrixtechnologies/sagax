@@ -2,7 +2,6 @@
 /** checkedModelSelection (#1388). Pure move from server/index.ts. */
 import { isModelVariant } from "../contracts.ts";
 import { isEffortLevel } from "../../shared/wire.ts";
-import { isForcedModelMode } from "../../shared/model-mode.ts";
 export type Host = Record<string, any>;
 
 export function createCheckedModelSelection(getHost: () => Host): any {
@@ -22,7 +21,7 @@ function checkedModelSelection(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, status: 400, error: "modelSelection must be an object" };
   }
-  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown; autoOptimize?: unknown; mode?: unknown };
+  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown; autoOptimize?: unknown };
   if (typeof value.instanceId !== "string" || !value.instanceId.trim()) {
     return { ok: false, status: 400, error: "modelSelection.instanceId is required" };
   }
@@ -63,14 +62,6 @@ function checkedModelSelection(
       return { ok: false, status: 400, error: "modelSelection.autoOptimize must be intelligence, balance or cost" };
     }
     if (value.auto === true) selection.autoOptimize = value.autoOptimize;
-  }
-  // #4900: the composer mode (Fast, Expert, Heavy, Build), kept only with Auto.
-  // "auto" or null is plain Auto: nothing stored.
-  if (value.mode !== undefined && value.mode !== null && value.mode !== "auto") {
-    if (!isForcedModelMode(value.mode)) {
-      return { ok: false, status: 400, error: "modelSelection.mode must be auto, fast, expert, heavy or build" };
-    }
-    if (value.auto === true) selection.mode = value.mode;
   }
   // The fast model (#1209): a model the engine lists, kept only with Auto.
   if (value.fast !== undefined && value.fast !== null) {

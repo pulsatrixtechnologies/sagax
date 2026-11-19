@@ -1,7 +1,6 @@
 // @ts-nocheck
 /** botAtThreadCapacity (#1388). Pure move from server/index.ts. */
 import { botMaxConcurrentThreads } from "../bots/bot-runtime-settings.ts";
-import { heavyAgentThreads } from "../heavy-team.ts";
 export type Host = Record<string, any>;
 
 export function createBotAtThreadCapacity(getHost: () => Host): any {
@@ -14,8 +13,6 @@ function botAtThreadCapacity(botId: string, personThreadId?: string, opts?: { ex
   // never block the person's routines (separate lane).
   const busyThreads = host.store.tasks(botId).filter((task) => {
     if (!host.threadBusy(botId, task.threadId)) return false;
-    // #4901: a Heavy turn's agents are that turn's own work, not parallel threads of the person's
-    if (heavyAgentThreads.has(task.threadId)) return false;
     if (opts?.excludeProactive && task.routineRunId && host.routines) {
       const run = host.routines.listRuns().find((candidate) => candidate.id === task.routineRunId);
       if (run?.proactive) return false;

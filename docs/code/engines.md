@@ -41,8 +41,10 @@ gave it in Providers, else its address, else "Account N";
 on the composer's chip. A model several accounts offer is drawn on the one a
 pick takes (the one in use, else the bot's account) and the panel's
 "Account" footer line moves it to another (`row.accountRows`). A model only
-one of the sign-in accounts offers wears "Special access"
-(`onlyAccountOffering`). Codex and the ChatGPT plan are two tools of one
+one of the connected sign-in accounts offers in its own list wears "Special
+access" (`onlyAccountOffering`, read through the provider catalog's
+`onlyAccount`, never from the rows shown now: a signed-out account kept for
+the bot's model never makes the other account's models look exclusive). Codex and the ChatGPT plan are two tools of one
 sign-in, never two accounts. The pick is `ModelSelection.instanceId` (the
 account), and favorites stay `<engine>/<model>`.
 
@@ -66,7 +68,8 @@ gave last (`accountModelsOrKept`, kept under
 `providers/engine-models/accounts/<fingerprint>.json`), never the written
 list, so a model only one account offers does not vanish. A turn moved to a
 sibling account (#2106) moves only among the organization's accounts and the
-person's own (`accountsOpenTo`). Tests: `shared/model-accounts.test.ts`,
+payer's own (`accountsOpenTo`, the payer as `turnPayer` judges it, so the
+owner's accounts when the owner pays for the people who write to the bot). Tests: `shared/model-accounts.test.ts`,
 `shared/provider-catalog.test.ts`, `buildSections.providers.test.ts`,
 `ModelPanel.test.ts`, `labels.test.ts`, `account-models.test.ts`,
 `startup-model-catalog.test.ts`, `resolve-model-account.test.ts`,

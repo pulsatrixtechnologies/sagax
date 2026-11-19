@@ -116,4 +116,25 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     const finish = readFileSync(join(here, "start-turn-finish.ts"), "utf8");
     expect(finish).toMatch(/host\.noteSignedOutTurn\?\.\(/);
   });
+
+  // M-20261119-015 (isolation): the #2106 move to a sibling account keeps
+  // the accounts of the person who PAYS the turn (engine-credentials.ts
+  // turnPayer, as orgEngineInput judges it), not the speaker alone: when the
+  // owner pays for the people who write to the bot, the owner's accounts.
+  it("moves a turn among the payer's own accounts, judged as resolveEngineAccess judges it", () => {
+    const validate = readFileSync(join(here, "start-turn-prepare-validate.ts"), "utf8");
+    const at = validate.indexOf("accountsOpenTo(siblings");
+    expect(at).toBeGreaterThan(-1);
+    const block = validate.slice(validate.lastIndexOf("#2106", at), at);
+    expect(block).toMatch(/turnPayer\(\{/);
+    expect(block).toMatch(/payerMode: speakerPayerMode\(state\.bot, switchSpeaker\)/);
+    expect(block).toMatch(/peerOwnerPrincipalId: peerOwnerPrincipal\(switchSpeaker\)/);
+    expect(block).not.toMatch(/speakerPrincipal\(/);
+    const index = readFileSync(join(here, "../index.ts"), "utf8");
+    const start = index.indexOf("const startTurnRunner = createStartTurn({");
+    const runner = index.slice(start, index.indexOf("\n});", start));
+    for (const dep of ["turnPayer", "peerOwnerPrincipal", "speakerPayerMode"]) {
+      expect(runner).toMatch(new RegExp(`^\\s+${dep},$`, "m"));
+    }
+  });
 });

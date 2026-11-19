@@ -19,7 +19,7 @@ import type { ModelOption } from "./helpers";
 import { modelLabel } from "./helpers";
 import { providerCatalog } from "../../../shared/provider-catalog";
 import { canonicalModelId, COMPUTER_PROVIDER_ID, providerOfInstance, providerOfModel, splitEngine, type ProviderRef } from "../../../shared/model-provider";
-import { accountWords, onlyAccountOffering } from "../../../shared/model-accounts";
+import { accountWords } from "../../../shared/model-accounts";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 import { isModelServerOption } from "../../../shared/model-server-option";
 
@@ -222,7 +222,15 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
   // model of this computer under "This computer" whatever engine runs it.
   // The accounts and engines of one provider are pooled: one model is one
   // row, the others ride on it as its alternatives ("Runs with").
-  const order = providerCatalog({ instances: engines, place: orgMode ? "organization" : "solo" }).providers.map((provider) => provider.id);
+  const catalog = providerCatalog({ instances: engines, place: orgMode ? "organization" : "solo" });
+  const order = catalog.providers.map((provider) => provider.id);
+  // M-20261119-015: the "Special access" badge is the catalog's verdict
+  // (shared/provider-catalog.ts onlyAccount: the one CONNECTED sign-in whose
+  // own list offers the model), never the rows shown now: a signed-out
+  // account kept for the bot's model, or one not responding, lists no model
+  // of the other account as its alone.
+  const onlyAccountOf = new Map(catalog.providers.flatMap((provider) => provider.models
+    .flatMap((model) => (model.onlyAccount ? [[`${provider.id}\u0000${model.id}`, model.onlyAccount] as const] : []))));
   const computer: ProviderRef = { id: COMPUTER_PROVIDER_ID, label: t("model.computerProvider"), kind: "computer" };
   const localTag = t("model.localGroup");
   interface Pool { ref: ProviderRef; models: Map<string, ModelMenuRow[]>; instances: InstanceInfo[] }
@@ -300,7 +308,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     const signIns = [...kinds.values()].filter((group) => group.length > 1).flat();
     return { signIns, all: signIns.length ? [...signIns, ...own.filter((instance) => instance.access === "api")] : [] };
   };
-  const withAccounts = (pool: Pool, candidates: readonly ModelMenuRow[]): ModelMenuRow[] => {
+  const withAccounts = (pool: Pool, modelId: string, candidates: readonly ModelMenuRow[]): ModelMenuRow[] => {
     const { signIns, all: accounts } = accountsOf(pool);
     if (signIns.length < 2) return [...candidates];
     const words = (instance: InstanceInfo) => accountWords({ displayName: instance.displayName, email: instance.snapshot.account?.email }, pool.ref.label)
@@ -309,7 +317,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       const instance = accounts.find((candidate) => candidate.instanceId === row.instanceId);
       return instance ? { ...row, account: words(instance) } : row;
     });
-    const only = onlyAccountOffering(named.flatMap((row) => (row.instanceId ? [row.instanceId] : [])), signIns.map((instance) => instance.instanceId));
+    const only = onlyAccountOf.get(`${pool.ref.id}\u0000${modelId}`);
     return only ? named.map((row) => row.instanceId === only
       ? { ...row, badge: { label: t("model.specialAccess"), title: t("model.specialAccessHint", { account: row.account ?? "" }) } }
       : row) : named;
@@ -321,8 +329,8 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       label: pool.ref.label,
       // every engine behind it waits for a sign-in
       note: pool.instances.every((instance) => needsSignIn(instance)) ? t("model.signInRequired") : undefined,
-      rows: [...pool.models.values()].map((pooled) => {
-        const candidates = withAccounts(pool, pooled);
+      rows: [...pool.models.entries()].map(([modelId, pooled]) => {
+        const candidates = withAccounts(pool, modelId, pooled);
         const shownRow = lead(candidates);
         const others = candidates.filter((row) => row !== shownRow);
         if (others.length === 0) return shownRow;

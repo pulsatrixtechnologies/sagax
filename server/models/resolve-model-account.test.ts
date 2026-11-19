@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accountsOpenTo, nextAccountAfterFailure, resolveModelAccount, type PoolAccount } from "./resolve-model-account.ts";
+import { turnPayer } from "../engines/engine-credentials.ts";
 
 const account = (partial: Partial<PoolAccount> & Pick<PoolAccount, "instanceId">): PoolAccount => ({
   models: ["claude-sonnet-5"],
@@ -77,5 +78,24 @@ describe("accountsOpenTo", () => {
     ], ownerOf, "ada", "claude-ada");
     const next = resolveModelAccount({ selection: { ...selection, instanceId: "claude-ada" }, accounts });
     expect(next.instanceId).toBe("claude-ada");
+  });
+
+  it("the owner pays for the people who write to the bot: the owner's accounts, never the writer's", () => {
+    // Nimbus writes to Ada's bot, Ada pays (#1137): the turn may move to
+    // Ada's account, never to Nimbus's (resolveEngineAccess refuses it)
+    const payer = turnPayer({
+      speaker: { origin: "person", principalId: "nimbus" },
+      owner: { principalId: "ada" },
+      payerMode: "owner",
+    }).principalId;
+    expect(payer).toBe("ada");
+    const pool = [
+      account({ instanceId: "claude", credit: "rate_limited" }),
+      account({ instanceId: "claude-ada" }),
+      account({ instanceId: "claude-nimbus", credit: "ok" }),
+    ];
+    const accounts = accountsOpenTo(pool, ownerOf, payer, "claude");
+    expect(accounts.map((entry) => entry.instanceId)).toEqual(["claude", "claude-ada"]);
+    expect(resolveModelAccount({ selection: { ...selection, instanceId: "claude" }, accounts }).instanceId).toBe("claude-ada");
   });
 });

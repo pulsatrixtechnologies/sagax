@@ -84,6 +84,30 @@ final class ModelMenuTests: XCTestCase {
         XCTAssertTrue(alone.flatMap(\.rows).allSatisfy { $0.account == nil && $0.badge == nil })
     }
 
+    // M-20261119-015: one connected account beside a signed-out one the bot
+    // still runs on: the badge reads the accounts' own lists, never on every model
+    func testOneConnectedAccountBesideASignedOutOneBadgesNothing() {
+        let models = [ModelOption(id: "opus", label: "Opus"), ModelOption(id: "fable", label: "Fable"), ModelOption(id: "sonnet", label: "Sonnet")]
+        let old = Instance(
+            instanceId: "claude-old", driverKind: "claudeAgent", displayName: "Old",
+            snapshot: ProviderSnapshot(state: "available", authenticated: false),
+            models: ModelCatalog(default: "opus", options: models)
+        )
+        let team = Instance(
+            instanceId: "claude-team", driverKind: "claudeAgent", displayName: "Team",
+            snapshot: ProviderSnapshot(state: "available", authenticated: true),
+            models: ModelCatalog(default: "opus", options: models)
+        )
+        let menu = ModelMenu.sections(
+            instances: [old, team], selection: ModelSelection(instanceId: "claude-old", model: "opus"),
+            botModel: ModelSelection(instanceId: "claude-old", model: "opus"), botName: "Ara", follows: nil,
+            organization: false, allowedEngines: nil, labels: labels, engineLabel: { _ in "Claude" }
+        )
+        let rows = menu.flatMap(\.rows).filter { $0.kind == .model }
+        XCTAssertTrue(rows.allSatisfy { $0.badge == nil }, rows.map { "\($0.instanceId ?? ""):\($0.modelId ?? "")=\($0.badge ?? "-")" }.joined(separator: ", "))
+        XCTAssertEqual(menu.first { $0.key == "claude-team" }?.rows.first?.account, "Team")
+    }
+
     func testASharedLocalModelNamesWhoSharesIt() {
         let option = ModelOption(id: "d::ornith", label: "Ornith-1.5-122B-oQ4e-mtp", custom: true, local: true, sharedBy: "Camille Tremblay")
         XCTAssertEqual(option.label, "Ornith-1.5-122B-oQ4e-mtp", "the name stays whole, no suffix")

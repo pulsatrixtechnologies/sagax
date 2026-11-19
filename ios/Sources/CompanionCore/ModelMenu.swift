@@ -315,14 +315,19 @@ public enum ModelMenu {
         return sections.map { section in
             guard let instance = listed.first(where: { $0.instanceId == section.key }),
                   let account = accountLabel(instance, among: listed, labels: labels, engineLabel: engineLabel) else { return section }
-            let signIns = providerAccounts(of: instance, among: listed, engineLabel: engineLabel)
+            // the badge reads the connected sign-ins' own lists (shared/provider-catalog.ts
+            // onlyAccount), never the rows shown now: a signed-out account kept for the
+            // bot's model lists no model of the other account as its alone
+            let connected = providerAccounts(of: instance, among: listed, engineLabel: engineLabel)
+                .filter { engineRuns($0) && $0.snapshot.authenticated != false }
+            let badged = connected.count >= 2 && connected.contains { $0.instanceId == instance.instanceId }
             var next = section
             next.label = "\(engineLabel(instance)) · \(account)"
             next.rows = section.rows.map { row in
                 var row = row
                 row.account = account
-                if let model = row.modelId {
-                    let offering = signIns.filter { other in sections.first { $0.key == other.instanceId }?.rows.contains { $0.modelId == model } == true }
+                if badged, let model = row.modelId {
+                    let offering = connected.filter { other in other.models.options.contains { $0.id == model } }
                     if offering.count == 1 {
                         row.badge = labels.specialAccess
                         row.badgeHint = labels.specialAccessHint(account)

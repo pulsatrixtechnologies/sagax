@@ -172,6 +172,19 @@ describe("a person's Claude accounts in the menu (M-20261119-015)", () => {
     expect(section(keyed.menuSections, "anthropic").rows.every((row) => row.account === undefined && row.badge === undefined)).toBe(true);
   });
 
+  it("one connected account beside a signed-out one the bot still runs on: never a badge on every model", () => {
+    // the signed-out account keeps only the bot's model in the menu; the
+    // badge reads the accounts' own lists, so the team account's other
+    // models (both accounts offer them) are not its alone
+    const signedOut = engine("claude-old", "claudeAgent", "Old", team.models.options.filter((option) => option.id !== "claude-mythos-5-2"),
+      { snapshot: { state: "available", authenticated: false } } as Partial<InstanceInfo>);
+    const { menuSections } = buildModelPickerSections(input([signedOut, team], { instanceId: "claude-old", model: "claude-opus-5-5" }));
+    const rows = section(menuSections, "anthropic").rows;
+    expect(rows.filter((row) => row.badge).map((row) => row.modelId)).toEqual([]);
+    // the accounts are still named apart
+    expect(rows.find((row) => row.modelId === "claude-fable-5-2")).toMatchObject({ instanceId: "claude-team", account: "Team" });
+  });
+
   it("Codex and the ChatGPT plan are one sign-in, never two accounts", () => {
     const { menuSections } = buildModelPickerSections(input([codex, { ...chatgpt, snapshot: { ...chatgpt.snapshot, chatgptPlan: true } }], { instanceId: "codex", model: "gpt-5.6" }));
     expect(section(menuSections, "openai").rows.every((row) => row.account === undefined && row.badge === undefined)).toBe(true);

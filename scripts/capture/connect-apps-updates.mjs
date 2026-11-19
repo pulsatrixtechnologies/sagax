@@ -3,8 +3,9 @@
  * Headless screenshots of the update marks of Connect Apps (#4504): the "N
  * updates" pill, the Update mark on a row, an update running, one that
  * failed (the item and why; the old version stays), the versions and notes on
- * an item's page, and "Updates first" in the sort. The real panel in the
- * gallery (?updates=1), no window, no server.
+ * an item's page, "Updates first" in the sort, and the last update line of a
+ * plugin updated by itself (?updates=history, no banner). The real panel in
+ * the gallery (?updates=1), no window, no server.
  * Usage: node scripts/capture/connect-apps-updates.mjs [--out DIR] [--port N]
  *   [--lang en|fr] [--scheme dark|light]
  */
@@ -78,9 +79,12 @@ try {
   await page.waitForSelector("[data-update-failure]", { timeout: 10_000 });
   await shot("34-update-all-done-one-failed");
 
-  // #475: a plugin the app updated by itself says so in one line, its routines follow
-  await open("auto");
-  await shot("35-auto-updated-line");
+  // M-20261119-040: an update done by itself raises no banner; the plugin's own page keeps one line (when, from, to)
+  await open("history");
+  await shot("35-no-update-banner");
+  await page.locator('[data-installed-entry="plugin:code-review@claude-plugins-official"] button[aria-label]').first().click();
+  await page.waitForSelector("[data-detail-last-update]", { timeout: 10_000 });
+  await shot("36-last-update-line");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

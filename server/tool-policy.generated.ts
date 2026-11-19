@@ -867,6 +867,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/respond$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/respond$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/undo$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/x-account$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/x-posts\\/([\\w-]{1,80})\\/([\\w-]{1,64})$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/threads\\/([\\w-]+)\\/x-posts\\/(post|discard)$","tier":"write","readOnly":false,"scope":"threads:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/threads\\/[\\w-]+\\/files\\/[a-f0-9]{24}$","tier":"read","readOnly":true,"scope":"threads:read","defaultEnabled":true},

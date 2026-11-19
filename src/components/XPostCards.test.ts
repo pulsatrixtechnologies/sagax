@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { quotePost, sampleDraft, samplePost, timelinePosts } from "@/lib/x-post-fixtures";
-import { XDraftCard, XPostList, xDateText } from "./XPostCards";
+import { postedPost, postedReply, quotePost, sampleDraft, samplePost, timelinePosts } from "@/lib/x-post-fixtures";
+import { XDraftCard, XPostList, XPostStack, xDateText, xFanStyle, xTimeText } from "./XPostCards";
 
 describe("X draft card (#4638)", () => {
   it("shows the avatar, Post and the handle, Copy, the text, and two equal buttons", () => {
@@ -79,5 +79,73 @@ describe("held X post call and the footer (#4638)", () => {
     expect(html.match(/flex min-w-0 flex-1 items-center gap-1/g)).toHaveLength(4);
     expect(html).toContain("ms-auto flex shrink-0");
     expect(html).not.toContain("max-w-[425px]");
+  });
+});
+
+describe("the posted card and the stack (#4640)", () => {
+  it("is one card as the account that posted: its picture, name, badge, handle, a Posted chip, X's logo, no second frame or link", () => {
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [postedPost("en")] }));
+    expect(html).toContain("Sample Account");
+    expect(html).toContain("@sample");
+    expect(html).toContain('title="Verified account"');
+    expect(html).toContain("pbs.twimg.com/profile_images");
+    expect(html).toContain("data-x-posted-chip");
+    expect(html).toContain("data-x-logo");
+    expect(html).not.toContain("data-x-view-link");
+    expect(html).not.toContain("View on X");
+    expect(html).not.toContain("Your account");
+    expect(html).not.toContain(">SA<");
+    expect(html.match(/<article/g)).toHaveLength(1);
+    expect(html.match(/<section/g)).toHaveLength(1);
+    expect(html).toContain('data-x-url="https://x.com/sample/status/1000000000000000100"');
+    // muted action icons when no count is known
+    for (const key of ["replies", "reposts", "likes", "views"]) expect(html).toContain(`data-x-metric="${key}"`);
+  });
+  it("shows the initials only when there is really no data, never an invented account", () => {
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [postedPost("en", 0, { name: "", handle: "", verified: false, avatarUrl: undefined })] }));
+    expect(html).toContain("Your account");
+    expect(html).not.toContain(">YA<");
+    expect(html).not.toContain("@x");
+    expect(html).not.toContain('title="Verified account"');
+  });
+  it("draws a reply with Replying to @handle and the parent quoted compactly", () => {
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [postedReply("en")] }));
+    expect(html).toContain("Replying to");
+    expect(html).toContain("@example_two");
+    expect(html).toContain("data-x-parent");
+    expect(html).toContain("The quoted post");
+  });
+  it("fans several posts of a turn: the front card, the others behind, a label, and a click on the label opens them all", () => {
+    const posts = [0, 1, 2].map((index) => postedPost("en", index));
+    const html = renderToStaticMarkup(createElement(XPostList, { posts }));
+    expect(html).toContain("data-x-stack");
+    expect(html).toContain("3 posts");
+    expect(html).toContain('data-x-stack-card="front"');
+    expect(html).toContain('data-x-stack-card="1"');
+    expect(html).toContain('data-x-stack-card="2"');
+    expect(html).toContain('aria-roledescription="stack of posts"');
+    // only the front card is reachable: the ones behind are inert and hidden from readers
+    expect(html.match(/aria-hidden="true"[^>]*data-x-stack-card|data-x-stack-card="[12]"[^>]*aria-hidden="true"/g) ?? []).toHaveLength(2);
+    expect(renderToStaticMarkup(createElement(XPostStack, { posts }))).toContain('aria-expanded="false"');
+  });
+  it("a single posted post is just the card, not a stack", () => {
+    expect(renderToStaticMarkup(createElement(XPostList, { posts: [postedPost("en")] }))).not.toContain("data-x-stack");
+  });
+  it("read posts keep their timeline, and a batch mixing read posts is not a stack", () => {
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [postedPost("en"), samplePost("en")] }));
+    expect(html).not.toContain("data-x-stack");
+  });
+  it("fans the cards back with a turn and an offset, and keeps them straight under reduced motion", () => {
+    expect(xFanStyle(0, false).transform).toBe("none");
+    expect(String(xFanStyle(1, false).transform)).toMatch(/rotate\(1\.8deg\)/);
+    expect(String(xFanStyle(2, false).transform)).toMatch(/rotate\(-3\.6deg\)/);
+    expect(String(xFanStyle(2, true).transform)).toContain("rotate(0deg)");
+    expect(xFanStyle(6, false).opacity).toBe(0);
+  });
+  it("writes the time the way the timeline does", () => {
+    const now = Date.parse("2026-11-18T12:00:00Z");
+    expect(xTimeText("2026-11-18T11:55:00Z", now)).toBe("5m");
+    expect(xTimeText("2026-11-18T09:00:00Z", now)).toBe("3h");
+    expect(xTimeText("2026-11-10T09:00:00Z", now)).not.toMatch(/\dh$/);
   });
 });

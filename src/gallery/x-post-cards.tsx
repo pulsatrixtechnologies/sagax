@@ -10,6 +10,10 @@
  *   failed     the card when the post did not go out
  *   single     one post with a quoted post and a photo
  *   timeline   three posts stacked
+ *   posted-one a post the bot just published, as the account that posted it
+ *   reply      a posted reply: Replying to @handle and the parent quoted
+ *   stack3     three posts of one turn, fanned like iMessage photos
+ *   stack6     six posts of one turn
 
  *   held       a bot's own X post call held for the answer: the same card
  *   neighbour  the email draft card (the conforming neighbour) beside the draft card
@@ -21,7 +25,7 @@ import { EmailCard } from "../components/EmailCard";
 import { XDraftCard } from "../components/XPostCards";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { nearLimitText, quotePost, sampleDraft, samplePost, timelinePosts, type Lang } from "../lib/x-post-fixtures";
+import { nearLimitText, postedPost, postedReply, quotePost, sampleDraft, samplePost, timelinePosts, type Lang } from "../lib/x-post-fixtures";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -60,6 +64,8 @@ const singleFence = fence("x-posts", JSON.stringify({
   posts: [samplePost(lang, { quoted: quotePost(lang), media: [{ type: "photo", url: "https://pbs.twimg.com/media/sample.jpg", alt: "Sample" }] })],
 }));
 const timelineFence = fence("x-posts", JSON.stringify({ posts: timelinePosts(lang) }));
+const postedFence = (posts: unknown[]) => fence("x-posts", JSON.stringify({ posts }));
+const stackOf = (count: number) => Array.from({ length: count }, (_, index) => postedPost(lang, index, index === 1 ? { media: [{ type: "photo", url: "https://pbs.twimg.com/media/sample.jpg", alt: "Sample" }] } : {}));
 
 function Frame({ children }: { children: ReactNode }) {
   return <main className="min-h-screen bg-canvas p-4 text-ink sm:p-8"><div className="mx-auto max-w-[44rem]" data-gallery-chat>{children}</div></main>;
@@ -75,6 +81,9 @@ function Page() {
     const note = lang === "fr" ? "Sample attend ta réponse" : "Sample is waiting for you";
     return <Frame><div className="mb-2 text-[13px] text-ink-secondary">{note}</div><XDraftCard draft={draft} held={{ onPost: () => {}, onDiscard: () => {} }} /></Frame>;
   }
+  if (scene === "posted-one") return <Frame>{bubble(lang === "fr" ? "C'est publié." : "It is posted.")}{chat(postedFence([postedPost(lang, 0)]), "m-4")}</Frame>;
+  if (scene === "reply") return <Frame>{bubble(lang === "fr" ? "J'ai répondu." : "I replied.")}{chat(postedFence([postedReply(lang)]), "m-5")}</Frame>;
+  if (scene === "stack3" || scene === "stack6") return <Frame>{bubble(lang === "fr" ? "Voilà, c'est publié." : "Done, they are posted.")}{chat(postedFence(stackOf(scene === "stack3" ? 3 : 6)), "m-6")}</Frame>;
   if (scene === "single") return <Frame>{bubble(readLine)}{chat(singleFence, "m-2")}</Frame>;
   if (scene === "timeline") return <Frame>{bubble(readLine)}{chat(timelineFence, "m-3")}</Frame>;
   if (scene === "neighbour") {

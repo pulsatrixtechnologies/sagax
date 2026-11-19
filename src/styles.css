@@ -5332,6 +5332,17 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --x-line: #2f3336;
   --x-quote-line: #2f3336;
   --x-hover: rgba(231, 233, 234, 0.03);
+  /* x.com's own stack (Chirp is theirs: the system faces it falls back to) */
+  font-family: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+/* #4640: the fan of published posts. The cards move only when motion is welcome. */
+.x-stack-card {
+  transform-origin: 50% 100%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .x-stack-card {
+    transition: transform 0.32s var(--ease-out-soft), opacity 0.2s ease-out;
+  }
 }
 :is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) .x-post {
   --x-bg: #ffffff;

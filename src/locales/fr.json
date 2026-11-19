@@ -15573,7 +15573,6 @@
   "rich.x.status.discarded": "Écarté",
   "rich.x.status.failed": "La publication n'est pas partie.",
   "rich.x.status.failedDetail": "La publication n'est pas partie : {error}",
-  "rich.x.viewOnX": "Voir sur X",
   "rich.x.open": "Ouvrir sur x.com",
   "rich.x.verified": "Compte vérifié",
   "rich.x.photo": "Photo",
@@ -15585,5 +15584,11 @@
   "rich.x.likes": "{count} mentions J'aime",
   "rich.x.views": "{count} vues",
   "rich.x.bookmark": "Signet",
-  "rich.x.share": "Partager"
+  "rich.x.share": "Partager",
+  "rich.x.replyingTo": "En réponse à",
+  "rich.x.replyingToPost": "En réponse à un post",
+  "rich.x.stack.label": "{count} posts",
+  "rich.x.stack.prev": "Post précédent",
+  "rich.x.stack.next": "Post suivant",
+  "rich.x.stack.role": "pile de posts"
 }

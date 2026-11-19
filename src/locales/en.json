@@ -15573,7 +15573,6 @@
   "rich.x.status.discarded": "Discarded",
   "rich.x.status.failed": "The post did not go out.",
   "rich.x.status.failedDetail": "The post did not go out: {error}",
-  "rich.x.viewOnX": "View on X",
   "rich.x.open": "Open on x.com",
   "rich.x.verified": "Verified account",
   "rich.x.photo": "Photo",
@@ -15585,5 +15584,11 @@
   "rich.x.likes": "{count} likes",
   "rich.x.views": "{count} views",
   "rich.x.bookmark": "Bookmark",
-  "rich.x.share": "Share"
+  "rich.x.share": "Share",
+  "rich.x.replyingTo": "Replying to",
+  "rich.x.replyingToPost": "Replying to a post",
+  "rich.x.stack.label": "{count} posts",
+  "rich.x.stack.prev": "Previous post",
+  "rich.x.stack.next": "Next post",
+  "rich.x.stack.role": "stack of posts"
 }

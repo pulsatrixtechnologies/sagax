@@ -75,3 +75,34 @@ export function timelinePosts(lang: Lang): XPostView[] {
     }),
   ];
 }
+
+/** The demo account's picture: the capture answers this X CDN address with a drawn avatar. */
+export const SAMPLE_AVATAR = "https://pbs.twimg.com/profile_images/1000000000000000000/sample_400x400.jpg";
+
+/** A post the demo account's bot just published (the Posted chip, the account's own picture). */
+export function postedPost(lang: Lang, index = 0, over: Partial<XPostView> = {}): XPostView {
+  const texts = lang === "fr"
+    ? ["Une version de démonstration est en ligne. Dites-nous ce que vous en pensez #demo", "Petit rappel : la démo reste ouverte toute la semaine.", "Merci @example_two pour les retours, on s'en occupe.", "Nouveau guide de démonstration : https://example.com/guide", "Une dernière note de démonstration, courte et neutre.", "Fin de la série de démonstration."]
+    : ["A sample build is live. Tell us what you think #demo", "A quick reminder: the demo stays open all week.", "Thanks @example_two for the feedback, we are on it.", "A new sample guide: https://example.com/guide", "One last sample note, short and neutral.", "End of the sample thread."];
+  return {
+    id: `100000000000000010${index}`,
+    url: `https://x.com/${SAMPLE_HANDLE}/status/100000000000000010${index}`,
+    name: "Sample Account",
+    handle: SAMPLE_HANDLE,
+    verified: true,
+    avatarUrl: SAMPLE_AVATAR,
+    createdAt: new Date(Date.now() - (2 + index) * 60_000).toISOString(),
+    text: texts[index % texts.length]!,
+    media: [],
+    posted: true,
+    ...over,
+  };
+}
+
+/** A posted reply: "Replying to @handle" and the parent quoted. */
+export function postedReply(lang: Lang): XPostView {
+  return postedPost(lang, 2, {
+    text: lang === "fr" ? "Merci pour le retour, c'est corrigé dans la prochaine version." : "Thanks for the feedback, it is fixed in the next version.",
+    replyTo: { id: "1000000000000000002", handle: "example_two", post: { ...quotePost(lang), metrics: undefined } },
+  });
+}

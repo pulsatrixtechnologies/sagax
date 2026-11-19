@@ -1,0 +1,142 @@
+{
+  "en-light": [
+    {
+      "row": "auto",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": []
+    },
+    {
+      "row": "follow",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "all",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": [
+        21
+      ]
+    }
+  ],
+  "en-dark": [
+    {
+      "row": "auto",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": []
+    },
+    {
+      "row": "follow",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "all",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": [
+        21
+      ]
+    }
+  ],
+  "fr-light": [
+    {
+      "row": "auto",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": []
+    },
+    {
+      "row": "follow",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "all",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": [
+        21
+      ]
+    }
+  ],
+  "fr-dark": [
+    {
+      "row": "auto",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": []
+    },
+    {
+      "row": "follow",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "model",
+      "textEdgeFromRight": 63,
+      "iconCentresFromRight": [
+        21
+      ]
+    },
+    {
+      "row": "all",
+      "textEdgeFromRight": null,
+      "iconCentresFromRight": [
+        21
+      ]
+    }
+  ]
+}

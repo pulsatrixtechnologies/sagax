@@ -23,7 +23,7 @@
 //   S7  a retry of a new conversation's send after a restart lands in the
 //       same conversation and runs nothing twice
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -387,12 +387,29 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     const chat = (byBot.body.groups as Array<any>).find((group) => group.label === "Chat");
     const first = (byDay.body.groups as Array<any>).find((group) => group.key === `day:${day.slice(0, 8)}01`);
     if (!day.endsWith("-01")) expect(first?.costUsd).toBeCloseTo(chat.costUsd, 6);
-    // its tool calls: the person's stats count them, an administrator's never
+    // its tool calls: the person's stats count them, an administrator's never.
+    // #4804: the server writes its tool spans every few seconds, so which of
+    // the fake turns' own calls (Orion's Bash among them, which an
+    // administrator rightly reads) are in the file at this instant varies.
+    // The check is per conversation, on calls this test writes in the same
+    // span file the server reads: one in each hidden chat, one in Orion's.
+    const orionThread = (await api("GET", "/api/bots?messages=0", bob)).body.bots.find((bot: any) => bot.id === orion).threadId as string;
+    const at = Date.now();
+    const span = (threadId: string, tool: string) => JSON.stringify({ t: `t-${tool}-${threadId}`, n: `execute_tool ${tool}`, a: at, b: at + 5, st: 0,
+      at: { "gen_ai.tool.name": tool, "sagax.tool.kind": "builtin", "sagax.thread.id": threadId } });
+    mkdirSync(join(home, ".sagax", "usage"), { recursive: true });
+    appendFileSync(join(home, ".sagax", "usage", `spans-${new Date(at).toISOString().slice(0, 7)}.jsonl`),
+      `${[...chats.map((chat) => span(chat, "SurfaceChatTool")), span(orionThread, "OrionTool")].join("\n")}\n`);
     const ownStats = await api("GET", `/api/me/usage/stats?${range}`, bob);
     const adminStats = await api("GET", `/api/usage/stats?${range}`, alice);
     expect(ownStats.status, ownStats.text).toBe(200);
     expect(adminStats.status, adminStats.text).toBe(200);
-    expect(JSON.stringify(adminStats.body)).not.toContain("Bash");
+    const calls = (stats: any, tool: string) => (stats.tools as Array<{ tool: string; calls: number }>).find((row) => row.tool === tool)?.calls ?? 0;
+    expect(calls(ownStats.body, "SurfaceChatTool")).toBe(chats.length);
+    expect(calls(ownStats.body, "OrionTool")).toBe(1);
+    expect(calls(adminStats.body, "SurfaceChatTool")).toBe(0);
+    expect(JSON.stringify(adminStats.body)).not.toContain("SurfaceChatTool");
+    expect(calls(adminStats.body, "OrionTool")).toBe(1);
     // the administrator's logs: no creation, send, stop or delete of it
     for (const read of [await admin("GET", "audit?category=client&limit=500"), await api("GET", `/api/admin-activity?${range}&limit=5000`, alice)]) {
       expect(read.status, read.text.slice(0, 300)).toBe(200);

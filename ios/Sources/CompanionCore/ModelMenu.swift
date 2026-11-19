@@ -269,124 +269,54 @@ public enum ModelMenu {
     }
 }
 
-/// The models a person starred (src/lib/model-favorites.ts): stored under
-/// the synced preference `sagax.modelFavorites.v1` as `[[instanceId,
-/// modelId], ...]`, oldest first. A favorite whose engine or model is gone
-/// is kept and simply not shown.
+/// The models a person starred (src/lib/model-favorites.ts): the server's
+/// own list, `favoriteModels` of `GET`/`PUT /api/me/models`, each
+/// `"<engine>/<model>"` (`modelKey`, shared/offered-models.ts), oldest first,
+/// at most 40, 300 characters each. A favorite whose engine or model is gone
+/// is kept and simply not shown. The menu row's key is the same string.
 public enum ModelFavorites {
-    public static let preferenceKey = "sagax.modelFavorites.v1"
-    /// A bound, not a quota: the value must fit one preference (8 KiB).
+    /// The server's bounds (server/config.ts).
     public static let max = 40
-    private static let maxId = 200
+    public static let maxKey = 300
+    /// The device's old record, before the list lived on the server: it is
+    /// read once to move its stars over, then dropped.
+    public static let legacyPreferenceKey = "sagax.modelFavorites.v1"
 
-    /// The id of a favorite, the same as the menu row's key for that model.
+    /// The id of a favorite: the server's key, also the menu row's key for that model.
     public static func key(instanceId: String, modelId: String) -> String {
-        "\(instanceId)\u{0}\(modelId)"
+        "\(instanceId)/\(modelId)"
     }
 
+    /// Only the first slash splits: a model id may hold one (OpenRouter's "vendor/model").
     static func split(_ key: String) -> (String, String)? {
-        guard let at = key.firstIndex(of: "\u{0}"), at > key.startIndex, key.index(after: at) < key.endIndex else { return nil }
+        guard let at = key.firstIndex(of: "/"), at > key.startIndex, key.index(after: at) < key.endIndex else { return nil }
         return (String(key[..<at]), String(key[key.index(after: at)...]))
     }
 
-    public static func parse(_ raw: String?) -> [String] {
-        guard let raw, let data = raw.data(using: .utf8),
-              let entries = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return [] }
+    /// The list as the server sends it: broken or repeated entries dropped, the newest 40 kept.
+    public static func clean(_ list: [String]) -> [String] {
         var keys: [String] = []
-        for entry in entries {
-            guard let pair = entry as? [Any], pair.count == 2,
-                  let instanceId = pair[0] as? String, let modelId = pair[1] as? String,
-                  !instanceId.isEmpty, !modelId.isEmpty, instanceId.utf16.count <= maxId, modelId.utf16.count <= maxId,
-                  !instanceId.contains("\u{0}") else { continue }
-            let key = key(instanceId: instanceId, modelId: modelId)
-            if !keys.contains(key) { keys.append(key) }
+        for key in list where split(key) != nil && key.utf16.count <= maxKey && !keys.contains(key) {
+            keys.append(key)
         }
         return Array(keys.suffix(max))
     }
 
-    public static func serialize(_ keys: [String]) -> String {
-        let pairs = keys.suffix(max).compactMap(split).map { [$0.0, $0.1] }
-        guard let data = try? JSONSerialization.data(withJSONObject: pairs, options: [.withoutEscapingSlashes]) else { return "[]" }
-        return String(decoding: data, as: UTF8.self)
-    }
-
     /// Adds the model at the end, or removes it when it is already there.
     public static func toggled(_ keys: [String], _ key: String) -> [String] {
-        guard split(key) != nil else { return keys }
+        guard split(key) != nil, key.utf16.count <= maxKey else { return keys }
         return keys.contains(key) ? keys.filter { $0 != key } : Array((keys + [key]).suffix(max))
     }
-}
 
-/// The providers a person pinned to the model menu (src/lib/model-provider-pins.ts):
-/// the synced preference `sagax.modelProviderPins.v1`, a JSON array of provider
-/// ids (the section keys, in the order pinned), at most `max`. The menu lists
-/// those providers and "All models" opens the rest, each with its pin. With
-/// nothing pinned the menu shows the bot's own provider and the two providers
-/// whose models the person starred most (the catalog's order after that).
-public enum ModelProviderPins {
-    public static let preferenceKey = "sagax.modelProviderPins.v1"
-    public static let max = 3
-    private static let maxId = 200
-
-    /// What the menu knows of one provider.
-    public struct Candidate: Equatable, Sendable {
-        public var key: String
-        /// How many of its models the person starred.
-        public var starred: Int
-        /// The bot's model is one of its models.
-        public var current: Bool
-
-        public init(key: String, starred: Int, current: Bool) {
-            self.key = key
-            self.starred = starred
-            self.current = current
-        }
-    }
-
-    public enum Change: Equatable, Sendable {
-        case pins([String])
-        /// A fourth pin: nothing changes; say to unpin one first.
-        case full
-    }
-
-    public static func parse(_ raw: String?) -> [String] {
+    /// The device's old record (`[[instanceId, modelId], ...]`) as server keys.
+    public static func parseLegacy(_ raw: String?) -> [String] {
         guard let raw, let data = raw.data(using: .utf8),
               let entries = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return [] }
-        var pins: [String] = []
-        for entry in entries {
-            guard let key = entry as? String, !key.isEmpty, key.utf16.count <= maxId, !pins.contains(key) else { continue }
-            pins.append(key)
-        }
-        return Array(pins.prefix(max))
-    }
-
-    public static func serialize(_ pins: [String]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: Array(pins.prefix(max)), options: [.withoutEscapingSlashes]) else { return "[]" }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    /// The current provider, then the most starred (a tie keeps the catalog's order).
-    public static func defaults(_ candidates: [Candidate]) -> [String] {
-        let current = candidates.filter(\.current).map(\.key)
-        let rest = candidates.enumerated()
-            .filter { !$0.element.current }
-            .sorted { $0.element.starred != $1.element.starred ? $0.element.starred > $1.element.starred : $0.offset < $1.offset }
-            .map(\.element.key)
-        return Array((current + rest).prefix(max))
-    }
-
-    /// The pins in effect: the person's own (those whose provider is still
-    /// listed), else the default.
-    public static func effective(stored: [String], candidates: [Candidate]) -> [String] {
-        let listed = Set(candidates.map(\.key))
-        let own = stored.filter { listed.contains($0) }
-        return own.isEmpty ? defaults(candidates) : own
-    }
-
-    /// Pins the provider, or unpins it when pinned. A fourth pin is refused.
-    public static func toggled(_ pins: [String], _ key: String) -> Change {
-        if pins.contains(key) { return .pins(pins.filter { $0 != key }) }
-        if pins.count >= max { return .full }
-        return .pins(pins + [key])
+        return clean(entries.compactMap { entry in
+            guard let pair = entry as? [Any], pair.count == 2,
+                  let instanceId = pair[0] as? String, let modelId = pair[1] as? String,
+                  !instanceId.isEmpty, !modelId.isEmpty, !instanceId.contains("/") else { return nil }
+            return key(instanceId: instanceId, modelId: modelId)
+        })
     }
 }

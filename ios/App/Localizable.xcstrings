@@ -2,22 +2,6 @@
   "sourceLanguage": "en",
   "version": "1.0",
   "strings": {
-    "Pin %@ to the model menu": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Épingler %@ au menu des modèles"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fixar %@ no menu de modelos"
-          }
-        }
-      }
-    },
     "Take over": {
       "localizations": {
         "en": {
@@ -62,22 +46,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prendre l'appel"
-          }
-        }
-      }
-    },
-    "Three providers are pinned. Unpin one first.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trois fournisseurs sont épinglés. Retire d’abord l’épingle d’un autre."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Três provedores estão fixados. Desafixe um primeiro."
           }
         }
       }
@@ -55541,22 +55509,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Principaux utilisateurs"
-          }
-        }
-      }
-    },
-    "Unpin %@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retirer l’épingle de %@"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Desafixar %@"
           }
         }
       }

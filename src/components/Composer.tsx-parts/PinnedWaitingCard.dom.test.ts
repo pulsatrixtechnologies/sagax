@@ -429,7 +429,8 @@ describe("the pinned card draws the server's items (#3543)", () => {
     expect(card()?.getAttribute("data-pinned-waiting")).toBe("open");
     const body = host.querySelector('[data-pinned-body="other"]')!;
     expect(body.textContent).toContain("Orla is waiting for your answer");
-    expect(body.querySelector("[data-pinned-text]")?.textContent).toBe("Sign the release checklist\n\nThree items left.");
+    // M-20261119-045: its text whole, drawn as the bot's Markdown (one paragraph each)
+    expect([...body.querySelectorAll("[data-pinned-text] p")].map((paragraph) => paragraph.textContent)).toEqual(["Sign the release checklist", "Three items left."]);
     // nothing to skip here: it is answered in its conversation
     expect(host.querySelector("[data-pinned-waiting] [data-card-skip]")).toBeNull();
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });

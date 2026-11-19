@@ -32,6 +32,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PinnedItem } from "@/lib/pending-question";
 import { pinnedItemsFrom, servedItemPlace, servedWidgetMessage, servedWordsCard, stillListed } from "@/lib/pinned-waiting";
+import { plainPreviewText } from "@/lib/plain-preview";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, type Bot, type Message, type useStore } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
@@ -41,6 +42,7 @@ import { XHeldDraft, heldXDraftOf } from "../XHeldDraft";
 import { QuestionCard } from "../QuestionCard";
 import { PersonRequestCard, ServedItemCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
 import { CardCloseButton } from "../AskCard";
+import { CardMarkdown } from "../CardMarkdown";
 import { OptionCard } from "../OptionCard";
 import { WidgetMessage } from "../widget/WidgetMessage";
 
@@ -89,7 +91,8 @@ export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId 
 
 export type PinnedWaiting = ReturnType<typeof usePinnedWaiting>;
 
-/** The words of what waits, for the folded line. */
+/** The words of what waits, for the folded line: read as plain words, never
+ * the bot's Markdown (M-20261119-045). */
 export function pinnedItemText(item: PinnedItem): string {
   const raw = item.kind === "question"
     ? item.message.card?.questionRequest?.questions[0]?.question ?? item.message.card?.title ?? ""
@@ -100,7 +103,7 @@ export function pinnedItemText(item: PinnedItem): string {
     : item.kind === "other"
       ? item.item.title || item.item.text
       : item.pending.message.card?.title || item.pending.detail || item.pending.tool;
-  const text = raw.replace(/\s+/g, " ").trim();
+  const text = plainPreviewText(raw).replace(/\s+/g, " ").trim();
   return text.length > FOLDED_TEXT_MAX ? `${text.slice(0, FOLDED_TEXT_MAX - 1).trimEnd()}…` : text;
 }
 
@@ -244,7 +247,8 @@ export function PinnedWaitingCard({
             ? <WidgetMessage key={current.key} botId={current.item.botId} threadId={askedIn} message={servedWidgetMessage(current.item)!} />
             : servedWordsCard(current.item)
             ? <ServedItemCard key={current.key} item={current.item} />
-            : <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-ink" data-pinned-text="">{current.item.text || current.item.title}</p>}
+            // M-20261119-045: the bot's words, drawn as in its bubble
+            : <div data-pinned-text=""><CardMarkdown text={current.item.text || current.item.title} draftId={groupId ? `group:${groupId}:${threadId}` : bot ? `bot:${bot.id}:${threadId}` : undefined} className="text-[14px] leading-5 text-ink" /></div>}
         </div>
       ) : current.kind === "request" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="request">

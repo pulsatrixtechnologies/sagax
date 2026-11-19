@@ -15,6 +15,7 @@ import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowUp, Box, Check, FileText, LayoutDashboard, Sparkles, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { CardCloseButton, moveChoiceFocus } from "./AskCard";
+import { CardMarkdown } from "./CardMarkdown";
 
 const CHOICE_ICONS: Record<string, LucideIcon> = {
   "file-text": FileText,
@@ -202,8 +203,11 @@ export function SheetChoices({
             <span className="min-w-0 flex-1">
               {/* plaintext bidi: each label orders its own script */}
               <span className="block break-words text-[14px] leading-5 text-ink [unicode-bidi:plaintext]">{choice.label}</span>
+              {/* M-20261119-045: an option's detail is the bot's words, drawn as
+                  in its bubble; inert in the row's button (a record link reads as
+                  its label, a chip being a control of its own) */}
               {choice.description && (
-                <span className="block break-words text-[13px] leading-[18px] text-ink-tertiary [unicode-bidi:plaintext]">{choice.description}</span>
+                <CardMarkdown text={choice.description} inert className="block text-[13px] leading-[18px] text-ink-tertiary" />
               )}
             </span>
             {settled && on && !quietPicked && <Check size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0 text-ink-secondary" />}

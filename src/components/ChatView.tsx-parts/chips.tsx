@@ -5,6 +5,7 @@ import { api, openRoutineRun, openThread, type Bot, type Message } from "@/state
 import { useStoreDispatch, useStoreGetter, useStoreSelector, shallowEqual } from "@/state/store-selector";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { readableError } from "@/lib/plain-error";
+import { plainPreviewText } from "@/lib/plain-preview";
 import type { PeerLine } from "@/lib/peer-message";
 import { autoWorkerLine } from "@/lib/auto-model";
 import { toolPlace, type EffectivePlace } from "@/lib/place";
@@ -146,8 +147,10 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
 const WATCH_FEEDBACK = ["up", "down", "less"] as const;
 
 /** The compact history line of an ask the pinned card over the composer
- * holds: its title and that it waits, never a second live copy. */
-export function WaitingHistoryLine({ text }: { text: string | undefined }) {
+ * holds: its title and that it waits, never a second live copy. Its words
+ * read as plain words, never the bot's Markdown (M-20261119-045). */
+export function WaitingHistoryLine({ text: raw }: { text: string | undefined }) {
+  const text = raw ? plainPreviewText(raw) : undefined;
   return (
     <p data-waiting-history="" className="truncate text-[13px] text-ink-secondary" title={text}>
       {text ? `${text} \u00b7 ` : null}

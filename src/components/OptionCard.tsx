@@ -7,6 +7,7 @@ import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-questio
 import { isFirstRunQuizCard } from "../../shared/options-card";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
+import { CardMarkdown, cardDraftId } from "./CardMarkdown";
 import { ExpandableText } from "./ExpandableText";
 import { SuggestionFeedback } from "./SuggestionFeedback";
 import { ProactiveChoiceCard } from "./ProactiveChoiceCard";
@@ -111,6 +112,9 @@ export function OptionCard({
   const title = terminalPicked ? t("terminal.card.title", { destination: terminalDestinationLabel(terminalPicked) }) : questionCardTitle(card);
   // #3515: an old card's English body reads in the app's language
   const subtitle = questionCardSubtitle(card);
+  // M-20261119-045: the bot's words are drawn as in its bubble; a record chip
+  // in them asks in this conversation's composer
+  const draftId = cardDraftId(state, botId, threadId ?? bot?.threadId, groupId);
   // Cards saved before the server flattened `ask_user` choices can still hold
   // `{ label }` rows; a label is drawable, an object as a React child is not.
   const options = parseChoices(card.options, LETTERS.length) ?? [];
@@ -198,14 +202,14 @@ export function OptionCard({
   return (
     <QuestionSheet
       ariaLabel={title}
-      title={title}
+      title={terminalPicked ? title : <CardMarkdown text={title} draftId={draftId} />}
       settled={settled}
       embedded={embedded}
       onDismiss={embedded ? undefined : dismiss}
       dismissLabel={skip ? t("waitingCard.skipAria") : t("onboarding.card.dismiss")}
       onKeyDown={settled ? undefined : sheetKeyHandler(choices.length, (index) => pick(choices[index]!.id ?? choices[index]!.label))}
     >
-      {subtitle && <ExpandableText text={subtitle} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
+      {subtitle && <ExpandableText text={subtitle} markdown draftId={draftId} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
       {terminal && !card.answered && (
         <div className="mb-2.5">
           <TerminalDestinationPicker destinations={terminalDestinations} value={terminalChoice} onChange={setTerminalPick} />

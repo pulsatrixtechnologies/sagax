@@ -32,6 +32,7 @@ import {
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
 import { AskFactsTable } from "./AskFactsTable";
+import { CardMarkdown } from "./CardMarkdown";
 import { ExpandableText } from "./ExpandableText";
 import { picksInAnswer, QuestionSheet, SHEET_FIELD, SheetChoices, SheetField, SheetNote, SheetSend, type SheetChoice } from "./QuestionSheet";
 
@@ -181,6 +182,7 @@ function FormWizard({
   cardId,
   title,
   context,
+  draftId,
   facts,
   questions,
   embedded,
@@ -194,6 +196,7 @@ function FormWizard({
   cardId: string;
   title: string;
   context?: string;
+  draftId?: string;
   facts?: readonly AskFact[];
   questions: readonly AskQuestion[];
   embedded: boolean;
@@ -344,7 +347,7 @@ function FormWizard({
     return (
       <div key={`${row}-${question.question}`} data-form-row="" data-form-followup={question.when ? "when" : "after"} className="ps-[34px] pe-1.5 pb-1.5 pt-0.5">
         <div className="mb-1 flex items-baseline gap-2">
-          <span dir="auto" className="min-w-0 break-words text-[12.5px] leading-snug text-ink-secondary">{question.question}</span>
+          <CardMarkdown text={question.question} draftId={draftId} className="text-[12.5px] leading-snug text-ink-secondary" />
           {question.optional && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t("question.form.optional")}</span>}
         </div>
         <div data-form-control="">
@@ -388,11 +391,11 @@ function FormWizard({
     // a card addressed to someone else: the questions are shown, not answered here
     return (
       <QuestionSheet ariaLabel={t("question.aria.card")} title={title} embedded={embedded} onDismiss={onDismiss} dismissLabel={dismissLabel}>
-        {context && <div data-form-context=""><ExpandableText text={context} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
+        {context && <div data-form-context=""><ExpandableText text={context} markdown draftId={draftId} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
         <div className="flex flex-col">
           {questions.map((question, index) => (
             <div key={`${index}-${question.question}`} data-form-row="" className={cn("flex min-h-9 min-w-0 items-baseline gap-2 py-1.5", index > 0 && "border-t border-ink/[0.06]")}>
-              <span dir="auto" className="min-w-0 break-words text-[13.5px] leading-5 text-ink">{question.question}</span>
+              <CardMarkdown text={question.question} draftId={draftId} className="text-[13.5px] leading-5 text-ink" />
               {question.optional && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t("question.form.optional")}</span>}
             </div>
           ))}
@@ -420,7 +423,7 @@ function FormWizard({
       onKeyDown={onKeyDown}
     >
       <AskFactsTable facts={facts} className="-mt-1" />
-      {context && <div data-form-context=""><ExpandableText text={context} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
+      {context && <div data-form-context=""><ExpandableText text={context} markdown draftId={draftId} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
       {steps.length > 1 && (
         <div role="tablist" aria-label={t("question.wizard.steps")} data-wizard-steps="" className="mb-2.5 flex flex-wrap items-center gap-1">
           {steps.map((entry, index) => (
@@ -468,7 +471,7 @@ function FormWizard({
                   title={t("question.wizard.change")}
                   className={cn("flex min-h-9 w-full min-w-0 items-start justify-between gap-3 rounded-[10px] px-2 py-1.5 text-start transition-colors hover:bg-ink/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", row !== entry.head && "ps-6")}
                 >
-                  <span dir="auto" className="min-w-0 break-words text-[13.5px] leading-5 text-ink">{question.question}</span>
+                  <CardMarkdown text={question.question} inert className="text-[13.5px] leading-5 text-ink" />
                   <span data-form-answer="" dir="auto" className={cn("max-w-[55%] shrink-0 break-words text-end text-[13px] font-medium leading-5", value ? "text-ink" : isOwed(row) ? "text-danger" : "text-ink-tertiary")}>
                     {value || (isOwed(row) ? t("question.form.notAnswered") : t("question.form.optional"))}
                   </span>
@@ -480,7 +483,7 @@ function FormWizard({
       ) : (
         <div ref={bodyRef} tabIndex={-1} data-wizard-body="step" data-wizard-step={at} className="-mx-1 max-h-[46vh] overflow-y-auto px-1 outline-none">
           <div className="mb-2 flex items-baseline gap-2">
-            <div className="min-w-0 flex-1"><ExpandableText text={head.question} className="text-[14px] font-medium leading-5 text-ink" /></div>
+            <div className="min-w-0 flex-1"><ExpandableText text={head.question} markdown draftId={draftId} className="text-[14px] font-medium leading-5 text-ink" /></div>
             {head.optional && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t("question.form.optional")}</span>}
           </div>
           {head.kind === "multi" && <div className="-mt-1 mb-1.5 text-[12px] text-ink-tertiary">{t("question.multiHint")}</div>}
@@ -515,6 +518,7 @@ export function QuestionForm({
   cardId,
   title,
   context,
+  draftId,
   facts,
   questions,
   settled,
@@ -533,6 +537,8 @@ export function QuestionForm({
   cardId: string;
   title: string;
   context?: string;
+  /** M-20261119-045: the composer a record chip in the bot's words asks in */
+  draftId?: string;
   facts?: readonly AskFact[];
   questions: readonly AskQuestion[];
   settled: boolean;
@@ -565,7 +571,7 @@ export function QuestionForm({
     const pressed = answer ? answeredAction(answer) : undefined;
     return (
       <QuestionSheet ariaLabel={t("question.aria.card")} settled title={title} embedded={embedded}>
-        {contextLine && <ExpandableText text={contextLine} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
+        {contextLine && <ExpandableText text={contextLine} markdown draftId={draftId} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
         {checklist ? (
           <div data-form-list="" className="max-h-[360px] overflow-y-auto">
             <SheetChoices
@@ -583,7 +589,7 @@ export function QuestionForm({
               if (answer && question.when && !given) return null;
               return (
                 <div key={`${index}-${question.question}`} data-form-row="" className={cn("flex min-h-9 min-w-0 items-center justify-between gap-3 py-1.5", index > 0 && "border-t border-ink/[0.06]")}>
-                  <span dir="auto" className="min-w-0 break-words text-[13.5px] leading-5 text-ink">{question.question}</span>
+                  <CardMarkdown text={question.question} draftId={draftId} className="text-[13.5px] leading-5 text-ink" />
                   <span data-form-answer="" dir="auto" className={cn("max-w-[55%] shrink-0 break-words text-end text-[13px] font-medium leading-5", value ? "text-ink" : "text-ink-tertiary")}>
                     {value ? shownAnswer(question, value) : t("question.form.notAnswered")}
                   </span>
@@ -615,7 +621,7 @@ export function QuestionForm({
         dismissLabel={dismissLabel}
       >
         <AskFactsTable facts={facts} className="-mt-1" />
-        {contextLine && <div data-form-context=""><ExpandableText text={contextLine} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" /></div>}
+        {contextLine && <div data-form-context=""><ExpandableText text={contextLine} markdown draftId={draftId} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" /></div>}
         <div data-form-list="" className="max-h-[360px] overflow-y-auto">
           <SheetChoices
             choices={only.options}
@@ -639,6 +645,7 @@ export function QuestionForm({
       cardId={cardId}
       title={title}
       context={contextLine}
+      draftId={draftId}
       facts={facts}
       questions={questions}
       embedded={embedded}

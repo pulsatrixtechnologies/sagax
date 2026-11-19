@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { CardMarkdown } from "./CardMarkdown";
 
 /** A question longer than this is collapsed until the person opens it.
  * Short asks stay fully visible, with no extra control. */
@@ -16,10 +17,13 @@ export function expandableTextIsLong(text: string, lines: ExpandableLines = 4): 
 }
 
 /** Collapsed text is clamped. Expanded text is the whole string: no clamp,
- * no max height, and no overflow clipping. */
-export function expandableTextClass(expanded: boolean, lines: ExpandableLines = 4): string {
-  if (expanded) return "whitespace-pre-wrap break-words";
-  return cn(lines === 2 ? "line-clamp-2" : "line-clamp-4", "whitespace-pre-wrap break-words");
+ * no max height, and no overflow clipping. Markdown draws its own line
+ * breaks, so it keeps no pre-wrap (the renderer's newlines between blocks
+ * would read as blank lines). */
+export function expandableTextClass(expanded: boolean, lines: ExpandableLines = 4, markdown = false): string {
+  const wrap = markdown ? "break-words" : "whitespace-pre-wrap break-words";
+  if (expanded) return wrap;
+  return cn(lines === 2 ? "line-clamp-2" : "line-clamp-4", wrap);
 }
 
 const CONTROL = {
@@ -34,7 +38,9 @@ const CONTROL = {
  * no control: on screen the clamp's overflow is measured, so the control
  * appears exactly when something is hidden. `expanded` and `onToggle` make
  * the fold controlled, for a caller that draws the open text elsewhere
- * (an exchange's subject unfolds into the scrolling transcript, #4043). */
+ * (an exchange's subject unfolds into the scrolling transcript, #4043).
+ * `markdown`: the text is a bot's words on a card, drawn by the chat's own
+ * renderer (CardMarkdown, M-20261119-045), folded the same way. */
 export function ExpandableText({
   text,
   className,
@@ -45,6 +51,8 @@ export function ExpandableText({
   lessLabel,
   tone = "accent",
   testId,
+  markdown = false,
+  draftId,
 }: {
   text: string;
   className?: string;
@@ -55,6 +63,9 @@ export function ExpandableText({
   lessLabel?: string;
   tone?: keyof typeof CONTROL;
   testId?: string;
+  markdown?: boolean;
+  /** the composer a record chip's "Ask" writes in (markdown only) */
+  draftId?: string;
 }) {
   const [own, setOwn] = useState(false);
   const expanded = controlled ?? own;
@@ -86,7 +97,9 @@ export function ExpandableText({
   };
   return (
     <div data-testid={testId} data-expandable={long ? (expanded ? "open" : "folded") : undefined}>
-      <div ref={ref} className={cn(className, expandableTextClass(expanded, lines))}>{text}</div>
+      <div ref={ref} className={cn(className, expandableTextClass(expanded, lines, markdown))}>
+        {markdown ? <CardMarkdown text={text} draftId={draftId} /> : text}
+      </div>
       {long && (
         <button
           type="button"

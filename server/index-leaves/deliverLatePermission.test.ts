@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ANSWER_NOT_DELIVERED } from "../../shared/restart-words.ts";
 import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
@@ -30,7 +33,8 @@ function hostFor(rows: Row[], over: Record<string, any> = {}) {
   const started: string[] = [];
   const appended: Array<Record<string, unknown>> = [];
   const host: Record<string, any> = {
-    DATA_DIR: "/tmp/sagax-approval-test",
+    // #4528: a fresh folder per host, as the saved allow is kept on disk
+    DATA_DIR: mkdtempSync(join(tmpdir(), "sagax-approval-test-")),
     appendDecision: vi.fn(),
     machineApprovals: new Map(),
     askMessageByRequest: new Map(),

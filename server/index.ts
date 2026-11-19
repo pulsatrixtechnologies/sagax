@@ -2159,6 +2159,8 @@ import { createPhoneCallbackOrigin } from "./index-leaves/phoneCallbackOrigin.ts
 import { createPersonDirectTurn } from "./index-leaves/personDirectTurn.ts";
 import { createPeopleDmProjection } from "./index-leaves/peopleDmProjection.ts";
 import { createOpenQuestionCard } from "./index-leaves/openQuestionCard.ts";
+import { createOpenApprovalCard } from "./index-leaves/openApprovalCard.ts";
+import { createAwaitsPerson } from "./index-leaves/awaitsPerson.ts";
 import { createNotificationQuietOnPhones } from "./index-leaves/notificationQuietOnPhones.ts";
 import { createNoteWakeDryRun } from "./index-leaves/noteWakeDryRun.ts";
 import { createMemberForAgentCaller } from "./index-leaves/memberForAgentCaller.ts";
@@ -6775,6 +6777,7 @@ bindLeafHost({
   get relayParentThreads() { return relayParentThreads; },
   get delegationWatch() { return delegationWatch; },
   get openQuestionCard() { return openQuestionCard; },
+  get openApprovalCard() { return openApprovalCard; },
   get openPersonCard() { return openPersonCard; },
   get agentPendingApproval() { return agentPendingApproval; },
   get delegatorOf() { return delegatorOf; },
@@ -7959,6 +7962,8 @@ const releaseLocalVmThread = createReleaseLocalVmThread(getLeafHost);
 const localVmAutoLifecycle = createLocalVmAutoLifecycle(getLeafHost);
 const localVmInventoryPayload = createLocalVmInventoryPayload(getLeafHost);
 const openQuestionCard = createOpenQuestionCard(getLeafHost);
+const openApprovalCard = createOpenApprovalCard(getLeafHost);
+const awaitsPersonOnCard = createAwaitsPerson(getLeafHost);
 const openPersonCard = createOpenPersonCard(getLeafHost);
 const agentPendingApproval = createAgentPendingApproval(getLeafHost);
 const agentPendingForCaller = createAgentPendingForCaller(getLeafHost);
@@ -21165,12 +21170,8 @@ routines = new RoutineManager({
     }
   },
   // 2026-11-03: a question card that outlives the turn holds the run (routines.ts turn.completed)
-  awaitsPerson: (threadId) => {
-    const open = openQuestionCard(threadId);
-    if (!open) return null;
-    const words = redactSecretsInText(open.subtitle ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
-    return words ? `Waiting for your answer: ${words}` : "Waiting for your answer";
-  },
+  // #4528: a permission card too, so the run waiting on it outlives a restart
+  awaitsPerson: (threadId) => awaitsPersonOnCard(threadId),
   cardRaisedSince: (threadId, since) => (askReplacedAt.get(threadId) ?? -Infinity) >= since
     || store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
   // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for real

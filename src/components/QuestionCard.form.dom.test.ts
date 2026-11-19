@@ -39,9 +39,15 @@ function mount(questions: AskQuestion[], card: Record<string, unknown> = {}) {
 }
 
 const formRow = (index: number) => host.querySelectorAll<HTMLElement>("[data-form-row]")[index]!;
-const pill = (index: number, label: string) =>
-  Array.from(formRow(index).querySelectorAll<HTMLButtonElement>("[data-form-choice]")).find((button) => button.textContent?.trim() === label)!;
-const submit = () => host.querySelector<HTMLButtonElement>("[data-sheet-send]")!;
+const wizard = (id: "back" | "next" | "submit") => host.querySelector<HTMLButtonElement>(`[data-wizard-action="${id}"]`);
+const submit = () => wizard("submit")!;
+const nextStep = () => act(() => wizard("next")!.click());
+/** the answer of the open step with this label */
+const option = (label: string) =>
+  Array.from(host.querySelectorAll<HTMLButtonElement>("[data-ask-choice]")).find((button) => button.textContent?.includes(label))!;
+const chips = () => Array.from(host.querySelectorAll<HTMLElement>("[data-wizard-chip]"));
+const field = () => host.querySelector<HTMLTextAreaElement | HTMLInputElement>('[data-wizard-body] textarea, [data-wizard-body] input')!;
+const durationInputs = () => Array.from(host.querySelectorAll<HTMLInputElement>('[data-wizard-body] input[type="number"]'));
 const action = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-sheet-send]")).find((button) => button.textContent?.trim() === label)!;
 
 function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -66,24 +72,53 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("a form card draws a row per question with its control (#4490)", () => {
-  it("shows the title, one line of context, and seven rows", () => {
+describe("a form card is answered one question at a time (#4910)", () => {
+  it("shows the title, one line of context, a chip per question and one question", () => {
     mount(TIME);
     expect(host.textContent).toContain("Time entries to confirm (routine Evening timesheet)");
     expect(host.querySelector("[data-form-context]")?.textContent).toContain("Seven entries drafted");
-    expect(host.querySelectorAll("[data-form-row]")).toHaveLength(7);
+    expect(chips().map((chip) => chip.textContent)).toEqual(["Standup", "Design review", "Ticket", "Call length", "Expense code", "Summary", "Backup check", "Review"]);
+    // the question on top, its answers as a vertical list, nothing of the other six
+    expect(host.querySelector("[data-wizard-body]")?.textContent).toContain(TIME[0]!.question);
+    expect(host.querySelector("[data-wizard-body]")?.textContent).not.toContain(TIME[1]!.question);
+    expect(host.textContent).toContain("Step 1 of 7");
+    expect(wizard("back")).toBeNull();
+    expect(wizard("next")!.disabled).toBe(true);
   });
 
-  it("draws the right control per kind", () => {
+  it("draws a numbered vertical list with Other, specify as its last row", () => {
     mount(TIME);
-    expect(formRow(0).querySelector('[role="radiogroup"]')).not.toBeNull();
-    expect(formRow(0).querySelectorAll("[data-form-choice]")).toHaveLength(3);
-    expect(formRow(1).querySelectorAll('input[type="number"]')).toHaveLength(2);
+    const rows = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-ask-choice]"));
+    expect(rows.map((row) => row.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2", "3", "4"]);
+    expect(rows[3]!.textContent).toContain("Other, specify");
+    expect(host.querySelector('[data-wizard-body="step"] [role="radiogroup"]')!.className).toContain("flex-col");
+  });
+
+  it("draws the right control per kind, one step each", () => {
+    mount(TIME);
+    act(() => option("Done").click());
+    // a pick moves on by itself
+    expect(durationInputs()).toHaveLength(2);
+    setValue(durationInputs()[0]!, "1");
+    nextStep();
     // a row in words is the answer field of every question card
-    expect(formRow(2).querySelector("textarea[data-question-field]")).not.toBeNull();
-    expect(pill(5, "Yes")).toBeTruthy();
-    expect(pill(5, "No")).toBeTruthy();
-    expect(formRow(6).textContent).toMatch(/Optional/);
+    expect(host.querySelector("[data-wizard-body] textarea[data-question-field]")).not.toBeNull();
+    setValue(field(), "4512");
+    nextStep();
+    expect(durationInputs()).toHaveLength(2);
+    act(() => chips()[5]!.click());
+    expect(option("Yes")).toBeTruthy();
+    expect(option("No")).toBeTruthy();
+    // a yes / no row has no Other
+    expect(host.querySelectorAll("[data-ask-choice]")).toHaveLength(2);
+  });
+
+  it("marks an optional question", () => {
+    mount(TIME);
+    act(() => chips()[6]!.click());
+    expect(host.querySelector("[data-wizard-body]")?.textContent).toMatch(/Optional/);
+    expect(wizard("next")!.textContent).toBe("Skip");
+    expect(wizard("next")!.disabled).toBe(false);
   });
 
   it("draws time, date, number, long text and multi", () => {
@@ -95,35 +130,46 @@ describe("a form card draws a row per question with its control (#4490)", () => 
       { question: "Notes", kind: "long_text", options: [] },
       { question: "Rooms", kind: "multi", multiSelect: true, options: [{ label: "North" }, { label: "South" }] },
     ]);
-    expect(formRow(0).querySelector('input[type="time"]')).not.toBeNull();
-    expect(formRow(1).querySelector('input[type="date"]')).not.toBeNull();
-    expect(formRow(1).querySelector("[data-date-shown]")?.textContent).toBe("mm/dd/yyyy");
-    expect(formRow(2).querySelector('input[type="number"]')).not.toBeNull();
-    expect(formRow(3).querySelector("textarea")).not.toBeNull();
-    expect(formRow(4).querySelectorAll('[role="checkbox"]')).toHaveLength(2);
+    const body = () => host.querySelector("[data-wizard-body]")!;
+    expect(body().querySelector('input[type="time"]')).not.toBeNull();
+    act(() => chips()[1]!.click());
+    expect(body().querySelector('input[type="date"]')).not.toBeNull();
+    expect(body().querySelector("[data-date-shown]")?.textContent).toBe("mm/dd/yyyy");
+    act(() => chips()[2]!.click());
+    expect(body().querySelector('input[type="number"]')).not.toBeNull();
+    act(() => chips()[3]!.click());
+    expect(body().querySelector("textarea")).not.toBeNull();
+    act(() => chips()[4]!.click());
+    expect(body().querySelectorAll('[role="checkbox"]')).toHaveLength(3);
   });
 
   it("shows a date in the interface language", () => {
     setLocale("fr");
     mount([{ question: "Jour", kind: "date", options: [] }]);
-    expect(formRow(0).querySelector("[data-date-shown]")?.textContent).toBe("yyyy-mm-dd");
-    setValue(formRow(0).querySelector("input")!, "2026-11-18");
-    expect(formRow(0).querySelector("[data-date-shown]")?.textContent).toBe("2026-11-18");
+    expect(host.querySelector("[data-date-shown]")?.textContent).toBe("yyyy-mm-dd");
+    setValue(host.querySelector("[data-wizard-body] input")! as HTMLInputElement, "2026-11-18");
+    expect(host.querySelector("[data-date-shown]")?.textContent).toBe("2026-11-18");
   });
 
-  it("sends only once every required row is answered, per row", () => {
+  it("walks the questions, reviews them, and sends only once every required one is answered, per row", () => {
     mount(TIME);
+    act(() => option("Done").click());
+    setValue(durationInputs()[0]!, "1");
+    setValue(durationInputs()[1]!, "30");
+    nextStep();
+    setValue(field(), "4512");
+    nextStep();
+    setValue(durationInputs()[1]!, "45");
+    nextStep();
+    act(() => option("Travel").click());
+    // the last required one is open: the review says what is missing and holds Submit
+    act(() => chips()[7]!.click());
+    expect(host.querySelector("[data-wizard-body]")?.textContent).toContain("Not answered");
     expect(submit().disabled).toBe(true);
-    act(() => pill(0, "Done").click());
-    const [hours, minutes] = Array.from(formRow(1).querySelectorAll<HTMLInputElement>('input[type="number"]'));
-    setValue(hours!, "1");
-    setValue(minutes!, "30");
-    setValue(formRow(2).querySelector<HTMLTextAreaElement>("textarea")!, "4512");
-    setValue(formRow(3).querySelectorAll<HTMLInputElement>('input[type="number"]')[1]!, "45");
-    act(() => pill(4, "Travel").click());
-    expect(submit().disabled).toBe(true);
-    act(() => pill(5, "Yes").click());
+    act(() => chips()[5]!.click());
+    act(() => option("Yes").click());
     // the optional row stays empty
+    act(() => chips()[7]!.click());
     expect(submit().disabled).toBe(false);
     act(() => submit().click());
     expect(decides()).toHaveLength(1);
@@ -191,26 +237,30 @@ describe("a checklist draws a checkbox per item and its actions as buttons (#449
 });
 
 describe("a duration of zero is no answer (#4490 review)", () => {
-  it("keeps the send off for 0 h 0 min", () => {
+  it("keeps Next off for 0 h 0 min", () => {
     mount([{ question: "How long?", kind: "duration", options: [] }]);
-    const [hours, minutes] = Array.from(formRow(0).querySelectorAll<HTMLInputElement>('input[type="number"]'));
-    setValue(hours!, "0");
-    setValue(minutes!, "0");
-    expect(submit().disabled).toBe(true);
-    setValue(minutes!, "0.2");
-    expect(submit().disabled).toBe(true);
-    setValue(minutes!, "15");
+    const next = () => wizard("next")!;
+    setValue(durationInputs()[0]!, "0");
+    setValue(durationInputs()[1]!, "0");
+    expect(next().disabled).toBe(true);
+    setValue(durationInputs()[1]!, "0.2");
+    expect(next().disabled).toBe(true);
+    setValue(durationInputs()[1]!, "15");
+    expect(next().disabled).toBe(false);
+    nextStep();
     expect(submit().disabled).toBe(false);
   });
 });
 
 describe("a row in words has no send of its own (#4490 second review)", () => {
-  it("shows no arrow in a text or long text row: the form's Submit sends", () => {
+  it("shows no arrow in a text or long text row: Next and the review's Submit send", () => {
     mount([{ question: "Ticket?", kind: "text", options: [] }, { question: "Notes", kind: "long_text", options: [] }]);
-    setValue(formRow(0).querySelector<HTMLTextAreaElement>("textarea")!, "4512");
-    setValue(formRow(1).querySelector<HTMLTextAreaElement>("textarea")!, "All done");
-    expect(formRow(0).querySelector("button")).toBeNull();
-    expect(formRow(1).querySelector("button")).toBeNull();
+    setValue(field(), "4512");
+    expect(host.querySelector("[data-wizard-body] button")).toBeNull();
+    nextStep();
+    setValue(field(), "All done");
+    expect(host.querySelector("[data-wizard-body] button")).toBeNull();
+    nextStep();
     expect(submit().disabled).toBe(false);
   });
 });

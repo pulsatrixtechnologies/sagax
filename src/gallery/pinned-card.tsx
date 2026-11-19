@@ -2,6 +2,7 @@
  * composer with what the bot waits on (#3214). Not shipped in the app.
  * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered|fixes-before|fixes-after|timesheet|timesheet-closed|fix-closed|fix-answered&width=1440|390&cardw=980|640|390 (the card's own width)
  * form cases (#4585): form-time|form-long|form-kinds|form-checklist|form-time-answered
+ * #4910: form-wizard (3 questions, 3 follow-ups hung under their answer) | form-wizard-old (the same card with no `when`)
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -236,6 +237,36 @@ const formChecklist = form("fc", 82, {
   items: (fr ? ["Notes de version 2.4", "Fil sur la rencontre", "Clip de la barre latérale"] : ["Release notes 2.4", "Thread about the meetup", "Sidebar clip"]).map((label) => ({ label, detail: `${label}.` })),
   actions: fr ? ["Publier la sélection", "Sauter ce soir"] : ["Post selected", "Skip tonight"],
 });
+// #4910: the six-row form the owner reported: three questions, each with a
+// follow-up that only one answer needs. `old` is the same card as a bot wrote
+// it before `when` existed: the follow-ups are separate Optional rows.
+function wizardRows(linked: boolean) {
+  const row = (r: Record<string, unknown>, when?: Record<string, string>) => ({ ...r, ...(linked && when ? { when } : {}) });
+  const q1 = fr ? "Revue de design de 10 h : combien de temps ?" : "Design review at 10:00: how long did it last?";
+  const q2 = fr ? "Appel sur la migration : quel billet ?" : "Migration call: which ticket?";
+  const q3 = fr ? "Reçu de taxi de mardi : quel code de dépense ?" : "Taxi receipt from Tuesday: which expense code?";
+  const enter = fr ? "Saisir" : "Enter it";
+  const ticket = fr ? "Un numéro de billet" : "Enter a ticket";
+  const note = fr ? "Autre, avec une note" : "Other, with a note";
+  return [
+    row({ question: q1, header: fr ? "Durée" : "Duration", kind: "choice", options: [{ label: fr ? "Comme prévu" : "As scheduled", detail: fr ? "Reprendre la durée du calendrier" : "Use the calendar length" }, { label: enter, detail: fr ? "Saisir la durée réelle plus bas" : "Type the real length below" }, { label: fr ? "Ne pas facturer" : "Do not bill", detail: fr ? "Aucune entrée de temps" : "No time entry" }] }),
+    row({ question: fr ? "Durée réelle (heures et minutes)" : "Real length (hours and minutes)", kind: "duration", optional: true }, { question: q1, option: enter }),
+    row({ question: q2, header: fr ? "Billet" : "Ticket", kind: "choice", options: [{ label: fr ? "Le billet habituel" : "The usual ticket", detail: fr ? "Celui du dernier appel" : "The one from the last call" }, { label: ticket, detail: fr ? "Saisir le numéro plus bas" : "Type the number below" }] }),
+    row({ question: fr ? "Numéro de billet" : "Ticket number", kind: "text", optional: true }, { question: q2, option: ticket }),
+    row({ question: q3, header: fr ? "Dépense" : "Expense", kind: "choice", options: [{ label: fr ? "Déplacement" : "Travel" }, { label: fr ? "Repas" : "Meals" }, { label: note, detail: fr ? "Précise-la dans le champ" : "Explain it in the field" }] }),
+    row({ question: fr ? "Note pour la comptabilité" : "Note for accounting", kind: "long_text", optional: true }, { question: q3, option: note }),
+  ];
+}
+const formWizard = form("fw", 83, {
+  title: fr ? "Temps du 16 novembre" : "Time for November 16",
+  question: fr ? "Trois entrées tirées du calendrier. Confirme chacune." : "Three entries drafted from the calendar. Confirm each one.",
+  questions: wizardRows(true),
+});
+const formWizardOld = form("fwo", 84, {
+  title: fr ? "Temps du 16 novembre" : "Time for November 16",
+  question: fr ? "Trois entrées tirées du calendrier. Confirme chacune." : "Three entries drafted from the calendar. Confirm each one.",
+  questions: wizardRows(false),
+});
 const formQuestions = formTime.card!.questionRequest!.questions as AskQuestion[];
 const formAnswered = { ...formTime, id: "fta", card: { ...formTime.card!, answered: "answer", answeredText: formatQuestionAnswers(formQuestions, [[formQuestions[0]!.options[0]!.label], ["90 min"], ["yes"]]) } } as Message;
 
@@ -259,6 +290,8 @@ const cases: Record<string, { approvals: Pending[]; questions: Message[]; collap
   "form-time": { approvals: [], questions: [formTime], inline: formTime },
   "form-long": { approvals: [], questions: [formLong], inline: formLong },
   "form-checklist": { approvals: [], questions: [formChecklist], inline: formChecklist },
+  "form-wizard": { approvals: [], questions: [formWizard], inline: formWizard },
+  "form-wizard-old": { approvals: [], questions: [formWizardOld], inline: formWizardOld },
   "form-time-answered": { approvals: [], questions: [], inline: formAnswered },
   question: { approvals: [], questions: [q1] },
   two: { approvals: [], questions: [q1, q2] },

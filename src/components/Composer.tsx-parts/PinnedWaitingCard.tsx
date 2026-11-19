@@ -277,6 +277,7 @@ export function PinnedWaitingCard({
               bot={questionBot(current.message, bot, name)}
               message={current.message}
               embedded
+              onCollapse={() => setCollapsed(true)}
               onAnswered={() => pinned.answered(current.key)}
               onAnswerFailed={() => pinned.answerFailed(current.key)}
             />

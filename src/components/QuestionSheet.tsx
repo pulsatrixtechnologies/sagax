@@ -11,7 +11,7 @@
 // (ask_person and the bots' flat asks, in a chat, a room or a bot-to-bot
 // thread) and the Approvals screen through QuestionCard. iOS draws the same
 // card in ios/App/Cards/QuestionSheet.swift.
-import type { KeyboardEvent, ReactNode } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowUp, Box, Check, FileText, LayoutDashboard, Sparkles, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { CardCloseButton, moveChoiceFocus } from "./AskCard";
@@ -146,6 +146,8 @@ export function SheetChoices({
   settled = false,
   disabled = false,
   quietPicked = false,
+  keys = "letters",
+  after,
   ariaLabel,
   onPick,
 }: {
@@ -157,10 +159,16 @@ export function SheetChoices({
   /** #4490: a checklist's rows: the box says it all, no tint and no
    * trailing check on a checked row */
   quietPicked?: boolean;
+  /** #4910: the key on each row: letters (A, B, C), numbers (1-9, a form
+   * step) or none (a row no key reaches) */
+  keys?: "letters" | "numbers" | "none";
+  /** #4910: what hangs right under a row (a follow-up field), by row id */
+  after?: (id: string) => ReactNode;
   ariaLabel: string;
   onPick: (label: string) => void;
 }) {
   if (!choices.length) return null;
+  const keyOf = (index: number) => (keys === "numbers" ? String(index + 1) : keys === "none" ? "" : sheetKey(index));
   return (
     <div role={multi ? "group" : "radiogroup"} aria-label={ariaLabel} onKeyDown={moveChoiceFocus} className="flex flex-col gap-px">
       {choices.map((choice, index) => {
@@ -168,16 +176,17 @@ export function SheetChoices({
         const on = picked.includes(id);
         const rowOff = settled || disabled || choice.disabled === true;
         const Icon = choice.icon ? CHOICE_ICONS[choice.icon] : undefined;
+        const below = after?.(id);
         return (
+          <Fragment key={`${index}-${id}`}>
           <button
-            key={`${index}-${id}`}
             type="button"
             data-ask-choice=""
             data-page-target={choice.id || undefined}
             role={multi ? "checkbox" : "radio"}
             aria-checked={on}
             aria-disabled={choice.disabled === true || undefined}
-            aria-keyshortcuts={settled || choice.disabled ? undefined : sheetKey(index)}
+            aria-keyshortcuts={settled || choice.disabled || !keyOf(index) ? undefined : keyOf(index)}
             disabled={rowOff}
             onClick={() => onPick(id)}
             className={cn(
@@ -188,7 +197,7 @@ export function SheetChoices({
                 : on && !quietPicked ? "bg-ink/[0.07]" : "hover:bg-ink/[0.05]",
             )}
           >
-            {multi ? <SheetBox on={on} /> : <SheetKey letter={sheetKey(index)} on={on} />}
+            {multi ? <SheetBox on={on} /> : <SheetKey letter={keys === "none" ? "\u2022" : keyOf(index)} on={on} />}
             {Icon && <Icon size={16} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
             <span className="min-w-0 flex-1">
               {/* plaintext bidi: each label orders its own script */}
@@ -199,6 +208,8 @@ export function SheetChoices({
             </span>
             {settled && on && !quietPicked && <Check size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
           </button>
+          {below}
+          </Fragment>
         );
       })}
     </div>
@@ -318,7 +329,7 @@ export function SheetSend({ label, disabled = false, onClick, actions }: {
   label?: string;
   disabled?: boolean;
   onClick?: () => void;
-  actions?: readonly { label: string; onClick: () => void }[];
+  actions?: readonly { label: string; onClick: () => void; disabled?: boolean; id?: string }[];
 }) {
   const all = actions ?? (label && onClick ? [{ label, onClick }] : []);
   return (
@@ -328,8 +339,9 @@ export function SheetSend({ label, disabled = false, onClick, actions }: {
           key={action.label}
           type="button"
           data-sheet-send=""
+          data-wizard-action={action.id}
           onClick={action.onClick}
-          disabled={disabled}
+          disabled={disabled || action.disabled}
           className={cn(SEND, index === all.length - 1 ? SEND_MAIN : SEND_OTHER)}
         >
           {action.label}

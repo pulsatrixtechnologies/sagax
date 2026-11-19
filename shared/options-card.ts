@@ -278,7 +278,11 @@ export function parseAskChoiceRows(value: Record<string, unknown>, context: stri
         if (typeof given !== "string") return fail(given.error);
         header = given;
       }
-      const given = row.options;
+      // #4910: `details` runs parallel to `options` (what each answer does)
+      const said: unknown[] = Array.isArray(row.details) ? row.details : [];
+      const given = Array.isArray(row.options) && said.length
+        ? row.options.map((entry, at) => (!record(entry) && typeof said[at] === "string" && said[at].trim() ? { label: entry, detail: said[at] } : entry))
+        : row.options;
       const hasOptions = Array.isArray(given) && given.length > 0;
       if (row.kind !== undefined && !(ANSWER_KINDS as readonly unknown[]).includes(row.kind)) return fail(`${field}.kind: one of ${ANSWER_KINDS.join(", ")}.`);
       const kind = (row.kind as AnswerKind | undefined) ?? (hasOptions ? "choice" : "text");
@@ -294,8 +298,24 @@ export function parseAskChoiceRows(value: Record<string, unknown>, context: stri
       } else if (hasOptions) {
         return fail(`${field}: a ${kind} row takes no options; make it kind choice to offer answers.`);
       }
+      // #4910: a follow-up shown only under the answer that needs it
+      let when: AskQuestion["when"];
+      if (row.when !== undefined) {
+        const hint = `${field}.when: {question, option} naming an EARLIER choice row (its question or header) and one of its options.`;
+        if (!record(row.when)) return fail(hint);
+        const parentText = boundedText(row.when.question, `${field}.when.question`, MAX_QUESTION_TEXT);
+        if (typeof parentText !== "string") return fail(parentText.error);
+        const optionText = boundedText(row.when.option, `${field}.when.option`, OPTIONS_CARD_LIMITS.option);
+        if (typeof optionText !== "string") return fail(optionText.error);
+        const parent = questions.find((earlier) => (earlier.question === parentText || earlier.header === parentText) && earlier.kind !== undefined && CHOICE_KINDS.has(earlier.kind));
+        if (!parent) return fail(hint);
+        const wanted = optionText.toLowerCase();
+        const picked = parent.options.find((option) => option.label.toLowerCase() === wanted || option.id?.toLowerCase() === wanted);
+        if (!picked) return fail(`${field}.when.option: "${optionText}" is not an answer of that row (${parent.options.map((option) => JSON.stringify(option.label)).join(", ")}).`);
+        when = { question: parent.question, option: picked.id ?? picked.label };
+      }
       questions.push({
-        question: asked, ...(header ? { header } : {}), kind, options,
+        question: asked, ...(header ? { header } : {}), kind, options, ...(when ? { when } : {}),
         ...(kind === "multi" ? { multiSelect: true } : {}),
         ...(row.optional === true ? { optional: true as const } : {}),
       });

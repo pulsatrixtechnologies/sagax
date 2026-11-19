@@ -2658,8 +2658,15 @@ row lights up under the pointer, a click is the answer, the letter keys
 answer once the card has focus. Choose several, a set or a form: boxes in
 place of keys and the reference's Submit, a filled ink pill (8px by 16px,
 14/20 medium); a checklist's other buttons are the same pill unfilled. A
-form's rows (#4490) draw their choices as the set's tab pills and their
-fields as the answer-in-words field. An answer in words: one plain
+form (#4490, #4910) is answered one question at a time, the way Claude Code's
+AskUserQuestion is: a step bar of short chips (the row's header, a check on
+an answered one, then Review), the question on top at full width, its
+answers as a numbered vertical list (1-9 pick, Enter continues, Esc folds
+the pinned card) with "Other, specify" as the list's last row, a follow-up
+field (a row with `when`: parent question and option) hung under the one
+answer that needs it, Back and Next, then a review step and the one Submit.
+An old card with no `when` hangs an optional text row under the choice row
+before it, always shown. An answer in words: one plain
 field (the "Other" row opens it). Once answered the card stays, the chosen
 row marked and the others dimmed (never folded into a line).
 

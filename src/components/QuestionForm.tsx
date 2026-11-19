@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { Calendar, Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { dateFieldLocale, formatDateField, t } from "@/lib/i18n";
+import { plainPreviewText } from "@/lib/plain-preview";
 import {
   answeredAction,
   formatQuestionAnswers,
@@ -433,7 +434,7 @@ function FormWizard({
               role="tab"
               data-wizard-chip=""
               aria-selected={index === at}
-              title={questions[entry.head]!.question}
+              title={plainPreviewText(questions[entry.head]!.question)}
               onClick={() => go(index)}
               className={cn(ASK_SMALL_PILL, "max-w-[11rem]", index === at ? "bg-ink/[0.08] text-ink" : "text-ink-secondary hover:bg-ink/[0.07] hover:text-ink")}
             >

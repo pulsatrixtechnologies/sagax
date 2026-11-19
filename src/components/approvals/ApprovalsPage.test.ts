@@ -305,6 +305,20 @@ describe("ApprovalsPage", () => {
     expect(host.querySelector("[data-approval-open-chat]")?.textContent).toContain("Ouvrir le chat de Pixel");
   });
 
+  // M-20261119-045: a question's row reads the bot's words, never their Markdown
+  it("reads a question's Markdown as words in its row", async () => {
+    const asked = question("q");
+    const card = (asked.message as { card: { questionRequest: { questions: Array<{ question: string }> } } }).card;
+    card.questionRequest.questions[0]!.question = "**Ce qu'elle confirme**\n- L'imprimante : [#300478](sagax://record/cw_psa_service/ticket/300478)";
+    fixture.payload = { ...fixture.payload, pending: [asked] };
+    await render();
+    const row = rows()[0]?.textContent ?? "";
+    expect(row).toContain("Ce qu'elle confirme");
+    expect(row).toContain("#300478");
+    expect(row).not.toContain("**");
+    expect(row).not.toContain("sagax://");
+  });
+
   // #2936: a row's preview is prose in the text font; mono only for a real command
   it("draws previews in the text font, a command excerpt in mono", async () => {
     const run = permission("x", "b1", "Nova", 1, "pnpm build");

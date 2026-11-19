@@ -53,6 +53,44 @@ export function redactSecretsInText(text: string): string {
   return redactFilledSecrets(redactSecretPatterns(text));
 }
 
+const MASK_SPAN = /«redacted \d+ chars»|••••••|\[credential\]/g;
+
+/** The original value behind each mask of `redactSecretsInText(original)`, in
+ * order, read off the gaps between the unchanged text around the masks.
+ * Null when the alignment is ambiguous (two masks side by side). */
+function maskedOriginals(original: string): string[] | null {
+  const redacted = redactSecretsInText(original);
+  const literals = redacted.split(MASK_SPAN);
+  if (literals.length < 2) return [];
+  const values: string[] = [];
+  let pos = 0;
+  for (let i = 0; i < literals.length - 1; i++) {
+    if (!original.startsWith(literals[i]!, pos)) return null;
+    pos += literals[i]!.length;
+    const next = literals[i + 1]!;
+    const last = i === literals.length - 2;
+    if (!next && !last) return null;
+    const end = last ? original.length - next.length : original.indexOf(next, pos);
+    if (end < pos || (last && !original.endsWith(next))) return null;
+    values.push(original.slice(pos, end));
+    pos = end;
+  }
+  return values;
+}
+
+/** A text read back through `redactSecretsInText` that a caller sends again:
+ * each mask takes the value it stood for in `original`, in order, so editing
+ * around a mask never saves the mask over the secret (same idea as a `true`
+ * in resolveSecrets keeping the stored value). Text without masks, or whose
+ * masks cannot be matched to `original`, is returned as received. */
+export function restoreMaskedSecrets(original: string, received: string): string {
+  if (!received.match(MASK_SPAN)) return received;
+  const values = maskedOriginals(original);
+  if (!values?.length) return received;
+  let index = 0;
+  return received.replace(MASK_SPAN, (mask) => values[index++] ?? mask);
+}
+
 // ── content-shaped secrets ────────────────────────────────────────────
 // What a bot's own reply, a tool title, or a permission card can carry —
 // and, since the rebuild replays activity into every handed-over context,

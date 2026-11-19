@@ -17,6 +17,7 @@ import {
   type RoutineToolDefinitionInput,
 } from "./routine-requests.ts";
 import { RoutineManager, type RoutineInput } from "./routines.ts";
+import { redactSecretsInText } from "../redact.ts";
 import type { JsonValue } from "../schema.ts";
 import { resolveWatchSource } from "./watch-tool-resolution.ts";
 import { directApply, type DirectApplyCheck } from "../direct-apply.ts";
@@ -129,6 +130,29 @@ describe("instructions holding a credential", () => {
     const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
     await expect(submit({ name: "Rewritten", instructions: "Only the visible text." })).resolves.toMatchObject({ state: "applied" });
     expect(routines.listRoutines()[0]).toMatchObject({ name: "Rewritten", prompt: "Only the visible text." });
+  });
+});
+
+describe("instructions read back masked", () => {
+  const key = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789";
+  const setup = () => {
+    const { routines, service } = harness(undefined, undefined, undefined, () => "self");
+    const prompt = `Review the queue.\nUse ${key} for the API.\nThen report.`;
+    const id = routines.create({ botId: "bot-a", name: "Keyed", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } }).id;
+    const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
+    return { routines, submit, prompt };
+  };
+
+  it("keeps the secret when the masked text comes back as read", async () => {
+    const { routines, submit, prompt } = setup();
+    await submit({ name: "Keyed 2", instructions: redactSecretsInText(prompt) });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Keyed 2", prompt });
+  });
+
+  it("keeps the secret when the text around the mask changes", async () => {
+    const { routines, submit, prompt } = setup();
+    await submit({ instructions: redactSecretsInText(prompt).replace("Review the queue.", "Review the inbox.").replace("Then report.", "Then email a summary.") });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Review the inbox.\nUse ${key} for the API.\nThen email a summary.`);
   });
 });
 

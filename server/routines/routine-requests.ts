@@ -12,7 +12,7 @@ import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubE
 import { cleanProductEventSchedule, productEventScheduleLabel, type RoutineProductEventSchedule } from "../../shared/routine-product-event.ts";
 import { newId } from "../contracts.ts";
 import { SELF_ROUTINE_CAP, UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
-import { redactSecretsInText } from "../redact.ts";
+import { redactSecretsInText, restoreMaskedSecrets } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
@@ -1029,6 +1029,14 @@ function normalizedOperation(
   if (!current) throw new RoutineRequestError("That routine does not exist", 404);
   if (validated.action === "update") {
     const changes = normalizeChanges(validated.changes, now, current.schedule);
+    // A bot reads the instructions masked (`text()` scrubs credentials):
+    // a mask it sends back keeps the value it stood for, and the text
+    // unchanged leaves the instructions alone.
+    if (changes.instructions !== undefined) {
+      const restored = restoreMaskedSecrets(current.prompt, changes.instructions);
+      if (restored === current.prompt.trim()) delete changes.instructions;
+      else changes.instructions = restored;
+    }
     return {
       action: "update",
       routineId: id,

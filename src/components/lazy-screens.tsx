@@ -33,6 +33,7 @@ export const PluginsPanel = lazyScreen("PluginsPanel", async () => (await import
 export const RemoteAgentSettingsPanel = lazyScreen("RemoteAgentSettingsPanel", async () => (await import("./RemoteAgentSettingsPanel")).RemoteAgentSettingsPanel);
 export const RemoteDesktopPanel = lazyScreen("RemoteDesktopPanel", async () => (await import("./remote-desktop-panel")).RemoteDesktopPanel);
 export const RoutinesPage = lazyScreen("RoutinesPage", async () => (await import("./RoutinesPage")).RoutinesPage);
+export const ScreenPanel = lazyScreen("ScreenPanel", async () => (await import("./ScreenPanel")).ScreenPanel);
 export const SettingsModal = lazyScreen("SettingsModal", async () => (await import("./SettingsModal")).SettingsModal);
 export const TeamMapPage = lazyScreen("TeamMapPage", async () => (await import("./TeamMapPage")).TeamMapPage);
 export const TriggersPanel = lazyScreen("TriggersPanel", async () => (await import("./TriggersPanel")).TriggersPanel);

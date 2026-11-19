@@ -646,7 +646,9 @@ function BrowserNote({ caption, children }: { caption: string; children: ReactNo
   </figure>;
 }
 
-export function BrowserPanel({ bot, signIn }: { bot: Bot; signIn?: BrowserSignIn | undefined }) {
+/** `live`: the screen side panel (#4452) draws the live browser in place, in its
+ * own column, instead of the Computer tab's preview square and its window. */
+export function BrowserPanel({ bot, signIn, live = false }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean }) {
   const { state } = useStore();
   const engine = state.config?.browserEngine;
   const [requested, setRequested] = useState(false);
@@ -664,7 +666,9 @@ export function BrowserPanel({ bot, signIn }: { bot: Bot; signIn?: BrowserSignIn
   if (bot.browser === false) return <BrowserNote caption={caption}><p className="text-[13px] text-ink-secondary">{t("browser.panel.enable")}</p></BrowserNote>;
   // Watching and taking over a session the bot already opened is for anyone
   // who can use the bot. Installing the engine on this computer stays admin.
-  if (engine?.kind === "engine" && !installing && !engine.installError) return <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
+  if (engine?.kind === "engine" && !installing && !engine.installError) {
+    return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
+  }
   return <BrowserNote caption={caption}>
     <div className="text-[15px] font-medium text-ink">{engine?.kind === "engine" ? t("browser.panel.incomplete") : t("browser.panel.notInstalled")}</div>
     <p className="text-[13px] leading-relaxed text-ink-secondary">{engine?.kind === "engine" ? t("browser.panel.incompleteHint") : <BrowserUnavailableNote config={state.config} />}</p>

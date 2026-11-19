@@ -11,6 +11,7 @@ import { appShortcutFor, shouldOpenKeyboardShortcuts } from "@/lib/keyboard-shor
 import { focusComposer } from "@/lib/composer-focus";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { openCommandPalette } from "@/lib/command-palette-open";
+import { toggleScreenPanel } from "@/lib/screen-panel";
 import { toggleSidebarCollapsed } from "@/lib/sidebar-preferences";
 import { botShowsUnread } from "@/lib/bot-unread";
 import { navigate } from "@/lib/view-transitions";
@@ -128,6 +129,11 @@ export function useShellNavigation() {
       if (chord === "toggle-sidebar") {
         e.preventDefault();
         toggleSidebarCollapsed();
+        return;
+      }
+      if (chord === "toggle-screen-panel") {
+        e.preventDefault();
+        toggleScreenPanel();
         return;
       }
       if (chord === "focus-composer") {

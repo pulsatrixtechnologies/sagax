@@ -1090,3 +1090,15 @@ never pushed). The Pod comes from the run provisioner
   engine; Git guard negatives), `server/runner/runner-drivers.test.ts` (the
   real Claude and Codex drivers with their fake CLIs),
   `server/runner/units.test.ts`.
+
+## Screen side panel, Cmd+Shift+B (#4452)
+
+`ScreenPanel` (src/components/ScreenPanel.tsx) is the one docked column beside
+the chat that shows the selected bot's live screen; its open state is a module
+store (`src/lib/screen-panel.ts`) toggled by Cmd+Shift+B (Ctrl+Shift+B
+elsewhere, `appShortcutFor` "toggle-screen-panel", useShellNavigation). The
+browser tab hosts `LiveBrowser` unchanged through `BrowserPanel live`, so take
+control, give back and typing are the takeover's. Width: own key, 360 to 960.
+Esc or the round X closes it. Later lots add marks and the VM and remote tabs.
+Tests: `src/components/ScreenPanel.dom.test.ts`, `src/lib/screen-panel.test.ts`,
+`src/lib/keyboard-shortcuts.test.ts`. Capture: `scripts/capture/screen-panel.mjs`.

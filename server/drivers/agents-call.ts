@@ -38,6 +38,7 @@ import { remoteSupportFromEnv } from "../remote-support/remote-support-local.ts"
 import { callCoreTool } from "./agents-tools/core.ts";
 import { callRoomsTool } from "./agents-tools/rooms.ts";
 import { callTeamTool } from "./agents-tools/team.ts";
+import { dropBlankArguments } from "./agents-blank-arguments.ts";
 import { callRoutinesTool } from "./agents-tools/routines.ts";
 import { callCloudAgentsTool } from "./agents-tools/cloud-agents.ts";
 import { callSettingsTool } from "./agents-tools/settings.ts";
@@ -88,12 +89,15 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
 export async function callTool(calledName: string, rawArgs: Json, context: ToolCallContext): Promise<ToolCallResult> {
   // a renamed tool's old name runs the new one (shared/agent-tool-renames.ts)
   const name = currentAgentToolName(calledName);
+  // Strict tool-calling engines fill every optional field with "" or null
+  // when they mean to leave it out (upstream #5141).
+  const given = dropBlankArguments(name, rawArgs);
   // #4507: the one dispatcher of the app's own tools. A record link
   // (`sagax://record/...`) is the chat's own address: a tool whose words
   // leave the app carries its label alone; a file, a skill, an artifact, a
   // memory note or code keeps its words exactly (shared/record-link-tools.ts,
   // the one list, an unlisted tool stripped).
-  const args = appToolWordsLeave(name, rawArgs) ? withoutRecordLinksIn(rawArgs) : rawArgs;
+  const args = appToolWordsLeave(name, given) ? withoutRecordLinksIn(given) : given;
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { apiResponse } = context.client;
 

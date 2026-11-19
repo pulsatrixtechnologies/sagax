@@ -1200,14 +1200,36 @@ describe("Chat MCP schema validation", () => {
     expect(() => session.validate("audit_write", {value:invalid})).toThrow("input schema");
   });
 
+  // upstream #4701: one schema the checker cannot compile whole no longer
+  // costs the server its tools; what can be checked still is, the server checks the rest.
   it.each([
-    { type: "object", properties: {value:{type:"string",format:"unregistered-format"}} },
-    { type: "object", properties: {value:{$ref:"https://example.invalid/private-schema"}} },
-    { type: "object", properties: {value:{type:"string",unrecognizedAssertion: true}} },
-    { type: "object", properties: {value:{type:"string","x-google-enum-descriptions": "not a list"}} },
-  ])("refuses schemas it cannot validate instead of silently weakening them %#", async (toolSchema) => {
-    const f = fixture("", toolSchema);
-    await expectSkipped(f, /schema could not be validated/);
+    ["an unknown format", { type: "object", properties: { value: { type: "string", format: "unregistered-format" } }, required: ["value"] }, "lenient"],
+    ["an unknown keyword", { type: "object", properties: { value: { type: "string", unrecognizedAssertion: true } }, required: ["value"] }, "lenient"],
+    ["a malformed vendor annotation", { type: "object", properties: { value: { type: "string", "x-google-enum-descriptions": "not a list" } }, required: ["value"] }, "object"],
+    ["an external $ref", { type: "object", properties: { value: { $ref: "https://example.invalid/private-schema", description: "Value" } }, required: ["value"] }, "object"],
+    ["a $ref to a definition it does not hold", { type: "object", properties: { value: { $ref: "#/$defs/missing" } }, required: ["value"] }, "object"],
+  ])("mounts a tool whose schema has %s, checks what it can and leaves the rest to the server", async (_label, toolSchema, check) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const f = fixture("", toolSchema);
+      const session = await f.mount();
+      expect(session.skipped).toEqual([]);
+      expect(session.definitions.map((tool) => tool.function.name)).toEqual(["audit_write"]);
+      expect(JSON.stringify(session.definitions[0]!.function.parameters)).not.toMatch(/example\.invalid|missing/);
+      expect(() => session.validate("audit_write", { value: "ok" })).not.toThrow();
+      if (check === "lenient") expect(() => session.validate("audit_write", { value: 7 })).toThrow("input schema");
+      else expect(() => session.validate("audit_write", { value: 7 })).not.toThrow();
+      await expect(session.execute("audit_write", { value: "ok" }, f.controller.signal)).resolves.toMatchObject({ ok: true, text: "recorded:ok" });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('"audit" tool "write": its input schema could not be compiled whole'));
+    } finally { warn.mockRestore(); }
+  });
+
+  it("mounts a 2020-12 schema written without $schema and enforces it (upstream #4701)", async () => {
+    const f = fixture("", { type: "object", properties: { app: { type: "string" }, value: { type: "string" } }, dependentRequired: { value: ["app"] } });
+    const session = await f.mount();
+    expect(session.skipped).toEqual([]);
+    expect(() => session.validate("audit_write", { app: "a", value: "v" })).not.toThrow();
+    expect(() => session.validate("audit_write", { value: "v" })).toThrow("input schema");
   });
 
   it("honors the configured per-call timeout instead of the fixed default", async () => {

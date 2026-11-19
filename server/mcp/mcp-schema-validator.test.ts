@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { compileToolSchema } from "./mcp-schema-validator.ts";
+import { compileServerToolSchema, compileToolSchema, serverToolValidator } from "./mcp-schema-validator.ts";
 
 describe("compileToolSchema cache (#1971)", () => {
   const schema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] };
@@ -61,5 +61,34 @@ describe("compileToolSchema schemars formats", () => {
 
   it("still refuses a format it does not know", () => {
     expect(() => compileToolSchema({ type: "object", properties: { x: { type: "string", format: "made-up" } } })).toThrow("could not be validated");
+  });
+});
+
+// upstream #4701
+describe("a configured server's tool schema", () => {
+  it("reads a schema without $schema as 2020-12 when draft-07 refuses it", () => {
+    const validate = compileServerToolSchema({ type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, dependentRequired: { b: ["a"] } });
+    expect(validate({ a: "x", b: "y" })).toBe(true);
+    expect(validate({ b: "y" })).toBe(false);
+  });
+
+  it("drops what asserts nothing (OpenAPI example, editor hints, repeated $id) before refusing", () => {
+    const validate = compileServerToolSchema({ type: "object", properties: {
+      a: { $id: "/schemas/unknown", type: "string", example: "x", markdownDescription: "A" },
+      b: { $id: "/schemas/unknown", type: "number", "x-vendor": true },
+    }, required: ["a"] });
+    expect(validate({ a: "x", b: 1 })).toBe(true);
+    expect(validate({ b: 1 })).toBe(false);
+  });
+
+  it("falls back to a lenient check, then to an object check, and never throws", () => {
+    expect(serverToolValidator({ type: "object", properties: { a: { type: "string" } } }).check).toBe("full");
+    const lenient = serverToolValidator({ type: "object", properties: { a: { type: "string", format: "made-up" } }, required: ["a"] });
+    expect(lenient.check).toBe("lenient");
+    expect(lenient.validate({ a: 1 })).toBe(false);
+    const object = serverToolValidator({ type: "object", properties: { a: { $ref: "https://example.invalid/x" } } });
+    expect(object.check).toBe("object");
+    expect(object.validate({ a: 1 })).toBe(true);
+    expect(object.validate([])).toBe(false);
   });
 });

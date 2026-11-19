@@ -56,9 +56,10 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             if (current && !current.state.settled && getSession().sessionId && p.sessionId === getSession().sessionId) current.receiveModelVariants(p.update);
             return;
           }
-          if (current && ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(p.update?.sessionUpdate)) {
+          if (current && ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update", "plan"].includes(p.update?.sessionUpdate)) {
             current.state.startupActivity = true;
-            if (current.state.promptSent) current.state.promptActivity = true;
+            // upstream #3752: a held ACK (promptUnreachedModel) is released by the first sign of life.
+            if (current.state.promptSent) { current.state.promptActivity = true; current.acknowledge(); }
             noteTurnActivity(current.latency, p.update.sessionUpdate, Date.now(), p.update);
           }
           if (!current || !current.state.promptSent) return;

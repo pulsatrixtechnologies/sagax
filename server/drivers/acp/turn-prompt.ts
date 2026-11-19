@@ -136,7 +136,9 @@ if (latency.full && pendingSplitReceipt) {
   latency.fullWhy = !previous ? (latency.newSessionWhy ? `new:${latency.newSessionWhy}` : "unsent")
     : previous.stable !== pendingSplitReceipt.receipt.stable ? "stable" : "anchor";
 }
-acknowledge();
+// upstream #3752: an engine that can say its prompt never reached the model
+// holds the ACK until the first sign of life, so recovery can still run the backup.
+if (!support.promptUnreachedModel) acknowledge();
 const promptIdleMs = promptIdleTimeoutMs();
 const quiet = startQuietWatch(threadId, session, current);
 const sendPrompt = (promptText: string = text) => request(

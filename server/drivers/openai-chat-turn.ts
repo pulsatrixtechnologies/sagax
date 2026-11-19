@@ -21,7 +21,7 @@ import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turns/turn-continuation.ts";
 
-import { ModelUnsupportedError, UnsupportedChatToolsError, UnsupportedReasoningReplayError, RejectedToolCallError } from "./openai-chat-completion.ts";
+import { ModelUnsupportedError, UnsupportedChatToolsError, UnsupportedReasoningReplayError, RejectedToolCallError, StreamTruncatedError } from "./openai-chat-completion.ts";
 import type { Completion, RuntimeOptions, Usage } from "./openai-chat-types.ts";
 import type { OpenAIChatMessage } from "./openai-chat-message.ts";
 import {
@@ -450,11 +450,16 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
             continue;
           }
           // Once a call has been handled, never replay it through a turn retry.
-          if (options.retryScale === undefined || abort.signal.aborted || streamed || seenCalls.size ||
-              error instanceof ChatProtocolError || !verdict.transient || attempt >= RETRY_MAX_ATTEMPTS - 1) throw error;
+          // A stream closed before any completion marker ran nothing upstream, so
+          // exactly that protocol error may resend, even where the caller never
+          // opted into retries (upstream #5076).
+          const truncation = error instanceof StreamTruncatedError;
+          const retryScale = truncation ? options.retryScale ?? 1 : options.retryScale;
+          if (retryScale === undefined || abort.signal.aborted || streamed || seenCalls.size ||
+              (error instanceof ChatProtocolError && !truncation) || (!verdict.transient && !truncation) || attempt >= RETRY_MAX_ATTEMPTS - 1) throw error;
           const delayMs = computeBackoff(attempt++);
-          emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: verdict.reason });
-          await interruptibleDelay(delayMs * options.retryScale, abort.signal).promise;
+          emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: truncation ? "stream_truncated" : verdict.reason });
+          await interruptibleDelay(delayMs * retryScale, abort.signal).promise;
           abort.signal.throwIfAborted();
         }
       }

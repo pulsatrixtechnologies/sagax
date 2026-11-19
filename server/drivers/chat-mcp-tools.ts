@@ -16,9 +16,9 @@ import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectory
 import { gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { connectorKeptGate, gateMaySearch } from "../mcp/mcp-gate-search.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
-import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
+import { serverToolValidator } from "../mcp/mcp-schema-validator.ts";
 import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLog } from "../mcp/agents-tool-priority.ts";
-import { fitToolList } from "../mcp/mcp-tool-schema.ts";
+import { fitToolList, withoutDanglingReferences } from "../mcp/mcp-tool-schema.ts";
 import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
@@ -546,10 +546,14 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       originalNames.add(tool.name);
       if (!object(tool.inputSchema) || tool.inputSchema.type !== "object") throw new Error("MCP tools require an object input schema");
       if (Buffer.byteLength(JSON.stringify(tool.inputSchema)) > SCHEMA_BYTES) throw new Error("MCP tool schema exceeds the 64KB limit");
-      const schema = compileToolSchema(tool.inputSchema);
+      // upstream #4701: a schema this checker cannot compile costs the server
+      // only that tool's strict check, never its other tools; the server still
+      // checks the call.
+      const { validate: schema, check } = serverToolValidator(tool.inputSchema);
+      if (check !== "full") console.warn(`chat-mcp: "${server}" tool "${tool.name}": its input schema could not be compiled whole; ${check === "lenient" ? "a lenient copy is checked" : "only an object is checked"}, the server checks the rest`);
       const [listed] = schemaProfile ? fitToolList([tool], schemaProfile, (line) => console.warn(`chat-mcp: ${server}: ${line}`)) : [tool];
       if (!object(listed) || !object(listed.inputSchema)) continue;
-      const parameters = { ...listed.inputSchema };
+      const parameters = check === "full" ? { ...listed.inputSchema } : { ...withoutDanglingReferences(listed.inputSchema) };
       const constraints: Record<string, unknown> = {};
       if (computerUse) {
         for (const key of ["anyOf", "oneOf", "allOf", "not"]) {

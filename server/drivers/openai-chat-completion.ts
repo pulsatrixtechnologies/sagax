@@ -119,6 +119,10 @@ function rejectsReasoningReplay(status: number, body: string): boolean {
  *  tool it was not offered (gpt-oss inventing a "json" tool to answer in
  *  JSON), sometimes arguments that miss the schema. `refusal` is the
  *  provider's whole error object, `failed_generation` included. */
+/** The provider closed the stream with neither finish_reason nor [DONE]: nothing
+ *  ran, so the request may be sent again (upstream #5076). */
+export class StreamTruncatedError extends ChatProtocolError {}
+
 export class RejectedToolCallError extends ChatProtocolError {
   readonly refusal: Record<string, unknown>;
   constructor(message: string, refusal: Record<string, unknown>) {
@@ -252,7 +256,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
           await stream.cancel().catch(() => {});
         }
         activeSignal.throwIfAborted();
-        if (!reader.done) throw new ChatProtocolError("Stream ended before completion");
+        if (!reader.done) throw new StreamTruncatedError("Stream ended before completion");
       }
       activeSignal.throwIfAborted();
       const reply = reader.reply();
@@ -526,7 +530,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
               const bodyError = body ? completionError(body, "completion error") : null;
               if (bodyError) throw bodyError;
             }
-            throw new ChatProtocolError("Stream ended before completion");
+            throw new StreamTruncatedError("Stream ended before completion");
           }
           resetIdleTimer();
           buffer += decoder.decode(value, { stream: true });

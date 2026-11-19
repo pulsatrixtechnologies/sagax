@@ -400,6 +400,8 @@ export interface AcpSupport {
   requireAuthenticationBeforeSpawn?: boolean;
   /** Classify provider-native failures without coupling the core to messages. */
   classifyError?(error: unknown): ProviderErrorCode | undefined;
+  /** A session/prompt error saying the agent never reached its model; startup recovery then holds the ACK for it (upstream #3752). */
+  promptUnreachedModel?(error: unknown): boolean;
   /** Plain words for an account failure (bad key, no credit, a used-up
    * quota, no subscription) in place of the provider's raw RPC text. */
   describeAccountError?(code: AccountErrorCode, model?: string): string;

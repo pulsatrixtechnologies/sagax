@@ -38,7 +38,13 @@ final class FormCardState: ObservableObject {
 
     var allDrafts: [Int: FormDraft] { Dictionary(uniqueKeysWithValues: questions.indices.map { ($0, draft($0)) }) }
     var owed: Int { AskQuestionAnswer.owed(questions, drafts: allDrafts) }
-    var required: Int { questions.filter { !$0.isOptional }.count }
+    /// #4910: which rows are on screen (a follow-up hides until its answer is picked).
+    var shown: [Bool] { AskQuestionAnswer.shownRows(questions, drafts: allDrafts) }
+    func isShown(_ index: Int) -> Bool { shown.indices.contains(index) ? shown[index] : true }
+    var required: Int {
+        let shown = shown
+        return questions.enumerated().filter { shown[$0.offset] && !$0.element.isOptional }.count
+    }
 }
 
 @MainActor
@@ -654,6 +660,24 @@ enum FormCardPieces {
     }
 }
 
+/// #4910: a form row's segment; nothing at all while its follow-up answer is
+/// not picked. Observes the state so the row appears under its answer.
+struct FormRowPiece: View {
+    @ObservedObject var state: FormCardState
+    let index: Int
+    var key: String?
+
+    var body: some View {
+        if state.isShown(index) {
+            if let key {
+                FormSegment(first: false, last: false, key: key) { FormRowContent(state: state, index: index) }
+            } else {
+                FormSegment(first: false, last: false) { FormRowContent(state: state, index: index) }
+            }
+        }
+    }
+}
+
 /// The first row of a pending form in the transcript: head and context.
 struct FormSplitHead: View {
     let chat: Chat
@@ -686,7 +710,7 @@ extension FormCardPieces {
             }
         } else {
             ForEach(Array(state.questions.indices), id: \.self) { position in
-                FormSegment(first: false, last: false, key: "\(message.id)#\(position)") { FormRowContent(state: state, index: position) }
+                FormRowPiece(state: state, index: position, key: "\(message.id)#\(position)")
             }
         }
         FormSegment(first: false, last: true, key: "\(message.id)#end") { FormFooterContent(chat: chat, message: message, state: state) }

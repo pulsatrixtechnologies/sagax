@@ -656,6 +656,67 @@
      "id": "f-list20",
      "at": 1787028603000,
      "parentId": "f-user"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Time entry to confirm",
+      "subtitle": "Pick how long it lasted. The length is asked only when you enter it yourself.",
+      "options": [],
+      "requestId": "form-when",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Design review with Ada: how long?",
+         "header": "Duration",
+         "kind": "choice",
+         "options": [
+          {
+           "label": "As scheduled",
+           "description": "Calendar length"
+          },
+          {
+           "label": "Enter it",
+           "description": "Type it below"
+          },
+          {
+           "label": "Do not bill",
+           "description": "No entry"
+          }
+         ]
+        },
+        {
+         "question": "Real length",
+         "kind": "duration",
+         "options": [],
+         "optional": false,
+         "when": {
+          "question": "Duration",
+          "option": "Enter it"
+         }
+        },
+        {
+         "question": "Billable?",
+         "kind": "yes_no",
+         "options": [
+          {
+           "label": "Yes",
+           "id": "yes"
+          },
+          {
+           "label": "No",
+           "id": "no"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-when",
+     "at": 1787029900000,
+     "parentId": "f-user"
     }
    ],
    "pinned": true

@@ -46,7 +46,7 @@ const accountInstances = [
 ];
 function accountSections(stars: readonly string[]): ModelMenuSection[] {
   const on = params.get("on") === "team" ? "claude-team" : "claude-personal";
-  const selection = { instanceId: on, model: on === "claude-team" ? "claude-mythos-5-2" : "claude-opus-5-5", auto: autoOn };
+  const selection = { instanceId: on, model: on === "claude-team" ? "claude-mythos-5-2" : "claude-opus-5-5", ...(autoOn ? { auto: true as const } : {}) };
   const bot = { id: "bot-1", name: "Scout", threadId: "t1", modelSelection: selection, tasks: [] };
   return buildModelPickerSections({
     orgMode: false, accountModels: new Map(), selection, switches: {}, autoOn, follows: undefined, selectedVariantLabel: undefined,

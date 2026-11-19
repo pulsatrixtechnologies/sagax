@@ -176,10 +176,6 @@ export function ModelPanel(props: ModelPanelProps) {
         {row.tags?.map((tag) => (
           <span key={tag} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink-secondary">{tag}</span>
         ))}
-        {/* M-20261119-015: only this account of the person's offers the model */}
-        {row.badge && (
-          <span data-model-badge title={row.badge.title} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-accent">{row.badge.label}</span>
-        )}
       </span>
     );
     return (
@@ -194,7 +190,13 @@ export function ModelPanel(props: ModelPanelProps) {
             // M-20261119-015: the account this row runs on, under its name, while the provider has several
             <span className="flex min-w-0 flex-1 flex-col justify-center">
               {nameLine}
-              <span data-model-row-account className="truncate text-[11.5px] leading-4 text-popover-ink-secondary">{row.account}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span data-model-row-account className="truncate text-[11.5px] leading-4 text-popover-ink-secondary">{row.account}</span>
+                {/* only this account of the person's offers the model */}
+                {row.badge && (
+                  <span data-model-badge title={row.badge.title} className="shrink-0 rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-accent">{row.badge.label}</span>
+                )}
+              </span>
             </span>
           ) : nameLine}
           {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="max-w-[45%] shrink-0 truncate text-[12px] text-popover-ink-secondary">{description}</span>}

@@ -198,7 +198,7 @@ posixOnly("engine hooks e2e: a shell call that hit its time limit", () => {
     const bot = await h.runTurn();
     const reply: Msg = bot.messages.filter((m: Msg) => m.role === "bot" && m.kind === "text" && m.text).at(-1);
     expect(reply.text!.match(/hit the shell time limit/g)).toHaveLength(2);
-    expect(reply.text).toContain("up to 600000");
+    expect(reply.text).toContain("up to 86400000, which is 1440 minutes");
     expect(reply.text).toContain("mdfind -name");
     const preview = await h.api("GET", `/api/bots/${bot.id}/system-prompt`);
     const shell = preview.body.sections.find((s: { id: string }) => s.id === "shell");

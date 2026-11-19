@@ -1133,7 +1133,9 @@ import { createPluginRoutes, pluginServerName, type InstalledPlugin } from "./ro
 import { createMarketplaceRoutes } from "./routes/marketplaces.ts";
 import { createInstallationCapabilityRoutes } from "./routes/installation-capabilities.ts";
 import { startOfficialCatalogsAuto, type OfficialCatalogsAuto } from "./plugins/official-catalogs-auto.ts";
-import { PluginMarketplaces, startMarketplaceBackgroundRefresh, type MarketplaceBackgroundRefresh, type MarketplacePullScope, type MarketplaceViewer } from "./plugins/plugin-marketplaces.ts";
+import { PluginMarketplaces, marketplaceVisibleTo, startMarketplaceBackgroundRefresh, type MarketplaceBackgroundRefresh, type MarketplacePullScope, type MarketplaceViewer } from "./plugins/plugin-marketplaces.ts";
+import { DefaultInstalls } from "./org/default-installs.ts";
+import { librarySkillFolder, listFolderFiles } from "./skills/skill-person-edit.ts";
 import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts";
 import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./auth/account-reauth.ts";
 import { createRegistrySearch } from "./plugins/plugin-registry.ts";
@@ -6355,6 +6357,7 @@ bindLeafHost({
   get _noteSandboxClusterWaitImpl() { return _noteSandboxClusterWaitImpl; },
   get personConnections() { return personConnections; },
   get personalSkills() { return personalSkills; },
+  get defaultInstalls() { return defaultInstalls; },
   get credentialVault() { return credentialVault; },
   get outbound() { return outbound; },
   get orderFollowUps() { return orderFollowUps; },
@@ -12828,6 +12831,44 @@ const personalPlugins = new BotPlugins({
   credentials: ({ actor, source }) => githubCredentialsFor(actor, source.github?.owner),
   tokens: marketplaceCredentials,
   policy: pluginMarketplacePolicy
+});
+// Perspicax #2220 (M-20261119-042): the plugins and skills Perspicax installs
+// by default for each person, posed once in their Me place, switched off
+// (server/org/default-installs.ts). The person turns each on or removes it.
+const defaultInstalls = new DefaultInstalls({
+  dataDir: DATA_DIR,
+  people: () => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxDirectory) return [];
+    return perspicaxDirectory.people().flatMap((person) => {
+      if (person.status !== "active" || !person.default_installs?.length) return [];
+      const principal = principals.bySubject(IDENTITY.issuer, person.sub);
+      return principal ? [{ principalId: principal.id, entries: person.default_installs }] : [];
+    });
+  },
+  has: (principalId, entry) => entry.kind === "plugin"
+    ? personalPlugins.listPlugins(principalId).some((plugin) => plugin.marketplace === entry.source && plugin.name === entry.name)
+    : personalSkills.list(principalId).some((skill) => skill.name === entry.name),
+  installPlugin: async (principalId, marketplace, plugin) => {
+    const record = pluginMarketplaces.record(marketplace);
+    if (!record) throw Object.assign(new Error("marketplace not connected"), { code: "marketplace_not_connected" });
+    if (!marketplaceVisibleTo(record, { principal: principalId })) throw Object.assign(new Error("marketplace not shared"), { code: "marketplace_private" });
+    await personalPlugins.install(principalId, { marketplace, plugin }, principalId, { enabled: false });
+  },
+  installSkill: async (principalId, name) => {
+    if (!skillsLibraryEnabled(cfg)) throw Object.assign(new Error("skills library off"), { code: "library_off" });
+    const listed = listLibrarySkills().find((skill) => skill.name === name);
+    const text = listed ? readLibrarySkillFile(name) : null;
+    if (!listed || text === null) throw Object.assign(new Error("not in the library"), { code: "not_in_library" });
+    const folder = librarySkillFolder(name);
+    const files = folder ? listFolderFiles(folder).map((file) => ({ path: file.path, content: readFileSync(join(folder, file.path)) })) : [];
+    // Not referenced: in their library, switched off until they turn it on.
+    const result = installLibrarySkill({
+      name, description: listed.description, instructions: text, source: listed.source || `org:${name}`,
+      warnings: scanSkillText(text), reviewState: "disabled", ...(files.length ? { files } : {}), root: personalSkills.root(principalId),
+    });
+    if ("error" in result) throw Object.assign(new Error(result.error), { code: "skill_refused" });
+  },
+  log: (line) => console.log(line),
 });
 const installationPlugins = new InstallationPlugins(DATA_DIR, pluginMarketplaces);
 installationPlugins.restore();
@@ -32676,6 +32717,8 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // an invitation accepted, a declaration changed in Perspicax.
     onDirectory: () => {
       void orgFlowPlugins.sync("directory").catch(() => undefined);
+      // #2220: each person's default installs, posed once, switched off
+      void defaultInstalls.sync("directory").catch(reportBackgroundError);
       // lot 4: the organization's declarations, installed once here
       void syncOrgCapabilities("directory").catch(reportBackgroundError);
       void syncPersonalProviderDirectory().catch(reportBackgroundError);
@@ -32685,9 +32728,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
   perspicaxDirectory.start(intervalMs);
   void syncPersonalProviderDirectory().catch(reportBackgroundError);
   // a newer Flow version: the sync fetches the marketplaces again when due
-  setInterval(() => { void orgFlowPlugins.sync("schedule").catch(() => undefined); }, 30 * 60_000).unref();
+  setInterval(() => { void orgFlowPlugins.sync("schedule").catch(() => undefined); void defaultInstalls.sync("schedule").catch(reportBackgroundError); }, 30 * 60_000).unref();
   // at start: what is missing or older than the last directory read
-  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start").catch(reportBackgroundError); }, 15_000).unref();
+  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start").catch(reportBackgroundError); void defaultInstalls.sync("start").catch(reportBackgroundError); }, 15_000).unref();
   // Slice 5: per-turn MCP tokens for the person who speaks.
   const directory = perspicaxDirectory;
   perspicaxMemory = new PerspicaxMemory({ link: () => directory });
@@ -32942,6 +32985,8 @@ const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions
         // Pulsatrix Flow with this person's own token (installs what is
         // missing or older; silent when up to date).
         void orgFlowPlugins.sync("sign-in").catch(() => undefined);
+        // #2220: a first sign-in makes the principal their list waited for
+        void defaultInstalls.sync("sign-in").catch(reportBackgroundError);
       }
     },
     openPairing: (input) => sessions.openPairing(input),
@@ -33011,6 +33056,14 @@ const orgPeopleDeps: PeopleDeps = {
     const effective = principalPermissions(principalId);
     return { source: effective.source, effective: permissionList(effective), narrowedBy: [...effective.narrowedBy] };
   },
+  // #2220: their own plugins and skills (Me), read by the console's sheet
+  installed: (principalId) => ({
+    plugins: personalPlugins.listPlugins(principalId).map((plugin) => ({
+      key: plugin.key, name: plugin.name, marketplace: plugin.marketplace, enabled: plugin.enabled, ...(plugin.version ? { version: plugin.version } : {}),
+    })),
+    skills: skillsLibraryEnabled(cfg) ? personalSkills.list(principalId).map((skill) => ({ name: skill.name, enabled: skill.enabled })) : [],
+    defaultInstalls: defaultInstalls.status(principalId),
+  }),
   people: () => {
     if (IDENTITY.kind !== "perspicax" || !perspicaxDirectory) return [];
     return orgDirectoryEntries(IDENTITY.issuer, perspicaxDirectory.people(), (iss, sub) => principals.bySubject(iss, sub))
@@ -33647,7 +33700,11 @@ const orgOpsDeps: OpsDeps = {
         } catch {
           allowed = false;
         }
-        return { id: market.name, name: market.name, url: market.source, allowed, plugins: market.plugins.length };
+        return {
+          id: market.name, name: market.name, url: market.source, allowed, plugins: market.plugins.length, visibility: market.visibility,
+          // #2220: the catalogue Perspicax's default installs pick from
+          items: market.plugins.map((plugin) => ({ name: plugin.name, ...(plugin.description ? { description: plugin.description } : {}), ...(plugin.version ? { version: plugin.version } : {}) })),
+        };
       }),
       skills: library.map((skill) => ({
         id: skill.name, name: skill.name, source: skill.source || null, version: skill.sha256 ? skill.sha256.slice(0, 12) : null,

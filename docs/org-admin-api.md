@@ -287,6 +287,11 @@ The row above, plus:
     "mcpServers": [{ "id": "github", "name": "github", "transport": "remote", "state": "enabled" }]
   },
   "routinesAsRunner": [{ "id": "r_1", "name": "Daily digest", "botId": "5e38..." }],
+  "installed": {
+    "plugins": [{ "key": "tickets@acme", "name": "tickets", "marketplace": "acme", "enabled": false, "version": "2.4.0" }],
+    "skills": [{ "name": "digest", "enabled": false }],
+    "defaultInstalls": { "posed": [{ "kind": "plugin", "source": "acme", "name": "tickets", "at": 1791500000000 }], "failed": [] }
+  },
   "permissions": {
     "source": "perspicax",
     "effective": ["bots.create", "bots.fullAccess", "sharing.grants", "apps.ownIntegrations", "usage.view"],
@@ -294,6 +299,14 @@ The row above, plus:
   }
 }
 ```
+
+`installed` (Perspicax #2220) is what the person has in their own place:
+their Me plugins (`key`, `name`, `marketplace`, `enabled`, `version`) and
+their Me skills (`name`, `enabled`), and `defaultInstalls`, what
+Perspicax's default installs posed for them (`posed`, each with `at`) or
+could not pose yet (`failed`, with a short `reason`).
+`server/org/default-installs.ts` poses each entry of the person's directory
+`default_installs` once, switched off; a removal stays removed.
 
 `permissions` (2026-10-09) is what this server enforces for the person:
 `source` is `admin` (every key), `perspicax` (the list the directory sent,
@@ -893,7 +906,7 @@ explain a disabled Always allow without an admin call.
     { "id": "docs", "name": "docs", "scope": "org", "owner": null, "transport": "remote", "state": "enabled" },
     { "id": "github", "name": "github", "scope": "person", "owner": { "principalId": "pr_7c1e...", "sub": "01J9...", "name": "Bob" }, "transport": "remote", "state": "enabled" }
   ],
-  "marketplaces": [{ "id": "acme", "name": "acme", "url": "acme/plugins", "allowed": true, "plugins": 12 }],
+  "marketplaces": [{ "id": "acme", "name": "acme", "url": "acme/plugins", "allowed": true, "plugins": 12, "visibility": "org", "items": [{ "name": "tickets", "description": "Service tickets", "version": "2.4.0" }] }],
   "skills": [{ "id": "digest", "name": "digest", "source": "https://github.com/acme/skills", "version": "3f2a9c1b7d4e", "bots": 2 }]
 }
 ```
@@ -906,6 +919,10 @@ explain a disabled Always allow without an admin call.
   `principalId` does it on demand.
 - `skills`: the organization's skills library (empty while the library is
   off); `version` is the first 12 hex of the skill's SHA-256.
+- `marketplaces[].visibility` and `items` (Perspicax #2220): shared with
+  everyone (`org`) or one person's own (`private`), and the plugins it lists
+  (name, description, version): the catalogue of Perspicax's « Installés par
+  défaut ».
 
 ### `POST connections/test`
 

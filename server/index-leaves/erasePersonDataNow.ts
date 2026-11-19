@@ -85,6 +85,8 @@ async function erasePersonDataNow(principalId: string): Promise<{ bots: number; 
   host.pushActivities.removePerson(principalId);
   host.reachMeSettings.removePerson(principalId);
   host.botSettings.forgetPerson(principalId);
+  // #2220: the record of what Perspicax's default installs posed for them
+  host.defaultInstalls?.forget(principalId);
   // Their Perspicax sign-in on this server: grants and routine delegation,
   // cached keys and photo, sessions and pairing codes (the back-channel
   // logout's effect), then their name, address and photo on the principal

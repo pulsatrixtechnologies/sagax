@@ -88,6 +88,21 @@ describe("people", () => {
     expect((await console.call("GET", "people/pr_nobody")).status).toBe(404);
   });
 
+  it("a person's page says what they have in their own place (Perspicax #2220)", async () => {
+    const { deps } = setup();
+    const installed = {
+      plugins: [{ key: "tickets@acme", name: "tickets", marketplace: "acme", enabled: false, version: "2.4.0" }],
+      skills: [{ name: "digest", enabled: false }],
+      defaultInstalls: { posed: [{ kind: "plugin" as const, source: "acme", name: "tickets", at: NOW }], failed: [] },
+    };
+    const seen: string[] = [];
+    const withInstalled = fakeConsole(peopleRoutes({ ...deps, installed: (principalId) => { seen.push(principalId); return installed; } }), () => NOW);
+    expect((await withInstalled.call("GET", "people/pr_bob")).body.installed).toEqual(installed);
+    expect(seen).toEqual(["pr_bob"]);
+    // A server without it says nothing of it.
+    expect((await fakeConsole(peopleRoutes(deps), () => NOW).call("GET", "people/pr_bob")).body).not.toHaveProperty("installed");
+  });
+
   it("disable and enable: audited, never oneself, a strict body", async () => {
     const { console } = setup();
     const off = await console.call("POST", "people/pr_bob/disable", { body: { disabled: true, reason: "Left the team" } });

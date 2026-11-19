@@ -23,6 +23,7 @@ import { normalizePermissions, type PermissionKey } from "../../shared/permissio
 import type { Principal } from "../auth/principals.ts";
 import { parseModelServers, type ModelServer } from "../drivers/pi-model-servers.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { defaultInstallEntrySchema } from "../org/default-installs.ts";
 
 export const LINK_FILE_MAX_BYTES = 4 * 1024;
 export const DIRECTORY_MAX_BYTES = 4 * 1024 * 1024;
@@ -147,6 +148,11 @@ const personSchema = z.object({
    * catalogue: the member defaults apply (shared/permissions.ts). Unknown
    * keys are ignored with a log, never fatal. */
   permissions: z.array(z.string().max(64)).max(1_000).nullable().optional().catch(undefined),
+  /** Perspicax #2220 (M-20261119-042): the plugins and skills installed by
+   * default for this person, each posed once in their Me place, switched
+   * off (server/org/default-installs.ts). Absent: none (an older Perspicax,
+   * someone created before the list with nothing added on their sheet). */
+  default_installs: tolerantArray(defaultInstallEntrySchema, 200),
   routine_delegation: z.object({
     consented_at: z.string().max(40),
     renewed_at: z.string().max(40),

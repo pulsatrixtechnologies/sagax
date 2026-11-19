@@ -134,7 +134,6 @@ export interface PerspicaxMcpOptions {
   /** Writing as "Moi" in a routine that runs under a role changes the
    * vendor attribution: the person's GO, on the approval card family.
    * Absent: such a write is refused. */
-  askMeWrite?(input: { threadId: string; botId: string; principalId: string; role: { slug: string; name: string }; tool: string; permission: CwPermission }): Promise<"allow" | "deny" | "timeout">;
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
@@ -321,8 +320,6 @@ interface Entry {
   boardWidest?: { role: string };
   /** #2960: role slug → the API member behind it (`cw_member:<id>`). */
   roleMembers?: Map<string, string>;
-  /** Tools the person allowed to write as "Moi" in this routine turn. */
-  meWritesAllowed?: Set<string>;
   /** The role lapsed during the last call and could not be renewed. */
   lapsedNow?: boolean;
   /** A remote `tools/list_changed` that the stdio bridge must forward to its
@@ -482,6 +479,15 @@ function missingPermission(permission: CwPermission): string {
 
 /** #3694 (rule d7-403-switch-role): what a bot may still do after the STOP
  * of one refused write. */
+/** Incident 2026-11-19 (D-20261119-055): the one line a routine that acts
+ * as a role gets when a write would leave under another identity. `now`: the
+ * identity the connection has instead ("" when the role is named but did
+ * not take). */
+export function routineRoleWriteStop(role: string, now: string): string {
+  const where = now ? `this connection acts as ${now}, not as ${role}` : `the role ${role} could not be taken for this run (the person the routine runs as may not hold it, or it lapsed)`;
+  return `STOP: not written. This routine writes only as ${role}, and ${where}. Nothing was sent under another identity. Stop this run now and say in one line that it wrote nothing because ${role} was not available; do not retry this write under another role or as the person.`;
+}
+
 const WRITE_STOP_NEXT = "Tell the person. Send this write again only when the person asks for it: it needs a role that holds that permission (the person decides, by a saved rule or a card) or an administrator of the vendor who gives it. Everything else goes on: other calls, and switching roles (identity_switch, clear included) for other work, are fine.";
 
 /** #4250: one resource the person can watch: a URI, or a URI template
@@ -1419,7 +1425,6 @@ export class PerspicaxMcp {
     entry.holidayNoted = false;
     entry.triedRoles = undefined;
     entry.boardWidest = undefined;
-    entry.meWritesAllowed = undefined;
     entry.lapsedNow = false;
     entry.roleLocked = false;
     entry.routineRole = undefined;
@@ -1432,6 +1437,15 @@ export class PerspicaxMcp {
     entry.roleLocked = picked.reason === "person";
     if (picked.reason === "routine" && slug) entry.routineRole = slug;
     if (slug && slug !== this.currentRole(entry)) this.setIdentity(entry, slug);
+  }
+
+  /** Whether this connection acts as its routine's role right now: the
+   * identity lease is that role and holds (renewed when it is due). */
+  private async onRoutineRole(entry: Entry): Promise<boolean> {
+    const identity = entry.identity;
+    if (!entry.routineRole || !identity || identity.profile() !== entry.routineRole) return false;
+    await identity.ensure();
+    return identity.active();
   }
 
   /** "Rester en …" on an "Agit comme" card: every live connection of this
@@ -1825,16 +1839,17 @@ export class PerspicaxMcp {
     // seeing the most boards goes there directly (one call, then back)
     const widest = read ? await this.widestListRead(entry, frame, name, args, before) : null;
     if (widest) return widest;
-    if (!read && entry.source === "delegation" && entry.routineRole && before === ME_ROLE && vendorWriteTool(name) && !entry.meWritesAllowed?.has(name)) {
+    // Incident 2026-11-19 (D-20261119-055): a routine that acts as a role
+    // writes under that role or not at all. Its role could not be taken (the
+    // person it runs as does not hold it, the switch lapsed) or the bot left
+    // it (clear, another role): the write is not sent, no card and no rule,
+    // since the vendor would record another author. The run stops there.
+    if (!read && entry.routineRole && vendorWriteTool(name) && !await this.onRoutineRole(entry)) {
       await this.ensureHeldRoles(entry);
       const role = this.roleView(entry, entry.routineRole);
       const permission = cwPermissionFor(name, args, false);
-      let answer: "allow" | "deny" | "timeout" = "deny";
-      try { answer = this.options.askMeWrite ? await this.options.askMeWrite({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, role, tool: name, permission }) : "deny"; } catch { answer = "deny"; }
-      if (answer !== "allow") {
-        return toolError(id, `Not sent: this routine runs as ${role.name}; writing in the person's own name changes who the vendor records as the author, and the person did not approve it. Switch back to ${role.name} (identity_switch) or report what is missing.`);
-      }
-      (entry.meWritesAllowed ??= new Set()).add(name);
+      this.emitRole(entry, "write_refused", name, { ...this.roleView(entry, before), reason: entry.roleReason ?? "routine" }, { permission, refusedRole: this.roleView(entry, before) });
+      return toolError(id, routineRoleWriteStop(role.name || role.slug, before === entry.routineRole ? "" : this.roleView(entry, before).name || (before ? before : "the person's own account")));
     }
     const answer = await this.relayFrameCore(input);
     if (entry.lapsedNow || (isObject(answer.body) && isObject(answer.body.error) && /could not restore the explicitly selected/.test(String(answer.body.error.message ?? "")))) {
@@ -1888,7 +1903,9 @@ export class PerspicaxMcp {
    * again, so the same write never loops). Null: no switch was possible (no
    * role left, the role is fixed). */
   private async switchWriteOnce(entry: Entry, frame: Json, id: unknown, name: string, from: string, refused: string, permission: CwPermission, needs: string): Promise<PerspicaxRelayAnswer | null> {
-    if (entry.roleLocked) return null;
+    // A role fixed for the turn is never left by a write: the person's pick,
+    // and the role a routine acts as (incident 2026-11-19, D-20261119-055).
+    if (entry.roleLocked || entry.routineRole) return null;
     const tried = this.triedFor(entry, `write:${permission.path || name}`);
     tried.add(refused);
     await this.ensureHeldRoles(entry);

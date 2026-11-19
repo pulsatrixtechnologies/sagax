@@ -70,11 +70,6 @@ export function createRoleEvents(deps: RoleEventsDeps) {
   };
 }
 
-/** The "Écrire au nom de …" approval summary (askMeWrite). */
-export function meWriteSummary(language: string, input: { person: string; role: string; tool: string; permission: CwPermission }): string {
-  return roleText(language, "roles.meWrite.summary", { person: input.person, role: input.role, tool: input.tool, permission: permissionLine(input.permission, language) });
-}
-
 /** #2581: the card that runs one read refused (403) under `from` once as
  * `to` ("" from = "Moi"). */
 export function readSwitchSummary(language: string, input: { from: string; to: string; tool: string; permission: CwPermission }): string {

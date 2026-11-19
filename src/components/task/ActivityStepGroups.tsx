@@ -48,9 +48,18 @@ function StepInput({ input }: { input: string }) {
   );
 }
 
-/** Every call of the group: when, its summary, its arguments; the tool's
- * name in words once at the top. */
+/** Every place the group's calls ran, in the order they first ran there. */
+function placesOf(group: ActivityStepGroup): NonNullable<BotActivityStep["where"]>[] {
+  const places: NonNullable<BotActivityStep["where"]>[] = [];
+  for (const step of group.steps) if (step.where && !places.includes(step.where)) places.push(step.where);
+  return places;
+}
+
+/** Every call of the group: when, its place when the group ran in more
+ * than one (#4988: the fold spans the run, the place is never lost), its
+ * summary, its arguments; the tool's name in words once at the top. */
 export function GroupDetail({ group }: { group: ActivityStepGroup }) {
+  const mixed = placesOf(group).length > 1;
   return (
     <div data-activity-technical={group.id} className="flex flex-col gap-1.5 text-[12px]">
       {/* 2026-11-02: the tool in words, never its raw id */}
@@ -60,6 +69,7 @@ export function GroupDetail({ group }: { group: ActivityStepGroup }) {
           <li key={step.id} data-activity-step-id={step.id} className="flex min-w-0 flex-col gap-0.5 rounded-md bg-inset px-2 py-1.5">
             <div className="flex min-w-0 items-center gap-2">
               <span className="shrink-0 tabular-nums text-ink-tertiary">{timeOf(step.at)}</span>
+              {mixed && step.where && <WhereMark where={step.where} />}
               {step.ok === false && <span className="shrink-0 text-danger">{t("step.turn.failed.one")}</span>}
               {step.summary && <span className="min-w-0 truncate text-ink" title={group.title ?? step.summary}>{step.summary}</span>}
             </div>
@@ -106,6 +116,9 @@ function GroupList({ groups, nested = false }: { groups: readonly ActivityStepGr
     <ol data-activity-steps={nested ? "nested" : ""} className={cn("flex flex-col", nested ? "mt-1 gap-0" : "gap-0.5")}>
       {groups.map((group) => {
         const step = group.steps[0]!;
+        // a group folded from both places names both, else the place once, then only when it changes
+        const places = placesOf(group);
+        const marks = places.length > 1 ? places : group.whereChanged && group.where ? [group.where] : [];
         const countMark = group.count > 1 ? <span data-activity-step-count={group.count} className="shrink-0 rounded-md bg-inset px-1.5 py-0.5 text-[11px] leading-4 tabular-nums text-ink-secondary">×{group.count}</span> : null;
         return (
           <li key={group.id} data-activity-step={step.name} data-activity-step-group={group.id} data-activity-step-phase={group.phase}>
@@ -115,10 +128,10 @@ function GroupList({ groups, nested = false }: { groups: readonly ActivityStepGr
               title={group.title}
               phase={group.phase}
               icon={group.subagent ? <Bot size={13} aria-hidden="true" className="text-accent-text" /> : undefined}
-              extra={(countMark || (group.whereChanged && group.where)) ? (
+              extra={(countMark || marks.length) ? (
                 <>
                   {countMark}
-                  {group.whereChanged && group.where && <WhereMark where={group.where} />}
+                  {marks.map((where) => <WhereMark key={where} where={where} />)}
                 </>
               ) : undefined}
               data={group.subagent ? { "data-activity-subagent": group.id } : undefined}

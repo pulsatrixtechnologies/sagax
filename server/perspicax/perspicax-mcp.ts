@@ -131,9 +131,6 @@ export interface PerspicaxMcpOptions {
   /** #2581: the journal already saw `slug` refused (403) for a read on
    * `path`: that role is not offered again. */
   knownReadRefusal?(input: { principalId: string; botId: string; slug: string; path: string }): boolean;
-  /** Writing as "Moi" in a routine that runs under a role changes the
-   * vendor attribution: the person's GO, on the approval card family.
-   * Absent: such a write is refused. */
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
@@ -477,8 +474,6 @@ function missingPermission(permission: CwPermission): string {
   return "The vendor's answer says what refused it.";
 }
 
-/** #3694 (rule d7-403-switch-role): what a bot may still do after the STOP
- * of one refused write. */
 /** Incident 2026-11-19 (D-20261119-055): the one line a routine that acts
  * as a role gets when a write would leave under another identity. `now`: the
  * identity the connection has instead ("" when the role is named but did
@@ -488,6 +483,8 @@ export function routineRoleWriteStop(role: string, now: string): string {
   return `STOP: not written. This routine writes only as ${role}, and ${where}. Nothing was sent under another identity. Stop this run now and say in one line that it wrote nothing because ${role} was not available; do not retry this write under another role or as the person.`;
 }
 
+/** #3694 (rule d7-403-switch-role): what a bot may still do after the STOP
+ * of one refused write. */
 const WRITE_STOP_NEXT = "Tell the person. Send this write again only when the person asks for it: it needs a role that holds that permission (the person decides, by a saved rule or a card) or an administrator of the vendor who gives it. Everything else goes on: other calls, and switching roles (identity_switch, clear included) for other work, are fine.";
 
 /** #4250: one resource the person can watch: a URI, or a URI template

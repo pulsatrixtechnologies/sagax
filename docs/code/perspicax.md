@@ -9,17 +9,21 @@ now means the section of that title in one of the files of `docs/code/`.
 ## Visible roles (#2016, corrected #2032/#2033, 2026-11-05)
 
 Every engine `tools/call` on the account's Perspicax connection reports its
-role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
-`askMeWrite`; `shared/perspicax-roles.ts`). Chat has no role picker and shows
+role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`;
+`shared/perspicax-roles.ts`). Chat has no role picker and shows
 no role chip, "Agit comme" card or role notice (web and iOS). The role lives
 only on a Pulsatrix Flow routine's "Au nom de" field (`RoutineActAsField`,
 hidden when the routine has no Flow recipe); other routines save no role. A
 read 403 under a role is read once more as "Moi" by the relay and the role is
-put back; a write 403 looks for one held role that may write it, by a saved
-rule or a card (rule d7-403-switch-role), and a refusal blocks that write only,
+put back; a write 403 of a chat turn looks for one held role that may write
+it, by a saved rule or a card (rule d7-403-switch-role), and a refusal blocks that write only,
 never the turn's role switches (#3694); a guard or policy refusal of the
 connector and a dry run are passed as they are (`roleRefusalOf`); a lapsed role stops the
-call; a routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+call. A routine that acts as a role writes under that role or not at all
+(#5078, D-20261119-055): a write while the connection is not on it (the role
+could not be taken, the bot cleared it or took another) stops with one line
+(`routineRoleWriteStop`), and a write 403 under it is never sent again under
+another role or as "Moi"; its reads keep the rule above. `server/perspicax/role-journal.ts`
 keeps transitions, refusals and owner rules per principal for the bot panel's
 Details > Permissions row (graph behind its disclosure; no Roles tab since 2026-11-05)
 and routine coverage; `role-events.ts` writes the journal only and never

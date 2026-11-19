@@ -3315,7 +3315,7 @@ list and keeps the card open after a choice.
 Captures: `scripts/capture/record-hover-card.mjs` (headless Chrome, DPR 2) of
 `src/gallery/record-card.html`, scene `neighbour` beside the link card.
 
-#### The opened record card is a window over the chat (owner, 2026-11-19, #5053)
+#### The opened record card is a window over the chat (#5053; the owner's two requests, M-20261119-055 and M-20261119-056)
 
 The owner, on a ticket's card: "Faudrait que ça soit plus gros, on voit rien,
 c'est trop compact", then "Faudrait que tu autorises de resize l'infobulle et
@@ -3325,10 +3325,18 @@ stays the hovered card's, untouched). It follows the file preview's family
 (2.13), a window over the conversation, without its veil: nothing is blocked,
 a click outside or Escape closes it.
 
+The owner asked for two things: a larger, readable card, and a card that can
+be resized with its size kept. Everything else below is an agent's choice, not
+decided by the owner, and each can be changed on his word: the sizes (1000px,
+80%, 840px, 480 by 320), the centred place without a veil, the two panes and
+where they stack, a size kept on the device only, and the eight-line fold of a
+note.
+
 - **Size**: 1000px wide and 80% of the window's height (840px at most) by
   default; never under 480 by 320; never past the window, 16px from its sides
   and its foot. A window too small for the kept size bounds the card and
-  leaves the kept size alone.
+  leaves the kept size alone. While nothing is kept, the height follows a
+  window that changes size with the card open.
 - **Place**: centred across the window, its top 8% of the window's height
   under the window's top (16 to 72px), the same for every record whatever its
   content: the head and its Back arrow never move from one card to the next,
@@ -3369,6 +3377,8 @@ a click outside or Escape closes it.
   card, never a large empty one.
 - **Notes**: several at once, each with its whole text. A note longer than
   eight lines offers "Less" to fold it to three, and "More" to open it again.
+  Nothing is folded by default: a record without tabs shows its notes open
+  too, at every width (stacked, their title row folds them on a click).
 - Nothing was removed: the status and priority menus, the six tabs and their
   counts, the notes' filters, the product's link, Ask, copy, "up to date at"
   and refresh.

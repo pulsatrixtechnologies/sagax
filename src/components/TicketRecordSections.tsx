@@ -50,9 +50,10 @@ export function TicketSchedule({ entries, error }: { entries?: ScheduleEntry[]; 
 const filters = ["discussion", "internal", "resolution", "all"] as const;
 type Filter = typeof filters[number];
 
-/** A note taller than this many lines (22px each) may be folded. */
+/** A note taller than this many lines (22px each, under the 2px its text has above it) may be folded. */
 const NOTE_LONG_LINES = 8;
 const NOTE_LINE_PX = 22;
+const NOTE_TOP_PX = 2;
 
 /** A note shows its whole text (#5053). A long one (more than eight lines)
  * offers "Less" to fold it to three lines, and "More" to open it again. */
@@ -63,7 +64,7 @@ function Note({ note }: { note: TicketNote }) {
   useLayoutEffect(() => {
     const node = body.current;
     if (!node || !expanded) return;
-    const measure = () => setLong(node.scrollHeight > NOTE_LONG_LINES * NOTE_LINE_PX + 1);
+    const measure = () => setLong(node.scrollHeight > NOTE_TOP_PX + NOTE_LONG_LINES * NOTE_LINE_PX + 1);
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(node);

@@ -231,6 +231,34 @@ describe("the opened record card's size", () => {
     expect(heightOf()).toContain("720px");
   });
 
+  it("follows a window that changes size while it is open: its default height moves, a double-click returns to this window's default", () => {
+    view(760, 520);
+    show({ raw: ticketCard(NOW, "fr"), related: related() });
+    expect(heightOf()).toBe("416px");
+    // the window grows with the card open: nothing is kept, so the default is this window's
+    view(1440, 900);
+    act(() => { window.dispatchEvent(new Event("resize")); });
+    expect(heightOf()).toBe("720px");
+    drag(corner("se")!, 40, 30);
+    expect(heightOf()).toBe("750px");
+    dblclick(corner("se")!);
+    expect(heightOf()).toBe("720px");
+    expect(stored.has(RECORD_CARD_HEIGHT_KEY)).toBe(false);
+  });
+
+  it("keeps a kept height when the window changes size while it is open", () => {
+    stored.set(RECORD_CARD_HEIGHT_KEY, "600");
+    show({ raw: ticketCard(NOW, "fr"), related: related() });
+    expect(heightOf()).toBe("600px");
+    view(1440, 1200);
+    act(() => { window.dispatchEvent(new Event("resize")); });
+    expect(heightOf()).toBe("600px");
+    expect(stored.get(RECORD_CARD_HEIGHT_KEY)).toBe("600");
+    // and its double-click goes to this window's default (840 px at most)
+    dblclick(edge("horizontal")!);
+    expect(heightOf()).toBe("840px");
+  });
+
   it("answers the keyboard on its right and bottom edges, and says how to resize", () => {
     show({ raw: ticketCard(NOW, "fr"), related: related() });
     const right = edge("vertical")!;
@@ -353,6 +381,38 @@ describe("the opened record card reads", () => {
     expect(bodies).toHaveLength(3);
     for (const body of bodies) expect(body.className).not.toContain("line-clamp");
     expect(bodies[0]!.textContent).toContain("The counter queue stays blocked.");
+  });
+
+  it("shows a record's notes without a click when its panes stack: the opened card folds nothing by itself", () => {
+    // a card narrower than 50rem (a small window, or a card the person made narrow): its panes stack
+    const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return (this as HTMLElement).className.includes("@container") ? 700 : 0; } });
+    try {
+      show({ raw: ticketCard(NOW, "fr") });
+      const fold = host.querySelector<HTMLButtonElement>("[data-record-notes] button[aria-expanded]")!;
+      expect(fold.getAttribute("aria-expanded")).toBe("true");
+      expect(host.querySelectorAll("[data-record-note]").length).toBeGreaterThan(1);
+      // the person may still fold them, and open them again
+      act(() => fold.click());
+      expect(host.querySelectorAll("[data-record-note]")).toHaveLength(0);
+      act(() => host.querySelector<HTMLButtonElement>("[data-record-notes] button[aria-expanded]")!.click());
+      expect(host.querySelectorAll("[data-record-note]").length).toBeGreaterThan(1);
+    } finally {
+      if (before) Object.defineProperty(HTMLElement.prototype, "clientWidth", before); else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+
+  it("offers \"Less\" on a note of more than eight lines, never on one of eight", () => {
+    // 22 px a line and 2 px above the text: eight lines are 178 px, nine are 200 px
+    const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.textContent?.includes("stops after") ? 178 : this.textContent?.includes("tomorrow morning") ? 200 : 22; });
+    try {
+      show({ raw: ticketCard(NOW, "fr"), related: related() });
+      const noteOf = (words: string) => [...host.querySelectorAll<HTMLElement>('[role="tabpanel"] li')].find((item) => item.textContent?.includes(words))!;
+      expect(noteOf("stops after").querySelector("button[aria-expanded]")).toBeNull();
+      expect(noteOf("tomorrow morning").querySelector("button[aria-expanded]")!.textContent).toBe("Moins");
+    } finally {
+      tall.mockRestore();
+    }
   });
 
   it("folds a long note only when the person asks, and opens it again", () => {

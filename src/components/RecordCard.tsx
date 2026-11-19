@@ -572,9 +572,11 @@ function Lines({ card, above, pinned, folded }: { card: Card; above: boolean; pi
 
 function Notes({ card, now, lang, description, above, pinned, stacked }: { card: Card; now: number; lang: string; description?: string; /** something sits above the activity in its pane */ above: boolean; pinned: boolean; stacked: boolean }) {
   const { notes } = card;
-  const [open, setOpen] = useState(false);
   const tab = useContext(TabContext);
   const roomy = useContext(RoomyContext);
+  // the opened card scrolls as one and has the room: its notes are open until the person folds them
+  const [chosen, setOpen] = useState<boolean | null>(null);
+  const open = chosen ?? roomy;
   const quiet = cn("text-[12px] leading-4 text-popover-ink-secondary", roomy && "text-[13px] leading-[18px]");
   if (notes.state === "forbidden") return <p data-fit-row="n-state" className={quiet}>{t("recordCard.notes.forbidden")}</p>;
   if (notes.state === "unavailable") return <p data-fit-row="n-state" className={quiet}>{t("recordCard.notes.unavailable")}</p>;
@@ -583,14 +585,14 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
   const others = notes.total !== undefined ? Math.max(0, notes.total - notes.items.length) : 0;
   if (!items.length && !others) return null;
   const count = notes.total ?? items.length;
-  // a card that is not wider than tall keeps its notes behind one row
+  // a hovered card that is not wider than tall keeps its notes behind one row
   const folded = stacked && !open;
   const title = notes.title ? `${notes.title} (${count})` : t("recordCard.notes.title", { count });
   return (
     <div className="flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden" data-record-notes>
       {stacked && (pinned ? (
         <div data-fit-row="n-title" className={cn(above && "border-t border-popover-hairline pt-1", above && roomy && "pt-3")}>
-          <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, roomy && ROOMY_BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen((value) => !value)}>
+          <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, roomy && ROOMY_BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen(!open)}>
             <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 transition-transform rtl:-scale-x-100", open && "rotate-90 rtl:-rotate-90")} />
             <span>{title}</span>
           </button>
@@ -801,8 +803,25 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
   // the opened card is a window over the chat: its size is the person's, kept on the device, the same for every record
   const roomy = pinned;
   const wide = useDockedPanelWidth(RECORD_CARD_WIDTH);
-  const [heightBounds] = useState(() => recordCardHeightBounds(windowView()));
+  const [heightBounds, setHeightBounds] = useState(() => recordCardHeightBounds(windowView()));
   const tall = useDockedPanelWidth(heightBounds);
+  // the default height is a share of the window: it follows a window that changes size while the card is open, so
+  // a card nobody sized keeps that share and a double-click returns to this window's default. A kept height stays.
+  const setTall = tall.setWidth;
+  const defaultTall = useRef(heightBounds.fallback);
+  useLayoutEffect(() => {
+    if (!roomy) return;
+    const follow = () => {
+      const next = recordCardHeightBounds(windowView());
+      const before = defaultTall.current;
+      if (next.fallback === before) return;
+      defaultTall.current = next.fallback;
+      setHeightBounds(next);
+      setTall((height) => (height === before ? next.fallback : height));
+    };
+    window.addEventListener("resize", follow);
+    return () => window.removeEventListener("resize", follow);
+  }, [roomy, setTall]);
   // a card with tabs takes the whole height (its tabs grow with it); any other is as tall as its content, up to it
   const fills = Boolean(card && related);
   const [frameNode, setFrameNode] = useState<HTMLDivElement | null>(null);

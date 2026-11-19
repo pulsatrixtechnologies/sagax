@@ -1222,7 +1222,7 @@
     },
     {
       "name": "wait_until",
-      "description": "Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised). No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
+      "description": "Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised, as far ahead as you need). No AI runs while you wait, only plain checks. Other kinds end after hours (default 24, 1-168).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1264,7 +1264,7 @@
           },
           "at": {
             "type": "string",
-            "description": "time_reached only: RFC3339 with offset, 1 minute to 168 hours ahead."
+            "description": "time_reached only: RFC3339 with offset, at least a minute ahead. No far limit."
           },
           "follow_up": {
             "type": "string",

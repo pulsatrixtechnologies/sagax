@@ -112,7 +112,7 @@ export function parseWaitRequest(body: unknown, home: string, now: number = Date
     const at = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? Date.parse(raw) : NaN;
     if (!Number.isFinite(at)) return fail("at: an RFC3339 time with its offset, e.g. 2026-11-08T09:30:00-05:00 (use list_routines or the current time you were given).");
     if (at < now + WAIT_TIME.minAheadMs) return fail("at must be at least a minute from now: for something due now, just do it.");
-    if (at > now + WAIT_HOURS.max * 3_600_000) return fail(`at must be within ${WAIT_HOURS.max} hours; for later, propose a one-time routine (propose_routine).`);
+    // #4528: a promised check-back may sit further ahead than the hours cap of the other kinds.
     request.at = at;
   }
   if (!absent(body.follow_up)) {

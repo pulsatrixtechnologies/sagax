@@ -330,6 +330,75 @@ describe("WaitManager", () => {
     expect(h.posts.map((p) => p.status)).toEqual(["fired"]);
   });
 
+  it("keeps a check-back set further than 168 hours ahead and fires it once, at that time", async () => {
+    const h = harness();
+    const at = T0 + 400 * 24 * 3_600_000;
+    const created = await h.create({ kind: "time_reached", at }, { label: "the later check" });
+    expect(created.state).toBe("created");
+    h.advance(169 * 3_600_000);
+    await h.manager.tick();
+    expect([h.posts, h.manager.list("bot-1").length]).toEqual([[], 1]);
+    h.advanceTo(at);
+    await h.manager.tick();
+    expect(h.posts).toEqual([{ status: "fired", text: `the later check: done. It is ${new Date(at).toISOString()}, the time you set to come back to it.` }]);
+  });
+
+  it("cuts a due check-back before the line, restarts, and tells it once past the old grace", async () => {
+    const h = harness();
+    const at = T0 + 60_000;
+    const created = await h.create({ kind: "time_reached", at }, { label: "the check", followUp: "look again", hours: 1 });
+    if (created.state !== "created") throw new Error("not created");
+    const id = created.wait.id;
+    let cut = true;
+    const lines = new Set<string>();
+    const runs = new Set<string>();
+    h.post.mockImplementation((wait: WaitRecord, notice: WaitNotice) => {
+      if (cut) throw new Error("cut");
+      lines.add(`${wait.id}:${notice.status}:${notice.text}`);
+      return true;
+    });
+    h.followUp.mockImplementation((wait: WaitRecord) => { runs.add(wait.id); });
+    h.advanceTo(at + 3 * 3_600_000);
+    await h.manager.tick();
+    expect(h.waitOf(id)).toMatchObject({ handed: "due", ending: { status: "fired" } });
+    expect([lines.size, runs.size]).toEqual([0, 0]);
+    cut = false;
+    h.reload();
+    await h.manager.tick();
+    expect([...lines]).toEqual([`${id}:fired:the check: done. It is ${new Date(at).toISOString()}, the time you set to come back to it.`]);
+    expect([...runs]).toEqual([id]);
+    expect(h.manager.all()).toEqual([]);
+    h.reload();
+    await h.manager.tick();
+    expect([lines.size, runs.size, h.manager.all()]).toEqual([1, 1, []]);
+  });
+
+  it("cuts a due check-back after the line is stored and starts the follow-up once", async () => {
+    const h = harness();
+    const at = T0 + 60_000;
+    const created = await h.create({ kind: "time_reached", at }, { label: "the check", followUp: "look again" });
+    if (created.state !== "created") throw new Error("not created");
+    const id = created.wait.id;
+    let posts = 0;
+    let followCuts = true;
+    h.post.mockImplementation((wait: WaitRecord) => { posts += 1; return linesOf(wait); });
+    const told = new Set<string>();
+    function linesOf(wait: WaitRecord): boolean {
+      told.add(wait.id);
+      return true;
+    }
+    h.followUp.mockImplementation(() => { if (followCuts) throw new Error("cut"); });
+    h.advanceTo(at);
+    await h.manager.tick();
+    expect([posts, h.waitOf(id).handed, told.size]).toEqual([1, "line", 1]);
+    followCuts = false;
+    const runs = new Set<string>();
+    h.followUp.mockImplementation((wait: WaitRecord) => { runs.add(wait.id); });
+    h.reload();
+    await h.manager.tick();
+    expect([posts, told.size, [...runs], h.manager.all()]).toEqual([1, 1, [id], []]);
+  });
+
   it("never fetches two pages at once, even for concurrent creates", async () => {
     const h = harness();
     h.page = { ok: true, text: "building" };

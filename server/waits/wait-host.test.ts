@@ -73,6 +73,15 @@ describe("the store side of waits", () => {
     expect(store.lines).toEqual([]);
   });
 
+  it("tells a promised check-back while that chat is busy", () => {
+    busy = true;
+    const time: WaitRecord = { ...wait, condition: { kind: "time_reached", at: NOW } };
+    expect(host.post(time, { status: "fired", text: "it is time" })).toBe(true);
+    expect(store.lines).toEqual([{ role: "bot", kind: "text", text: "it is time", wait: { id: "w1", status: "fired" } }]);
+    expect(host.post(time, { status: "fired", text: "it is time" })).toBe(true);
+    expect(store.lines).toHaveLength(1);
+  });
+
   it("shows a card with the follow-up, and settles it", () => {
     const id = host.showCard({ ...wait, followUp: "Deploy it." });
     expect(store.message(id!)).toMatchObject({ role: "bot", kind: "options", card: {

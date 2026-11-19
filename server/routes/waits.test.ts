@@ -130,7 +130,8 @@ describe("the waits route", () => {
       .toMatchObject({ ok: true, request: { kind: "time_reached", at: Date.parse("2026-11-07T22:00:00Z") } });
     expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-07T17:00:00" }, HOME, now)).toMatchObject({ ok: false });
     expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-07T15:00:00-05:00" }, HOME, now)).toMatchObject({ ok: false });
-    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-20T15:00:00-05:00" }, HOME, now)).toMatchObject({ ok: false });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-20T15:00:00-05:00" }, HOME, now)).toMatchObject({ ok: true, request: { kind: "time_reached" } });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2030-01-01T00:00:00Z" }, HOME, now)).toMatchObject({ ok: true, request: { at: Date.parse("2030-01-01T00:00:00Z") } });
     expect(parseWaitRequest({ label: "qc1", kind: "time_reached" }, HOME, now)).toEqual({ ok: false, error: "time_reached needs at." });
     expect(parseWaitRequest({ label: "qc1", kind: "bot_idle", bot: "x", at: "2026-11-07T17:00:00-05:00" }, HOME, now)).toEqual({ ok: false, error: "at applies only to time_reached." });
   });

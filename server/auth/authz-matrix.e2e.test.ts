@@ -316,6 +316,11 @@ const USE_WRITES = new Set([
   // threads, memory, grants or routines (routes/bot-catalog.ts)
   "POST /api/bot-catalog/{bot}/import",
   "POST /api/bots/{bot}/messages",
+  // "Compact now" of the person's own conversation: a turn with the same
+  // admission as a message (routes/bots-messages-edit.ts). Unlisted, it held
+  // only while the message just above still ran (409 busy); on the loaded
+  // build VM that turn had ended and the 202 failed the row (#4930).
+  "POST /api/bots/{bot}/compact",
   "POST /api/bots/{bot}/messages/{message}/edit",
   "POST /api/bots/{bot}/read",
   "POST /api/bots/{bot}/warm",

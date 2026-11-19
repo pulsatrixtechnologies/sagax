@@ -11,6 +11,7 @@ import {
   autoStartLine,
   autoStartTarget,
   pinnedWorkspaceStart,
+  workspaceStart,
   parseAutoComputerTarget,
   selectAutoComputer,
   MAX_AUTO_COMPUTER_SWITCHES,
@@ -353,6 +354,35 @@ describe("a place pinned from the Computer menu (#2576)", () => {
     expect(pinnedWorkspaceStart({ auto: false, fixed: "off" }, false)).toBeNull();
     expect(pinnedWorkspaceStart({ auto: false, fixed: "browser" }, false)).toBeNull();
     expect(pinnedWorkspaceStart({ auto: true }, false)).toBeNull();
+  });
+
+  it("M-20261119-034: the bot's own Cloud is where it starts, not a lock; a forced cloud and the bot's other places stay fixed", () => {
+    const notPinned = { forced: false, pinned: false };
+    expect(workspaceStart({ auto: false, fixed: "cloud" }, notPinned)).toBe("cloud");
+    expect(workspaceStart({ auto: false, fixed: "cloud" }, { forced: true, pinned: false })).toBeNull();
+    for (const fixed of ["local", "vm", "browser", "off"] as const) expect(workspaceStart({ auto: false, fixed }, notPinned)).toBeNull();
+    expect(workspaceStart({ auto: true }, notPinned)).toBeNull();
+    // a conversation pin keeps #2576
+    expect(workspaceStart({ auto: false, fixed: "local" }, { forced: false, pinned: true })).toBe("this_computer");
+    expect(workspaceStart({ auto: false, fixed: "cloud" }, { forced: true, pinned: true })).toBeNull();
+  });
+
+  it("M-20261119-034: a Cloud bot's turn, person-asked or a routine (#4858), reaches the person's connected computer with computer_select", () => {
+    for (const routine of [false, true]) {
+      const start = autoStartTarget({
+        wanted: workspaceStart({ auto: false, fixed: "cloud" }, { forced: false, pinned: false }),
+        routine, personAsked: !routine, desktopConnected: true, sandboxConfigured: true, browserAvailable: true,
+      });
+      expect(start).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+      const state = auto({ selected: start.target, routine });
+      expect(autoComputerToolRefusal(state.selected, "sagax-desktop", "read_file")).toContain("computer_select with target this_computer");
+      const moved = selectAutoComputer(state, { target: "this_computer", reason: "the file is on the Mac" }, true);
+      expect(moved).toMatchObject({ ok: true, target: "this_computer", from: "cloud", changed: true });
+      expect(autoComputerToolRefusal("this_computer", "sagax-desktop", "read_file")).toBeNull();
+      expect(autoComputerToolRefusal("this_computer", "sagax-desktop", "run_command")).toBeNull();
+      // their computer offline: said, never worked around
+      expect(selectAutoComputer(auto({ routine, desktopMounted: false }), { target: "this_computer" }, false).ok).toBe(false);
+    }
   });
 
   it("tells the bot the menu is a starting place and maps sandbox words to the cloud", () => {

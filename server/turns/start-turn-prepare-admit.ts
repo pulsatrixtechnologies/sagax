@@ -1,7 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
-import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-computer.ts";
+import { carryAutoComputerMoves, workspaceStart } from "../computer/auto-computer.ts";
 import { turnLanguage } from "./turn-language.ts";
 import { turnClockIn } from "./turn-clock.ts";
 import { withHelpPrefetch } from "../self-knowledge/help-prefetch.ts";
@@ -307,11 +307,12 @@ export function createPrepareAdmitStartTurn(
     hasTeamComputer: Boolean(inheritedTeamComputer(state.bot))
   });
   // A place the person pinned from the Computer menu is where Auto starts,
-  // not a lock (#2576): "dans ton sandbox" still reaches the cloud. Only the
-  // conversation pin (state.plan.pinned) is that menu; the bot's own fixed
-  // Works on (Cloud, Local VM, This computer) stays fixed (#2842).
+  // not a lock (#2576): "dans ton sandbox" still reaches the cloud. The
+  // bot's own Cloud is a starting place too (M-20261119-034): their computer,
+  // in Always allow, stays one computer_select away. A place forced on the
+  // turn and the bot's own Local VM or This computer stay fixed (#2842).
   const turnWorksPinned = turnWorksOn(state.plan, turnRemote.forceCloud);
-  const turnPinnedStart = IDENTITY.kind === "perspicax" && state.plan.pinned ? pinnedWorkspaceStart(turnWorksPinned, turnRemote.forceCloud) : null;
+  const turnPinnedStart = IDENTITY.kind === "perspicax" ? workspaceStart(turnWorksPinned, { forced: turnRemote.forceCloud, pinned: Boolean(state.plan.pinned) }) : null;
   const turnWorks = turnPinnedStart ? { auto: true } : turnWorksPinned;
   state.turnPrincipal = sandboxPrincipalForTurn({
     botOwnerPrincipalId: effectiveBotOwner(state.bot),
@@ -432,8 +433,10 @@ export function createPrepareAdmitStartTurn(
     return { kind: "return", value: state.userMessage };
   }
   // Auto: one discreet line when this turn starts on another place than the
-  // thread last showed, or could not start where it was sent.
-  if (state.turnAuto?.auto && turnAutoStart && !state.warmOnly && !state.opts.cardContinuation) noteAutoWorkspace(state.threadId, turnAutoStart, turnAutoWanted !== null);
+  // thread last showed, or could not start where it was sent. A bot whose
+  // own Works on is Cloud starting there says nothing its setting does not.
+  const botCloudStart = !state.plan.pinned && turnPinnedStart === "cloud" && !turnAutoStart?.fallback;
+  if (state.turnAuto?.auto && turnAutoStart && !botCloudStart && !state.warmOnly && !state.opts.cardContinuation) noteAutoWorkspace(state.threadId, turnAutoStart, turnAutoWanted !== null);
   state.recoveryUserMessageId = state.opts?.coordination
     ? store.activePath(state.threadId).findLast((m: any) => m.role === "user" && m.kind === "text")?.id
     : state.userMessage.id;

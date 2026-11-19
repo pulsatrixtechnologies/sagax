@@ -17,14 +17,17 @@ open a shared machine.
 | `none` | organization mode without a provisioner | nothing is mounted |
 
 The choice between the two is `resolveBotWorkplace` (`server/desktop/desktop-bridge.ts`),
-from the bot's Works on: Auto and Cloud ("Cloud (server environment)") use the
-server environment, the default; Local VM and This computer use the person's
+from the bot's Works on: Auto and Cloud ("Cloud (server environment)") start in the
+server environment, the default, and reach the person's own computer with
+`computer_select` when it is connected and its execution access allows it
+(Cloud since M-20261119-034); Local VM and This computer use the person's
 own computer, and when their desktop app is not connected nothing runs there
 and the bot and the composer say so. Routines start in the server environment
 by default (Auto and Cloud). With Works on set to This computer or Local VM,
-or after an explicit `computer_select` to those places when the owner allowed
-routines on their computer and it is connected, a routine can use that
-computer; room follow-ups no person asked for use the server environment
+or after an explicit `computer_select` to those places when the owner's
+computer is connected and its execution access allows it, a routine can use that
+computer; a routine with `runOn: "cloud"` and a cloud-only bot stay in the
+cloud; room follow-ups no person asked for use the server environment
 too. Files a person attaches in that turn are copied to `/workspace/attachments/`.
 
 Whose environment (`sandboxPrincipalForTurn`, matching private threads and

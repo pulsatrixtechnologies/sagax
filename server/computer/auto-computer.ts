@@ -17,10 +17,14 @@
 // thread opened with a workspace (start_thread, create_agent) starts there
 // when it is allowed, else falls back and says so.
 //
-// A fixed Works on (Cloud, Local VM, This computer, Browser, Off) stays
-// fixed: the tool only reports it. Nothing here widens what a turn may
-// reach: the desktop bridge, the person's consent for a Local VM, host tools
-// withheld, private threads and payer rules are unchanged.
+// A bot whose Works on is Cloud starts each turn in the cloud, and the
+// person's own computer stays one computer_select away when it is connected
+// and its execution access allows it (M-20261119-034: workspaceStart). A
+// place forced on the turn (a cloud-only bot, a cloud routine) and a fixed
+// Local VM, This computer, Browser or Off stay fixed: the tool only reports
+// it. Nothing here widens what a turn may reach beyond the person's own
+// computer: the desktop bridge's access levels, the person's consent for a
+// Local VM, host tools withheld, private threads and payer rules are unchanged.
 
 import type { SelectedComputer } from "../../shared/execution-target.ts";
 import type { WorkspaceFallbackReason, WorkspaceLine } from "../../shared/workspace-line.ts";
@@ -307,6 +311,21 @@ export function pinnedWorkspaceStart(worksOn: { auto: boolean; fixed?: FixedWork
   if (worksOn.fixed === "vm") return "local_vm";
   if (worksOn.fixed === "cloud") return "cloud";
   return null;
+}
+
+/** Where a turn's Works on makes it start, when that is a starting place and
+ * not a lock (null: Auto, or a place that stays fixed). A place the person
+ * pinned from the Computer menu (#2576), and the bot's own Cloud
+ * (M-20261119-034): the person's bots see their computer when its execution
+ * access is Always allow (or Ask every time, with its card), so a Cloud bot
+ * starts in the cloud and moves to their computer when a step needs it,
+ * routines included. A place forced by the bot or the turn (a cloud-only
+ * bot, a cloud routine) stays fixed, and so do the bot's own Local VM, This
+ * computer, Browser and Off. Pure: tested on its own. */
+export function workspaceStart(worksOn: { auto: boolean; fixed?: FixedWorksOn }, input: { forced: boolean; pinned: boolean }): AutoComputerTarget | null {
+  if (input.pinned) return pinnedWorkspaceStart(worksOn, input.forced);
+  if (input.forced || worksOn.auto) return null;
+  return worksOn.fixed === "cloud" ? "cloud" : null;
 }
 
 /** The thread line for a turn start, or null when it says nothing new:

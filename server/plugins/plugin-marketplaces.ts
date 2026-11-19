@@ -668,7 +668,7 @@ export class PluginMarketplaces {
         }
         if (!manifestUrl && !existsSync(join(staging, ".claude-plugin", "marketplace.json"))) {
           // #2613: a skill catalog (Hermes Agent, OpenClaw, a skills/ folder) is read as a marketplace
-          synthesizeSkillsCatalog(staging, {
+          await synthesizeSkillsCatalog(staging, {
             name: official?.id ?? catalogNameFor(source.id),
             ...(official ? { description: official.description, dirs: official.skillDirs ?? DEFAULT_SKILL_DIRS } : {}),
           });

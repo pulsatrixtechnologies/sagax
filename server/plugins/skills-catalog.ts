@@ -3,7 +3,8 @@
 // (#2613): each skill folder becomes a one-skill plugin under
 // `sagax-skills/<name>/skills/<name>/`, and a `.claude-plugin/marketplace.json`
 // lists them, so the workspace and per-bot installs work unchanged.
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { cp } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
@@ -84,22 +85,25 @@ function readSkill(root: string, folder: string, file: string, top: string): Syn
 }
 
 /** Write the marketplace of a skill catalog into `root` (a fresh clone with
- * no marketplace.json). Returns the count of skills; 0 writes nothing. */
-export function synthesizeSkillsCatalog(root: string, info: { name: string; description?: string; dirs?: readonly string[] }): number {
+ * no marketplace.json). Resolves to the count of skills; 0 writes nothing.
+ * The copy is asynchronous: a synchronous one of an official catalog (some
+ * thousand files) held the server's event loop for over 10 s on a slow disk. */
+export async function synthesizeSkillsCatalog(root: string, info: { name: string; description?: string; dirs?: readonly string[] }): Promise<number> {
   const skills = findSkillFolders(root, info.dirs ?? DEFAULT_SKILL_DIRS);
   if (!skills.length) return 0;
-  const plugins = skills.map((skill) => {
+  const plugins = [];
+  for (const skill of skills) {
     const target = join(root, SYNTH_ROOT, skill.name, "skills", skill.name);
     mkdirSync(target, { recursive: true });
     // no symlink leaves the clone, no macOS metadata reaches an engine (#3063)
-    cpSync(join(root, skill.path), target, { recursive: true, filter: (src) => withoutMacMetadata(src) && !lstatSync(src).isSymbolicLink() });
-    return {
+    await cp(join(root, skill.path), target, { recursive: true, filter: (src) => withoutMacMetadata(src) && !lstatSync(src).isSymbolicLink() });
+    plugins.push({
       name: skill.name,
       ...(skill.description ? { description: skill.description } : {}),
       ...(skill.category ? { category: skill.category } : {}),
       source: `./${SYNTH_ROOT}/${skill.name}`,
-    };
-  });
+    });
+  }
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
   writeFileSync(join(root, ".claude-plugin", "marketplace.json"), JSON.stringify({
     name: info.name,

@@ -211,8 +211,9 @@ describe("the existing badge without a click", () => {
     await vi.advanceTimersByTimeAsync(AFTER_FIRST);
     job.stop();
     vi.useRealTimers();
-    // the clone may still be finishing on real I/O
-    await vi.waitFor(async () => expect((await markets.list())[0]!.plugins[0]).toMatchObject({ version: "1.8.0", installedVersion: "1.0.0", updateAvailable: true }));
+    // the clone may still be finishing on real I/O: the 1 s default of
+    // vi.waitFor ran out on a loaded build VM before the pull landed
+    await vi.waitFor(async () => expect((await markets.list())[0]!.plugins[0]).toMatchObject({ version: "1.8.0", installedVersion: "1.0.0", updateAvailable: true }), { timeout: 15_000 });
     // the installed copy is untouched: updating stays the person's or the bot's act
     expect(markets.installed()[0]).toMatchObject({ version: "1.0.0" });
   });

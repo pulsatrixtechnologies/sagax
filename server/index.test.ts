@@ -140,7 +140,8 @@ let managedBoatRows: Array<Record<string, unknown>> = [];
 let managedBoatListRowsOverride: Array<Record<string, unknown>> | null = null;
 let managedBoatListStatus = 200;
 let managedBoatStopDelayMs = 0;
-let managedBoatRenameDelayMs = 0;
+/** Holds a managed Boat rename (PATCH /boxes/<id>) open until released. */
+let managedBoatRenameHold: Promise<void> | null = null;
 type DeferredGate = {
   wait: Promise<void>;
   release: () => void;
@@ -1157,9 +1158,7 @@ beforeAll(async () => {
         let raw = "";
         for await (const chunk of req) raw += chunk;
         const requestedName = raw ? JSON.parse(raw).name : undefined;
-        if (managedBoatRenameDelayMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, managedBoatRenameDelayMs));
-        }
+        if (managedBoatRenameHold) await managedBoatRenameHold;
         if (managedBoatCreateMode === "fail-rename") {
           res.statusCode = 503;
           return res.end(JSON.stringify({ ok: false, message: "rename unavailable" }));
@@ -1299,19 +1298,10 @@ beforeAll(async () => {
   });
   child.stderr!.on("data", (c) => (stderr += c));
 
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      const res = await fetch(`${BASE}/api/health`);
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up. stderr:\n${stderr}`);
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}. stderr:\n${stderr}`);
-    await new Promise((r) => setTimeout(r, 150));
-  }
-}, 30_000);
+  // ready when this child's health answers: a fixed 20 s window ran out on a
+  // loaded build VM during the cold strip-types boot of index.ts
+  await waitForServerReady(child, BASE, () => stderr);
+}, 90_000);
 
 afterAll(async () => {
   boatStub?.close();
@@ -1611,7 +1601,9 @@ describe("harness HTTP API", () => {
         await removeTempDir(isolatedHome);
       }
     }
-  }, 30_000);
+  // two cold boots of index.ts, each allowed the 60 s of waitForServerReady:
+  // 30 s for the whole test ran out on a loaded build VM before the restart
+  }, 180_000);
 
   it("reconciles durable working goal cards with scheduler truth after a restart", async () => {
     const state = await api("GET", "/api/bots?messages=30");
@@ -8503,7 +8495,8 @@ describe("harness HTTP API", () => {
 
       const beforeSlow = boatSlowRequestCount;
       const changing = api("PUT", "/api/config", { box: { token: "box_slow" } });
-      await expect.poll(() => boatSlowRequestCount).toBeGreaterThan(beforeSlow);
+      // the check is held open: its arrival is the only thing waited for
+      await expect.poll(() => boatSlowRequestCount, { timeout: 30_000 }).toBeGreaterThan(beforeSlow);
       const lifecycle = await api("POST", `/api/bots/${bot.id}/computer/provision`, {});
       expect(lifecycle.status).toBe(409);
       expect(lifecycle.body.error).toMatch(/Boat account settings are being updated/i);
@@ -8526,6 +8519,11 @@ describe("harness HTTP API", () => {
 
   it("rejects a Boat token change while create and rename own the lifecycle lane", async () => {
     let botId = "";
+    // The rename stays open until the raced change is refused: a fixed 1 s
+    // rename, and the 1 s default of expect.poll, both ran out on a loaded
+    // build VM before the change could race it.
+    let releaseRename = () => {};
+    managedBoatRenameHold = new Promise<void>((resolve) => { releaseRename = resolve; });
     try {
       managedBoatRows = [];
       expect((await api("PUT", "/api/config", { box: { token: "box_route" } })).status).toBe(200);
@@ -8535,18 +8533,17 @@ describe("harness HTTP API", () => {
       managedBoatCreateMode = "success";
       managedBoatCreateId = "bx_fghjkmnp";
       managedBoatCreateName = managedBoatNameForFixture(bot.id);
-      managedBoatRenameDelayMs = 1_000;
       boatRouteCalls.length = 0;
 
       const provisioning = api("POST", `/api/bots/${bot.id}/computer/provision`, {});
       await expect.poll(() => boatRouteCalls.some(
         (call) => call.method === "PATCH" && call.path === `/boxes/${managedBoatCreateId}`,
-      )).toBe(true);
+      ), { timeout: 30_000 }).toBe(true);
       const racedChange = await api("PUT", "/api/config", { box: { token: "box_good" } });
       expect(racedChange.status).toBe(409);
       expect(racedChange.body.error).toMatch(/cloud computer actions/i);
+      releaseRename();
       expect((await provisioning).status).toBe(200);
-      managedBoatRenameDelayMs = 0;
 
       expect((await api("POST", `/api/computers/boxes/${managedBoatCreateId}/delete`, {
         confirmName: managedBoatCreateName,
@@ -8554,7 +8551,8 @@ describe("harness HTTP API", () => {
       expect((await api("DELETE", `/api/bots/${bot.id}`)).status).toBe(200);
       botId = "";
     } finally {
-      managedBoatRenameDelayMs = 0;
+      releaseRename();
+      managedBoatRenameHold = null;
       managedBoatCreateMode = "refuse";
       managedBoatCreateId = "bx_cdefghjk";
       managedBoatCreateName = "";

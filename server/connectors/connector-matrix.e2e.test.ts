@@ -47,6 +47,7 @@ import { isHeldRequestId } from "../harness/held-requests.ts";
 import { CALL_CONNECTOR_INTERNAL_PATH, createCallConnectorInternalRoute } from "../routes/internal-connectors.ts";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 import { createConnectorHub } from "./hub.ts";
 import { createConnectorPlanForTurn } from "./turn-plan.ts";
 import { createClaudeConnectorHost } from "./hosts/claude-host.ts";
@@ -350,22 +351,19 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
         // queue behind every other row's. The boot memory limit is not what
         // the matrix checks (server/engines/engine-start-gate.test.ts does).
         SAGAX_BOOT_ENGINE_SLOTS: "0",
+        // This env is built from scratch, so VITEST is not in it: without
+        // this, a minute after the start the server cloned every official
+        // skill catalog from GitHub, and on a loaded build VM its copy held
+        // the event loop for 10 s at a time, past the matrix's waits.
+        SAGAX_NO_OFFICIAL_CATALOGS: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stderr!.on("data", (c) => (stderr += c));
     child.stdout!.on("data", (c) => (stderr += c));
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      try {
-        if ((await fetch(`${base}/api/health`)).ok) break;
-      } catch {
-        /* not up yet */
-      }
-      if (Date.now() > deadline) throw new Error(`server never came up. stderr:\n${stderr}`);
-      if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}. stderr:\n${stderr}`);
-      await new Promise((r) => setTimeout(r, 150));
-    }
+    // ready when this child's health answers (a cold boot under load is
+    // slower than a fixed 30 s), and a child that exits fails at once
+    await waitForServerReady(child, base, () => stderr);
   };
   const stop = async () => {
     const running = child;
@@ -501,7 +499,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     // the chat row: an OpenAI-compatible endpoint on the local stub
     const configured = await api("PATCH", "/api/config", { openaiCompat: { key: "matrix-fixture-key", url: `http://127.0.0.1:${stubPort()}/v1`, model: "matrix-model" } });
     expect(configured.status, JSON.stringify(configured.body)).toBeLessThan(300);
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     await stop();

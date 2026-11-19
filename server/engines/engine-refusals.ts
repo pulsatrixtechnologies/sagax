@@ -99,6 +99,17 @@ export function activeEngineRefusal(engine: string, account: string | undefined,
   const { told: _told, ...out } = refusal;
   return out;
 }
+/** Every refusal still in force for this engine, whatever account it was met
+ * on; the caller keeps the accounts that are its own (agent-model-health.ts). */
+export function activeEngineRefusals(engine: string, now: number): EngineRefusal[] {
+  const out: EngineRefusal[] = [];
+  for (const row of [...refusals.values()]) {
+    if (row.engine !== engine) continue;
+    const live = activeEngineRefusal(row.engine, row.account, now);
+    if (live) out.push(live);
+  }
+  return out;
+}
 /** A newer completed turn, or a verified sign-in, releases only this account. */
 export function clearEngineRefusal(engine: string, account?: string, at = Date.now(), signedInOnly = false): void {
   const id = key(engine, account);

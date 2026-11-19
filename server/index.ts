@@ -7,7 +7,7 @@ import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, soloRoutineTriggers, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
-import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, onEngineWorksAgain, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
+import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, activeEngineRefusals, clearSignedOut, onEngineWorksAgain, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
 import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
 import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
@@ -2163,6 +2163,7 @@ import { createOpenApprovalCard } from "./index-leaves/openApprovalCard.ts";
 import { createAwaitsPerson } from "./index-leaves/awaitsPerson.ts";
 import { createNotificationQuietOnPhones } from "./index-leaves/notificationQuietOnPhones.ts";
 import { createNoteWakeDryRun } from "./index-leaves/noteWakeDryRun.ts";
+import { modelHealth, refusalIsTheirs, type HealthInstance, type HealthSources } from "./agent-model-health.ts";
 import { createMemberForAgentCaller } from "./index-leaves/memberForAgentCaller.ts";
 import { createMeetingBrowserRefusal } from "./index-leaves/meetingBrowserRefusal.ts";
 import { createLockedLookRefusal } from "./index-leaves/lockedLookRefusal.ts";
@@ -16702,6 +16703,22 @@ function limitScopeOfTurn(threadId: string): string {
   return payer === "org" ? SERVER_LIMIT_SCOPE : payer;
 }
 const LIMIT_DRIVER: Record<string, "claude" | "codex" | "grok"> = { claudeAgent: "claude", codex: "codex", grokAgent: "grok" };
+/** What list_agent_models reads for one engine and the person asking: the
+ * refusals on the accounts that pay their turns, and the usage clock or limit
+ * hold that refuses it (server/agent-model-health.ts). */
+function agentModelHealthSources(principalId: string, instanceId: string): HealthSources {
+  const id = principalId.trim().toLowerCase();
+  const organization = IDENTITY.kind === "perspicax" && isPrincipalId(id);
+  const now = Date.now();
+  const paidByPersonNow = organization && personPaysEngine(id, instanceId);
+  const refusals = activeEngineRefusals(instanceId, now).filter((row) => refusalIsTheirs(row.account, id, paidByPersonNow));
+  const scope = organization ? limitScopeFor(id, instanceId) : SERVER_LIMIT_SCOPE;
+  const clock = limitReset.view(scope, () => scope).report().engines
+    .find((limit) => limit.engine === instanceId && limit.blocked);
+  const held = limitFailoverStore.holdOf(organization ? id : "server", instanceId);
+  const resets = [clock?.resetsAt ?? null, held?.until ?? null].filter((at): at is number => at !== null);
+  return { refusals, limit: clock || held ? { resetsAt: resets.length ? Math.max(...resets) : null } : null };
+}
 const limitReset = createLimitResetHost({
   accounts: () => {
     // An organization server's own logins pay nobody's turns (its key runs
@@ -34580,10 +34597,13 @@ const agentApi = createAgentApi({
       // the person's own list (GET /api/instances) already fits a new bot
       const piPaid = bot && instance.driverKind === "piAgent" ? botPiKeyOptions(bot, instanceId, caller.id) : null;
       const rows = piPaid ? [...(modelBag?.options ?? []).filter((option) => !option?.keyPaid && !piModelKeyProvider(String(option?.id ?? ""))), ...piPaid] : modelBag?.options;
+      // Live health per model (agent-model-health.ts): what Sagax already tracks.
+      const sources = agentModelHealthSources(caller.id, instanceId);
       const options = Array.isArray(rows)
         ? rows!.filter((option) => typeof option?.id === "string" && option.id.trim()).map((option) => ({
           id: String(option.id).trim(),
           label: String(option.label ?? option.id).trim(),
+          ...modelHealth({ instanceId, driverKind: String(instance.driverKind ?? ""), snapshot: instance.snapshot as HealthInstance["snapshot"] }, { id: String(option.id).trim(), ...((option as { local?: boolean }).local === true ? { local: true } : {}) }, sources),
         }))
         : [];
       const caps = instance.capabilities && typeof instance.capabilities === "object" ? instance.capabilities as { effortLevels?: unknown } : null;

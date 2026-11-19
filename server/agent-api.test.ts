@@ -2474,3 +2474,19 @@ describe("the server's lines read through the thread API in the person's languag
     expect(long.endsWith("longtemps.\n[...]")).toBe(true);
   });
 });
+
+describe("list_agent_models health fields", () => {
+  it("passes each model's health through unchanged", async () => {
+    const w = world();
+    const health = { signed_in: false, limit_reached: true, resets_at: "2026-11-20T12:00:00.000Z", out_of_credits: true, kind: "cloud" as const };
+    const earlier = w.deps.listModels!;
+    w.deps.listModels = async (caller, agentId) => {
+      const listed = await earlier(caller, agentId);
+      if ("code" in listed) return listed;
+      return { ...listed, models: listed.models.map((engine) => ({ ...engine, models: engine.models.map((model) => ({ ...model, ...health })) })) };
+    };
+    const api = createAgentApi(w.deps);
+    const r = await api.call(person("pr_1"), "list_agent_models", {});
+    expect((r.body.models as AgentModelChoice[])[0]!.models[0]).toMatchObject(health);
+  });
+});

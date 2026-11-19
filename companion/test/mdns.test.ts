@@ -414,7 +414,10 @@ class FakeSocket extends EventEmitter {
     callback?.();
   }
   setMulticastTTL(_ttl: number) {}
-  addMembership(_group: string, _membershipInterface?: string) {}
+  readonly memberships: Array<string | undefined> = [];
+  addMembership(_group: string, membershipInterface?: string) {
+    this.memberships.push(membershipInterface);
+  }
   setMulticastInterface(multicastInterface: string) {
     this.ops.push({ op: "pin", address: multicastInterface });
   }
@@ -423,7 +426,9 @@ class FakeSocket extends EventEmitter {
     this.packets.push(packet);
     callback?.(null);
   }
+  closed = false;
   close(callback?: () => void) {
+    this.closed = true;
     callback?.();
   }
   address() {
@@ -770,5 +775,45 @@ describe("clampBytes", () => {
     expect(clamped).not.toContain("�");
     expect(clampBytes("\u{1F600}", 4)).toBe("\u{1F600}");
     expect(clampBytes("\u{1F600}", 3)).toBe("");
+  });
+});
+
+// Upstream #4802: no Bonjour on a Mac's VPN tunnels (a utun membership that
+// came or went panicked macOS 27), and no default-route fallback on a Mac.
+describe("advertisableAddresses on a Mac", () => {
+  const nic = (address: string): NetworkInterfaceInfoIPv4 => ({
+    address, netmask: "255.255.255.0", family: "IPv4", mac: "00:00:00:00:00:00", internal: false, cidr: `${address}/24`,
+  });
+  const mac = {
+    en0: [nic("192.168.1.42")],
+    utun3: [nic("10.20.30.40")],
+    utun4: [nic("100.102.178.88")],
+    ipsec0: [nic("10.9.0.2")],
+    ppp0: [nic("10.8.0.6")],
+    bridge100: [nic("192.168.64.1")],
+  };
+
+  it("leaves a Mac's tunnels out and keeps them on other platforms", () => {
+    expect(advertisableAddresses(mac, "darwin")).toEqual(lanAddresses(mac).filter((address) => ["192.168.1.42", "192.168.64.1"].includes(address)));
+    expect(advertisableAddresses(mac, "linux")).toEqual(lanAddresses(mac));
+  });
+
+  it("never falls back to the default-route membership on a Mac", async () => {
+    for (const [platform, expected, advertised] of [["darwin", [], false], ["linux", [undefined], true]] as const) {
+      const socket = new FakeSocket();
+      const join = socket.addMembership.bind(socket);
+      socket.addMembership = (group, membershipInterface) => {
+        if (membershipInterface) throw new Error("EADDRNOTAVAIL");
+        join(group, membershipInterface);
+      };
+      const responder = new MdnsResponder({ socketFactory: () => socket, platform });
+      try {
+        expect(await responder.advertise({ ...service, addresses: ["192.168.1.42"] })).toBe(advertised);
+        expect(socket.memberships).toEqual(expected);
+        expect(socket.closed).toBe(!advertised);
+      } finally {
+        await responder.stop();
+      }
+    }
   });
 });

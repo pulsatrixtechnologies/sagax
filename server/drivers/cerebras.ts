@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { operatorEnvKey } from "./operator-env-key.ts";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { publishedContextWindow } from "../pages/published-context-window.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
@@ -52,7 +53,7 @@ export const CerebrasDriver: ProviderDriver<CerebrasConfig> = {
   defaultConfig: () => decodeConfig({}),
   async create(input) {
     const { config } = input;
-    const apiKey = (input.environment.CEREBRAS_API_KEY ?? process.env.CEREBRAS_API_KEY ?? "").trim();
+    const apiKey = (input.environment.CEREBRAS_API_KEY ?? operatorEnvKey("CEREBRAS_API_KEY") ?? "").trim();
     const known = new Map(DEFAULT_MODELS.options.map((option) => [option.id, option]));
     const withConfiguredModel = (options: ModelCatalog["options"]): ModelCatalog => {
       const preferred = config.model ?? DEFAULT_MODELS.default;

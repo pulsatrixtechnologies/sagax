@@ -5562,7 +5562,7 @@ ipcMain.handle("desktop:capabilities", async (event) =>
 
 installOpenAtLogin({ ipcMain, app, guard: localWorkspaceOnly });
 
-async function saveWorkspaceCredential(name, value) {
+async function saveWorkspaceCredential(name, value, options) {
   const patchFor = CREDENTIAL_PATCH[name];
   if (!patchFor || typeof value !== "string") {
     throw new Error("Unsupported credential");
@@ -5583,7 +5583,7 @@ async function saveWorkspaceCredential(name, value) {
         { "content-type": "application/json" },
         { packaged: app.isPackaged, token: desktopMutationToken },
       ),
-      body: JSON.stringify(patchFor(secret)),
+      body: JSON.stringify(patchFor(secret, options)),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.error || `Could not save credential (HTTP ${response.status})`);
@@ -5621,8 +5621,8 @@ installCredentialStoreIpc({
 
 // "xaiVoiceKey" (an older renderer, a bot's credential card) is the xAI key
 // since Grok voice runs on it (2026-10-14).
-ipcMain.handle("credential:set", localOnly("credential:set", (_event, name, value) =>
-  saveWorkspaceCredential(name === "xaiVoiceKey" ? "xaiApiKey" : name, value),
+ipcMain.handle("credential:set", localOnly("credential:set", (_event, name, value, options) =>
+  saveWorkspaceCredential(name === "xaiVoiceKey" ? "xaiApiKey" : name, value, options),
 ));
 
 ipcMain.handle("approvals:set-trusted-mode", localOnly("approvals:set-trusted-mode", (_event, botId, mode, options) => {

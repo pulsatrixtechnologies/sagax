@@ -75,9 +75,15 @@ registerHooks({
           `if (event.type === 'turn.completed') {\n        const fixture = JSON.parse(readVmEvents(${jsLiteral(state)}, 'utf8'));\n        if (fixture.dropCompletion) return;\n        if (fixture.holdCompletion) { writeVmEvent(${jsLiteral(state)} + '.completionheld', event.turnId ?? ''); const timer = setInterval(() => { if (!existsVmRelease(${jsLiteral(state)} + '.releasecompletion')) return; clearInterval(timer); writeVmEvent(${jsLiteral(state)} + '.latecompleted', event.turnId ?? ''); for (const l of Array.from(listeners)) l(event); }, 10); return; }\n      }\n      for (const l of Array.from(listeners)) l(event);`) };
     }
     if (url.endsWith('/turn-watchdog.ts')) {
+      // The stall seam: the watchdog's silence test, rewritten so a fixture
+      // can stall a turn at once. A seam that no longer matches would leave
+      // every stall test waiting for nothing, so it fails loudly instead.
+      const watchdog = String(result.source);
+      const silence = 'at - turn.lastEventAt < limit.ms';
+      if (watchdog.split(silence).length !== 2 || watchdog.split('this.opts = opts;').length !== 2) throw new Error('turn watchdog stall seam changed');
       return { ...result, source: `import { readFileSync as readVmWatch } from 'node:fs';\n` +
-        String(result.source).replace('this.opts = opts;', 'this.opts = { ...opts, checkMs: 30 };')
-          .replace('at - turn.lastEventAt < silentMs', `at - turn.lastEventAt < (JSON.parse(readVmWatch(${jsLiteral(state)}, 'utf8')).stall ? 0 : JSON.parse(readVmWatch(${jsLiteral(state)}, 'utf8')).stallThread === turn.threadId ? 100 : silentMs)`) };
+        watchdog.replace('this.opts = opts;', 'this.opts = { ...opts, checkMs: 30 };')
+          .replace(silence, `at - turn.lastEventAt < (JSON.parse(readVmWatch(${jsLiteral(state)}, 'utf8')).stall ? 0 : JSON.parse(readVmWatch(${jsLiteral(state)}, 'utf8')).stallThread === turn.threadId ? 100 : limit.ms)`) };
     }
     if (url.endsWith('/turn-dispatch-guard.ts')) {
       // wedgeClear parks a room turn inside waitForClear, the pre-id

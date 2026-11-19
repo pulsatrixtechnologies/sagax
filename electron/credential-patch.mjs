@@ -9,4 +9,14 @@ export const CREDENTIAL_PATCH = {
   openaiImageApiKey: (value) => ({ imageGen: { key: value } }),
   customImageApiKey: (value) => ({ imageGen: { customApiKey: value } }),
   openaiApiKey: (value) => ({ openai: { key: value } }),
+  // everyClaudeBot travels with the key, so a first key never moves every
+  // signed-in Claude bot onto API billing (port of upstream #5280).
+  anthropicApiKey: (value, options) => ({ anthropic: { key: value, ...(options?.everyClaudeBot === false ? { everyClaudeBot: false } : {}) } }),
+  openrouterApiKey: (value) => ({ openrouter: { key: value } }),
+  mistralApiKey: (value) => ({ mistral: { key: value } }),
+  cerebrasApiKey: (value) => ({ cerebras: { key: value } }),
+  groqApiKey: (value) => ({ groq: { key: value } }),
+  metaApiKey: (value) => ({ meta: { key: value } }),
+  deepseekApiKey: (value) => ({ deepseek: { key: value } }),
+  openaiCompatApiKey: (value) => ({ openaiCompat: { key: value } }),
 };

@@ -10,7 +10,7 @@ import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
 import { codexHomeOf, learnedAmbientMcp } from "./ambient-mcp.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
-import { codexLocalProviderArgs } from "../local-inject.ts";
+import { codexSelectedProviderArgs } from "../codex-catalog.ts";
 import { networkProxyEnvironment } from "../network-proxy.ts";
 import { permissionLaunchCwd } from "../permission-command.ts";
 import { spawnCli } from "../../procs.ts";
@@ -89,7 +89,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // plan sign-in, which wins over a managed or local provider.
   const launch = codexAccessLaunch(env, turn.access);
   const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
-  const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs(planBridge !== null) : config.managed ? managedCodexArgs(config.managed) : codexLocalProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
+  const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs(planBridge !== null) : config.managed ? managedCodexArgs(config.managed) : codexSelectedProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
     // Native snapshots can restore inherited variables after the shell
     // policy has filtered them. Scoped MCP gate settings must stay private.
     ...(turn.toolScope === undefined ? [] : ["-c", "features.shell_snapshot=false"]),

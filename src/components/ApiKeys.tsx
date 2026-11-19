@@ -67,8 +67,18 @@ const SECTIONS: Record<
 
 // OpenAI shares the desktop credential used by Live calls. Other sections
 // without a shell slot are saved by the server.
-const ELECTRON_CREDENTIAL: Partial<Record<ConfigSection, "openaiApiKey" | "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "openaiImageApiKey" | "customImageApiKey">> = {
+const ELECTRON_CREDENTIAL: Partial<Record<ConfigSection, DesktopCredentialName>> = {
   openai: "openaiApiKey",
+  // Every AI provider key lives in the desktop's encrypted store (upstream #5280).
+  anthropic: "anthropicApiKey",
+  openrouter: "openrouterApiKey",
+  mistral: "mistralApiKey",
+  cerebras: "cerebrasApiKey",
+  groq: "groqApiKey",
+  meta: "metaApiKey",
+  deepseek: "deepseekApiKey",
+  openaiCompat: "openaiCompatApiKey",
+  azureFoundry: "openaiCompatApiKey",
   box: "boxToken",
   opencodeGo: "opencodeGoApiKey",
   elevenlabs: "ttsKey",
@@ -317,8 +327,11 @@ function CredentialHelp({ section }: { section: ConfigSection }) {
  * a provider line's Remove share this one path). */
 export function saveCredential(section: ConfigSection, value: string, configured: boolean): Promise<ConfigStatus> {
   const electronSlot = ELECTRON_CREDENTIAL[section];
+  // A first Anthropic key keeps signed-in Claude bots on their subscription,
+  // the same flag the /api/config body carries.
+  const firstAnthropicKey = section === "anthropic" && !configured && !!value;
   return window.ogb?.setCredential && electronSlot
-    ? window.ogb.setCredential(electronSlot, value)
+    ? window.ogb.setCredential(electronSlot, value, firstAnthropicKey ? { everyClaudeBot: false } : undefined)
     : api("/api/config", { method: "PUT", body: JSON.stringify(SECTIONS[section].body(value, !configured)) });
 }
 

@@ -69,6 +69,12 @@ export const CONTROL_BUSY =
 export const CONTROL_UNCONFIRMED =
   "Sagax could not confirm that this computer is free, so this call was NOT performed and nothing happened on the screen. " +
   "Retry in a few seconds.";
+/** The gate no longer accepts this call's turn capability (401: the turn
+ * settled, or its computer was switched or taken back), so no retry can
+ * succeed. Upstream #4802. */
+export const CONTROL_TURN_ENDED =
+  "This turn no longer has access to this computer (the turn already ended, or the computer was switched or taken back), so this call was NOT performed and nothing happened on the screen. " +
+  "Retrying will not help: stop calling the computer tools now and end your turn. The computer can be used again in a new turn.";
 
 export interface ControlState {
   /** This call must not act now; the model is told why (controlRefusal). */
@@ -91,6 +97,7 @@ export interface ControlClient {
 
 const DISENGAGED: ControlState = { held: false, helpOpen: false };
 const UNCONFIRMED: ControlState = { held: true, helpOpen: false, blockedReason: CONTROL_UNCONFIRMED };
+const TURN_ENDED: ControlState = { held: true, helpOpen: false, blockedReason: CONTROL_TURN_ENDED };
 
 /** The text a held state hands the model. */
 export function controlRefusal(state: Pick<ControlState, "reason" | "blockedReason">): string {
@@ -119,6 +126,7 @@ export function createControlClient(options?: {
   async function read(): Promise<ControlState> {
     try {
       const res = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+      if (res.status === 401) return TURN_ENDED;
       if (!res.ok) return UNCONFIRMED;
       const body: any = await res.json().catch(() => null);
       if (typeof body?.held !== "boolean" || typeof body?.helpOpen !== "boolean") return UNCONFIRMED;

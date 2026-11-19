@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { hostname, networkInterfaces } from "node:os";
 
-import { lanAddresses } from "./listener.ts";
+import { lanInterfaces } from "./listener.ts";
 
 const MDNS_ADDRESS = "224.0.0.251";
 const MDNS_PORT = 5353;
@@ -453,6 +453,13 @@ export function defaultHostName(machine = hostname()): string {
   return `openmausbot-${digest}.local`;
 }
 
+/** macOS point-to-point tunnels: utun (every VPN, Tailscale, tun2socks),
+ * ipsec, ppp. Multicast cannot cross them, and on macOS 27 closing a socket
+ * that held memberships on a utun that came or went hung the kernel and
+ * panicked the Mac. Typed-address and tailnet pairing do not use mDNS.
+ * Upstream #4802. */
+const MAC_TUNNEL_INTERFACE = /^(utun|ipsec|ppp)\d*$/i;
+
 /**
  * Every IPv4 address worth publishing.
  *
@@ -460,11 +467,14 @@ export function defaultHostName(machine = hostname()): string {
  * to be a second copy of the same filter, which is the kind of duplication
  * that stays correct right up until one side learns about a new interface
  * type and the other does not — and the failure then is a phone that
- * discovers the computer but cannot reach it.
+ * discovers the computer but cannot reach it. A Mac's tunnels are left out.
  */
-export function advertisableAddresses(): string[] {
-  return lanAddresses();
+export function advertisableAddresses(interfaces = networkInterfaces(), platform = process.platform): string[] {
+  return lanInterfaces(interfaces)
+    .filter((entry) => platform !== "darwin" || !MAC_TUNNEL_INTERFACE.test(entry.name))
+    .map((entry) => entry.address);
 }
+
 
 // ── the responder ──────────────────────────────────────────────────────
 
@@ -496,6 +506,7 @@ export interface ResponderOptions {
   /** Test rigs substitute a recording socket: interface pinning never
    * reaches the wire in CI, so the socket is where it can be asserted. */
   socketFactory?: () => ResponderSocket;
+  platform?: NodeJS.Platform;
 }
 
 /** A Bonjour responder, small enough to read: it announces one service, and
@@ -510,11 +521,13 @@ export class MdnsResponder {
   private readonly port: number;
   private readonly multicast: boolean;
   private readonly socketFactory: () => ResponderSocket;
+  private readonly platform: NodeJS.Platform;
 
   constructor(options: ResponderOptions = {}) {
     this.port = options.port ?? MDNS_PORT;
     this.multicast = options.multicast ?? true;
     this.socketFactory = options.socketFactory ?? (() => createSocket({ type: "udp4", reuseAddr: true }));
+    this.platform = options.platform ?? process.platform;
   }
 
   /** Whether the socket is up. False is normal and not an error. */
@@ -576,6 +589,17 @@ export class MdnsResponder {
         }
       }
       if (!joined) {
+        // On a Mac the default route may be a VPN tunnel (see
+        // MAC_TUNNEL_INTERFACE), so there is no fallback: with no group
+        // joined, discovery is not running.
+        if (this.platform === "darwin") {
+          try {
+            socket.close();
+          } catch {
+            /* already closed */
+          }
+          return false;
+        }
         try {
           socket.addMembership(MDNS_ADDRESS);
         } catch {

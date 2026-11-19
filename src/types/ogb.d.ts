@@ -1,6 +1,9 @@
 // The narrow bridge the Electron preload exposes. Absent in the browser.
 
 declare global {
+  /** A credential name electron/credential-patch.mjs knows how to save. */
+  type DesktopCredentialName = "xaiApiKey" | "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "xaiVoiceKey" | "jevApiKey" | "openaiImageApiKey" | "customImageApiKey" | "openaiApiKey"
+    | "anthropicApiKey" | "openrouterApiKey" | "mistralApiKey" | "cerebrasApiKey" | "groqApiKey" | "metaApiKey" | "deepseekApiKey" | "openaiCompatApiKey";
   /** electron/main.mjs signInState: the system-browser sign-in /pair waits on. */
   type PulsatrixSignInState =
     | { status: "idle" }
@@ -591,8 +594,9 @@ const __BUILD_DATE__: string;
       };
       /** Save a provider credential through Electron's OS-backed store. */
       setCredential?(
-        name: "xaiApiKey" | "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "xaiVoiceKey" | "jevApiKey" | "openaiImageApiKey" | "customImageApiKey" | "openaiApiKey",
+        name: DesktopCredentialName,
         value: string,
+        options?: { everyClaudeBot?: false },
       ): Promise<ConfigStatus>;
       /** In-app auto-update (packaged app only; dormant in dev). Updates
        * download by themselves. On this computer's page and the person's own

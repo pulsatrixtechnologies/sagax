@@ -51,7 +51,31 @@ export async function copyText(text: string): Promise<CopyResult> {
   } catch {
     // both mechanisms failed
   }
-  return "failed";
+  return writeLegacy(text) ? "copied" : "failed";
+}
+
+/** Legacy execCommand fallback: on plain-http phone pages (an insecure
+ * context) `navigator.clipboard` is undefined and only the classic
+ * select-then-copy path works. No-op outside a real DOM. Upstream #4803. */
+function writeLegacy(text: string): boolean {
+  if (typeof document === "undefined" || !document.body || typeof document.execCommand !== "function") return false;
+  const active = document.activeElement as HTMLElement | null;
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.left = "-9999px";
+  try {
+    document.body.appendChild(area);
+    area.select();
+    area.setSelectionRange(0, text.length);
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    area.remove();
+    active?.focus?.({ preventScroll: true });
+  }
 }
 
 interface CopyFeedbackOptions {

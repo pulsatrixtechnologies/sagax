@@ -2,12 +2,22 @@
 
 export class CodexRpcError extends Error {
   code: unknown;
+  data: unknown;
 
-  constructor(error: { code?: unknown; message?: string }) {
+  constructor(error: { code?: unknown; message?: string; data?: unknown }) {
     super(error.message ?? JSON.stringify(error));
     this.code = error.code;
+    this.data = error.data;
   }
 }
+
+/** codex-cli refuses to resume a session saved under another provider ("This
+ * chat uses custom, but your current provider is ... Switch to custom to
+ * continue."), with data { type: "modelProviderMismatch" }. Upstream #4802. */
+export const codexProviderMismatch = (error: unknown): boolean =>
+  error instanceof CodexRpcError && error.code === -32600 &&
+  typeof error.data === "object" && error.data !== null && !Array.isArray(error.data) &&
+  (error.data as { type?: unknown }).type === "modelProviderMismatch";
 
 export function missingNativeCodexThread(error: unknown, cursor: string): boolean {
   // Codex's local thread/resume rejection, verified with an empty native home.

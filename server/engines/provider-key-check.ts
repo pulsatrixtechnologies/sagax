@@ -5,6 +5,7 @@
 // The answer is a verdict and, on success, a few model ids; never the key,
 // never the raw response. Keys travel only over TLS, except to a loopback
 // test double.
+import { isIP } from "node:net";
 import { azureDeployments, azureOpenAIEndpoint } from "../../shared/azure-openai.ts";
 
 export type ProviderKeyKind = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta";
@@ -32,7 +33,9 @@ const MAX_MODELS = 5;
 /** A URL hostname on this machine: the only place a key may go over plain http. */
 export function isLoopback(hostname: string): boolean {
   const host = hostname.replace(/^\[|\]$/g, "");
-  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.startsWith("127.");
+  // A literal 127.x address only: a host name such as 127.example.test is
+  // anywhere on the internet (upstream #4803).
+  return host === "localhost" || host === "::1" || (isIP(host) === 4 && host.startsWith("127."));
 }
 
 /** A provider's base URL: the configured one, or its default. */

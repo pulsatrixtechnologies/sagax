@@ -30,7 +30,6 @@ import { ModelManager } from "./ModelPicker.tsx-parts/ModelManager";
 import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { useModelFavorites } from "@/lib/model-favorites";
-import { useProviderPins } from "@/lib/model-provider-pins";
 import { useModelFavoritesServerSync } from "@/lib/model-favorites-sync";
 import { requestSettingsCard, useSettingsSurface } from "./SettingsPrimitives";
 import { modelOffer, type ModelSwitches } from "../../shared/offered-models";
@@ -209,7 +208,6 @@ export function ModelPicker({
   const org = usePerspicaxOrg();
   const advanced = useAdvancedMode();
   const favoriteKeys = useModelFavorites();
-  const providerPins = useProviderPins();
   const myEngines = useMyEngines();
   const orgMode = org !== null;
   const health = { orgMode, myEngines };
@@ -449,7 +447,6 @@ export function ModelPicker({
       menuSections={menuSections}
       onRow={onRow}
       favoriteKeys={favoriteKeys}
-      providerPins={providerPins}
       openProviders={openProviders}
       advanced={showEffort}
       selection={selection}
@@ -495,7 +492,6 @@ function ModelPickerShell({
   menuSections,
   onRow,
   favoriteKeys,
-  providerPins,
   openProviders,
   advanced,
   selection,
@@ -538,7 +534,6 @@ function ModelPickerShell({
   menuSections: Parameters<typeof ModelPickerMenu>[0]["menuSections"];
   onRow: (row: ModelMenuRow) => void;
   favoriteKeys: ReturnType<typeof useModelFavorites>;
-  providerPins: readonly string[];
   openProviders: () => void;
   advanced: boolean;
   selection: ModelSelection;
@@ -635,7 +630,6 @@ function ModelPickerShell({
         onRow,
         bot,
         favoriteKeys,
-        providerPins,
         viewerLocal,
         openProviders,
         advanced,

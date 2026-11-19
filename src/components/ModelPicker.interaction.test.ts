@@ -94,6 +94,12 @@ vi.mock("@/state/store", async (importOriginal) => ({
 // These cases cover the full picker; Simple mode has its own file.
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 
+// These cases cover the long list ("All models"); the short menu has its own cases in ModelPanel.test.ts.
+vi.mock("./ModelPanel", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./ModelPanel")>();
+  return { ...real, ModelPanel: function ModelPanel(props: import("./ModelPanel").ModelPanelProps) { return real.ModelPanel({ ...props, view: "all" }); } };
+});
+
 const { ModelPicker } = await import("./ModelPicker");
 const { ModelPanel } = await import("./ModelPanel");
 const indicatorModule = await import("./LimitResetContinue");
@@ -680,10 +686,8 @@ describe("the models window (windowOnly, #2963)", () => {
     expect(shown.html).toContain(`data-model-favorite="${opus.key}"`);
     expect(shown.html).toContain("data-model-switch=");
     expect(shown.html).toContain(">Models<");
-    // each provider carries its pin (three at most): the bot's own is pinned by default
-    expect(shown.html).toContain('data-model-manager-pin="anthropic"');
-    expect(shown.html).toMatch(/aria-pressed="true"[^>]*data-model-manager-pin="anthropic"/);
-    expect(shown.html).toContain('data-model-manager-pin="openai"');
+    // the pins are gone: the menu shows the person's favorites instead
+    expect(shown.html).not.toContain("data-model-manager-pin");
   });
 
   it("picks a model and keeps the window open", () => {

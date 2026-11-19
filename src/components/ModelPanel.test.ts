@@ -14,7 +14,7 @@ const sections = (count: number, current = "m0"): ModelMenuSection[] => [
 ];
 const props = (extra: Partial<ModelPanelProps> = {}): ModelPanelProps => ({
   sections: sections(3), onPick: vi.fn(), favorites: { keys: [], onToggle: vi.fn() }, mark: (key) => createElement("i", { "data-mark": key }),
-  autoOn: false, showSettings: true, ...extra,
+  autoOn: false, showSettings: true, view: "all", ...extra,
 });
 const html = (extra?: Partial<ModelPanelProps>) => renderToStaticMarkup(createElement(ModelPanel, props(extra)));
 
@@ -30,9 +30,8 @@ describe("the model panel", () => {
     expect(markup).not.toContain("aria-haspopup");
   });
 
-  it("opens on Auto when it is on, else on the provider holding the current model", () => {
-    expect(initialPanelView(sections(3), true)).toBe("view:auto");
-    expect(initialPanelView(sections(3), false)).toBe("claude");
+  it("opens the long list on the provider holding the current model", () => {
+    expect(initialPanelView(sections(3))).toBe("claude");
   });
 
   it("lists a provider's models with their one line, and the check on the current one", () => {
@@ -105,27 +104,47 @@ describe("the model panel", () => {
     })),
   ];
 
-  it("shows at most three providers and a More segment that opens the Models window", () => {
-    const onMore = vi.fn();
-    const markup = html({ sections: many(), onMore });
-    const segments = [...markup.matchAll(/data-model-provider="([a-z]+)"/g)].map((match) => match[1]);
-    expect(segments).toHaveLength(3);
-    // nothing pinned: the bot's own provider first, then the first of the rest
-    expect(segments[0]).toBe("xai");
-    expect(markup).toContain("data-model-panel-more");
-    expect(markup).toContain('aria-label="All providers"');
-  });
-
-  it("shows the pinned providers, in the order pinned", () => {
-    const markup = html({ sections: many(), onMore: vi.fn(), pinnedProviders: ["computer", "cohere"] });
-    const segments = [...markup.matchAll(/data-model-provider="([a-z]+)"/g)].map((match) => match[1]);
-    // the provider in use is not pinned: it shows too while it is the one viewed
-    expect(segments).toEqual(["computer", "cohere", "xai"]);
-  });
-
-  it("shows every provider when the surface has no Models window", () => {
+  it("shows every provider as a segment in the long list, no More segment and no pins", () => {
     const markup = html({ sections: many() });
     expect([...markup.matchAll(/data-model-provider="/g)]).toHaveLength(6);
     expect(markup).not.toContain("data-model-panel-more");
+    expect(markup).toContain("data-model-panel-back");
+  });
+
+  describe("the short menu", () => {
+    const withFavorites = (): ModelMenuSection[] => [
+      { key: "top", rows: [{ key: "auto", kind: "auto", label: "Auto", current: false }] },
+      { key: "favorites", label: "Favorites", rows: [row("m1", { current: false })] },
+      ...sections(3).slice(1),
+    ];
+    const rowsOf = (markup: string) => markup.split('data-model-panel-row="').slice(1).map((part) => part.slice(0, part.indexOf('"')).replace("\u0000", "/"));
+
+    it("lists Auto, then the favorites, then All models, and no provider segments", () => {
+      const markup = html({ view: "short", sections: withFavorites(), favorites: { keys: ["e\u0000m1"], onToggle: vi.fn() } });
+      expect(rowsOf(markup)).toEqual(["auto", "e/m1", "e/m0"]);
+      expect(markup).toContain("data-model-panel-all");
+      expect(markup).not.toContain("data-model-panel-segment");
+      // a favorite carries a filled star to remove it
+      expect(markup).toContain('aria-pressed="true" data-model-favorite="e\u0000m1"');
+    });
+
+    it("keeps the model in use in view when it is not a favorite, and shows only Auto and All models with no favorite", () => {
+      const markup = html({ view: "short", sections: sections(3, "m2") });
+      expect(rowsOf(markup)).toEqual(["auto", "e/m2"]);
+      expect(rowsOf(html({ view: "short", sections: sections(3, "none") }))).toEqual(["auto"]);
+      expect(html({ view: "short", sections: sections(3, "none") })).toContain("data-model-panel-all");
+    });
+
+    it("shows the Optimize choice under Auto only while Auto is on", () => {
+      const optimize = { value: "balance" as const, onPick: vi.fn() };
+      expect(html({ view: "short", optimize })).not.toContain("data-model-auto-optimize");
+      expect(html({ view: "short", optimize, autoOn: true })).toContain("data-model-auto-optimize");
+    });
+
+    it("gives every model of All models a star to add or remove a favorite", () => {
+      const markup = html({ view: "all" });
+      expect(markup).toContain('data-model-favorite="e\u0000m0"');
+      expect(markup).toContain("Add m0 to favorites");
+    });
   });
 });

@@ -20,6 +20,12 @@ vi.mock("@/state/store", async (importOriginal) => ({
   }),
 }));
 
+// These cases cover the long list ("All models"); the short menu has its own cases in ModelPanel.test.ts.
+vi.mock("./ModelPanel", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./ModelPanel")>();
+  return { ...real, ModelPanel: function ModelPanel(props: import("./ModelPanel").ModelPanelProps) { return real.ModelPanel({ ...props, view: "all" }); } };
+});
+
 const { ModelPicker } = await import("./ModelPicker");
 afterAll(() => vi.unstubAllGlobals());
 
@@ -68,8 +74,7 @@ describe("model picker in Simple mode", () => {
     const markup = html();
     expect(markup).toContain("data-model-panel");
     expect(markup).toContain('role="radiogroup"');
-    // Auto is the first segment, every provider one more; the current one shows its name
-    expect(markup).toContain('data-model-panel-segment="view:auto"');
+    // every provider is a segment; the current one shows its name
     expect(markup).toContain('data-model-provider="anthropic"');
     expect(markup).toContain(">Claude<");
     // the models of the provider in use, flat, in one list (no submenu, no step)

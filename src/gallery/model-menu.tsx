@@ -1,170 +1,60 @@
-/** Isolated gallery for Playwright screenshots of the composer's model menu
- * in its two steps (#4329: provider, then model) over a mock chat bar.
- * Not shipped in the app.
- * ?skin=<id>&lang=<code>&q=<search>&favorites=1&narrow=1
- * &path=<provider>: open at that provider's models (anthropic, openai, xai,
- *   server:home, computer)
- * &line=effort|runsWith: open that line of the footer
- * &mode=before: the menu as origin/main drew it before #3116 (340 px,
- *   provider submenus, fixed footer with no floor under the list)
- * &open=<provider key>: with mode=before, click that submenu
- * &broken=1: the bot's model does not respond (src/lib/model-health.ts) */
-import { StrictMode, useEffect, type ReactNode } from "react";
+/** The real ModelPanel in its menu box on synthetic rows, for captures of the
+ * composer's model menu (scripts/capture/model-menu.mjs). No server. Every name
+ * is synthetic. Not shipped.
+ * ?view=short|all &theme=light|dark &lang=en|fr &stars=<n favorites> &auto=1 */
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ChevronDown, ChevronRight, Mic, Monitor, Plus } from "lucide-react";
-import { ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../components/ModelMenu";
-import { ModelMenuSettings } from "../components/ModelMenuSettings";
-import { InstanceProviderMark, PresetProviderMark } from "../components/ProviderIcons";
-import { loadLocale, t } from "../lib/i18n";
-import { localModelSubtext } from "../lib/local-model-label";
-import { favoriteKey, toggleModelFavorite, useModelFavorites, writeModelFavorites } from "../lib/model-favorites";
-import { runsWithChoices } from "../lib/runs-with";
-import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { XAI_GROUP_LABEL } from "../../shared/model-provider";
+
+import { ModelPanel } from "../components/ModelPanel";
+import { ClaudeMark, ProviderMonogram } from "../components/ProviderIcons";
+import { MENU_BOX } from "../components/menu-look";
+import { loadLocale } from "../lib/i18n";
+import { applySkin } from "../lib/skins";
+import type { ModelMenuRow, ModelMenuSection } from "../lib/model-menu";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
-const skinParam = params.get("skin") as SkinId | null;
-applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
-await loadLocale(params.get("lang") ?? "fr");
-writeModelFavorites(params.get("favorites") === "1" ? [favoriteKey("claude", "claude-opus-5-5"), favoriteKey("grok", "grok-4.7")] : []);
+const lang = params.get("lang") ?? "en";
+await loadLocale(lang);
+applySkin(params.get("theme") === "dark" ? "pulsatrix" : "pulsatrix-light");
+const view = params.get("view") === "all" ? "all" : "short";
+const autoOn = params.get("auto") === "1";
 
-const model = (instanceId: string, id: string, label: string, extra: Partial<ModelMenuRow> = {}): ModelMenuRow => ({
-  key: favoriteKey(instanceId, id), kind: "model", instanceId, modelId: id, label, current: false, ...extra,
+const row = (instanceId: string, modelId: string, label: string, extra: Partial<ModelMenuRow> = {}): ModelMenuRow => ({
+  key: `${instanceId}\u0000${modelId}`, kind: "model", instanceId, modelId, label, current: false, ...extra,
 });
-const defaultTag = t("model.defaultTag");
-const before = params.get("mode") === "before";
-const high = t("model.effortLevel.high");
-const medium = t("model.effortLevel.medium");
-// Claude: the sign-in, a key and pi, pooled: one model, one row; the
-// others ride on it ("Runs with").
-const viaClaude = (id: string, label: string, extra: Partial<ModelMenuRow> = {}) => model("claude", id, label, {
-  harness: "claudeAgent", ...extra,
-  alternatives: [model("claudeApi", id, label, { harness: "claudeAgent" }), model("pi", `anthropic/${id}`, label, { harness: "piAgent" })],
-});
-const sections: ModelMenuSection[] = [
-  { key: "top", rows: [
-    ...(params.get("keep") === "1" ? [{ key: "keep", kind: "keep" as const, label: t("teamSettings.keepModel"), current: true }] : []),
-    { key: "auto", kind: "auto", label: t("model.auto.label"), detail: t("model.auto.rowHint"), current: false },
-    { key: "follow", kind: "follow", label: t("model.useBotModel", { name: "Nimbus" }), detail: "Claude Sonnet 5", current: false,
-      warning: params.get("broken") === "1" ? t("model.notResponding") : undefined },
-  ] },
-  { key: "anthropic", label: "Claude", rows: [
-    viaClaude("claude-fable-5-2", "Claude Fable 5.2", { detail: high, current: true }),
-    viaClaude("claude-fable-5-1", "Claude Fable 5.1", { detail: high }),
-    viaClaude("claude-opus-5-5", "Claude Opus 5.5", { detail: high }),
-    viaClaude("claude-sonnet-5-5", "Claude Sonnet 5.5", { detail: medium }),
-    viaClaude("claude-sonnet-5", "Claude Sonnet 5", { detail: medium, tags: [defaultTag] }),
-    viaClaude("claude-haiku-5-5", "Claude Haiku 5.5"),
-  ] },
-  { key: "openai", label: "OpenAI", rows: [
-    model("codex", "gpt-5.6", "GPT-5.6", { detail: medium, harness: "codex" }), model("codex", "gpt-5.6-mini", "GPT-5.6 mini", { harness: "codex" }),
-  ] },
-  { key: "xai", label: XAI_GROUP_LABEL, rows: [
-    model("grok", "grok-4.7", "Grok 4.7", { detail: high, harness: "grokAgent" }), model("grok", "grok-4.5", "Grok 4.5", { detail: high, harness: "grokAgent" }),
-  ] },
-  { key: "server:home", label: "Home server", rows: [
-    model("compat-home", "qwen3-coder", "Qwen3 Coder", { harness: "openai-compat" }),
-  ] },
-  // The model name alone (2026-10-26); "(Shared by …)" for another person's
-  // computer; the server only when two servers share a name.
-  { key: "computer", label: t("model.computerProvider"), rows: [
-    model("claude", "desk8000ab::Ornith-1.5-122B-oQ4e-mtp", "Ornith-1.5-122B-oQ4e-mtp", { harness: "claudeAgent" }),
-    model("claude", "desk8000cd::Qwen3-Coder-Next", "Qwen3-Coder-Next", { harness: "claudeAgent", subtext: localModelSubtext({ sharedBy: "Camille Tremblay-Lachance" }) }),
-    model("claude", "desk8000ab::Gemma-4", "Gemma-4", { harness: "claudeAgent", subtext: "oMLX" }),
-  ] },
-];
+const claude = [row("claude", "opus", "Opus", { description: "1M context", current: !autoOn }), row("claude", "sonnet", "Sonnet", { description: "200k context" }), row("claude", "haiku", "Haiku", { description: "200k context" })];
+const grok = [row("grok", "grok-4", "Grok 4", { description: "256k context" }), row("grok", "grok-code", "Grok Code", { description: "256k context" })];
+const gpt = [row("codex", "gpt-5", "GPT-5", { description: "400k context" })];
 
-const MARKS: Record<string, ReactNode> = {
-  anthropic: <PresetProviderMark preset="anthropic" size={14} />, openai: <PresetProviderMark preset="openai" size={14} />,
-  xai: <PresetProviderMark preset="xai" size={14} />, "server:home": <InstanceProviderMark instance={{ driverKind: "openai-compat" }} size={14} />,
-  computer: <Monitor size={14} aria-hidden="true" />,
-};
-let lineOpened = false;
-const pathProvider = params.get("path") ?? undefined;
-const initialPath = pathProvider ? { provider: pathProvider } : {};
-
-/** The chat bar under the menu, for the side-by-side: the chip names the
- * model (its provider when the name does not say it). */
-function ChatBar({ narrow }: { narrow: boolean }) {
-  const chip = `Claude Fable 5.2 ${high}`;
+function Menu() {
+  const [stars, setStars] = useState<string[]>(["claude\u0000sonnet", "grok\u0000grok-4"].slice(0, Number(params.get("stars") ?? "2")));
+  const all = [...claude, ...grok, ...gpt];
+  const sections: ModelMenuSection[] = [
+    { key: "top", rows: [{ key: "auto", kind: "auto", label: "Auto", current: autoOn }] },
+    { key: "favorites", label: "Favorites", rows: all.filter((candidate) => stars.includes(candidate.key)) },
+    { key: "claude", label: "Claude", rows: claude },
+    { key: "xai", label: "Grok", rows: grok },
+    { key: "openai", label: "OpenAI", rows: gpt },
+  ];
   return (
-    <div data-chat-bar
-      style={narrow ? { left: 8, right: 8, bottom: 8 } : { left: 24, right: 24, bottom: 16 }}
-      className="fixed z-40 rounded-[22px] menu-edge bg-composer px-2 py-1.5">
-      <div className="px-2 py-2 text-[15px] text-ink-secondary">{t("composer.placeholder.bot", { name: "Nimbus" })}</div>
-      <div className="flex items-center gap-1">
-        <span className="flex size-8 items-center justify-center rounded-full text-ink-secondary"><Plus size={18} aria-hidden="true" /></span>
-        <span data-chat-bar-chip aria-expanded="true"
-          className="flex max-w-full items-center gap-1 rounded-lg bg-raised px-1.5 py-1 text-[13px] text-ink">
-          <span className="truncate">{chip}</span>
-          <ChevronDown size={14} className="shrink-0 rotate-180" aria-hidden="true" />
-        </span>
-        <span className="flex-1" />
-        <span className="flex size-8 items-center justify-center rounded-full text-ink-secondary"><Mic size={18} aria-hidden="true" /></span>
+    <div className="flex min-h-screen items-center justify-center bg-surface p-6">
+      <div className={`${MENU_BOX} w-[320px] py-1 text-popover-ink`} data-model-menu>
+        <ModelPanel
+          sections={sections}
+          onPick={() => undefined}
+          favorites={{ keys: stars, onToggle: (candidate) => setStars((list) => (list.includes(candidate.key) ? list.filter((key) => key !== candidate.key) : [...list, candidate.key])) }}
+          mark={(key) => (key === "claude" ? <ClaudeMark size={14} /> : <ProviderMonogram label={key === "xai" ? "Grok" : "OpenAI"} />)}
+          autoOn={autoOn}
+          optimize={{ value: "balance", onPick: () => undefined }}
+          effort={{ title: "Reasoning effort", levels: ["low", "medium", "high"], modelDefault: "medium", onPick: () => undefined }}
+          manage={{ onManage: () => undefined, turnedOff: 0, openProviders: () => undefined }}
+          showSettings
+          view={view}
+        />
       </div>
     </div>
   );
 }
 
-function Gallery() {
-  const keys = useModelFavorites();
-  useEffect(() => {
-    const open = params.get("open");
-    const query = params.get("q");
-    const input = document.querySelector<HTMLInputElement>("[data-model-search]");
-    if (query && input) {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, query);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    if (open) setTimeout(() => document.querySelector<HTMLElement>(`[data-model-provider="${open}"]`)?.click(), 50);
-    // once: StrictMode runs this effect twice, and a second click would close the line
-    const line = params.get("line");
-    if (line && !lineOpened) {
-      lineOpened = true;
-      setTimeout(() => document.querySelector<HTMLElement>(`[data-model-line="${line === "runsWith" ? "runs-with" : line}"]`)?.click(), 50);
-    }
-  }, []);
-  const narrow = params.get("narrow") === "1";
-  // the bot runs a Claude model; its own tool and pi can run it (src/lib/runs-with.ts)
-  const runsWith = runsWithChoices({ harnesses: ["piAgent", "claudeAgent"], current: "claudeAgent", recommended: "claudeAgent", vendor: "anthropic", onPick: () => {} });
-  const footer = (
-    <>
-      <ModelMenuSettings
-        effort={{ title: t("model.thinkingEffort"), levels: ["low", "medium", "high", "xhigh", "max"], value: "high", modelDefault: "high", onPick: () => {} }}
-        runsWith={runsWith} />
-      <div className="border-t border-popover-hairline px-1.5 pt-1">
-        <div className="flex min-h-8 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px] text-popover-ink">
-          <span>{t("model.manage")}</span>
-          <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
-        </div>
-      </div>
-    </>
-  );
-  const bottom = narrow ? 92 : 100;
-  const width = before ? 340 : 420;
-  return (
-    <div className="min-h-dvh bg-app p-4">
-      <ChatBar narrow={narrow} />
-      <div data-model-menu
-        style={narrow ? { left: 8, right: 8, bottom } : { left: 24, bottom, width }}
-        className={`fixed z-50 flex flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50 ${
-          before ? "max-h-[min(392px,calc(100dvh-96px))]" : "max-h-[min(520px,calc(100dvh-120px))]"}`}>
-        {before ? (
-          <ModelSearchList variant="popover" autoFocus submenus sections={sections} onPick={() => {}}
-            favorites={{ keys, onToggle: (row) => toggleModelFavorite(row.key) }}
-            after={footer} />
-        ) : (
-          <ModelSearchList variant="popover" autoFocus showAll sections={sections} onPick={() => {}}
-            custom={params.get("custom") === "1" ? { label: (text: string) => t("code.launch.useModel", { model: text }), onPick: () => {} } : undefined}
-            favorites={{ keys, onToggle: (row) => toggleModelFavorite(row.key) }}
-            steps={{ mark: (key) => MARKS[key] ?? null, initialPath }}
-            listMinHeight={240}
-            after={footer} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><Menu /></StrictMode>);

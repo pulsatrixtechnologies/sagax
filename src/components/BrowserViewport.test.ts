@@ -1,6 +1,7 @@
 import { Children, createElement, type EffectCallback, type ImgHTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactElement, type RefObject } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { BrowserViewport, browserFrameSize, browserViewportPoint, createBrowserPressedInputs } from "./BrowserViewport";
 
 const fixture = vi.hoisted(() => ({ effects: [] as EffectCallback[] }));
@@ -147,6 +148,20 @@ describe("browser viewport input forwarding", () => {
     // Further cleanup cannot repeat a release or replay the printable key.
     props.onPointerUp!(pointer); props.onPointerCancel!(pointer);
     expect(input).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves the screen panel's chord to the app while driving (#4452)", () => {
+    const { input, props } = viewport();
+    const mac = isMacPlatform();
+    const chord = (key: string, over: object = {}) => ({ key, code: "KeyB", keyCode: 66, altKey: false, ctrlKey: !mac, metaKey: mac, shiftKey: true,
+      nativeEvent: { isComposing: false }, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...over }) as unknown as KeyboardEvent<HTMLImageElement>;
+    const event = chord("B");
+    props.onKeyDown!(event); props.onKeyUp!(event);
+    expect(input).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    // a plain Cmd+B still belongs to the page
+    props.onKeyDown!(chord("b", { shiftKey: false }));
+    expect(input).toHaveBeenCalledOnce();
   });
 
   it("lets Tab move focus past the page until the person clicks or types in it", () => {

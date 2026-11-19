@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { t } from "@/lib/i18n";
+import { appShortcutFor } from "@/lib/keyboard-shortcuts";
 
 export interface BrowserFrame {
   seq: number; data: string; format?: "jpeg" | "png";
@@ -8,6 +9,10 @@ export interface BrowserFrame {
 export type BrowserInput = (body: Record<string, unknown>) => void;
 const modifiers = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
   Number(e.altKey) + Number(e.ctrlKey) * 2 + Number(e.metaKey) * 4 + Number(e.shiftKey) * 8;
+/** Cmd+Shift+B (Ctrl+Shift+B) closes the screen side panel (#4452): it is the
+ * app's chord, never the page's, so it passes through while the person drives. */
+const isPanelChord = (e: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }) =>
+  appShortcutFor({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, isComposing: false, defaultPrevented: false }) === "toggle-screen-panel";
 const MODIFIER_KEYS = new Set(["Alt", "Control", "Meta", "Shift"]);
 
 /** The CSS size a frame's pixels depict. Frame metadata can describe the
@@ -154,7 +159,7 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
         if (at) input({ type: "input_mouse", eventType: "mouseMoved", ...at, button: e.buttons & 1 ? "left" : e.buttons & 2 ? "right" : e.buttons & 4 ? "middle" : "none", modifiers: modifiers(e) });
       }}
       onKeyDown={(e) => {
-        if (!driving || e.nativeEvent.isComposing) return;
+        if (!driving || e.nativeEvent.isComposing || isPanelChord(e)) return;
         if (e.key === "Escape" && e.shiftKey) {
           e.preventDefault(); e.stopPropagation(); pressed.release(); onReturnToToolbar(); return;
         }
@@ -166,7 +171,7 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
         input({ type: "input_keyboard", eventType: "keyDown", key: e.key, code: e.code, windowsVirtualKeyCode: e.keyCode, modifiers: modifiers(e), ...(e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey ? { text: e.key } : {}) });
       }}
       onKeyUp={(e) => {
-        if (!driving || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v")) return;
+        if (!driving || isPanelChord(e) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v")) return;
         if (e.key === "Escape" && e.shiftKey) { e.preventDefault(); e.stopPropagation(); return; }
         if (e.key === "Tab" && !engaged.current) return;
         e.preventDefault(); input({ type: "input_keyboard", eventType: "keyUp", key: e.key, code: e.code, windowsVirtualKeyCode: e.keyCode, modifiers: modifiers(e) });

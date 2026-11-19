@@ -523,7 +523,7 @@ import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createLimitResetHost, SERVER_LIMIT_SCOPE } from "./usage/limit-reset-host.ts";
 import { engineLabel } from "./usage/limit-resets.ts";
-import { LimitFailoverStore } from "./usage/limit-failover.ts";
+import { billsEachUse, LimitFailoverStore } from "./usage/limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
 import { sendBlockFor } from "../shared/send-state.ts";
 import { repeatsShownFailure } from "../shared/failure-dedup.ts";
@@ -16455,6 +16455,12 @@ const accountSwitch = createAccountSwitch({
     return refusal?.cause === "usage_limit" || refusal?.cause === "credits";
   },
 });
+/** An engine's access and environment, as the limit failover reads them
+ * (whether it bills each use, server/usage/limit-failover.ts billsEachUse). */
+function limitFailoverConfig(instanceId: string): { environment?: Record<string, string>; access?: string } | undefined {
+  const config = providerConfigs()[instanceId];
+  return config ? { ...(config.environment ? { environment: config.environment } : {}), ...(config.access ? { access: config.access } : {}) } : undefined;
+}
 /** #5014: Auto picked a model; among the accounts of its provider that offer
  * it (in Auto's own list, so isolation and the organization's rules hold),
  * the person's account strategy says which one runs it. The account Auto
@@ -16463,8 +16469,10 @@ const accountSwitch = createAccountSwitch({
 function autoAccountFor(input: { botId: string; threadId: string; payer: string; selection: ModelSelection; engines: ReadonlyArray<{ instanceId: string; driverKind: string; models: { options: ReadonlyArray<{ id: string }> } }> }): { instanceId: string; pick: AccountPick; moved: boolean } | null {
   const home = input.engines.find((engine) => engine.instanceId === input.selection.instanceId);
   if (!home) return null;
+  // never onto an account that bills each use (billsEachUse, as the limit failover)
   const pool = input.engines
-    .filter((engine) => engine.driverKind === home.driverKind && engine.models.options.some((option) => option.id === input.selection.model))
+    .filter((engine) => engine.driverKind === home.driverKind && engine.models.options.some((option) => option.id === input.selection.model)
+      && (engine.instanceId === home.instanceId || !billsEachUse(limitFailoverConfig(engine.instanceId))))
     .map((engine) => engine.instanceId);
   if (pool.length < 2) return null;
   const task = store.taskByThread(input.botId, input.threadId);
@@ -16556,10 +16564,7 @@ const limitFailover = createLimitFailoverHost({
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
     return [...botRecoveryBackups(bot, cfg), ...(orgDefault ? [{ instanceId: orgDefault.instanceId, model: orgDefault.model }] : [])];
   },
-  config: (instanceId) => {
-    const config = providerConfigs()[instanceId];
-    return config ? { ...(config.environment ? { environment: config.environment } : {}), ...(config.access ? { access: config.access } : {}) } : undefined;
-  },
+  config: (instanceId) => limitFailoverConfig(instanceId),
   payer: (botId, speaker) => {
     const bot = store.bot(botId);
     return bot ? autoPayerKey(bot, (speaker ?? { origin: "person" }) as TurnSpeaker) : "server";

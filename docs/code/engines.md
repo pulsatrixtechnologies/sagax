@@ -110,7 +110,10 @@ expected, on a failed solve or past 50 ms.
 
 `server/usage/account-switch-host.ts` joins them: isolation first (the
 organization's accounts and the person's own, never another person's), then
-the holds of the limit failover. `limit-failover-host.ts` `beforeTurn` asks
+the holds of the limit failover. It switches nothing while no account of the
+pool has a reading yet (the conversation stays where it is), and never puts a
+conversation on an account that bills each use (`billsEachUse`, the limit
+failover's own rule). `limit-failover-host.ts` `beforeTurn` asks
 it before a turn (instead of the old near-limit rotation) and moves the
 conversation with `switchThread`; a limit's backup among the same provider's
 accounts follows its ranking (`accountRank`, `pickLimitBackup` `rank`). Auto

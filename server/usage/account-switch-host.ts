@@ -71,6 +71,10 @@ export interface AccountSwitch {
   rank(payer: string, driverKind: string, pool: readonly string[]): string[];
 }
 
+/** Sagax has read something of this account's windows. */
+const measured = (account: StrategyAccount) => account.fiveHour.usedPercent !== null || account.fiveHour.resetsAt !== null
+  || account.weekly.usedPercent !== null || account.weekly.resetsAt !== null;
+
 export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
   const clock = deps.clock ?? (() => performance.now());
   const plans = new Map<string, { at: number; current: string; result: Extract<PlannerResult, { status: "planned" }> }>();
@@ -105,6 +109,9 @@ export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
       const { person, accounts } = accountsOf(input.payer, input.pool);
       // one account (or none open to this person): nothing to choose
       if (accounts.length < 2 || !accounts.some((account) => account.instanceId === input.current)) return null;
+      // no account has a reading yet (no report, no limit header): nothing to
+      // switch on, the conversation stays where it is
+      if (!accounts.some(measured)) return null;
       const setting = deps.setting(person, deps.provider(input.current));
       const now = deps.now();
       const rule = { strategy: setting.strategy, threshold: setting.threshold, now, accounts, current: input.current, fresh: input.fresh };

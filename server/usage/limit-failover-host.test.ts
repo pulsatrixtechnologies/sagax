@@ -1124,6 +1124,13 @@ describe("the account strategy before a turn (#5014)", () => {
     expect(picks[0]).toMatchObject({ moved: true, pick: { instanceId: "claude-work" } });
   });
 
+  it("never offers the strategy an account that bills each use", () => {
+    const ids = ["claude", "claude-work", "claude-other", "codex"];
+    const { host, asked } = setup({ config: (id) => (id === "claude-other" ? { environment: { ANTHROPIC_API_KEY: "test-key" } } : undefined) }, ids);
+    host.beforeTurn("bot", "thread", undefined);
+    expect(asked).toEqual([{ current: "claude", pool: ["claude", "claude-work"] }]);
+  });
+
   it("leaves an account forced on the Account line where it is", () => {
     const { w, host, asked } = setup({ accountChoice: () => ({ instanceId: "claude-work", pick: pick("claude-work", { kind: "fillUp" }) }) });
     w.state.selection = { instanceId: "claude", model: "opus", accountPinned: true };

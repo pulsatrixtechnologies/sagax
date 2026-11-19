@@ -12,7 +12,7 @@ import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-ref
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
 import { pickAccountByRule } from "./account-strategy.ts";
-import { limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
+import { billsEachUse, limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -1161,8 +1161,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           }
           const decide = (candidates: readonly LimitCandidate[]) => {
             if (!same(deps.threadSelection(botId, threadId), selection)) return;
+            // never onto an account that bills each use: the limit failover's
+            // own rule for a catalog backup (billsEachUse, 3ed90a037)
             const pool = candidates
-              .filter((candidate) => sameProvider(from, candidate) && (candidate.instanceId === instanceId || candidate.models.includes(selection.model)))
+              .filter((candidate) => sameProvider(from, candidate) && (candidate.instanceId === instanceId
+                || (candidate.models.includes(selection.model) && !billsEachUse(deps.config(candidate.instanceId)))))
               .map((candidate) => candidate.instanceId);
             if (!pool.includes(instanceId)) pool.unshift(instanceId);
             if (pool.length < 2) return;

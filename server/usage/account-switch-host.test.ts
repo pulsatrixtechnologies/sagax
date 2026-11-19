@@ -107,6 +107,15 @@ describe("the account strategy host (#5014)", () => {
     expect(choice?.instanceId).toBe("claude-org");
   });
 
+  it("leaves a new conversation where it is while no account of the pool has a reading", () => {
+    // nothing measured on any account (no report, no limit header): nothing to switch on
+    const w = world();
+    expect(w.host.choose({ payer: "ada", threadId: "t1", driverKind: "claudeAgent", current: "claude-work", pool: ["claude", "claude-work"], fresh: true })).toBeNull();
+    // one reading is enough for the strategy to rank them
+    w.meter.notePlan("ada", ["claude"], { fiveHour: window(10, NOW + HOUR) });
+    expect(w.host.choose({ payer: "ada", threadId: "t1", driverKind: "claudeAgent", current: "claude-work", pool: ["claude", "claude-work"], fresh: true })?.instanceId).toBe("claude");
+  });
+
   it("leaves a single account alone", () => {
     const w = world();
     expect(w.host.choose({ payer: "ada", threadId: "t1", driverKind: "claudeAgent", current: "claude", pool: ["claude", "claude-nimbus"], fresh: true })).toBeNull();

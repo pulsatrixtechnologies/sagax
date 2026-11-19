@@ -200,7 +200,7 @@ export function moveChoiceFocus(event: KeyboardEvent<HTMLElement>): void {
   const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"];
   if (!keys.includes(event.key)) return;
   // a field hung under a row (#4910) keeps its own arrows and Home / End
-  if ((event.target as HTMLElement).closest("input, textarea, select")) return;
+  if ((event.target as HTMLElement | undefined)?.closest?.("input, textarea, select")) return;
   const group = event.currentTarget;
   const items = Array.from(group.querySelectorAll<HTMLElement>("[data-ask-choice]:not([disabled])"));
   if (!items.length) return;

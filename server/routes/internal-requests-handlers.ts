@@ -266,7 +266,8 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
   // Routines created in the calendar predate chat-card redaction and may
   // contain a credential in their instructions. The list result is handed
   // back to the model, so scrub the complete value before taking its preview.
-  const safeInstructions = redactSecretsInText(routine.prompt);
+  // Numbered masks: a bot that rewrites them keeps each secret (#4971).
+  const safeInstructions = redactSecretsInText(routine.prompt, { numbered: true });
   const safeName = redactSecretsInText(routine.name);
   return {
     id: routine.id,

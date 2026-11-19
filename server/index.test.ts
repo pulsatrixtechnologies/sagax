@@ -11196,6 +11196,8 @@ describe("harness HTTP API", () => {
       expect(legacyResult.instructions).not.toContain(fakeSecret);
       expect(legacyResult.name).not.toContain(fakeNameSecret);
       expect(legacyResult.instructions).toContain("redacted");
+      // each mask numbered, so a bot rewriting them keeps every secret (#4971)
+      expect(legacyResult.instructions).toMatch(/«redacted #1, \d+ chars»/);
       // One routine read gives the whole instructions (upstream #5907), and
       // says a credential was masked so the bot never saves them back.
       expect(legacyResult.instructionsTruncated).toBe(false);

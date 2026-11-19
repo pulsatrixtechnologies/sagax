@@ -1029,12 +1029,13 @@ function normalizedOperation(
   if (!current) throw new RoutineRequestError("That routine does not exist", 404);
   if (validated.action === "update") {
     const changes = normalizeChanges(validated.changes, now, current.schedule);
-    // A bot reads the instructions masked (`text()` scrubs credentials):
-    // a mask it sends back keeps the value it stood for, and the text
-    // unchanged leaves the instructions alone.
+    // A bot reads the instructions with each secret behind a numbered mask
+    // (list_routines): a mask it sends back keeps the value it stood for,
+    // and the text unchanged leaves the instructions alone, even when its
+    // masks could not be placed (a plain read of the same text).
     if (changes.instructions !== undefined) {
       const restored = restoreMaskedSecrets(current.prompt, changes.instructions);
-      if (restored === current.prompt.trim()) delete changes.instructions;
+      if (restored === current.prompt.trim() || changes.instructions === redactSecretsInText(current.prompt).trim()) delete changes.instructions;
       else changes.instructions = restored;
     }
     return {

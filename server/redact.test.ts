@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskValues } from "../shared/redact.ts";
-import { redactSecrets } from "./redact.ts";
+import { redactSecrets, restoreMaskedSecrets } from "./redact.ts";
 
 const flat = (value: unknown) => JSON.stringify(value);
 
@@ -442,5 +442,69 @@ describe("maskValues", () => {
     expect(maskValues("prefix-sensitive-suffix / prefix", ["prefix", "prefix-sensitive-suffix"], "[r]")).toBe("[r] / [r]");
     expect(maskValues("keep a.b+c here", ["a.b+c", ""], "[r]")).toBe("keep [r] here");
     expect(maskValues("nothing", ["absent"], "[r]")).toBe("nothing");
+  });
+});
+
+describe("numbered masks read back (#4971)", () => {
+  // Fake keys, same length (49), so a pairing by length alone is ambiguous.
+  const a = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const b = "sk-ant-api03-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const c = "sk-ant-api03-cccccccccccccccccccc";
+  const original = `First use ${a} on the queue.\nThen use ${b} on the archive.`;
+  const read = () => redactSecretsInText(original, { numbered: true });
+
+  it("numbers each mask and keeps the plain form for every other reader", () => {
+    expect(read()).toBe("First use «redacted #1, 49 chars» on the queue.\nThen use «redacted #2, 49 chars» on the archive.");
+    expect(redactSecretsInText(original)).toBe("First use «redacted 49 chars» on the queue.\nThen use «redacted 49 chars» on the archive.");
+    // a numbered text scrubbed again (the proposal path) stays as it is
+    expect(redactSecretsInText(read())).toBe(read());
+  });
+
+  it("text sent back unchanged gives back the original", () => {
+    expect(restoreMaskedSecrets(original, read())).toBe(original);
+  });
+
+  it("one of two masks removed: the other keeps its own secret", () => {
+    const sent = read().replace("First use «redacted #1, 49 chars» on the queue.\n", "");
+    expect(restoreMaskedSecrets(original, sent)).toBe(`Then use ${b} on the archive.`);
+  });
+
+  it("two masks moved: each keeps its own secret", () => {
+    const sent = "Archive: «redacted #2, 49 chars». Queue: «redacted #1, 49 chars».";
+    expect(restoreMaskedSecrets(original, sent)).toBe(`Archive: ${b}. Queue: ${a}.`);
+  });
+
+  it("plain masks of the same length, one removed: the other stays a mask, never the wrong key", () => {
+    const sent = "Then use «redacted 49 chars» on the archive.";
+    expect(restoreMaskedSecrets(original, sent)).toBe(sent);
+  });
+
+  it("a plain mask with a single value of its length takes that value", () => {
+    const mixed = `Use ${a} then ${c}.`;
+    expect(restoreMaskedSecrets(mixed, "Only «redacted 33 chars» now.")).toBe(`Only ${c} now.`);
+  });
+
+  it("masks side by side form one numbered span restored whole, its length hidden", () => {
+    const held = "hunter2-fake-held";
+    const stop = addHeldSecretScrubber((text) => text.split(held).join(HELD_SECRET_MASK));
+    try {
+      const glued = `Keys ${a}${held} then ${b}.`;
+      expect(redactSecretsInText(glued)).toBe(`Keys «redacted 49 chars»${HELD_SECRET_MASK} then «redacted 49 chars».`);
+      const masked = redactSecretsInText(glued, { numbered: true });
+      expect(masked).toBe("Keys «redacted #1» then «redacted #2, 49 chars».");
+      expect(restoreMaskedSecrets(glued, masked)).toBe(glued);
+      expect(restoreMaskedSecrets(glued, "Swap «redacted #2, 49 chars» and «redacted #1».")).toBe(`Swap ${b} and ${a}${held}.`);
+    } finally {
+      stop();
+    }
+  });
+
+  it("text without masks is returned as received", () => {
+    expect(restoreMaskedSecrets(original, "Brand new instructions.")).toBe("Brand new instructions.");
+  });
+
+  it("an invented mask is kept as received", () => {
+    const sent = "Use «redacted #7, 49 chars» and «redacted #1, 12 chars» and «redacted 20 chars».";
+    expect(restoreMaskedSecrets(original, sent)).toBe(sent);
   });
 });

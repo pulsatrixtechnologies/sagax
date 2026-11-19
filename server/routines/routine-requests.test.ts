@@ -154,6 +154,48 @@ describe("instructions read back masked", () => {
     await submit({ instructions: redactSecretsInText(prompt).replace("Review the queue.", "Review the inbox.").replace("Then report.", "Then email a summary.") });
     expect(routines.listRoutines()[0]!.prompt).toBe(`Review the inbox.\nUse ${key} for the API.\nThen email a summary.`);
   });
+
+  // Two fake keys of the same length: only the mask number tells them apart.
+  const first = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const second = "sk-ant-api03-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const twoKeys = () => {
+    const { routines, service } = harness(undefined, undefined, undefined, () => "self");
+    const prompt = `Queue with ${first}.\nArchive with ${second}.`;
+    const id = routines.create({ botId: "bot-a", name: "Two keys", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } }).id;
+    const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
+    return { routines, submit, prompt, read: redactSecretsInText(prompt, { numbered: true }) };
+  };
+
+  it("one of two masks removed: the other keeps its own key", async () => {
+    const { routines, submit, read } = twoKeys();
+    await submit({ instructions: read.split("\n")[1] });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Archive with ${second}.`);
+  });
+
+  it("two masks moved: each keeps its own key", async () => {
+    const { routines, submit, read } = twoKeys();
+    const [queue, archive] = read.split("\n");
+    await submit({ instructions: `${archive}\n${queue}` });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Archive with ${second}.\nQueue with ${first}.`);
+  });
+
+  it("a plain mask of an ambiguous length stays a mask, never the other key", async () => {
+    const { routines, submit } = twoKeys();
+    await submit({ instructions: "Archive with «redacted 49 chars»." });
+    expect(routines.listRoutines()[0]!.prompt).toBe("Archive with «redacted 49 chars».");
+  });
+
+  it("a plain read sent back unchanged leaves the instructions alone", async () => {
+    const { routines, submit, prompt } = twoKeys();
+    await submit({ name: "Renamed", instructions: redactSecretsInText(prompt) });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Renamed", prompt });
+  });
+
+  it("an invented mask number is kept as written", async () => {
+    const { routines, submit } = twoKeys();
+    await submit({ instructions: "Use «redacted #9, 49 chars»." });
+    expect(routines.listRoutines()[0]!.prompt).toBe("Use «redacted #9, 49 chars».");
+  });
 });
 
 describe("routine compute settings", () => {

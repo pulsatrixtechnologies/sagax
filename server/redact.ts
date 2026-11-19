@@ -46,49 +46,80 @@ import { redactFilledSecrets } from "./vault/filled-secret-guard.ts";
 // and run inside the shared pass. `mask` stays the shared one.
 export { addHeldSecretScrubber, holdsCredential, HELD_SECRET_MASK, mask, redactCutSecrets, scrubHeldSecrets };
 
-export function redactSecretsInText(text: string): string {
+export interface RedactTextOptions {
+  /** Number each masked span (`«redacted #2, 49 chars»`) so a text read back
+   * and sent again tells which secret each mask stood for
+   * (restoreMaskedSecrets). For a bot reading text it may rewrite. */
+  numbered?: boolean;
+}
+
+export function redactSecretsInText(text: string, options?: RedactTextOptions): string {
   // Shared pass already runs held scrubbers (filled-secret-guard). Keep an
   // explicit filled pass so a caller that imported shared/redact alone and
   // then this module still gets vault fills scrubbed if registration raced.
-  return redactFilledSecrets(redactSecretPatterns(text));
+  const redacted = redactFilledSecrets(redactSecretPatterns(text));
+  if (!options?.numbered || redacted === text) return redacted;
+  return maskedSpans(text, redacted)?.numbered ?? redacted;
 }
 
-const MASK_SPAN = /«redacted \d+ chars»|••••••|\[credential\]/g;
+const PLAIN_MASK = /^«redacted (\d+) chars»$/;
+/** Masks side by side form one span: their boundaries are not readable. */
+const MASK_RUN = /(?:«redacted \d+ chars»|••••••|\[credential\])+/g;
+const NUMBERED_MASK = /«redacted #(\d+)(?:, (\d+) chars)?»/g;
+const ANY_PLAIN_MASK = /«redacted (\d+) chars»/g;
 
-/** The original value behind each mask of `redactSecretsInText(original)`, in
- * order, read off the gaps between the unchanged text around the masks.
- * Null when the alignment is ambiguous (two masks side by side). */
-function maskedOriginals(original: string): string[] | null {
-  const redacted = redactSecretsInText(original);
-  const literals = redacted.split(MASK_SPAN);
-  if (literals.length < 2) return [];
+/** Each masked span of `redacted` (the redaction of `original`) with the
+ * value it hides, read off the unchanged text around it, and the text with
+ * each span numbered. Null when a span cannot be placed in `original`. */
+function maskedSpans(original: string, redacted: string): { values: string[]; numbered: string } | null {
+  const literals = redacted.split(MASK_RUN);
+  const masks = redacted.match(MASK_RUN) ?? [];
+  if (!masks.length) return { values: [], numbered: redacted };
   const values: string[] = [];
+  let numbered = literals[0]!;
   let pos = 0;
-  for (let i = 0; i < literals.length - 1; i++) {
+  for (let i = 0; i < masks.length; i++) {
     if (!original.startsWith(literals[i]!, pos)) return null;
     pos += literals[i]!.length;
     const next = literals[i + 1]!;
-    const last = i === literals.length - 2;
-    if (!next && !last) return null;
-    const end = last ? original.length - next.length : original.indexOf(next, pos);
-    if (end < pos || (last && !original.endsWith(next))) return null;
+    const last = i === masks.length - 1;
+    const plain = PLAIN_MASK.exec(masks[i]!);
+    const end = plain ? pos + Number(plain[1]) : last ? original.length - next.length : original.indexOf(next, pos);
+    if (end <= pos || !original.startsWith(next, end) || (last && end + next.length !== original.length)) return null;
     values.push(original.slice(pos, end));
+    // A held secret's mask hides its length; keep it hidden.
+    numbered += `«redacted #${i + 1}${plain ? `, ${plain[1]} chars` : ""}»${next}`;
     pos = end;
   }
-  return values;
+  return { values, numbered };
 }
 
-/** A text read back through `redactSecretsInText` that a caller sends again:
- * each mask takes the value it stood for in `original`, in order, so editing
- * around a mask never saves the mask over the secret (same idea as a `true`
- * in resolveSecrets keeping the stored value). Text without masks, or whose
- * masks cannot be matched to `original`, is returned as received. */
+/** A text read with `redactSecretsInText(original, { numbered: true })` that
+ * a caller sends again: each `«redacted #k»` mask takes back the value it
+ * stood for, wherever the bot moved it, so editing around a mask never saves
+ * the mask over the secret (same idea as a `true` in resolveSecrets keeping
+ * the stored value). A mask the bot removed is a secret it removed. A plain
+ * `«redacted N chars»` (read elsewhere) takes the only unused value of N
+ * characters. Any other mask (an unknown number, an ambiguous length) is
+ * kept as received, never given another secret. */
 export function restoreMaskedSecrets(original: string, received: string): string {
-  if (!received.match(MASK_SPAN)) return received;
-  const values = maskedOriginals(original);
+  if (!received.includes("«redacted")) return received;
+  const redacted = redactSecretsInText(original);
+  if (redacted === original) return received;
+  const values = maskedSpans(original, redacted)?.values;
   if (!values?.length) return received;
-  let index = 0;
-  return received.replace(MASK_SPAN, (mask) => values[index++] ?? mask);
+  const used = new Set<number>();
+  for (const match of received.matchAll(NUMBERED_MASK)) used.add(Number(match[1]) - 1);
+  const restored = received.replace(NUMBERED_MASK, (mask, index: string, length?: string) => {
+    const value = values[Number(index) - 1];
+    return value !== undefined && (length === undefined || value.length === Number(length)) ? value : mask;
+  });
+  return restored.replace(ANY_PLAIN_MASK, (mask, length: string) => {
+    const candidates = values.flatMap((value, index) => (!used.has(index) && value.length === Number(length) ? [index] : []));
+    if (candidates.length !== 1) return mask;
+    used.add(candidates[0]!);
+    return values[candidates[0]!]!;
+  });
 }
 
 // ── content-shaped secrets ────────────────────────────────────────────

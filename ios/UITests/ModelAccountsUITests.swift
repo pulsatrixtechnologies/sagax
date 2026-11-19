@@ -35,12 +35,20 @@ final class ModelAccountsUITests: XCTestCase {
         let open = app.buttons["model-menu-open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10))
         open.tap()
+        // the short menu: the model in use says its account
+        let all = app.buttons["model-all"]
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        let current = app.buttons["model-row.current"]
+        if current.exists { XCTAssertTrue(current.label.contains("ada@example.com"), current.label) }
+        shot("model-accounts-short", app)
+        all.tap()
 
         let team = app.buttons["model-provider.preview-team"]
-        XCTAssertTrue(team.waitForExistence(timeout: 5), "one page per account")
+        XCTAssertTrue(team.waitForExistence(timeout: 5), "a segment per account")
         XCTAssertTrue(team.label.contains("ada.admin@acme.test"), team.label)
         XCTAssertTrue(app.buttons["model-provider.preview"].label.contains("ada@example.com"), app.buttons["model-provider.preview"].label)
-        shot("model-accounts-menu", app)
+        XCTAssertTrue(app.buttons["model-row.preview.claude-opus-4-5"].waitForExistence(timeout: 5))
+        shot("model-accounts-personal", app)
         team.tap()
         let mythos = app.buttons["model-row.preview-team.claude-mythos-5-2"]
         XCTAssertTrue(mythos.waitForExistence(timeout: 5))
@@ -49,10 +57,6 @@ final class ModelAccountsUITests: XCTestCase {
         XCTAssertTrue(shared.exists)
         XCTAssertFalse(shared.label.contains("Accès spécial"), shared.label)
         shot("model-accounts-team", app)
-        app.buttons["model-menu-back"].tap()
-        app.buttons["model-provider.preview"].tap()
-        XCTAssertTrue(app.buttons["model-row.preview.claude-opus-4-5"].waitForExistence(timeout: 5))
-        shot("model-accounts-personal", app)
     }
 
     @MainActor

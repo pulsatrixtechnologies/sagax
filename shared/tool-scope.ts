@@ -82,6 +82,32 @@ export function allowsTool(scope: unknown, tool: ToolIdentity): boolean {
   return parsed.ok && permits(parsed.scope, tool);
 }
 
+/** A scope that permits a tool only when both `base` and `narrower` do: a
+ * conversation's own narrowing on top of its bot's selection. It never
+ * widens: an exact name the narrower allows is kept when the base permits
+ * it; a wildcard keeps the base's names it covers (or itself when the base
+ * has no allow list); the deny lists add up. An invalid side permits
+ * nothing. */
+export function narrowToolScope(base: unknown, narrower: unknown): ToolScope | undefined {
+  const outer = parseToolScope(base);
+  const inner = parseToolScope(narrower);
+  if (!outer.ok || !inner.ok) return { allow: [] };
+  if (!inner.scope) return outer.scope;
+  if (!outer.scope) return inner.scope;
+  const baseScope = outer.scope;
+  const deny = [...new Set([...(baseScope.deny ?? []), ...(inner.scope.deny ?? [])])];
+  const allow = inner.scope.allow === undefined ? baseScope.allow : [...new Set(inner.scope.allow.flatMap((selector) => {
+    const tool = selectorIdentity(selector)!;
+    if (tool.name !== "*") return permits(baseScope, tool) ? [selector] : [];
+    if (baseScope.allow === undefined) return [selector];
+    return baseScope.allow.filter((own) => {
+      const owned = selectorIdentity(own);
+      return owned !== undefined && matches(selector, owned);
+    });
+  }))];
+  return { ...(allow !== undefined ? { allow } : {}), ...(deny.length ? { deny } : {}) };
+}
+
 /** Whether an engine needs a native catalog contract, in addition to MCP gates. */
 export function narrowsNativeTools(value: unknown): boolean {
   const parsed = parseToolScope(value);

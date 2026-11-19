@@ -459,7 +459,7 @@ export function createPrepareValidateStartTurn(
   // 2026-10-30 (lot 2): a model turned off never runs a turn by name
   const modelRefusal = state.bot.modelSelection.auto === true ? undefined : modelSwitchRefusal(state.instance.instanceId, state.bot.modelSelection.model, effectiveBotOwner(state.bot));
   if (modelRefusal) throw Object.assign(new Error(modelRefusal), { status: 409, code: "model_turned_off" });
-  state.toolScope = toolScopeForTurn(state.bot.id);
+  state.toolScope = toolScopeForTurn(state.bot.id, state.threadId);
   // On a Cloud home a guest's turn never gets a shell or reads outside its
   // own folder (docs/cloud-pro.md): an engine that cannot run it that way is
   // refused, in one plain line, before anything is recorded.

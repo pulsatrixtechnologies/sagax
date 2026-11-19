@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { allowsTool, canUseMcpServer, MCP_SERVER_NAME, narrowsNativeTools, parseToolScope, toolScopeWidens } from "./tool-scope.ts";
+import { allowsTool, canUseMcpServer, MCP_SERVER_NAME, narrowToolScope, narrowsNativeTools, parseToolScope, toolScopeWidens } from "./tool-scope.ts";
 
 describe("per-bot tool selection", () => {
   it("#1935: an MCP server longer than 32 characters stays mounted and selectable", () => {
@@ -121,5 +121,27 @@ describe("tool namespace of a long MCP server (#1935)", () => {
     const { TOOL_NAMESPACE } = await import("./tool-surface");
     expect("organization_ticket_dispatch_readonly__cw_psa_query".replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
     expect(`${"p".repeat(40)}__cw_psa_query`.replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
+  });
+
+  it("narrowToolScope permits only what both permit and never widens", () => {
+    const tool = (server: string, name: string) => ({ kind: "mcp" as const, server, name });
+    const read = { allow: ["mcp:host:tickets_query", "mcp:host:api_search"] };
+    // no bot selection: the conversation's own
+    expect(narrowToolScope(undefined, read)).toEqual(read);
+    expect(narrowToolScope(read, undefined)).toEqual(read);
+    // the bot leaves a tool out: the conversation cannot bring it back
+    const bot = { allow: ["mcp:host:*", "native:Read"], deny: ["mcp:host:api_search"] };
+    const both = narrowToolScope(bot, read);
+    expect(allowsTool(both, tool("host", "tickets_query"))).toBe(true);
+    expect(allowsTool(both, tool("host", "api_search"))).toBe(false);
+    expect(allowsTool(both, { kind: "native", name: "Read" })).toBe(false);
+    expect(allowsTool(both, tool("host", "tickets_write"))).toBe(false);
+    // a wildcard keeps only the bot's own names it covers
+    const wide = narrowToolScope({ allow: ["native:Read", "mcp:host:tickets_query"] }, { allow: ["native:*"] });
+    expect(wide).toEqual({ allow: ["native:Read"] });
+    // an empty allow list permits nothing; an invalid side permits nothing
+    expect(allowsTool(narrowToolScope(bot, { allow: [] }), tool("host", "tickets_query"))).toBe(false);
+    expect(narrowToolScope({ allow: "x" }, read)).toEqual({ allow: [] });
+    expect(narrowToolScope(read, { allow: ["Bash"] })).toEqual({ allow: [] });
   });
 });

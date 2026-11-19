@@ -1530,6 +1530,42 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect((await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", hidden: "yes" })).body.code).toBe("bad_request");
   });
 
+  it("toolScope narrows the conversation the send opens before anything is sent, never an existing one", async () => {
+    serveSends();
+    const narrowed: Array<{ botId: string; threadId: string; scope: unknown; sent: number }> = [];
+    const sends = () => performed.filter((p) => p.request.path === "/api/bots/b1/messages").length;
+    deps.narrowThreadTools = (botId, threadId, scope) => { narrowed.push({ botId, threadId, scope, sent: sends() }); return true; };
+    const scope = { allow: ["mcp:host:tickets_query"] };
+    const got = await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "read only", hidden: true, newThread: true, toolScope: scope });
+    expect(got.status).toBe(200);
+    // narrowed first: no message reached the bot before it
+    expect(narrowed).toEqual([{ botId: "b1", threadId: "ac_1", scope, sent: 0 }]);
+    expect(sends()).toBe(1);
+    expect((await call("GET", "capabilities", token("bob"))).body.routes).toContain("POST bots/{id}/messages:toolScope");
+    // an existing conversation, or no newThread: refused, nothing sent
+    performed = [];
+    for (const body of [{ text: "x", threadId: "t1", toolScope: scope }, { text: "x", toolScope: scope }]) {
+      const refused = await call("POST", "bots/b1/messages", token("bob", "employee", "console"), body);
+      expect(refused.status).toBe(400);
+      expect(refused.body.message).toContain("newThread true");
+    }
+    // a selector the scope grammar refuses
+    for (const toolScope of [{ allow: ["Bash"] }, { allow: "mcp:host:*" }, { only: [] }, []]) {
+      expect((await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", newThread: true, toolScope })).status).toBe(400);
+    }
+    expect(sends()).toBe(0);
+    // narrowing failed: nothing is sent
+    deps.narrowThreadTools = () => false;
+    const failed = await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", hidden: true, newThread: true, toolScope: scope });
+    expect(failed.status).toBe(502);
+    expect(sends()).toBe(0);
+    // a server that cannot narrow says so, and never lists the feature
+    deps.narrowThreadTools = undefined;
+    expect((await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", newThread: true, toolScope: scope })).status).toBe(501);
+    expect((await call("GET", "capabilities", token("bob"))).body.routes).not.toContain("POST bots/{id}/messages:toolScope");
+    expect(sends()).toBe(0);
+  });
+
   it("a send to a surface bot is always hidden; another person's reaches the app's one refusal, an admin's view included", async () => {
     serveSends();
     const own = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi" });

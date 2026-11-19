@@ -11,7 +11,7 @@ import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proact
 import { commitBotChange, keptRevocation, saveBotsFor, touchesPermissions } from "./bots/bots-save.ts";
 import { discardNativeLog } from "./drivers/native.ts";
 import { applyHumanIds } from "./rooms/channel-membership.ts";
-import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
+import { narrowToolScope, parseToolScope, toolScopeWidens, type ToolScope } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
 import { isSectionId, migrateSectionLinks, sameTeamLink } from "./rooms/section-link.ts";
 import type { TeamComputers } from "./computer/team-computers.ts";
@@ -139,6 +139,11 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * prefixed with inbox/ or attachments/. Written only by addStagedFiles, never by a patch or
    * from a message's text: what goes when the conversation goes. */
   stagedFiles?: string[];
+  /** A host product's helper conversation: its own tool selection on top of
+   * its bot's, set by the member API's `toolScope` before its first turn.
+   * It only ever narrows (narrowToolScope). Written only by narrowTaskTools,
+   * never by a patch; clients never see it. */
+  toolScope?: ToolScope;
   /** Summaries Sagax wrote when it folded this thread on its own, newest
    * last (server/context/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
@@ -205,7 +210,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
 /** TaskRecord fields no client may see. Everything else must be on WireTask:
  * the exactness assertion below fails to compile when either side drifts,
  * so a new server field forces a decision — wire-visible or private here. */
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker" | "stagedFiles";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker" | "stagedFiles" | "toolScope";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
 export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
@@ -225,7 +230,7 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
     engineSessions: _engineSessions, carriedThreads: _carriedThreads, forgetSessionsAtNextTurn: _forgetSessionsAtNextTurn, speaker: _speaker,
-    stagedFiles: _stagedFiles, ...stored } = task;
+    stagedFiles: _stagedFiles, toolScope: _toolScope, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
     // only the fact, never when (shared/background-threads.ts)
     ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
@@ -3479,6 +3484,23 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     saveBotsFor("the files sent to this conversation", () => this.saveBotsSoon());
   }
 
+  /** Narrow one conversation's tools (the member API's `toolScope`): what it
+   * may use is what its bot may use and this scope allows. A second call
+   * narrows again, never widens. False when there is no such conversation. */
+  narrowTaskTools(botId: string, threadId: string, scope: ToolScope): boolean {
+    const bot = this.bot(botId);
+    const task = this.taskByThread(botId, threadId);
+    if (!bot || !task) return false;
+    const next = task.toolScope === undefined ? structuredClone(scope) : narrowToolScope(task.toolScope, scope) ?? { allow: [] };
+    // saved before the first turn: a restart never finds it wider
+    try {
+      this.commitBotChange(bot, "the tools of this conversation", () => { task.toolScope = next; });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   setHandedMessages(botId: string, threadId: string, instanceId: string, state: HandedState) {
     const task = this.taskByThread(botId, threadId);
     if (!task || JSON.stringify(task.handedMessages?.[instanceId]) === JSON.stringify(state)) return;
@@ -3772,6 +3794,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       pinnedMessageId: task.pinnedMessageId,
       activity: task.activity ?? "idle",
       busy: Boolean(task.busy),
+      // a conversation's own narrowing on top of its bot's selection
+      ...(task.toolScope !== undefined ? { toolScope: narrowToolScope(bot.toolScope, task.toolScope) } : {}),
     };
   }
 

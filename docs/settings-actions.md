@@ -195,7 +195,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Primary Bot | Bot editor > Permissions > Primary Bot | `sagax_settings` get, set `bot.primary` | simple |
 | Parallel work, recovery and turn limits ({maxConcurrentThreads, maxParallelPerPerson, busySend, automaticRecovery, turnLimits}) | Bot editor > Behaviour > Parallel tasks | `sagax_settings` get, set `bot.runtime` | simple |
 | Who pays for replies (owner, speaker = each person, default) | Bot editor > Model > Who pays for replies | `sagax_settings` get, set `bot.turnPayer` | simple |
-| Its rules, RULES.md (get: every rule set's text; set: {action: append, text} / {action: replace, oldText, text} / {action: remove, oldText}, optional set; one rule, at most 500 characters) | Bot editor > Rules | `sagax_settings` get, set `bot.rules` | simple |
+| Its rules, RULES.md (get: every rule set's text; set: {action: append, text} / {action: replace, oldText, text} / {action: remove, oldText}, optional set, a new name creates it; one rule, at most 500 characters) | Bot editor > Rules | `sagax_settings` get, set `bot.rules` | simple |
 | A reference document in docs/ (get: value its path, docs/<name>.md; set: {action: write/append/replace/delete, path, text?, oldText?}): procedures, lists, references | Bot editor > Files | `sagax_settings` get, set `bot.docs` | simple |
 | Memory text | Bot editor > Memory | `sagax_settings` get, set `bot.memory` | simple |
 | The memory's files (read only: MEMORY.md and the topics memory/<topic>.md, their size; bot.memoryFile reads and changes one) | Bot editor > Memory | `sagax_settings` get, set `bot.memoryFiles` | simple |

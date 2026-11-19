@@ -14,6 +14,21 @@ export interface VersionRow {
   before?: string;
   after?: string;
   canRestore?: boolean;
+  /** #4940: who wrote it: the person, an AI client by MCP (its client name)
+   * or a bot acting for its person. Older rows have none. */
+  writer?: VersionWriter;
+}
+
+export interface VersionWriter {
+  kind: "person" | "agent" | "bot";
+  via: string;
+  name?: string;
+  client?: string;
+}
+
+/** Two writers are the same author: same kind and AI client. */
+export function sameWriter(a: VersionWriter | undefined, b: VersionWriter | undefined): boolean {
+  return (a?.kind ?? "") === (b?.kind ?? "") && (a?.client ?? "") === (b?.client ?? "");
 }
 
 /** What a restore may write: the profile fields the history records. */
@@ -37,7 +52,7 @@ const TOGGLES = new Set(["notifications", "speakReplies"]);
 /** The changes recorded together with `row` (one save writes one row per
  * field, with the same time and origin). */
 function sameChange(a: VersionRow, b: VersionRow): boolean {
-  return a.at === b.at && a.via === b.via && a.actor === b.actor;
+  return a.at === b.at && a.via === b.via && a.actor === b.actor && sameWriter(a.writer, b.writer);
 }
 
 /** The fields to write so the bot is back at the version `versionId` ends
@@ -83,6 +98,7 @@ export interface BotVersion<Row extends VersionRow = VersionRow> {
   at: number;
   actor: string;
   via: string;
+  writer?: VersionWriter;
   rows: Row[];
 }
 
@@ -94,7 +110,7 @@ export function botVersions<Row extends VersionRow>(rows: readonly Row[]): BotVe
   for (const row of oldestFirst) {
     const last = versions[versions.length - 1];
     if (last && sameChange(last.rows[0]!, row)) last.rows.push(row);
-    else versions.push({ id: row.id, at: row.at, actor: row.actor, via: row.via, rows: [row] });
+    else versions.push({ id: row.id, at: row.at, actor: row.actor, via: row.via, ...(row.writer ? { writer: row.writer } : {}), rows: [row] });
   }
   return versions.reverse();
 }

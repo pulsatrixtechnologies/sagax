@@ -8,6 +8,7 @@
 import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileRevision, profileSnapshot } from "../profiles/profile-revision.ts";
 import { flushProfileHistory, readHistory, recordProfileChange } from "../profiles/profile-versions.ts";
+import { historyWriterOf } from "../history-writer.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -82,7 +83,7 @@ export function createBotHistoryRoutes<B extends HistoryBot, W>(deps: BotHistory
       const before = profileSnapshot(bot);
       const updated = deps.setSoul(bot.id, parsed.patch.soul ?? "");
       if (!updated) return json(res, 404, { error: "no such bot" });
-      recordProfileChange(bot.id, "user", "rollback", before, profileSnapshot(updated));
+      recordProfileChange(bot.id, "user", "rollback", before, profileSnapshot(updated), historyWriterOf(auth));
       const visible = deps.wireBot(updated);
       deps.broadcast({ kind: "bot", bot: visible });
       return json(res, 200, { bot: visible });

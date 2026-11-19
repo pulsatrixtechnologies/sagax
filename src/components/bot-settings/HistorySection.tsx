@@ -30,7 +30,7 @@ import { formatMemoryBytes } from "@/lib/memory";
 import { cachedDateFormat, niceTime } from "@/lib/schedule-label";
 import { utf8Bytes } from "@/lib/soul";
 import type { LocaleKey } from "@/locales";
-import { botVersions, versionComparison, versionRestorePlan, type BotVersion } from "../../../shared/bot-versions";
+import { botVersions, sameWriter, versionComparison, versionRestorePlan, type BotVersion, type VersionWriter } from "../../../shared/bot-versions";
 import { foldMoreLabel } from "../ShowMoreFold";
 
 const ACTOR: Record<string, LocaleKey> = {
@@ -76,10 +76,15 @@ export interface HistoryRow {
   restoreUnavailableReason?: string;
   before?: string;
   after?: string;
+  /** #4940: who wrote it (server/history-writer.ts); older rows have none. */
+  writer?: VersionWriter;
 }
 
-/** Who changed it, in words ("You", "The bot"); an unknown actor as sent. */
-export function historyWho(row: Pick<HistoryRow, "actor">): string {
+/** Who changed it, in words ("You", "The bot"); an AI client by its own
+ * name and MCP ("Claude Code · MCP"); an unknown actor as sent. */
+export function historyWho(row: Pick<HistoryRow, "actor" | "writer">): string {
+  if (row.writer?.kind === "agent") return row.writer.client ? `${row.writer.client} · MCP` : "MCP";
+  if (row.writer?.kind === "bot") return t("botPanel.history.actor.bot");
   const key = ACTOR[row.actor];
   return key ? t(key) : row.actor;
 }
@@ -204,6 +209,7 @@ function historyEntries(versions: Version[]): Entry[] {
     const head = last?.versions[0];
     const alike = last && head && !last.current
       && head.actor === version.actor
+      && sameWriter(head.writer, version.writer)
       && restoredVersion(head) === restoredVersion(version)
       && fieldsKey(head) === fieldsKey(version)
       && last.day === dayKey(version.at);

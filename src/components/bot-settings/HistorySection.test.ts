@@ -88,6 +88,10 @@ describe("HistorySection helpers", () => {
   it("names who changed it and the field, an unknown one as sent", () => {
     expect(historyWho({ actor: "bot" })).toBe("The bot");
     expect(historyWho({ actor: "cron" })).toBe("cron");
+    // #4940: an AI client's change is not "You"
+    expect(historyWho({ actor: "user", writer: { kind: "agent", via: "mcp", client: "Claude Code" } })).toBe("Claude Code · MCP");
+    expect(historyWho({ actor: "user", writer: { kind: "agent", via: "mcp" } })).toBe("MCP");
+    expect(historyWho({ actor: "user", writer: { kind: "person", via: "app" } })).toBe("You");
     expect(historyField("soul")).toBe("Personality");
     expect(historyField("color")).toBe("color");
   });

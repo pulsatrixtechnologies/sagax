@@ -121,6 +121,15 @@ const sessionSchema = z.object({
    * credential, not the person at the keyboard. The "sign-in younger than 15 minutes" gates read this, never
    * `createdAt` (server/auth/recent-sign-in.ts). */
   authAt: z.number().optional(),
+  /** #4940: an act-as session opened for the member API names who writes
+   * through it, for the change history (server/history-writer.ts): the
+   * person in the console, or an AI client by MCP with its client name.
+   * Act-as sessions live in memory only. */
+  writer: z.object({
+    kind: z.enum(["person", "agent"]),
+    via: z.enum(["console", "mcp"]),
+    client: z.string().max(120).optional(),
+  }).optional(),
 });
 
 /** Why a session stopped authenticating, as the 401 `code` a client reads
@@ -952,7 +961,7 @@ export class SessionRegistry {
    * meets in Sagax. Like a bot-act copy: memory only, not listed, not
    * renewed, no identity provider grant of its own. Null for scopes this
    * registry refuses as personal. */
-  actAs(input: { principalId: string; scopes: Scope[]; label: string; userId?: string; idp?: SessionRecord["idp"] }): { token: string; session: PublicSession } | null {
+  actAs(input: { principalId: string; scopes: Scope[]; label: string; userId?: string; idp?: SessionRecord["idp"]; writer?: SessionRecord["writer"] }): { token: string; session: PublicSession } | null {
     const scopes = [...new Set(input.scopes)].filter((scope): scope is Scope => SCOPES.includes(scope));
     if (!scopes.length || this.personal(scopes)) return null;
     const now = this.now();
@@ -970,6 +979,7 @@ export class SessionRegistry {
     };
     if (input.userId) record.userId = input.userId;
     if (input.idp) record.idp = { iss: input.idp.iss, sub: input.idp.sub, ...(input.idp.role ? { role: input.idp.role } : {}) };
+    if (input.writer) record.writer = { kind: input.writer.kind, via: input.writer.via, ...(input.writer.client ? { client: input.writer.client.slice(0, 120) } : {}) };
     this.sessions.push(record);
     return { token, session: publicSession(record) };
   }

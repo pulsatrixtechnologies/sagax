@@ -7,6 +7,7 @@ import { soulFile, readSoulDrift, writeSoulMirror } from "../bots/bot-folder.ts"
 import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileRevision, profileSnapshot } from "../profiles/profile-revision.ts";
 import { recordProfileChange } from "../profiles/profile-versions.ts";
+import { historyWriterOf } from "../history-writer.ts";
 import { sessionPrincipal } from "../auth/request-auth.ts";
 
 import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile.ts";
@@ -67,7 +68,7 @@ export function createBotsCoreSoulRoutes(deps: BotsCoreRouteDeps): RouteHandler 
       const beforeProfile = profileSnapshot(bot);
       const updated = store.setSoul(bot.id, parsed.patch.soul ?? "");
       if (!updated) return json(res, 404, { error: "no such bot" });
-      recordProfileChange(bot.id, "file", "ui", beforeProfile, profileSnapshot(updated));
+      recordProfileChange(bot.id, "file", "ui", beforeProfile, profileSnapshot(updated), historyWriterOf(auth));
       recordPersonaSave(auth, bot.id, beforeProfile, profileSnapshot(updated));
       const visible = wireBot(updated);
       broadcast({ kind: "bot", bot: visible });

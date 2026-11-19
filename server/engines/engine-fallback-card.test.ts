@@ -28,7 +28,7 @@ function world() {
   const open = new Map<string, OpenEngineFallback>();
   const ledgerAt = () => new SignalLedger({ storage: signalLedgerDirStorage(dir), now: () => clock, schedule: (fn) => fn() });
   let ledger = ledgerAt();
-  const tell = () => createTellPerson<{ step: number }>({ ledger, notify: (n, item) => rings.push({ person: "", key: item.key, step: n.step }), log: () => {} });
+  const tell = () => createTellPerson<{ step: number }>({ ledger, notify: (n, item) => { rings.push({ person: "", key: item.key, step: n.step }); }, log: () => {} });
   const raise = (person: string, key: string, card: OpenEngineFallback) => {
     open.set(`${person}\u0000${key}`, card);
     tell()(person, { key, kind: KIND, bot: card.access.botId, label: `Reconnect ${card.access.engine}`, notification: { step: 0 } });

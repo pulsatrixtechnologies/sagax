@@ -40,7 +40,7 @@ import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
 import type { ReachCode, ReachCodeStore, ReachMeStore } from "./store.ts";
 import { reportBackgroundError } from "../background-error.ts";
-import { SignalLedger, type SignalEntry } from "../proactive/signal-ledger.ts";
+import { SignalLedger, type ChannelAnswer, type SignalEntry } from "../proactive/signal-ledger.ts";
 import { MORNING_LINE_KIND, URGENT_LADDER, dueStep, hasNextStep, ladderFor, morningLineKey, morningMinute } from "../proactive/escalation-ladder.ts";
 import { ROUTINE_PROBLEM_KEY_PREFIX } from "../routines/routine-problem-card.ts";
 import { CONFIDENTIAL_NOTICE_BODY } from "../threads/confidential-threads.ts";
@@ -293,26 +293,50 @@ export class ReachMe {
 
   private sendNotice(notice: ReachNotice, settings: ReachMeSettings): void {
     const channels = channelsForLevel("card", this.attention(notice.person).channels, settings.channels);
-    this.signals.told(notice.person, { key: notice.id, kind: REACH_NOTICE_KIND, level: "card", bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } }, channels);
-    if (channels.includes("push")) {
-      this.deps.push({
-        kind: "message", personId: notice.person, title: notice.botName || notice.title,
-        // a notice line can be a bot's Markdown: the phone reads it as words
-        body: plainPreviewLine([notice.title, ...notice.lines].join("\n"), 600),
-        threadId: notice.threadId, botId: notice.botId, id: notice.id, at: this.now(),
-      });
+    const tried = new Set(this.signals.get(notice.person, notice.botId, notice.id)?.attempts ?? []);
+    // #4528: a text and a WhatsApp message are never handed twice. A push is handed once here; its sender retries once.
+    const hand = channels.filter((channel) => !tried.has(channel));
+    if (!hand.length) return;
+    const note = { key: notice.id, kind: REACH_NOTICE_KIND, level: "card" as const, bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } };
+    this.signals.handed(notice.person, note, hand);
+    let pushOk: boolean | undefined;
+    if (hand.includes("push")) {
+      try {
+        this.deps.push({
+          kind: "message", personId: notice.person, title: notice.botName || notice.title,
+          // a notice line can be a bot's Markdown: the phone reads it as words
+          body: plainPreviewLine([notice.title, ...notice.lines].join("\n"), 600),
+          threadId: notice.threadId, botId: notice.botId, id: notice.id, at: this.now(),
+        });
+        pushOk = true;
+      } catch {
+        pushOk = false;
+      }
     }
-    this.track(this.dispatchNotice(notice, channels));
+    this.track(this.finishNotice(notice, hand, pushOk));
   }
 
-  private async dispatchNotice(notice: ReachNotice, channels: readonly ReachChannelId[]): Promise<void> {
+  /** Record what each channel answered. Told only when one of them arrived. */
+  private async finishNotice(notice: ReachNotice, hand: readonly ReachChannelId[], pushOk: boolean | undefined): Promise<void> {
+    const answers: ChannelAnswer[] = [];
+    if (pushOk !== undefined) answers.push({ channel: "push", ok: pushOk });
+    answers.push(...await this.dispatchNotice(notice, hand));
+    this.signals.recordAnswers(notice.person, notice.botId, notice.id, answers);
+    const arrived = answers.filter((answer) => answer.ok).map((answer) => answer.channel);
+    if (!arrived.length) return;
+    this.signals.told(notice.person, { key: notice.id, kind: REACH_NOTICE_KIND, level: "card", bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } }, arrived);
+  }
+
+  private async dispatchNotice(notice: ReachNotice, channels: readonly ReachChannelId[]): Promise<ChannelAnswer[]> {
     const wanted = channels.filter((channel) => channel !== "push");
+    const answers: ChannelAnswer[] = [];
     // a tag the Teams send carries (its one self-send is matched on it); nobody answers it
     const tag = `N${randomBytes(4).toString("hex").toUpperCase()}`;
     for (const channel of wanted) {
       const status = this.deps.channels[channel]?.status(notice.person, notice.botId);
       if (!status?.ready) {
         this.deps.audit({ person: notice.person, botId: notice.botId, threadId: notice.threadId, channel, action: "send_failed", reason: status?.reason ?? "not set up" });
+        answers.push({ channel, ok: false });
         continue;
       }
       const out: ReachOutbound = {
@@ -321,10 +345,12 @@ export class ReachMe {
         language: this.deps.language(notice.person),
       };
       const result = await this.deps.channels[channel]!.send(out).catch((error: unknown) => ({ ok: false as const, reason: error instanceof Error ? error.message : "error" }));
+      answers.push({ channel, ok: result.ok });
       this.deps.audit(result.ok
         ? { person: notice.person, botId: notice.botId, threadId: notice.threadId, channel, action: "sent" }
         : { person: notice.person, botId: notice.botId, threadId: notice.threadId, channel, action: "send_failed", reason: result.reason.slice(0, 200) });
     }
+    return answers;
   }
 
   /** Every minute: notices held for the person's quiet hours go out once they end, a card left open is recalled, and

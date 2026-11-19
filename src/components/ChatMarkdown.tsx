@@ -1320,7 +1320,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         }
         if (kind === "x-posts" && !inert && !pending) {
           const posts = parseXPostsFence(code);
-          if (posts) return <XPostList posts={posts} />;
+          if (posts) return <XPostList posts={posts} threadId={threadId} botId={botId} />;
         }
         const email = kind === "email" || !kind ? parseEmailBlock(code, lang) : null;
         if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} draftsEnabled={emailDrafts} />;

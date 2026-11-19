@@ -50,6 +50,18 @@ export interface XPostView {
   media: XMedia[];
   quoted?: XPostView;
   metrics?: XMetrics;
+  /** A post the person's own bot just published (the card shows the Posted chip). */
+  posted?: boolean;
+  /** What a reply answers: the handle when known, the parent post when the thread holds it. */
+  replyTo?: { id?: string; handle?: string; post?: XPostView };
+}
+
+/** The X account a bot posts from: what its connector knows about it. */
+export interface XAccount {
+  handle: string;
+  name: string;
+  verified: boolean;
+  avatarUrl?: string;
 }
 
 export interface XDraft {
@@ -310,10 +322,11 @@ export function readXPost(value: unknown, includes?: Row, depth = 0): XPostView 
   const author = isRow(value.author) ? value.author : isRow(value.user) ? value.user : users.find((user) => user.id !== undefined && String(user.id) === String(value.author_id));
   const handle = handleOf(first(value.handle, value.username, value.screen_name, author?.username, author?.handle, author?.screen_name));
   const body = typeof value.text === "string" ? value.text : typeof value.full_text === "string" ? value.full_text : undefined;
-  if (!handle || !body?.trim()) return null;
+  const posted = value.posted === true;
+  if ((!handle && !posted) || !body?.trim()) return null;
   const id = text(first(value.id, value.id_str, value.rest_id, value.tweet_id)) ?? (typeof value.id === "number" ? String(value.id) : undefined);
   const stated = xSiteUrl(value.url);
-  const url = stated ?? (id && /^\d{5,25}$/.test(id) ? `https://x.com/${handle}/status/${id}` : undefined);
+  const url = stated ?? (id && /^\d{5,25}$/.test(id) ? `https://x.com/${handle ?? "i/web"}/status/${id}` : undefined);
   const mediaKeys = isRow(value.attachments) && Array.isArray(value.attachments.media_keys) ? value.attachments.media_keys.map(String) : [];
   const included = Array.isArray(includes?.media) ? (includes!.media as unknown[]).filter(isRow) : [];
   const media = readMedia(Array.isArray(value.media) ? value.media : included.filter((item) => mediaKeys.includes(String(item.media_key))));
@@ -326,7 +339,7 @@ export function readXPost(value: unknown, includes?: Row, depth = 0): XPostView 
     isRow(quoteId) ? tweets.find((item) => String(item.id) === String(quoteId.id)) : undefined,
   );
   const quoted = quotedRaw ? readXPost(quotedRaw, includes, depth + 1) : null;
-  const name = text(first(value.name, value.displayName, value.display_name, author?.name, author?.displayName)) ?? handle;
+  const name = text(first(value.name, value.displayName, value.display_name, author?.name, author?.displayName)) ?? handle ?? "";
   const verifiedType = text(first(value.verified_type, author?.verified_type));
   const verified = first(
     typeof value.verified === "boolean" ? value.verified : undefined,
@@ -337,11 +350,12 @@ export function readXPost(value: unknown, includes?: Row, depth = 0): XPostView 
   const avatarUrl = httpsUrl(first(value.avatarUrl, value.avatar, value.profile_image_url, author?.avatarUrl, author?.profile_image_url, author?.profile_image_url_https));
   const createdAt = text(first(value.createdAt, value.created_at, value.date));
   const metrics = readMetrics(value);
+  const replyTo = depth === 0 ? readReplyTo(value, includes, users, depth) : undefined;
   return {
     ...(id ? { id } : {}),
     ...(url ? { url } : {}),
     name: name.slice(0, 80),
-    handle,
+    handle: handle ?? "",
     verified,
     ...(avatarUrl ? { avatarUrl } : {}),
     ...(createdAt ? { createdAt } : {}),
@@ -349,7 +363,22 @@ export function readXPost(value: unknown, includes?: Row, depth = 0): XPostView 
     media,
     ...(quoted ? { quoted } : {}),
     ...(metrics ? { metrics } : {}),
+    ...(posted ? { posted } : {}),
+    ...(replyTo ? { replyTo } : {}),
   };
+}
+
+function readReplyTo(value: Row, includes: Row | undefined, users: Row[], depth: number): XPostView["replyTo"] | undefined {
+  const given = isRow(value.replyTo) ? value.replyTo : isRow(value.reply_to) ? value.reply_to : undefined;
+  const refs = Array.isArray(value.referenced_tweets) ? (value.referenced_tweets as unknown[]).find((item) => isRow(item) && item.type === "replied_to") : undefined;
+  const id = text(first(given?.id, isRow(refs) ? refs.id : undefined, value.in_reply_to_status_id_str, value.in_reply_to_status_id, value.in_reply_to_tweet_id)) ?? undefined;
+  const tweets = Array.isArray(includes?.tweets) ? (includes!.tweets as unknown[]).filter(isRow) : [];
+  const parentRaw = first<Row>(isRow(given?.post) ? given.post : undefined, id ? tweets.find((item) => String(item.id) === id) : undefined);
+  const post = parentRaw ? readXPost(parentRaw, includes, depth + 1) : null;
+  const userId = text(first(value.in_reply_to_user_id, value.in_reply_to_user_id_str));
+  const handle = handleOf(first(given?.handle, value.in_reply_to_screen_name, value.in_reply_to_username, post?.handle, userId ? users.find((user) => String(user.id) === userId)?.username : undefined));
+  if (!id && !handle && !post) return undefined;
+  return { ...(id ? { id } : {}), ...(handle ? { handle } : {}), ...(post ? { post } : {}) };
 }
 
 /** The posts of an ```x-posts fence: an array, {posts|data|tweets|results}, or one post. */
@@ -406,4 +435,94 @@ export function xCount(value: number, language = "en"): string {
   if (value >= 1_000_000) return short(1_000_000, "M");
   if (value >= 10_000) return short(1_000, "K");
   return new Intl.NumberFormat(fr ? "fr-CA" : "en-US").format(value);
+}
+
+
+// ---------------------------------------------------------------------------
+// Who posted: the account the X connector acts as (#4640)
+
+/** A tool that tells who the connection is: "me", "whoami", verify credentials. */
+export function isXAccountTool(name: string): boolean {
+  const lowered = ` ${name.toLowerCase().replace(/__+/g, " ").replace(/[^a-z0-9]+/g, " ")} `;
+  return X_WORD.test(lowered) && /( me | whoami | self | current user | verify credentials | authenticated | my account | account )/.test(lowered) && !/( delete | update | follow | block | mute )/.test(lowered);
+}
+
+/** X serves a small picture by default: the larger one reads sharper on a card. */
+export function xAvatarSized(url: string, size: "bigger" | "400x400" = "400x400"): string {
+  return url.replace(/_(normal|bigger|mini|400x400|200x200)(\.\w+)$/i, `_${size}$2`);
+}
+
+/** One account out of a user object (API v2 or v1.1 names) or a card's own fields. */
+export function readXAccount(value: unknown): XAccount | null {
+  if (!isRow(value)) return null;
+  const handle = handleOf(first(value.username, value.screen_name, value.handle));
+  if (!handle) return null;
+  const name = text(first(value.name, value.displayName, value.display_name)) ?? handle;
+  const verifiedType = text(value.verified_type);
+  const verified = first(
+    typeof value.verified === "boolean" ? value.verified : undefined,
+    typeof value.is_blue_verified === "boolean" ? value.is_blue_verified : undefined,
+  ) ?? Boolean(verifiedType && verifiedType !== "none");
+  const avatarUrl = httpsUrl(first(value.profile_image_url_https, value.profile_image_url, value.avatarUrl, value.avatar));
+  return { handle, name: name.slice(0, 80), verified, ...(avatarUrl ? { avatarUrl } : {}) };
+}
+
+function jsonOf(output: string | undefined): unknown {
+  if (!output) return undefined;
+  const raw = output.trim();
+  for (const candidate of [raw, raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)]) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try the next shape
+    }
+  }
+  return undefined;
+}
+
+/** The posting account in a tool's answer. A "who am I" answer is the account itself;
+ * a post answer names it as the post's author (an `includes.users` entry, `author`, `user`). */
+export function xAccountFromOutput(output: string | undefined, whoAmI = false): XAccount | null {
+  const parsed = jsonOf(output);
+  if (!isRow(parsed)) return null;
+  const data = isRow(parsed.data) ? parsed.data : undefined;
+  const users = isRow(parsed.includes) && Array.isArray(parsed.includes.users) ? (parsed.includes.users as unknown[]) : [];
+  const candidates: unknown[] = whoAmI ? [data, parsed, parsed.user, parsed.account] : [users[0], data?.author, data?.user, parsed.author, parsed.user, parsed.core && isRow(parsed.core) ? (parsed.core.user_results as Row | undefined)?.result : undefined];
+  for (const candidate of candidates) {
+    const direct = readXAccount(candidate);
+    if (direct) return direct;
+    if (isRow(candidate) && isRow(candidate.legacy)) {
+      const legacy = readXAccount({ ...candidate.legacy, verified: candidate.is_blue_verified ?? candidate.legacy.verified });
+      if (legacy) return legacy;
+    }
+  }
+  return null;
+}
+
+/** What a post call replies to, out of its arguments (X API v2 `reply.in_reply_to_tweet_id` and the usual flat names). */
+export function xReplyFromInput(input: string | undefined): { id?: string; handle?: string } | null {
+  const parsed = jsonOf(input);
+  if (!isRow(parsed)) return null;
+  const rows: Row[] = [];
+  const walk = (value: unknown, depth: number) => {
+    if (depth > 3 || !isRow(value)) return;
+    rows.push(value);
+    for (const inner of Object.values(value)) walk(inner, depth + 1);
+  };
+  walk(parsed, 0);
+  let id: string | undefined;
+  let handle: string | undefined;
+  for (const row of rows) {
+    const found = text(first(row.in_reply_to_tweet_id, row.in_reply_to_status_id, row.reply_to_tweet_id, row.reply_to_post_id, row.reply_to_id, row.replyToId, row.reply_to));
+    if (!id && found && /^\d{5,25}$/.test(found)) id = found;
+    handle ??= handleOf(first(row.in_reply_to_screen_name, row.in_reply_to_username, row.reply_to_handle, row.reply_to_username));
+    const link = text(first(row.reply_to_url, row.in_reply_to_url));
+    const match = link ? /(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})/i.exec(link) : null;
+    if (match) {
+      handle ??= match[1];
+      id ??= match[2];
+    }
+  }
+  return id || handle ? { ...(id ? { id } : {}), ...(handle ? { handle } : {}) } : null;
 }

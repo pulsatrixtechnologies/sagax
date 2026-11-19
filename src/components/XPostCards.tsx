@@ -7,11 +7,15 @@
 //               then turns into the published post with its link. Discard
 //               closes it. Nothing is posted by the fence itself.
 //   XPostList   what a bot read from X: each post drawn the way x.com draws it
-//               (name, badge, @handle, date, text with links, a quoted post as
+//               (name, badge, @handle, time, text with links, a quoted post as
 //               an inner card, media, the row of counts), stacked like a
 //               timeline. A click opens the post on x.com.
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy } from "lucide-react";
+//               What the person's bot just published (#4640) is one card of its
+//               own, as the account that posted it (picture, name, badge,
+//               @handle), with a quiet Posted chip; several posts of one turn
+//               are a fan of cards like photos in iMessage (XPostStack).
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t, activeLocale } from "@/lib/i18n";
@@ -24,6 +28,7 @@ import {
   xCounter,
   xDraftKey,
   xPostText,
+  type XAccount,
   type XDraft,
   type XMedia,
   type XPostStatus,
@@ -58,20 +63,59 @@ function initialsOf(name: string): string {
   return letters.join("") || "X";
 }
 
-/** The account picture: X's own CDN loads, anything else shows the initials. */
-function XAvatar({ url, name, size = 40 }: { url?: string; name: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  const show = url && isXMediaHost(url) && !failed;
+/** A picture the card may draw: X's own CDN, or the copy Sagax kept of it. */
+const drawable = (url: string | undefined): url is string => Boolean(url && (isXMediaHost(url) || /^data:image\/(jpeg|png|webp|gif);base64,/.test(url)));
+
+/** The account picture: X's own CDN loads (then the copy Sagax kept), else the initials. */
+function XAvatar({ url, fallbackUrl, name, size = 40 }: { url?: string; fallbackUrl?: string; name: string; size?: number }) {
+  const [failed, setFailed] = useState(0);
+  const sources = [url, fallbackUrl].filter(drawable);
+  const shown = sources[failed];
   return (
     <span
       data-x-avatar=""
       aria-hidden="true"
       style={{ width: size, height: size }}
-      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-raised text-[13px] font-semibold text-ink-secondary"
+      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--x-line)] text-[13px] font-semibold text-[var(--x-sub)]"
     >
-      {show ? <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" /> : size >= 32 ? (name ? initialsOf(name) : <XIcon name="logo" size={18} className="text-ink" />) : null}
+      {shown ? <img src={shown} alt="" loading="lazy" onError={() => setFailed(failed + 1)} className="size-full object-cover" /> : size >= 32 ? (name ? initialsOf(name) : <XIcon name="logo" size={18} className="text-[var(--x-ink)]" />) : null}
     </span>
   );
+}
+
+// The account a bot posts as, asked once per conversation and bot (#4640).
+const accountReads = new Map<string, Promise<XAccountView | null>>();
+type XAccountView = XAccount & { avatarData?: string };
+function useXAccount(threadId: string | undefined, botId: string | undefined, wanted = true): XAccountView | null {
+  const [account, setAccount] = useState<XAccountView | null>(null);
+  useEffect(() => {
+    if (!threadId || !wanted) return;
+    const key = `${threadId}:${botId ?? ""}`;
+    let read = accountReads.get(key);
+    if (!read) {
+      read = api<{ account: XAccountView | null }>(`/api/threads/${encodeURIComponent(threadId)}/x-account${botId ? `?botId=${encodeURIComponent(botId)}` : ""}`).then((body) => body.account).catch(() => null);
+      accountReads.set(key, read);
+      // a missing account is asked again next time: the tool may tell it later
+      void read.then((value) => { if (!value) accountReads.delete(key); });
+    }
+    let live = true;
+    void read.then((value) => { if (live) setAccount(value); });
+    return () => { live = false; };
+  }, [threadId, botId, wanted]);
+  return account;
+}
+
+/** A published post with the account that posted it: what the post lacks is filled in. */
+function withAccount(post: XPostView, account: XAccountView | null): XPostView {
+  if (!account || !post.posted) return post;
+  const handle = post.handle || account.handle;
+  return {
+    ...post,
+    handle,
+    name: post.name || account.name,
+    verified: post.handle ? post.verified : account.verified,
+    ...(post.avatarUrl || account.avatarUrl ? { avatarUrl: post.avatarUrl ?? account.avatarUrl } : {}),
+  };
 }
 
 function VerifiedBadge() {
@@ -86,6 +130,19 @@ export function xDateText(value: string | undefined, now = Date.now()): string {
   const date = new Date(time);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return new Intl.DateTimeFormat(activeLocale().startsWith("fr") ? "fr-CA" : "en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+/** The time as X's timeline shows it: 5s, 12m, 3h, then the date. */
+export function xTimeText(value: string | undefined, now = Date.now()): string {
+  if (!value) return "";
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return value;
+  const seconds = Math.max(0, Math.floor((now - time) / 1000));
+  const fr = activeLocale().startsWith("fr");
+  if (seconds < 60) return fr ? `${seconds} s` : `${seconds}s`;
+  if (seconds < 3600) return fr ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86_400) return fr ? `${Math.floor(seconds / 3600)} h` : `${Math.floor(seconds / 3600)}h`;
+  return xDateText(value, now);
 }
 
 const LINK = /(https?:\/\/[^\s]+|(?<![\w@])[@#][A-Za-z0-9_]+)/g;
@@ -163,31 +220,32 @@ function XMediaView({ media }: { media: XMedia[] }) {
 }
 
 function XHeader({ post, compact = false }: { post: XPostView; compact?: boolean }) {
-  const date = xDateText(post.createdAt);
+  const date = xTimeText(post.createdAt);
+  const full = post.createdAt && Number.isFinite(Date.parse(post.createdAt)) ? new Date(post.createdAt).toLocaleString(activeLocale().startsWith("fr") ? "fr-CA" : "en-US") : undefined;
   return (
     <div className={cn("flex min-w-0 items-center gap-1 leading-5", compact ? "text-[15px]" : "text-[15px]")}>
-      <span className="min-w-0 truncate font-bold text-[var(--x-ink)]">{post.name}</span>
+      <span className="min-w-0 truncate font-bold text-[var(--x-ink)]">{post.name || (post.handle ? post.handle : t("rich.x.you"))}</span>
       {post.verified && <span title={t("rich.x.verified")} className="inline-flex shrink-0"><VerifiedBadge /></span>}
-      <span className="min-w-0 truncate text-[var(--x-sub)]">@{post.handle}</span>
+      {post.handle && <span className="min-w-0 truncate text-[var(--x-sub)]">@{post.handle}</span>}
       {date && (
         <>
           <span aria-hidden="true" className="shrink-0 text-[var(--x-sub)]">·</span>
-          <time dateTime={post.createdAt} className="shrink-0 whitespace-nowrap text-[var(--x-sub)]">{date}</time>
+          <time dateTime={post.createdAt} title={full} className="shrink-0 whitespace-nowrap text-[var(--x-sub)]">{date}</time>
         </>
       )}
     </div>
   );
 }
 
-function XQuote({ post }: { post: XPostView }) {
+function XQuote({ post, compact = false }: { post: XPostView; compact?: boolean }) {
   return (
-    <div data-x-quote="" className="mt-3 overflow-hidden rounded-2xl border border-[var(--x-quote-line)] px-3 pb-3 pt-3">
+    <div data-x-quote="" data-x-parent={compact ? "" : undefined} className="mt-3 overflow-hidden rounded-2xl border border-[var(--x-quote-line)] px-3 pb-3 pt-3">
       <div className="flex min-w-0 items-center gap-1.5">
         <XAvatar url={post.avatarUrl} name={post.name} size={20} />
         <XHeader post={post} compact />
       </div>
-      <XText text={post.text} className="mt-1 text-[15px] leading-5 text-[var(--x-ink)]" />
-      <XMediaView media={post.media} />
+      <XText text={post.text} className={cn("mt-1 text-[15px] leading-5 text-[var(--x-ink)]", compact && "line-clamp-2")} />
+      {!compact && <XMediaView media={post.media} />}
     </div>
   );
 }
@@ -200,10 +258,11 @@ const METRICS: { key: "replies" | "reposts" | "likes" | "views"; icon: keyof typ
   { key: "views", icon: "views", hover: "group-hover/m:text-[#1d9bf0]", label: "rich.x.views" },
 ];
 
+/** X's action row: reply, repost, like, views with their counts when known (muted icons otherwise), bookmark and share.
+ * A post the person's bot just published carries the quiet Posted chip in place of bookmark and share. */
 function XFooter({ post }: { post: XPostView }) {
   const language = activeLocale();
-  if (!post.metrics) return null;
-  const metrics = post.metrics;
+  const metrics = post.metrics ?? {};
   const label = (key: (typeof METRICS)[number]) => {
     const value = metrics[key.key];
     return value === undefined ? t(key.label, { count: "0" }) : t(key.label, { count: xCount(value, language) });
@@ -219,14 +278,35 @@ function XFooter({ post }: { post: XPostView }) {
           <span className="-ms-1 min-w-4 whitespace-nowrap tabular-nums">{metrics[metric.key] === undefined ? "" : xCount(metrics[metric.key]!, language)}</span>
         </span>
       ))}
-      <span className="ms-auto flex shrink-0 items-center">
-        <span data-x-metric="bookmark" title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
-          <XIcon name="bookmark" />
+      {post.posted ? (
+        <span data-x-posted-chip="" role="status" className="ms-auto me-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--x-sub)_16%,transparent)] px-2 py-0.5 text-[12px] font-medium text-[var(--x-sub)]">
+          <Check size={12} aria-hidden="true" className="text-[#00ba7c]" />
+          {t("rich.x.status.posted")}
         </span>
-        <span data-x-metric="share" title={t("rich.x.share")} aria-label={t("rich.x.share")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
-          <XIcon name="share" />
+      ) : (
+        <span className="ms-auto flex shrink-0 items-center">
+          <span data-x-metric="bookmark" title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
+            <XIcon name="bookmark" />
+          </span>
+          <span data-x-metric="share" title={t("rich.x.share")} aria-label={t("rich.x.share")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
+            <XIcon name="share" />
+          </span>
         </span>
-      </span>
+      )}
+    </div>
+  );
+}
+
+/** "Replying to @handle", the handle in X's blue. */
+function XReplying({ post }: { post: XPostView }) {
+  const handle = post.replyTo?.handle ?? post.replyTo?.post?.handle;
+  return (
+    <div data-x-replying="" className="text-[15px] leading-5 text-[var(--x-sub)]">
+      {handle ? (
+        <>
+          {t("rich.x.replyingTo")} <span className="text-[#1d9bf0]">@{handle}</span>
+        </>
+      ) : t("rich.x.replyingToPost")}
     </div>
   );
 }
@@ -237,49 +317,61 @@ function openOnX(url: string, event: { preventDefault(): void }) {
   if (typeof window !== "undefined" && window.ogb) {
     event.preventDefault();
     window.open(url, "_blank", "noopener");
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
-export function XPostItem({ post, divider = false }: { post: XPostView; divider?: boolean }) {
+/** One post on X: the picture, the header, the text, the media, the reply's parent, the quote, the action row.
+ * As a timeline row it has no frame of its own; with `card` it is a card with one border and X's logo in the corner. */
+export function XPostItem({ post, divider = false, card = false, accountPicture, style, className }: {
+  post: XPostView;
+  divider?: boolean;
+  card?: boolean;
+  accountPicture?: string;
+  style?: CSSProperties;
+  className?: string;
+}) {
   const inner = (
     <>
-      <XAvatar url={post.avatarUrl} name={post.name} />
+      <XAvatar url={post.avatarUrl} fallbackUrl={accountPicture} name={post.name || post.handle} />
       <div className="min-w-0 flex-1">
-        <XHeader post={post} />
+        <div className={cn(card && "pe-6")}><XHeader post={post} /></div>
+        {post.replyTo && <XReplying post={post} />}
         <XText text={post.text} className="text-[15px] leading-5 text-[var(--x-ink)]" />
         <XMediaView media={post.media} />
         {post.quoted && <XQuote post={post.quoted} />}
+        {post.replyTo?.post && <XQuote post={post.replyTo.post} compact />}
         <XFooter post={post} />
       </div>
+      {card && <span data-x-logo="" aria-hidden="true" className="pointer-events-none absolute end-4 top-3 text-[var(--x-ink)]"><XIcon name="logo" size={18} /></span>}
     </>
   );
-  const frame = cn("flex min-w-0 gap-3 px-4 pb-1 pt-3", divider && "border-t border-[var(--x-line)]");
-  const label = t("rich.x.post.aria", { name: post.name, handle: post.handle });
+  const frame = cn(
+    "flex min-w-0 gap-3 px-4 pb-1 pt-3",
+    card ? "x-post relative rounded-2xl border border-[var(--x-quote-line)] bg-[var(--x-bg)] pb-1.5 text-left shadow-sm" : divider && "border-t border-[var(--x-line)]",
+    className,
+  );
+  const label = t("rich.x.post.aria", { name: post.name || post.handle, handle: post.handle });
   const url = post.url;
-  if (!url) return <article data-x-post="" aria-label={label} className={frame}>{inner}</article>;
+  if (!url) return <article data-x-post="" data-x-posted={post.posted ? "" : undefined} aria-label={label} style={style} className={frame}>{inner}</article>;
   // the whole post opens on x.com; the links inside it keep their own target
-  const open = (event: { preventDefault(): void }) => {
-    if (typeof window !== "undefined" && window.ogb) {
-      event.preventDefault();
-      window.open(url, "_blank", "noopener");
-    } else {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
   return (
     <article
       data-x-post=""
+      data-x-posted={post.posted ? "" : undefined}
       role="link"
       tabIndex={0}
       aria-label={label}
       title={t("rich.x.open")}
       data-x-url={url}
+      style={style}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a")) return;
-        open(event);
+        if ((event.target as HTMLElement).closest("a, button")) return;
+        openOnX(url, event);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && event.target === event.currentTarget) open(event);
+        if (event.key === "Enter" && event.target === event.currentTarget) openOnX(url, event);
       }}
       className={cn(frame, "cursor-pointer transition-colors hover:bg-[var(--x-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d9bf0]")}
     >
@@ -288,14 +380,163 @@ export function XPostItem({ post, divider = false }: { post: XPostView; divider?
   );
 }
 
-function XPostListComponent({ posts }: { posts: XPostView[] }) {
+/** One post as a card of its own: a single border, X's logo in the corner. */
+export function XPostCard({ post, accountPicture, style, className }: { post: XPostView; accountPicture?: string; style?: CSSProperties; className?: string }) {
+  return <XPostItem post={post} card accountPicture={accountPicture} style={style} className={className} />;
+}
+
+// ---------------------------------------------------------------------------
+// Several posts of one turn: a fan of cards, like photos in iMessage
+
+const FAN_DEPTH = 3;
+const SWIPE_PX = 56;
+
+/** Where the card at `depth` behind the front one sits: a little lower, turned, smaller. */
+export function xFanStyle(depth: number, reduced: boolean): CSSProperties {
+  if (depth === 0) return { transform: "none", zIndex: 10 };
+  const side = depth % 2 === 1 ? 1 : -1;
+  if (depth > FAN_DEPTH) return { transform: `translateY(${FAN_DEPTH * 15}px) scale(0.86)`, opacity: 0, zIndex: 0, pointerEvents: "none" };
+  const turn = reduced ? 0 : side * depth * 1.8;
+  return { transform: `translate(${side * depth * 5}px, ${depth * 15}px) rotate(${turn}deg) scale(${1 - depth * 0.045})`, zIndex: 10 - depth, pointerEvents: "none" };
+}
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(query.matches);
+    const change = () => setReduced(query.matches);
+    query.addEventListener?.("change", change);
+    return () => query.removeEventListener?.("change", change);
+  }, []);
+  return reduced;
+}
+
+export function XPostStack({ posts, accountPicture }: { posts: XPostView[]; accountPicture?: string }) {
+  const count = posts.length;
+  const [front, setFront] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [drag, setDrag] = useState(0);
+  const reduced = useReducedMotion();
+  const gesture = useRef<{ x: number; moved: boolean } | null>(null);
+  const swallow = useRef(false);
+  const go = useCallback((step: number) => setFront((current) => (current + step + count) % count), [count]);
+
+  const begin = (event: React.PointerEvent) => {
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    gesture.current = { x: event.clientX, moved: false };
+    const move = (next: PointerEvent) => {
+      const state = gesture.current;
+      if (!state) return;
+      const delta = next.clientX - state.x;
+      if (Math.abs(delta) > 5) state.moved = true;
+      if (state.moved) setDrag(delta);
+    };
+    const end = (next: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      const state = gesture.current;
+      gesture.current = null;
+      setDrag(0);
+      if (!state?.moved) return;
+      // a drag is not a click on the card under it
+      swallow.current = true;
+      setTimeout(() => { swallow.current = false; }, 0);
+      const delta = next.clientX - state.x;
+      if (Math.abs(delta) >= SWIPE_PX) go(delta < 0 ? 1 : -1);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+  const keys = (event: ReactKeyboardEvent) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "ArrowRight") { event.preventDefault(); go(1); }
+    else if (event.key === "ArrowLeft") { event.preventDefault(); go(-1); }
+  };
+
+  const behind = Math.min(count - 1, FAN_DEPTH);
   return (
-    <section data-x-posts="" aria-label={t("rich.x.list.aria", { count: String(posts.length) })} className="x-post my-2 min-w-0 overflow-hidden rounded-2xl border border-[var(--x-line)] bg-[var(--x-bg)] pb-2 text-left shadow-sm">
-      {posts.map((post, index) => <XPostItem key={post.id ?? `${post.handle}-${index}`} post={post} divider={index > 0} />)}
+    <section data-x-stack="" data-x-expanded={expanded ? "" : undefined} aria-label={t("rich.x.list.aria", { count: String(count) })} className="x-post my-2 min-w-0 max-w-[36rem] text-left">
+      <div className="mb-2 flex items-center gap-1 text-[13px] text-ink-secondary">
+        <button
+          type="button"
+          data-x-stack-label=""
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium text-ink-secondary hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        >
+          {t("rich.x.stack.label", { count: String(count) })}
+          <ChevronDown size={14} aria-hidden="true" className={cn("transition-transform", expanded && "rotate-180")} />
+        </button>
+        {!expanded && (
+          <span className="ms-auto flex items-center gap-0.5">
+            <button type="button" data-x-stack-prev="" aria-label={t("rich.x.stack.prev")} onClick={() => go(-1)} className="flex size-7 items-center justify-center rounded-full hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><ChevronLeft size={15} aria-hidden="true" /></button>
+            <span className="min-w-8 text-center tabular-nums" aria-live="polite">{front + 1} / {count}</span>
+            <button type="button" data-x-stack-next="" aria-label={t("rich.x.stack.next")} onClick={() => go(1)} className="flex size-7 items-center justify-center rounded-full hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><ChevronRight size={15} aria-hidden="true" /></button>
+          </span>
+        )}
+      </div>
+      {expanded ? (
+        <div className="flex flex-col gap-3">
+          {posts.map((post, index) => <XPostCard key={post.id ?? `${post.handle}-${index}`} post={post} accountPicture={accountPicture} />)}
+        </div>
+      ) : (
+        <div
+          role="group"
+          aria-roledescription={t("rich.x.stack.role")}
+          tabIndex={0}
+          onKeyDown={keys}
+          onPointerDown={begin}
+          onClickCapture={(event) => { if (swallow.current) { event.preventDefault(); event.stopPropagation(); } }}
+          data-x-stack-deck=""
+          style={{ paddingBottom: behind * 17 + (behind ? 14 : 0), touchAction: "pan-y" }}
+          className="relative rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d9bf0]/60"
+        >
+          {posts.map((post, index) => {
+            const depth = (index - front + count) % count;
+            const top = depth === 0;
+            const room = behind * 17 + (behind ? 14 : 0);
+            const style: CSSProperties = top && drag
+              ? { transform: `translateX(${drag}px) rotate(${reduced ? 0 : drag / 40}deg)`, zIndex: 10, transition: "none", userSelect: "none" }
+              : { ...xFanStyle(depth, reduced), ...(top ? {} : { bottom: room }) };
+            return (
+              <div
+                key={post.id ?? `${post.handle}-${index}`}
+                data-x-stack-card={top ? "front" : String(depth)}
+                aria-hidden={top ? undefined : true}
+                {...(top ? {} : { inert: true })}
+                style={style}
+                className={cn("x-stack-card", top ? "relative" : "absolute inset-x-0 top-0 overflow-hidden rounded-2xl", !top && "h-auto [&>article>*]:invisible")}
+              >
+                <XPostCard post={post} accountPicture={accountPicture} className={top ? undefined : "h-full"} />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
-export const XPostList = memo(XPostListComponent, (previous, next) => JSON.stringify(previous.posts) === JSON.stringify(next.posts));
+
+function XPostListComponent({ posts, threadId, botId }: { posts: XPostView[]; threadId?: string; botId?: string }) {
+  const mine = posts.some((post) => post.posted);
+  const account = useXAccount(threadId, botId, mine);
+  const filled = mine ? posts.map((post) => withAccount(post, account)) : posts;
+  const picture = account?.avatarData;
+  if (mine && filled.length > 1 && filled.every((post) => post.posted)) return <XPostStack posts={filled} accountPicture={picture} />;
+  if (filled.length === 1) {
+    return <section data-x-posts="" aria-label={t("rich.x.list.aria", { count: "1" })} className="x-post my-2 min-w-0 max-w-[36rem] text-left"><XPostCard post={filled[0]!} accountPicture={picture} /></section>;
+  }
+  return (
+    <section data-x-posts="" aria-label={t("rich.x.list.aria", { count: String(posts.length) })} className="x-post my-2 min-w-0 overflow-hidden rounded-2xl border border-[var(--x-quote-line)] bg-[var(--x-bg)] pb-2 text-left shadow-sm">
+      {filled.map((post, index) => <XPostItem key={post.id ?? `${post.handle}-${index}`} post={post} divider={index > 0} accountPicture={picture} />)}
+    </section>
+  );
+}
+export const XPostList = memo(XPostListComponent, (previous, next) => previous.threadId === next.threadId && previous.botId === next.botId && JSON.stringify(previous.posts) === JSON.stringify(next.posts));
 
 // ---------------------------------------------------------------------------
 // The draft
@@ -383,10 +624,13 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
   const { copied, copy } = useCopyFeedback();
   const key = xDraftKey(written.text);
   const { state, act } = useDraftPost(threadId, messageId, key);
+  const account = useXAccount(threadId, botId, !held);
+  const postedAt = useRef(new Date().toISOString());
   const [edited, setEdited] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const text = edited ?? written.text;
-  const name = written.name ?? written.handle ?? "";
+  const name = written.name ?? account?.name ?? written.handle ?? account?.handle ?? "";
+  const handle = written.handle ?? account?.handle;
   const counter = xCounter(text);
   const busy = held ? held.busy === true : state?.status === "asking" || state?.status === "sending";
   const settled = !held && (state?.status === "posted" || state?.status === "discarded");
@@ -410,10 +654,10 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
 
   const header = (
     <header className="flex items-start gap-3">
-      <XAvatar url={written.avatarUrl} name={name} />
+      <XAvatar url={written.avatarUrl ?? account?.avatarUrl} fallbackUrl={account?.avatarData} name={name} />
       <div className="flex min-w-0 flex-1 flex-col justify-center self-center leading-5">
         <span className="text-[15px] font-bold text-ink">{t("rich.x.draft.title")}</span>
-        {written.handle && <span className="truncate text-[13px] text-ink-secondary">@{written.handle}</span>}
+        {handle && <span className="truncate text-[13px] text-ink-secondary">@{handle}</span>}
       </div>
       <button
         type="button"
@@ -428,30 +672,23 @@ function XDraftCardComponent({ draft: written, pending = false, threadId, botId,
     </header>
   );
 
-  // the published post: the card turns into the post, with a link to it
+  // the published post: the card turns into the post as the account that posted it, one card, opening on x.com
   if (state?.status === "posted") {
     const posted: XPostView = {
-      name: written.name ?? written.handle ?? t("rich.x.you"),
-      handle: written.handle ?? "x",
-      verified: false,
-      ...(written.avatarUrl ? { avatarUrl: written.avatarUrl } : {}),
-      createdAt: new Date().toISOString(),
+      name: written.name ?? account?.name ?? "",
+      handle: handle ?? "",
+      verified: written.name || written.handle ? false : account?.verified ?? false,
+      ...(written.avatarUrl ?? account?.avatarUrl ? { avatarUrl: written.avatarUrl ?? account?.avatarUrl } : {}),
+      createdAt: postedAt.current,
       text: state.text ?? text,
       media: [],
+      posted: true,
       ...(state.url ? { url: state.url } : {}),
     };
+    const merged = account && handle === account.handle ? { ...posted, verified: account.verified } : posted;
     return (
-      <section data-x-draft="posted" className="x-post my-2 min-w-0 overflow-hidden rounded-2xl border border-[var(--x-line)] bg-[var(--x-bg)] pb-2 text-left shadow-sm">
-        <div className="flex items-center gap-1.5 px-4 pt-3 text-[13px] text-[var(--x-sub)]" role="status">
-          <Check size={13} aria-hidden="true" className="text-success" />
-          {t("rich.x.status.posted")}
-        </div>
-        <XPostItem post={{ ...posted, handle: written.handle ?? "x" }} />
-        {state.url && (
-          <a href={state.url} target="_blank" rel="noreferrer noopener" onClick={(event) => openOnX(state.url!, event)} data-x-view-link="" className="mx-4 mb-2 inline-block text-[13px] font-medium text-[#1d9bf0] hover:underline">
-            {t("rich.x.viewOnX")}
-          </a>
-        )}
+      <section data-x-draft="posted" className="x-post my-2 min-w-0 max-w-[36rem] text-left">
+        <XPostCard post={merged} accountPicture={account?.avatarData} />
       </section>
     );
   }

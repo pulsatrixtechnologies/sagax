@@ -7,13 +7,88 @@
  * own X tool call that carries exactly that text through (an organization
  * Refuse or Ask-first rule still holds it: see auto-approve.ts). When the
  * call ends, the state turns into posted (with the link) or failed. */
-import { X_POST_PASS_MS, isXPostTool, normalizeXDraft, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, type XPostRequest } from "../../shared/x-post.ts";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { X_POST_PASS_MS, isXAccountTool, isXMediaHost, isXPostTool, normalizeXDraft, parseXPostsFence, xAccountFromOutput, xAvatarSized, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, xReplyFromInput, type XAccount, type XPostRequest } from "../../shared/x-post.ts";
 export type Host = Record<string, any>;
 
 interface Pass { threadId: string; botId: string; messageId: string; draftKey: string; text: string; handle?: string; expires: number }
 
+/** What is kept about the posting account of one bot: its identity and a small copy of its picture. */
+interface KnownAccount extends XAccount { avatarData?: string; at: number }
+const AVATAR_MAX_BYTES = 60_000;
+const X_TOOL_WORD = /(^|[^a-z])(x|twitter)([^a-z]|$)/;
+
 export function createXPostCard(getHost: () => Host): any {
   const passes: Pass[] = [];
+  let known: Record<string, KnownAccount> | undefined;
+  const file = (host: Host) => join(host.DATA_DIR, "x-accounts.json");
+  const accounts = (host: Host) => {
+    if (!known) {
+      try {
+        known = JSON.parse(readFileSync(file(host), "utf8"));
+      } catch {
+        known = {};
+      }
+    }
+    return known!;
+  };
+  const save = (host: Host) => {
+    try {
+      mkdirSync(host.DATA_DIR, { recursive: true });
+      writeFileSync(file(host), JSON.stringify(known ?? {}));
+    } catch {
+      // the identity is a convenience: a disk that refuses it keeps the memory copy
+    }
+  };
+
+  /** Keep who the bot posts as, and fetch its picture once so the card never waits on X's CDN. */
+  function remember(host: Host, botId: string, account: XAccount) {
+    const all = accounts(host);
+    const before = all[botId];
+    const sameAvatar = before && before.handle === account.handle && before.avatarUrl === account.avatarUrl;
+    all[botId] = { ...account, ...(sameAvatar && before.avatarData ? { avatarData: before.avatarData } : {}), at: Date.now() };
+    save(host);
+    if (!sameAvatar || !before?.avatarData) void cacheAvatar(host, botId, account);
+  }
+  async function cacheAvatar(host: Host, botId: string, account: XAccount) {
+    if (!account.avatarUrl || !isXMediaHost(account.avatarUrl)) return;
+    try {
+      const answer = await fetch(xAvatarSized(account.avatarUrl, "bigger"), { signal: AbortSignal.timeout(8000), redirect: "error" });
+      const type = answer.headers.get("content-type") ?? "";
+      if (!answer.ok || !/^image\/(jpeg|png|webp|gif)$/.test(type)) return;
+      const bytes = Buffer.from(await answer.arrayBuffer());
+      if (!bytes.length || bytes.length > AVATAR_MAX_BYTES) return;
+      const current = accounts(host)[botId];
+      if (!current || current.handle !== account.handle) return;
+      current.avatarData = `data:${type};base64,${bytes.toString("base64")}`;
+      save(host);
+    } catch {
+      // no picture kept: the card draws the remote one, then the initials
+    }
+  }
+  /** The account a bot posts as, with its cached picture, or null when nothing is known yet. */
+  function accountOf(host: Host, botId: string | undefined) {
+    const row = botId ? accounts(host)[botId] : undefined;
+    if (!row) return null;
+    const { at: _at, avatarData, ...account } = row;
+    return { ...account, ...(avatarData ? { avatarData } : {}) };
+  }
+  /** GET the posting account of a thread's bot. */
+  function account(auth: any, threadId: string, botId: string | undefined): { status: number; body: Record<string, unknown> } {
+    const host = getHost();
+    const owner = host.store.botByThread(threadId);
+    if (!owner && !host.store.groupByThread(threadId)) return { status: 404, body: { error: "no such conversation" } };
+    const target = host.emailDraftBot(auth, threadId, botId ?? owner?.id);
+    if (!("bot" in target)) return target.status === 400 ? { status: 404, body: { error: "no such conversation" } } : target;
+    return { status: 200, body: { account: accountOf(host, target.bot.id) } };
+  }
+  /** An X tool answered: a "who am I" call or a post names the account. */
+  function learn(host: Host, botId: string | undefined, tool: string, ok: boolean, output: string | undefined) {
+    if (!ok || !botId || !X_TOOL_WORD.test(` ${tool.toLowerCase().replace(/__+/g, " ").replace(/[^a-z0-9]+/g, " ")} `)) return;
+    const found = xAccountFromOutput(output, isXAccountTool(tool));
+    if (found) remember(host, botId, found);
+  }
   const live = () => {
     const now = Date.now();
     for (let index = passes.length - 1; index >= 0; index--) if (passes[index]!.expires <= now) passes.splice(index, 1);
@@ -119,30 +194,75 @@ export function createXPostCard(getHost: () => Host): any {
     return true;
   }
 
-  /** The card that shows the published post: a bot message holding the draft fence, in the state posted. */
-  function showPosted(host: Host, threadId: string, from: any, text: string, url: string | undefined) {
-    const draftKey = xDraftKey(text);
-    host.store.appendMessage(threadId, {
-      role: "bot",
-      kind: "text",
-      text: "```x-post\n" + JSON.stringify({ text }) + "\n```",
-      from,
-      xPosts: { [draftKey]: { draftKey, text, status: "posted", ...(url ? { url } : {}), at: Date.now() } },
-    });
+  /** A post of the thread a reply answers, read back from the x-posts cards already in the chat. */
+  function parentOf(host: Host, threadId: string, id: string | undefined) {
+    if (!id) return undefined;
+    for (const row of [...host.store.messagesFor(threadId)].reverse()) {
+      for (const match of String(row.text ?? "").matchAll(/```x-posts\n([\s\S]*?)\n```/g)) {
+        const found = parseXPostsFence(match[1]!)?.find((post) => post.id === id);
+        if (found) return { ...found, replyTo: undefined };
+      }
+    }
+    return undefined;
+  }
+
+  /** The card that shows a published post, as the account that posted it. Posts of one turn
+   * (nothing but tool rows between them) join the same message: the chat draws them as a stack. */
+  function showPosted(host: Host, threadId: string, from: any, text: string, url: string | undefined, input?: string) {
+    const botId = from?.botId;
+    const who = accountOf(host, botId);
+    const id = url ? /status\/(\d{5,25})/.exec(url)?.[1] : undefined;
+    const reply = xReplyFromInput(input);
+    const parent = parentOf(host, threadId, reply?.id);
+    const replyTo = reply || parent ? { ...(reply?.id ? { id: reply.id } : {}), ...((parent?.handle || reply?.handle) ? { handle: parent?.handle ?? reply?.handle } : {}), ...(parent ? { post: parent } : {}) } : undefined;
+    const post = {
+      ...(id ? { id } : {}),
+      ...(url ? { url } : {}),
+      name: who?.name ?? "",
+      handle: who?.handle ?? "",
+      verified: who?.verified ?? false,
+      ...(who?.avatarUrl ? { avatarUrl: who.avatarUrl } : {}),
+      createdAt: new Date().toISOString(),
+      text,
+      media: [],
+      posted: true,
+      ...(replyTo ? { replyTo } : {}),
+    };
+    const rows = host.store.messagesFor(threadId);
+    let last: any;
+    for (let index = rows.length - 1; index >= 0; index--) {
+      if (rows[index].tool) continue;
+      last = rows[index];
+      break;
+    }
+    const open = last && last.role === "bot" && last.from?.botId === botId && Date.now() - (last.at ?? 0) < X_POST_PASS_MS * 3 ? /^```x-posts\n([\s\S]*)\n```$/.exec(String(last.text ?? "")) : null;
+    if (open) {
+      try {
+        const body = JSON.parse(open[1]!);
+        if (Array.isArray(body.posts) && body.posts.every((item: any) => item?.posted === true)) {
+          host.store.patchMessage(threadId, last.id, { text: "```x-posts\n" + JSON.stringify({ posts: [...body.posts, post] }) + "\n```" });
+          return;
+        }
+      } catch {
+        // not a batch of ours: this post gets its own message
+      }
+    }
+    host.store.appendMessage(threadId, { role: "bot", kind: "text", text: "```x-posts\n" + JSON.stringify({ posts: [post] }) + "\n```", from });
   }
 
   /** The X tool call ended: posted with its link, or failed with why. A call the person answered
    * on the held draft card (no state yet) gets its published-post card here. */
   function finish(threadId: string, tool: string, ok: boolean, output: string | undefined, input: string | undefined, speaker?: { botId: string; name: string; color?: string }) {
     const host = getHost();
+    learn(host, speaker?.botId ?? host.store.botByThread(threadId)?.id, tool, ok, output);
     for (const row of host.store.messagesFor(threadId)) {
       for (const request of Object.values(row.xPosts ?? {}) as XPostRequest[]) {
         if (request.status !== "sending" || !xPostCallMatches(request.text, tool, input)) continue;
-        const url = xPostUrlFromResult(output);
+        const url = xPostUrlFromResult(output, accountOf(host, row.from?.botId ?? host.store.botByThread(threadId)?.id)?.handle);
         if (ok) patchState(host, threadId, row.id, request.draftKey, { status: "posted", ...(url ? { url } : {}) });
         else patchState(host, threadId, row.id, request.draftKey, { status: "failed", error: String(output ?? "").replace(/\s+/g, " ").slice(0, 300) || "The X tool refused the post." });
         // a held call's message is the approval card, not a draft fence: show the post on its own card
-        if (ok && !String(row.text ?? "").includes("```x-post")) showPosted(host, threadId, row.from, request.text, url);
+        if (ok && !String(row.text ?? "").includes("```x-post")) showPosted(host, threadId, row.from, request.text, url, input);
         return true;
       }
     }
@@ -151,11 +271,11 @@ export function createXPostCard(getHost: () => Host): any {
     const owner = text && !speaker ? host.store.botByThread(threadId) : undefined;
     const from = speaker ?? (owner ? { botId: owner.id, name: owner.name, color: owner.color } : undefined);
     if (text && from) {
-      showPosted(host, threadId, from, text, xPostUrlFromResult(output));
+      showPosted(host, threadId, from, text, xPostUrlFromResult(output, accountOf(host, from.botId)?.handle), input);
       return true;
     }
     return false;
   }
 
-  return { post, discard, status, takePass, finish, key: xDraftKey };
+  return { post, discard, status, takePass, finish, account, key: xDraftKey };
 }

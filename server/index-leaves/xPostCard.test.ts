@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createXPostCard } from "./xPostCard.ts";
 
@@ -81,8 +84,10 @@ describe("the X draft card's Post (#4638)", () => {
     host.store.appendMessage = (_t: string, row: any) => { appended.push(row); messages.push({ id: `n${appended.length}`, ...row }); return row; };
     host.store.botByThread = () => ({ id: "b1", name: "Bot", color: "blue" });
     expect(card.finish("t1", TOOL, true, '{"url":"https://x.com/sample/status/1234567890123"}', JSON.stringify({ text: "Direct" }))).toBe(true);
-    expect(appended[0].text).toContain("```x-post");
-    expect(Object.values(appended[0].xPosts)[0]).toMatchObject({ status: "posted", text: "Direct", url: "https://x.com/sample/status/1234567890123" });
+    expect(appended[0].text).toContain("```x-posts");
+    expect(appended[0].text).toContain('"text":"Direct"');
+    expect(appended[0].text).toContain('"posted":true');
+    expect(appended[0].text).toContain('"url":"https://x.com/sample/status/1234567890123"');
     // a failed call, or another tool, adds nothing
     expect(card.finish("t1", TOOL, false, "no", JSON.stringify({ text: "Direct" }))).toBe(false);
     expect(card.finish("t1", "mcp__x__get_posts", true, "{}", JSON.stringify({ text: "Direct" }))).toBe(false);
@@ -97,8 +102,66 @@ describe("the X draft card's Post (#4638)", () => {
     const speaker = { botId: "b7", name: "Poster", color: "green" };
     expect(card.finish("t1", TOOL, true, '{"url":"https://x.com/sample/status/1234567890123"}', JSON.stringify({ text: "In a room" }), speaker)).toBe(true);
     expect(appended[0].from).toEqual(speaker);
-    expect(appended[0].text).toContain("```x-post");
+    expect(appended[0].text).toContain("```x-posts");
     // nobody to speak for: nothing is invented
     expect(card.finish("t1", TOOL, true, "{}", JSON.stringify({ text: "In a room" }))).toBe(false);
+  });
+});
+
+describe("the posted card carries the account that posted (#4640)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "x-account-"));
+  function turn() {
+    const rows: any[] = [];
+    const store = {
+      messagesFor: () => rows,
+      appendMessage: (_t: string, row: any) => { rows.push({ id: `p${rows.length}`, at: Date.now(), ...row }); },
+      patchMessage: (_t: string, id: string, patch: any) => Object.assign(rows.find((row) => row.id === id)!, patch),
+      groupByThread: () => undefined,
+      botByThread: () => ({ id: "b1", name: "Bot", color: "#fff" }),
+    };
+    const host: any = { store, DATA_DIR: dir, appendDecision: vi.fn(), languageOfRequest: () => "en", emailDraftBot: () => ({ bot: { id: "b1" } }) };
+    return { card: createXPostCard(() => host), rows, host };
+  }
+  const ME = JSON.stringify({ data: { id: "42", username: "sample", name: "Sample Account", verified: true, profile_image_url: "https://pbs.twimg.com/profile_images/1/sample_normal.jpg" } });
+  const fenceOf = (row: any) => JSON.parse(/```x-posts\n([\s\S]*)\n```/.exec(row.text)![1]!).posts;
+
+  it("learns the account from a who-am-i call, then draws it on the post, with a link built from its handle", () => {
+    const { card, rows, host } = turn();
+    card.finish("t1", "mcp__x__get_me", true, ME, "{}");
+    expect(card.account({}, "t1", "b1").body.account).toMatchObject({ handle: "sample", name: "Sample Account", verified: true });
+    card.finish("t1", TOOL, true, '{"data":{"id":"1234567890123"}}', JSON.stringify({ text: "One" }));
+    const [post] = fenceOf(rows[0]);
+    expect(post).toMatchObject({ name: "Sample Account", handle: "sample", verified: true, posted: true, url: "https://x.com/sample/status/1234567890123" });
+    expect(post.avatarUrl).toContain("pbs.twimg.com");
+    expect(host.DATA_DIR).toBe(dir);
+  });
+
+  it("names the account from the post's own answer", () => {
+    const { card, rows } = turn();
+    const answer = JSON.stringify({ data: { id: "1234567890124", text: "x" }, includes: { users: [{ id: "42", username: "sample", name: "Sample Account" }] } });
+    card.finish("t1", TOOL, true, answer, JSON.stringify({ text: "Two" }));
+    expect(fenceOf(rows[0])[0]).toMatchObject({ handle: "sample", name: "Sample Account" });
+  });
+
+  it("puts the posts of one turn in one message (a stack) and a reply names its parent", () => {
+    const { card, rows } = turn();
+    card.finish("t1", "mcp__x__get_me", true, ME, "{}");
+    rows.push({ id: "tool1", role: "bot", kind: "tool", tool: { name: TOOL }, at: Date.now() });
+    card.finish("t1", TOOL, true, '{"id":"1234567890001"}', JSON.stringify({ text: "One" }));
+    rows.push({ id: "tool2", role: "bot", kind: "tool", tool: { name: TOOL }, at: Date.now() });
+    card.finish("t1", TOOL, true, '{"id":"1234567890002"}', JSON.stringify({ text: "Two", reply: { in_reply_to_tweet_id: "999999999999" }, in_reply_to_screen_name: "example_two" }));
+    const cards = rows.filter((row) => !row.tool);
+    expect(cards).toHaveLength(1);
+    const posts = fenceOf(cards[0]);
+    expect(posts.map((post: any) => post.text)).toEqual(["One", "Two"]);
+    expect(posts[1].replyTo).toMatchObject({ id: "999999999999", handle: "example_two" });
+  });
+
+  it("a person's message ends the turn: the next post starts a new stack", () => {
+    const { card, rows } = turn();
+    card.finish("t1", TOOL, true, '{"id":"1234567890001"}', JSON.stringify({ text: "One" }));
+    rows.push({ id: "u1", role: "user", kind: "text", text: "another", at: Date.now() });
+    card.finish("t1", TOOL, true, '{"id":"1234567890002"}', JSON.stringify({ text: "Two" }));
+    expect(rows.filter((row) => row.text?.includes("```x-posts"))).toHaveLength(2);
   });
 });

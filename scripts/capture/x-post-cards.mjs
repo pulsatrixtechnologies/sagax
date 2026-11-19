@@ -31,9 +31,11 @@ async function freePort() {
 const attach = arg("--attach");
 const port = Number(attach ?? arg("--port") ?? await freePort());
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
-const langs = ["fr", "en"];
-const widths = [1280, 390];
-const scenes = ["draft", "near", "over", "sending", "failed", "posted", "single", "timeline", "neighbour", "held"];
+const langs = arg("--langs")?.split(",") ?? ["fr", "en"];
+const widths = arg("--widths")?.split(",").map(Number) ?? [1280, 390];
+const allScenes = ["draft", "near", "over", "sending", "failed", "posted", "single", "timeline", "neighbour", "held", "posted-one", "reply", "stack3", "stack6"];
+const scenes = arg("--scenes")?.split(",") ?? allScenes;
+const skipInbox = process.argv.includes("--no-inbox");
 
 async function waitForServer(url, ms = 180_000) {
   const start = Date.now();
@@ -62,21 +64,23 @@ try {
   const PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/></svg>`;
   for (const width of widths) {
     const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
-    await page.route("https://pbs.twimg.com/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
+    // the demo account's picture: a drawn avatar (nobody real)
+    const AVATAR = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs><rect width="80" height="80" fill="url(#a)"/><circle cx="40" cy="31" r="14" fill="#fff" fill-opacity=".9"/><path d="M12 80c3-18 15-26 28-26s25 8 28 26z" fill="#fff" fill-opacity=".9"/></svg>`;
+    await page.route("https://pbs.twimg.com/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: route.request().url().includes("/profile_images/") ? AVATAR : PHOTO }));
     page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
     page.on("console", (message) => { if (message.type() === "error") console.error("console:", message.text().slice(0, 300)); });
     for (const lang of langs) {
       for (const { id, label } of skins) {
         for (const scene of scenes) {
           await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene })}`);
-          await page.waitForSelector("[data-x-draft], [data-x-posts]", { timeout: 120_000 });
+          await page.waitForSelector("[data-x-draft], [data-x-posts], [data-x-stack]", { timeout: 120_000 });
           await page.waitForTimeout(500);
           await page.screenshot({ path: join(outDir, `${scene}-${lang}-${label}-${width}.png`), fullPage: true });
         }
       }
     }
     // the Approvals inbox: the same card for a held X post call (#4638)
-    for (const lang of langs) {
+    for (const lang of skipInbox ? [] : langs) {
       for (const { id, label } of skins) {
         await page.goto(`http://127.0.0.1:${port}/src/gallery/approvals-page.html?${new URLSearchParams({ skin: id, lang, n: "1", xpost: "1" })}`);
         await page.waitForSelector("[data-approval-row], [data-inbox-x-post]", { timeout: 120_000 });

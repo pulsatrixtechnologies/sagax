@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   X_POST_LIMIT, isXPostTool, normalizeXDraft, parseXDraftFence, parseXPostsFence, readXPost,
   heldXDraft, xPostTextOfInput, xCount, xCounter, xDraftKey, xPostCallMatches, xPostUrlFromResult, xWeightedLength, xSiteUrl,
+  isXAccountTool, xAccountFromOutput, xAvatarSized, xReplyFromInput,
 } from "./x-post.ts";
 
 describe("X character count", () => {
@@ -114,5 +115,26 @@ describe("a bot's own X post call, shown as the draft card (#4638)", () => {
   it("shows a draft with one blank line between paragraphs", () => {
     expect(parseXDraftFence('{"text":"One\\n\\n\\n\\nTwo"}')?.text).toBe("One\n\nTwo");
     expect(parseXDraftFence("One\n \n \n\nTwo")?.text).toBe("One\n\nTwo");
+  });
+});
+
+describe("who posted (#4640)", () => {
+  it("reads the account of a who-am-i answer and of a post's includes", () => {
+    const me = xAccountFromOutput(JSON.stringify({ data: { username: "sample", name: "Sample Account", verified: true, profile_image_url: "https://pbs.twimg.com/profile_images/1/a_normal.jpg" } }), true);
+    expect(me).toMatchObject({ handle: "sample", name: "Sample Account", verified: true });
+    expect(xAvatarSized(me!.avatarUrl!)).toBe("https://pbs.twimg.com/profile_images/1/a_400x400.jpg");
+    const post = xAccountFromOutput(JSON.stringify({ data: { id: "1" }, includes: { users: [{ username: "sample", name: "S", verified_type: "blue" }] } }));
+    expect(post).toMatchObject({ handle: "sample", verified: true });
+    expect(xAccountFromOutput("not json")).toBeNull();
+    expect(isXAccountTool("mcp__x__get_me")).toBe(true);
+    expect(isXAccountTool("mcp__x__create_post")).toBe(false);
+  });
+  it("reads a reply's target from the call and a posted card without an account yet", () => {
+    expect(xReplyFromInput(JSON.stringify({ text: "hi", reply: { in_reply_to_tweet_id: "1234567890123" } }))).toEqual({ id: "1234567890123" });
+    expect(xReplyFromInput(JSON.stringify({ text: "hi", reply_to_url: "https://x.com/example_two/status/1234567890123" }))).toEqual({ id: "1234567890123", handle: "example_two" });
+    expect(xReplyFromInput(JSON.stringify({ text: "hi" }))).toBeNull();
+    const posts = parseXPostsFence(JSON.stringify({ posts: [{ text: "Hi", posted: true, replyTo: { handle: "example_two" } }] }));
+    expect(posts?.[0]).toMatchObject({ posted: true, handle: "", replyTo: { handle: "example_two" } });
+    expect(parseXPostsFence(JSON.stringify({ posts: [{ text: "Hi" }] }))).toBeNull();
   });
 });

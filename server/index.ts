@@ -26345,7 +26345,7 @@ ROUTES.push(createSecurityKeyRoutes({
 // (server/routes/email-drafts.ts, server/mail/email-draft-send.ts).
 ROUTES.push(createEmailDraftRoutes({ ask: requestEmailDraftSend, status: emailDraftStatus }));
 // #4638: the X draft card's Post, Discard and state
-ROUTES.push(createXPostRoutes({ post: (...args) => xPostCard().post(...args), discard: (...args) => xPostCard().discard(...args), status: (...args) => xPostCard().status(...args) }));
+ROUTES.push(createXPostRoutes({ post: (...args) => xPostCard().post(...args), discard: (...args) => xPostCard().discard(...args), status: (...args) => xPostCard().status(...args), account: (...args) => xPostCard().account(...args) }));
 ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
  * send to the thread, a named thread only (an implicit one could open a

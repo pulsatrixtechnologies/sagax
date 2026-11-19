@@ -1279,6 +1279,7 @@ import { createModerationStore } from "./safety/moderation.ts";
 import { createGroupFolderRoutes } from "./routes/group-folders.ts";
 import { createNudgeRoutes } from "./routes/nudges.ts";
 import { agentSettingsVersion, routineVersion, VersionReads } from "./write-versions.ts";
+import { historyWriterOf } from "./history-writer.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
@@ -26173,7 +26174,7 @@ ROUTES.push(createBotVersionRoutes({
     const before = profileSnapshot(bot);
     const updated = store.patchBotProfile(botId, parsed.patch);
     if (!updated) return { status: 404, error: "no such bot" };
-    recordProfileChange(botId, "user", "restore", before, profileSnapshot(updated));
+    recordProfileChange(botId, "user", "restore", before, profileSnapshot(updated), historyWriterOf(auth));
     recordPersonaSave(auth, botId, before, profileSnapshot(updated));
     const visible = wireBot(updated);
     broadcast({ kind: "bot", bot: visible });

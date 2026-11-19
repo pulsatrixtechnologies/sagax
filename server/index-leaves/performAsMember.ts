@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** performAsMember (#1388). Pure move from server/index.ts. */
+import { writerStampForActor } from "../history-writer.ts";
+
 export type Host = Record<string, any>;
 
 export function createPerformAsMember(getHost: () => Host): any {
@@ -15,6 +17,8 @@ async function performAsMember(person: MemberPerson, request: MemberRequest): Pr
     principalId: person.principalId,
     scopes,
     label: person.name.trim().slice(0, 80) || "AI client (Perspicax)",
+    // #4940: who writes through it, for the change history
+    writer: writerStampForActor(person.actor, person.client),
     ...(host.IDENTITY.kind === "perspicax" ? { idp: { iss: host.IDENTITY.issuer, sub: person.sub, role: person.admin ? "admin" : "employee" } } : {})
   });
   if (!opened) return { status: 403, body: { error: "This person cannot act on this server." } };

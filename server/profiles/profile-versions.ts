@@ -13,6 +13,7 @@ import { PROFILE_REQUEST_FIELDS, type ProfileRequestChanges } from "../../shared
 import { botFolder } from "../bots/bot-folder.ts";
 import { redactSecrets } from "../redact.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import type { HistoryWriter } from "../history-writer.ts";
 
 export type HistoryActor = "user" | "bot" | "file" | "import" | "system";
 
@@ -22,6 +23,10 @@ export interface HistoryRow {
   actor: HistoryActor;
   /** "ui", "api", `card:<messageId>`, "migration", "rollback" */
   via: string;
+  /** #4940: who wrote it: the person in the app or the console, an AI client
+   * by MCP with its client name, or a bot acting for its person. Rows written
+   * before have none. */
+  writer?: HistoryWriter;
   field: string;
   summary: string;
   before?: string;
@@ -44,15 +49,16 @@ function oneLiner(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, ONE_LINER);
 }
 
-function rowFor(field: string, at: number, actor: HistoryActor, via: string, before: string, after: string): HistoryRow {
+function rowFor(field: string, at: number, actor: HistoryActor, via: string, before: string, after: string, writer?: HistoryWriter): HistoryRow {
+  const by = writer ? { writer } : {};
   if (field === "soul") {
     const b = Buffer.byteLength(before, "utf8");
     const a = Buffer.byteLength(after, "utf8");
-    return { id: randomUUID(), at, actor, via, field, summary: `soul: ${b} → ${a} bytes`, before, after };
+    return { id: randomUUID(), at, actor, via, ...by, field, summary: `soul: ${b} → ${a} bytes`, before, after };
   }
   const b = oneLiner(before);
   const a = oneLiner(after);
-  return { id: randomUUID(), at, actor, via, field, summary: `${field}: ${JSON.stringify(b)} → ${JSON.stringify(a)}`, before: b, after: a };
+  return { id: randomUUID(), at, actor, via, ...by, field, summary: `${field}: ${JSON.stringify(b)} → ${JSON.stringify(a)}`, before: b, after: a };
 }
 
 function withRestoreEligibility(row: HistoryRow): HistoryRow {
@@ -100,6 +106,7 @@ export function recordProfileChange(
   via: string,
   before: ProfileRequestChanges,
   after: ProfileRequestChanges,
+  writer?: HistoryWriter,
 ): void {
   const at = Date.now();
   const rows: HistoryRow[] = [];
@@ -110,7 +117,7 @@ export function recordProfileChange(
   for (const field of PROFILE_REQUEST_FIELDS) {
     const b = before[field];
     const a = after[field];
-    if (b !== a) rows.push(rowFor(field, at, actor, via, historyText(b), historyText(a)));
+    if (b !== a) rows.push(rowFor(field, at, actor, via, historyText(b), historyText(a), writer));
   }
   queueHistoryRows(botId, rows);
 }

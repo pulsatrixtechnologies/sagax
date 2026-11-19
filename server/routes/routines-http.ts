@@ -27,6 +27,8 @@ import {
   routineRunReceipt,
 } from "./routine-run-internal.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { historyWriterOf } from "../history-writer.ts";
+import { readRoutineHistory, recordRoutineChange } from "../routines/routine-history.ts";
 
 export interface RoutinesHttpVisible {
   everything: boolean;
@@ -185,6 +187,7 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
         deps.create(body, undefined, { ...deps.routineActor(auth), ...runAsChoice }));
       if (deps.isTriggerSchedule(routine.schedule)) deps.bindOwnedTrigger(routine);
       deps.auditRunAs(auth, routine, deps.routineActor(auth)?.actorPrincipalId);
+      recordRoutineChange(routine.botId, routine.id, "create", body, historyWriterOf(auth));
       return json(res, 201, { routine: deps.onWire(routine) });
     }
 
@@ -296,16 +299,23 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
       const latest = deps.listRuns().filter(run => run.routineId === target.id).sort((a, b) => b.createdAt - a.createdAt)[0];
       const scope = deps.scopeDeps(auth, visible, viewerId);
       const lastRun = latest && (scope.mine(latest) ? latest : redactRun(latest));
-      return json(res, 200, { routine: deps.onWire(target), lastRun, readiness: lastRun?.readiness });
+      // #4940: its changes, newest first, each with who wrote it
+      return json(res, 200, { routine: deps.onWire(target), lastRun, readiness: lastRun?.readiness, history: readRoutineHistory(target.botId, target.id) });
     }
 
     routineMatch = path.match(/^\/api\/routines\/([\w-]+)$/);
     if (routineMatch && method === "PATCH") {
-      const done = await deps.patchAs(auth, req, routineMatch[1]!, await readBody(req));
+      const body = await readBody(req);
+      const done = await deps.patchAs(auth, req, routineMatch[1]!, body);
+      // #4940: who changed what, for the routine's history
+      const botId = deps.routineBotId(routineMatch[1]!);
+      if (done.status < 300 && botId) recordRoutineChange(botId, routineMatch[1]!, "update", body, historyWriterOf(auth));
       return json(res, done.status, done.body);
     }
     if (routineMatch && method === "DELETE") {
+      const botId = deps.routineBotId(routineMatch[1]!);
       const done = deps.deleteAs(auth, routineMatch[1]!);
+      if (done.status < 300 && botId) recordRoutineChange(botId, routineMatch[1]!, "delete", undefined, historyWriterOf(auth));
       return json(res, done.status, done.body);
     }
 

@@ -6,6 +6,7 @@ import { atLeast } from "../auth/authz.ts";
 import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileSnapshot } from "../profiles/profile-revision.ts";
 import { recordProfileChange } from "../profiles/profile-versions.ts";
+import { historyWriterOf } from "../history-writer.ts";
 
 import type { BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -48,7 +49,7 @@ export function createBotsCoreProfileRoutes(deps: BotsCoreRouteDeps): RouteHandl
       const beforeProfile = existingBot ? profileSnapshot(existingBot) : undefined;
       const bot = store.patchBotProfile(m[1], parsed.patch);
       if (!bot) return json(res, 404, { error: "no such bot" });
-      if (beforeProfile) recordProfileChange(bot.id, "user", "api", beforeProfile, profileSnapshot(bot));
+      if (beforeProfile) recordProfileChange(bot.id, "user", "api", beforeProfile, profileSnapshot(bot), historyWriterOf(auth));
       recordPersonaSave(auth, bot.id, beforeProfile, profileSnapshot(bot));
       const visible = wireBot(bot);
       broadcast({ kind: "bot", bot: visible });

@@ -2,6 +2,7 @@
 // Never imports server/index.ts.
 import type { BotRecord } from "../store.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
+import { historyWriterOf } from "../history-writer.ts";
 
 export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): Promise<void> {
   const {
@@ -211,7 +212,7 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
   }
   if (beforeProfile) {
     const now = env.store.bot(bot.id)!;
-    env.recordProfileChange(bot.id, "user", "api", beforeProfile, env.profileSnapshot(now));
+    env.recordProfileChange(bot.id, "user", "api", beforeProfile, env.profileSnapshot(now), historyWriterOf(env.auth));
     env.recordPersonaSave(env.auth, bot.id, beforeProfile, env.profileSnapshot(now));
   }
   // A new audience changes who may see this bot's rooms and teams too:

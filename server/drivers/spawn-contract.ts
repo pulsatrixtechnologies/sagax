@@ -67,7 +67,7 @@ export function turnSwitches(servers: Record<string, unknown>): Record<string, b
   const env = agentsEnvOf(servers);
   return {
     ...Object.fromEntries(TURN_SWITCH_ENV.map((key) => [key, env[key] === "1"])),
-    ...("SAGAX_PEER_HOP" in env ? { [PEER_TOOLS_SWITCH]: env.SAGAX_PEER_HOP !== "1" && env.SAGAX_PEER_HOP !== "exchange" } : {}),
+    ...("SAGAX_PEER_HOP" in env ? { [PEER_TOOLS_SWITCH]: env.SAGAX_PEER_HOP !== "1" } : {}),
   };
 }
 

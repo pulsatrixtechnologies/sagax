@@ -146,15 +146,16 @@ describe("one person's own Primary Bot (#1098)", () => {
     expect(canReachPeer(self, fleet[4]!)).toBe(true);
     // hidden and audience still apply
     expect(canReachPeer(self, { ...primary, hidden: true })).toBe(false);
-    // lot S1: a person's surface bot is reached by no bot, theirs included,
+    // lot S1: a person's surface bot stays out of every bot's list (reached by no bot),
     const surface: RosterMember = { ...primary, id: "surface", chiefOfStaff: false, temporary: { surface: true } };
     expect(canReachPeer(self, surface)).toBe(false);
     expect(canReachPeer(primary, surface)).toBe(false);
-    // and it reaches no bot of theirs, their Primary Bot included
-    expect(canReachPeer(surface, self)).toBe(false);
-    expect(canReachPeer(surface, primary)).toBe(false);
-    expect(reachablePeers([...fleet, primary], surface)).toEqual([]);
     expect(reachablePeers([...fleet, primary, surface], self).map(bot => bot.id)).not.toContain("surface");
+    // #4920 (liberty audit 2026-11-19 G2): and it reaches its person's bots
+    // like any of them, their Primary Bot included
+    expect(canReachPeer(surface, self)).toBe(true);
+    expect(canReachPeer(surface, primary)).toBe(true);
+    expect(reachablePeers([...fleet, primary], surface).map(bot => bot.id)).toEqual(reachablePeers([...fleet, primary], { ...surface, temporary: undefined }).map(bot => bot.id));
     expect(canReachPeer(self, { ...primary, visibility: "admins" })).toBe(false);
   });
 

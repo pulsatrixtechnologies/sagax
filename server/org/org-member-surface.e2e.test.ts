@@ -244,16 +244,15 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
 
     // one turn of an ordinary bot of the person, to compare with
     expect((await member("POST", `bots/${orion}/messages`, BOB, { text: "plain turn", wait: 60 })).status).toBe(200);
-    // its turns get the agents tools without the ones that reach another bot
-    // ("exchange"), and keep the rest of a turn (skills, own threads) as an ordinary bot's
+    // #4920 (liberty audit 2026-11-19 G2): its turns get every agents tool an
+    // ordinary bot's turn gets, the ones that reach another bot included
     const turns = readFileSync(join(home, "turns.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { mcpConfig?: { mcpServers?: Record<string, { env?: Record<string, string> }> } });
     const agentsEnvs = turns.flatMap((turn) => Object.values(turn.mcpConfig?.mcpServers ?? {}).map((server) => server.env ?? {})).filter((env) => env.SAGAX_BOT_ID === surface);
     expect(agentsEnvs.length).toBeGreaterThan(0);
     const ordinary = turns.flatMap((turn) => Object.values(turn.mcpConfig?.mcpServers ?? {}).map((server) => server.env ?? {})).find((env) => env.SAGAX_BOT_ID === orion)!;
     expect(ordinary.SAGAX_PEER_HOP).toBe("0");
     for (const env of agentsEnvs) {
-      expect(env.SAGAX_PEER_HOP).toBe("exchange");
-      for (const key of ["SAGAX_SKILL_AUTHORING_ENABLED", "SAGAX_OWN_THREAD_CREATION", "SAGAX_ROOM_TURN"]) expect(env[key], key).toBe(ordinary[key]);
+      for (const key of ["SAGAX_PEER_HOP", "SAGAX_SKILL_AUTHORING_ENABLED", "SAGAX_OWN_THREAD_CREATION", "SAGAX_ROOM_TURN"]) expect(env[key], key).toBe(ordinary[key]);
     }
 
     await sleep(500);
@@ -310,13 +309,13 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
       expect(searched.status, searched.text).toBe(200);
       expect(searched.body.hits).toEqual([]);
     }
-    // routines: never one on it, its owner asking included (the routine store's own check)
-    const routine = await api("POST", "/api/routines", bob, { name: "Nightly", botId: surface, prompt: "x", enabled: false, schedule: { type: "interval", everyMinutes: 60 } });
-    expect(routine.status, routine.text).toBeGreaterThanOrEqual(400);
+    // #4920: it holds a routine and joins a room like any bot of its person;
+    // another person, an admin included, still sees none of its routines
+    const routine = await api("POST", "/api/routines", bob, { name: "Nightly", botId: surface, prompt: "x", enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
+    expect(routine.status, routine.text).toBeLessThan(300);
     expect(((await api("GET", "/api/routines", alice)).body.routines as Array<any>).some((row) => row.botId === surface)).toBe(false);
-    // rooms: never in one, its owner placing it included
     const room = await api("POST", "/api/groups", bob, { name: "Desk room", memberIds: [orion, surface] });
-    expect(room.status, room.text).toBe(403);
+    expect(room.status, room.text).toBeLessThan(300);
     // Today: nothing of it
     const today = await api("GET", "/api/approvals", bob);
     expect(today.status).toBe(200);

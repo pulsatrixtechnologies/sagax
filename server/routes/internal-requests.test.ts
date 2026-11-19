@@ -199,7 +199,7 @@ describe("createInternalRequestsRoutes", () => {
     expect(input.explicitConfirm).toBeUndefined();
   });
 
-  it("lot S1: a surface bot never holds a routine: it proposes one for a bot of its person, by the same card", async () => {
+  it("lot S1, #4920: a surface bot holds its own routine like any bot, and may propose one for a bot of its person", async () => {
     const submitRoutine = vi.fn(async (_input: Record<string, unknown>) => ({
       requestId: "req-r", messageId: "msg-r", state: "pending" as const, summary: "Create", detail: "Create",
     }));
@@ -207,22 +207,24 @@ describe("createInternalRequestsRoutes", () => {
     const route = createInternalRequestsRoutes(baseDeps({
       submitRoutine,
       bot: (id) => (id === BOT.id ? { ...BOT, chiefOfStaff: false } : id === orion.id ? orion : undefined),
-      // the surface bot reaches no bot (peers), yet may name its person's for a routine
+      // may name its person's bots for a routine, whatever the peer rules say
       canReachPeer: () => false,
       surfaceRoutineHolders: () => [{ id: orion.id, name: orion.name }],
     }));
     const routine = { name: "Morning brief", instructions: "Summarize.", schedule: { type: "daily", time: "08:00" } };
-    // on itself (no target, or its own id): refused, with the bots to choose from
+    // #4920 (liberty audit 2026-11-19 G2): on itself (no target, or its own
+    // id), the same card as any bot's own routine, never routine_needs_bot
     for (const target of [{}, { forBotId: BOT.id }]) {
       const { sent } = await call(route, { path: "/api/internal/routine-requests", method: "POST", body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "create", routine, ...target } });
-      expect(sent[0]?.status).toBe(409);
-      expect(sent[0]?.body).toMatchObject({ code: "routine_needs_bot", error: expect.stringContaining("Orion (for_bot_id bot-2)") });
+      expect(sent[0]?.status).toBe(201);
+      expect(sent[0]?.body).not.toMatchObject({ code: "routine_needs_bot" });
     }
-    expect(submitRoutine).not.toHaveBeenCalled();
+    expect(submitRoutine).toHaveBeenCalledTimes(2);
+    expect((submitRoutine.mock.calls[0]![0] as { proposal?: { forBot?: unknown } }).proposal?.forBot).toBeUndefined();
     // for the bot the person named: the existing card, with the same approvals
     const { sent } = await call(route, { path: "/api/internal/routine-requests", method: "POST", body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "create", routine, forBotId: orion.id } });
     expect(sent[0]?.status).toBe(201);
-    expect(submitRoutine.mock.calls[0]![0]).toMatchObject({ proposal: { forBot: { botId: orion.id, name: "Orion" } } });
+    expect(submitRoutine.mock.calls[2]![0]).toMatchObject({ proposal: { forBot: { botId: orion.id, name: "Orion" } } });
   });
 
   it("POST /profile-requests refuses an unknown sender (403)", async () => {

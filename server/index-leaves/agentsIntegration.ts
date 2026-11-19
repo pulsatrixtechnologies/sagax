@@ -7,7 +7,6 @@ import { personDisplayName } from "../people/viewer-identity.ts";
 import { phoneToolTurn } from "../phone/phone-tools.ts";
 import * as tts from "../tts/index.ts";
 import { join } from "node:path";
-import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createAgentsIntegration(getHost: () => Host): any {
@@ -55,9 +54,7 @@ function agentsIntegration(
       SAGAX_TURN_DEPTH: String(depth),
       SAGAX_ROOM_TURN: roomCoordination ? "1" : "0",
       // 2026-10-28: a teammate one hop away keeps its tools, not the peer ones
-      // lot S1: a surface bot's turn lists no tool that reaches another bot,
-      // and keeps everything else of its turn ("exchange", agents-catalog.ts)
-      SAGAX_PEER_HOP: host.peerHopTurn(depth, roomCoordination) ? "1" : isSurfaceBot(host.store.bot(botId)) ? "exchange" : "0",
+      SAGAX_PEER_HOP: host.peerHopTurn(depth, roomCoordination) ? "1" : "0",
       // A real room (group conversation). A person's direct chat also sets
       // SAGAX_ROOM_TURN (bounded coordination), so a tool absent from rooms
       // only (propose_page) reads this, never SAGAX_ROOM_TURN.

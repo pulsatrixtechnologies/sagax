@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { availableTools, catalogProfileFromEnv, PEER_EXCHANGE_TOOLS, PERSPICAX_TOOLS } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, PEER_HOP_ABSENT_TOOLS, PERSPICAX_TOOLS } from "./agents-catalog.ts";
 import { GUEST_CONFINED_CODEX_ARGS } from "./codex.ts";
 import { engineHasNativeWebSearch } from "../web-search/native.ts";
 import { chiefOfStaffSystemPrompt } from "../chief-of-staff.ts";
@@ -51,8 +51,8 @@ const TURNS: Record<string, Env> = {
   // API, one hop away: its tools without the peer ones
   "teammate": { SAGAX_ROOM_TURN: "0", SAGAX_AGENT_API: "1", SAGAX_PEER_HOP: "1" },
   // lot S1: a person's surface bot, a person's message in its hidden chat:
-  // no tool that reaches another bot, everything else of the direct turn
-  "surface": { SAGAX_ROOM_TURN: "1", SAGAX_OWN_THREAD_CREATION: "1", SAGAX_AGENT_API: "1", SAGAX_PEER_HOP: "exchange" },
+  // the direct turn, peer tools included (#4920)
+  "surface": { SAGAX_ROOM_TURN: "1", SAGAX_OWN_THREAD_CREATION: "1", SAGAX_AGENT_API: "1", SAGAX_PEER_HOP: "0" },
 };
 const ROLES: Record<string, Env> = { chief: { SAGAX_CHIEF_OF_STAFF: "1" }, member: { SAGAX_CHIEF_OF_STAFF: "0" } };
 
@@ -173,17 +173,15 @@ describe("reachability guard: a teammate one hop away (ask_bot, delegate_bot, ag
     }
   });
 
-  it("lot S1: a surface bot's turn lists no tool that reaches another bot, and keeps the rest of the direct turn", () => {
+  it("lot S1, #4920: a surface bot's turn lists every tool of the direct turn, the ones that reach another bot included", () => {
     for (const role of Object.values(ROLES)) for (const extra of [{}, EVERY_SWITCH]) {
       const direct = names({ ...TURNS.direct, ...role, ...extra });
       const surface = names({ ...TURNS.surface, ...role, ...extra });
-      for (const name of PEER_EXCHANGE_TOOLS) expect(surface.has(name), name).toBe(false);
-      // only the exchange tools go: its own threads, a part on another engine, skills, setup stay
-      expect([...direct].filter((name) => !surface.has(name)).sort()).toEqual([...direct].filter((name) => PEER_EXCHANGE_TOOLS.has(name)).sort());
-      for (const kept of ["start_thread", "run_with_engine"]) if (direct.has(kept)) expect(surface.has(kept), kept).toBe(true);
+      expect([...surface].sort()).toEqual([...direct].sort());
+      // a process launched before #4920 with the old "exchange" value no longer narrows the list
+      expect([...names({ ...TURNS.surface, ...role, ...extra, SAGAX_PEER_HOP: "exchange" })].sort()).toEqual([...direct].sort());
     }
-    expect(PEER_EXCHANGE_TOOLS.has("ask_bot") && PEER_EXCHANGE_TOOLS.has("send_to_bot") && PEER_EXCHANGE_TOOLS.has("send_prompt")).toBe(true);
-    expect(names({ ...TURNS.surface, ...ROLES.member, ...EVERY_SWITCH }).has("start_thread")).toBe(true);
+    expect([...names({ ...TURNS.surface, ...ROLES.member, ...EVERY_SWITCH })].some((name) => PEER_HOP_ABSENT_TOOLS.has(name))).toBe(true);
   });
 
   it("is off unless the harness says so", () => {

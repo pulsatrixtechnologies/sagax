@@ -21693,8 +21693,7 @@ const botWaits = waitsBoot.waits;
 // #4250 (S5): the lines are the pre-check of the bot's « Checklist » routine
 // (code check `heartbeat`); the routine scheduler beats, no timer of its own.
 const heartbeat = new HeartbeatManager({
-  // lot S1: a surface bot has no routine
-  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot) && !isSurfaceBot(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
+  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
   read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
   routines: () => routines ? {
     list: () => routines!.listRoutines(),

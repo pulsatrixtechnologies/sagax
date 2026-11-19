@@ -1,7 +1,6 @@
 // @ts-nocheck
 /** refusePlacedBots (#1388). Pure move from server/index.ts. */
 import { canPlaceBot, ownerUserIdForPlacement } from "../rooms/channel-membership.ts";
-import { isSurfaceBot } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createRefusePlacedBots(getHost: () => Host): any {
@@ -12,8 +11,6 @@ function refusePlacedBots(auth: RequestAuth, botIds: readonly unknown[], already
   for (const id of botIds) {
     if (typeof id !== "string" || already.has(id)) continue;
     const bot = typeof id === "string" ? host.store.bot(id) : undefined;
-    // lot S1: a surface bot is in no room (its host product invites bots itself)
-    if (isSurfaceBot(bot)) return "forbidden: this bot cannot join a room";
     const ownerUserId = bot
       ? host.effectiveBotOwner(bot)
       : ownerUserIdForPlacement({ localOperatorId: host.localPrincipalId() });

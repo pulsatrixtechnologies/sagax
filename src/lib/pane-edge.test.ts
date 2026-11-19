@@ -23,6 +23,10 @@ describe("pane edge token", () => {
       expect(read(`../components/${f}.tsx`), f).toContain("border-pane-edge");
     }
   });
+  it("high contrast keeps the strong edge on the panels too", () => {
+    expect(styles).toContain("--color-pane-edge: color-mix(in srgb, var(--color-ink) 55%, transparent);");
+    expect(styles).toContain("--color-sidebar-pane-edge: var(--color-sidebar-hairline);");
+  });
   it("high contrast still draws the strong edge", () => {
     expect(styles).toMatch(/:root\[data-contrast="high"\] aside\[data-sidebar-surface\] \{\n  border-color: var\(--color-sidebar-hairline\);/);
   });

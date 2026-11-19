@@ -5088,6 +5088,8 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --color-ink-tertiary: var(--color-ink);
   --color-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
   --color-hairline-weak: color-mix(in srgb, var(--color-ink) 30%, transparent);
+  /* the pane edge keeps a strong line (the docked panels read it) */
+  --color-pane-edge: color-mix(in srgb, var(--color-ink) 55%, transparent);
   /* the menu family's edge (menus, composer, pinned cards) follows */
   --menu-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
   --composer-focus-edge: var(--color-ink);
@@ -5097,6 +5099,7 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
    edge is the strong one and the rail takes a tonal step away from the pane. */
 :root[data-contrast="high"]:not(#a11y) {
   --color-sidebar-hairline: color-mix(in srgb, var(--color-sidebar-ink) 55%, transparent);
+  --color-sidebar-pane-edge: var(--color-sidebar-hairline);
 }
 :root[data-contrast="high"] aside[data-sidebar-surface] {
   border-color: var(--color-sidebar-hairline);

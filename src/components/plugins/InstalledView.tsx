@@ -371,7 +371,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   // the section's LAST row, under the text of the rows above it: what is folded, counted so the heading's number adds up
   const moreRow = shownProducts.length > ORGANIZATION_PREVIEW ? (
     <button type="button" onClick={() => setAllOrganization((value) => !value)} className={cn(PLUGINS.groupLink, "mt-2 -ml-2")} data-plugins-organization-all>
-      {allOrganization ? t("connectApps.manage.showFewer") : t("connectApps.showMoreRows", { count: shownProducts.length - ORGANIZATION_PREVIEW })}
+      {allOrganization ? t("connectApps.manage.showFewer") : t(shownProducts.length - ORGANIZATION_PREVIEW === 1 ? "fold.showMoreOne" : "connectApps.showMoreRows", { count: shownProducts.length - ORGANIZATION_PREVIEW })}
     </button>
   ) : null;
   const consoleShown = kind !== undefined && (shownProducts.length > 0 || resolvedOrganization.length > 0 || consoleHasExtras);

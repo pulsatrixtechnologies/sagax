@@ -1787,6 +1787,12 @@ final class Session: ObservableObject {
         }
     }
 
+    /// The health route answers again while the stream is down: skip the
+    /// rest of its backoff and reconnect at once (the cursor survives).
+    func retryStreamNow() {
+        restartStream()
+    }
+
     /// Reopen the stream so its query string matches what we now want. The
     /// cursor survives, so this is a gap, not a reset.
     private func restartStream() {

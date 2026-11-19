@@ -16,6 +16,8 @@ import CompanionCore
 final class ModelFavoritesStore: ObservableObject {
     static let shared = ModelFavoritesStore()
     @Published private(set) var keys: [String] = ModelFavorites.parse(UserDefaults.standard.string(forKey: ModelFavorites.preferenceKey))
+    /// The providers pinned to the menu (at most 3), as stored; the menu reads the effective ones.
+    @Published private(set) var pins: [String] = ModelProviderPins.parse(UserDefaults.standard.string(forKey: ModelProviderPins.preferenceKey))
     /// The person's record on an organization server; nil keeps them on this device.
     private var synced = false
 
@@ -31,7 +33,19 @@ final class ModelFavoritesStore: ObservableObject {
             keys = ModelFavorites.parse(raw)
             UserDefaults.standard.set(raw, forKey: ModelFavorites.preferenceKey)
         }
+        if let raw = record.preferences[ModelProviderPins.preferenceKey] {
+            pins = ModelProviderPins.parse(raw)
+            UserDefaults.standard.set(raw, forKey: ModelProviderPins.preferenceKey)
+        }
         return record.preferences[ModelMenu.interfaceModeKey] ?? UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey)
+    }
+
+    fileprivate func setPins(_ next: [String], session: Session) {
+        pins = next
+        let raw = ModelProviderPins.serialize(next)
+        UserDefaults.standard.set(raw, forKey: ModelProviderPins.preferenceKey)
+        guard synced, let client = session.settingsClient else { return }
+        Task { _ = try? await client.saveSidebarPreferences([ModelProviderPins.preferenceKey: raw]) }
     }
 
     func toggle(_ key: String, session: Session) {
@@ -40,6 +54,16 @@ final class ModelFavoritesStore: ObservableObject {
         UserDefaults.standard.set(raw, forKey: ModelFavorites.preferenceKey)
         guard synced, let client = session.settingsClient else { return }
         Task { _ = try? await client.saveSidebarPreferences([ModelFavorites.preferenceKey: raw]) }
+    }
+}
+
+extension ModelFavoritesStore {
+    /// Pins or unpins a provider, from the pins in effect (what the person sees);
+    /// false when it would be a fourth.
+    func togglePin(_ key: String, effective: [String], session: Session) -> Bool {
+        guard case let .pins(next) = ModelProviderPins.toggled(effective, key) else { return false }
+        setPins(next, session: session)
+        return true
     }
 }
 
@@ -65,6 +89,7 @@ struct ModelMenuSheet: View {
     @State private var page: Page = .root
     @State private var query = ""
     @State private var saving = false
+    @State private var pinNote = false
 
     private var organization: Bool { session.surfaceGate.allows(.people) }
     private var profile: Bot { session.state.bot(bot.id) ?? bot }
@@ -158,7 +183,12 @@ struct ModelMenuSheet: View {
                 if simple {
                     pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
                 } else {
-                    providerRows(menu.providers)
+                    // at most three pinned providers (and the one in use); "All models" opens the rest
+                    let shown = pinnedProviders(menu.providers)
+                    providerRows(shown)
+                    if shown.count < menu.providers.count {
+                        pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
+                    }
                 }
             }
         }
@@ -167,9 +197,45 @@ struct ModelMenuSheet: View {
     @ViewBuilder
     private func providers(back: Page) -> some View {
         Section { backButton(to: back) }
-        Section(header: Text("All models")) {
-            providerRows(ModelMenu.root(sections, favorites: favorites.keys).providers)
+        let all = ModelMenu.root(sections, favorites: favorites.keys).providers
+        let pins = effectivePins(all)
+        Section(header: Text("All models"), footer: pinNote ? Text("Three providers are pinned. Unpin one first.") : nil) {
+            ForEach(all) { provider in
+                HStack(spacing: 8) {
+                    pageButton(provider.section.label ?? provider.id, id: "model-provider.\(provider.id)", current: provider.current) {
+                        page = .provider(provider.id)
+                    }
+                    .buttonStyle(.plain)
+                    let pinned = pins.contains(provider.id)
+                    Button {
+                        pinNote = !favorites.togglePin(provider.id, effective: pins, session: session)
+                    } label: {
+                        Image(systemName: pinned ? "pin.fill" : "pin")
+                            .foregroundStyle(pinned ? Theme.accent : Theme.textTertiary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(pinned ? Text("Unpin \(provider.section.label ?? provider.id)") : Text("Pin \(provider.section.label ?? provider.id) to the model menu"))
+                    .accessibilityIdentifier("model-pin.\(provider.id)")
+                }
+            }
         }
+    }
+
+    /// The pins in effect: the person's own, else the bot's provider and the most starred.
+    private func effectivePins(_ providers: [ModelMenuProvider]) -> [String] {
+        ModelProviderPins.effective(stored: favorites.pins, candidates: providers.map { provider in
+            .init(key: provider.id, starred: provider.section.rows.filter { favorites.keys.contains($0.key) }.count, current: provider.current)
+        })
+    }
+
+    /// The providers the root lists: the pinned ones in the order pinned, then the one in use.
+    private func pinnedProviders(_ providers: [ModelMenuProvider]) -> [ModelMenuProvider] {
+        guard providers.count > ModelProviderPins.max else { return providers }
+        let pins = effectivePins(providers)
+        let pinned = pins.compactMap { key in providers.first { $0.id == key } }
+        return pinned + providers.filter { $0.current && !pins.contains($0.id) }
     }
 
     private func providerRows(_ providers: [ModelMenuProvider]) -> some View {

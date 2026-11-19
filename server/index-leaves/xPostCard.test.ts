@@ -118,6 +118,7 @@ describe("the posted card carries the account that posted (#4640)", () => {
       patchMessage: (_t: string, id: string, patch: any) => Object.assign(rows.find((row) => row.id === id)!, patch),
       groupByThread: () => undefined,
       botByThread: () => ({ id: "b1", name: "Bot", color: "#fff" }),
+      bot: (id: string) => ({ id, name: "Bot", color: "#fff" }),
     };
     const host: any = { store, DATA_DIR: dir, appendDecision: vi.fn(), languageOfRequest: () => "en", emailDraftBot: () => ({ bot: { id: "b1" } }) };
     return { card: createXPostCard(() => host), rows, host };
@@ -175,5 +176,25 @@ describe("the posted card carries the account that posted (#4640)", () => {
     rows.push({ id: "u1", role: "user", kind: "text", text: "another", at: Date.now() });
     card.finish("t1", TOOL, true, '{"id":"1234567890002"}', JSON.stringify({ text: "Two" }));
     expect(rows.filter((row) => row.text?.includes("```x-posts"))).toHaveLength(2);
+  });
+  it("a post made by clicking Post in the browser shows the same Posted card, once", () => {
+    const { card, rows } = turn();
+    card.learnAccount("b1", { handle: "sample", name: "Sample Account", verified: false });
+    const found = { id: "1234567890555", url: "https://x.com/sample/status/1234567890555", text: "From the browser" };
+    card.browserPost("b1", "t1", found);
+    card.browserPost("b1", "t1", found);
+    const cards = rows.filter((row) => row.text?.includes("```x-posts"));
+    expect(cards).toHaveLength(1);
+    expect(fenceOf(cards[0])[0]).toMatchObject({ id: "1234567890555", name: "Sample Account", handle: "sample", posted: true, text: "From the browser", url: found.url });
+  });
+
+  it("a browser post with no known text shows no card, and one for an approved draft turns that draft posted", () => {
+    const { card, rows } = turn();
+    card.browserPost("b1", "t1", { id: "1234567890556", url: "https://x.com/sample/status/1234567890556" });
+    expect(rows).toHaveLength(0);
+    rows.push({ id: "m9", role: "bot", text: "```x-post\n{}\n```", from: { botId: "b1", name: "Bot" }, xPosts: { k9: { draftKey: "k9", text: "Approved  text", status: "sending", at: Date.now() } } });
+    card.browserPost("b1", "t1", { id: "1234567890557", url: "https://x.com/sample/status/1234567890557", text: "Approved text" });
+    expect(rows[0].xPosts.k9).toMatchObject({ status: "posted", url: "https://x.com/sample/status/1234567890557" });
+    expect(rows).toHaveLength(1);
   });
 });

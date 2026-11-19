@@ -10,18 +10,18 @@ final class ConnectionNoticeTests: XCTestCase {
         var machine = Machine()
         machine.streamDisconnected(at: 1_000)
         XCTAssertNil(machine.evaluate(now: 2_000))
-        XCTAssertNil(machine.evaluate(now: 3_400))
-        machine.streamConnected(at: 3_450)
-        XCTAssertNil(machine.evaluate(now: 3_500))
-        XCTAssertNil(machine.evaluate(now: 4_000))
+        XCTAssertNil(machine.evaluate(now: 8_900))
+        machine.streamConnected(at: 8_950)
+        XCTAssertNil(machine.evaluate(now: 9_000))
+        XCTAssertNil(machine.evaluate(now: 10_000))
     }
 
     func testUnreachableThenReconnectedForThreeSeconds() {
         var machine = Machine()
         machine.streamDisconnected(at: 1_000)
         machine.streamDisconnected(at: 2_000) // a retry keeps the outage's start
-        XCTAssertEqual(machine.evaluate(now: 3_600)?.kind, .serverUnreachable)
-        XCTAssertEqual(machine.evaluate(now: 3_600)?.occurrence, "unreachable:1000")
+        XCTAssertEqual(machine.evaluate(now: 9_100)?.kind, .serverUnreachable)
+        XCTAssertEqual(machine.evaluate(now: 9_100)?.occurrence, "unreachable:1000")
         machine.streamConnected(at: 10_000)
         XCTAssertEqual(machine.evaluate(now: 10_000)?.kind, .reconnected)
         XCTAssertEqual(machine.evaluate(now: 12_900)?.kind, .reconnected)
@@ -34,7 +34,8 @@ final class ConnectionNoticeTests: XCTestCase {
         machine.restartAnnounced(at: 1_000)
         machine.streamDisconnected(at: 1_100)
         XCTAssertNil(machine.evaluate(now: 2_000))
-        XCTAssertEqual(machine.evaluate(now: 4_000)?.kind, .updating)
+        XCTAssertNil(machine.evaluate(now: 30_000))
+        XCTAssertEqual(machine.evaluate(now: 31_100)?.kind, .updating)
         XCTAssertEqual(machine.evaluate(now: 1_100 + 299_000)?.kind, .updating)
         XCTAssertEqual(machine.evaluate(now: 1_100 + 300_000)?.kind, .serverUnreachable)
     }
@@ -43,18 +44,18 @@ final class ConnectionNoticeTests: XCTestCase {
         var machine = Machine()
         machine.restartAnnounced(at: 0)
         machine.streamDisconnected(at: 700_000)
-        XCTAssertEqual(machine.evaluate(now: 703_000)?.kind, .serverUnreachable)
+        XCTAssertEqual(machine.evaluate(now: 709_000)?.kind, .serverUnreachable)
     }
 
     func testHealthProbeDecides() {
         var machine = Machine()
         machine.streamDisconnected(at: 0)
         machine.probed(.failed, at: 1_000)
-        XCTAssertEqual(machine.evaluate(now: 3_000)?.kind, .serverUnreachable)
-        machine.probed(.draining, at: 5_000)
-        XCTAssertEqual(machine.evaluate(now: 6_000)?.kind, .updating)
+        XCTAssertEqual(machine.evaluate(now: 9_000)?.kind, .serverUnreachable)
+        machine.probed(.draining, at: 40_000)
+        XCTAssertEqual(machine.evaluate(now: 40_000)?.kind, .updating)
         // five minutes after the probe first said draining
-        XCTAssertEqual(machine.evaluate(now: 5_000 + 300_000)?.kind, .serverUnreachable)
+        XCTAssertEqual(machine.evaluate(now: 40_000 + 300_000)?.kind, .serverUnreachable)
         // a probe while the stream is up changes nothing
         var up = Machine()
         up.probed(.draining, at: 0)
@@ -65,10 +66,38 @@ final class ConnectionNoticeTests: XCTestCase {
         let draining = Data(#"{"ok":false,"shuttingDown":true}"#.utf8)
         XCTAssertEqual(Machine.classifyHealth(status: 503, maintenanceHeader: false, body: draining), .draining)
         XCTAssertEqual(Machine.classifyHealth(status: 503, maintenanceHeader: true, body: nil), .draining)
-        XCTAssertEqual(Machine.classifyHealth(status: 503, maintenanceHeader: false, body: Data("<html>".utf8)), .failed)
-        XCTAssertEqual(Machine.classifyHealth(status: 502, maintenanceHeader: false, body: nil), .failed)
-        XCTAssertEqual(Machine.classifyHealth(status: 504, maintenanceHeader: false, body: nil), .failed)
+        XCTAssertEqual(Machine.classifyHealth(status: 503, maintenanceHeader: false, body: Data("<html>".utf8)), .gateway)
+        XCTAssertEqual(Machine.classifyHealth(status: 502, maintenanceHeader: false, body: nil), .gateway)
+        XCTAssertEqual(Machine.classifyHealth(status: 504, maintenanceHeader: false, body: nil), .gateway)
+        XCTAssertEqual(Machine.classifyHealth(status: 500, maintenanceHeader: false, body: nil), .failed)
         XCTAssertEqual(Machine.classifyHealth(status: 200, maintenanceHeader: false, body: nil), .ok)
+    }
+
+    func testARestartThatPassesInUnderThirtySecondsShowsNothing() {
+        var machine = Machine()
+        machine.streamDisconnected(at: 0)
+        // the edge answers 502 while the server rolls
+        machine.probed(.gateway, at: 1_000)
+        XCTAssertNil(machine.evaluate(now: 9_000))
+        XCTAssertNil(machine.evaluate(now: 29_000))
+        machine.streamConnected(at: 29_500)
+        XCTAssertNil(machine.evaluate(now: 29_500))
+    }
+
+    func testAGatewayAnswerPastThirtySecondsIsUpdatingThenUnreachable() {
+        var machine = Machine()
+        machine.streamDisconnected(at: 0)
+        machine.probed(.gateway, at: 1_000)
+        XCTAssertEqual(machine.evaluate(now: 30_000)?.kind, .updating)
+        XCTAssertEqual(machine.evaluate(now: 119_000)?.kind, .updating)
+        XCTAssertEqual(machine.evaluate(now: 120_000)?.kind, .serverUnreachable)
+    }
+
+    func testHealthAlreadyBackStaysQuietForThirtySeconds() {
+        var machine = Machine()
+        machine.streamDisconnected(at: 0)
+        machine.probed(.ok, at: 1_000)
+        XCTAssertNil(machine.evaluate(now: 20_000))
     }
 
     func testPerspicaxUnreachable() {
@@ -78,7 +107,7 @@ final class ConnectionNoticeTests: XCTestCase {
         // the server going down takes over once it is not a blip
         machine.streamDisconnected(at: 2_000)
         XCTAssertEqual(machine.evaluate(now: 2_500)?.kind, .perspicaxUnreachable)
-        XCTAssertEqual(machine.evaluate(now: 5_000)?.kind, .serverUnreachable)
+        XCTAssertEqual(machine.evaluate(now: 10_500)?.kind, .serverUnreachable)
         machine.streamConnected(at: 6_000)
         XCTAssertEqual(machine.evaluate(now: 6_000)?.kind, .perspicaxUnreachable)
         machine.perspicax(unreachable: false, since: 7_000, at: 7_000)
@@ -92,7 +121,7 @@ final class ConnectionNoticeTests: XCTestCase {
     func testDismissedStaysDismissedForThatOccurrenceOnly() {
         var machine = Machine()
         machine.streamDisconnected(at: 0)
-        let shown = try! XCTUnwrap(machine.evaluate(now: 3_000))
+        let shown = try! XCTUnwrap(machine.evaluate(now: 9_000))
         machine.dismiss(shown)
         XCTAssertNil(machine.evaluate(now: 4_000))
         machine.streamConnected(at: 5_000)
@@ -100,18 +129,18 @@ final class ConnectionNoticeTests: XCTestCase {
         XCTAssertNil(machine.evaluate(now: 5_000))
         // a new outage is a new occurrence
         machine.streamDisconnected(at: 10_000)
-        XCTAssertEqual(machine.evaluate(now: 13_000)?.occurrence, "unreachable:10000")
+        XCTAssertEqual(machine.evaluate(now: 19_000)?.occurrence, "unreachable:10000")
     }
 
     func testReconnectedCanBeDismissed() {
         var machine = Machine()
         machine.streamDisconnected(at: 0)
-        _ = machine.evaluate(now: 3_000)
-        machine.streamConnected(at: 4_000)
-        let reconnected = try! XCTUnwrap(machine.evaluate(now: 4_000))
+        _ = machine.evaluate(now: 9_000)
+        machine.streamConnected(at: 10_000)
+        let reconnected = try! XCTUnwrap(machine.evaluate(now: 10_000))
         XCTAssertEqual(reconnected.kind, .reconnected)
         machine.dismiss(reconnected)
-        XCTAssertNil(machine.evaluate(now: 4_500))
+        XCTAssertNil(machine.evaluate(now: 10_500))
     }
 
     func testDeviceOfflineAddsNothing() {

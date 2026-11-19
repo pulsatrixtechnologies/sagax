@@ -5,6 +5,9 @@
 // while its owner is signed out. Through the real server and the fake
 // engine: the run reads its owner's grants; a revoke from the run stays a
 // card for the person and the grant is still active.
+// #4947 (#4528): a permission card left open in a routine's own conversation
+// holds that run waiting until the person answers it (their answer starts
+// the run's next turn), so the run waits on the revoke's card.
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,7 +47,9 @@ it("a routine run reads its owner's tool grants; revoking one still waits for th
     }, 201);
     const started = await api("POST", `/api/routines/${routine.id}/run`, {}, 201);
     const runId = (started.run ?? started).id;
-    await expect.poll(async () => (await api("GET", "/api/routines")).runs.find((run: any) => run.id === runId)?.status, { timeout: 30_000 }).toBe("completed");
+    await expect.poll(async () => (await api("GET", "/api/routines")).runs.find((run: any) => run.id === runId)?.status, { timeout: 30_000 }).toBe("waiting");
+    const waiting = (await api("GET", "/api/routines")).runs.find((run: any) => run.id === runId);
+    expect(waiting.attention).toMatch(/^Waiting for your approval: .*security\.myToolGrants/);
     await expect.poll(() => existsSync(dump), { timeout: 10_000 }).toBe(true);
     const calls = JSON.parse(readFileSync(dump, "utf8")).calls as Array<{ ok: boolean; text: string }>;
     expect(calls).toHaveLength(2);

@@ -3,11 +3,11 @@
 // in server/harness-connectors.ts), by name and state. claude.ai lists no
 // tools before a call, so an entry carries none.
 import type { ClaudeAiConnectorInventory, ClaudeAiConnectorStatus, ClaudeAiInventory } from "../../harness-connectors.ts";
+import { canonicalJson } from "../../../shared/canonical-json.ts";
 import { claudeAiServerName, connectorCallId } from "../../../shared/connector-call.ts";
 import { readPinnedToolCall, type PinnedToolCallReading } from "../../claude-artifacts/pinned-call.ts";
 import type { ConnectorHostResult } from "../hosts/types.ts";
 import { connectorAccountKey, type ConnectorAccount, type ConnectorAccountRef, type ConnectorEntry, type ConnectorProviderSource, type ConnectorState } from "../types.ts";
-import { canonicalJson } from "./grok-com.ts";
 
 export interface ClaudeAiProviderDeps {
   /** The engine instances of the person's own Claude sign-ins (organization:

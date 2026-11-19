@@ -64,7 +64,8 @@ Two sessions can no longer overwrite each other's change (owner decision, 2026-1
 - `get_agent` answers `version`, an opaque string over every Edit bot field
   `update_agent_settings` may write. `sagax_routines` (`GET
   /api/org/member/routines` and `routines/{id}`) answers each routine's
-  `version`. Every successful write answers the new `version`.
+  `version`. Every successful write answers the new `version`, a create
+  (`create_agent`, `create_routine`) included.
 - `update_agent_settings`, `update_routine` and `delete_routine` take
   `expected_version`; `update_agent_settings` also takes `expectedVersion`
   (the gateway remaps snake_case to camelCase). `PATCH
@@ -76,7 +77,8 @@ Two sessions can no longer overwrite each other's change (owner decision, 2026-1
 - Without `expected_version`, an AI client (via `perspicax-mcp`) writes only
   when the copy of the same person and AI client (`client_name`) is the
   current version (read by `get_agent` or `sagax_routines`, or answered by its
-  own last write); else the same 409, `conflict` `not_read` or `stale`. The
+  own last write, the create that made the bot or routine included); else the
+  same 409, `conflict` `not_read` or `stale`. The
   person in the console, the Sagax app and a bot write as before.
 - One write at a time per bot or routine: the check and the write are never
   split by another write.

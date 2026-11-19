@@ -285,8 +285,13 @@ posixOnly("routine modal: Runs as", () => {
     const run = await runNow(alice, bobRoutine);
     expect(run.status, run.error).toBe("completed");
     expect(run.runAs).toBe(ids.bob);
+    const subs = idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub);
     // Readiness and execution each use this person's account exchange.
-    expect(idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub)).toEqual([BOB.sub, BOB.sub]);
+    expect(subs.filter((sub) => sub === BOB.sub)).toEqual([BOB.sub, BOB.sub]);
+    // #2726 (0.8.65, #2789): a routine works in its bot owner's environment
+    // (sandboxPrincipalForTurn), so the turn's host computer note refreshes
+    // Alice's own host list with her own exchange; never anyone else's.
+    expect(subs.every((sub) => sub === BOB.sub || sub === ALICE.sub), subs.join(",")).toBe(true);
   }, 90_000);
 
   it("Run now: the person it runs as may, someone else with run may not; one run in flight; audited as manual; a paused routine stays paused", async () => {

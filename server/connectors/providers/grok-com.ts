@@ -9,6 +9,7 @@
 // (server/connectors/hosts/grok-host.ts): the pinned prompt, the reading of
 // Grok's own ask (it must name the approved tool and input exactly), the
 // reading of the tool's result, and a tool's description.
+import { canonicalJson } from "../../../shared/canonical-json.ts";
 import type { ConnectorHostResult, ConnectorHostTool } from "../hosts/types.ts";
 import { grokAccountReach, grokReachConnectorNames, type GrokAccountReach } from "../../drivers/acp/grok-tool-catalog.ts";
 import { connectorAccountKey, type ConnectorAccount, type ConnectorEntry, type ConnectorAccountRef, type ConnectorAccountSlot, type ConnectorProviderSource } from "../types.ts";
@@ -72,19 +73,6 @@ export function grokComProvider(deps: GrokComProviderDeps): ConnectorProviderSou
  * reachable without a model turn, and its list carries no input schema. */
 export function grokPinnedPrompt(tool: string, input: Record<string, unknown>): string {
   return `Call the tool use_tool exactly once with tool "${tool}" and this input JSON, then stop:\n${JSON.stringify(input)}`;
-}
-
-/** JSON with its keys sorted, so two equal inputs read the same whatever
- * order the model wrote them in. */
-export function canonicalJson(value: unknown): string {
-  const sort = (entry: unknown): unknown => {
-    if (Array.isArray(entry)) return entry.map(sort);
-    if (entry && typeof entry === "object") {
-      return Object.fromEntries(Object.keys(entry as Record<string, unknown>).sort().map((key) => [key, sort((entry as Record<string, unknown>)[key])]));
-    }
-    return entry;
-  };
-  return JSON.stringify(sort(value) ?? null);
 }
 
 /** The gateway call Grok asks to run, from its session/request_permission

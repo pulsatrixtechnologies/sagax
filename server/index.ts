@@ -34304,7 +34304,7 @@ const purgeSendPromptReceipts = () => {
   try { expireCommandReceipts("agent.send_prompt", SEND_RECEIPT_TTL_MS); } catch (error) { reportBackgroundError(error); }
 };
 purgeSendPromptReceipts();
-setInterval(purgeSendPromptReceipts, 3_600_000).unref();
+// its hourly purge runs on the approval expiry timer below (#4250 timer budget)
 
 /** #3515: the time zone a server line says its times in for a text-only
  * reader (the agent API, the organization's connector): the person's own,
@@ -38202,7 +38202,15 @@ try {
 } catch (error) {
   console.warn(`[approval] startup expiry of open approval cards failed: ${error instanceof Error ? error.message : String(error)}`);
 }
-setInterval(() => { runPendingApprovalExpirySweep(); settleStaleWaiting(); }, 60 * 60_000).unref();
+// The hour timer: the approval expiry sweep and the send_prompt receipts
+// purge (#4817) share one timer, so the server keeps to the #4250 timer
+// budget (server/routines/probe-engine-wiring.test.ts). The purge catches its
+// own error, so a failed purge never stops the sweep.
+setInterval(() => {
+  purgeSendPromptReceipts();
+  runPendingApprovalExpirySweep();
+  settleStaleWaiting();
+}, 60 * 60_000).unref();
 // #3503, once at the upgrade: the questions a bot asked another bot of the
 // same person that were left waiting on the person close as skipped. After
 // the boot, one conversation at a time (#3473); a receipt keeps it to once.

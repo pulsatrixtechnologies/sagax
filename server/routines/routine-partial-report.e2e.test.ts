@@ -5,6 +5,15 @@
 // now or scheduled, with the routine's "post results" off, posts its card in
 // the person's one conversation, without the raw RUN_STATUS marker, and
 // its report reads as prose, never a markdown table.
+//
+// #4815 (owner rule 2026-11-18, #4797): a run with a problem that the person
+// did not start is told only once its streak reaches 3 runs in a row,
+// whatever the schedule, and from the 3rd the routine's bot investigates it
+// (#4876); a run the person started is always shown. So the scheduled run
+// here, the 2nd problem run in a row, stays in the routine's runs. #4852
+// (#4839): a partial line backed by a tool step that worked is a run
+// completed with notes, never a problem; here the read the bot names was
+// refused, as in #3152, so each run stays one completed with problems.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,14 +33,17 @@ const PARTIAL = [
   "Quatre GO attendent la personne : surveiller Sagax 0.8.76, renouveler le jeton GitHub, retirer iMessage et REA, garder Flow 0.22.0.",
 ].join("\n");
 // #3479: the same problem twice in a row is said once; the scheduled run
-// here meets a different one, so it posts its own card.
+// here meets a different one, so its own words are kept on its run.
 const OTHER_PARTIAL = PARTIAL.replace("lecture des droits d'outils refusée (session personne absente)", "lecture des droits d'outils refusée (jeton expiré)");
+/** The read the partial line names, refused: no tool step of the run worked (#4852). */
+const REFUSED_READ = [{ name: "Read", input: { file_path: "tool-grants.json" }, ok: false, output: "Permission denied" }];
 
-it("a run completed with problems posts in the bot's chat, Run now and scheduled, without the raw marker or a table", async () => {
+it("a run completed with problems: Run now posts in the bot's chat without the raw marker or a table, a scheduled one keeps to its streak", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "sagax-partial-routines-"));
   const fixture = await launchVerificationServer({
     ...process.env,
     FAKE_CLAUDE_REPLIES: JSON.stringify([PARTIAL, OTHER_PARTIAL]),
+    FAKE_CLAUDE_TOOL_CALLS: JSON.stringify(REFUSED_READ),
     FAKE_CLAUDE_REPLY_STATE: join(scratch, "reply-index"),
   });
   const api = async (method: string, path: string, body?: unknown, status = 200) => {
@@ -76,7 +88,9 @@ it("a run completed with problems posts in the bot's chat, Run now and scheduled
     const runNow = await settle((started.run ?? started).id);
     await checkCard(runNow);
 
-    // 2. Scheduled, "post results" off.
+    // 2. Scheduled, "post results" off: the 2nd problem run in a row, kept
+    // in the routine's runs with its problem and its place in the streak,
+    // never a card in the chat (#4815).
     const previous = new Set((await api("GET", "/api/routines")).runs.map((run: any) => run.id));
     const at = Date.now() + 1_000;
     await api("PATCH", `/api/routines/${routine.id}`, { enabled: true, schedule: { type: "once", at } });
@@ -86,7 +100,10 @@ it("a run completed with problems posts in the bot's chat, Run now and scheduled
       return scheduledId;
     }, { timeout: 20_000 }).not.toBe("");
     const scheduled = await settle(scheduledId);
-    await checkCard(scheduled);
+    expect(scheduled.problems).toContain("lecture des droits d'outils refusée (jeton expiré)");
+    expect(scheduled).toMatchObject({ tellsStreak: false, problemRepeat: { firstRunId: runNow.id, count: 2 } });
+    expect(String(scheduled.output ?? "")).not.toMatch(/RUN[_ ]STATUS/);
+    expect(await cardOf(scheduled.id)).toBeUndefined();
     expect((await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id).tasks.find((task: any) => task.threadId === main).unread).toBe(true);
   } finally {
     await fixture.close();

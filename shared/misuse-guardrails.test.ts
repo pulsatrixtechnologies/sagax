@@ -364,7 +364,8 @@ describe("what a person reads", () => {
       expect(phrases.filter((phrase) => text.includes(phrase)).length, `${category}: ${text}`).toBe(1);
       expect(text.split(". ").length, text).toBeGreaterThanOrEqual(2);
     }
-    expect(misuseRefusalText("platform_exfiltration", "block")).toContain("Vos fichiers sont dans /workspace");
+    // #3268: French text written by the server and shared code says tu.
+    expect(misuseRefusalText("platform_exfiltration", "block")).toContain("Tes fichiers sont dans /workspace");
     expect(MISUSE_REFUSAL_BLOCK).not.toMatch(/élévation|malveillant|attaque|destructrice/);
     expect(misuseRefusalText(undefined, "block")).toBe(MISUSE_REFUSAL_BLOCK);
   });

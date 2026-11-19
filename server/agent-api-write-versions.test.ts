@@ -35,6 +35,14 @@ function world() {
     async deleteRoutine() {
       return { deleted: true as const };
     },
+    async createAgent(_caller: AgentCaller, input: { name: string }) {
+      bot.name = input.name;
+      return summary();
+    },
+    async createRoutine(_caller: AgentCaller, _agentId: string, input: { name: string; instructions: string }) {
+      Object.assign(routine, { name: input.name, prompt: input.instructions, updatedAt: ++clock });
+      return { routine: { ...routine } };
+    },
     threads: () => [],
     messages: () => [],
     turnState: () => "idle",
@@ -140,6 +148,53 @@ describe("conditional writes (#4939)", () => {
     const gone = await w.api.call(a, "delete_routine", { routine_id: "r-1", expected_version: "1000" });
     expect(gone.status).toBe(409);
     expect((await w.api.call(a, "delete_routine", { routine_id: "r-1", expected_version: "1001" })).status).toBe(200);
+  });
+
+  // org-member-api M12 (#4172): an AI client makes a lasting bot, then
+  // changes it; makes a routine, then deletes it. Its create answered the
+  // version, so that copy is its own (its own last write).
+  it("what an AI client creates is its copy: it changes it without reading first, another client still reads first", async () => {
+    const w = world();
+    const a = caller("session-a");
+    const made = await w.api.call(a, "create_agent", { kind: "lasting", name: "Keeper" });
+    expect(made.status, JSON.stringify(made.body)).toBe(200);
+    expect(made.body.version).toBe(agentSettingsVersion(w.bot));
+    const changed = await w.api.call(a, "update_agent_settings", { agent_id: "bot-marc", soul: "Keep things tidy." });
+    expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+    const other = await w.api.call(caller("session-b"), "update_agent_settings", { agent_id: "bot-marc", soul: "blind" });
+    expect(other.status).toBe(409);
+    expect(other.body.conflict).toBe("not_read");
+    expect(w.bot.soul).toBe("Keep things tidy.");
+
+    const routine = await w.api.call(a, "create_routine", { agent_id: "bot-marc", name: "Tidy", instructions: "Tidy the notes.", schedule: { type: "daily", time: "08:00" }, enabled: false });
+    expect(routine.status, JSON.stringify(routine.body)).toBe(200);
+    expect(routine.body.version).toBe("1001");
+    expect((await w.api.call(caller("session-b"), "delete_routine", { routine_id: "r-1" })).status).toBe(409);
+    const gone = await w.api.call(a, "delete_routine", { routine_id: "r-1" });
+    expect(gone.status, JSON.stringify(gone.body)).toBe(200);
+  });
+
+  // The anti-overwrite of #4939 still holds after a create: a change made
+  // meanwhile by someone else makes the creator's copy stale.
+  it("after its create, an AI client writing over a change someone else made meanwhile is refused as stale", async () => {
+    const w = world();
+    const a = caller("session-a");
+    const person = caller("console", "console");
+    expect((await w.api.call(a, "create_agent", { kind: "lasting", name: "Keeper" })).status).toBe(200);
+    expect((await w.api.call(person, "update_agent_settings", { agent_id: "bot-marc", soul: "The person's words." })).status).toBe(200);
+    const blind = await w.api.call(a, "update_agent_settings", { agent_id: "bot-marc", soul: "overwrite" });
+    expect(blind.status).toBe(409);
+    expect(blind.body.conflict).toBe("stale");
+    expect(w.bot.soul).toBe("The person's words.");
+
+    expect((await w.api.call(a, "create_routine", { agent_id: "bot-marc", name: "Tidy", instructions: "Tidy the notes.", schedule: { type: "daily", time: "08:00" }, enabled: false })).status).toBe(200);
+    expect((await w.api.call(person, "update_routine", { routine_id: "r-1", instructions: "The person's steps." })).status).toBe(200);
+    const late = await w.api.call(a, "delete_routine", { routine_id: "r-1" });
+    expect(late.status).toBe(409);
+    expect(late.body.conflict).toBe("stale");
+    const overwrite = await w.api.call(a, "update_routine", { routine_id: "r-1", instructions: "overwrite" });
+    expect(overwrite.status).toBe(409);
+    expect(w.routine.prompt).toBe("The person's steps.");
   });
 
   it("a malformed expected_version is a bad request", async () => {

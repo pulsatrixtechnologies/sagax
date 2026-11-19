@@ -25,6 +25,7 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
     listeners, listCommands, active, sessions, warmContracts, warmHolds, heldVolatile,
     sessionFileBytes, closeSession, armIdle, writeUser,
     applyApprovalMode, authRecovery, stopRenewWatch, sendTurn, supportModule,
+    modelsForAccess, noteModelSeen,
   } = bag;
   const {
     claudeUserMessage,
@@ -231,6 +232,7 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
       return getModels();
     },
     refreshModels,
+    ...(modelsForAccess ? { modelsForAccess } : {}),
     ...(startupModelRefresh ? { startupModelRefresh } : {}),
     snapshot,
     startAuthentication: () => login.start(),
@@ -278,7 +280,11 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
         // stdin open and no prompt, so the first spoken turn reuses it.
         warmSession: true,
       },
-      sendTurn: (turn) => authRecovery.send(turn, sendTurn),
+      sendTurn: (turn) => {
+        // #4973: a model the list does not name reads the account's list again
+        noteModelSeen?.(turn.model);
+        return authRecovery.send(turn, sendTurn);
+      },
       steer,
       interruptTurn: async (threadId) => active.get(threadId)?.stop(),
       applyApprovalMode,

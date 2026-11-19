@@ -6,6 +6,7 @@ import { normalizeClaudeCommands } from "../../../shared/harness-commands.ts";
 import type {
   DriverCreateInput,
   HarnessCommandScope,
+  ModelCatalog,
   ProviderInstance,
   RuntimeEvent,
   RuntimeEventListener,
@@ -24,6 +25,16 @@ import {
 import { claudeAuthRecovery } from "../claude-auth-recovery.ts";
 import { probeClaudeCommands } from "../harness-command-probe.ts";
 import { DRIVER_KIND, STATIC_CLAUDE_MODELS, type ClaudeCliVersion, type ClaudeConfig } from "./config.ts";
+import { createKeyModelCatalogs } from "../../models/key-model-catalogs.ts";
+import { liveModelListsEnabled } from "../../models/live-model-lists.ts";
+import {
+  ANTHROPIC_API_BASE,
+  CLAUDE_MODELS_TTL_MS,
+  claudeAuthKey,
+  claudeEnvironmentAuth,
+  claudeLoginAuth,
+  readClaudeAccountModels,
+} from "./account-models.ts";
 import { createClaudeSessionRuntime } from "./create-instance-session.ts";
 import { createSendTurn } from "./turn-send.ts";
 import { buildClaudeInstanceApi } from "./instance-api.ts";
@@ -100,15 +111,70 @@ export async function createClaudeInstance(
     console.error(`claude (${instanceId}): SAGAX_CLAUDE_INHERIT_USER_CONFIG=1 — bots inherit this machine's Claude Code MCP servers, skills, hooks and CLAUDE.md on every turn; remove it unless a bot needs a user-scope server`);
   }
   let models = config.managedModels ? { default: config.managedModels[0], options: config.managedModels.map(id => ({ id, label: id })) } : STATIC_CLAUDE_MODELS;
+  // #4973: the list this instance's own account offers, read live; the
+  // written list until the first read succeeds, and the last good one after
+  // a failed read.
+  let liveOfficial: ModelCatalog | null = null;
+  let liveReadAt = 0;
+  let refreshing: Promise<void> | null = null;
+  const readLiveOfficial = async () => {
+    if (!liveModelListsEnabled()) return;
+    const found = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
+    if (!found) return;
+    const live = await readClaudeAccountModels(found.auth, STATIC_CLAUDE_MODELS, { baseUrl: found.baseUrl });
+    if (live) liveOfficial = live;
+  };
   const refreshModels = async () => {
     if (config.managed) return;
-    try {
-      const resolved = await mergeLocalInject(readClaudeModelCatalog(catalogEnv), catalogEnv);
-      if (resolved.options.length) models = resolved;
-    } catch {
-      // Keep the last usable catalog when settings.json is unreadable.
-    }
-    try { writeStartupModelCache(instanceId, models); } catch { /* derived cache */ }
+    if (refreshing) return refreshing;
+    refreshing = (async () => {
+      liveReadAt = Date.now();
+      await readLiveOfficial().catch(() => undefined);
+      try {
+        const resolved = await mergeLocalInject(readClaudeModelCatalog(catalogEnv, liveOfficial ?? STATIC_CLAUDE_MODELS), catalogEnv);
+        if (resolved.options.length) models = resolved;
+      } catch {
+        // Keep the last usable catalog when settings.json is unreadable.
+      }
+      try { writeStartupModelCache(instanceId, models); } catch { /* derived cache */ }
+    })().finally(() => { refreshing = null; });
+    return refreshing;
+  };
+  /** Read again behind the caller when the list is older than its life. */
+  const refreshWhenStale = () => {
+    if (config.managed || refreshing || Date.now() - liveReadAt < CLAUDE_MODELS_TTL_MS) return;
+    void refreshModels().catch(() => undefined);
+  };
+  /** A model a turn runs that the list does not name: read the list again
+   * (a model the account just gained), at most once per life of the list
+   * for the same id. */
+  const unknownSeen = new Map<string, number>();
+  const noteModelSeen = (model: string | null | undefined) => {
+    if (config.managed || !model || decodeInjectId(model) || models.options.some((option) => option.id === model)) return;
+    const last = unknownSeen.get(model) ?? 0;
+    if (Date.now() - last < CLAUDE_MODELS_TTL_MS) return;
+    unknownSeen.set(model, Date.now());
+    liveReadAt = 0;
+    void refreshModels().catch(() => undefined);
+  };
+  // #4973: an organization person's own Claude account (their sign-in or
+  // their key) lists what it offers, read live per account and kept for
+  // CLAUDE_MODELS_TTL_MS; the instance's own account keeps `models`.
+  const perAccount = createKeyModelCatalogs({ fallback: () => models, ttlMs: CLAUDE_MODELS_TTL_MS });
+  const modelsForAccess = async (access: TurnAccessInput): Promise<ModelCatalog> => {
+    if (config.managed || !liveModelListsEnabled()) return models;
+    const env = environment(null, access);
+    const own = access.via === "subscription" && access.claudeConfigDir
+      ? await claudeLoginAuth(access.claudeConfigDir, env).then((auth) => auth ? { auth, baseUrl: ANTHROPIC_API_BASE } : null)
+      : await claudeEnvironmentAuth(env, undefined);
+    if (!own) return models;
+    const ownAuth = await claudeEnvironmentAuth(catalogEnv, config.configDir).catch(() => null);
+    if (ownAuth && claudeAuthKey(ownAuth.auth) === claudeAuthKey(own.auth)) return models;
+    const cacheKey = access.via === "subscription" ? `subscription:${access.identity}` : claudeAuthKey(own.auth);
+    return perAccount.forKey(cacheKey, async () => {
+      const live = await readClaudeAccountModels(own.auth, STATIC_CLAUDE_MODELS, { baseUrl: own.baseUrl });
+      return live ? mergeLocalInject(readClaudeModelCatalog(env, live), env) : null;
+    });
   };
   // A later start serves the saved list and refreshes behind listen.
   // The first run still waits so the seeded default model does not change.
@@ -371,7 +437,9 @@ export async function createClaudeInstance(
     input,
     config,
     environment,
-    getModels: () => models,
+    getModels: () => { refreshWhenStale(); return models; },
+    modelsForAccess,
+    noteModelSeen,
     setModels: (m: typeof models) => { models = m; },
     refreshModels,
     startupModelRefresh,

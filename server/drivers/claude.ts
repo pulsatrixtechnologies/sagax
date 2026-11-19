@@ -25,6 +25,7 @@ import { ClaudeLoginController } from "./claude-login-auth.ts";
 
 import type {
   DriverCreateInput,
+  ModelCatalog,
   ProviderDriver,
   ProviderInstance,
   ProviderSnapshot,
@@ -525,7 +526,7 @@ async function resolveClaudeTurnModel(
   model: string | null | undefined,
   env: Record<string, string | undefined>,
 ): Promise<string | null | undefined> {
-  if (!model || decodeInjectId(model) || STATIC_CLAUDE_MODELS.options.some((option) => option.id === model)) {
+  if (!model || decodeInjectId(model) || OFFICIAL_CLAUDE_ID.test(model) || STATIC_CLAUDE_MODELS.options.some((option) => option.id === model)) {
     return model;
   }
   return resolveInjectId(model, await probeLocalInjects(env)) ?? model;
@@ -551,7 +552,11 @@ function extrasFromUnknown(value: unknown): Array<{ id: string; label: string }>
  *  Custom put a non-inject id in the picker and the turn then had no
  *  ANTHROPIC_API_KEY ("Not logged in · Please run /login"). Live injects
  *  come from mergeLocalInject. */
-export function readClaudeModelCatalog(env: Record<string, string | undefined> = process.env) {
+export function readClaudeModelCatalog(
+  env: Record<string, string | undefined> = process.env,
+  /** #4973: the account's live list when it was read, else the written one. */
+  official: ModelCatalog = STATIC_CLAUDE_MODELS,
+) {
   // A missing or unreadable settings.json is not fatal: an instance whose
   // environment sets ANTHROPIC_MODEL (a Claude Code install pointed at an
   // Anthropic-compatible host) still lists that model as Custom.
@@ -571,7 +576,7 @@ export function readClaudeModelCatalog(env: Record<string, string | undefined> =
   const envModel = nestedEnv.ANTHROPIC_MODEL ?? env.ANTHROPIC_MODEL;
   if (typeof envModel === "string") extras.push(...extrasFromUnknown([envModel]).map((extra) => ({ ...extra, custom: true })));
 
-  const options = STATIC_CLAUDE_MODELS.options.map((option) => ({ ...option }));
+  const options: ModelCatalog["options"] = official.options.map((option) => ({ ...option }));
   const seen = new Set(options.map((option) => option.id));
   for (const extra of extras) {
     if (seen.has(extra.id)) continue;
@@ -582,7 +587,7 @@ export function readClaudeModelCatalog(env: Record<string, string | undefined> =
       ? { id: extra.id, label: extra.label, custom: true }
       : { id: extra.id, label: extra.label });
   }
-  return { default: STATIC_CLAUDE_MODELS.default, options };
+  return { default: official.default, options };
 }
 
 // ── permission broker (ported from agentcal drivers/claude.js) ─────────

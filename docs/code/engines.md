@@ -6,6 +6,29 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Claude's model list is the account's own (#4973, 2026-11-19)
+
+`server/drivers/claude/account-models.ts` reads `GET /v1/models` (paged) with
+the engine's key, gateway token or Claude sign-in (`.credentials.json`, else
+the macOS keychain item of that login folder), and on a sign-in Claude Code's
+`additional_model_options` from `/api/claude_cli/bootstrap`. The rows keep
+Anthropic's order and names, `max_input_tokens` as the context size and the
+model's own effort levels; `STATIC_CLAUDE_MODELS` adds what it knows about a
+row it names and serves only while nothing was read. A dated id whose
+undated alias is written keeps the alias. An Anthropic-compatible host
+(`ANTHROPIC_BASE_URL`) keeps the list it was given.
+
+The instance reads it at start, at sign-in, on `refreshModels`, behind any
+read older than 10 min (`CLAUDE_MODELS_TTL_MS`), and when a turn runs a model
+the list does not name (`noteModelSeen`). On an organization server
+`modelsForAccess` reads a person's own Claude sign-in or key, kept per
+account for 10 min (`createKeyModelCatalogs`), and `viewerAccountModels`
+passes a Claude sign-in as well as a key. `SAGAX_DISABLE_LIVE_MODEL_LISTS=1`
+(set by the test setup) turns the reads off. Tests:
+`server/drivers/claude/account-models.test.ts`,
+`server/drivers/claude-catalog.test.ts`,
+`server/index-leaves/viewerAccountModels.test.ts`.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via

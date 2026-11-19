@@ -201,3 +201,82 @@ describe("ClaudeDriver catalog", () => {
     }
   });
 });
+
+// #4973: the instance lists what its own account offers, read live, and an
+// organization person's own sign-in lists theirs; nothing is written by hand.
+describe("live Claude catalog (#4973)", () => {
+  const previousFetch = globalThis.fetch;
+  const previousSwitch = process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS;
+  afterEach(() => {
+    globalThis.fetch = previousFetch;
+    if (previousSwitch === undefined) delete process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS;
+    else process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS = previousSwitch;
+  });
+
+  const signIn = (dir: string, token: string) => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: token, refreshToken: "r".repeat(40), expiresAt: Date.now() + 3_600_000 } }));
+  };
+  const effort = { supported: true, low: { supported: true }, medium: { supported: true }, high: { supported: true }, xhigh: { supported: true }, max: { supported: true } };
+  const listing = (ids: string[]) => ({ data: ids.map((id) => ({ id, display_name: id.replace(/^claude-/, "Claude "), max_input_tokens: 1_000_000, capabilities: { effort } })), has_more: false });
+
+  it("offers the account's own models, Mythos among them, and each person's own", async () => {
+    delete process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS;
+    const own = "o".repeat(40);
+    const person = "p".repeat(40);
+    const accounts: Record<string, string[]> = {
+      [own]: ["claude-mythos-5-2", "claude-mythos-5-1", "claude-fable-5-2", "claude-opus-4-8"],
+      [person]: ["claude-sonnet-5", "claude-opus-4-7"],
+    };
+    globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+      const target = new URL(String(url));
+      if (target.origin !== "https://api.anthropic.com") throw new Error("offline");
+      const token = String(new Headers(init?.headers).get("authorization") ?? "").replace(/^Bearer /, "");
+      if (!accounts[token]) return new Response("denied", { status: 401 });
+      if (target.pathname === "/api/claude_cli/bootstrap") return Response.json({ additional_model_options: null });
+      return Response.json(listing(accounts[token]!));
+    }) as typeof fetch;
+    const home = mkdtempSync(join(tmpdir(), "omb-claude-live-"));
+    scratchDirs.push(home);
+    signIn(join(home, ".claude"), own);
+    const instanceId = "claude-live-catalog";
+    const instance = await ClaudeDriver.create({ instanceId, displayName: "Claude", environment: { HOME: home }, enabled: true, config: ClaudeDriver.defaultConfig() });
+    try {
+      await instance.startupModelRefresh;
+      expect(instance.models.options.map((option) => option.id)).toEqual(["claude-mythos-5-2", "claude-mythos-5-1", "claude-fable-5-2", "claude-opus-4-8"]);
+      expect(instance.models.options[0]).toMatchObject({ id: "claude-mythos-5-2", contextWindow: 1_000_000, effortLevels: ["low", "medium", "high", "xhigh", "max"] });
+      // The account gains a model: a turn on it reads the list again.
+      accounts[own] = ["claude-mythos-5-3", ...accounts[own]!];
+      await instance.refreshModels?.();
+      expect(instance.models.options[0]?.id).toBe("claude-mythos-5-3");
+
+      const personDir = join(home, "principals", "pr_a", "claude");
+      signIn(personDir, person);
+      const theirs = await instance.modelsForAccess!({ via: "subscription", identity: "subscription:pr_a:claude", claudeConfigDir: personDir });
+      expect(theirs.options.map((option) => option.id)).toEqual(["claude-sonnet-5", "claude-opus-4-7"]);
+      // A sign-in that cannot be read keeps the instance's list.
+      const unread = await instance.modelsForAccess!({ via: "subscription", identity: "subscription:pr_b:claude", claudeConfigDir: join(home, "principals", "pr_b", "claude") });
+      expect(unread).toBe(instance.models);
+    } finally {
+      await instance.dispose();
+      rmSync(startupModelCachePath(instanceId)!, { force: true });
+    }
+  });
+
+  it("keeps the written list when the account's list cannot be read", async () => {
+    delete process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS;
+    globalThis.fetch = (async () => { throw new Error("offline"); }) as typeof fetch;
+    const home = mkdtempSync(join(tmpdir(), "omb-claude-live-off-"));
+    scratchDirs.push(home);
+    signIn(join(home, ".claude"), "q".repeat(40));
+    const instanceId = "claude-live-catalog-off";
+    const instance = await ClaudeDriver.create({ instanceId, displayName: "Claude", environment: { HOME: home }, enabled: true, config: ClaudeDriver.defaultConfig() });
+    try {
+      await instance.startupModelRefresh;
+      expect(instance.models.options.map((option) => option.id)).toEqual(STATIC_CLAUDE_MODELS.options.map((option) => option.id));
+    } finally {
+      await instance.dispose();
+      rmSync(startupModelCachePath(instanceId)!, { force: true });
+    }
+  });
+});

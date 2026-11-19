@@ -106,6 +106,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - Never put a per-turn value in a pooled process's contract or session inputs: it relaunches the engine on every turn.
 - Perspicax is one fixed `perspicax` mount on every engine; a role switch changes its catalog, never its server name; never narrow the general tool limit back to 32 (2026-11-03, #1935).
 - Never fix the Codex Perspicax bridge by removing the reserved-variable guard or sharing `SAGAX_PERSPICAX_*` with another server (2026-10-30).
+- A provider's model list comes live from the person's own account; a written list is only a fallback and extra metadata, never a filter, and a new model needs no code change (2026-11-19, #4973).
 
 ## Capabilities
 

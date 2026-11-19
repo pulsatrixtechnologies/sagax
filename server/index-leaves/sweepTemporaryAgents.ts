@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** sweepTemporaryAgents (#1388). Pure move from server/index.ts. */
-import { expired as temporaryExpired, purgeDue as temporaryPurgeDue, testLeftover } from "../temporary-agents.ts";
+import { expired as temporaryExpired, purgeDue as temporaryPurgeDue } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createSweepTemporaryAgents(getHost: () => Host): any {
@@ -12,14 +12,12 @@ async function sweepTemporaryAgents(now = Date.now()) {
   for (const bot of host.store.bots.slice()) {
     const temporary = bot.temporary;
     if (!temporary) continue;
-    // 2026-11-18: a test's leftover agent goes now, not after its retention
-    const leftover = !bot.busy && !host.store.tasks(bot.id).some((task) => host.threadBusy(bot.id, task.threadId)) && testLeftover(bot, host.botLastActivity(bot), now);
-    if (leftover || temporaryPurgeDue(temporary, now)) {
+    if (temporaryPurgeDue(temporary, now)) {
       const result = await host.deleteBotWithLifecycle(bot.id).catch((error) => {
         console.warn(`[temporary-agents] could not delete ${bot.id}: ${error instanceof Error ? error.message : String(error)}`);
         return null;
       });
-      if (result?.status === 200) host.temporaryAudit("agents.temporary.purged", bot, { archivedAt: temporary.archived?.at ?? null, ...(leftover ? { testLeftover: true } : {}) });
+      if (result?.status === 200) host.temporaryAudit("agents.temporary.purged", bot, { archivedAt: temporary.archived?.at ?? null });
       continue;
     }
     if (bot.busy || host.store.tasks(bot.id).some((task) => host.threadBusy(bot.id, task.threadId))) continue;

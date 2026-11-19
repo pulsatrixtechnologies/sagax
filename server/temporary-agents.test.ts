@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeCount, archiveMark, capInstructions, cleanTemporaryAgent, defaultIdleHours, expired, isSurfaceBot, mayDelete, mayPin, profileSections, purgeDue, quotaKey,
-  TEMP_AGENT_QUOTA, TEMP_AGENT_RETENTION_MS, temporaryOwner, testLeftover, type TemporaryAgent,
+  TEMP_AGENT_QUOTA, TEMP_AGENT_RETENTION_MS, temporaryOwner, type TemporaryAgent,
 } from "./temporary-agents.ts";
 
 const HOUR = 3_600_000;
@@ -152,29 +152,5 @@ describe("lot S1: a person's surface bot", () => {
     const unpinned: TemporaryAgent = { ...surface };
     delete unpinned.pinned;
     expect(expired(unpinned, T0, T0 + 10_000 * HOUR)).toBe(false);
-  });
-});
-
-describe("temporary agents: a test's leftover (2026-11-18)", () => {
-  const now = 10 * 3_600_000;
-  const agent = (over: Partial<TemporaryAgent> = {}): TemporaryAgent => ({
-    via: "mcp", createdAt: 0, ownerPrincipalId: "pr_1", createdBy: { kind: "person", principalId: "pr_1" }, idleHours: 24, lastActiveAt: now, ...over,
-  });
-  it("is a temporary agent under a test name, unpinned, archived or idle for more than an hour", () => {
-    const archived = agent({ archived: { at: 1, by: { kind: "system" }, reason: "expired", purgeAt: now * 100 } });
-    expect(testLeftover({ name: "perf-test-061", temporary: archived }, 0, now)).toBe(true);
-    // archived a moment ago, by a test that still reads it back
-    expect(testLeftover({ name: "perf-test-061", temporary: { ...archived, archived: { ...archived.archived!, at: now - 1_000 } } }, 0, now)).toBe(false);
-    expect(testLeftover({ name: "perf-test-062", temporary: agent({ lastActiveAt: 0 }) }, 0, now)).toBe(true);
-    // a test that still runs keeps its agent
-    expect(testLeftover({ name: "perf-test-063", temporary: agent() }, now, now)).toBe(false);
-  });
-  it("never on the name alone", () => {
-    const old = agent({ lastActiveAt: 0 });
-    expect(testLeftover({ name: "perf-test-061" }, 0, now)).toBe(false);
-    expect(testLeftover({ name: "perf-test-061", temporary: { ...old, pinned: { principalId: "pr_1", at: 1 } } }, 0, now)).toBe(false);
-    expect(testLeftover({ name: "perf-test-061", temporary: { ...old, surface: true } }, 0, now)).toBe(false);
-    expect(testLeftover({ name: "Perf review", temporary: old }, 0, now)).toBe(false);
-    expect(testLeftover({ name: "my perf-test-061", temporary: old }, 0, now)).toBe(false);
   });
 });

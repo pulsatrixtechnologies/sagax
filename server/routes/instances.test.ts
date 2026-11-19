@@ -291,22 +291,27 @@ describe("instances routes", () => {
     expect(order).toEqual(["plan", "apply", "persist"]);
   });
 
-  it("offers the person's other account of the same provider, never another person's own (2026-11-18)", async () => {
+  it("offers every other account of the same provider: the plan keeps each bot within its own person's (2026-11-19)", async () => {
     const accountMoves = { plan: vi.fn(async () => ({ moves: [], noEngine: false })), apply: vi.fn() };
     const { call, cfg } = harness({ accountMoves });
     cfg.instances!["claude-other"] = { driver: "claudeAgent", displayName: "Theirs", ownerPrincipalId: "member@example.com" };
     await call("GET", "/api/instances/claude-extra/moves");
-    expect(accountMoves.plan).toHaveBeenLastCalledWith(expect.objectContaining({ sameProvider: ["claude"] }));
+    expect(accountMoves.plan).toHaveBeenLastCalledWith(expect.objectContaining({ sameProvider: ["claude", "claude-other"] }));
   });
 
-  it("signs out with the bots moved first when the confirmation asks it (2026-11-18)", async () => {
-    const plan = { moves: [], noEngine: true };
+  it("a sign-out from any app moves the bots first, no flag needed, and says what moved (2026-11-19)", async () => {
+    const plan = { moves: [{ botId: "b1", name: "Scout", via: "default" as const, to: { instanceId: "chatgpt", model: "m" } }], noEngine: false };
     const accountMoves = { plan: vi.fn(async () => plan), apply: vi.fn() };
     const { call, deps } = harness({ accountMoves });
-    expect((await call("POST", "/api/instances/claude/auth/sign-out", { body: {} })).sent?.status).toBe(200);
-    expect(accountMoves.apply).not.toHaveBeenCalled();
+    // the Claude and Codex account settings send no body at all
+    const bare = await call("POST", "/api/instances/claude/auth/sign-out");
+    expect(bare.sent?.status).toBe(200);
+    expect(bare.sent?.body).toMatchObject({ moved: plan.moves, noEngine: false });
+    expect(accountMoves.apply).toHaveBeenCalledTimes(1);
+    expect(accountMoves.apply).toHaveBeenLastCalledWith(plan, ["claude"], { forget: false, moveDefault: true });
+    // the providers page still sends { move: true }: the same
     expect((await call("POST", "/api/instances/claude/auth/sign-out", { body: { move: true } })).sent?.status).toBe(200);
-    expect(accountMoves.apply).toHaveBeenCalledWith(plan, ["claude"], { forget: false, moveDefault: true });
+    expect(accountMoves.apply).toHaveBeenCalledTimes(2);
     expect(deps.providerAuthSessions.signOut).toHaveBeenCalledTimes(2);
   });
 

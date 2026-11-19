@@ -542,11 +542,18 @@ export class ProviderRegistry {
   }
 
   async dispose(instanceId: InstanceId) {
+    await this.release(instanceId)?.dispose();
+  }
+
+  /** Takes an instance out of the registry without stopping it: a turn in
+   * flight on it keeps its live engine (an account removed mid-turn), and
+   * the caller disposes it once that turn is over. */
+  release(instanceId: InstanceId): ProviderInstance | undefined {
     const entry = this.byId.get(instanceId);
     this.byId.delete(instanceId);
     this.cliByInstance.delete(instanceId);
     this.lastSnapshots.delete(instanceId);
     this.seeds.delete(instanceId);
-    await entry?.live?.dispose();
+    return entry?.live;
   }
 }

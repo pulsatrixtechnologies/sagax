@@ -150,26 +150,6 @@ export function purgeDue(agent: TemporaryAgent, now: number): boolean {
   return Boolean(agent.archived && now >= agent.archived.purgeAt);
 }
 
-/** The names the repo's tests give the temporary agents they make
- * (server/primary-scope.e2e.test.ts: perf-test-061, perf-test-062). */
-export const TEST_AGENT_NAME = /^perf-test-\d+$/;
-/** How long a test-named agent may sit idle before the cleanup takes it. */
-export const TEST_AGENT_IDLE_MS = 3_600_000;
-
-/** A leftover of a test run on a real data folder (2026-11-18: perf-test-061
- * sat on the owner's account): a temporary agent made through MCP
- * (create_agent), under a test name, nobody pinned it, and it was archived
- * or went idle more than an hour ago. All four, never the name alone: such a bot is purged at
- * the next sweep (the first one runs at start). */
-export function testLeftover(bot: { name?: string; temporary?: TemporaryAgent }, lastActivity: number, now: number): boolean {
-  const agent = bot.temporary;
-  if (!agent || agent.via !== "mcp" || agent.pinned || agent.surface || !TEST_AGENT_NAME.test(bot.name?.trim() ?? "")) return false;
-  // an hour either way: a test that still runs (and reads its archived
-  // agent back) keeps it
-  if (agent.archived) return now - agent.archived.at >= TEST_AGENT_IDLE_MS;
-  return now - Math.max(agent.lastActiveAt, lastActivity) >= TEST_AGENT_IDLE_MS;
-}
-
 /** The archive mark for now. */
 export function archiveMark(by: ArchiveActor, reason: "deleted" | "expired", now: number): NonNullable<TemporaryAgent["archived"]> {
   return { at: now, by, reason, purgeAt: now + TEMP_AGENT_RETENTION_MS };

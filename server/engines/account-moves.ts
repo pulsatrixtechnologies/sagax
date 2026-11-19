@@ -60,21 +60,26 @@ export interface AccountMoveInput {
   /** Move the default model too when it is on the account. */
   moveDefault?: boolean;
   label?: (selection: ModelSelection) => string;
+  /** Whether a bot (null: the default model for new bots) may run on an
+   * engine: on an organization server each person's bots only move within
+   * that person's own accounts or the organization's shared ones. */
+  reachable?: (botId: string | null, instanceId: string) => boolean;
 }
 
 export function planAccountMoves(input: AccountMoveInput): AccountMovePlan {
   const { leaving } = input;
-  const usable = (instanceId: string) => !leaving.has(instanceId) && input.engines.some((engine) => engine.instanceId === instanceId && engine.usable);
-  const sibling = input.sameProvider.find(usable);
-  const onSibling = (selection: ModelSelection): ModelSelection => ({ ...structuredClone(selection), instanceId: sibling! });
-  const anyEngine = (): ModelSelection | null => {
+  const runs = (instanceId: string) => !leaving.has(instanceId) && input.engines.some((engine) => engine.instanceId === instanceId && engine.usable);
+  // per bot: never onto an engine of another person
+  const usableFor = (botId: string | null) => (instanceId: string) => runs(instanceId) && (input.reachable?.(botId, instanceId) ?? true);
+  const onto = (selection: ModelSelection, instanceId: string): ModelSelection => ({ ...structuredClone(selection), instanceId });
+  const anyEngine = (usable: (instanceId: string) => boolean): ModelSelection | null => {
     const engine = input.engines.find((candidate) => candidate.defaultModel && usable(candidate.instanceId));
     return engine ? { instanceId: engine.instanceId, model: engine.defaultModel } : null;
   };
-  const fallbackDefault = (): { via: AccountMoveVia; to: ModelSelection | null } => {
+  const fallbackDefault = (usable: (instanceId: string) => boolean): { via: AccountMoveVia; to: ModelSelection | null } => {
     const own = input.personDefault;
     if (own && usable(own.instanceId)) return { via: "default", to: structuredClone(own) };
-    const any = anyEngine();
+    const any = anyEngine(usable);
     return any ? { via: "default", to: any } : { via: "none", to: null };
   };
   const named = <T extends { to: ModelSelection | null }>(entry: T): T & { engine?: string } => entry.to && input.label ? { ...entry, engine: input.label(entry.to) } : entry;
@@ -84,18 +89,20 @@ export function planAccountMoves(input: AccountMoveInput): AccountMovePlan {
     if (!liveAccountUser(bot) || !usesAccount(bot, input.tasks, leaving)) continue;
     const name = bot.name?.trim() || bot.id;
     const backups = bot.fallback ?? [];
+    const usable = usableFor(bot.id);
+    const sibling = input.sameProvider.find(usable);
     let target: { via: AccountMoveVia; to: ModelSelection | null };
     if (!leaving.has(bot.modelSelection.instanceId)) target = { via: "stays", to: structuredClone(bot.modelSelection) };
-    else if (sibling) target = { via: "account", to: onSibling(bot.modelSelection) };
+    else if (sibling) target = { via: "account", to: onto(bot.modelSelection, sibling) };
     else {
       const next = backups.find((candidate) => usable(candidate.instanceId));
-      target = next ? { via: "fallback", to: structuredClone(next) } : fallbackDefault();
+      target = next ? { via: "fallback", to: structuredClone(next) } : fallbackDefault(usable);
     }
     // its backups: one on the account moves to the other account, else goes;
     // the one it now runs on is no longer a backup
     const fallback: ModelSelection[] = [];
     for (const candidate of backups) {
-      const kept = leaving.has(candidate.instanceId) ? (sibling ? onSibling(candidate) : null) : structuredClone(candidate);
+      const kept = leaving.has(candidate.instanceId) ? (sibling ? onto(candidate, sibling) : null) : structuredClone(candidate);
       if (!kept) continue;
       if (target.to && kept.instanceId === target.to.instanceId && kept.model === target.to.model) continue;
       if (fallback.some((entry) => entry.instanceId === kept.instanceId && entry.model === kept.model)) continue;
@@ -107,13 +114,15 @@ export function planAccountMoves(input: AccountMoveInput): AccountMovePlan {
   let defaultModel: AccountMovePlan["defaultModel"];
   const current = input.personDefault;
   if (input.moveDefault && current && leaving.has(current.instanceId)) {
-    defaultModel = named(sibling ? { via: "account" as const, to: onSibling(current) } : (() => {
-      const any = anyEngine();
+    const usable = usableFor(null);
+    const sibling = input.sameProvider.find(usable);
+    defaultModel = named(sibling ? { via: "account" as const, to: onto(current, sibling) } : (() => {
+      const any = anyEngine(usable);
       return any ? { via: "default" as const, to: any } : { via: "none" as const, to: null };
     })());
   }
   // every usable engine is in `engines` (the sibling and a backup too)
-  const noEngine = !input.engines.some((engine) => usable(engine.instanceId));
+  const noEngine = !input.engines.some((engine) => runs(engine.instanceId));
   return { moves, ...(defaultModel ? { defaultModel } : {}), noEngine };
 }
 
@@ -143,6 +152,25 @@ export interface AccountMovesHostDeps {
   moveBots(leaving: ReadonlySet<string>, moves: readonly AccountMove[], forget: boolean): void;
   /** Saves a new default model for new bots. */
   setDefault(selection: ModelSelection): void;
+  /** Organization server: the person a bot belongs to, and the person an
+   * engine is the own account (or server) of, undefined for the
+   * organization's shared ones. Absent: one person, every engine is theirs. */
+  botOwner?(botId: string): string | null | undefined;
+  engineOwner?(instanceId: string): string | undefined;
+}
+
+/** A bot may run on an engine shared by the organization or owned by the
+ * bot's own person, never on another person's own account. The default model
+ * for new bots (null) is everyone's: only a shared engine. */
+export function ownerReachable(deps: Pick<AccountMovesHostDeps, "botOwner" | "engineOwner">) {
+  const key = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+  return (botId: string | null, instanceId: string): boolean => {
+    const engine = deps.engineOwner?.(instanceId);
+    if (engine === undefined) return true;
+    if (botId === null) return false;
+    const whose = key(deps.botOwner?.(botId));
+    return whose !== "" && whose === key(engine);
+  };
 }
 
 export function createAccountMovesHost(deps: AccountMovesHostDeps): AccountMovesHost {
@@ -157,6 +185,7 @@ export function createAccountMovesHost(deps: AccountMovesHostDeps): AccountMoves
         personDefault: deps.personDefault() ?? null,
         moveDefault: input.moveDefault,
         label: (selection) => deps.label(selection, input.person),
+        reachable: ownerReachable(deps),
       });
     },
     apply(plan, leaving, options) {

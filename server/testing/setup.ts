@@ -43,6 +43,9 @@ Object.defineProperty(globalThis.navigator, "language", { value: "en", configura
 // (server/content-encryption.test.ts) turn it on explicitly.
 process.env.SAGAX_CONTENT_ENCRYPTION ??= "off";
 
+// #4973: no test reads a real account's live model list (network, keychain).
+process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS ??= "1";
+
 // SQLite keeps the database file open for the lifetime of its handle.
 // Windows will not remove a directory containing an open database, so close
 // the per-test handle before the next test resets its throwaway data dir.

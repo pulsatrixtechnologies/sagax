@@ -106,3 +106,48 @@ describe("each person's own key lists their account's models (#4416)", () => {
     expect(await modelsFor("pr_alice")).toEqual(WRITTEN);
   });
 });
+
+// #4973: on Claude Code, a person's own Claude sign-in lists what their
+// account offers, read through the engine's modelsForAccess.
+describe("each person's own Claude sign-in lists their account's models (#4973)", () => {
+  it("passes the viewer's own sign-in, and nobody else's", async () => {
+    const asked: Array<{ via: string; claudeConfigDir?: string }> = [];
+    const written = { default: "claude-sonnet-5", options: [{ id: "claude-sonnet-5", label: "Claude Sonnet 5" }] };
+    const runtime = {
+      models: written,
+      modelsForAccess: async (access: { via: string; claudeConfigDir?: string }) => {
+        asked.push(access);
+        return { default: "claude-mythos-5-2", options: [{ id: "claude-mythos-5-2", label: "Claude Mythos 5.2" }] };
+      },
+    };
+    const signedIn = new Set(["pr_alice"]);
+    const host: Record<string, unknown> = {
+      IDENTITY: { kind: "perspicax", issuer: "https://issuer.invalid" },
+      DATA_DIR: "/nonexistent-4973",
+      registry: { get: (id: string) => (id === "claude" ? runtime : undefined) },
+      describeInstances: async () => [{ instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude", models: written }],
+      isPrincipalId: (id: string) => id.startsWith("pr_"),
+      principals: { byId: (id: string) => ({ id, subject: { sub: `sub-${id}`, iss: "https://issuer.invalid" } }), list: () => [] },
+      orgPersonFacts: (person: { subject: { sub: string } }) => ({ sub: person.subject.sub }),
+      engineInstalled: () => true,
+      keyOnlyInstance: () => false,
+      engineLogins: { signedIn: (pid: string) => signedIn.has(pid), expired: () => false },
+      perspicaxDirectory: { providerKeys: () => [], invalidate: () => {} },
+      providerAccountOwner: (id: string | undefined) => (id ? { principalId: id } : null),
+      providerAccounts: { resolve: async () => ({ ok: false, error: "link" }) },
+      principalLoginDir: (pid: string) => `/nonexistent-4973/principals/${pid}/claude`,
+      driverKeyBacked: () => false,
+      fileKeyConfigured: () => false,
+      serverEngineAllowedFor: () => true,
+      consoleEngineAllowed: () => true,
+    };
+    host.piKeyProviders = createPiKeyProviders(() => host);
+    const viewer = createViewerAccountModels(() => host);
+    const ids = async (person: string) => ((await viewer(person, await (host.describeInstances as () => Promise<unknown[]>)())) as { models: { options: { id: string }[] } }[])[0]!.models.options.map((option) => option.id);
+    expect(await ids("pr_alice")).toEqual(["claude-mythos-5-2"]);
+    expect(asked).toEqual([expect.objectContaining({ via: "subscription", claudeConfigDir: "/nonexistent-4973/principals/pr_alice/claude" })]);
+    // Not signed in, no key: the instance's list, and no read on their behalf.
+    expect(await ids("pr_bob")).toEqual(["claude-sonnet-5"]);
+    expect(asked).toHaveLength(1);
+  });
+});

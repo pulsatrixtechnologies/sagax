@@ -23,6 +23,7 @@
 import { execChild } from "../process/spawn-helper.ts";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import type { InstanceConfigMap } from "../contracts.ts";
 import { resolveClaudeConfigDir } from "../drivers/claude/config.ts";
@@ -897,13 +898,30 @@ function claudeKeychainServices(account: PlanAccount, env: NodeJS.ProcessEnv, re
   return [`${CLAUDE_KEYCHAIN_SERVICE}-${suffix}`];
 }
 
-export function readDarwinClaudeKeychain(service: string): Promise<string | null> {
-  if (process.platform !== "darwin") return Promise.resolve(null);
+/** #4973: Claude Code writes its sign-in under the account named after the
+ * macOS user; an older item of the same service (one holding only MCP
+ * sign-ins) can sit beside it, and `find-generic-password -s` alone returns
+ * whichever comes first. The user's own item wins when it holds the
+ * sign-in; else the first item of the service, as before. */
+export async function readDarwinClaudeKeychain(service: string): Promise<string | null> {
+  if (process.platform !== "darwin") return null;
+  let user = "";
+  try {
+    user = userInfo().username;
+  } catch {
+    user = process.env.USER ?? "";
+  }
+  const own = user ? await runSecurityFind(["find-generic-password", "-s", service, "-a", user, "-w"]) : null;
+  if (own && decodeKeychainSecret(own)?.includes("claudeAiOauth")) return own;
+  return await runSecurityFind(["find-generic-password", "-s", service, "-w"]) ?? own;
+}
+
+function runSecurityFind(args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       execChild(
         "security",
-        ["find-generic-password", "-s", service, "-w"],
+        args,
         {
           timeout: KEYCHAIN_TIMEOUT_MS,
           maxBuffer: KEYCHAIN_MAX_BUFFER,

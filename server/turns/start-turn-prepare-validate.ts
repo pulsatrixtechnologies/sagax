@@ -257,6 +257,9 @@ export function createPrepareValidateStartTurn(
     });
     // Recorded on the task once the turn is admitted (below), never before.
     if (state.autoTurn) state.bot = { ...state.bot, modelSelection: state.autoTurn.pick.selection };
+    // #5014: the account the person's strategy took for Auto's pick, said once
+    const account = state.autoTurn?.pick.account;
+    if (account && !state.opts?.warmOnly) host.noteAccountPick?.(state.bot.id, state.threadId, account.pick, account.moved);
   }
   // A turn said on a live call, and the warm that prepares its process, run
   // on a fast model (server/voice/voice-turn.ts): the person waits in silence for

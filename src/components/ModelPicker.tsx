@@ -9,6 +9,7 @@ import { type Bot, type ModelSelection, type useStore } from "@/state/store";
 import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
+import { accountPickChipLine } from "@/lib/account-pick";
 import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
 import { needsCli } from "./EngineSetup";
 import type { ModelMenuRow } from "./ModelMenu";
@@ -351,7 +352,8 @@ export function ModelPicker({
     if (row.kind === "auto") return chooseAuto();
     if (row.kind === "follow") return pickBotModel();
     const instance = state.instances.find((candidate) => candidate.instanceId === row.instanceId);
-    if (instance && row.modelId !== undefined) pick(instance, row.modelId);
+    // #5014: the Account line forces its account; a row leaves it to the strategy
+    if (instance && row.modelId !== undefined) pick(instance, row.modelId, false, row.pinAccount === true);
   };
 
   const summary = modelPickerSummary({ autoOn, autoRecord, active, selection, selectedVariantLabel, advanced });
@@ -367,7 +369,10 @@ export function ModelPicker({
   });
   if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 
-  const composerTitle = bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`;
+  // #5014: why the conversation runs on this account, in one line, under the chip's words
+  const pickedLine = accountPickChipLine(profile.tasks?.find((task) => task.threadId === (threadId ?? bot.threadId))?.accountPick, selection);
+  const titled = pickedLine ? `${composerLabel}\n${pickedLine}${followLine}` : `${composerLabel}${followLine}`;
+  const composerTitle = bot.busy ? `${titled}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : titled;
   const ultracodeChip = isUltracodeEffort(selection.effort);
   const menuShownOpen = menu && !locked;
 

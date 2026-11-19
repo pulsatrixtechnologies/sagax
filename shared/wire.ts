@@ -12,6 +12,7 @@ import type { PersonAttentionCard, RunStatusNote } from "./person-attention.ts";
 import type { PeerOutcome } from "./peer-outcome.ts";
 import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
+import type { AccountPick } from "./account-switch.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
 import type { DataContext } from "./data-context.ts";
@@ -306,6 +307,9 @@ export interface WireTask {
   modelSelection?: ModelSelection;
   /** Auto: the model the last turn here ran on, and why. Server-derived. */
   autoModel?: AutoModelRecord;
+  /** #5014: the account of its provider the last turn here took by the
+   * person's account strategy, and why (the model chip says it). Server-derived. */
+  accountPick?: AccountPick;
   /** true: the thread runs on its bot's model and moves with it; false: a
    * person picked this thread's model. Derived at projection, never stored;
    * absent from servers older than this field. */

@@ -334,6 +334,20 @@ case "rate_limit_event":
   // the account's usage window as the API's last response left it;
   // read only when the turn fails (claudeUsageLimit, `result`)
   if (session.turn) session.turn.limit = claudeLimitRefusal(o.rate_limit_info);
+  // #5014: and the account meter's reading of that window (the account strategy)
+  if (o.rate_limit_info && typeof o.rate_limit_info === "object") {
+    const info = o.rate_limit_info as Record<string, unknown>;
+    emit({
+      ...base(threadId, currentTurnId()),
+      type: "account.rate-limit",
+      info: {
+        ...(typeof info.status === "string" ? { status: info.status } : {}),
+        ...(typeof info.rateLimitType === "string" ? { rateLimitType: info.rateLimitType } : {}),
+        ...(typeof info.resetsAt === "number" ? { resetsAt: info.resetsAt } : {}),
+        ...(typeof info.utilization === "number" ? { utilization: info.utilization } : {}),
+      },
+    });
+  }
   break;
 case "tool_progress":
   // Claude Code 2.1.306 sends one every 30 s while a tool runs:

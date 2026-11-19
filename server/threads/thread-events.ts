@@ -259,6 +259,8 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEvent {
       return typeof value.input === "number" && typeof value.output === "number";
     case "runtime.notice":
       return typeof value.message === "string";
+    case "account.rate-limit":
+      return isRecord(value.info);
     case "runtime.error":
       return typeof value.message === "string" &&
         (value.setup === undefined || typeof value.setup === "boolean") &&

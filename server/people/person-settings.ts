@@ -23,6 +23,7 @@ import {
 import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-models.ts";
 import { cleanHarnessDefaults } from "../../shared/harness-matrix.ts";
 import { cleanContextDefaults } from "../../shared/context-size.ts";
+import { cleanAccountSwitchDefaults, type AccountSwitchSetting } from "../../shared/account-switch.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export const PERSON_SETTINGS_FILE = "person-settings.json";
@@ -47,6 +48,10 @@ export interface PersonSettings {
   /** #4417: this person's default context size per provider,
    * `{ <provider id>: <tokens> }` (shared/context-size.ts). Absent when none. */
   contextByProvider?: Record<string, number>;
+  /** #5014 (D-20261119-050): this person's account strategy per provider,
+   * `{ <provider id>: { strategy, threshold } }` (shared/account-switch.ts).
+   * Absent when none. */
+  accountSwitchByProvider?: Record<string, AccountSwitchSetting>;
   /** #1940: days before a pending approval in this person's inbox expires
    * (0 = never). Absent follows the organization setting, then the env /
    * default (7). */
@@ -110,6 +115,7 @@ function parse(value: unknown): PersonSettings {
   const favoriteModels = cleanFavoriteModels(raw.favoriteModels);
   const harnessByProvider = cleanHarnessDefaults(raw.harnessByProvider);
   const contextByProvider = cleanContextDefaults(raw.contextByProvider);
+  const accountSwitchByProvider = cleanAccountSwitchDefaults(raw.accountSwitchByProvider);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
   return {
@@ -119,6 +125,7 @@ function parse(value: unknown): PersonSettings {
     ...(favoriteModels.length ? { favoriteModels } : {}),
     ...(Object.keys(harnessByProvider).length ? { harnessByProvider } : {}),
     ...(Object.keys(contextByProvider).length ? { contextByProvider } : {}),
+    ...(Object.keys(accountSwitchByProvider).length ? { accountSwitchByProvider } : {}),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
     ...(aboutMe ? { aboutMe } : {}),
   };
@@ -207,6 +214,15 @@ export class PersonSettingsStore {
     const { contextByProvider: _, ...rest } = current;
     const next = cleanContextDefaults(map);
     return this.save(principalId, { ...rest, ...(Object.keys(next).length ? { contextByProvider: next } : {}) });
+  }
+
+  /** #5014: the person's account strategy per provider, the whole map. */
+  setAccountSwitchDefaults(principalId: string, map: unknown): PersonSettings {
+    if (!map || typeof map !== "object" || Array.isArray(map)) throw new PersonSettingsError("accountSwitchByProvider must be an object.");
+    const current = this.get(principalId);
+    const { accountSwitchByProvider: _, ...rest } = current;
+    const next = cleanAccountSwitchDefaults(map);
+    return this.save(principalId, { ...rest, ...(Object.keys(next).length ? { accountSwitchByProvider: next } : {}) });
   }
 
   /** #1940: personal override for pending approval age. `null` clears it

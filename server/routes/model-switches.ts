@@ -3,10 +3,12 @@
 //
 //   GET /api/me/models   { org: string[], mine: string[], favoriteModels: string[],
 //                          harnessByProvider: { <provider id>: <driver kind> },
-//                          contextByProvider: { <provider id>: <tokens> } }
+//                          contextByProvider: { <provider id>: <tokens> },
+//                          accountSwitchByProvider: { <provider id>: { strategy, threshold } } }
 //   PUT /api/me/models   { disabledModels?: string[], favoriteModels?: string[],
 //                          harnessByProvider?: { <provider id>: <driver kind> | null },
-//                          contextByProvider?: { <provider id>: <tokens> | null } }
+//                          contextByProvider?: { <provider id>: <tokens> | null },
+//                          accountSwitchByProvider?: { <provider id>: { strategy?, threshold? } | null } }
 //                        each list given replaces the person's whole list;
 //                        each provider given in harnessByProvider sets or
 //                        (null) clears that provider's default only
@@ -24,6 +26,11 @@
 // provider (shared/context-size.ts), read by each turn of their bots without
 // a size of their own; a provider given sets or (null) clears its default.
 //
+// #5014 (D-20261119-050): `accountSwitchByProvider` is the person's account
+// strategy for each provider (shared/account-switch.ts): which of their
+// accounts of that provider runs a turn when several offer the model. A
+// provider given sets the fields sent (the rest kept) or (null) clears it.
+//
 // Their own: no admin right. On an organization server the list is kept in
 // the person's settings (server/people/person-settings.ts); on a solo server it is
 // the installation's (`disabledModels` in config.json), written by whoever
@@ -33,6 +40,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-models.ts";
 import { cleanHarnessDefaults, isHarnessId } from "../../shared/harness-matrix.ts";
 import { cleanContextDefaults, isContextSize } from "../../shared/context-size.ts";
+import { accountSwitchSettingOf, cleanAccountSwitchDefaults, cleanAccountThreshold, isAccountStrategy, type AccountSwitchSetting } from "../../shared/account-switch.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const MODEL_SWITCHES_PATH = "/api/me/models";
@@ -64,6 +72,12 @@ export interface ModelSwitchRouteDeps {
     /** Saves the whole map; the next turn of each bot reads it. */
     save(owner: string | "installation", map: Record<string, number>): void;
   };
+  /** #5014: the owner's account strategy per provider. */
+  accountSwitchDefaults?: {
+    read(owner: string | "installation"): Readonly<Record<string, AccountSwitchSetting>>;
+    /** Saves the whole map; the next turn of each bot reads it. */
+    save(owner: string | "installation", map: Record<string, AccountSwitchSetting>): void;
+  };
 }
 
 export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandler {
@@ -77,19 +91,38 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
       org: [...deps.org()], mine: [...deps.mine(owner)], favoriteModels: [...deps.favorites(owner)],
       ...(deps.harnessDefaults ? { harnessByProvider: { ...deps.harnessDefaults.read(owner) } } : {}),
       ...(deps.contextDefaults ? { contextByProvider: { ...deps.contextDefaults.read(owner) } } : {}),
+      ...(deps.accountSwitchDefaults ? { accountSwitchByProvider: { ...deps.accountSwitchDefaults.read(owner) } } : {}),
     });
     if (method === "GET") return answer();
     if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
       return json(res, 415, { error: "content-type must be application/json" });
     }
-    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown; contextByProvider?: unknown } | undefined;
+    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown; contextByProvider?: unknown; accountSwitchByProvider?: unknown } | undefined;
     const switches = body && typeof body === "object" && Array.isArray(body.disabledModels);
     const favorites = body && typeof body === "object" && Array.isArray(body.favoriteModels);
     const rawHarness = body && typeof body === "object" ? body.harnessByProvider : undefined;
     const harness = Boolean(deps.harnessDefaults) && rawHarness !== null && typeof rawHarness === "object" && !Array.isArray(rawHarness);
     const rawContext = body && typeof body === "object" ? body.contextByProvider : undefined;
     const context = Boolean(deps.contextDefaults) && rawContext !== null && typeof rawContext === "object" && !Array.isArray(rawContext);
-    if (!switches && !favorites && !harness && !context) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } } and/or { contextByProvider: { \"<provider>\": <tokens> | null } }." });
+    const rawAccounts = body && typeof body === "object" ? body.accountSwitchByProvider : undefined;
+    const accounts = Boolean(deps.accountSwitchDefaults) && rawAccounts !== null && typeof rawAccounts === "object" && !Array.isArray(rawAccounts);
+    if (!switches && !favorites && !harness && !context && !accounts) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } } and/or { contextByProvider: { \"<provider>\": <tokens> | null } } and/or { accountSwitchByProvider: { \"<provider>\": { \"strategy\": \"high-water\" | \"most-free\" | \"fill-up\", \"threshold\": <10-100> } | null } }." });
+    let accountsMap: Record<string, AccountSwitchSetting> | undefined;
+    if (accounts) {
+      const next: Record<string, AccountSwitchSetting> = { ...deps.accountSwitchDefaults!.read(owner) };
+      for (const [provider, value] of Object.entries(rawAccounts as Record<string, unknown>)) {
+        if (value === null) { delete next[provider]; continue; }
+        const given = value && typeof value === "object" && !Array.isArray(value) ? value as { strategy?: unknown; threshold?: unknown } : null;
+        if (!given || (given.strategy !== undefined && !isAccountStrategy(given.strategy))) {
+          return json(res, 400, { error: `accountSwitchByProvider.${provider}.strategy must be high-water, most-free or fill-up.` });
+        }
+        if (given.threshold !== undefined && cleanAccountThreshold(given.threshold) === null) {
+          return json(res, 400, { error: `accountSwitchByProvider.${provider}.threshold must be a whole percent from 10 to 100.` });
+        }
+        next[provider] = accountSwitchSettingOf({ ...next[provider], ...given });
+      }
+      accountsMap = cleanAccountSwitchDefaults(next);
+    }
     let contextMap: Record<string, number> | undefined;
     if (context) {
       const next: Record<string, number> = { ...deps.contextDefaults!.read(owner) };
@@ -116,6 +149,7 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
     if (favorites) deps.saveFavorites(owner, cleanFavoriteModels(body!.favoriteModels));
     if (harnessMap) await deps.harnessDefaults!.save(owner, harnessMap, auth);
     if (contextMap) deps.contextDefaults!.save(owner, contextMap);
+    if (accountsMap) deps.accountSwitchDefaults!.save(owner, accountsMap);
     return answer();
   };
 }

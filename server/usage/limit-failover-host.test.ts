@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 
+import type { AccountPick } from "../../shared/account-switch.ts";
 import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { LimitFailoverStore, type LimitCandidate } from "./limit-failover.ts";
@@ -1012,6 +1013,7 @@ describe("account rotation within a provider (#2192)", () => {
     const drivers: Record<string, string> = { ...DRIVERS, "claude-work": "claudeAgent" };
     const names: Record<string, string> = { ...NAMES, "claude-work": "Claude (work)" };
     const used = new Map<string, number>([["claude", 92], ["claude-work", 20]]);
+    const picks: Array<{ pick: AccountPick; moved: boolean }> = [];
     const host = createLimitFailoverHost({
       ...w.deps,
       engine: (id) => drivers[id] ? { instanceId: id, driverKind: drivers[id]! } : undefined,
@@ -1020,12 +1022,15 @@ describe("account rotation within a provider (#2192)", () => {
         instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"],
       })),
       planUsedPercent: (_payer, id) => used.get(id) ?? null,
+      noteAccountPick: (_bot, _thread, pick, moved) => { picks.push({ pick, moved }); },
     });
     const pending = host.beforeTurn("bot", "thread", undefined);
     expect(pending).not.toBeNull();
     await pending;
     expect(w.state.switches).toEqual([{ instanceId: "claude-work", model: "opus" }]);
-    expect(w.state.lines[0]!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Claude (work)", estimated: true });
+    // #5014: High-water's threshold moved it, said as such, never as a limit reached
+    expect(w.state.lines).toEqual([]);
+    expect(picks).toMatchObject([{ moved: true, pick: { instanceId: "claude-work", account: "Claude (work)", why: { kind: "threshold", from: "Claude", used: 92, threshold: 80 } } }]);
   });
 
   it("retries an empty reply once on the next pool member", async () => {
@@ -1068,6 +1073,90 @@ describe("account rotation within a provider (#2192)", () => {
     await host.idle();
     expect(w.state.switches).toEqual([]);
     expect(w.state.lines[0]!.line).toMatchObject({ kind: "waiting", from: "Claude" });
+  });
+});
+
+// #5014: the person's account strategy among the accounts of one provider.
+describe("the account strategy before a turn (#5014)", () => {
+  const HOUR = 3_600_000;
+  const drivers: Record<string, string> = { ...DRIVERS, "claude-work": "claudeAgent", "claude-other": "claudeAgent" };
+  const names: Record<string, string> = { ...NAMES, "claude-work": "Claude (work)", "claude-other": "Claude (other)" };
+  const pool = ["claude", "claude-work", "codex"];
+  const setup = (extra: Partial<LimitFailoverHostDeps> = {}, ids = pool) => {
+    const w = world({ allowed: ids });
+    const picks: Array<{ pick: AccountPick; moved: boolean }> = [];
+    const asked: Array<{ current: string; pool: string[] }> = [];
+    const host = createLimitFailoverHost({
+      ...w.deps,
+      engine: (id) => drivers[id] ? { instanceId: id, driverKind: drivers[id]! } : undefined,
+      engineName: (id) => names[id] ?? id,
+      candidates: async () => ids.map((id) => ({ instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"] })),
+      candidatesNow: () => ids.map((id) => ({ instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"] })),
+      noteAccountPick: (_bot, _thread, pick, moved) => { picks.push({ pick, moved }); },
+      accountChoice: (input) => {
+        asked.push({ current: input.current, pool: input.pool });
+        return null;
+      },
+      ...extra,
+    });
+    return { w, host, picks, asked };
+  };
+  const pick = (instanceId: string, why: AccountPick["why"]): AccountPick => ({ instanceId, account: names[instanceId]!, why, strategy: "high-water", at: 0 });
+
+  it("asks among the accounts of the same provider that offer the model, never another provider", () => {
+    const { host, asked } = setup();
+    expect(host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(asked).toEqual([{ current: "claude", pool: ["claude", "claude-work"] }]);
+  });
+
+  it("keeps the conversation on its account under the threshold: no move, one line", () => {
+    const { w, host, picks } = setup({ accountChoice: () => ({ instanceId: "claude", pick: pick("claude", { kind: "keeps", used: 40, threshold: 80 }) }) });
+    host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.switches).toEqual([]);
+    expect(picks).toEqual([{ moved: false, pick: pick("claude", { kind: "keeps", used: 40, threshold: 80 }) }]);
+  });
+
+  it("moves the conversation to the account the strategy picks, its model and level kept", () => {
+    const { w, host, picks } = setup({ accountChoice: () => ({ instanceId: "claude-work", pick: pick("claude-work", { kind: "expiring", resetsAt: HOUR, unused: 60 }) }) });
+    w.state.selection = { instanceId: "claude", model: "opus", effort: "high" };
+    host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.switches).toEqual([{ instanceId: "claude-work", model: "opus", effort: "high" }]);
+    expect(picks[0]).toMatchObject({ moved: true, pick: { instanceId: "claude-work" } });
+  });
+
+  it("leaves an account forced on the Account line where it is", () => {
+    const { w, host, asked } = setup({ accountChoice: () => ({ instanceId: "claude-work", pick: pick("claude-work", { kind: "fillUp" }) }) });
+    w.state.selection = { instanceId: "claude", model: "opus", accountPinned: true };
+    expect(host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(asked).toEqual([]);
+    expect(w.state.switches).toEqual([]);
+  });
+
+  it("never moves onto an account a limit holds", () => {
+    const { w, host } = setup({ accountChoice: () => ({ instanceId: "claude-work", pick: pick("claude-work", { kind: "fillUp" }) }) });
+    w.store.block("server", "claude-work", w.clock.now + HOUR);
+    host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.switches).toEqual([]);
+  });
+
+  it("a limit moves the turn at once to the best next account by the strategy, before another provider", async () => {
+    const ids = ["claude", "claude-work", "claude-other", "codex"];
+    const ranked: string[][] = [];
+    const { w, host } = setup({
+      accountRank: (_payer, _driver, candidates) => {
+        ranked.push(candidates);
+        return ["claude-other", "claude-work"];
+      },
+      // the headroom alone would take claude-work
+      planUsedPercent: (_payer, id) => (id === "claude-work" ? 5 : id === "claude-other" ? 70 : null),
+    }, ids);
+    w.state.selection = { ...A };
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
+    host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await host.idle();
+    expect(ranked[0]).toEqual(["claude-work", "claude-other"]);
+    expect(w.state.switches).toEqual([{ instanceId: "claude-other", model: "opus" }]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: { instanceId: "claude-other", model: "opus" } }]);
   });
 });
 

@@ -1559,7 +1559,13 @@ import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
 import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
-import { accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
+import { accountOwnedBy, accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
+import { accountWords } from "../shared/model-accounts.ts";
+import { providerOfInstance } from "../shared/model-provider.ts";
+import { accountPickText, accountSwitchSettingOf, cleanAccountSwitchDefaults, type AccountPick, type AccountSwitchSetting } from "../shared/account-switch.ts";
+import { createAccountMeter } from "./usage/account-meter.ts";
+import { createAccountSwitch } from "./usage/account-switch-host.ts";
+import { createUsageForecast } from "./usage/usage-forecast.ts";
 import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
@@ -5911,6 +5917,9 @@ bindLeafHost({
   get installationCapabilityStore() { return installationCapabilityStore; },
   get spentPlans() { return spentPlans; },
   get planUsedPercents() { return planUsedPercents; },
+  get accountMeter() { return accountMeter; },
+  get noteAccountDemand() { return noteAccountDemand; },
+  get autoAccountFor() { return autoAccountFor; },
   get planSiblings() { return planSiblings; },
   get spentPlanUntil() { return spentPlanUntil; },
   get planUsedPercent() { return planUsedPercent; },
@@ -16408,6 +16417,90 @@ const spentPlans = new Map<string, number>();
 const planUsedPercents = new Map<string, number>();
 /** #0867: per payer and engine, every instance folded on the same login, from the last report. */
 const planSiblings = new Map<string, string[]>();
+/** #5014: the account strategy among a person's accounts of one provider:
+ * the forecast of each bot's usage per hour (usage-forecast.ts), each
+ * account's windows from what Sagax already reads (account-meter.ts), and
+ * each person's setting per provider (`accountSwitchByProvider`, beside
+ * their context size and "Runs with" defaults). */
+const usageForecast = createUsageForecast({ dataDir: DATA_DIR });
+const accountMeter = createAccountMeter({ scales: usageForecast.scales });
+/** The person a payer key names: this server's own when solo. */
+function accountSwitchPerson(payer: string): string | null {
+  if (IDENTITY.kind !== "perspicax") return localPrincipalId();
+  return payer && payer !== "unknown" && payer !== "server" ? payer : null;
+}
+const accountSwitch = createAccountSwitch({
+  now: () => Date.now(),
+  meter: accountMeter,
+  forecast: usageForecast,
+  setting: (person, provider) => accountSwitchSettingOf(personAccountSwitchDefaults(person)[provider]),
+  provider: (instanceId) => {
+    const live = registry.get(instanceId);
+    const facts = live ? { instanceId, driverKind: live.driverKind, displayName: engineDisplayName(live) } : null;
+    return (facts && providerOfInstance(facts)?.id) || live?.driverKind || instanceId;
+  },
+  person: accountSwitchPerson,
+  // M-20261119-015 isolation: the organization's accounts and the person's own, never another person's
+  open: (person, instanceId) => IDENTITY.kind !== "perspicax" ||
+    accountOwnedBy(accountOwnerOf(cfg.instances, instanceId) ?? personalProviderInstances.ownerOf(instanceId), person),
+  label: (person, instanceId, index, total) => {
+    const live = registry.get(instanceId);
+    const driver = live?.driverKind ?? "";
+    const named = engineNameForPerson(instanceId, live ? engineDisplayName(live) : instanceId, driver, IDENTITY.kind === "perspicax" ? person : null);
+    return accountWords({ displayName: named }, driverDisplayName(driver)) ?? (total > 1 ? `Account ${index + 1}` : named);
+  },
+  held: (payer, instanceId) => {
+    if (limitFailoverStore.blockedUntil(payer, instanceId) !== null) return true;
+    const refusal = activeEngineRefusal(instanceId, undefined, Date.now());
+    return refusal?.cause === "usage_limit" || refusal?.cause === "credits";
+  },
+});
+/** #5014: Auto picked a model; among the accounts of its provider that offer
+ * it (in Auto's own list, so isolation and the organization's rules hold),
+ * the person's account strategy says which one runs it. The account Auto
+ * used last here is the conversation's. Null: leave Auto's pick. Pure: a
+ * preview of Auto's pick asks it too. */
+function autoAccountFor(input: { botId: string; threadId: string; payer: string; selection: ModelSelection; engines: ReadonlyArray<{ instanceId: string; driverKind: string; models: { options: ReadonlyArray<{ id: string }> } }> }): { instanceId: string; pick: AccountPick; moved: boolean } | null {
+  const home = input.engines.find((engine) => engine.instanceId === input.selection.instanceId);
+  if (!home) return null;
+  const pool = input.engines
+    .filter((engine) => engine.driverKind === home.driverKind && engine.models.options.some((option) => option.id === input.selection.model))
+    .map((engine) => engine.instanceId);
+  if (pool.length < 2) return null;
+  const task = store.taskByThread(input.botId, input.threadId);
+  const last = task?.autoModel?.instanceId;
+  const current = last && pool.includes(last) ? last : input.selection.instanceId;
+  const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
+  const choice = accountSwitch.choose({ payer: input.payer, threadId: input.threadId, driverKind: home.driverKind, current, pool, fresh });
+  // said once the turn really starts (start-turn-prepare-validate.ts), never for a preview
+  return choice ? { instanceId: choice.instanceId, pick: choice.pick, moved: choice.instanceId !== current } : null;
+}
+/** #5014: a settled turn's cost (the ledger's row) is the demand the
+ * planner forecasts per bot and hour, and the spend the meter scales its
+ * readings by, for the payer of that turn. */
+function noteAccountDemand(row: Pick<UsageRow, "botId" | "threadId" | "instanceId" | "costUsd" | "payerPrincipalId" | "ownerPrincipalId">): void {
+  if (typeof row.costUsd !== "number" || !(row.costUsd > 0)) return;
+  const payer = limitFailover.dispatchOf(row.threadId)?.payer
+    ?? (IDENTITY.kind !== "perspicax" ? "server" : (row.payerPrincipalId ?? row.ownerPrincipalId ?? "").trim().toLowerCase());
+  if (!payer) return;
+  usageForecast.record(payer, row.botId, row.costUsd);
+  accountMeter.noteSpend(payer, row.instanceId, row.costUsd);
+}
+/** #5014: the account a conversation's turn took and why: on the thread (the
+ * model chip reads it) when it changed, and in the Events lens when the
+ * account changed or was picked for the first time. Never a row in the chat. */
+function noteAccountPick(botId: string, threadId: string, pick: AccountPick, moved: boolean): void {
+  const task = store.taskByThread(botId, threadId);
+  if (!task) return;
+  const before = task.accountPick;
+  const changed = !before || before.instanceId !== pick.instanceId || before.why.kind !== pick.why.kind || pick.at - before.at > 10 * 60_000;
+  if (changed) store.patchTask(botId, threadId, { accountPick: pick });
+  if (moved || !before || before.instanceId !== pick.instanceId) {
+    const words = accountPickText(pick, Date.now());
+    console.info(`[account-switch] ${threadId}: ${words}`);
+    bus.publish({ eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(), type: "runtime.notice", message: words });
+  }
+}
 function planLimitUntil(payer: string, instanceId: string): number | null {
   const until = spentPlans.get(`${payer}\u0000${instanceId}`);
   return until !== undefined && until > Date.now() ? until : null;
@@ -16449,6 +16542,15 @@ const limitFailover = createLimitFailoverHost({
   planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),
   // #0867: the instances folded on the same login share the plan, so all of them are cleared.
   planWorked: (payer, instanceId) => planWorked(payer, instanceId),
+  // #5014: the person's account strategy among the accounts of one provider
+  accountChoice: ({ botId, threadId, payer, driverKind, current, pool }) => {
+    const task = store.taskByThread(botId, threadId);
+    // no engine session open on its account: a new conversation, no cache to keep
+    const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
+    return accountSwitch.choose({ payer, threadId, driverKind, current, pool, fresh });
+  },
+  accountRank: (payer, driverKind, pool) => accountSwitch.rank(payer, driverKind, pool),
+  noteAccountPick: (botId, threadId, pick, moved) => noteAccountPick(botId, threadId, pick, moved),
   preferred: (botId, threadId) => {
     const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
@@ -16670,7 +16772,12 @@ onConfigSaved((before, after) => {
 bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   try {
-    if (event.type === "thread.token-usage.updated") {
+    if (event.type === "account.rate-limit") {
+      // #5014: the provider's limit headers for the account this turn runs on
+      const dispatch = limitFailover.dispatchOf(event.threadId);
+      const instanceId = event.providerInstanceId ?? dispatch?.engine.instanceId;
+      if (dispatch && instanceId) accountMeter.noteHeader(dispatch.payer, instanceId, event.info);
+    } else if (event.type === "thread.token-usage.updated") {
       if (event.contextTokens !== undefined) keepWarmContext.set(event.threadId, event.contextTokens);
     } else if (event.type === "turn.started") {
       keepWarmContext.delete(event.threadId);
@@ -31073,6 +31180,18 @@ ROUTES.push(createModelSwitchRoutes({
       await applyHarnessDefaults(owner, auth, cleared);
     },
   },
+  // #5014: the person's account strategy per provider, read per turn
+  accountSwitchDefaults: {
+    read: (owner) => accountSwitchDefaultsOf(owner),
+    save: (owner, map) => {
+      if (owner === "installation") {
+        saveConfig({ accountSwitchByProvider: map });
+        cfg.accountSwitchByProvider = map;
+      } else {
+        personSettings.setAccountSwitchDefaults(owner, map);
+      }
+    },
+  },
   // #4417: the person's default context size per provider, read per turn
   contextDefaults: {
     read: (owner) => contextDefaultsOf(owner),
@@ -33768,6 +33887,17 @@ function turnContextWindow(bot: Pick<BotRecord, "contextWindow" | "ownerUserId">
     instance, option: instance.models.options.find((option) => option.id === model),
     chosen: bot.contextWindow, defaults: personContextDefaults(effectiveBotOwner(bot)),
   });
+}
+/** #5014 (D-20261119-050): a person's account strategy per provider, read
+ * by each turn (server/usage/account-switch-host.ts). */
+function personAccountSwitchDefaults(principalId: string | null | undefined): Record<string, AccountSwitchSetting> {
+  if (IDENTITY.kind !== "perspicax") return cleanAccountSwitchDefaults(cfg.accountSwitchByProvider);
+  const owner = personSettingsOwner(principalId);
+  return owner ? personSettings.get(owner).accountSwitchByProvider ?? {} : {};
+}
+/** #5014: the same map for a settings owner (GET/PUT /api/me/models). */
+function accountSwitchDefaultsOf(owner: string | "installation"): Record<string, AccountSwitchSetting> {
+  return owner === "installation" ? cleanAccountSwitchDefaults(cfg.accountSwitchByProvider) : { ...personSettings.get(owner).accountSwitchByProvider };
 }
 /** #4417: the same map for a settings owner (GET/PUT /api/me/models). */
 function contextDefaultsOf(owner: string | "installation"): Record<string, number> {
@@ -38005,6 +38135,7 @@ const startTurnRunner = createStartTurn({
   registeredWorkers,
   registry,
   accountManagedPlugins,
+  noteAccountPick,
   releaseBootEngineSlot,
   releaseLocalVmThread,
   releasePlain,

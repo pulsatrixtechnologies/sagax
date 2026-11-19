@@ -21,7 +21,7 @@ function checkedModelSelection(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, status: 400, error: "modelSelection must be an object" };
   }
-  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown; autoOptimize?: unknown };
+  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown; autoOptimize?: unknown; accountPinned?: unknown };
   if (typeof value.instanceId !== "string" || !value.instanceId.trim()) {
     return { ok: false, status: 400, error: "modelSelection.instanceId is required" };
   }
@@ -56,6 +56,8 @@ function checkedModelSelection(
     return { ok: false, status: 400, error: "modelSelection.auto must be a boolean" };
   }
   if (value.auto === true) selection.auto = true;
+  // #5014: the Account line's own choice, never with Auto; only true is stored.
+  if (value.accountPinned === true && value.auto !== true) selection.accountPinned = true;
   // #2106: Auto's Optimize preference (Intelligence / Balance / Cost), kept only with Auto.
   if (value.autoOptimize !== undefined && value.autoOptimize !== null) {
     if (!host.isAutoOptimize(value.autoOptimize)) {

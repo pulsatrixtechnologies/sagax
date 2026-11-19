@@ -403,7 +403,7 @@ export function ModelPanel(props: ModelPanelProps) {
                     <button key={choice.key} type="button" role="radio" aria-checked={on} disabled={disabled || Boolean(choice.unavailable)}
                       data-model-account-choice={choice.instanceId} onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
-                        if (!on) onPick({ ...choice, current: false });
+                        if (!on) onPick({ ...choice, current: false, pinAccount: true });
                         setAccountOpen(false);
                       }}
                       className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">

@@ -57,7 +57,8 @@ export interface LimitCandidate extends LimitEngine {
 
 /** The engine that takes over, or null. Same-provider accounts first (#2192),
  * then the bot's own backups and the organization's default, then the catalog.
- * Within a pool, lower plan used-percent (more headroom) wins when known.
+ * Within a pool, the person's account strategy ranks the same provider's
+ * accounts (#5014), else lower plan used-percent (more headroom) wins.
  * A catalog fallthrough never picks a pay-per-use engine the person did not
  * choose as a backup (3ed90a037). */
 export function pickLimitBackup(input: {
@@ -72,6 +73,10 @@ export function pickLimitBackup(input: {
   skip?: readonly string[];
   /** Only same-provider accounts (proactive near-limit rotation). */
   sameProviderOnly?: boolean;
+  /** #5014: the same provider's accounts, best first, by the person's
+   * account strategy (account-switch-host.ts rank): it orders them instead of
+   * the headroom alone; one it leaves out (no room) comes after. */
+  rank?: readonly string[];
 }): ModelSelection | null {
   const skip = new Set(input.skip ?? []);
   const usable = (candidate: LimitCandidate) => !skip.has(candidate.instanceId) && !input.blocked(candidate.instanceId) &&
@@ -86,6 +91,15 @@ export function pickLimitBackup(input: {
     return used === null || used === undefined ? 50 : used;
   };
   const byHeadroom = (left: LimitCandidate, right: LimitCandidate) => headroom(left.instanceId) - headroom(right.instanceId);
+  const ranked = (instanceId: string) => {
+    const at = input.rank?.indexOf(instanceId) ?? -1;
+    return at < 0 ? Infinity : at;
+  };
+  const byRank = (left: LimitCandidate, right: LimitCandidate) => {
+    const a = ranked(left.instanceId);
+    const b = ranked(right.instanceId);
+    return a !== b ? (a === Infinity ? 1 : b === Infinity ? -1 : a - b) : byHeadroom(left, right);
+  };
   const pickPool = (preferSame: boolean): ModelSelection | null => {
     for (const entry of input.preferred) {
       const candidate = input.candidates.find((engine) => engine.instanceId === entry.instanceId);
@@ -96,7 +110,7 @@ export function pickLimitBackup(input: {
     const catalog = input.candidates
       .filter((candidate) => usable(candidate) && !billsEachUse(input.config(candidate.instanceId))
         && (!preferSame || sameProvider(input.from, candidate)))
-      .sort(byHeadroom);
+      .sort(preferSame && input.rank ? byRank : byHeadroom);
     const next = catalog[0];
     return next ? selectionOf(next) : null;
   };

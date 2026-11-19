@@ -41,7 +41,9 @@ const ALICE: FakeOidcUser = { sub: "01J9S5ALICE00000000000000A", email: "alice@e
 const BOB: FakeOidcUser = { sub: "01J9S5BOB000000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };
 const CAROL: FakeOidcUser = { sub: "01J9S5CAROL00000000000000C", email: "carol@example.test", name: "Carol", preferred_username: "carol", role: "employee" };
 const PROFILE = { id: "01J9S5PROFILEDISPATCH00001", slug: "dispatch", name: "Dispatch", description: "Tickets and schedules" };
-const PACKAGE_VERSION = (JSON.parse(readFileSync(join(SERVER_DIR, "..", "package.json"), "utf8")) as { version: string }).version;
+// #2914 (QA 0.8.66 F7): Perspicax hears the release people know
+// (environment.ts linkVersion: package.json forkVersion), never the base version.
+const RELEASE_VERSION = (JSON.parse(readFileSync(join(SERVER_DIR, "..", "package.json"), "utf8")) as { forkVersion: string }).forkVersion;
 
 let PORT = 0;
 let BASE = "";
@@ -347,7 +349,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(calls.length).toBeGreaterThanOrEqual(3);
     expect(calls.every((r) => r.sub === BOB.sub && r.profile === null)).toBe(true);
     const init = calls.find((r) => r.rpcMethod === "initialize")!;
-    expect(init.clientInfo).toEqual({ name: `Pulsa Bot (${x.id})`, version: PACKAGE_VERSION });
+    expect(init.clientInfo).toEqual({ name: `Pulsa Bot (${x.id})`, version: RELEASE_VERSION });
     expect(init.sessionId).toBeNull();
     expect(calls.filter((r) => r.rpcMethod !== "initialize").every((r) => r.sessionId?.startsWith("sess-"))).toBe(true);
     expect(idp.mcpRequests.slice(callsBefore).some((r) => r.sub === ALICE.sub)).toBe(false);

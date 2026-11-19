@@ -1084,6 +1084,18 @@ function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[]
 }
 
 /** An agent as list_agents, find_agents and create_agent answer it. */
+/** #4939: a create is its caller's own write: the new agent's or routine's
+ * version is that caller's copy now ("answered by its own last write",
+ * server/write-versions.ts), so an AI client changes what it just made
+ * without reading it first. Null: no version kept on this server. */
+function createdVersion(deps: Pick<AgentApiDeps, "writeVersions">, caller: AgentCaller, target: WriteTarget): string | null {
+  const versions = deps.writeVersions;
+  if (!versions) return null;
+  const version = target.kind === "agent" ? versions.agent(target.id) : versions.routine(target.id);
+  versions.reads.wrote(readerKey(caller), target, version);
+  return version;
+}
+
 const wireSummary = (agent: AgentSummary) => ({
   id: agent.id,
   name: agent.name,
@@ -1413,7 +1425,9 @@ function createAgentApiHandlers(env: {
       ...(Object.keys(selection).length ? { selection } : {}),
     });
     if (isRefusal(created)) return created;
+    const version = createdVersion(deps, caller, { kind: "agent", id: created.id });
     return ok({
+      ...(version ? { version } : {}),
       agent: wireSummary(created),
       kind: "lasting",
       greeted: true,
@@ -1545,7 +1559,9 @@ function createAgentApiHandlers(env: {
       if (existing) return refuse(409, "agent_exists", `An agent named ${existing.name} already exists (id ${existing.id}). Use it instead of creating another${existing.temporary ? ", or delete it first with delete_agent" : ""}.`);
       const created = await deps.createAgent(caller, { name, description, ...(idleHours !== undefined ? { idleHours } : {}), ...(workspace ? { workspace } : {}) });
       if (isRefusal(created)) return created;
+      const version = createdVersion(deps, caller, { kind: "agent", id: created.id });
       return ok({
+        ...(version ? { version } : {}),
         agent: wireSummary(created),
         greeted: true,
         note: "The new agent is temporary: it is archived after its idle expiry unless a person pins it, and delete_agent archives it now. It greets the user itself. Do not send it a first prompt unless asked, and never quote its id to the user.",
@@ -2161,8 +2177,9 @@ function createAgentApiConfigHandlers(env: {
       const made = await deps.createRoutine(caller, agentId, { ...fields, name, instructions, schedule });
       if (isRefusal(made)) return made;
       const madeId = typeof made.routine.id === "string" ? made.routine.id : null;
-      // #4939: the version a later update_routine passes as expected_version.
-      const version = madeId ? deps.writeVersions?.routine(madeId) ?? null : null;
+      // #4939: the version a later update_routine passes as expected_version,
+      // and this caller's copy now.
+      const version = madeId ? createdVersion(deps, caller, { kind: "routine", id: madeId }) : null;
       return ok({ routine_id: madeId, routine: made.routine, ...(version ? { version } : {}) });
     },
 

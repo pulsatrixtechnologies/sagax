@@ -378,8 +378,10 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     const threadId = final.threadId as string;
     const messageId = final.messageId as string;
     // 2026-10-29: the card waits in the AI client's own conversation with the
-    // bot, and still reaches Alice (Reach me): only she can answer it
-    await waitFor(async () => notifications(live.text()).some((note) => note.kind === "approval" && note.threadId === threadId), 20_000);
+    // bot, and still reaches Alice (Reach me): only she can answer it.
+    // #2910 (#2901): a card of a background conversation is mirrored into the
+    // bot's chat, where the notification opens it.
+    await waitFor(async () => notifications(live.text()).some((note) => note.kind === "approval" && note.threadId === bots.vega!.threadId), 20_000);
     live.close();
 
     // Who may answer it: Alice owns Vega; Bob does not even reach the thread.

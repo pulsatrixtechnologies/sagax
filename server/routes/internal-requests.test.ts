@@ -220,7 +220,7 @@ describe("createInternalRequestsRoutes", () => {
       expect(sent[0]?.body).not.toMatchObject({ code: "routine_needs_bot" });
     }
     expect(submitRoutine).toHaveBeenCalledTimes(2);
-    expect(submitRoutine.mock.calls[0]![0]).not.toHaveProperty("proposal.forBot");
+    expect((submitRoutine.mock.calls[0]![0] as { proposal?: { forBot?: unknown } }).proposal?.forBot).toBeUndefined();
     // for the bot the person named: the existing card, with the same approvals
     const { sent } = await call(route, { path: "/api/internal/routine-requests", method: "POST", body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "create", routine, forBotId: orion.id } });
     expect(sent[0]?.status).toBe(201);

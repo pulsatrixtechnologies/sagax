@@ -311,7 +311,7 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     }
     // #4920: it holds a routine and joins a room like any bot of its person;
     // another person, an admin included, still sees none of its routines
-    const routine = await api("POST", "/api/routines", bob, { name: "Nightly", botId: surface, prompt: "x", enabled: false, schedule: { type: "interval", everyMinutes: 60 } });
+    const routine = await api("POST", "/api/routines", bob, { name: "Nightly", botId: surface, prompt: "x", enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
     expect(routine.status, routine.text).toBeLessThan(300);
     expect(((await api("GET", "/api/routines", alice)).body.routines as Array<any>).some((row) => row.botId === surface)).toBe(false);
     const room = await api("POST", "/api/groups", bob, { name: "Desk room", memberIds: [orion, surface] });

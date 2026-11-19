@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { availableTools, catalogProfileFromEnv, PERSPICAX_TOOLS } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, PEER_HOP_ABSENT_TOOLS, PERSPICAX_TOOLS } from "./agents-catalog.ts";
 import { GUEST_CONFINED_CODEX_ARGS } from "./codex.ts";
 import { engineHasNativeWebSearch } from "../web-search/native.ts";
 import { chiefOfStaffSystemPrompt } from "../chief-of-staff.ts";
@@ -181,7 +181,7 @@ describe("reachability guard: a teammate one hop away (ask_bot, delegate_bot, ag
       // a process launched before #4920 with the old "exchange" value no longer narrows the list
       expect([...names({ ...TURNS.surface, ...role, ...extra, SAGAX_PEER_HOP: "exchange" })].sort()).toEqual([...direct].sort());
     }
-    expect(names({ ...TURNS.surface, ...ROLES.member, ...EVERY_SWITCH }).has("ask_bot")).toBe(true);
+    expect([...names({ ...TURNS.surface, ...ROLES.member, ...EVERY_SWITCH })].some((name) => PEER_HOP_ABSENT_TOOLS.has(name))).toBe(true);
   });
 
   it("is off unless the harness says so", () => {

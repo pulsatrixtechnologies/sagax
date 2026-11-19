@@ -118694,6 +118694,22 @@
         }
       }
     },
+    "shortcuts.item.toggleScreenPanel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot’s screen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écran du bot"
+          }
+        }
+      }
+    },
     "shortcuts.item.closePanel": {
       "localizations": {
         "en": {
@@ -118866,6 +118882,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Champ du message vide"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.toggleScreenPanel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show or hide"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher ou masquer"
           }
         }
       }

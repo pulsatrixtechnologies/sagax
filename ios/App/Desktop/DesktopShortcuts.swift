@@ -68,6 +68,7 @@ struct DesktopShortcutGroup: Identifiable {
                 row("new-group", "newGroup", ["⌘", "⇧", "N"], nil),
             ]),
             group("panels", [
+                hinted("toggle-screen-panel", "toggleScreenPanel", ["⌘", "⇧", "B"]),
                 hinted("close-panel", "closePanel", ["Esc"]),
             ]),
             group("calls", [

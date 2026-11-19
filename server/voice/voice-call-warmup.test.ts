@@ -76,7 +76,11 @@ describe("VoiceCallWarmup", () => {
     expect(ran).toBe(2);
   });
 
-  it("replaces a call only after the previous warm finishes", async () => {
+  // A new call on the thread keeps the process the previous call's warm
+  // holds (VoiceTurnSessions.plan, server/voice/voice-turn.ts). An aborted
+  // warm signal is a hangup to the engine, which closes that process, so
+  // the replacement must not abort it (server/voice-call-latency.e2e.test.ts).
+  it("replaces a call only after the previous warm finishes, without aborting it", async () => {
     const warm = new VoiceCallWarmup();
     let releaseFirst!: () => void;
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -90,7 +94,7 @@ describe("VoiceCallWarmup", () => {
     expect(firstSignal.aborted).toBe(false);
     warm.begin("t1", "call-bbbbbbbb", async () => { secondStarted = true; });
     await Promise.resolve();
-    expect(firstSignal.aborted).toBe(true);
+    expect(firstSignal.aborted).toBe(false);
     expect(secondStarted).toBe(false);
     // The replacement is the job join waits on, and cancel still finds it.
     expect(warm.cancel("t1", "call-bbbbbbbb")).toBe(true);

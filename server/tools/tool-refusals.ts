@@ -265,7 +265,8 @@ export function refusalLines(refused: readonly RefusedTool[]): string[] {
     const instead = connectorKnowledge(connector, reason)?.instead;
     const tools = rows.map((row) => row.tool).slice(0, LINE_TOOLS_MAX).join(", ");
     const last = Math.max(...rows.map((row) => row.at));
-    return `${connector} last refused ${tools} for this person (${reason}) at ${refusedAt(last)}; its access may have changed since, call it when the task needs it.${instead ? ` Another way: ${instead}` : ""}`;
+    // kept under turn-reach.ts LINE_MAX (280) with five tools and a way around
+    return `${connector} refused ${tools} for this person (${reason}, ${refusedAt(last)}); may answer now, retry when needed.${instead ? ` Else: ${instead}` : ""}`;
   });
 }
 

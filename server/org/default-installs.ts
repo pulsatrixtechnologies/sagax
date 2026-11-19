@@ -1,5 +1,5 @@
 // The plugins and skills Perspicax installs by default for each person
-// (JC, 2026-11-19, M-20261119-042; decisions D-20261119-072 to 074; Perspicax
+// (owner, 2026-11-19, M-20261119-042; decisions D-20261119-072 to 074; Perspicax
 // #2220). Perspicax keeps one list for the organization and, on each
 // person's sheet, what is added or removed for that person; it sends each
 // person's resulting list in the directory (`default_installs`). The list a

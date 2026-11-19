@@ -598,3 +598,26 @@ describe("active fallback chain", () => {
     expect(refused.chain).not.toContainEqual({ instanceId: claudeBase.instanceId, model: claudeBase.model });
   });
 });
+
+describe("Google's Pro is the top model, not a variant", () => {
+  const google: AutoEngine = {
+    instanceId: "gemini",
+    driverKind: "geminiAgent",
+    displayName: "Gemini",
+    models: { default: "gemini-3-flash", options: [{ id: "gemini-3-pro", label: "Gemini 3 Pro" }, { id: "gemini-3-flash", label: "Gemini 3 Flash" }] },
+  };
+  const googleCatalog: CatalogLookup = (_driver, id) => ({
+    "gemini-3-pro": { name: "Gemini 3 Pro", reasoning: true, vision: true, context: 1_000_000, costInput: 2, costOutput: 12, releaseDate: "2026-06-01" },
+    "gemini-3-flash": { name: "Gemini 3 Flash", reasoning: true, vision: true, context: 1_000_000, costInput: 0.3, costOutput: 2.5, releaseDate: "2026-06-01" },
+  } as Record<string, CatalogFacts>)[bareModelId(id)];
+
+  it("keeps -pro next to Flash for the top tier", () => {
+    expect(modelForTier(google, "top", googleCatalog)?.id).toBe("gemini-3-pro");
+  });
+
+  it("still treats -pro as a variant on other families", () => {
+    const other: AutoEngine = { ...claude, models: { default: "claude-opus-5-5", options: [{ id: "claude-opus-5-5", label: "Claude Opus 5.5" }, { id: "claude-opus-5-5-pro", label: "Pro" }] } };
+    const cat: CatalogLookup = (d, id) => (bareModelId(id) === "claude-opus-5-5-pro" ? { ...FACTS["claude-opus-5-5"]!, name: "Pro" } : catalog(d, id));
+    expect(modelForTier(other, "top", cat)?.id).toBe("claude-opus-5-5");
+  });
+});

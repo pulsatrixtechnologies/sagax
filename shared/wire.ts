@@ -1192,9 +1192,6 @@ export interface WireMessage extends WaitLineField {
     /** #3296: the live state of the "server environment is starting" row
      * (shared/sandbox-wake.ts): what is waited for, since when, and its end. */
     sandboxWake?: SandboxWakeLine;
-    /** #4901: a Heavy run, the Team of Experts's agents and the Leader's
-     * steps (shared/heavy-team.ts), patched in place while it runs. */
-    team?: import("./heavy-team.ts").HeavyTeamLine;
   };
   /** A bot line a "post" webhook wrote: whoever called the webhook chose
    * its words. On a Cloud home a conversation holding one is someone else's

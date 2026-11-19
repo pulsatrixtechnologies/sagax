@@ -1112,6 +1112,12 @@ export class Store {
         b.projects = b.projects.map(({ id, name, emoji }) => ({ id, name, ...(isProjectEmoji(emoji) ? { emoji } : {}) }));
         boot.botsMigrated = true;
       }
+      // A composer "mode" (Fast, Expert, Heavy, Build) was saved for a few
+      // days in 0.8.158 and is gone: the field is dropped, the bot or thread
+      // keeps its model and Auto.
+      for (const selection of [b.modelSelection, ...(b.tasks ?? []).map((task) => task.modelSelection)]) {
+        if (selection && "mode" in selection) { delete (selection as { mode?: unknown }).mode; boot.botsMigrated = true; }
+      }
       if (!b.tasks?.length) {
         b.tasks = [{
           threadId: b.threadId,

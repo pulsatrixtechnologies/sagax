@@ -947,10 +947,6 @@ public struct ModelSelection: Codable, Hashable, Sendable {
     /// #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
     /// Cost). Absent means Balance. Cleared when a model is pinned.
     public var autoOptimize: ModelAutoOptimize? = nil
-    /// #4900: the composer mode the person chose on the desktop with Auto on
-    /// (`fast`, `expert`, `heavy` or `build`); absent is plain Auto. Kept as
-    /// text so a selection this phone sends back never loses it.
-    public var mode: String? = nil
 
     public init(
         instanceId: String,
@@ -958,8 +954,7 @@ public struct ModelSelection: Codable, Hashable, Sendable {
         effort: String? = nil,
         variant: String? = nil,
         auto: Bool? = nil,
-        autoOptimize: ModelAutoOptimize? = nil,
-        mode: String? = nil
+        autoOptimize: ModelAutoOptimize? = nil
     ) {
         self.instanceId = instanceId
         self.model = model
@@ -967,7 +962,6 @@ public struct ModelSelection: Codable, Hashable, Sendable {
         self.variant = variant
         self.auto = auto
         self.autoOptimize = autoOptimize
-        self.mode = mode
     }
 }
 

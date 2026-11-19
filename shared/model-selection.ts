@@ -40,10 +40,4 @@ export interface ModelSelection {
   /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
    * Cost). Absent means Balance. Cleared when a model is pinned. */
   autoOptimize?: "intelligence" | "balance" | "cost";
-  /** Composer mode (#4900): with Auto on, the person asked for Fast, Expert,
-   * Heavy or Build instead of letting Auto read the request. The model each
-   * mode runs is picked per turn from what the person can use
-   * (server/models/model-mode.ts). Absent means plain Auto. Kept only with
-   * Auto; picking a model in the engine list clears it. */
-  mode?: "fast" | "expert" | "heavy" | "build";
 }

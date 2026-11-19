@@ -1,8 +1,6 @@
 // @ts-nocheck
 /** autoPickForTurn (#1388). Pure move from server/index.ts. */
 import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
-import { pickModeModel, resolveModes } from "../models/model-mode.ts";
-import { isForcedModelMode, type ModeResolution, type ModelMode } from "../../shared/model-mode.ts";
 import { statSync } from "node:fs";
 export type Host = Record<string, any>;
 
@@ -18,9 +16,7 @@ function autoPickForTurn(input: {
   guestConfined?: boolean;
   text: string;
   skip?: readonly AutoChainEntry[];
-  /** #4900: the preview also says what each composer mode would run. */
-  withModes?: boolean;
-}): { pick: AutoPick; payer: string; modes?: Record<ModelMode, ModeResolution> } | null {
+}): { pick: AutoPick; payer: string } | null {
   const host = getHost();
   const { attachmentsInText, autoRefusalsFor } = host;
   const { bot } = input;
@@ -65,17 +61,8 @@ function autoPickForTurn(input: {
     });
     return { payer, pick: pickWorkerModel({ ...request, task: { text: parsed.text, attachments, ...(role ? { role } : {}) } }) };
   }
-  // #4900: the person chose Fast, Expert, Heavy or Build in the composer: the
-  // mode's rule picks among the engines they can use (never a pinned model's
-  // own engine rule: a call turn takes the pick as a typed turn does, #4888).
-  // With nothing usable for the mode the bot's Auto reads the request as before.
-  const modes = input.withModes ? { modes: resolveModes(request) } : {};
-  if (isForcedModelMode(bot.modelSelection.mode)) {
-    const picked = pickModeModel(request, bot.modelSelection.mode);
-    if (picked) return { payer, pick: picked, ...modes };
-  }
   const quick = host.parsedQuickTask(input.text);
-  return { payer, pick: pickOrchestrationModel(request, quick), ...modes };
+  return { payer, pick: pickOrchestrationModel(request, quick) };
 
 }
   return autoPickForTurn;

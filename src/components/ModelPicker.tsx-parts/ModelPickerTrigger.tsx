@@ -25,7 +25,7 @@ export function listChipLabel({ autoOn, autoRecord, active, selection }: {
   showActiveAccount?: boolean;
 }): string {
   const effort = selection.effort ? effortLabel(selection.effort) : undefined;
-  if (autoOn) return [autoChipLabel(autoRecord, selection), effort].filter(Boolean).join(" · ");
+  if (autoOn) return [autoChipLabel(autoRecord), effort].filter(Boolean).join(" · ");
   return [modelLabel(active, selection.model), effort].filter(Boolean).join(" · ");
 }
 
@@ -183,7 +183,7 @@ export function ModelPickerTrigger({
         {chooseLabel === undefined && active && showActiveAccount && !autoOn && (
           <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
         )}
-        {chooseLabel !== undefined ? chooseLabel : autoOn ? <span data-model-auto-chip>{autoChipLabel(autoRecord, selection)}</span> : modelLabel(active, selection.model)}
+        {chooseLabel !== undefined ? chooseLabel : autoOn ? <span data-model-auto-chip>{autoChipLabel(autoRecord)}</span> : modelLabel(active, selection.model)}
         {chooseLabel === undefined && !autoOn && active && modelProvider(active, selection.model) && (
           <span className="text-ink-secondary"> · {modelProvider(active, selection.model)}</span>
         )}

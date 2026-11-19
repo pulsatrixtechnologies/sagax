@@ -67,20 +67,12 @@ function autoEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = fa
       ? instance.models.options.find((option) => option.id === bot.modelSelection.fast?.model && modelOn(switches, instance.instanceId, option.id) &&
         (!host.hostedModels || host.hostedModels.allows({ instanceId: instance.instanceId, model: option.id })))
       : undefined;
-    // #4900: what the catalogue never ranks (a local model, a model server's
-    // row, a custom id) is not Auto's to pick, but a composer mode falls back
-    // on it when nothing ranked is usable.
-    const unranked = instance.models.options.filter((option) => modelOn(switches, instance.instanceId, option.id) &&
-      (option.custom || !host.autoCatalogLookup(instance.driverKind, option.id)) &&
-      (!host.hostedModels || host.hostedModels.allows({ instanceId: instance.instanceId, model: option.id })))
-      .map((option) => ({ id: option.id, label: option.label || option.id, ...(option.contextWindow ? { contextWindow: option.contextWindow } : {}) }));
     engines.push({
       instanceId: instance.instanceId,
       driverKind: instance.driverKind,
       displayName: host.engineDisplayName(instance),
       ...(fastWanted ? { fast: { id: fastWanted.id, label: fastWanted.label || fastWanted.id } } : {}),
       models: { default: instance.models.default, options },
-      ...(unranked.length ? { unranked } : {}),
       ...(instance.adapter.capabilities.effortLevels ? { effortLevels: instance.adapter.capabilities.effortLevels } : {}),
       via
     });

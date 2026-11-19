@@ -1,6 +1,5 @@
 // Auto model (docs/plans/2026-10-08-auto-model.md): the shapes the server
 // records of a pick and the renderer draws. The choosing is server/models/model-auto.ts.
-import type { ForcedModelMode, ModeResolution, ModelMode } from "./model-mode.ts";
 
 /** What kind of work a task is. */
 export type AutoTaskClass =
@@ -24,7 +23,7 @@ export type AutoTier = "top" | "coding" | "fast" | "long" | "vision";
  * strongest-other: the bot's own engine is not usable for this turn; the
  * next engine in the order. tier-fallback: no engine had the tier; a
  * nearby one stood in. base: nothing matched; the bot's own model. */
-export type AutoReason = "strongest-own" | "strongest-other" | "tier-fallback" | "base" | "fast" | "mode";
+export type AutoReason = "strongest-own" | "strongest-other" | "tier-fallback" | "base" | "fast";
 
 /** How the payer pays on the picked engine (server AccessVia). */
 export type AutoPayerVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
@@ -43,8 +42,6 @@ export interface AutoModelRecord {
   via?: AutoPayerVia;
   /** The bot's own engine, when the pick left it. */
   fromEngineLabel?: string;
-  /** #4900: the composer mode that made this pick (reason "mode"). */
-  mode?: ForcedModelMode;
   at: number;
 }
 
@@ -59,6 +56,4 @@ export interface AutoModelPreview {
   excluded: AutoModelExcluded[];
   /** Actual configured startup recovery for a pinned model. */
   backups: AutoModelEntry[];
-  /** #4900: what each composer mode would run for this person now. */
-  modes?: Record<ModelMode, ModeResolution>;
 }

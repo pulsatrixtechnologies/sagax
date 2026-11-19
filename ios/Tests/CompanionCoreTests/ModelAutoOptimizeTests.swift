@@ -35,24 +35,4 @@ final class ModelAutoOptimizeTests: XCTestCase {
         XCTAssertNil(next.autoOptimize)
         XCTAssertEqual(next.model, "sonnet")
     }
-
-    /// #4900: a composer mode chosen on the desktop is not lost when this phone
-    /// sends the selection back (an effort change, say).
-    func testSelectionKeepsTheComposerMode() throws {
-        let decoded = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"heavy"}"#.utf8))
-        XCTAssertEqual(decoded.mode, "heavy")
-        let data = try JSONEncoder().encode(decoded)
-        XCTAssertEqual(try JSONDecoder().decode(ModelSelection.self, from: data).mode, "heavy")
-        let plain = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus"}"#.utf8))
-        XCTAssertNil(plain.mode)
-    }
-
-    func testPinningAModelDropsTheMode() throws {
-        let current = ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "expert")
-        let instance = try JSONDecoder().decode(Instance.self, from: Data("""
-        {"instanceId":"claude","driverKind":"claudeAgent","snapshot":{"state":"available","authenticated":true},
-         "models":{"default":"opus","options":[{"id":"sonnet","label":"Sonnet"},{"id":"opus","label":"Opus"}]}}
-        """.utf8))
-        XCTAssertNil(ModelPickerRules.selectionForPick(current, instance: instance, model: "sonnet").mode)
-    }
 }

@@ -1971,16 +1971,6 @@ Rules that hold at every width:
 - Composer: one capsule on the column's edges; the model chip shows while
   the capsule is at least 560px wide (35rem) and folds into the + menu's
   Model row below that.
-- Mode menu (owner's request, 2026-11-18, #4900): the chip reads the mode's name
-  ("Expert ⌄") and opens five rows in the menu family's look (32px rows, 14/20
-  type, 10px corners, the glyph in its 18px slot, the mode in use at 8% of the
-  ink with a check): Auto, Fast, Expert, Heavy, Build. A hovered or keyboard
-  focused row opens a small tooltip beside the menu, level with the row: what the
-  mode does, then the model behind it in secondary ink ("Quick responses · Grok
-  4.7"); a click's own focus stays quiet. No model list: "All models" at the foot
-  opens the models window. See `docs/model-modes.md`. Test:
-  `src/components/ModeMenu.dom.test.ts`; captures:
-  `scripts/capture/mode-menu.mjs`.
 - Message bar (#4152, measured 2026-11-13 in the owner's configuration;
   neither flag changes these values): one line is 44px tall with a 0.5px
   hairline; the field's type is the reference's body step, 14px on a 20px

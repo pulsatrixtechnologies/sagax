@@ -85,11 +85,8 @@ export type TurnState = {
   proactiveAskPrompt: any;
   autoContinuing: boolean;
   /** The model a routine run, webhook run or proactive wake a usage limit refused goes on with
-   * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts); its wake skips the fast pick. */
+   * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts). */
   limitTakeover: any;
-  /** Sagax runs this turn on a quick model of its own pick (a call's or a wake's, #1694), not on the
-   * conversation's: a limit that refuses it is that model's (limit failover's LimitDispatch.detour). */
-
   activeMessages: any;
   liveBot: any;
   /** The turn's connector plan (server/connectors/turn-plan.ts), set in setup. */

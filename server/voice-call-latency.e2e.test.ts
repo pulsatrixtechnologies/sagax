@@ -205,20 +205,21 @@ async function grokFixture() {
 it("Grok: warms at call start, then every call turn is a bare prompt whose tools use the current token", async () => {
   const t = await grokFixture();
   try {
+    // (Grok's per-turn session/set_model pin and its _x.ai/mcp/list check
+    // that the MCP servers are ready before a prompt (#691) are wire calls on
+    // the live session, not an establishment: they are left out. The warm's
+    // cache-prime prompt sends them too, like every prompt.)
+    const establishing = (methods: string[]) => methods.filter((method) => method !== "session/set_model" && method !== "_x.ai/mcp/list");
     await t.api("POST", `/api/bots/${t.bot.id}/voice/call`, { threadId: t.thread, callId: CALL_ID, state: "start" });
     // the warm: handshake, a native session, then one background cache-prime
     // prompt (not a turn). The spoken prompts come after.
-    await expect.poll(() => t.rpc(), { timeout: 15_000 }).toEqual(["initialize", "authenticate", "session/new", "session/prompt"]);
+    await expect.poll(() => establishing(t.rpc()), { timeout: 15_000 }).toEqual(["initialize", "authenticate", "session/new", "session/prompt"]);
     for (let turn = 1; turn <= 3; turn++) {
       await t.send({ text: `question ${turn}`, sendId: `send-${turn}-000000000${turn}`, voiceCall: { callId: CALL_ID, utteranceId: `utt-000000${turn}` } });
       await expect.poll(async () => (await t.replies()).length, { timeout: 15_000 }).toBe(turn);
     }
     // one process, one session, and nothing but prompts after the warm
     expect(t.processes()).toHaveLength(1);
-    // (Grok's per-turn session/set_model pin and its _x.ai/mcp/list check
-    // that the MCP servers are ready before a prompt (#691) are wire calls on
-    // the live session, not an establishment: they are left out)
-    const establishing = (methods: string[]) => methods.filter((method) => method !== "session/set_model" && method !== "_x.ai/mcp/list");
     expect(establishing(t.rpc())).toEqual([
       "initialize", "authenticate", "session/new", "session/prompt",
       "session/prompt", "session/prompt", "session/prompt",

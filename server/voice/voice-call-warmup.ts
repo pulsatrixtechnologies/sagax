@@ -6,9 +6,12 @@ import { reportBackgroundError } from "../background-error.ts";
 // turn reuses the process. A second start of the same call does nothing,
 // including a keepalive after the warm has finished. A new call on the
 // thread waits for the previous warm to finish before it starts, so two
-// spawns cannot overwrite the pooled process. Hangup aborts the warm and
-// forgets it, so a later start of that call id warms again. join still
-// waits until the in-flight run has released the thread.
+// spawns cannot overwrite the pooled process. That previous warm is not
+// aborted: an aborted warm signal means a hangup, and the engine closes the
+// process it holds (the new call keeps it, server/voice/voice-turn.ts).
+// Hangup aborts the warm and forgets it, so a later start of that call id
+// warms again. join still waits until the in-flight run has released the
+// thread.
 
 interface WarmJob {
   callId: string;
@@ -23,8 +26,8 @@ export class VoiceCallWarmup {
   private readonly finished = new Map<string, string>();
 
   /** Register `run` synchronously. The same callId is a no-op, in flight or
-   * already finished. A different callId aborts the previous warm and waits
-   * for it before running. */
+   * already finished. A different callId waits for the previous warm before
+   * running, and never aborts it: the new call reuses the process it warms. */
   begin(threadId: string, callId: string, run: (signal: AbortSignal) => Promise<void>): void {
     if (this.finished.get(threadId) === callId) return;
     const existing = this.jobs.get(threadId);
@@ -38,10 +41,7 @@ export class VoiceCallWarmup {
     const previous = existing;
     void (async () => {
       try {
-        if (previous) {
-          previous.controller.abort();
-          await previous.done;
-        }
+        if (previous) await previous.done;
         if (controller.signal.aborted) return;
         await run(controller.signal);
       } catch {

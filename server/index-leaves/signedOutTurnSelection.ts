@@ -9,7 +9,10 @@ import { signedOutCarryOn } from "../engines/signed-out-carry-on.ts";
 export type Host = Record<string, any>;
 
 export function createSignedOutTurnSelection(getHost: () => Host): any {
-/** `probe`: only whether a backup would take the turn, with no row and no card. */
+/** `probe`: only whether a backup would take the turn, with no row and no card.
+ * The probe runs while the refused turn is still settling (turn-completed.ts):
+ * the turn it asks about is the one sent again after it, so the refused turn
+ * still holding the thread is no reason to refuse the backup. */
 function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnSpeaker, options: { probe?: boolean } = {}) {
   const host = getHost();
   const now = Date.now();
@@ -41,7 +44,7 @@ function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnS
       if (host.recoveryCapabilityError({ driverKind: from.driverKind, capabilities: from.adapter.capabilities },
         { driverKind: target.driverKind, capabilities: target.adapter.capabilities })) return null;
       // The same rules as a switch by hand (the approval level included), without saving it.
-      const checked = host.checkedTaskModelSwitch(current, backup, false, true);
+      const checked = host.checkedTaskModelSwitch(current, backup, false, true, { settling: options.probe === true });
       return checked.ok ? checked.selection : null;
     },
   });

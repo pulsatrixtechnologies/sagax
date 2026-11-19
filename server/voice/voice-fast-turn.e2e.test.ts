@@ -153,15 +153,24 @@ it("a barge-in cuts the answer being written, and lines said meanwhile become on
       const asked = all.findIndex((m) => m.role === "user" && m.text === "stop, what time is it");
       return asked >= 0 && all.slice(asked + 1).some((m) => m.role === "bot" && m.kind === "text" && String(m.text ?? "").trim());
     }, { timeout: 20_000 }).toBe(true);
-    // the cut story never gets a written answer of its own
+    // the cut story never gets the answer it was holding (the fake CLI writes
+    // it as "reply to: ..." once its gate opens), even when the gate opens
+    // after the cut: what the cut turn wrote before the cut stays as written,
+    // and its last words are that turn's answer (markTerminalAssistantMessage
+    // in server/store.ts keeps commentary as the visible fallback)
+    t.open("first");
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     const all = await t.messages();
     const story = all.findIndex((m) => m.role === "user" && String(m.text).includes("long story"));
     const next = all.findIndex((m) => m.role === "user" && m.text === "stop, what time is it");
-    expect(all.slice(story + 1, next).filter((m) => m.role === "bot" && m.kind === "text" && m.turnTerminal && String(m.text ?? "").trim())).toHaveLength(0);
+    expect(story).toBeGreaterThanOrEqual(0);
+    expect(next).toBeGreaterThan(story);
+    expect(all.filter((m) => m.role === "bot" && m.kind === "text" && /reply to:[\s\S]*long story/.test(String(m.text ?? "")))).toHaveLength(0);
 
     // no pile-up: lines said while a turn is being stopped are answered by
     // ONE turn: queued, they drain together and it answers the newest with
-    // the earlier as context; or the newest joins the turn the first started
+    // the earlier as context; or the newest joins the turn the first started;
+    // or, said once that turn runs, the newest starts beside it (#4216)
     await t.send(said(3, "[gate:hold] check the printer"));
     await expect.poll(t.busy, { timeout: 15_000 }).toBe(true);
     const stopping = t.api("POST", `/api/bots/${t.bot.id}/interrupt`, { threadId: t.thread });
@@ -177,7 +186,14 @@ it("a barge-in cuts the answer being written, and lines said meanwhile become on
     await expect.poll(answersAfter, { timeout: 20_000 }).toBe(1);
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     expect(await answersAfter()).toBe(1);
-    const merged = t.prompts().filter((prompt) => prompt.includes("the one upstairs") && prompt.includes("is it fixed"));
+    // A line said once the stop is over, while the next line's turn runs, is
+    // a new request said on a call while the bot works: it starts beside that
+    // turn as a parallel task (#4216, server/busy-routing.ts callBusyMode),
+    // whose brief quotes the conversation for context and asks only that
+    // line. Every other prompt carrying both lines is the one merged turn.
+    const parallel = t.prompts().filter((prompt) => prompt.includes("[Parallel task."));
+    for (const prompt of parallel) expect(prompt).toMatch(/\nRequest:\nis it fixed$/);
+    const merged = t.prompts().filter((prompt) => !prompt.includes("[Parallel task.") && prompt.includes("the one upstairs") && prompt.includes("is it fixed"));
     for (const prompt of merged) expect(prompt).toContain("Before you could answer, they also said this on the call");
     // and every line stays in the conversation
     const texts = (await t.messages()).filter((m) => m.role === "user").map((m) => m.text);

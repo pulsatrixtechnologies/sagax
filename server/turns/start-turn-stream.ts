@@ -41,7 +41,10 @@ export function createStreamStartTurn(host: StartTurnHost) {
         retireProviderTurn(state.dispatch.value.turnId);
         throw new DirectTurnSetupCancelled("turn stopped during provider setup");
       }
-      voiceLatency.mark(state.threadId, "engine", { warm: state.dispatch.value.reused === true });
+      // A call's warm is not the call turn the thread is timing: a turn sent
+      // while the warm was still starting must not take the warm's spawn as
+      // its own engine stage (it would read "cold start" before its dispatch).
+      if (!state.warmOnly) voiceLatency.mark(state.threadId, "engine", { warm: state.dispatch.value.reused === true });
       const requestOwner = directRequestOwners.get(state.threadId);
       if (requestOwner?.generation === state.dispatchClaimId && state.dispatch.value.turnId) {
         if (requestOwner.turnId && requestOwner.turnId !== state.dispatch.value.turnId) {

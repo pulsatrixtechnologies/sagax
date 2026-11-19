@@ -532,13 +532,13 @@ it("tells the Chief a teammate's turn stalled, in the watchdog's words", () => c
   expect(stalled.status).toBe("failed");
   expect(handoffOutcome(f.dataDir, stalled.id)).toBe("stalled");
   // The cause first, then what the turn did and last said, quoted as data.
-  expect(stalled.result).toBe('No activity for 20 minutes — the turn was stopped. No tool calls were seen before it stopped.\nIts last message, quoted: "SUITE-STARTED"');
+  expect(stalled.result).toBe('No activity for 20 minutes, so the turn was stopped. No tool calls were seen before it stopped.\nIts last message, quoted: "SUITE-STARTED"');
   const review = f.prompt(f.turn("D1"));
-  expect(review).toContain("No activity for 20 minutes — the turn was stopped.");
+  expect(review).toContain("No activity for 20 minutes, so the turn was stopped.");
   expect(review).not.toContain("The coordinated turn was interrupted");
   // Its chip shows the cause alone; the quote stays in the account.
-  expect(await f.rows(job)).toContain("Mira — failed: No activity for 20 minutes — the turn was stopped. No tool calls were seen before it stopped.");
-  expect(await f.rows(stalled.threadId)).toContain("error: no activity for 20 minutes — the turn was stopped");
+  expect(await f.rows(job)).toContain("Mira — failed: No activity for 20 minutes, so the turn was stopped. No tool calls were seen before it stopped.");
+  expect(await f.rows(stalled.threadId)).toContain("error: no activity for 20 minutes, so the turn was stopped");
   // The stopped turn reports nothing late, and the Chief resumed once.
   f.open("suite");
   await new Promise((resolve) => setTimeout(resolve, 500));

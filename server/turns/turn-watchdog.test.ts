@@ -433,7 +433,7 @@ describe("the stall handler", () => {
     const { context, settled, delegations, guardSettled } = load();
     context.watchdog.options.onStall({ threadId: "t1", botId: "eli" }, 20 * 60_000, "silent");
     expect(guardSettled).toEqual(["t1"]);
-    const told = 'No activity for 20 minutes — the turn was stopped. Before it stopped it made 1 tool call: Bash ×1.\nIts last message, quoted: "Exporting the second half now."';
+    const told = 'No activity for 20 minutes, so the turn was stopped. Before it stopped it made 1 tool call: Bash ×1.\nIts last message, quoted: "Exporting the second half now."';
     // delegate_bot rides the job runtime now (#2702): its requester hears a
     // stall through the same settle as every assignment, no separate watch.
     expect(settled).toEqual([{ generation: "gen-1", text: told }]);
@@ -445,7 +445,7 @@ describe("the stall handler", () => {
   it("names the silence that stopped a turn whose tool was running", () => {
     const { context, settled } = load();
     context.watchdog.options.onStall({ threadId: "t1", botId: "eli" }, 120 * 60_000, "silent");
-    expect(settled[0]!.text).toMatch(/^No activity for 120 minutes — the turn was stopped\. Before it stopped/);
+    expect(settled[0]!.text).toMatch(/^No activity for 120 minutes, so the turn was stopped\. Before it stopped/);
   });
 
   it("says the engine's process ended when the turn was stopped for that (port of OpenMausBot #5967)", () => {
@@ -561,7 +561,7 @@ describe("TurnWatchdog: exited engines and working commands (ports of OpenMausBo
     expect(stuckCommand({ runningTools: new Set(["a"]), toolStartedAt: new Map([["a", 0]]), toolCommand: new Map([["a", "curl -H 'Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz0123456789'"]]) }, 3 * 60_000))
       .toEqual({ command: expect.not.stringContaining("sk-abcdefghijklmnopqrstuvwxyz0123456789"), minutes: 3 });
     expect(stuckCommand({ runningTools: new Set(["a"]), toolStartedAt: new Map([["a", 0]]) }, 60_000)).toBeNull();
-    expect(stallNotice({}, 20 * 60_000, 0)).toBe("no activity for 20 minutes — the turn was stopped");
+    expect(stallNotice({}, 20 * 60_000, 0)).toBe("no activity for 20 minutes, so the turn was stopped");
     expect(await engineCommandCpuMs(undefined, "t1", 0)).toBeNull();
     expect(await engineCommandCpuMs(tracked(ENGINE_PID), "t1", 5, async (pid, since) => ({ cpuMs: pid + since, connections: null }))).toBe(ENGINE_PID + 5);
   });

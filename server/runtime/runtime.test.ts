@@ -665,7 +665,7 @@ describe("Runtime: host-named roots and request marks", () => {
   it("ends a root the host's watchdog stopped as stalled, any other failed root as a provider error", () => {
     const w = world();
     w.runtime.begin(beginReq({ id: "gen-3" }));
-    w.runtime.end("gen-3", { ok: false, text: "No activity for 20 minutes — the turn was stopped.", stalled: true });
+    w.runtime.end("gen-3", { ok: false, text: "No activity for 20 minutes, so the turn was stopped.", stalled: true });
     expect(w.store.get("gen-3")).toMatchObject({ status: "failed", outcome: "stalled" });
     w.runtime.begin(beginReq({ id: "gen-4" }));
     w.runtime.end("gen-4", { ok: false, text: "The engine exited" });

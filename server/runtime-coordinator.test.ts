@@ -351,7 +351,7 @@ describe("RuntimeCoordinator: the requesting turn and its tree", () => {
   it("fails a turn the host's watchdog stopped as stalled, not as a provider error", async () => {
     const dir = mkdtempSync(join(tmpdir(), "runtime-coordinator-stalled-"));
     try {
-      const w = world((node) => node.botId === "builder" ? { ok: false, text: "No activity for 20 minutes — the turn was stopped", stalled: true }
+      const w = world((node) => node.botId === "builder" ? { ok: false, text: "No activity for 20 minutes, so the turn was stopped", stalled: true }
         : node.botId === "tester" ? { ok: false, text: "The engine exited" } : undefined, {}, dir);
       const { node: built } = send(w, chief, "gen-1", undefined, builder, "Build it");
       const { node: tested } = send(w, chief, "gen-1", undefined, tester, "Test it");

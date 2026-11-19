@@ -246,8 +246,8 @@ describe("thread control placement", () => {
     expect(markup).toMatch(/<summary[^>]*>Details<\/summary><p[^>]*>API Error: 529/);
     expect(markup).toContain(" Retry</button>");
     // a cause already written for a person stays the headline, with nothing to expand
-    const plain = renderToStaticMarkup(createElement(FailedTurnRow, { tool: { name: "error: no activity for 10 minutes — the turn was stopped", ok: false }, engine: undefined }));
-    expect(plain).toContain(">no activity for 10 minutes — the turn was stopped</span>");
+    const plain = renderToStaticMarkup(createElement(FailedTurnRow, { tool: { name: "error: no activity for 10 minutes, so the turn was stopped", ok: false }, engine: undefined }));
+    expect(plain).toContain(">no activity for 10 minutes, so the turn was stopped</span>");
     expect(plain).not.toContain(">Details</summary>");
   });
   it("offers to update Claude Code for a too-old install, or hands over the command", () => {

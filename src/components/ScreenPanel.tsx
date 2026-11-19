@@ -6,12 +6,15 @@
 // take control, give back, tabs, the address bar and typing behave exactly as
 // in the full-window takeover. It is the person's own bot's screen: no
 // approval card, and never a thread panel (the chat stays the one conversation).
-import { Globe, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Globe, PenLine, X } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { setScreenPanelOpen, SCREEN_PANEL_DEFAULT_WIDTH, SCREEN_PANEL_MAX_WIDTH, SCREEN_PANEL_MIN_WIDTH, SCREEN_PANEL_WIDTH_KEY } from "@/lib/screen-panel";
-import type { Bot } from "@/state/store";
-import { BrowserPanel } from "./BrowserPanel";
+import { useStore, type Bot } from "@/state/store";
+import { BrowserPanel, type BrowserDescriber } from "./BrowserPanel";
+import { ScreenMarksBar, ScreenMarksOverlay, useScreenMarks } from "./ScreenMarks";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 
 const SCREEN_BOUNDS = {
@@ -24,6 +27,12 @@ const SCREEN_BOUNDS = {
 export function ScreenPanel({ bot }: { bot: Bot }) {
   const panel = useDockedPanelWidth(SCREEN_BOUNDS);
   const title = t("computer.browserOf", { name: bot.name });
+  const { dispatch } = useStore();
+  // Marking up (#4452): the tools and the overlay show only while it is on.
+  const [marking, setMarking] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
+  const describer = useRef<BrowserDescriber | null>(null);
+  const marks = useScreenMarks({ bot, host: body, describer, dispatch, onSent: () => setMarking(false) });
   return (
     <aside
       data-screen-panel=""
@@ -42,13 +51,19 @@ export function ScreenPanel({ bot }: { bot: Bot }) {
       <div data-screen-panel-header="" className="flex min-h-[52px] shrink-0 items-center gap-2 px-3 py-2.5">
         <Globe size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
         <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px] font-medium leading-5 text-ink">{title}</span>
+        <button type="button" data-screen-panel-marks="" aria-pressed={marking} onClick={() => setMarking((on) => !on)} aria-label={t("screenMarks.toggle")} title={t("screenMarks.toggle")}
+          className={cn(CIRCLE_BUTTON, marking && "ring-2 ring-accent/60")}>
+          <PenLine size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
         <button type="button" data-screen-panel-close="" onClick={() => setScreenPanelOpen(false)} aria-label={t("screenPanel.close")} title={t("screenPanel.close")} className={CIRCLE_BUTTON}>
           <X size={17} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
-      <div data-screen-panel-body="" className="flex min-h-0 flex-1 flex-col px-3 pb-3">
-        <BrowserPanel key={bot.id} bot={bot} live />
+      <div ref={body} data-screen-panel-body="" className="relative flex min-h-0 flex-1 flex-col px-3 pb-3">
+        <BrowserPanel key={bot.id} bot={bot} live onDescriber={(describe) => { describer.current = describe; }} />
+        {marking && <ScreenMarksOverlay marks={marks} />}
       </div>
+      {marking && <ScreenMarksBar marks={marks} />}
     </aside>
   );
 }

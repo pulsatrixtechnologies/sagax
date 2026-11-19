@@ -115,6 +115,23 @@ describe("browser viewer protocol boundary", () => {
     expect(browserStreamPort(ready)).toBe(43210);
     for (const value of [null, {}, { enabled: false, port: 42 }, { enabled: true, port: "42" }, { enabled: true, port: 0 }, { enabled: true, port: 65536 }, { enabled: true, port: 2.2 }]) expect(() => browserStreamPort(value)).toThrow();
   });
+  it("describes the element under the person's marks without taking control (#4452)", async () => {
+    const a = await open();
+    execute.mockResolvedValueOnce(output({ result: JSON.stringify({ url: "https://example.com/p?token=abc#frag", tag: "button", role: "button", name: "Pay" }) }));
+    const answer = await a.action({ type: "describe", points: [{ x: 300, y: 200 }] }) as { ok: boolean; elements: Array<{ role?: string; name?: string } | null> };
+    expect(answer.ok).toBe(true);
+    expect(answer.elements[0]).toMatchObject({ role: "button", name: "Pay" });
+    const evalCall = execute.mock.calls.at(-1)!;
+    expect(evalCall[1][0]).toBe("eval");
+    expect(evalCall[1][1]).toContain("elementFromPoint");
+    expect(evalCall[1][1]).toContain("[300, 200]");
+  });
+  it("accepts only a few in-range points for a describe action", () => {
+    expect(parseBrowserLiveAction({ type: "describe", points: [{ x: 1, y: 2 }] })).toEqual({ type: "describe", points: [{ x: 1, y: 2 }] });
+    for (const points of [[], "x", [{ x: -1, y: 0 }], [{ x: 0, y: 9000 }], Array.from({ length: 9 }, () => ({ x: 1, y: 1 }))]) {
+      expect(() => parseBrowserLiveAction({ type: "describe", points })).toThrow();
+    }
+  });
   it("maps only fixed navigation/tab verbs and rejects executable URLs and flags", () => {
     expect(parseBrowserLiveAction({ type: "navigate", url: "https://example.com/?q=hi", command: "eval", args: ["secret"] })).toEqual({ type: "command", args: ["open", "https://example.com/?q=hi"] });
     expect(parseBrowserLiveAction({ type: "tab-new" })).toEqual({ type: "command", args: ["tab", "new", "https://www.google.com/"] });

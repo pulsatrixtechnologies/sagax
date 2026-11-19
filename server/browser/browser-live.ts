@@ -161,6 +161,7 @@ export function browserStreamPort(value: unknown): number {
 
 type Action = { type: "take" | "release" | "restart" } | { type: "ack"; seq: number }
   | { type: "record-start" | "record-stop" | "record-discard" }
+  | { type: "describe"; points: Array<{ x: number; y: number }> }
   | { type: "command"; args: string[] } | { type: "input"; message: ObjectValue };
 
 /** HTTP bodies can select a fixed action, never a CLI command, flag, port or CDP method. */
@@ -171,6 +172,16 @@ export function parseBrowserLiveAction(value: unknown): Action {
   if (body.type === "take" || body.type === "release" || body.type === "restart") return { type: body.type };
   // Teach by demonstration: the person's own recording (server/browser/browser-teach.ts).
   if (body.type === "record-start" || body.type === "record-stop" || body.type === "record-discard") return { type: body.type };
+  // The person's marks (#4452): what element sits under each highlight. Read only.
+  if (body.type === "describe") {
+    if (!Array.isArray(body.points) || body.points.length < 1 || body.points.length > 8) throw invalid();
+    const points = body.points.map((point) => {
+      const at = object(point);
+      if (!at || !number(at.x, 0, 8192) || !number(at.y, 0, 8192)) throw invalid();
+      return { x: at.x, y: at.y };
+    });
+    return { type: "describe", points };
+  }
   if (body.type === "ack" && integer(body.seq, 1, Number.MAX_SAFE_INTEGER)) return { type: "ack", seq: body.seq };
   if (body.type === "back" || body.type === "forward" || body.type === "reload") return { type: "command", args: [body.type] };
   if (body.type === "navigate" || body.type === "tab-new") {
@@ -627,6 +638,15 @@ export class BrowserLive {
         viewer.frameSeq = undefined; viewer.frameAt = undefined;
       }
       return { ok: true };
+    }
+    if (action.type === "describe") {
+      // Looking at a page element needs no control of the browser: it only reads.
+      const elements = [];
+      for (const point of action.points) {
+        const described = await this.describe(viewer, point);
+        elements.push(described ? { url: described.url, ...(described.target ? { role: described.target.role, name: described.target.name, tag: described.target.tag } : {}) } : null);
+      }
+      return { ok: true, elements };
     }
     if (action.type === "record-start") {
       this.teach.start(viewer.owner, viewer.session);

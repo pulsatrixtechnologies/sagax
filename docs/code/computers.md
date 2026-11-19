@@ -1099,6 +1099,6 @@ store (`src/lib/screen-panel.ts`) toggled by Cmd+Shift+B (Ctrl+Shift+B
 elsewhere, `appShortcutFor` "toggle-screen-panel", useShellNavigation). The
 browser tab hosts `LiveBrowser` unchanged through `BrowserPanel live`, so take
 control, give back and typing are the takeover's. Width: own key, 360 to 960.
-Esc or the round X closes it. Later lots add marks and the VM and remote tabs.
+Esc or the round X closes it. Mark up (the pen button, `ScreenMarks.tsx`, `src/lib/screen-marks.ts`): highlight, arrow, circle and freehand over the frame in frame coordinates, plus a note; Send makes one message (the frame with the marks as a PNG, the element under each mark from the browser live action `describe`, the note) through the ordinary send, `busyMode` steer while the bot works. A later lot adds the VM and remote tabs.
 Tests: `src/components/ScreenPanel.dom.test.ts`, `src/lib/screen-panel.test.ts`,
-`src/lib/keyboard-shortcuts.test.ts`. Capture: `scripts/capture/screen-panel.mjs`.
+`src/lib/keyboard-shortcuts.test.ts`, `src/lib/screen-marks.test.ts`, `src/components/ScreenMarks.dom.test.ts`, `server/browser/browser-live.test.ts`. Capture: `scripts/capture/screen-panel.mjs`.

@@ -16,6 +16,7 @@ vi.mock("./BrowserPanel", () => ({
     return null;
   },
 }));
+vi.mock("@/state/store", () => ({ useStore: () => ({ dispatch: vi.fn(), state: {} }) }));
 import { ScreenPanel } from "./ScreenPanel";
 
 const bot = { id: "ada", name: "Ada" } as unknown as Bot;
@@ -39,6 +40,17 @@ describe("ScreenPanel", () => {
     expect(host.textContent).toContain("Ada’s browser");
     expect(seen).toEqual({ live: true, botId: "ada" });
     expect(host.querySelector("[role=separator]")?.getAttribute("aria-label")).toBe("Resize the screen panel");
+  });
+
+  it("shows the marking tools only while Mark up is on", () => {
+    const toggle = host.querySelector("[data-screen-panel-marks]") as HTMLButtonElement;
+    expect(host.querySelector("[data-screen-marks-bar]")).toBeNull();
+    act(() => { toggle.click(); });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector("[data-screen-marks-bar]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-marks-overlay]")).not.toBeNull();
+    act(() => { toggle.click(); });
+    expect(host.querySelector("[data-screen-marks-overlay]")).toBeNull();
   });
 
   it("closes from its X button", () => {

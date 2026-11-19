@@ -15,6 +15,7 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "screen-panel"));
 const port = Number(arg("--port") ?? 5311);
 const prefix = arg("--prefix") ?? "screen-panel";
+const lang = "fr";
 const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -46,6 +47,20 @@ try {
     await page.waitForSelector("[data-screen-panel]");
     await page.waitForTimeout(1200);
     await page.locator("[data-gallery-sample]").screenshot({ path: join(outDir, `${prefix}-${label}.png`) });
+    // Marking up: highlight, circle and arrow on the frame, then a note.
+    await page.click("[data-screen-panel-marks]");
+    const svg = await page.locator("[data-screen-marks-overlay]").boundingBox();
+    const drag = async (tool, from, to) => {
+      await page.click(`[data-mark-tool=${tool}]`);
+      await page.mouse.move(svg.x + from[0], svg.y + from[1]); await page.mouse.down();
+      await page.mouse.move(svg.x + to[0], svg.y + to[1], { steps: 6 }); await page.mouse.up();
+    };
+    await drag("highlight", [40, 380], [300, 430]);
+    await drag("circle", [60, 230], [230, 300]);
+    await drag("arrow", [300, 140], [200, 270]);
+    await page.fill("[data-mark-note]", lang === "fr" ? "Ce montant est faux" : "This amount is wrong");
+    await page.waitForTimeout(300);
+    await page.locator("[data-gallery-sample]").screenshot({ path: join(outDir, `${prefix}-marks-${label}.png`) });
   }
   console.log(`screenshots in ${outDir}`);
 } catch (error) {

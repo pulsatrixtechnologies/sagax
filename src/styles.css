@@ -3021,42 +3021,23 @@ body {
   outline: none;
 }
 
-/* The profile banner is a soft wash of the mascot's colour (#2173): the
-   page passes its hex as --bot-profile-banner-color and the wash mixes it
-   with a pale base, darker at the top. The page's top bar carries the top
-   colour (.bot-profile-banner-top) so bar and banner read as one header. A
-   neutral mascot keeps a visible grey. The base is one plain colour, never
-   light-dark(): the build (lightningcss) rewrites light-dark() into
-   --lightningcss-light/-dark variables that only a literal color-scheme
-   defines, and the skins set `color-scheme: var(--code-color-scheme)`, so
-   in the shipped app the base was invalid, the banner and the bar went
-   transparent and the hero card floated under a dark gap (#2554). */
-/* Trace the artwork before the skin's ambient drop shadow can widen its alpha. */
-.profile-mascot-contour {
-  --mascot-filter: none;
-  --profile-mascot-edge: color-mix(in srgb, var(--color-ink) 80%, transparent);
-  filter: drop-shadow(1px 0 0 var(--profile-mascot-edge)) drop-shadow(-1px 0 0 var(--profile-mascot-edge))
-    drop-shadow(0 1px 0 var(--profile-mascot-edge)) drop-shadow(0 -1px 0 var(--profile-mascot-edge));
-}
-
-.bot-profile-banner,
-.bot-profile-banner-top {
-  --bot-profile-banner-base: #f7f7f7;
-  --bot-profile-banner-from: color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base));
-}
+/* The profile banner is a soft wash of the mascot's colour (#2173): the page
+   passes the wash's top and bottom colours, already kept apart from the
+   mascot's body colour (src/lib/profile-banner.ts), and the banner paints
+   them, darker at the top. A neutral mascot keeps a visible grey. The wash
+   is plain colours, never light-dark(): the build (lightningcss) rewrites
+   light-dark() into --lightningcss-light/-dark variables that only a literal
+   color-scheme defines, and the skins set `color-scheme: var(--code-color-scheme)`,
+   so in the shipped app the base was invalid, the banner went transparent
+   and the hero card floated under a dark gap (#2554). */
 .bot-profile-banner {
-  background-image: linear-gradient(
-    180deg,
-    var(--bot-profile-banner-from) 0%,
-    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 36%, var(--bot-profile-banner-base)) 100%
-  );
+  background-image: linear-gradient(180deg, var(--bot-profile-banner-from, #c6c9ce) 0%, var(--bot-profile-banner-to, #dcdee1) 100%);
 }
-.bot-profile-banner-top {
-  background-color: var(--bot-profile-banner-from);
-}
-.bot-profile-banner[data-bot-profile-banner-palette="neutral"],
-.bot-profile-banner-top[data-bot-profile-banner-palette="neutral"] {
-  --bot-profile-banner-color: #8e949e;
+/* The profile mascot's own soft shadow, the one any avatar has: no outline,
+   no halo. It replaces the skin's ambient shadow so the two never stack. */
+.profile-mascot-shadow {
+  --mascot-filter: none;
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.3));
 }
 /* The account button's own pill carries the keyboard ring, so the square
    outline around the button is always off. */

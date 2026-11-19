@@ -48,8 +48,8 @@ export interface MascotLookPreviewProps {
    * bare hero (the mascot, the name and label under it), no card. */
   heading?: ReactNode;
   subheading?: ReactNode;
-  /** The profile page's hero: a contour following the visible artwork. */
-  outlined?: boolean;
+  /** The profile page's hero: the mascot at 64px in its 70px frame, with a soft drop shadow. */
+  profile?: boolean;
   /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
   /** The bot's live state and the moves it plays across the app. */
@@ -60,7 +60,7 @@ export interface MascotLookPreviewProps {
 type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
-  outlined?: boolean;
+  profile?: boolean;
   /** The room around the mascot inside its button (20px in the editor's
    * card, a thin 4px on the profile page's hero). */
   pad?: number;
@@ -69,8 +69,7 @@ type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "
   clip?: boolean;
 };
 
-function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, outlined, pad = 20, clip = false }: StageProps) {
-  const skinEdge = !picture && shown === "shape" && ["night", "neon", "circuit", "outline"].includes(shownLook.skins?.shape ?? "plain");
+function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, profile, pad = 20, clip = false }: StageProps) {
   return (
     <button
       type="button"
@@ -81,7 +80,7 @@ function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, pre
       style={{ width: size + pad, height: size + pad }}
       className={cn("relative grid shrink-0 place-items-center rounded-2xl", clip && "overflow-hidden", focusRing)}
     >
-      <span aria-hidden="true" className={cn("pointer-events-none", outlined && !skinEdge && "profile-mascot-contour", shownLock.locked && "opacity-60 grayscale")}>
+      <span aria-hidden="true" className={cn("pointer-events-none", profile && "profile-mascot-shadow", shownLock.locked && "opacity-60 grayscale")}>
         <BotAvatar
           bot={picture ?? { name: bot.name, color: bot.color, mascotSkin: (previewSkin && shown === "owl" ? previewSkin : owlSkin) as typeof owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
           size={size}
@@ -122,7 +121,7 @@ export function MascotLookPreview({
   onRandomize,
   heading,
   subheading,
-  outlined,
+  profile,
   picture,
   liveState,
   liveMotion,
@@ -138,11 +137,11 @@ export function MascotLookPreview({
         data-mascot-detail={shown}
         data-mascot-hero=""
         aria-label={t("appearance.preview", { name: shownName })}
-        className={cn("relative flex w-full flex-col items-start text-left", outlined ? "gap-2" : "gap-1")}
+        className={cn("relative flex w-full flex-col items-start text-left", profile ? "gap-2" : "gap-1")}
       >
-        {outlined ? (
+        {profile ? (
           <span data-mascot-frame="" className="grid size-[70px] shrink-0 place-items-center">
-            <MascotStage {...stage} size={MASCOT_PROFILE_SIZE} pad={0} outlined />
+            <MascotStage {...stage} size={MASCOT_PROFILE_SIZE} pad={0} profile />
           </span>
         ) : (
           <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />

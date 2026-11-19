@@ -682,7 +682,7 @@ export default function MascotLookEditor({
         onRandomize={slot || randomizeInTabRow ? undefined : randomize}
         heading={slot?.heading}
         subheading={slot?.subheading}
-        outlined={slot?.outlined}
+        profile={slot?.profile}
         liveState={slot?.state}
         liveMotion={slot?.motion}
       />

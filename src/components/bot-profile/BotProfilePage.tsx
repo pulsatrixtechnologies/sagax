@@ -81,6 +81,9 @@ import {
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
+import { botAvatarProfile } from "../../../shared/bot-avatar";
+import { mascotDominantColor } from "@/lib/mascot-dominant";
+import { profileBannerColors } from "@/lib/profile-banner";
 import { DescribedRow, PILL, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
 import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
@@ -641,12 +644,17 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   // The banner is a wash of the mascot's colour (#2173, back after #2313),
   // 124px tall as the reference's cover (its stage top plus 40px, #4420):
-  // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
-  // visible grey there. The banner scrolls with the page under the clear
+  // a neutral mascot keeps a visible grey there. The wash comes from the bot
+  // colour, which the mascot wears too, so its two colours go to the
+  // stylesheet already kept apart from the mascot's body colour
+  // (profile-banner.ts). The banner scrolls with the page under the clear
   // top bar, so nothing cuts it.
-  const bannerColor = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
-  const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
   const bannerPalette = mascotColorGroup(bot.color);
+  const bannerAccent = bannerPalette === "neutral" ? "#8e949e" : (MAUS_COLORS[bot.color] ?? MAUS_COLORS.green);
+  const avatar = botAvatarProfile(bot);
+  const wearsPicture = Boolean(avatar.avatarUrl) && avatar.avatarCrop !== "mascot";
+  const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
+  const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
 
   const { heroSlot, hero } = useBotProfileHero({ bot, derived });
 

@@ -17,8 +17,8 @@ export interface MascotHeroSlot {
   heading: ReactNode;
   /** Under the heading: the bot's label. */
   subheading?: ReactNode;
-  /** The profile page's hero only: trace the visible silhouette. */
-  outlined?: boolean;
+  /** The profile page's hero only: the 64px mascot in its 70px frame, with a soft drop shadow. */
+  profile?: boolean;
   /** The bot's live state and the moves it plays across the app. */
   state?: MausState;
   motion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;

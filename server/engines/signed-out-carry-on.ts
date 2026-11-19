@@ -34,3 +34,25 @@ export function signedOutCarryOn(input: SignedOutCarryOnInput): ModelSelection |
   }
   return null;
 }
+
+export interface SignedOutResendInput {
+  /** The turn ended refused by its engine: signed out, or an account whose
+   * plan does not allow it here (an HTTP 403 "permission_error"). */
+  refused: boolean;
+  /** A sign-in renew holds the refusal and sends the turn again itself. */
+  renewHeld: boolean;
+  /** A message the person sent, not stopped, not a routine's run. */
+  personTurn: boolean;
+  /** This thread's refused turn was already sent again once. */
+  alreadyResent: boolean;
+  /** A chosen backup may take the turn now (signedOutCarryOn, no side effect). */
+  backupReady: () => boolean;
+}
+
+/** The owner (2026-11-18, a call turn refused by Claude's plan): the refused
+ * turn itself is sent again at once, so the backup the person chose answers
+ * it, not only the next turn. Once per thread, so a backup that refuses too
+ * never loops; the sent-again turn starts on the backup (signedOutCarryOn). */
+export function resendOnSignedOutBackup(input: SignedOutResendInput): boolean {
+  return input.refused && !input.renewHeld && input.personTurn && !input.alreadyResent && input.backupReady();
+}

@@ -1,4 +1,4 @@
-// The profile page's Share pill and its popover, Grok Bot style
+// The profile page's round Share button and its popover, Grok Bot style
 // (2026-11-06): "Share this Bot" with Copy link at the right, a field that
 // adds people or groups from the organization directory, then "Who has
 // access": the owner, and each person or team with its
@@ -6,7 +6,7 @@
 // Sharing section (useBotSharing + useGrantEditor, GET/PUT/DELETE
 // /api/bots/:id/grants); the server decides who may change what.
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { Check, ChevronRight, Link2, Loader2, UserPlus, Users } from "lucide-react";
+import { Check, ChevronRight, Link2, Loader2, Share2, UserPlus, Users } from "lucide-react";
 
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PillSelect, PLAIN_FIELD } from "../SettingsPrimitives";
@@ -16,7 +16,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { CIRCLE_CLOSE_BUTTON, CIRCLE_ICON } from "@/lib/circle-button";
 import { copyText } from "@/lib/copy-text";
 import { botRefUrl } from "@/lib/thread-refs";
 import { initialsOf } from "@/lib/page-share-plan";
@@ -323,11 +323,13 @@ export function ShareBotButton({ bot, open, onOpenChange, style, className }: {
         aria-controls={open ? popoverId : undefined}
         onClick={() => onOpenChange(!open)}
         data-bot-profile-share=""
+        aria-label={t("botProfile.share")}
+        title={t("botProfile.share")}
         style={style}
-        className={cn(CIRCLE_LABEL_BUTTON, className)}
+        className={cn(CIRCLE_CLOSE_BUTTON, className)}
       >
-        {/* the word alone, as the reference's Share of its stage header (#4420) */}
-        {t("botProfile.share")}
+        {/* the round icon button of the X beside it (JC 2026-11-19): the share icon the sidebar's bot menu uses */}
+        <Share2 {...CIRCLE_ICON} aria-hidden="true" />
       </button>
       {open && (
         <AnchoredPopover

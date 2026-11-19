@@ -22,8 +22,9 @@ const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
  * left, the owner 2026-11-09): the reference's avatar reads larger than the
  * owl drawn at 84px, whose art leaves room around it (#4420). */
 export const MASCOT_HERO_SIZE = 96;
-/** The profile header keeps the 64px artwork centred in its 70px frame. */
-export const MASCOT_PROFILE_SIZE = 64;
+/** The profile header's avatar (JC 2026-11-19: the bot's real picture, not a
+ * line of text tall): the 160px artwork centred in its 168px frame. */
+export const MASCOT_PROFILE_SIZE = 160;
 /** The preview card's Randomize button (and the tab row's, beside Reset). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
@@ -140,7 +141,7 @@ export function MascotLookPreview({
         className={cn("relative flex w-full flex-col items-start text-left", profile ? "gap-2" : "gap-1")}
       >
         {profile ? (
-          <span data-mascot-frame="" className="grid size-[70px] shrink-0 place-items-center">
+          <span data-mascot-frame="" className="grid size-[168px] shrink-0 place-items-center">
             <MascotStage {...stage} size={MASCOT_PROFILE_SIZE} pad={0} profile />
           </span>
         ) : (

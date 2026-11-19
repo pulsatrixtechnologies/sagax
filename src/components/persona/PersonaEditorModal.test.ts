@@ -10,8 +10,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, BotSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
-import { CIRCLE_CLOSE_BUTTON, CIRCLE_LABEL } from "@/lib/circle-button";
-import { MASCOT_HERO_SIZE, MASCOT_PROFILE_SIZE } from "@/components/floating-bots/MascotLookPreview";
+import { CIRCLE_CLOSE_BUTTON } from "@/lib/circle-button";
+import { MASCOT_PROFILE_SIZE } from "@/components/floating-bots/MascotLookPreview";
 
 import { CHARACTER_PAINT, MASCOT_CHARACTERS, MASCOT_SHAPES, type MascotLook } from "../../../shared/mascot-look";
 import { MASCOT_SKIN_IDS } from "../../../shared/mascot-skins";
@@ -280,7 +280,7 @@ describe("bot profile page shell", () => {
     expect(banner).toBeLessThan(hero);
     expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-from:#[0-9a-f]{6};--bot-profile-banner-to:#[0-9a-f]{6}" class="bot-profile-banner h-\[124px\] /i);
     // the mascot over the banner's lower edge, at the left of the column
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[35px\] flex flex-col items-start/);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[84px\] flex flex-col items-start/);
     const heroHtml = html.slice(hero, audience);
     expect(heroHtml).toContain("data-mascot-hero");
     // no card: no border, no panel, no tinted ground around the mascot
@@ -290,7 +290,7 @@ describe("bot profile page shell", () => {
     expect(card).toContain("items-start");
     expect(card).not.toContain("items-center");
     const frame = /<span[^>]*data-mascot-frame=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
-    expect(frame).toContain("size-[70px]");
+    expect(frame).toContain("size-[168px]");
     expect(frame).not.toMatch(/rounded|border|bg-/);
     expect(heroHtml).toContain("profile-mascot-shadow");
     expect(heroHtml).not.toContain("profile-mascot-contour");
@@ -306,7 +306,8 @@ describe("bot profile page shell", () => {
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[26px\] font-medium/);
-    expect(MASCOT_HERO_SIZE).toBeGreaterThan(MASCOT_PROFILE_SIZE);
+    // the avatar of the header: large, a real picture of the bot (2026-11-19)
+    expect(MASCOT_PROFILE_SIZE).toBeGreaterThanOrEqual(150);
     // no button row nor summary in the header: they head the Appearance tab
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
     // nothing lost under it: who sees it, left-aligned (no description line, the bot is asked for it)
@@ -438,7 +439,14 @@ describe("bot profile page shell", () => {
     for (const cls of CIRCLE_CLOSE_BUTTON.split(" ")) expect(close).toContain(cls);
     expect(close).toContain('aria-label="Close"');
     const share = tagOf("data-bot-profile-share");
-    for (const cls of CIRCLE_LABEL.split(" ")) expect(share).toContain(cls);
+    // Share is the same round icon button as the X: no word, a name and a tooltip, the 18px glyph
+    for (const cls of CIRCLE_CLOSE_BUTTON.split(" ")) expect(share).toContain(cls);
+    expect(share).toContain('aria-label="Share"');
+    expect(share).toContain('title="Share"');
+    const shareStart = html.indexOf("data-bot-profile-share");
+    const shareInner = html.slice(html.indexOf(">", shareStart) + 1, html.indexOf("</button>", shareStart));
+    expect(shareInner).not.toMatch(/>\s*Share\s*</);
+    expect(shareInner).toContain('width="18"');
     for (const tag of [close, share]) {
       expect(tag).not.toContain("bg-black");
       expect(tag).not.toContain("text-white");
@@ -468,16 +476,17 @@ describe("regression #4420: the bot page's header is the reference's", () => {
     expect(close).toBeLessThan(banner);
     // the left group: no X there any more (the condensed name only)
     expect(html.slice(bar, actions)).not.toContain("data-window-close");
-    // Share is the word alone, as the reference's
+    // Share is a round icon button with no word (2026-11-19), named for assistive tech
     const shareButton = html.slice(share, html.indexOf("</button>", share));
-    expect(shareButton).not.toContain("<svg");
-    expect(shareButton).toContain(">Share");
+    expect(shareButton).toContain("<svg");
+    expect(shareButton).not.toMatch(/>\s*Share\s*</);
+    expect(shareButton).toContain('aria-label="Share"');
   });
 
   it("draws a 124px banner, the mascot on its lower edge, the name at 26px medium, and one left edge for the name, the tabs and the cards' labels", () => {
     const html = render("overview");
     expect(html).toMatch(/class="bot-profile-banner h-\[124px\] w-full shrink-0"/);
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[35px\] /);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[84px\] /);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*text-\[26px\] font-medium leading-8 tracking-\[-0\.015em\]/);
     // the header 12px into the column; the cards' grey labels on the same edge
     expect(html).toMatch(/<header data-bot-profile-header=""[^>]*class="flex min-w-0 flex-col px-3"/);

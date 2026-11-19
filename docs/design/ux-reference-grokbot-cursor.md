@@ -366,10 +366,11 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   (« Nom · Titre », le titre en gris secondaire, tronqué en premier, jamais une
   deuxième ligne au bureau), puis qui le voit et son propriétaire. Aucune description
   dans l'en-tête (JC 2026-11-17) : on la change en la demandant au bot
-  (update_agent_settings). La mascotte (64 px) porte un anneau de 3 px de la couleur de
-  la page (plaque de 70 px), sur cette page seulement. La mascotte, le nom, ces lignes, le
+  (update_agent_settings). La mascotte (160 px dans une plaque de 168 px, son milieu sur le bord de la
+  bannière ; JC 2026-11-19 : l'image du bot, plus la hauteur d'une ligne de texte ; la
+  référence mesurait 64 px) est nue, sans anneau, sur cette page seulement. La mascotte, le nom, ces lignes, le
   texte des onglets et les étiquettes grises des cartes partagent un même bord gauche,
-  12 px dans la colonne. Partager (le mot seul) puis le bouton rond Fermer ensemble en
+  12 px dans la colonne. Partager (bouton rond à icône, même disque que Fermer ; infobulle et nom accessible « Partager ») puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des
   groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
   passe dessous.

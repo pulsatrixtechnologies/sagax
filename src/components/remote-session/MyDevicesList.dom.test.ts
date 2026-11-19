@@ -38,7 +38,11 @@ describe("MyDevicesList", () => {
     expect(rows[0]!.textContent).toContain("This device");
     expect(rows[0]!.querySelector("[data-my-device-rename]")).not.toBeNull();
     expect(rows[1]!.querySelector("[data-my-device-rename]")).toBeNull();
+    // this device's access is set in "Execution on this computer": no choice and no menu on its row
+    expect(rows[0]!.querySelector("[data-my-device-access]")).toBeNull();
+    expect(rows[0]!.querySelector("[data-my-device-more]")).toBeNull();
     expect(rows[1]!.querySelector("[data-my-device-access]")?.getAttribute("data-my-device-access")).toBe("ask");
+    expect(rows[1]!.querySelector("[data-my-device-more]")).not.toBeNull();
     expect(rows[2]!.querySelector("[data-my-device-access]")).toBeNull();
     expect(rows[2]!.querySelector("[data-my-device-more]")).toBeNull();
     expect(deviceLine(phone, NOW)).toMatch(/^iOS · Last opened 5 hours? ago$|^iOS · Last opened 5 hr/);
@@ -46,12 +50,45 @@ describe("MyDevicesList", () => {
 
   it("saves the access chosen for a computer", async () => {
     await mount([mac, mini]);
-    const pill = host.querySelectorAll<HTMLElement>("[data-my-device-access] [data-pill-select]")[1]!;
+    const pill = host.querySelectorAll<HTMLElement>("[data-my-device-access] [data-pill-select]")[0]!;
     await act(async () => { pill.click(); });
     const never = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.includes("Never allow"))!;
     await act(async () => { never.click(); });
     expect(saved).toEqual([["Mac mini", "never"]]);
-    expect(host.querySelectorAll("[data-my-device-access]")[1]!.getAttribute("data-my-device-access")).toBe("never");
+    expect(host.querySelectorAll("[data-my-device-access]")[0]!.getAttribute("data-my-device-access")).toBe("never");
+  });
+
+  it("numbers two phones of one name, the first keeps it", async () => {
+    await mount([mac, { ...phone, key: "p1", name: "iPhone 16 Pro" }, { ...phone, key: "p2", name: "iPhone 16 Pro" }, { ...phone, key: "p3", name: "iPad Air" }]);
+    expect([...host.querySelectorAll("[data-my-device-name]")].map((node) => node.textContent)).toEqual(["Work MacBook", "iPhone 16 Pro", "iPhone 16 Pro (2)", "iPad Air"]);
+  });
+
+  it("opens a Remove menu on another computer only, a status line with the kind and presence", async () => {
+    await mount([mac, mini]);
+    const row = host.querySelectorAll<HTMLElement>("[data-my-device]")[1]!;
+    expect(row.querySelector("[data-my-device-line]")?.textContent).toMatch(/^Computer · Last opened /);
+    await act(async () => { row.querySelector<HTMLElement>("[data-my-device-more]")!.click(); });
+    const items = [...row.querySelectorAll('[role="menuitem"]')];
+    expect(items.map((item) => item.textContent)).toEqual(["Remove"]);
+  });
+
+  it("keeps an old name of this machine removable from its row", async () => {
+    await mount([mac, { ...mini, key: "k9", name: "Work MacBook.local" }]);
+    const row = host.querySelector<HTMLElement>("[data-current]")!;
+    expect(row.querySelector("[data-my-device-aliases]")).not.toBeNull();
+    await act(async () => { row.querySelector<HTMLElement>("[data-my-device-more]")!.click(); });
+    expect([...row.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(["Remove Work MacBook.local"]);
+  });
+
+  it("renames in place: the pencil opens the field, Escape cancels", async () => {
+    await mount([mac]);
+    await act(async () => { host.querySelector<HTMLElement>("[data-my-device-rename]")!.click(); });
+    const input = host.querySelector<HTMLInputElement>("form input")!;
+    expect(input.value).toBe("Work MacBook");
+    expect(host.querySelector("[data-my-device-line]")?.textContent).toBe("Computer · Online now");
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(host.querySelector("form")).toBeNull();
+    expect(host.querySelector("[data-my-device-name]")?.textContent).toBe("Work MacBook");
   });
 
   it("shows nothing without devices", async () => {

@@ -13,7 +13,7 @@ import { Check, ChevronRight, Menu, Search, SlidersHorizontal, type LucideIcon }
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuDivider } from "./menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider } from "./menu-look";
 
 /** A header control: a 36px square outlined icon button (Team map standard, 2026-11-06). A labelled control adds w-auto, px-3 and gap-1.5. */
 export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
@@ -269,16 +269,18 @@ export function PageMenu({ name, menuRef, label, title, badge, children }: {
 }
 
 /** An entry of the ☰ menu: its icon, its name, then its count or a check when it is the section shown. */
-export function PageMenuItem({ icon: Icon, children, current, trailing, onClick, ...rest }: {
+export function PageMenuItem({ icon: Icon, children, current, trailing, danger, onClick, ...rest }: {
   icon: LucideIcon;
   children: ReactNode;
   /** The section on screen: aria-current and a check (unless `trailing` shows a count). */
   current?: boolean;
   trailing?: ReactNode;
+  /** An entry that deletes or ends something: the danger ink. */
+  danger?: boolean;
   onClick: () => void;
 } & Omit<HTMLAttributes<HTMLButtonElement>, "onClick"> & DataAttributes) {
   return (
-    <button {...rest} type="button" role="menuitem" aria-current={current ? "page" : undefined} onClick={onClick} className={PAGE_MENU_ITEM}>
+    <button {...rest} type="button" role="menuitem" aria-current={current ? "page" : undefined} onClick={onClick} className={danger ? MENU_ROW_DANGER : PAGE_MENU_ITEM}>
       <Icon size={16} />{children}
       {trailing ?? (current && <Check size={14} className="ml-auto text-ink-secondary" aria-hidden="true" />)}
     </button>

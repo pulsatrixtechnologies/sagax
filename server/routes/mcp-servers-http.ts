@@ -23,6 +23,7 @@ import {
   isRemoteMcpServer,
   MAX_DISABLED_TOOLS,
   MAX_MCP_SERVERS,
+  mcpServerNotFound,
   parseMcpServerMutation,
   parseMcpServersImport,
   parseStoredMcpServer,
@@ -188,7 +189,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
       const configured = deps.mcpServers() ?? {};
       const name = Object.keys(configured).find((entry) => entry === mcpTest[1]);
       const raw = name === undefined ? undefined : configured[name];
-      if (name === undefined || raw === undefined) return json(res, 404, { error: "MCP server not found." });
+      if (name === undefined || raw === undefined) return json(res, 404, { error: name === undefined ? "MCP server not found." : mcpServerNotFound(name) });
       const parsed = parseStoredMcpServer(name, raw);
       if (!parsed.ok) return json(res, 400, { error: parsed.error });
       if (skipPersonalInSharedProbe(name, deps.personalMcpNamesForGuard())) {
@@ -208,9 +209,10 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
         if (!isRemoteMcpServer(server)) return json(res, 200, await probeMcpServer(server, undefined, controller.signal, name));
         await deps.mcpOAuth.refresh(name, server, false, controller.signal).catch(() => false);
         const withSignIn = { ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] };
-        let result = await probeMcpServer(withSignIn, undefined, controller.signal, name);
+        // a person pressed Test: a server that answers the unknown tool is asked once with a read-only tool of its own (port of OpenMausBot #5105)
+        let result = await probeMcpServer(withSignIn, undefined, controller.signal, name, { tryReadOnlyTool: true });
         if (!result.ok && result.status === 401 && await deps.mcpOAuth.refresh(name, server, true, controller.signal).catch(() => false)) {
-          result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name);
+          result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name, { tryReadOnlyTool: true });
         }
         // Record a sign-in the Test found. probeServer never drops tokens for a
         // credential-less probe; a Bearer we sent and the server refused still
@@ -312,7 +314,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
       try {
         const name = mcpServerRoute[1]!;
         const current = deps.mcpServers() ?? {};
-        if (!Object.hasOwn(current, name)) return json(res, 404, { error: "MCP server not found." });
+        if (!Object.hasOwn(current, name)) return json(res, 404, { error: mcpServerNotFound(name) });
         if (method === "DELETE") {
           const next = { ...current };
           delete next[name];

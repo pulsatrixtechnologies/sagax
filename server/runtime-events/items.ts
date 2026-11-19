@@ -6,6 +6,7 @@ import { screenSurfaceForTool, screenTouchingTool } from "../computer/screen-fra
 import { dropCancelledVoiceEvent } from "../voice/voice-call-duplex.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
 import { cwToolRowWidget } from "../widgets/cw-widget-actions.ts";
+import { mcpStepProblem } from "../../shared/mcp-failure.ts";
 export function handleItemEvents(event: any, ctx: any, host: any): void {
   const {
     bot, pushMessage, pushAssistantText, routineRun, staleAssistant, liveTurnId,
@@ -61,8 +62,10 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
           stepDurationMs = durationMs;
           // what a phone answered goes to the turn, never into the transcript
           const output = isPhoneToolCallName(toolName) ? PHONE_TOOL_OUTPUT_NOT_KEPT : event.output;
+          // port of OpenMausBot #5105: a failed step on one of the person's MCP servers says which server and why
+          const mcpProblem = mcpStepProblem(toolName, event.ok, typeof event.output === "string" ? event.output : undefined, host.mcpServerNames?.() ?? []);
           host.store.patchMessage(event.threadId, messageId, {
-            tool: { ...existing, name: toolName, ok: event.ok, output, ...(durationMs !== undefined ? { durationMs } : {}), ...(widget ? { widget } : {}) }
+            tool: { ...existing, name: toolName, ok: event.ok, output, ...(durationMs !== undefined ? { durationMs } : {}), ...(widget ? { widget } : {}), ...(mcpProblem ? { mcpProblem } : {}) }
           });
           host.toolMessageByItem.delete(itemKey);
           // #4638: the bot's X call for an approved draft ended: the card turns posted or failed

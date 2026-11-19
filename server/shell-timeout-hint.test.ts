@@ -10,7 +10,7 @@ describe("shellTimeoutHint", () => {
     const hint = shellTimeoutHint("Bash", { command: "ffmpeg -i in.mp3 -ar 16000 out.wav" }, TIMED_OUT)!;
     expect(hint).toContain("Do not rerun it the same way");
     expect(hint).toContain("`timeout`");
-    expect(hint).toContain("600000");
+    expect(hint).toContain("86400000, which is 1440 minutes");
     expect(hint).toContain("nohup");
     expect(hint).not.toContain("mdfind");
   });

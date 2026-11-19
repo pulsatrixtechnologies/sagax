@@ -9,7 +9,10 @@
  * sender's row (asked, answered with a verdict, failed) and the teammate's.
  * send: send_to_bot receipts in the sender's chat (#3246).
  * refusal: a connector's refused sign-in in a failed step's detail, in the
- * app's language (#3515), under the neighbouring failed step. */
+ * app's language (#3515), under the neighbouring failed step.
+ * mcp-problem: a failed step on one of the person's MCP servers says which
+ * server and why on its row, and what to do in its detail (port of
+ * OpenMausBot #5105). */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivityRun } from "../components/ActivityRun";
@@ -263,12 +266,33 @@ function Refusal() {
   );
 }
 
+/* ---- port of OpenMausBot #5105: a failed MCP step names its server and why ---- */
+const signInNeeded: Tool = {
+  name: "mcp__mail__search_threads", ok: false, durationMs: 900,
+  output: 'MCP server "mail" needs authentication', mcpProblem: { kind: "sign-in", server: "mail" },
+};
+const timedOut: Tool = {
+  name: "mail_get_thread", ok: false, durationMs: 600_000,
+  output: "MCP request timed out; execution outcome may be uncertain", mcpProblem: { kind: "timeout", server: "mail" },
+};
+function McpProblem() {
+  return (
+    <Section title="mcp-problem">
+      <div data-shot="mcp-problem" className="flex flex-col gap-2">
+        <ToolActivity tool={failed} />
+        <ToolActivity tool={signInNeeded} />
+        <ToolActivity tool={timedOut} defaultOpen />
+      </div>
+    </Section>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
         <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">Résume le billet #296221</div>
-        {view === "before" ? <Before /> : view === "refusal" ? <Refusal /> : view === "send" ? <Sends /> : view.startsWith("handoff") ? <Handoff /> : <After />}
+        {view === "before" ? <Before /> : view === "refusal" ? <Refusal /> : view === "mcp-problem" ? <McpProblem /> : view === "send" ? <Sends /> : view.startsWith("handoff") ? <Handoff /> : <After />}
         <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Voici le résumé du billet #296221 : gabarit de courriel dans Bamboo, 4 notes.</div>
       </div>
     </div>

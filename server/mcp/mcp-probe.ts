@@ -130,35 +130,62 @@ async function asksForSignIn(url: string, refusal: McpHttpError, at: RefusedAt, 
   return meta !== null && (at === "connect" || meta.source === "protected-resource");
 }
 
+/** A tool the server itself marks read-only and not destructive, and that
+ * cannot run without arguments: called with none, so a server that checks
+ * arguments before it runs anything runs nothing, and any other at worst
+ * does one read (port of OpenMausBot #5105). */
+export function harmlessListedTool(listed: unknown[]): string | undefined {
+  for (const entry of listed) {
+    const tool = entry as { name?: unknown; annotations?: { readOnlyHint?: unknown; destructiveHint?: unknown }; inputSchema?: { required?: unknown } } | null;
+    if (typeof tool?.name !== "string" || !tool.name || tool.annotations?.readOnlyHint !== true || tool.annotations.destructiveHint === true) continue;
+    if (Array.isArray(tool.inputSchema?.required) && tool.inputSchema.required.length > 0) return tool.name;
+  }
+  return undefined;
+}
+
+/** `sign-in`: an HTTP 401 behind a protected-resource document. `answered`:
+ * the server replied at the MCP level, without asking who was calling.
+ * `unclear`: anything else (another status, a timeout, a network failure). */
+async function signInCheck(client: RemoteMcpClient, url: string, name: string, signal: AbortSignal): Promise<"sign-in" | "answered" | "unclear"> {
+  try {
+    await client.request("tools/call", { name, arguments: {} }, AbortSignal.any([signal, AbortSignal.timeout(SIGN_IN_CHECK_MS)]));
+    return "answered";
+  } catch (error) {
+    if (error instanceof McpRpcError) return "answered";
+    return error instanceof McpHttpError && error.kind === "status" && error.status === 401 && await asksForSignIn(url, error, "call", signal) ? "sign-in" : "unclear";
+  }
+}
+
 /** After a tools/list that carried no credentials: do tool calls need a
- * sign-in? One call of SIGN_IN_CHECK_TOOL through the same client. Only HTTP
- * 401 behind a protected-resource document means yes. Any other answer, a
- * timeout or a network failure keeps the verdict Connected. A server that
- * really lists that name is never called. */
+ * sign-in? One call of SIGN_IN_CHECK_TOOL through the same client, and when
+ * the server answers that without asking who is calling and `tryReadOnly` is
+ * set (a person pressed Test), one call of a harmless tool of its own: some
+ * servers (Gmail's) answer an unknown name but refuse every real tool with
+ * HTTP 401. Only HTTP 401 behind a protected-resource document means yes;
+ * any other answer, a timeout or a network failure keeps the verdict
+ * Connected. A server that really lists the check's name is never called. */
 export async function callsNeedSignIn(
   client: RemoteMcpClient,
   url: string,
   listed: unknown[],
   signal: AbortSignal,
+  tryReadOnly = false,
 ): Promise<boolean> {
   if (listed.some((tool) => (tool as { name?: unknown } | null)?.name === SIGN_IN_CHECK_TOOL)) return false;
-  try {
-    await client.request(
-      "tools/call",
-      { name: SIGN_IN_CHECK_TOOL, arguments: {} },
-      AbortSignal.any([signal, AbortSignal.timeout(SIGN_IN_CHECK_MS)]),
-    );
-    return false;
-  } catch (error) {
-    return error instanceof McpHttpError && error.kind === "status" && error.status === 401
-      && await asksForSignIn(url, error, "call", signal);
-  }
+  const unknownTool = await signInCheck(client, url, SIGN_IN_CHECK_TOOL, signal);
+  if (unknownTool !== "answered" || !tryReadOnly) return unknownTool === "sign-in";
+  const real = harmlessListedTool(listed);
+  return real !== undefined && await signInCheck(client, url, real, signal) === "sign-in";
 }
 
 export interface McpProbeOptions {
   /** Start a command server as this bot's AI would: from its own folder
    * (boxed wrap is a leftover where Sagax gains bot-box). */
   asBot?: { id: string; cwd: string };
+  /** Someone asked for this test: a server that answers the unknown tool may
+   * be asked once more with a real read-only tool. Background checks never
+   * call a real tool. */
+  tryReadOnlyTool?: boolean;
 }
 
 /** Prove the MCP handshake and list the tools of one configured server,
@@ -172,7 +199,7 @@ export function probeMcpServer(
   options?: McpProbeOptions,
 ): Promise<McpProbeResult> {
   return isRemoteMcpServer(server)
-    ? probeRemoteMcpServer(server, timeoutMs ?? REMOTE_PROBE_TIMEOUT_MS, signal, serverName)
+    ? probeRemoteMcpServer(server, timeoutMs ?? REMOTE_PROBE_TIMEOUT_MS, signal, serverName, options?.tryReadOnlyTool === true)
     : probeStdioMcpServer(server, timeoutMs ?? STDIO_PROBE_TIMEOUT_MS, signal, serverName, options);
 }
 
@@ -184,6 +211,7 @@ async function probeRemoteMcpServer(
   timeoutMs: number,
   signal?: AbortSignal,
   serverName?: string,
+  tryReadOnlyTool = false,
 ): Promise<McpProbeResult> {
   if (signal?.aborted) return { ok: false, error: publicProbeError("cancelled") };
   const timeout = new AbortController();
@@ -195,7 +223,7 @@ async function probeRemoteMcpServer(
     const result = await client.request("tools/list", {}, combined);
     const tools = result && typeof result === "object" ? (result as { tools?: unknown }).tools : undefined;
     if (!Array.isArray(tools)) return { ok: false, error: "The server did not return a valid MCP tools list." };
-    if (!sendsCredentials(server) && await callsNeedSignIn(client, server.url, tools, combined)) {
+    if (!sendsCredentials(server) && await callsNeedSignIn(client, server.url, tools, combined, tryReadOnlyTool)) {
       return { ok: false, auth: "required", error: SIGN_IN_REQUIRED };
     }
     const secrets = server.oauth?.clientSecret ? { ...server.headers, "oauth.clientSecret": server.oauth.clientSecret } : server.headers;

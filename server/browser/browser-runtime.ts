@@ -157,14 +157,17 @@ function elementRef(params: unknown): string | null {
 /** "free" unless the focus is on a field Sagax filled (or inside a frame,
  * which the top document cannot see into). */
 const FOCUS_ON_FILLED_SCRIPT = `(() => {'use strict';
-const el = document.activeElement;
+let el = document.activeElement;
+// Through open shadow roots, as the fill itself looks (upstream #5846).
+while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
 if (!el) return 'free';
 if (el.tagName === 'IFRAME' || el.hasAttribute('data-sagax-filled')) return 'filled';
 return 'free';
 })()`;
 /** The current contents of the fields Sagax filled, edited or not. */
 const FILLED_VALUES_SCRIPT = `(() => {'use strict';
-return JSON.stringify(Array.from(document.querySelectorAll('[data-sagax-filled]')).map((el) => typeof el.value === 'string' ? el.value : '').filter(Boolean).slice(0, 20));
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
+return JSON.stringify(deepAll(document, '[data-sagax-filled]').map((el) => typeof el.value === 'string' ? el.value : '').filter(Boolean).slice(0, 20));
 })()`;
 /** The taint a person's own sign-in leaves (armForPerson): not an origin. */
 const PERSON_SIGN_IN = "person-sign-in";
@@ -175,7 +178,8 @@ export const NOT_ARMED_FOR_PERSON = "This browser was not prepared for your sign
 /** Empty every password and one-time code field of the top document. */
 const CLEAR_SIGN_IN_FIELDS_SCRIPT = `(() => {'use strict';
 let cleared = 0;
-for (const el of Array.from(document.querySelectorAll('input'))) {
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
+for (const el of deepAll(document, 'input')) {
   const code = el.autocomplete === 'one-time-code' || /otp|totp|2fa|mfa|one.?time|verification|security.?code|auth.?code/i.test([el.name, el.id, el.autocomplete, el.placeholder].join(' '));
   if (el.type !== 'password' && !code) continue;
   if (!el.value) continue;

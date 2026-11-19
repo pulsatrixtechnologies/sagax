@@ -262,7 +262,7 @@ export interface InternalRequestsDeps {
 const routineTimestamp = (value: number | undefined) =>
   value !== undefined && Number.isFinite(value) ? new Date(value).toISOString() : null;
 
-function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequestsRun) {
+function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequestsRun, full = false) {
   // Routines created in the calendar predate chat-card redaction and may
   // contain a credential in their instructions. The list result is handed
   // back to the model, so scrub the complete value before taking its preview.
@@ -276,8 +276,11 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     ...(routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
     ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     ...(routine.effort ? { effort: routine.effort } : {}),
-    instructions: safeInstructions.slice(0, 2_000),
-    instructionsTruncated: safeInstructions.length > 2_000,
+    // One routine read gives the whole instructions, so a bot never saves a
+    // cut copy back (upstream #5907); the list keeps its preview.
+    instructions: full ? safeInstructions : safeInstructions.slice(0, 2_000),
+    instructionsTruncated: !full && safeInstructions.length > 2_000,
+    instructionsRedacted: safeInstructions !== routine.prompt,
     continuity: routine.continuity === true,
     ...(routine.runOnStartup === true ? { runOnStartup: true } : {}),
     overlap: routine.overlap ?? "skip",
@@ -425,7 +428,7 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
         now: new Date().toISOString(),
         timeZone: deps.timeZone(),
         routine: {
-          ...agentRoutine(one, latestRuns.get(one.id)),
+          ...agentRoutine(one, latestRuns.get(one.id), true),
           ...(ownedHook ? { webhookId: ownedHook.id } : {}),
           ...(one.botId !== from.id ? { botId: one.botId } : {}),
         },

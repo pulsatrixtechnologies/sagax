@@ -12,6 +12,7 @@
 // Composer dictation omits this flag and keeps its existing press-to-stop
 // behavior, while call mode opts into silence endpointing.
 import AVFoundation
+import Darwin
 import Foundation
 import Speech
 
@@ -50,6 +51,37 @@ let finishFile: String? = {
   guard let index = args.firstIndex(of: "--finish-file"), index + 1 < args.count else { return nil }
   return args[index + 1]
 }()
+
+// The owner lifeline (upstream #3840): Electron holds the only writer of this
+// FIFO, so EOF means the app died and the helper stops capturing at once.
+let lifelineFile: String = {
+  let args = CommandLine.arguments
+  guard let index = args.firstIndex(of: "--lifeline-file"), index + 1 < args.count else {
+    fail("missing-lifeline")
+  }
+  return args[index + 1]
+}()
+let lifelineFD = Darwin.open(lifelineFile, O_RDONLY | O_NONBLOCK)
+guard lifelineFD >= 0 else { fail("lifeline-unavailable") }
+
+func checkOwner() {
+  var byte: UInt8 = 0
+  let count = Darwin.read(lifelineFD, &byte, 1)
+  guard count == 0 || (count < 0 && errno != EAGAIN && errno != EINTR) else { return }
+  let sessionDir = (lifelineFile as NSString).deletingLastPathComponent
+  // Owner death leaves private transcripts behind. Remove only this session's known files, never a directory tree.
+  for name in ["stdout.ndjson", "stderr.log", "stop", "finish", "owner.pipe"] {
+    _ = unlink((sessionDir as NSString).appendingPathComponent(name))
+  }
+  _ = rmdir(sessionDir)
+  exit(0)
+}
+
+// LaunchServices reparents the helper. FIFO EOF binds capture to Electron's lifetime without trusting a reusable PID.
+checkOwner()
+let ownerSource = DispatchSource.makeReadSource(fileDescriptor: lifelineFD, queue: .global(qos: .userInitiated))
+ownerSource.setEventHandler { checkOwner() }
+ownerSource.resume()
 
 // LaunchServices gives the helper the bundle identity TCC needs, but it also
 // means the parent cannot terminate it by killing the `open -W` process. A

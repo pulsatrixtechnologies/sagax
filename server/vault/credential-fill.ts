@@ -96,16 +96,20 @@ export function aimOf(request: FillRequest): Aim {
 
 // The in-page finder, shared by the probe and the fill so both judge the
 // same element. It never crosses into a frame: a selector only searches the
-// top document, and a focused iframe is reported as one.
+// top document, and a focused iframe is reported as one. It does look inside
+// open shadow roots (web components), as a person sees them (upstream #5846).
 const FINDER = String.raw`
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
+const deepActive = () => { let node = document.activeElement; while (node && node.shadowRoot && node.shadowRoot.activeElement) node = node.shadowRoot.activeElement; return node; };
+const hostOf = (el) => { const root = el.getRootNode ? el.getRootNode() : null; return root && root.host ? root.host : null; };
 const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
 const usable = (el) => (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.disabled && !el.readOnly && el.type !== 'hidden';
 const textLike = (el) => el instanceof HTMLInputElement && ['text','email','tel','number','search',''].includes(el.type);
-const hint = (el) => [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label')].join(' ');
+const hint = (el) => { const host = hostOf(el); const labels = el.labels ? Array.from(el.labels).map((label) => label.textContent || '').join(' ') : ''; return [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label'), host && host.getAttribute('name'), host && host.getAttribute('id'), host && host.getAttribute('label'), host && host.getAttribute('aria-label'), host && host.getAttribute('placeholder'), host && host.getAttribute('autocomplete'), labels].join(' '); };
 function pick(aim, field) {
-  if (aim.mode === 'focused') { const el = document.activeElement; if (el && el.tagName === 'IFRAME') return { frame: true }; return { el }; }
+  if (aim.mode === 'focused') { const el = deepActive(); if (el && el.tagName === 'IFRAME') return { frame: true }; return { el }; }
   if (aim.mode === 'selector') { let el = null; try { el = document.querySelector(aim.selector); } catch (e) { return { bad: true }; } if (el && el.tagName === 'IFRAME') return { frame: true }; return { el }; }
-  const inputs = Array.from(document.querySelectorAll('input,textarea')).filter((el) => usable(el) && visible(el));
+  const inputs = deepAll(document, 'input,textarea').filter((el) => usable(el) && visible(el));
   if (field === 'password') return { el: inputs.find((el) => el.type === 'password') };
   if (field === 'totp') return { el: inputs.find((el) => el.autocomplete === 'one-time-code') || inputs.find((el) => textLike(el) && /otp|totp|2fa|mfa|one.?time|verification|security.?code|auth.?code/i.test(hint(el))) };
   if (field === 'username') {
@@ -188,12 +192,12 @@ return JSON.stringify({ top: true, problem, targets, methods });
  * answer is a bare word, never the value. */
 export function writeScript(nonce: string, field: VaultFillField, origin: string, value: string): string {
   return `(() => {'use strict';${originGuard(origin, "moved")}${FINDER}
-const el = document.querySelector(${JSON.stringify(nonceSelector(nonce))});
+const el = deepAll(document, ${JSON.stringify(nonceSelector(nonce))})[0] || null;
 if (!el || !el.isConnected || el.ownerDocument !== document) return 'moved';
 const problem = judge({ el }, ${JSON.stringify(field)});
 if (problem) return problem;
-if (document.activeElement !== el) el.focus();
-if (document.activeElement !== el) return 'focus';
+if (deepActive() !== el) el.focus();
+if (deepActive() !== el) return 'focus';
 el.setAttribute('autocomplete', 'off');
 el.setAttribute('data-sagax-filled', '1');
 const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;

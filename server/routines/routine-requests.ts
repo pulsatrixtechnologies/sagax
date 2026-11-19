@@ -621,6 +621,14 @@ export type UndoRoutineRequestResult =
       ownersBefore?: boolean;
     };
 
+/** A bot reads instructions with their credentials masked, so replacing
+ * instructions that hold one would save the masked copy over the real one.
+ * Other fields still change (upstream #5907). */
+export function instructionsUpdateRefusal(prompt: string, instructions: string | undefined): string | null {
+  if (instructions === undefined || redactSecretsInText(prompt) === prompt) return null;
+  return "These instructions contain hidden credentials, so the bot cannot safely replace them. Ask the person to edit the instructions on the Automations page. Other fields can be changed by omitting instructions.";
+}
+
 export class RoutineRequestError extends Error {
   readonly status: number;
   /** True when no retry of this card can ever succeed — the routine moved
@@ -1028,11 +1036,14 @@ function normalizedOperation(
   const current = ownedRoutine(manager, id, ownerBotId);
   if (!current) throw new RoutineRequestError("That routine does not exist", 404);
   if (validated.action === "update") {
+    const changes = normalizeChanges(validated.changes, now, current.schedule);
+    const refusal = instructionsUpdateRefusal(current.prompt, changes.instructions);
+    if (refusal) throw new RoutineRequestError(refusal, 409);
     return {
       action: "update",
       routineId: id,
       expectedUpdatedAt: current.updatedAt,
-      changes: normalizeChanges(validated.changes, now, current.schedule),
+      changes,
       ...(validated.forBot ? { forBot: validated.forBot } : {}),
     };
   }

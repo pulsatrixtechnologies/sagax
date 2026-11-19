@@ -9,6 +9,7 @@ import {
   RoutineRequestError,
   RoutineRequestService,
   consequenceLine,
+  instructionsUpdateRefusal,
   routineRequestFingerprint,
   type RoutineProposalInput,
   type RoutineRequestMessage,
@@ -119,6 +120,27 @@ function cardFingerprint(card: RoutineRequestOptionCard, messageId: string): str
   if (!card.routineRequest) throw new Error("missing routine request payload");
   return routineRequestFingerprint(card.routineRequest, messageId);
 }
+
+describe("instructions holding a credential (upstream #5907)", () => {
+  it("refuses instruction replacement after redaction without changing other fields, and allows a plain rename", async () => {
+    const { routines, service } = harness(undefined, undefined, undefined, () => "self");
+    const prompt = "Review the queue.\n".repeat(180) + "Use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789.";
+    const created = await service.submit({ botId: "bot-a", threadId: "thread", proposal: createProposal({ instructions: prompt }) });
+    expect(created.state).toBe("applied");
+    const id = routines.listRoutines()[0]!.id;
+    const before = structuredClone(routines.listRoutines());
+    const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
+    await expect(submit({ name: "Must not apply", instructions: "Only the visible text." })).rejects.toMatchObject({ status: 409 });
+    expect(routines.listRoutines()).toEqual(before);
+    await submit({ name: "Safe rename" });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Safe rename", prompt });
+  });
+
+  it("allows replacing ordinary instructions, long ones included", () => {
+    expect(instructionsUpdateRefusal("Check the queue.\n".repeat(500), "Check the queue twice.")).toBeNull();
+    expect(instructionsUpdateRefusal("Use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789.", undefined)).toBeNull();
+  });
+});
 
 describe("routine compute settings", () => {
   it("accepts effort, applies model and effort without an access card, and Undo restores both", async () => {

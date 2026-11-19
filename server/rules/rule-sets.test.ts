@@ -162,10 +162,24 @@ describe("rules_update with a set", () => {
     expect(updateRules(BOT, { action: "append", text: "Ask first.", set: "Rules" })).toMatchObject({ ok: true, path: "RULES.md" });
     expect(read("rules/emails.md")).toBe("# Emails\n- Sign every email.\n");
     expect(read("RULES.md")).toBe("# Rules\n\n- Ask first.\n");
-    expect(updateRules(BOT, { action: "append", text: "x", set: "Nope" })).toMatchObject({ ok: false, code: "missing" });
+    expect(updateRules(BOT, { action: "replace", oldText: "x", text: "y", set: "Nope" })).toMatchObject({ ok: false, code: "missing" });
     const conflict = updateRules(BOT, { action: "remove", oldText: "missing", set: "client emails" });
     expect(conflict).toMatchObject({ ok: false, code: "conflict" });
     expect(conflict.ok ? "" : conflict.error).toContain("rules/emails.md");
+  });
+
+  it("creates the set an append names when the bot has none by that name (#5019)", () => {
+    write("RULES.md", rules(RULES_MAX_LINES));
+    expect(updateRules(BOT, { action: "append", text: "One more rule." })).toMatchObject({ ok: false, code: "over-budget" });
+    const created = updateRules(BOT, { action: "append", text: "One more rule.", set: "Répartition" });
+    expect(created).toMatchObject({ ok: true, path: "rules/repartition.md", set: "Répartition", created: true });
+    expect(read("rules/repartition.md")).toBe("# Répartition\n\n- One more rule.\n");
+    expect(listRuleSets(BOT).map((set) => [set.id, set.name, set.enabled])).toEqual([["rules", null, true], ["repartition", "Répartition", true]]);
+    // the next append to that name lands in the same set, never a second one
+    expect(updateRules(BOT, { action: "append", text: "Another.", set: "répartition" })).toMatchObject({ ok: true, path: "rules/repartition.md" });
+    expect(listRuleSets(BOT)).toHaveLength(2);
+    expect(updateRules(BOT, { action: "remove", oldText: "x", set: "Elsewhere" })).toMatchObject({ ok: false, code: "missing" });
+    expect(listRuleSets(BOT)).toHaveLength(2);
   });
 
   it("keeps working as before on a bot with RULES.md only", () => {

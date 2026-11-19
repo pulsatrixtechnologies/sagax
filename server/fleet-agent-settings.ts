@@ -255,7 +255,7 @@ const listOf = (value: unknown): unknown[] => Array.isArray(value) ? value : [va
 /** rules as rules_update takes it: { action: append with text | replace
  * with text and old_text | remove with old_text, set? }, or a list. */
 function parseRulesChanges(value: unknown): AgentRulesChange[] | string {
-  const shape = "rules is { action: \"append\", text } | { action: \"replace\", old_text, text } | { action: \"remove\", old_text }, with an optional set (a rule set's name), or a list of them; one rule per change, at most 500 characters";
+  const shape = "rules is { action: \"append\", text } | { action: \"replace\", old_text, text } | { action: \"remove\", old_text }, with an optional set (a rule set's name; an append with a new name creates that set), or a list of them; one rule per change, at most 500 characters";
   const items = listOf(value);
   if (!items.length || items.length > AGENT_WORKSPACE_CHANGES_MAX) return `${shape}, at most ${AGENT_WORKSPACE_CHANGES_MAX} changes.`;
   const out: AgentRulesChange[] = [];

@@ -305,12 +305,42 @@ export function docPathFor(title: string): string {
 
 const headingTitle = (line: string) => line.replace(/^#{1,6}\s+/, "").replace(/\s*#*\s*$/, "").replace(/:\s*$/, "").trim();
 
-/** One piece to file: a whole unit, or a part of one. */
+/** One piece to file: a whole unit, or a part of one. `spans` are the
+ * exact passages of the unit it takes out of the soul once filed: the unit,
+ * a part, or what is left of a unit around its parts (its text as filed is
+ * that rest folded, which the unit does not hold as such). */
 interface PlannedMove {
   unit: number;
   kind: SoulSortKind;
   text: string;
   title: string;
+  spans: string[];
+}
+
+const BARE_BULLET = /^\s*(?:[-*+•]|\d{1,3}[.)])?\s*$/;
+
+/** The passages of `text` around `parts` (each cut at its first place not
+ * already cut), without their list marker: exact substrings of `text`. Pure. */
+function spansAround(text: string, parts: readonly string[]): string[] {
+  const cuts: Array<[number, number]> = [];
+  for (const part of parts) {
+    let from = 0;
+    let at = text.indexOf(part, from);
+    while (at !== -1 && cuts.some(([start, end]) => at < end && at + part.length > start)) {
+      from = at + 1;
+      at = text.indexOf(part, from);
+    }
+    if (at !== -1) cuts.push([at, at + part.length]);
+  }
+  cuts.sort((a, b) => a[0] - b[0]);
+  const spans: string[] = [];
+  let position = 0;
+  for (const [start, end] of cuts) {
+    spans.push(text.slice(position, start));
+    position = Math.max(position, end);
+  }
+  spans.push(text.slice(position));
+  return spans.map((span) => span.trim().replace(BULLET, "").trim()).filter((span) => span && !BARE_BULLET.test(span));
 }
 
 /** What the classification decided, before anything is written. */
@@ -330,13 +360,14 @@ function plannedMoves(parsed: ReturnType<typeof soulUnits>, items: SoulSortPlan[
     const near = [...unit.context].reverse().find(Boolean);
     const title = verdict.title || (near ? headingTitle(near) : "") || "Notes";
     for (const part of verdict.parts ?? []) {
-      if (part.kind !== "persona") moves.push({ unit: index, kind: part.kind, text: part.text, title });
+      if (part.kind !== "persona") moves.push({ unit: index, kind: part.kind, text: part.text, title, spans: [part.text] });
     }
     if (verdict.kind !== "persona") {
       let rest = unit.text;
       for (const part of verdict.parts ?? []) rest = rest.replace(part.text, " ");
       if (verdict.parts?.length) rest = rest.replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").trim();
-      if (rest.replace(BULLET, "").trim()) moves.push({ unit: index, kind: verdict.kind, text: verdict.parts?.length ? rest : unit.text, title });
+      const spans = verdict.parts?.length ? spansAround(unit.text, verdict.parts.map((part) => part.text)) : [unit.text];
+      if (rest.replace(BULLET, "").trim() && spans.length) moves.push({ unit: index, kind: verdict.kind, text: verdict.parts?.length ? rest : unit.text, title, spans });
     }
   }
   return moves;
@@ -347,22 +378,24 @@ function plannedMoves(parsed: ReturnType<typeof soulUnits>, items: SoulSortPlan[
  * runs twice (a retry, a client that sends the same rule again) files
  * nothing twice. */
 export interface SoulSortWriters {
-  /** updateRules(botId, { action: "append", text }) */
+  /** updateRules(botId, { action: "append", text }): the first set that is
+   * on and has room; `path` is the file it went to. */
   appendRule(botId: string, text: string, actor: SoulWriteActor): WriteOutcome;
-  /** The rules a bot loads now (RULES.md and its other sets). */
+  /** The rules a bot loads now (RULES.md and its other sets that are on). */
   currentRules(botId: string): string;
   /** A document's text, null when it does not exist. */
   readDoc(botId: string, path: string): string | null;
   /** updateDoc(botId, { action, path, text }) */
   writeDoc(botId: string, update: { action: "write" | "append"; path: string; text: string }, actor: SoulWriteActor): WriteOutcome;
-  /** MEMORY.md as it is now. */
-  memoryText(botId: string): string;
+  /** MEMORY.md as it is now, one fact per line: each live entry's fact
+   * without its date, and the lines written by hand. */
+  memoryLines(botId: string): string[];
   /** updateMemory(botId, { action: "append", text }) */
   appendMemory(botId: string, text: string, actor: SoulWriteActor): WriteOutcome;
   memoryOn(botId: string): boolean;
 }
 
-export type WriteOutcome = { ok: true } | { ok: false; error: string };
+export type WriteOutcome = { ok: true; path?: string } | { ok: false; error: string };
 
 export const MEMORY_PIECE_MAX = 1_000;
 
@@ -385,7 +418,14 @@ function applySoulSort(
     if (!verdict) kept.push({ text: soulSortExcerpt(plan.parsed.units[unit]!.text), reason: "unsorted" });
   }
   const norm = (line: string) => line.replace(BULLET, "").replace(/\s+/g, " ").trim().toLowerCase();
-  const flat = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+  // A piece counts as already there only when a whole line holds it, never
+  // a longer line around it: "Bob" is not in "Bobby" (a substring test filed
+  // a fact out of the soul and wrote it nowhere).
+  const holds = (lines: Iterable<string>) => {
+    const have = new Set(Array.from(lines, norm).filter(Boolean));
+    return (text: string) => text.split("\n").map(norm).filter(Boolean).every((line) => have.has(line));
+  };
+  const fileSpans = (move: PlannedMove) => { for (const span of move.spans) fileOut(move.unit, span); };
   // documents: the pieces of one title go to one file, in order
   const docs = new Map<string, { title: string; moves: PlannedMove[] }>();
   for (const move of plan.moves) {
@@ -394,6 +434,7 @@ function applySoulSort(
       const pieces = splitUnder(foldItem(move.text), ruleMax);
       let written = 0;
       let refusal: string | null = null;
+      const paths = new Set<string>();
       for (const piece of pieces) {
         if (have.has(norm(piece))) {
           written += 1;
@@ -404,18 +445,20 @@ function applySoulSort(
           refusal = done.error;
           break;
         }
+        paths.add(done.path ?? "RULES.md");
         have.add(norm(piece));
         written += 1;
       }
+      const to = paths.size ? Array.from(paths).join(", ") : "RULES.md";
       if (written === pieces.length) {
-        fileOut(move.unit, move.text);
-        moved.push({ kind: "rule", to: "RULES.md", text: soulSortExcerpt(move.text), entries: pieces.length });
+        fileSpans(move);
+        moved.push({ kind: "rule", to, text: soulSortExcerpt(move.text), entries: pieces.length });
       } else {
         // the rules already written stay written; the rest stays in the soul
         if (written > 0) {
-          fileOut(move.unit, move.text);
+          fileSpans(move);
           fileOut(move.unit, `\u0000${pieces.slice(written).join(" ")}`);
-          moved.push({ kind: "rule", to: "RULES.md", text: soulSortExcerpt(pieces.slice(0, written).join(" ")), entries: written });
+          moved.push({ kind: "rule", to, text: soulSortExcerpt(pieces.slice(0, written).join(" ")), entries: written });
         }
         kept.push({ text: soulSortExcerpt(pieces.slice(written).join(" ")), reason: "refused", ...(refusal ? { detail: refusal } : {}) });
       }
@@ -431,11 +474,11 @@ function applySoulSort(
         else acc[acc.length - 1] = `${acc[acc.length - 1]}\n${line}`;
         return acc;
       }, []).flatMap((piece) => splitUnder(foldItem(piece), MEMORY_PIECE_MAX));
-      const memory = flat(writers.memoryText(botId));
+      const remembered = holds(writers.memoryLines(botId));
       let written = 0;
       let refusal: string | null = null;
       for (const piece of pieces) {
-        if (memory.includes(flat(piece))) {
+        if (remembered(piece)) {
           written += 1;
           continue;
         }
@@ -447,11 +490,11 @@ function applySoulSort(
         written += 1;
       }
       if (written === pieces.length) {
-        fileOut(move.unit, move.text);
+        fileSpans(move);
         moved.push({ kind: "fact", to: "MEMORY.md", text: soulSortExcerpt(move.text), entries: pieces.length });
       } else {
         if (written > 0) {
-          fileOut(move.unit, move.text);
+          fileSpans(move);
           fileOut(move.unit, `\u0000${pieces.slice(written).join("\n")}`);
           moved.push({ kind: "fact", to: "MEMORY.md", text: soulSortExcerpt(pieces.slice(0, written).join(" ")), entries: written });
         }
@@ -472,13 +515,13 @@ function applySoulSort(
       return `${index === 0 ? "" : joined ? "\n" : "\n\n"}${move.text.trim()}`;
     }).join("");
     const current = writers.readDoc(botId, path);
-    const done: WriteOutcome = current !== null && flat(current).includes(flat(body))
+    const done: WriteOutcome = current !== null && holds(current.split("\n"))(body)
       ? { ok: true }
       : current !== null
         ? writers.writeDoc(botId, { action: "append", path, text: `\n${body}\n` }, actor)
         : writers.writeDoc(botId, { action: "write", path, text: `# ${doc.title}\n\n${body}\n` }, actor);
     if (done.ok) {
-      for (const move of doc.moves) fileOut(move.unit, move.text);
+      for (const move of doc.moves) fileSpans(move);
       for (const kind of new Set(doc.moves.map((move) => move.kind))) {
         const mine = doc.moves.filter((move) => move.kind === kind);
         moved.push({ kind, to: path, text: soulSortExcerpt(mine.map((move) => move.text).join(" ")), entries: mine.length });
@@ -506,7 +549,7 @@ function rebuildSoul(parsed: ReturnType<typeof soulUnits>, filed: Map<number, st
       if (text.startsWith("\u0000")) back.push(text.slice(1));
       else rest = rest.replace(text, " ");
     }
-    rest = rest === unit.text ? rest : rest.split("\n").map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd()).filter((line) => line.trim()).join("\n").trim();
+    rest = rest === unit.text ? rest : rest.split("\n").map((line) => line.replace(/(\S)[ \t]{2,}/g, "$1 ").trimEnd()).filter((line) => !BARE_BULLET.test(line)).join("\n").trim();
     const kept = [rest.replace(BULLET, "").trim() ? rest : "", ...back].filter(Boolean).join("\n");
     replacement.set(index, kept || null);
   }

@@ -305,7 +305,7 @@ add({
 // docs_update's own functions answer for the person (bot-workspace.ts)
 add({
   key: "bot.rules", family: "bot", target: "bot", value: "object",
-  label: "Its rules, RULES.md (get: every rule set's text; set: {action: append, text} | {action: replace, oldText, text} | {action: remove, oldText}, optional set; one rule, at most 500 characters)", where: "Bot editor > Rules",
+  label: "Its rules, RULES.md (get: every rule set's text; set: {action: append, text} | {action: replace, oldText, text} | {action: remove, oldText}, optional set, a new name creates it; one rule, at most 500 characters)", where: "Bot editor > Rules",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/workspace/file`, query: { path: "RULES.md" }, maxChars: 30_000 }),
   write: (ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/workspace/rules`, body: v } : "value is {action: append, text} | {action: replace, oldText, text} | {action: remove, oldText}.",
 });

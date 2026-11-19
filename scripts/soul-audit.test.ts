@@ -7,7 +7,7 @@ import { auditSoul } from "./soul-audit.ts";
 describe("soul audit", () => {
   it("a persona and its voice are clean, the voice rule included", () => {
     expect(auditSoul([
-      "Tu es Melonie, l'adjointe de l'équipe.",
+      "Tu es Nora, l'adjointe de l'équipe.",
       "",
       "## Voix",
       "",

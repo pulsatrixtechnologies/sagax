@@ -118,7 +118,7 @@ export const DEF_RULES_UPDATE = {
         action: { type: "string", enum: ["append", "replace", "remove"] },
         text: { type: "string", minLength: 1, maxLength: 500, description: "The rule, for append or replace." },
         old_text: { type: "string", minLength: 1, description: "Exact unique passage, for replace or remove." },
-        set: { type: "string", minLength: 1, maxLength: 60, description: "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set." },
+        set: { type: "string", minLength: 1, maxLength: 60, description: "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set. An append with a new name creates that set (when a set is full)." },
       },
       required: ["action"],
     },

@@ -8,8 +8,9 @@ import { DATA_DIR } from "../config.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
 import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
 import { MEMORY_INDEX, RULES_PATH, readMemoryDoc } from "../memory/memory-store.ts";
-import { RULE_MAX_CHARS } from "../rules/rule-sets.ts";
-import { updateRules } from "../workspace/workspace-tools.ts";
+import { RULE_MAX_CHARS, writeRuleSets } from "../rules/rule-sets.ts";
+import { updateDoc, updateRules } from "../workspace/workspace-tools.ts";
+import { updateMemory } from "../workspace/workspace.ts";
 import {
   createSoulSorter,
   docPathFor,
@@ -195,6 +196,70 @@ describe("the sort", () => {
     expect(sorted.report.moved.map((move) => move.text)).toEqual(["- Rule number 3."]);
     expect(sorted.report.kept.map((kept) => [kept.reason, kept.text])).toEqual([["refused", "A new rule that does not fit."], ["refused", "One more that does not fit."]]);
     expect(sorted.report.kept[0]!.detail).toMatch(/Nothing was saved/);
+  });
+
+  it("a mixed add: the voice stays, the rule and the procedure each land once, word for word", async () => {
+    const before = "# Nora\n\nTu es Nora, l'adjointe d'Alex.\n\n## Voix\n\nCourte, chaleureuse.";
+    const voice = "Tutoie toujours Alex, sur un ton complice.";
+    const rule = "Never send an email to a client without asking Alex first.";
+    const after = `${before}\n\n${voice}\n\n${rule}\n\n## Ticket triage\n\n- Read the ticket.\n- Check the agreement.\n`;
+    const { classifier } = model((text) => text === rule ? { kind: "rule" } : text.startsWith("- ") ? { kind: "procedure", title: "Ticket triage" } : { kind: "persona" });
+    const sorted = await sorter(classifier).sort(BOT, before, after, "person");
+    expect(sorted.soul).toBe(`${before}\n\n${voice}\n`);
+    expect(rules().split("\n").filter((line) => line === `- ${rule}`)).toHaveLength(1);
+    expect(readMemoryDoc(BOT, "docs/ticket-triage.md").text).toBe("# Ticket triage\n\n- Read the ticket.\n- Check the agreement.\n");
+    expect(sorted.report.kept).toEqual([]);
+  });
+
+  it("a rule paragraph with a voice sentence: the rules leave the soul, the voice stays (never in two places)", async () => {
+    const after = "You are Marc.\n\nAlways check the schedule before booking. Say it warmly. Never book on Sunday.";
+    const { classifier } = model(() => ({ kind: "rule", parts: [{ text: "Say it warmly.", kind: "persona" }] }));
+    const sorted = await sorter(classifier).sort(BOT, "You are Marc.", after, "person");
+    expect(sorted.soul).toBe("You are Marc.\n\nSay it warmly.");
+    expect(rules()).toContain("- Always check the schedule before booking. Never book on Sunday.");
+    expect(sorted.soul).not.toContain("Never book on Sunday");
+  });
+
+  it("a fact that is only part of a remembered one is written, never dropped", async () => {
+    expect(updateMemory(BOT, { action: "append", text: "Client contact: Bobby Tremblay" }).ok).toBe(true);
+    const after = "You are Marc.\n\nClient contact: Bob";
+    const { classifier } = model(() => ({ kind: "fact" }));
+    const sorted = await sorter(classifier).sort(BOT, "You are Marc.", after, "person");
+    expect(sorted.soul).toBe("You are Marc.");
+    expect(readMemoryDoc(BOT, MEMORY_INDEX).text.split("\n").some((line) => line.endsWith("· Client contact: Bob"))).toBe(true);
+    // the same fact again is not written twice
+    const again = await sorter(classifier).sort(BOT, "You are Marc.", after, "person");
+    expect(again.soul).toBe("You are Marc.");
+    expect(readMemoryDoc(BOT, MEMORY_INDEX).text.match(/Client contact: Bob$/gm)).toHaveLength(1);
+  });
+
+  it("a procedure a document holds only inside longer lines is written, never dropped", async () => {
+    expect(updateDoc(BOT, { action: "write", path: "docs/ticket-triage.md", text: "# Ticket triage\n\n- Read the ticket twice, then call.\n" }).ok).toBe(true);
+    const after = "You are Marc.\n\n- Read the ticket";
+    const { classifier } = model(() => ({ kind: "procedure", title: "Ticket triage" }));
+    const sorted = await sorter(classifier).sort(BOT, "You are Marc.", after, "person");
+    expect(sorted.soul).toBe("You are Marc.");
+    expect(readMemoryDoc(BOT, "docs/ticket-triage.md").text).toMatch(/^- Read the ticket$/m);
+  });
+
+  it("a rule held only by a set that is off is filed again, so it stays in force", async () => {
+    writeRuleSets(BOT, [{ id: "rules", name: null, enabled: true }, { id: "old", name: "Old", enabled: false }]);
+    expect(updateRules(BOT, { action: "append", text: "Never book on Sunday.", set: "Old" }).ok).toBe(true);
+    const { classifier } = model(() => ({ kind: "rule" }));
+    const sorted = await sorter(classifier).sort(BOT, "You are Marc.", "You are Marc.\n\nNever book on Sunday.", "person");
+    expect(sorted.soul).toBe("You are Marc.");
+    expect(rules()).toContain("- Never book on Sunday.");
+  });
+
+  it("a full RULES.md files the rule in the next set that is on (#5019)", async () => {
+    for (let index = 0; index < 98; index += 1) expect(updateRules(BOT, { action: "append", text: `Rule number ${index}.` }).ok).toBe(true);
+    expect(updateRules(BOT, { action: "append", text: "Does not fit." })).toMatchObject({ ok: false, code: "over-budget" });
+    expect(updateRules(BOT, { action: "append", text: "First of the new set.", set: "Répartition" })).toMatchObject({ ok: true, created: true });
+    const { classifier } = model(() => ({ kind: "rule" }));
+    const sorted = await sorter(classifier).sort(BOT, "You are Marc.", "You are Marc.\n\n- Never book on Sunday.", "person");
+    expect(sorted.soul).toBe("You are Marc.");
+    expect(readMemoryDoc(BOT, "rules/repartition.md").text).toContain("- Never book on Sunday.");
+    expect(sorted.report.moved.map((move) => move.to)).toEqual(["rules/repartition.md"]);
   });
 
   it("a draft is sorted when the editor is left, against the soul it started from", async () => {

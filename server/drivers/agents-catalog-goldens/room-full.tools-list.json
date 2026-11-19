@@ -2000,7 +2000,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 60,
-            "description": "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set."
+            "description": "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set. An append with a new name creates that set (when a set is full)."
           }
         },
         "required": [

@@ -11,6 +11,16 @@ export const CAPABILITY_UPDATES_ROUTE = "/api/me/capability-updates";
 /** The window event the live frame `capability.updates` raises (use-store-live). */
 export const CAPABILITY_UPDATES_EVENT = "sagax:capability-updates";
 
+/** One plugin the app updated by itself because the catalog had a newer version. */
+export interface AutoUpdatedLine { name: string; from?: string; to?: string; notes?: string }
+let autoUpdatedLines: AutoUpdatedLine[] = [];
+/** Remember what was updated by itself, until the person closes the line (the
+ * window may be closed when the frame arrives). */
+export function noteAutoUpdated(lines: readonly AutoUpdatedLine[]): void {
+  const names = new Set(lines.map((line) => line.name));
+  autoUpdatedLines = [...autoUpdatedLines.filter((line) => !names.has(line.name)), ...lines];
+}
+
 export type UpdateKind = "plugin" | "skill" | "connector";
 
 export interface CapabilityUpdateItem {
@@ -108,6 +118,7 @@ export function useCapabilityUpdates(active = true) {
   const [running, setRunning] = useState<ReadonlySet<string>>(() => new Set());
   const [all, setAll] = useState(false);
   const [failures, setFailures] = useState<UpdateFailure[]>([]);
+  const [autoUpdated, setAutoUpdated] = useState<AutoUpdatedLine[]>(autoUpdatedLines);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const load = useCallback(async () => {
@@ -121,7 +132,7 @@ export function useCapabilityUpdates(active = true) {
   useEffect(() => {
     if (!active) return;
     void load();
-    const again = () => void load();
+    const again = () => { setAutoUpdated(autoUpdatedLines); void load(); };
     window.addEventListener(CAPABILITY_UPDATES_EVENT, again);
     return () => window.removeEventListener(CAPABILITY_UPDATES_EVENT, again);
   }, [active, load]);
@@ -152,6 +163,8 @@ export function useCapabilityUpdates(active = true) {
     running,
     updatingAll: all,
     failures,
+    autoUpdated,
+    dismissAutoUpdated: (name: string) => { autoUpdatedLines = autoUpdatedLines.filter((line) => line.name !== name); setAutoUpdated(autoUpdatedLines); },
     dismissFailure: (key: string) => setFailures((current) => current.filter((entry) => entry.key !== key)),
     update: (keys: string[]) => run({ keys }),
     updateAll: () => run({ all: true }),

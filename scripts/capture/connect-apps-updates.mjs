@@ -77,6 +77,10 @@ try {
   await page.click("[data-plugins-update-all]");
   await page.waitForSelector("[data-update-failure]", { timeout: 10_000 });
   await shot("34-update-all-done-one-failed");
+
+  // #475: a plugin the app updated by itself says so in one line, its routines follow
+  await open("auto");
+  await shot("35-auto-updated-line");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

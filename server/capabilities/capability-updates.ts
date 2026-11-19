@@ -305,7 +305,11 @@ export interface CapabilityUpdatesOptions {
   people?: () => UpdatePerson[];
   /** Tell one person their list changed (the live frame), with the view
    * their own GET answers. */
-  notify?: (personId: string, view: UpdatesView) => void;
+  notify?: (personId: string, view: UpdatesView, autoUpdated?: UpdateResult[]) => void;
+  /** Update by itself the plugins of the person's own places when a check
+   * finds a newer version (the catalog moved): no question, one line to the
+   * person of what changed. Off when absent. */
+  autoUpdate?: { kinds: readonly UpdateKind[] };
   log?: (line: string) => void;
 }
 
@@ -322,6 +326,9 @@ export class CapabilityUpdates {
   private readonly told = new Map<string, string>();
   /** One update of one item at a time; a second ask joins the first. */
   private readonly inflight = new Map<string, Promise<UpdateResult>>();
+  /** `person key version` already tried by the automatic update: a failure is
+   * not tried again until the source has a newer version. */
+  private readonly autoTried = new Set<string>();
 
   constructor(options: CapabilityUpdatesOptions) {
     this.options = options;
@@ -361,7 +368,7 @@ export class CapabilityUpdates {
 
   /** Send the live frame to each person whose list changed since they
    * were last told or last read it. */
-  private async notifyPeople(only?: UpdatePerson): Promise<void> {
+  private async notifyPeople(only?: UpdatePerson, autoUpdated?: ReadonlyMap<string, UpdateResult[]>): Promise<void> {
     if (!this.options.notify) return;
     const people = new Map<string, UpdatePerson>();
     if (only) people.set(only.id, only);
@@ -376,7 +383,8 @@ export class CapabilityUpdates {
         const before = this.told.get(person.id);
         this.told.set(person.id, now);
         // never told before (right after a start): an update to show is news
-        if (before === undefined ? view.count > 0 : before !== now) this.options.notify(person.id, view);
+        const updated = autoUpdated?.get(person.id);
+        if (updated?.length || (before === undefined ? view.count > 0 : before !== now)) this.options.notify(person.id, view, updated);
       } catch (error) {
         this.log(`[capability-updates] the live frame could not be built: ${reason(error)}`);
       }
@@ -404,6 +412,35 @@ export class CapabilityUpdates {
     }
   }
 
+  /** The automatic update: the person's own items of `kind` (their personal
+   * place and their bots') that have an update, one at a time through the
+   * same path as the page's Update. The organization's items (the console
+   * decides their version) and this installation's shared ones (they need an
+   * administrator's request) are left to their own flows. */
+  private async autoUpdate(kind: UpdateKind): Promise<Map<string, UpdateResult[]>> {
+    const done = new Map<string, UpdateResult[]>();
+    const people = new Map<string, UpdatePerson>();
+    for (const person of this.options.people?.() ?? []) people.set(person.id, person);
+    for (const person of this.seen.values()) people.set(person.id, person);
+    for (const person of people.values()) {
+      let items: UpdateItem[];
+      try {
+        items = (await this.items(person)).filter((item) => item.kind === kind && item.updateAvailable && item.canUpdate && !item.updateUnknown && (item.scope === "me" || item.scope === "bot"));
+      } catch {
+        continue;
+      }
+      for (const item of items) {
+        const tried = `${person.id}\u0000${item.key}\u0000${item.availableVersion ?? ""}`;
+        if (this.autoTried.has(tried)) continue;
+        this.autoTried.add(tried);
+        const result = await this.updateOne(person, item);
+        if (result.status === "updated") done.set(person.id, [...(done.get(person.id) ?? []), result]);
+        else if (result.status === "failed") this.log(`[capability-updates] automatic update of ${item.name} failed, the old version stays: ${result.error ?? ""}`);
+      }
+    }
+    return done;
+  }
+
   /** Check every kind now (single flight per kind). */
   async check(): Promise<void> {
     await Promise.all(this.options.providers.map((provider) => this.checkKind(provider)));
@@ -424,7 +461,8 @@ export class CapabilityUpdates {
         this.running.delete(provider.kind);
       }
       this.checkedAt = this.now();
-      if (changed) await this.notifyPeople();
+      const auto = this.options.autoUpdate?.kinds.includes(provider.kind) ? await this.autoUpdate(provider.kind) : new Map<string, UpdateResult[]>();
+      if (changed || auto.size) await this.notifyPeople(undefined, auto);
     })();
     this.running.set(provider.kind, run);
     return run;

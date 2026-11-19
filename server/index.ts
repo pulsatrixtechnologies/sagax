@@ -27416,7 +27416,12 @@ const capabilityUpdates = new CapabilityUpdates({
   // the bots' owners, as their own GET sees them (an admin manages this
   // installation's items); the people who read their list are known too
   people: () => updatePeople().map((person) => ({ id: person, manager: IDENTITY.kind !== "perspicax" || principalIsOrgAdmin(person) })),
-  notify: (person, view) => broadcast({ kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt }),
+  // a plugin the catalog moved on is updated by itself (#475 side of the host); the frame says what changed in one line
+  autoUpdate: { kinds: ["plugin"] },
+  notify: (person, view, autoUpdated) => broadcast({
+    kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt,
+    ...(autoUpdated?.length ? { autoUpdated: autoUpdated.map((one) => ({ name: one.name, ...(one.from ? { from: one.from } : {}), ...(one.to ? { to: one.to } : {}), ...(one.updateNotes ? { notes: one.updateNotes } : {}) })) } : {}),
+  }),
 });
 ROUTES.push(createCapabilityUpdatesRoutes({
   updates: capabilityUpdates,

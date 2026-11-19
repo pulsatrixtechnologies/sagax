@@ -588,7 +588,11 @@ describe("server-owned browser MCP runtime", () => {
 
   it("lets the agent restart an interrupted browser itself, then resume", async () => {
     const closeBrowser = vi.fn(async () => true);
-    const value = runtime({ closeBrowser, recoveryCheckMs: 300 });
+    // No step here waits on a request deadline (the crash ends its call, the
+    // rest answer at once), so the fresh engine after the restart gets a real
+    // one: at the 1 s of runtime(), a loaded build VM spawning it timed the
+    // final echo out and latched it as a lost call.
+    const value = runtime({ closeBrowser, recoveryCheckMs: 300, requestTimeoutMs: 30_000 });
     const daemon = daemonSpec();
     writeFileSync(daemon.busy, "busy"); // the engine never answers again
     const spec = () => daemon.spec;

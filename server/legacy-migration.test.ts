@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
@@ -46,18 +47,11 @@ beforeAll(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stderr?.on("data", (chunk) => (stderr += String(chunk)));
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${PORT}/api/health`);
-      if (res.ok) return;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`server did not start:\n${stderr}`);
-}, 30_000);
+  // Ready when this child's health answers, not after a fixed 20 s: a cold
+  // strip-types boot of index.ts on a shared build VM (8 cores, several gates
+  // at once) took longer than that and failed the whole file.
+  await waitForServerReady(child, `http://127.0.0.1:${PORT}`, () => stderr);
+}, 90_000);
 
 afterAll(async () => {
   await waitForExit(child, { signal: "SIGTERM" });

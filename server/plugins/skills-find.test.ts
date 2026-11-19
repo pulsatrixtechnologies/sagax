@@ -24,13 +24,13 @@ describe("official catalogs (#2613)", () => {
     expect(catalogNameFor("https://github.com/acme/My Skills.git")).toBe("my-skills");
   });
 
-  it("reads a skills folder as a marketplace, one plugin per skill, with its category", () => {
+  it("reads a skills folder as a marketplace, one plugin per skill, with its category", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-cat-"));
     dirs.push(root);
     skill(root, "skills/devops/docker-compose", "docker-compose", "Run compose stacks");
     skill(root, "optional-skills/code-review", "code-review", "Review a diff");
     expect(findSkillFolders(root).map((found) => found.name)).toEqual(["docker-compose", "code-review"]);
-    expect(synthesizeSkillsCatalog(root, { name: "hermes-agent" })).toBe(2);
+    expect(await synthesizeSkillsCatalog(root, { name: "hermes-agent" })).toBe(2);
     const manifest = JSON.parse(readFileSync(join(root, ".claude-plugin", "marketplace.json"), "utf8"));
     expect(manifest.name).toBe("hermes-agent");
     expect(manifest.plugins[0]).toMatchObject({ name: "docker-compose", category: "devops", source: "./sagax-skills/docker-compose" });
@@ -80,5 +80,26 @@ describe("skills_find ranking", () => {
     expect(asked).toEqual(["bot-1"]);
     expect(answer?.status).toBe(200);
     expect(String(answer?.body.text)).toContain("code-review @ hermes-agent");
+  });
+});
+
+describe("a skills catalog read as a marketplace", () => {
+  it("copies a catalog without holding the event loop (a server froze 10 s while an official catalog was added)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "skills-cat-"));
+    dirs.push(root);
+    for (let index = 0; index < 20; index++) {
+      skill(root, `skills/pack/skill-${index}`, `skill-${index}`, "A skill");
+      for (let file = 0; file < 10; file++) writeFileSync(join(root, `skills/pack/skill-${index}/file-${file}.md`), "x".repeat(4096));
+    }
+    let turns = 0;
+    let counting = true;
+    const count = () => { if (!counting) return; turns++; setImmediate(count); };
+    setImmediate(count);
+    const synthesized = synthesizeSkillsCatalog(root, { name: "pack" });
+    expect(synthesized).toBeInstanceOf(Promise);
+    expect(await synthesized).toBe(20);
+    counting = false;
+    expect(turns).toBeGreaterThan(0);
+    expect(readFileSync(join(root, "sagax-skills", "skill-19", "skills", "skill-19", "file-9.md"), "utf8")).toHaveLength(4096);
   });
 });

@@ -173,8 +173,8 @@ describe("preloadScreens", () => {
     vi.stubGlobal("cancelIdleCallback", cancel);
     const preloads = stubPreloads();
     // Measured 2026-11-03: 21 prior screens + MemoryManager, Plugins, BotWizard,
-    // PersonPanel, CommandPalette, OrgImport, StagedOrgImport, ArtifactsHost.
-    expect(preloads.length).toBe(28);
+    // PersonPanel, CommandPalette, OrgImport, StagedOrgImport, ArtifactsHost, ScreenPanel.
+    expect(preloads.length).toBe(29);
     const stop = preloadScreens();
     for (const preload of preloads) expect(preload).not.toHaveBeenCalled();
     idle!();

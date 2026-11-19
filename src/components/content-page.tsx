@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider } from "./menu-look";
+import { SEGMENT_ITEM, SEGMENT_OFF, SEGMENT_ON, SEGMENT_TRACK } from "./SegmentedChoice";
 
 /** A header control: a 36px square outlined icon button (Team map standard, 2026-11-06). A labelled control adds w-auto, px-3 and gap-1.5. */
 export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
@@ -162,7 +163,8 @@ export function PageToggle({ pressed, onClick, children, ...rest }: { pressed: b
 /** A segmented switch of the header (List or Calendar; All, Unlocked or Locked).
  * `compact` is the reference's small segmented control for a row (#4327,
  * measured in the reference app: 24 px tall, a grey track at 6 % of the
- * ink, 2 px of padding, round, the chosen segment a shade lighter). */
+ * ink, 2 px of padding, round, the chosen segment a shade lighter; its
+ * look is written once, SEGMENT_* in SegmentedChoice.tsx). */
 export function PageSegment<T extends string | number>({ label, value, options, onChange, compact = false, disabled = false, ...rest }: {
   label: string;
   value: T;
@@ -177,7 +179,7 @@ export function PageSegment<T extends string | number>({ label, value, options, 
   return (
     <div {...rest} role="group"
       className={compact
-        ? "flex h-6 shrink-0 items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5"
+        ? cn("flex h-6 shrink-0 items-center rounded-full", SEGMENT_TRACK)
         : "flex shrink-0 items-center rounded-lg border border-hairline/50 bg-panel p-0.5"}
       aria-label={label}>
       {options.map((option) => {
@@ -187,7 +189,7 @@ export function PageSegment<T extends string | number>({ label, value, options, 
           <button key={String(option.value)} {...option.data} type="button" aria-pressed={on} title={option.title ?? option.label} disabled={disabled}
             onClick={() => onChange(option.value)}
             className={compact
-              ? cn("flex h-5 items-center gap-1 rounded-full px-2 text-[12px] leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none", on ? "bg-ink/[0.1] font-medium text-ink" : "text-ink-secondary hover:text-ink")
+              ? cn(SEGMENT_ITEM, on ? SEGMENT_ON : SEGMENT_OFF)
               : cn("flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px]", on ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>
             {Icon && <Icon size={compact ? 12 : 14} aria-hidden="true" />}
             <span className={cn(Icon && !compact && "@max-[60rem]/page-header:sr-only")}>{option.label}</span>

@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import type { Bot, InstanceInfo } from "@/state/store";
 import type { ComposerModelMenuControl } from "./ModelPicker";
 import { ModelManager } from "./ModelPicker.tsx-parts/ModelManager";
+import { SEGMENT_TRACK } from "./SegmentedChoice";
 
 // Opens the real picker and clicks through it without a DOM: useState is
 // held here by call order (the picker's own hooks run first, children after),
@@ -708,6 +709,19 @@ describe("the models window (windowOnly, #2963)", () => {
     const frameRef = manager(shown)!.props.frameRef;
     expect(frameRef).toBeDefined();
     expect(frameRef).toBe(effects.last!.menuRef);
+  });
+
+  // M-20261119-051: the window's Optimize for and its Effort are the one shared
+  // segmented control (SegmentedChoice), never an older copy drawn beside it
+  it("draws Optimize for and Effort on the same shared segmented control", () => {
+    const withEffort = signedIn();
+    fixture.instances = [{ ...withEffort, capabilities: { ...withEffort.capabilities, effortLevels: ["low", "medium", "high"] } }];
+    const onAuto = { ...bot("claude", "claude-opus-5-5"), modelSelection: { instanceId: "claude", model: "claude-opus-5-5", auto: true as const } };
+    const shown = render(onAuto, { windowOnly: true, threadId: undefined });
+    const track = (attribute: string) => new RegExp(`<div ${attribute}="" role="radiogroup"[^>]*class="([^"]*)"`).exec(shown.html)?.[1];
+    expect(track("data-model-auto-optimize")).toContain(SEGMENT_TRACK);
+    expect(track("data-model-auto-optimize")).toBe(track("data-model-effort-menu"));
+    expect([...shown.html.matchAll(/role="radio"[^>]*data-model-auto-optimize-option=/g)]).toHaveLength(3);
   });
 });
 

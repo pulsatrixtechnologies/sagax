@@ -21,6 +21,7 @@ import { ActivityWindow, activityChip } from "../bot-settings/ActivityWindow";
 import { FIELD, Switch } from "../SettingsPrimitives";
 import { ShowMoreFold } from "../ShowMoreFold";
 import { EffortSegments } from "../ModelMenuSettings";
+import { SegmentedChoice } from "../SegmentedChoice";
 import { engineSections } from "../ModelMenu";
 import { MODELS_SHOWN, switchableModels, toggledList } from "../settings/ModelSwitchesSettings";
 import { providerOfModel } from "../../../shared/model-provider";
@@ -182,19 +183,14 @@ export function ModelManager({
                 <div key={row.key} className="border-b border-border last:border-b-0">
                   <ModelRowButton row={row} disabled={busy} onChoose={() => choose(row)} mark={row.kind === "auto" ? <Sparkles size={15} aria-hidden="true" /> : undefined} />
                   {row.kind === "auto" && row.current && setAutoOptimize && (
-                    <div role="radiogroup" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize=""
-                      className="flex flex-wrap items-center gap-2 px-3.5 pb-2.5">
+                    // M-20261119-051: the shared segmented control, the same as the Effort below and the menu's
+                    <div className="flex flex-wrap items-center gap-2 px-3.5 pb-2.5">
                       <span className="text-[12px] text-ink-secondary">{t("model.auto.optimizeTitle")}</span>
-                      <div className="inline-flex rounded-lg bg-inset p-0.5">
-                        {AUTO_OPTIMIZE_VALUES.map((value) => (
-                          <button key={value} type="button" role="radio" aria-checked={optimize === value} disabled={busy}
-                            data-model-auto-optimize-option={value} onClick={() => setAutoOptimize(value)}
-                            className={cn("rounded-md px-2.5 py-1 text-[12.5px] transition-colors disabled:opacity-50",
-                              optimize === value ? "bg-elevated text-ink shadow-sm" : "text-ink-secondary hover:text-ink")}>
-                            {t(`model.auto.optimize.${value}`)}
-                          </button>
-                        ))}
-                      </div>
+                      <SegmentedChoice data-model-auto-optimize="" label={t("model.auto.optimizeTitle")} disabled={busy}
+                        value={optimize} onPick={setAutoOptimize}
+                        options={AUTO_OPTIMIZE_VALUES.map((value) => ({
+                          value, label: t(`model.auto.optimize.${value}`), data: { "data-model-auto-optimize-option": value },
+                        }))} />
                     </div>
                   )}
                 </div>
@@ -250,7 +246,7 @@ export function ModelManager({
             ) : efforts.length > 0 && (
               <div className="flex flex-wrap items-center gap-2" data-model-settings-effort="">
                 <span className="text-[12.5px] text-ink-secondary">{effortTitle}</span>
-                <EffortSegments tone="panel" title={effortTitle} levels={efforts} disabled={busy}
+                <EffortSegments title={effortTitle} levels={efforts} disabled={busy}
                   value={selection.effort && efforts.includes(selection.effort) ? selection.effort : undefined}
                   modelDefault={modelDefaultEffort(activeOption, engineEfforts)} onPick={setEffort} />
               </div>

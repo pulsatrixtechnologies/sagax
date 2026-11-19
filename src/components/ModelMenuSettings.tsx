@@ -10,7 +10,7 @@
 // when more than one engine can. The models window keeps the segmented
 // control (EffortSegments). Rendered by ModelPicker.tsx, which owns what
 // each choice does.
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { EffortLevel } from "../../shared/wire";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
@@ -21,6 +21,7 @@ import { t } from "@/lib/i18n";
 import { ChoiceLine, ROW } from "./MenuChoiceLine";
 import { RunsWith, runsWithShown, type RunsWithChoice } from "./RunsWith";
 import { ContextSize, contextSizeShown, type ContextSizeChoice } from "./ContextSize";
+import { SegmentedChoice } from "./SegmentedChoice";
 
 export type { ContextSizeChoice, RunsWithChoice };
 
@@ -100,57 +101,31 @@ export function ModelMenuSettings({ fast, effort, variantRow, runsWith, contextS
   );
 }
 
-/** Default, then only the levels this model takes, side by side. A radio
+/** Default, then only the levels this model takes, side by side: the shared
+ * segmented control (SegmentedChoice), in balanced lines past four. A radio
  * group: the arrow keys move and pick, Home and End go to either end. */
-export function EffortSegments({ title, levels, value, modelDefault, onPick, disabled = false, tone = "popover" }: {
+export function EffortSegments({ title, levels, value, modelDefault, onPick, disabled = false }: {
   title: string;
   levels: readonly EffortLevel[];
   value?: EffortLevel;
   modelDefault?: EffortLevel;
   onPick: (level: EffortLevel | undefined) => void;
   disabled?: boolean;
-  /** "popover" in the composer menu, "panel" in the models window. */
-  tone?: "popover" | "panel";
 }) {
   const choices: Array<EffortLevel | undefined> = [undefined, ...levels];
-  const at = Math.max(0, choices.indexOf(value));
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
-    const to = event.key === "Home" ? 0 : event.key === "End" ? choices.length - 1 : step ? (at + step + choices.length) % choices.length : -1;
-    if (to < 0) return;
-    event.preventDefault();
-    // stays inside the menu: its own arrow keys must not move the list too
-    event.stopPropagation();
-    onPick(choices[to]);
-    const buttons = event.currentTarget.querySelectorAll<HTMLElement>("[data-model-effort-choice]");
-    requestAnimationFrame(() => buttons[to]?.focus());
-  };
-  const panel = tone === "panel";
   return (
-    <div role="radiogroup" aria-label={title} data-model-effort-menu onKeyDown={onKeyDown}
-      className={cn("flex min-w-0 flex-wrap gap-0.5 rounded-lg p-0.5", panel ? "bg-inset" : "bg-popover-hover/60")}>
-      {choices.map((level, index) => {
-        const on = index === at;
-        return (
-          <button key={level ?? "default"} type="button" role="radio" aria-checked={on} disabled={disabled}
-            tabIndex={on ? 0 : -1}
-            data-model-effort-choice={level ?? "default"}
-            title={level === undefined ? t("model.effort.defaultTitle") : isUltracodeEffort(level) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level) })}
-            onClick={() => onPick(level)}
-            className={cn(
-              "min-h-7 flex-1 whitespace-nowrap rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:transition-none",
-              on
-                ? panel ? "bg-elevated font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.12)]" : "bg-popover font-medium text-popover-ink shadow-[0_1px_2px_rgb(0_0_0/0.18)]"
-                : panel ? "text-ink-secondary hover:text-ink" : "text-popover-ink-secondary hover:text-popover-ink",
-            )}>
-            <span className={cn(isUltracodeEffort(level) && "ultracode-effort-option")}>
-              {level === undefined
-                ? modelDefault ? t("model.effort.defaultWith", { level: effortLabel(modelDefault) }) : t("model.defaultTag")
-                : effortLabel(level)}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedChoice<EffortLevel | "default"> data-model-effort-menu="" label={title} disabled={disabled}
+      value={value && levels.includes(value) ? value : "default"}
+      onPick={(key) => onPick(key === "default" ? undefined : key)}
+      options={choices.map((level) => ({
+        value: level ?? "default",
+        title: level === undefined ? t("model.effort.defaultTitle") : isUltracodeEffort(level) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level) }),
+        data: { "data-model-effort-choice": level ?? "default" },
+        label: (
+          <span className={isUltracodeEffort(level) ? "ultracode-effort-option" : undefined}>
+            {level === undefined ? defaultWord(modelDefault) : effortLabel(level)}
+          </span>
+        ),
+      }))} />
   );
 }

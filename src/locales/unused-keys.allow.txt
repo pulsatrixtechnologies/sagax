@@ -95,8 +95,6 @@ botPanel.model.recoveryOff
 botPanel.permissions.contactSection
 botPanel.rules.action
 botPanel.voice.hostUnsetTitle
-botProfile.engine
-botProfile.sharing.people
 botSettings.nav.computer
 botSettings.nav.overview
 browser.control.handBack

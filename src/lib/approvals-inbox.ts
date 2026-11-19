@@ -8,6 +8,7 @@ import { inboxKey, type InboxApproval, type InboxHeldSignal, type InboxPayload }
 import type { PersonAttentionCard } from "../../shared/person-attention";
 import { approvalAction } from "@/lib/approval-describe";
 import { t } from "@/lib/i18n";
+import { plainPreviewText } from "@/lib/plain-preview";
 import { questionCardTitle } from "@/lib/question-card-title";
 import { approvalChime } from "@/lib/notification-preferences";
 import { api, type Message } from "@/state/store";
@@ -211,17 +212,20 @@ export function attentionOf(entry: InboxApproval): PersonAttentionCard | undefin
 export function inboxTitle(entry: InboxApproval): string {
   const attention = attentionOf(entry);
   if (entry.kind === "attention") {
-    const first = attention?.items[0]?.text.replace(/\*\*|__|`/g, "") ?? "";
+    const first = attention?.items[0]?.text ? plainPreviewText(attention.items[0].text) : "";
     return first.trim() ? withoutIds(first).slice(0, 240) : t("approvals.kind.attention");
   }
   if (entry.kind === "form") {
     // #4234: a routine run's form: its words, else its routine's name
-    const words = ((entry.message as Message | undefined)?.text ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+    const first = ((entry.message as Message | undefined)?.text ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+    const words = first ? plainPreviewText(first) : "";
     return withoutIds(words || entry.routineName || t("approvals.kind.form")).slice(0, 240);
   }
   const card = cardOf(entry);
   if (entry.kind === "question") {
-    const question = card?.questionRequest?.questions?.[0]?.question ?? (card ? questionCardTitle(card) : undefined);
+    // M-20261119-045: the bot's words read as words, never their Markdown
+    const raw = card?.questionRequest?.questions?.[0]?.question ?? (card ? questionCardTitle(card) : undefined);
+    const question = raw ? plainPreviewText(raw) : undefined;
     return question?.trim() ? withoutIds(question) : t("approvals.kind.question");
   }
   if (entry.kind === "proposal") {
@@ -243,7 +247,7 @@ export interface InboxPreview {
 export function inboxPreview(entry: InboxApproval): InboxPreview {
   const prose = (text: string): InboxPreview => ({ text, code: false });
   if (entry.kind === "attention") {
-    const rest = attentionOf(entry)?.items.slice(1).map((item) => item.text.replace(/\*\*|__|`/g, "")) ?? [];
+    const rest = attentionOf(entry)?.items.slice(1).map((item) => plainPreviewText(item.text)) ?? [];
     return prose(withoutIds(rest.join(" · ")).slice(0, 240));
   }
   // #4234: a form is answered in its conversation, at the run's row

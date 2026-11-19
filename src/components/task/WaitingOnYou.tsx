@@ -13,6 +13,7 @@ import { t } from "@/lib/i18n";
 import { usePinnedHeldNearby } from "@/lib/pinned-waiting";
 import type { WaitingItem } from "@/lib/use-waiting-cards";
 import type { Bot } from "@/state/store";
+import { CardMarkdown } from "../CardMarkdown";
 import { OptionCard } from "../OptionCard";
 import { PendingApprovalBox } from "../PendingApproval";
 import { PILL } from "../SettingsPrimitives";
@@ -80,7 +81,8 @@ export function WaitingOnYou({ items, threadId, botFor, onCancel, onOpenThread, 
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 flex-1 text-[13px] leading-[18px] text-ink">{item.text}</p>
+              {/* M-20261119-045: the bot's words, drawn as in its bubble */}
+              <CardMarkdown text={item.text} className="flex-1 text-[13px] leading-[18px] text-ink" />
               {item.threadId && onOpenThread && (
                 <button type="button" data-task-waiting-open onClick={() => onOpenThread(item.botId, item.threadId!)} className={cn(PILL, "gap-1.5")}>
                   <ExternalLink size={13} aria-hidden="true" />

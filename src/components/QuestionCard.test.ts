@@ -151,7 +151,8 @@ describe("QuestionCard", () => {
   it("makes a short single question the title, in plain ink", () => {
     const single = message({ questionRequest: { version: 1, questions: [questionRequest.questions[1]!] } });
     const markup = render(single);
-    expect(markup).toMatch(/text-\[14px\] font-semibold leading-5 text-ink"><bdi dir="auto">Which style should it write in\?</);
+    // M-20261119-045: the question is the bot's words, drawn by the chat's renderer
+    expect(markup).toMatch(/text-\[14px\] font-semibold leading-5 text-ink"><bdi dir="auto"><div data-card-markdown=""[^>]*>(?:<div[^>]*>)+<p[^>]*>Which style should it write in\?<\/p>/);
     expect(markup).not.toContain("text-accent-text\"><bdi");
   });
 

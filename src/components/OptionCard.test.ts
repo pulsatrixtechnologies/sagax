@@ -116,7 +116,8 @@ describe("OptionCard", () => {
     expect(markup).toContain('data-ask-card="pending"');
     expect(markup).toContain("rounded-2xl bg-card p-3"); // #4490: the reference bubble, 12px padding
     expect(markup).not.toContain("text-accent-text");
-    expect(markup).toMatch(/font-semibold[^"]*"><bdi dir="auto">Pick a region</);
+    // M-20261119-045: the title is the bot's words, drawn by the chat's renderer
+    expect(markup).toMatch(/font-semibold[^"]*"><bdi dir="auto"><div data-card-markdown=""[^>]*>(?:<div[^>]*>)+<p[^>]*>Pick a region<\/p>/);
     expect(markup).toMatch(/size-6[^>]*>A</); // #4490: the reference's 24px key
     expect(markup).toContain("eu-west-1");
   });

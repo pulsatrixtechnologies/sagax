@@ -18,7 +18,7 @@
 import type { AccountPick, AccountStrategy, AccountSwitchSetting } from "../../shared/account-switch.ts";
 import type { AccountMeter } from "./account-meter.ts";
 import { PLAN_BUDGET_MS, PLAN_HORIZON_HOURS, planAccounts, type PlannerAccount, type PlannerResult } from "./account-planner.ts";
-import { pickAccountByRule, rankAccounts, type StrategyAccount, type StrategyPick } from "./account-strategy.ts";
+import { hasRoom, pickAccountByRule, rankAccounts, underThreshold, type StrategyAccount, type StrategyPick } from "./account-strategy.ts";
 import type { UsageForecast } from "./usage-forecast.ts";
 
 /** A cached plan is reused for this long by the same conversation. */
@@ -111,7 +111,11 @@ export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
       let fallback: AccountChoice["fallback"];
       if (setting.strategy === "high-water") {
         const cached = plans.get(input.threadId);
-        let planned = !input.fresh && cached && cached.current === input.current && now - cached.at < PLAN_REFRESH_MS ? cached.result : null;
+        // a cached plan stands only while the conversation's account is still
+        // under its threshold with room: a reading past it plans again now
+        const own = accounts.find((account) => account.instanceId === input.current)!;
+        const stands = hasRoom(own) && underThreshold(own, setting.threshold);
+        let planned = !input.fresh && stands && cached && cached.current === input.current && now - cached.at < PLAN_REFRESH_MS ? cached.result : null;
         if (!planned) {
           const result = planAccounts({
             now, threshold: setting.threshold, accounts, current: input.current, fresh: input.fresh,
@@ -128,7 +132,7 @@ export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
         }
         // a plan made before an account filled up or was held is not applied
         const target = planned ? accounts.find((account) => account.instanceId === planned!.pick.instanceId) : undefined;
-        if (planned && target && target.blocked !== true) {
+        if (planned && target && hasRoom(target)) {
           const pick = planned.pick.instanceId === input.current && planned.pick.why.kind !== "keeps" && !input.fresh
             ? pickAccountByRule(rule) ?? planned.pick
             : planned.pick;

@@ -74,6 +74,19 @@ describe("the account strategy host (#5014)", () => {
     expect(choice).toMatchObject({ instanceId: "claude-work", by: "planner", pick: { why: { kind: "planned", unused: 60 } } });
   });
 
+  it("re-plans a cached keep once the account crosses its threshold, within the 5 minutes", () => {
+    // a week of history, one point per unit: the plan keeps the conversation on claude at 70 %
+    const w = world({ history: 8 * DAY, demand: 30 });
+    w.meter.notePlan("ada", ["claude"], { fiveHour: window(70, NOW + 4 * HOUR) });
+    w.meter.notePlan("ada", ["claude-work"], { fiveHour: window(10, NOW + 4.5 * HOUR) });
+    const host = createAccountSwitch({ ...w.deps, meter: { ...w.meter, scale: () => 1, weekScale: () => null } });
+    const input = { payer: "ada", threadId: "t1", driverKind: "claudeAgent", current: "claude", pool: ["claude", "claude-work"], fresh: false };
+    expect(host.choose(input)).toMatchObject({ instanceId: "claude", by: "planner", pick: { why: { kind: "keeps", used: 70 } } });
+    // the next turn, a minute later: claude read at 85 %, past High-water's 80 %
+    w.meter.notePlan("ada", ["claude"], { fiveHour: window(85, NOW + 4 * HOUR) });
+    expect(host.choose(input)).toMatchObject({ instanceId: "claude-work", pick: { why: { kind: "threshold", from: "claude", used: 85, threshold: 80 } } });
+  });
+
   it("follows the person's own strategy for the provider", () => {
     const w = world();
     w.settings.set("ada/anthropic", { strategy: "fill-up", threshold: 80 });

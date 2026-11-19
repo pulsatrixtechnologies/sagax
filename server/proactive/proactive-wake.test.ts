@@ -55,6 +55,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
       changes.push({ botId, keys: events.map((event) => event.key) });
       disk?.set(botId, events);
     },
+    settled: (botId, runId) => disk?.settled(botId, runId),
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
     ...(opts.owner ? { owner: opts.owner } : {}),
     ...(opts.signals ? { signals: opts.signals } : {}),
@@ -79,7 +80,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
   };
   /** Every model call the fake engine would have made: one per wake run. */
   const modelCalls = () => woken.length;
-  return { waker, advance, woken, lines, modelCalls, dropped, changes, setMode: (botId: string, mode: string) => { modes[botId] = mode; } };
+  return { waker, disk, advance, woken, lines, modelCalls, dropped, changes, setMode: (botId: string, mode: string) => { modes[botId] = mode; } };
 }
 
 const mail = (botId: string, n = 1, extra: Partial<ProactiveEvent> = {}): ProactiveEvent => ({
@@ -906,5 +907,110 @@ describe("failed wakes back off and are told once (2026-11-05)", () => {
     expect(h.waker.pendingFor("nova")).toBe(1);
     h.advance(PROACTIVE_FAILURE_BACKOFF_MS);
     expect(h.modelCalls()).toBe(1);
+  });
+});
+
+// #4528 lot 2: the inbox keeps every event through a restart. What a
+// previous process left is not erased by what arrives while the server
+// starts again, and a wake settles only its own events.
+describe("#4528: the event inbox through a restart", () => {
+  const rowsOf = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as { pending: Record<string, Array<{ key: string; status: string; run?: string }>> }).pending;
+
+  it("an event that arrives while the server starts again does not erase what the previous process gathered", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-restart-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const signals = new SignalLedger();
+      const before = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      expect(before.waker.offer(mail("nova", 1))).toBe("gathered");
+      // the server stops inside the gather window
+      const after = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      // a new mail arrives before the replay of the kept rows
+      expect(after.waker.offer(mail("nova", 2))).toBe("gathered");
+      expect(rowsOf(file).nova?.map((row) => row.key).sort()).toEqual(["mail-1", "mail-2"]);
+      const rows = after.disk!.take();
+      expect(rows.map((row) => row.key)).toEqual(["mail-1"]);
+      const restored = after.disk!.readSealed((rows[0]!.ref as { id: string }).id);
+      expect(restored?.detail).toBe(mail("nova", 1).detail);
+      after.waker.replayPending(rows, () => {
+        expect(after.waker.offer(restored!)).toBe("gathered");
+      });
+      after.advance(30_000);
+      expect(after.woken.map((batch) => batch.events.map((event) => event.key).sort())).toEqual([["mail-1", "mail-2"]]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a stop before the replay keeps the previous rows for the next start", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-restart-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const signals = new SignalLedger();
+      const first = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      first.waker.offer(mail("nova", 1));
+      const second = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      second.waker.offer(mail("nova", 2));
+      // stopped again before its replay ran
+      const third = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      expect(third.disk!.take().map((row) => row.key).sort()).toEqual(["mail-1", "mail-2"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a wake settles only its own run's events: a second wake of the bot keeps its rows, and they outlive a restart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proactive-restart-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      let runs = 0;
+      const h = harness({ nova: "proactive" }, { pendingFile: file, wake: () => ({ id: `run-${++runs}` }) });
+      h.waker.offer(mail("nova", 1));
+      h.advance(30_000);
+      h.waker.offer(mail("nova", 2));
+      h.advance(60 * 60_000);
+      expect(h.woken).toHaveLength(2);
+      expect(rowsOf(file).nova).toEqual([
+        expect.objectContaining({ key: "mail-1", status: "running", run: "run-1" }),
+        expect.objectContaining({ key: "mail-2", status: "running", run: "run-2" }),
+      ]);
+      h.waker.noteWakeSucceeded("nova", "run-1");
+      expect(rowsOf(file).nova).toEqual([expect.objectContaining({ key: "mail-2", status: "running", run: "run-2" })]);
+      // a restart while run-2 waits its turn: its row stays until run-2 ends
+      const after = harness({ nova: "proactive" }, { pendingFile: file });
+      expect(after.disk!.take()).toEqual([]);
+      after.waker.noteWakeSucceeded("nova", "run-1");
+      expect(rowsOf(file).nova?.map((row) => row.key)).toEqual(["mail-2"]);
+      after.waker.noteWakeEnded("nova", "run-2");
+      expect(rowsOf(file)).toEqual({});
+      expect(existsSync(join(dir, "proactive-sealed")) ? readdirSync(join(dir, "proactive-sealed")) : []).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("one person's wake ending does not settle another person's events of the same bot", () => {
+    let runs = 0;
+    const h = harness({ nova: "proactive" }, { wake: () => ({ id: `run-${++runs}` }) });
+    h.waker.offer(mail("nova", 1, { runAs: "alex" }));
+    h.waker.offer(mail("nova", 2, { runAs: "sam" }));
+    h.advance(60 * 60_000);
+    expect(h.woken.map((batch) => batch.runAs).sort()).toEqual(["alex", "sam"]);
+    const sams = h.woken.findIndex((batch) => batch.runAs === "sam");
+    h.waker.noteWakeSucceeded("nova", `run-${sams === 0 ? 2 : 1}`);
+    expect(h.changes.at(-1)).toEqual({ botId: "nova", keys: ["mail-2"] });
+  });
+
+  it("a wake that could not start goes back to its inbox and is tried again", () => {
+    let fail = true;
+    const h = harness({ nova: "proactive" }, { wake: () => { if (fail) throw new Error("Routines are not ready yet"); return { id: "run-1" }; } });
+    h.waker.offer(mail("nova", 1));
+    h.advance(30_000);
+    expect(h.woken).toHaveLength(1);
+    expect(h.waker.pendingFor("nova")).toBe(1);
+    fail = false;
+    h.advance(60 * 60_000);
+    expect(h.woken).toHaveLength(2);
+    expect(h.waker.pendingFor("nova")).toBe(0);
   });
 });

@@ -148,6 +148,8 @@ export interface ProactiveEvent {
   replay?: ProactiveReplayRef;
   /** A copy the waker reports for a wake that has started. Not part of the event. */
   inbox?: "running";
+  /** #4528: the run of that started wake, so its end settles these rows only. */
+  inboxRun?: string;
   /** 2026-11-08 (#2691): the sender (address or number), matched by the
    * bot's direct trigger filters. Never shown, never in the prompt. */
   from?: string;
@@ -359,6 +361,9 @@ export interface ProactiveWakerDeps {
   /** 2026-11-02: the events a bot has gathered changed (empty: its wake
    * started or they were dropped), for ProactivePendingFile. */
   pendingChanged?: (botId: string, events: readonly ProactiveEvent[]) => void;
+  /** #4528: a wake of this bot settled (its run, when known). Rows a previous
+   * process left running for that run leave the disk copy. */
+  settled?: (botId: string, runId?: string) => void;
   /** Cheap: this bot's login engine is marked expired. Skip new wakes until reconnect. */
   engineExpired?: (botId: string) => boolean;
   now?: () => number;
@@ -382,6 +387,14 @@ interface Pending {
   events: ProactiveEvent[];
   more: number;
   timer: unknown;
+}
+
+/** A started wake whose run has not settled (#4528: keyed by its run). */
+interface Running {
+  botId: string;
+  person: string;
+  runId?: string;
+  events: ProactiveEvent[];
 }
 
 /** The gathering key of an event: its bot and its person. */
@@ -444,7 +457,8 @@ export class ProactiveWaker {
    * A restart does not offer them again: the wake's turn is what finishes
    * them. Keyed like the gather groups, so one person's wake does not drop
    * another's record. */
-  private readonly running = new Map<string, ProactiveEvent[]>();
+  private readonly running = new Map<string, Running>();
+  private runningSeq = 0;
 
   /** Offers the gathered events a restart cut before their wake
    * (ProactivePendingFile.take): their keys were noted in the ledger when
@@ -535,30 +549,48 @@ export class ProactiveWaker {
    * that come meanwhile gather into that one wake. Returns true only for
    * the first failure of a streak. Who is told is the routine streak's rule
    * (server/routines/routines.ts problemAlert, #3990), not this. */
-  noteWakeFailed(botId: string): boolean {
+  noteWakeFailed(botId: string, runId?: string): boolean {
+    const fresh = this.backOff(botId);
+    this.settleInbox(botId, runId);
+    return fresh;
+  }
+
+  /** The failure streak and its backoff (a failed wake, or one that could
+   * not start). True for the first failure of a streak. */
+  private backOff(botId: string): boolean {
     const now = this.now();
     const previous = this.failures.get(botId);
     const fresh = !previous || now - previous.at > PROACTIVE_FAILURE_BACKOFF_MAX_MS;
     const count = fresh ? 1 : previous.count + 1;
     const backoff = Math.min(PROACTIVE_FAILURE_BACKOFF_MS * 2 ** (count - 1), PROACTIVE_FAILURE_BACKOFF_MAX_MS);
     this.failures.set(botId, { count, at: now, until: now + backoff });
-    this.settleInbox(botId);
     return fresh;
   }
 
-  /** Started wakes of this bot are over. The signal names the bot only, so
-   * every person's running rows of that bot leave together. */
-  private settleInbox(botId: string): void {
-    if (!this.clearRunning(botId)) return;
+  /** A started wake of this bot is over. #4528: with its run, only that
+   * run's rows leave (another person's wake, or a second wake waiting its
+   * turn, keeps its own); without one, every running row of the bot. */
+  private settleInbox(botId: string, runId?: string): void {
+    this.clearRunning(botId, runId);
+    this.settledOnDisk(botId, runId);
     this.changed(botId);
   }
 
-  /** Drops the bot's running copies. True when there was one. */
-  private clearRunning(botId: string): boolean {
-    const prefix = `${botId}\u0000`;
+  private settledOnDisk(botId: string, runId?: string): void {
+    try {
+      this.deps.settled?.(botId, runId);
+    } catch {
+      // the disk copy is a convenience: the wake goes on without it
+    }
+  }
+
+  /** Drops running copies of a bot: the run's (and any whose run is not
+   * known yet), else all of them. True when there was one. */
+  private clearRunning(botId: string, runId?: string): boolean {
     let any = false;
-    for (const key of this.running.keys()) {
-      if (!key.startsWith(prefix)) continue;
+    for (const [key, running] of this.running) {
+      if (running.botId !== botId) continue;
+      if (runId !== undefined && running.runId !== undefined && running.runId !== runId) continue;
       this.running.delete(key);
       any = true;
     }
@@ -567,8 +599,7 @@ export class ProactiveWaker {
 
   /** Running events of a bot, in the order their wakes started. */
   private runningOf(botId: string): ProactiveEvent[] {
-    const prefix = `${botId}\u0000`;
-    return [...this.running.entries()].filter(([key]) => key.startsWith(prefix)).flatMap(([, events]) => events);
+    return [...this.running.values()].filter((running) => running.botId === botId).flatMap((running) => running.events);
   }
 
   /** #4621 review: a proactive run of this bot ended neither completed nor
@@ -576,16 +607,15 @@ export class ProactiveWaker {
    * cut by a restart). Its started events leave the inbox, with no backoff.
    * The disk copy is rewritten even when this process started nothing, so
    * rows a previous process left running and their sealed files go too. */
-  noteWakeEnded(botId: string): void {
-    this.clearRunning(botId);
-    this.changed(botId);
+  noteWakeEnded(botId: string, runId?: string): void {
+    this.settleInbox(botId, runId);
   }
 
   /** A wake of this bot finished: the streak of failures ends, and its
    * events leave the inbox. */
-  noteWakeSucceeded(botId: string): void {
+  noteWakeSucceeded(botId: string, runId?: string): void {
     this.failures.delete(botId);
-    this.settleInbox(botId);
+    this.settleInbox(botId, runId);
   }
 
   /** Wake now with what this bot gathered for one person (the timer calls
@@ -653,7 +683,9 @@ export class ProactiveWaker {
     };
     // On disk as running before the wake call, so a restart does not offer
     // them a second time. If the call throws, they go back to pending.
-    this.running.set(held, pending.events.map((event) => ({ ...event })));
+    const runningKey = `${held}\u0000${++this.runningSeq}`;
+    const running: Running = { botId, person: pending.person, events: pending.events.map((event) => ({ ...event })) };
+    this.running.set(runningKey, running);
     this.pending.delete(held);
     this.changed(botId);
     let started: unknown;
@@ -661,8 +693,21 @@ export class ProactiveWaker {
       this.deps.log(botId, wakeLine(batch));
       started = this.deps.wake(batch);
     } catch (error) {
-      this.running.delete(held);
+      this.running.delete(runningKey);
+      // #4528: back in the inbox, with events that came meanwhile, and tried
+      // again after the gather window (or the backoff): never left waiting
+      // for another event to arm a timer
+      const meanwhile = this.pending.get(held);
+      if (meanwhile) {
+        if (meanwhile.timer !== null) this.clearTimer(meanwhile.timer);
+        const merged = [...pending.events, ...meanwhile.events];
+        pending.events = merged.slice(0, PROACTIVE_EVENTS_PER_WAKE);
+        pending.more += meanwhile.more + Math.max(0, merged.length - PROACTIVE_EVENTS_PER_WAKE);
+      }
       this.pending.set(held, pending);
+      this.backOff(botId);
+      const who = pending.person;
+      pending.timer = this.setTimer(() => this.flush(botId, who), this.delayFor(botId));
       this.changed(botId);
       this.deps.log(botId, `Proactive wake could not start: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
       return null;
@@ -670,9 +715,16 @@ export class ProactiveWaker {
     // #4621 review: a wake that started no run has nothing that would settle
     // its rows later; they leave now
     if (started === false) {
-      this.running.delete(held);
+      this.running.delete(runningKey);
       this.changed(botId);
       return null;
+    }
+    // #4528: the run's id rides the rows, so its end settles them alone
+    const runId = started && typeof (started as { id?: unknown }).id === "string" ? (started as { id: string }).id : undefined;
+    if (runId) {
+      running.runId = runId;
+      running.events = running.events.map((event) => ({ ...event, inboxRun: runId }));
+      this.changed(botId);
     }
     return batch;
   }
@@ -714,6 +766,7 @@ export class ProactiveWaker {
       this.pending.delete(pendingKey(botId, pending.person));
     }
     this.clearRunning(botId);
+    this.settledOnDisk(botId);
     this.changed(botId);
     this.budget.forget(botId);
     this.lastWake.delete(botId);
@@ -1085,7 +1138,7 @@ export function proactiveWakeEndedOtherwise(run: { status: string; error?: strin
 /** One inbox row. `status` missing means pending, so a file written before
  * running rows existed still replays. The words of a sealed row live in
  * proactive-sealed/, never here. */
-type InboxRow = { key: string; ref: ProactiveReplayRef; status: "pending" | "running" };
+type InboxRow = { key: string; ref: ProactiveReplayRef; status: "pending" | "running"; run?: string };
 
 const SEALED_SOURCES = new Set<ProactiveSource>(["mail", "calendar", "run", "bot", "peer", "webhook", "sms", "suggestion", "screen", "watch"]);
 
@@ -1101,7 +1154,12 @@ const SEALED_FIELDS = ["botId", "source", "key", "label", "detail", "summary", "
  * mode 0600, removed when the row leaves. */
 export class ProactivePendingFile {
   private readonly file: string | null;
+  /** This process's rows, per bot (what the waker reports). */
   private items: Record<string, InboxRow[]> = {};
+  /** #4528: rows a previous process left: pending until the replay takes
+   * them, running until their wake settles. What this process gathers in
+   * the meantime never overwrites them. */
+  private carried: Record<string, InboxRow[]> = {};
   constructor(file: string | null) {
     this.file = file;
     if (!file) return;
@@ -1120,7 +1178,7 @@ export class ProactivePendingFile {
       if (parsed.pending && typeof parsed.pending === "object") {
         for (const [botId, rows] of Object.entries(parsed.pending as Record<string, unknown>)) {
           const kept = Array.isArray(rows) ? rows.filter(isPendingRow).map(normalizeRow) : [];
-          if (kept.length) this.items[botId] = kept;
+          if (kept.length) this.carried[botId] = kept;
         }
       }
     } catch {
@@ -1133,7 +1191,7 @@ export class ProactivePendingFile {
   set(botId: string, events: readonly ProactiveEvent[]): void {
     const previous = this.items[botId] ?? [];
     // a row already sealed keeps its file: only a new event is written
-    const sealedBefore = new Set(previous.flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : [])));
+    const sealedBefore = new Set([...previous, ...(this.carried[botId] ?? [])].flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : [])));
     const next: InboxRow[] = [];
     for (const event of events) {
       let ref = event.replay;
@@ -1143,7 +1201,8 @@ export class ProactivePendingFile {
         if (!sealed) continue;
         ref = sealed;
       }
-      next.push({ key: event.key, ref, status: event.inbox === "running" ? "running" : "pending" });
+      const running = event.inbox === "running";
+      next.push({ key: event.key, ref, status: running ? "running" : "pending", ...(running && event.inboxRun ? { run: event.inboxRun } : {}) });
     }
     if (next.length) this.items[botId] = next;
     else delete this.items[botId];
@@ -1162,17 +1221,44 @@ export class ProactivePendingFile {
   take(): Array<{ botId: string; key: string; ref: ProactiveReplayRef }> {
     const out: Array<{ botId: string; key: string; ref: ProactiveReplayRef }> = [];
     let changed = false;
-    for (const [botId, rows] of Object.entries(this.items)) {
+    for (const [botId, rows] of Object.entries(this.carried)) {
       const stay = rows.filter((row) => row.status === "running");
       for (const row of rows) {
         if (row.status === "running") continue;
         out.push({ botId, key: row.key, ref: row.ref });
         changed = true;
       }
-      if (stay.length) this.items[botId] = stay;
-      else delete this.items[botId];
+      if (stay.length) this.carried[botId] = stay;
+      else delete this.carried[botId];
     }
     if (changed) this.save();
+    return out;
+  }
+
+  /** #4528: a wake of this bot settled. Rows a previous process left running
+   * for that run (or with no run known) leave, with their sealed files.
+   * Without a run, every row it left running for the bot leaves. */
+  settled(botId: string, runId?: string): void {
+    const rows = this.carried[botId];
+    if (!rows?.length) return;
+    const stay = rows.filter((row) => row.status !== "running" || (runId !== undefined && row.run !== undefined && row.run !== runId));
+    if (stay.length === rows.length) return;
+    if (stay.length) this.carried[botId] = stay;
+    else delete this.carried[botId];
+    this.save();
+    for (const row of rows) {
+      if (row.ref.kind === "sealed" && !stay.includes(row)) this.forgetSealed(row.ref.id);
+    }
+  }
+
+  /** Every row on disk: what a previous process left, then this one's. */
+  private allRows(): Record<string, InboxRow[]> {
+    const out: Record<string, InboxRow[]> = {};
+    for (const source of [this.carried, this.items]) {
+      for (const [botId, rows] of Object.entries(source)) {
+        if (rows.length) out[botId] = [...(out[botId] ?? []), ...rows];
+      }
+    }
     return out;
   }
 
@@ -1212,7 +1298,7 @@ export class ProactivePendingFile {
   private sealedFiles(): Array<{ path: string; scope: { bot: string } }> {
     const out: Array<{ path: string; scope: { bot: string } }> = [];
     const seen = new Set<string>();
-    for (const [botId, rows] of Object.entries(this.items)) {
+    for (const [botId, rows] of Object.entries(this.allRows())) {
       for (const row of rows) {
         if (row.ref.kind !== "sealed" || seen.has(row.ref.id)) continue;
         seen.add(row.ref.id);
@@ -1231,7 +1317,7 @@ export class ProactivePendingFile {
     const dir = join(dirname(this.file), "proactive-sealed");
     let names: string[];
     try { names = readdirSync(dir); } catch { return; }
-    const kept = new Set(Object.values(this.items).flatMap((rows) => rows.flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : []))));
+    const kept = new Set(Object.values(this.allRows()).flatMap((rows) => rows.flatMap((row) => (row.ref.kind === "sealed" ? [row.ref.id] : []))));
     for (const name of names) {
       const match = /^([0-9a-f]{32})\.json$/.exec(name);
       if (!match || kept.has(match[1]!)) continue;
@@ -1241,7 +1327,7 @@ export class ProactivePendingFile {
 
   private forgetSealed(id: string): void {
     if (!/^[0-9a-f]{32}$/.test(id)) return;
-    const still = Object.values(this.items).some((rows) => rows.some((row) => row.ref.kind === "sealed" && row.ref.id === id));
+    const still = Object.values(this.allRows()).some((rows) => rows.some((row) => row.ref.kind === "sealed" && row.ref.id === id));
     if (still) return;
     try {
       rmSync(this.sealedPath(id), { force: true });
@@ -1258,7 +1344,7 @@ export class ProactivePendingFile {
     if (!this.file) return;
     try {
       mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
-      writeFileAtomic(this.file, JSON.stringify({ version: 1, pending: this.items }), { mode: 0o600 });
+      writeFileAtomic(this.file, JSON.stringify({ version: 1, pending: this.allRows() }), { mode: 0o600 });
     } catch {
       // kept in memory: the wake still runs, a restart may lose it
     }
@@ -1270,8 +1356,9 @@ function sealedIdOf(event: Pick<ProactiveEvent, "botId" | "key">): string {
   return createHash("sha256").update(`${event.botId}\0${event.key}`).digest("hex").slice(0, 32);
 }
 
-function normalizeRow(row: { key: string; ref: ProactiveReplayRef; status?: "pending" | "running" }): InboxRow {
-  return { key: row.key, ref: row.ref, status: row.status === "running" ? "running" : "pending" };
+function normalizeRow(row: { key: string; ref: ProactiveReplayRef; status?: "pending" | "running"; run?: unknown }): InboxRow {
+  const running = row.status === "running";
+  return { key: row.key, ref: row.ref, status: running ? "running" : "pending", ...(running && typeof row.run === "string" && row.run ? { run: row.run.slice(0, 80) } : {}) };
 }
 
 function isPendingRow(row: unknown): row is { key: string; ref: ProactiveReplayRef; status?: "pending" | "running" } {

@@ -147,8 +147,8 @@ describe("what the model is told", () => {
     memory.record("ada@example.com", "github", "create_issue", permissionRefusalOf(GITHUB_SCOPE, 10)!);
     const lines = refusalLines(memory.list("ada@example.com"));
     expect(lines).toEqual([
-      "github last refused create_issue for this person (insufficient_scope) at 00:00 UTC; its access may have changed since, call it when the task needs it.",
-      "X last refused get_users_by_username for this person (billing-scope-missing) at 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id",
+      "github last refused create_issue for this person (insufficient_scope) at 1970-01-01 00:00 UTC; its access may have changed since, call it when the task needs it.",
+      "X last refused get_users_by_username for this person (billing-scope-missing) at 1970-01-01 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id",
     ]);
     registerReachProvider("tool-refusals", ({ speakerPrincipalId, room }) => {
       if (room || !speakerPrincipalId) return null;
@@ -255,7 +255,7 @@ describe("second review (#4720)", () => {
     });
     const { lines } = reachContributions({ connectorPrincipalId: "ada@example.com" });
     expect(lines).toEqual(refusalLines(memory.list("ada@example.com")));
-    expect(lines[1]).toBe("X last refused get_usage_credits, get_users_by_id, get_users_by_username, get_users_by_usernames, search_posts_all for this person (billing-scope-missing) at 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id");
+    expect(lines[1]).toBe("X last refused get_usage_credits, get_users_by_id, get_users_by_username, get_users_by_usernames, search_posts_all for this person (billing-scope-missing) at 1970-01-01 00:00 UTC; its access may have changed since, call it when the task needs it. Another way: search_users with the handle, then get_users_posts with its id");
   });
 
   it("is kept for whoever's connections the turn uses: a routine run as B on A's bot uses A's", () => {

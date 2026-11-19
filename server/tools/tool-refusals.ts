@@ -3,8 +3,10 @@
 // 403 client-forbidden, billing-scope-missing, when the connection may not
 // bill the person's own developer account; an OAuth server answers
 // insufficient_scope; GitHub "Resource not accessible by integration".
-// Calling again changes nothing until the person's access changes, so a bot
-// that is told nothing retries it on every turn and every routine run.
+// A bot that is told nothing reports the raw scope on every turn and every
+// routine run; told why and when, it explains the refusal and may still call
+// the tool again: access can change at the provider without a new sign-in
+// (#4919, never an order not to call).
 //
 // One memory for every connector and every engine, fed by the runtime bus
 // (server/host/tool-refusal-guard.ts): a key (person, connector, tool) holds
@@ -245,8 +247,8 @@ export function createToolRefusalMemory(deps: { dataDir?: string; now?: () => nu
 
 const LINE_TOOLS_MAX = 8;
 
-/** When a refusal was received, in UTC (`14:02 UTC`). */
-const refusedAt = (at: number) => `${new Date(at).toISOString().slice(11, 16)} UTC`;
+/** When a refusal was received, in UTC (`2026-11-18 14:02 UTC`). */
+const refusedAt = (at: number) => `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
 /** One line per connector for the model (server/turns/turn-reach.ts): the
  * tools the provider last refused for this person, why and when, and the way

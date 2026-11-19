@@ -163,9 +163,8 @@ s.handleServerRequest = (msg: any) => {
     if (!s.asks.delete(requestId)) return;
     clearTimeout(timer);
     if (isQuestion) {
-      // Only the person's reply is filed: timeout and turn teardown send
-      // empty answers so every id reads unanswered — system notes never
-      // occupy the slot the model reads as the person's words.
+      // Only the person's reply is filed as their words: turn teardown
+      // sends empty answers, a timeout the shared no-answer note (#5032).
       s.send({ jsonrpc: "2.0", id: msg.id, result: codexQuestionReply(behavior, message, source, protocolQuestions ?? []) });
     } else {
       s.send({
@@ -178,8 +177,9 @@ s.handleServerRequest = (msg: any) => {
   };
   const timer = setTimeout(
     // A timed-out question resolves as denied, not answered: the card
-    // closes with no reply (answers stay empty either way), and the
-    // resolve event must not claim an answer that never happened.
+    // stays open for the person, the model reads the no-answer note
+    // (codexQuestionReply), and the resolve event must not claim an
+    // answer that never happened.
     () => finish("deny", isQuestion ? undefined : DENY_TIMEOUT_NOTE, "timeout"),
     15 * 60_000,
   );

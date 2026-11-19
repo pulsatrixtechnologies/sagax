@@ -18,7 +18,19 @@ import { validRecordRef, type RecordRef } from "./record-cards.ts";
 
 /** The provider tool whose input this module understands. */
 export const ASK_USER_QUESTION_TOOL = "AskUserQuestion";
+/** A wire marker only: the close (X) of a question card sends it, and the
+ * respond routes catch it before any engine (an unanswered question refuses
+ * it with a 409). Its words are what released apps send, so they stay as
+ * they are; the model never reads them. */
 export const QUESTION_DISMISS_MESSAGE = "The user closed this question without answering. Use your best judgment and continue.";
+
+/** #5032 (M-20261119-026): what the model reads when its question reaches
+ * the engine's timer with no answer from the person, on every engine. No
+ * answer is never an answer: the card stays open, and the person's later
+ * answer arrives as their next message (the kept-card path). The one copy
+ * of these words. */
+export const QUESTION_UNANSWERED_NOTE =
+  "Sagax: no answer from the person. The question stays open. Do not choose for them, do not act on anything that depends on their answer, and continue only with what does not depend on it.";
 
 /** Caps. Claude Code's own limits are smaller (1-4 questions, 2-4 options);
  * these leave room for a provider that widens them without letting a card

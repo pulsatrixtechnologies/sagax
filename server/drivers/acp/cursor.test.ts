@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ensureDirs } from "../../config.ts";
 import { recordEvents } from "../../testing/events.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
+import { QUESTION_UNANSWERED_NOTE } from "../../../shared/ask-question.ts";
 import {
   classifyCursorError,
   createCursorAgentDriver,
@@ -439,7 +440,7 @@ describe("CursorAgentDriver", () => {
       expect(recorder.events.some((e) => e.type === "request.opened")).toBe(false);
     });
 
-    it("cancels an unanswered card after 15 minutes", async () => {
+    it("skips an unanswered card after 15 minutes with the no-answer note (#5032)", async () => {
       const timeouts: Array<{ delay: number; cb: () => void }> = [];
       const realSetTimeout = globalThis.setTimeout;
       const realClearTimeout = globalThis.clearTimeout;
@@ -469,7 +470,8 @@ describe("CursorAgentDriver", () => {
         clearSpy.mockRestore();
       }
       await recorder.until((e) => e.type === "turn.completed");
-      expect(reply()).toEqual({ result: { outcome: { outcome: "cancelled" } } });
+      // the model reads that nobody answered and must not choose; no option is picked
+      expect(reply()).toEqual({ result: { outcome: { outcome: "skipped", reason: QUESTION_UNANSWERED_NOTE } } });
     });
   });
 

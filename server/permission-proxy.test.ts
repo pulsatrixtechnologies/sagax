@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { brokerSocketPath } from "./procs.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
-import { formatQuestionAnswers } from "../shared/ask-question.ts";
+import { formatQuestionAnswers, QUESTION_UNANSWERED_NOTE } from "../shared/ask-question.ts";
 
 const PROXY = join(dirname(fileURLToPath(import.meta.url)), "permission-proxy.ts");
 
@@ -232,23 +232,33 @@ describe("permission proxy", () => {
     });
   });
 
-  it("files a timeout's own note as unanswered, not as the user's choice", async () => {
+  it("refuses a timed-out AskUserQuestion with the no-answer note, never an answer or a pick (#5032)", async () => {
     // what the broker actually sends on a timeout: `answer`, source "timeout",
-    // and a full sentence. A blank-message stand-in never exercised this, which
-    // is how the note ended up recorded as the person's chosen option.
-    answerWith = () => ({
-      behavior: "answer",
-      message: "Sagax: nobody answered in time. Use your best judgment and continue.",
-      source: "timeout",
-    });
+    // and a full sentence. Never filed as the person's chosen option, and
+    // never allowed with empty answers either: the CLI then said "the user
+    // did not answer" and the model went on to pick the first option itself.
+    answerWith = () => ({ behavior: "answer", message: QUESTION_UNANSWERED_NOTE, source: "timeout" });
     rpc({
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
       params: { name: "approve", arguments: { tool_name: "AskUserQuestion", input: QUESTION } },
     });
-    // Left out, the CLI reports the question as unanswered — which is true.
-    expect(resultJson(await waitFor(2)).updatedInput.answers).toEqual({});
+    expect(resultJson(await waitFor(2))).toEqual({ behavior: "deny", message: QUESTION_UNANSWERED_NOTE });
+  });
+
+  it("tells the model a timed-out ask_user has no answer, whatever note an older broker sent (#5032)", async () => {
+    answerWith = () => ({ behavior: "answer", message: "Sagax: nobody answered in time. Use your best judgment and continue.", source: "timeout" });
+    rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "ask_user", arguments: { question: "Write these time entries?", choices: ["Yes, all", "No"] } } });
+    const text = (await waitFor(2)).result.content[0].text;
+    expect(text).toBe(QUESTION_UNANSWERED_NOTE);
+    expect(text).not.toMatch(/best judgment|Yes, all/);
+  });
+
+  it("never falls back to best judgment when an answer carries no words (#5032)", async () => {
+    answerWith = () => ({ behavior: "answer", source: "system" });
+    rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "ask_user", arguments: { question: "Ready?" } } });
+    expect((await waitFor(2)).result.content[0].text).toBe(QUESTION_UNANSWERED_NOTE);
   });
 
   it("treats the turn ending the same way — system words are not the user's answer", async () => {
@@ -470,7 +480,7 @@ describe("permission proxy", () => {
     expect(res.result.content[0].text).toBe("Apple, Cherry");
   });
 
-  it("keeps a multiSelect ask_user's system note as the note, not as picks", async () => {
+  it("gives a timed-out multiSelect ask_user the no-answer note, not picks", async () => {
     answerWith = () => ({ behavior: "answer", source: "timeout", message: "Nobody answered in time." });
     rpc({
       jsonrpc: "2.0",
@@ -478,7 +488,7 @@ describe("permission proxy", () => {
       method: "tools/call",
       params: { name: "ask_user", arguments: { question: "Which fruits?", choices: ["Apple", "Banana"], multiSelect: true } },
     });
-    expect((await waitFor(2)).result.content[0].text).toBe("Nobody answered in time.");
+    expect((await waitFor(2)).result.content[0].text).toBe(QUESTION_UNANSWERED_NOTE);
   });
 
   it("leaves a single-pick ask_user without a question card", async () => {

@@ -17,7 +17,7 @@ import { spawnChild } from "../process/spawn-helper.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolIdentity } from "../../shared/tool-scope.ts";
-import { ASK_USER_TOOL, formatQuestionAnswers, MAX_OPTIONS, MAX_QUESTIONS, parseAskQuestions } from "../../shared/ask-question.ts";
+import { ASK_USER_TOOL, formatQuestionAnswers, MAX_OPTIONS, MAX_QUESTIONS, parseAskQuestions, QUESTION_UNANSWERED_NOTE } from "../../shared/ask-question.ts";
 import { CALL_TOOL, directoryCallTarget, isDirectoryTool } from "../mcp/mcp-directory.ts";
 import { REMOTE_MCP_STARTUP_MS } from "../mcp/mcp-http.ts";
 
@@ -697,8 +697,6 @@ function summarizeParams(params: unknown): string {
   }
 }
 
-const ASK_USER_NOT_ANSWERED = "The person did not answer this question. Do not guess an answer; ask again later or proceed without it.";
-
 /** ask_user, the ask tool every Sagax engine shares (shared/ask-question.ts),
  * over Pi's own dialogs. In RPC mode each select becomes one question card,
  * so the questions are asked one after another, and a reply typed in the
@@ -743,17 +741,16 @@ function askUserTool(allowed: () => boolean): PiToolDefinition {
           ? `${question.question}\n\n${described.map((option) => `${option.label}: ${option.description}`).join("\n")}`
           : question.question;
         // A dismissed, timed-out or aborted dialog resolves undefined: stop
-        // asking rather than leave the model waiting on the rest.
+        // asking rather than leave the model waiting on the rest. #5032: the
+        // model reads the shared no-answer note, never a pick of its own.
         const answer = labels.length
           ? await ctx.ui.select?.(title, labels, { signal })
           : await ctx.ui.input?.(question.question, undefined, { signal });
         if (!answer?.trim()) break;
         answers.push([answer.trim()]);
       }
-      if (!answers.length) throw new Error(ASK_USER_NOT_ANSWERED);
-      const unanswered = answers.length < questions.length
-        ? "\n\nThe person did not answer the other questions. Do not guess their answers."
-        : "";
+      if (!answers.length) throw new Error(QUESTION_UNANSWERED_NOTE);
+      const unanswered = answers.length < questions.length ? `\n\n${QUESTION_UNANSWERED_NOTE}` : "";
       return { content: [{ type: "text", text: formatQuestionAnswers(questions, answers) + unanswered }], details: {} };
     },
   };

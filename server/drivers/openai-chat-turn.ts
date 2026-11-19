@@ -2,7 +2,7 @@
 import type { SendTurnInput } from "../contracts.ts";
 import { warmResourcePerson } from "../resources/warm-resources.ts";
 import { newId } from "../contracts.ts";
-import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
+import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, QUESTION_UNANSWERED_NOTE, questionChoices } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { maskValues } from "../../shared/redact.ts";
@@ -584,11 +584,11 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
               abort.signal.throwIfAborted();
               if (answer === null) {
                 // An unanswered question is absence, not a "no": the card
-                // timed out or the person closed it. Keep the turn alive so
-                // the model's final response stands; it is told not to
-                // guess and may ask again later. An explicit deny of a
-                // permission stays terminal.
-                result = { ok: true, text: "The person did not answer this question. Do not guess an answer; ask again later or proceed without it." };
+                // timed out, was refused or the turn stopped. Keep the turn alive so the
+                // model's final response stands; it reads the shared note
+                // (#5032) and never chooses for the person. An explicit
+                // deny of a permission stays terminal.
+                result = { ok: true, text: QUESTION_UNANSWERED_NOTE };
               } else {
                 result = { ok: true, text: answer };
               }

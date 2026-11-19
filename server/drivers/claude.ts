@@ -47,10 +47,11 @@ import { extractMcpImages } from "../mcp/mcp-tool-images.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 import {
   parseChoices,
+  QUESTION_UNANSWERED_NOTE,
   questionChoices,
 } from "../../shared/ask-question.ts";
 import { CLAUDE_UNUSED_COMMANDS } from "./host-tools.ts";
-import { DENY_TIMEOUT_NOTE, QUESTION_TIMEOUT_NOTE, DUPLICATE_ASK_ID_NOTE, systemEndedReply, askQuestions, askSummary, type Ask, type AskBehavior, type AskResolutionSource } from "./claude-asks.ts";
+import { DENY_TIMEOUT_NOTE, DUPLICATE_ASK_ID_NOTE, systemEndedReply, askQuestions, askSummary, type Ask, type AskBehavior, type AskResolutionSource } from "./claude-asks.ts";
 
 export {
   claudeApiErrorMessage,
@@ -595,8 +596,9 @@ export function readClaudeModelCatalog(
 // neither stall silently NOR get blanket-denied — it should ask the user.
 // The broker is a net server on a per-turn socket; the proxy (spawned by
 // the claude CLI) forwards asks over it and waits. Unanswered permission
-// asks deny after timeoutMs with a keep-moving note; unanswered questions
-// answer with "use your best judgment" — guidance, never a block.
+// asks deny after timeoutMs with a keep-moving note; an unanswered question
+// gets QUESTION_UNANSWERED_NOTE (#5032): no answer is never an answer, the
+// model never chooses for the person, and the card stays open.
 
 export const sumNativeTurnResults = sumNativeTurnResultsFromSession;
 
@@ -721,7 +723,7 @@ export async function createPermissionBroker(opts: {
     const timer = setTimeout(
       () =>
         ask.kind === "question"
-          ? finish("answer", QUESTION_TIMEOUT_NOTE, "timeout")
+          ? finish("answer", QUESTION_UNANSWERED_NOTE, "timeout")
           : finish("deny", DENY_TIMEOUT_NOTE, "timeout"),
       timeoutMs,
     );

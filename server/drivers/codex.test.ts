@@ -44,7 +44,7 @@ import { isReservedMcpEnvEntry, MCP_RESTART_ENV } from "../mcp/mcp-registry.ts";
 
 /** #1977: Full access on Codex lets MCP tool approvals reach Sagax's gate. */
 const CODEX_FULL_POLICY = codexFullApprovalPolicy();
-import { formatQuestionAnswers } from "../../shared/ask-question.ts";
+import { formatQuestionAnswers, QUESTION_UNANSWERED_NOTE } from "../../shared/ask-question.ts";
 
 vi.mock("./codex-release.ts", async (importOriginal) => ({
   ...await importOriginal<typeof import("./codex-release.ts")>(),
@@ -2992,7 +2992,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     }
   });
 
-  it("times out an ask with empty answers and a timeout-sourced resolve", async () => {
+  it("times out an ask with the no-answer note on every question and a timeout-sourced resolve (#5032)", async () => {
     // Hold the ask reply without completing the turn: a completed turn
     // starts the driver's child-reap loop, whose 25ms setTimeout poll would
     // freeze on the fake clock and strand the teardown.
@@ -3026,8 +3026,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
     }
-    // nobody answered, so every id reads unanswered — no note filed as words
-    expect(decision).toEqual({ answers: {} });
+    // nobody answered: every id carries the no-answer note, never a pick and
+    // never empty answers the model would fill in on its own
+    expect(decision).toEqual({ answers: {
+      "q-ship": { answers: [QUESTION_UNANSWERED_NOTE] },
+      "q-review": { answers: [QUESTION_UNANSWERED_NOTE] },
+    } });
   });
 
   it("answers Codex 0.149 MCP elicitation with the MCP result shape", async () => {

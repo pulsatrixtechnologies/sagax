@@ -2,7 +2,7 @@
 // record-link stripping, searched call_tool, pre-allowed names, artifact
 // reads. The MCP proxy (server/permission-proxy.ts) and the stdio
 // can_use_tool handler (can-use-tool.ts, #4525) both use this.
-import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "../../../shared/ask-question.ts";
+import { parseAskQuestions, QUESTION_UNANSWERED_NOTE, questionAnswersByQuestion, type AskQuestion } from "../../../shared/ask-question.ts";
 import { permissionRoute } from "../../../shared/searched-tool-call.ts";
 import { withoutRecordLinksIn } from "../../../shared/record-cards.ts";
 import { harnessToolWordsLeave } from "../../../shared/record-link-tools.ts";
@@ -96,12 +96,16 @@ export async function answerNativeQuestions(
   return JSON.stringify(nativeQuestionDecision(input, questions, answer));
 }
 
-/** AskUserQuestion's documented `answers` field. A bare allow drops the click. */
+/** AskUserQuestion's documented `answers` field. A bare allow drops the click.
+ * #5032: a question that ran out of time is refused with the shared note,
+ * never allowed with empty answers: the CLI then read "the user did not
+ * answer" and the model went on to pick for the person. */
 export function nativeQuestionDecision(
   input: unknown,
   questions: AskQuestion[],
   answer: { behavior?: string; message?: string; source?: string },
 ): { behavior: "allow"; updatedInput: Record<string, unknown> } | { behavior: "deny"; message: string } {
+  if (answer.source === "timeout") return { behavior: "deny", message: QUESTION_UNANSWERED_NOTE };
   if (answer.behavior === "deny") return { behavior: "deny", message: answer.message || "Denied from Sagax" };
   const answers = answer.source === "user" && typeof answer.message === "string"
     ? questionAnswersByQuestion(answer.message, questions)

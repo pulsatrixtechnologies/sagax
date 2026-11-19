@@ -747,8 +747,13 @@ export interface RoutineManagerOptions {
    * same for final words that leave several items to decide as text: one
    * card per item (routineClaimedCardChoices). #4233: `card.noHold`: the
    * cards hold nothing (a repeating routine's run, asksHoldNothing); the run
-   * then ends normally and each answer arrives later as its own turn. */
-  raiseClaimedCard?: (threadId: string, claim: string, card?: { noHold: true }) => string | null;
+   * then ends normally and each answer arrives later as its own turn.
+   * #5025: `card` also names the conversations of the routine's
+   * earlier runs and the claim window's start: an ask an open card of the
+   * bot for the person already carries draws nothing new, and when every
+   * ask has one the host answers ROUTINE_CLAIM_ALREADY_OPEN (the run ends
+   * with its words in its log). */
+  raiseClaimedCard?: (threadId: string, claim: string, card?: RoutineClaimedCardContext) => string | null | typeof ROUTINE_CLAIM_ALREADY_OPEN;
   /** #4205: a run cancelled or superseded leaves none of its own question
    * cards open: each card drawn in its conversation since `since` (the
    * run's start) is closed (an answer to it starts nothing). A card drawn
@@ -912,16 +917,96 @@ export function routineRerunStartedBy(prior: Pick<RoutineRun, "startedBy"> | und
   return prior && routineRunStartedByPerson(prior) ? "person" : undefined;
 }
 
+/** #5025: what raiseClaimedCard knows of the run whose claim it draws. */
+export interface RoutineClaimedCardContext {
+  /** #4233: the cards hold nothing (a repeating routine's run). */
+  noHold?: true;
+  /** The conversations of this routine's earlier runs (the one before, and
+   * any still waiting): an open card there that carries the same ask is
+   * the card, never drawn twice. */
+  earlierThreads?: readonly string[];
+  /** The claim window's start (claimWindowStart): a card of the bot for the
+   * person drawn since then, anywhere, is the card its words speak of. */
+  since?: number;
+}
+
+/** #5025: raiseClaimedCard's answer when every ask of the claim
+ * already has an open card of the bot for the person (same ask, same
+ * ticket, or this trigger's earlier run): nothing new is drawn, and the
+ * run ends normally with its words in its log. */
+export const ROUTINE_CLAIM_ALREADY_OPEN: { readonly alreadyOpen: true } = Object.freeze({ alreadyOpen: true as const });
+
 export const ROUTINE_CARD_CLAIM_WITHOUT_CARD = "The bot said it showed you a card, but no card was shown: nothing is waiting for your choice and nothing was written. Run the routine again.";
+
+/** #5025: a word of these, whole (accents included), never inside another. */
+const wholeWords = (body: string, flags = "iu") => new RegExp(`(?<![\\p{L}\\p{N}])(?:${body})(?![\\p{L}\\p{N}])`, flags);
+const CARD_WORD = "cartes?|cards?";
+/** Up to `n` words in a row, never across a mark (",", ":", "."). */
+const wordsUpTo = (n: number) => `(?:\\s+[\\p{L}\\p{N}'\u2019-]+){0,${n}}?\\s+`;
+/** #5025: the card was there before this turn ("A card is
+ * already waiting", "déjà une carte", "la carte attend toujours", "the
+ * card from the previous run", "la carte précédente"). */
+const CARD_ALREADY_THERE = wholeWords([
+  `(?:${CARD_WORD})${wordsUpTo(4)}(?:already\\s+(?:waiting|waits|open|pending|there|up|shown|posted|sent|displayed|raised|drawn|out)|déjà\\s+(?:en attente|affichée?s?|envoyée?s?|ouverte?s?|là|présentée?s?|montrée?s?)|attend(?:ent)?\\s+(?:déjà|encore|toujours)|still\\s+(?:waiting|waits|open|pending|there|up)|(?:encore|toujours)\\s+(?:en attente|affichée?s?|ouverte?s?|là)|exists|existe(?:nt)?)`,
+  `(?:cartes?)\\s+(?:précédente?s?|existante?s?|d'avant|de plus tôt|du (?:tour|run|message) précédent)`,
+  `(?:cards?)\\s+(?:from|of)\\s+(?:the\\s+)?(?:earlier|previous|last)\\s+(?:run|turn|message)`,
+  `(?:already|déjà|earlier|previous|existing|précédente?|existante?)(?:\\s+[\\p{L}'\u2019-]+){0,2}?\\s+(?:${CARD_WORD})`,
+].join("|"));
+/** #5025: the card told as a past event ("a card was posted", "la
+ * carte a été affichée"): a report, never one shown now. */
+const CARD_TOLD_PAST = wholeWords(`(?:${CARD_WORD})${wordsUpTo(3)}(?:was|were|has been|have been|had been|a été|ont été|avait été|avaient été|était|étaient)\\s+(?:[\\p{L}'\u2019-]+\\s+)?(?:posted|shown|displayed|sent|raised|drawn|created|affichée?s?|envoyée?s?|présentée?s?|montrée?s?|publiée?s?|créée?s?)`);
+/** #5025: the card waits on someone else, named ("waiting for
+ * Sam", "attend le GO de Robin"): the bot reports it, it shows nothing to
+ * the person it speaks to. Case matters (the name's capital). */
+const CARD_FOR_SOMEONE_ELSE = new RegExp(`(?<![\\p{L}\\p{N}])(?:[Cc]artes?|[Cc]ards?)${wordsUpTo(4)}(?:[Ww]ait(?:ing|s)?\\s+(?:for|on)|attend(?:ent)?(?:\\s+(?:le|la|les)\\s+(?:GO|OK|accord|feu vert|réponse)\\s+(?:de|d'))?|en attente (?:de|d'|du GO de))\\s*(?!(?:[Yy]ou|[Yy]our|toi|vous|ton|ta|tes|votre|vos|te)(?![\\p{L}\\p{N}]))(?:\\p{Lu}[\\p{L}\\p{N}]*|him|her|them|lui|elle|eux)(?![\\p{L}\\p{N}])`, "u");
+/** #5025: the bot says why it draws no card ("A second card would
+ * duplicate it", "pas besoin d'une autre carte"): nothing is claimed. */
+const CARD_NOT_AGAIN = wholeWords([
+  `(?:${CARD_WORD})${wordsUpTo(4)}(?:duplicat\\w*|doublon\\w*|en double|doubler\\w*|ferai\\w* double emploi)`,
+  `(?:duplicat\\w*|doublon\\w*|en double)${wordsUpTo(4)}(?:${CARD_WORD})`,
+  `(?:no|not|never|won't|wouldn't|don't|didn't|without|pas|aucune|jamais|sans)${wordsUpTo(4)}(?:second|another|new|other|extra|deuxième|seconde|autre|nouvelle)\\s+(?:${CARD_WORD})`,
+].join("|"));
 
 /** The bot's final words say a card or a choice is on the person's screen
  * (French or English): "La carte est affichée", "I've shown you a card",
- * "the approval card is waiting for you". */
+ * "the approval card is waiting for you". #5025: only a card it
+ * announces for the person now. Words that speak of a card already there,
+ * from earlier, told as a past event, waiting on someone else, or that say
+ * why no second card is drawn ("A card is already waiting for Sam. A
+ * second card would duplicate it.") claim nothing: the server drew the
+ * very duplicate the bot meant to avoid. */
 export function routineClaimsCard(output: string | undefined): boolean {
   if (!output) return false;
   const text = output.normalize("NFC");
-  return /\b(?:carte|card)s?\b[^.\n]{0,60}\b(?:affich|montr|présent|envoy|shown|displayed|posted|waiting|on your screen|en attente|t'attend|vous attend)/i.test(text)
-    || /\b(?:affich|montr|présent|show|display|post)\w*\b[^.\n]{0,30}\b(?:une|la|ta|a|the|an|your)\s+(?:\w+\s+)?(?:carte|card)\b/i.test(text);
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/);
+  if (sentences.some((sentence) => CARD_NOT_AGAIN.test(sentence))) return false;
+  return sentences.some((sentence) => routineSentenceClaimsCard(sentence)
+    && !CARD_ALREADY_THERE.test(sentence) && !CARD_TOLD_PAST.test(sentence) && !CARD_FOR_SOMEONE_ELSE.test(sentence));
+}
+
+/** #5025: the card handed over in words ("Voici la carte :",
+ * "Here is your approval card:"), an announcement made now. */
+const CARD_HANDED_OVER = wholeWords(`(?:voici|voilà|here's|here is|here are)\\s+(?:(?:la|ta|une|votre|vos|les|tes|ma|the|your|a|an|my)\\s+)?(?:[\\p{L}'\u2019-]+\\s+)?(?:${CARD_WORD})`);
+
+function routineSentenceClaimsCard(sentence: string): boolean {
+  return /\b(?:carte|card)s?\b[^.\n]{0,60}\b(?:affich|montr|présent|envoy|shown|displayed|posted|waiting|on your screen|en attente|t'attend|vous attend)/i.test(sentence)
+    || /\b(?:affich|montr|présent|show|display|post)\w*\b[^.\n]{0,30}\b(?:une|la|ta|a|the|an|your)\s+(?:\w+\s+)?(?:carte|card)\b/i.test(sentence)
+    || CARD_HANDED_OVER.test(sentence);
+}
+
+/** #5025: the words ask the person something: a question, or a
+ * request made to them ("Confirme l'envoi.", "J'ai besoin de ton GO", "I
+ * need your approval"). A claimed card whose words ask nothing and list no
+ * choice carries no decision, so it draws no card. */
+const ROUTINE_REQUEST_LEAD = wholeWords("(?:please\\s+|svp\\s+|s'il te plaît,?\\s+|merci de\\s+)?(?:confirm|choose|pick|approve|reply|answer|decide|tell me|let me know|confirme|confirmez|choisis|choisissez|réponds|répondez|décide|décidez|approuve|approuvez|valide|validez|dis-moi|dites-moi|indique-moi|indiquez-moi)");
+const ROUTINE_REQUEST_ANYWHERE = wholeWords("merci de (?:confirmer|choisir|répondre|décider|approuver|valider|me dire)|(?:I|we) need your|need your (?:go|ok|approval|answer|decision|choice|reply)|(?:waiting|wait) for your (?:go|ok|approval|answer|decision|choice|reply)|j'ai besoin de (?:ton|votre|ta)|il me faut (?:ton|votre|ta)|(?:j'attends|en attente de) (?:ton|votre|ta) (?:GO|OK|accord|feu vert|approbation|choix|réponse|décision)");
+function routineWordsAsk(text: string): boolean {
+  const plain = text.normalize("NFC").replace(/\*\*|__|`/g, "");
+  if (/\?(?=[\s»")\]*_]|$)/.test(plain)) return true;
+  if (ROUTINE_REQUEST_ANYWHERE.test(plain)) return true;
+  // a request opens its sentence (after a list mark): "Confirme l'envoi."
+  return plain.split(/(?<=[.!?:;])\s+|\n+/)
+    .some((sentence) => ROUTINE_REQUEST_LEAD.exec(sentence.replace(/^\s*(?:(?:[-*\u2022]|\d{1,2}[.)])\s+)?/, ""))?.index === 0);
 }
 
 /** #2939: the line just before a list offers its items as choices ("choisis :",
@@ -937,8 +1022,10 @@ const CLAIMED_CARD_LEAD_INTRO = /\b(?:carte|card)s?\b[^\n]*:\s*$/i;
  * are the ones the bot listed (bullets or numbers), else go on or stop, in
  * the bot's language. #2939: only a list the bot offers as choices (the line
  * before it asks to choose, or announces the card); a summary list of what
- * it did stays in the question, never a choice. */
-export function routineClaimedCardChoice(claim: string): { title: string; question: string; options: string[] } {
+ * it did stays in the question, never a choice. #5025: null when
+ * the words list no choice and ask nothing (routineWordsAsk): a card must
+ * carry a real decision. */
+export function routineClaimedCardChoice(claim: string): { title: string; question: string; options: string[] } | null {
   const text = claim.normalize("NFC").replace(/\r\n?/g, "\n").trim();
   const lines = text.split("\n");
   const itemOf = (line: string) => /^\s*(?:[-*\u2022]|\d{1,2}[.)])\s+(.+?)\s*$/.exec(line)?.[1]?.replace(/\*\*/g, "").trim();
@@ -964,6 +1051,10 @@ export function routineClaimedCardChoice(claim: string): { title: string; questi
   const rest = lines.filter((_, index) => !taken.has(index));
   const french = routineWordsAreFrench(text);
   const asks = listed.length >= 2 ? [] : routineAsksInText(text);
+  // #5025: no choice listed, none in words, nothing asked: no
+  // decision to carry, so no card (never a bare go on or stop); the words
+  // stay the run's report.
+  if (listed.length < 2 && asks.length !== 1 && !routineWordsAsk(text)) return null;
   // #4205: one ask with its choices in words ("Approuver ou refuser ?")
   // offers those choices, never a generic go on or stop.
   const options = listed.length >= 2 ? listed : asks.length === 1 ? asks[0]!.options : french ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"];
@@ -975,11 +1066,13 @@ export function routineClaimedCardChoice(claim: string): { title: string; questi
 
 /** #4205: the cards drawn for a run's final words: one per separate ask
  * the words hold (each item ending on its choices in words), else the one
- * card of routineClaimedCardChoice. */
+ * card of routineClaimedCardChoice, or none when the words ask nothing
+ * (#5025). */
 export function routineClaimedCardChoices(claim: string): Array<{ title: string; question: string; options: string[] }> {
   const asks = routineAsksInText(claim);
   if (asks.length >= 2) return asks.map((ask) => ({ title: "Your bot has a question", ...ask }));
-  return [routineClaimedCardChoice(claim)];
+  const one = routineClaimedCardChoice(claim);
+  return one ? [one] : [];
 }
 
 /** The run's waiting line for those cards (as awaitsPerson words it). */
@@ -4942,6 +5035,18 @@ export class RoutineManager {
     return drawn === undefined ? run.startedAt : Math.max(run.startedAt, drawn + 1);
   }
 
+  /** #5025: the conversations of this run's routine (the same
+   * trigger) whose open cards a claim of this run is checked against: the
+   * run just before it and any still waiting on the person. */
+  private earlierRunThreads(run: RoutineRun): string[] {
+    const startOf = (one: RoutineRun) => one.startedAt ?? one.scheduledFor;
+    const others = this.runsOfRoutine(run.routineId)
+      .filter((other) => other.id !== run.id && other.threadId && other.threadId !== run.threadId && startOf(other) <= startOf(run));
+    const before = others.reduce<RoutineRun | undefined>((latest, other) => (!latest || startOf(other) > startOf(latest) ? other : latest), undefined);
+    const threads = [...(before ? [before] : []), ...others.filter((other) => other.status === "waiting")].map((other) => other.threadId!);
+    return [...new Set(threads)].slice(0, 6);
+  }
+
   /** The bot's final words claim a card no one drew on this turn. */
   private claimsUndrawnCard(run: RoutineRun): boolean {
     return Boolean(run.threadId && run.startedAt !== undefined && this.options.cardRaisedSince
@@ -5017,26 +5122,37 @@ export class RoutineManager {
     // #4233: the claimed asks have their cards (drawn, or an earlier run's
     // pending card replaced in place by its text key), holding nothing
     let asksDrawn = false;
-    if ((this.claimsUndrawnCard(run) || this.endsOnUndrawnAsks(run, words)) && this.options.raiseClaimedCard
+    // #5025: the claim needs no card of its own (it asks nothing,
+    // or an open card already carries it): the run ends normally, its
+    // words in its log, and never fails as a claim without a card.
+    let claimSettled = false;
+    if ((this.claimsUndrawnCard(run) || this.endsOnUndrawnAsks(run, words))
       && routineReportOutcome(run.output).declared?.status !== "failed"
       && !this.runTrouble.get(run.id)?.flowBlocked && !flowRunBlockedReason(run.output)) {
       // The card and the waiting run show the bot's words, never the
       // goal lines (GOAL_STATUS / NEXT_CHECK) or the report markers: the
       // turn that ends the run carries its own and settles the goal.
       const said = readGoalReport(routineReportOutcome(words).report, this.now()).report;
-      // #4233: a repeating routine's run raises them holding nothing and
-      // ends normally below, so its next occurrence starts on time
-      const noHold = this.asksHoldNothing(run.threadId!);
-      const waiting = this.options.raiseClaimedCard(run.threadId!, said, noHold ? { noHold: true } : undefined);
-      if (waiting && !noHold) {
-        this.finalWords.delete(run.id);
-        run.output = said ? clipReadable(said, 2_000) : undefined;
-        run.claimCardAt = this.now();
-        this.wait(run, waiting);
-        run.error = undefined;
-        return false;
+      if (!routineClaimedCardChoices(said).length) claimSettled = true;
+      else if (this.options.raiseClaimedCard) {
+        // #4233: a repeating routine's run raises them holding nothing and
+        // ends normally below, so its next occurrence starts on time
+        const noHold = this.asksHoldNothing(run.threadId!);
+        const waiting = this.options.raiseClaimedCard(run.threadId!, said, {
+          ...(noHold ? { noHold: true as const } : {}),
+          earlierThreads: this.earlierRunThreads(run),
+          since: this.claimWindowStart(run as RoutineRun & { startedAt: number }),
+        });
+        if (waiting === ROUTINE_CLAIM_ALREADY_OPEN) claimSettled = true;
+        else if (typeof waiting === "string" && waiting && !noHold) {
+          this.finalWords.delete(run.id);
+          run.output = said ? clipReadable(said, 2_000) : undefined;
+          run.claimCardAt = this.now();
+          this.wait(run, waiting);
+          run.error = undefined;
+          return false;
+        } else asksDrawn = Boolean(waiting);
       }
-      asksDrawn = Boolean(waiting);
     }
     const goalProblem = this.settleGoal(run);
     const outcome = this.settleReport(run);
@@ -5083,7 +5199,7 @@ export class RoutineManager {
     // 2026-11-03: "La carte est affichée" with no card anywhere is a failure
     // the person must hear, not a success that sends them looking for it
     // (when the host could not draw it above).
-    if (!asksDrawn && this.claimsUndrawnCard(run)) {
+    if (!asksDrawn && !claimSettled && this.claimsUndrawnCard(run)) {
       this.failRun(run, ROUTINE_CARD_CLAIM_WITHOUT_CARD);
       queueMicrotask(() => this.tickInBackground());
       return true;

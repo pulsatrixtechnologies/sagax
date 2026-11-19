@@ -13,7 +13,7 @@ import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { cardRefusalText, nativeCardRuleBreak } from "../../shared/card-rules.ts";
 import { cardRefusalTurns } from "../approvals/card-refusal-turns.ts";
-import { formatQuestionAnswers, type AskQuestion } from "../../shared/ask-question.ts";
+import { formatQuestionAnswers, parseAskFacts, type AskQuestion } from "../../shared/ask-question.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
 
 /** #4219: the card fields an ask_choice event carries (never more). */
@@ -22,6 +22,9 @@ function askCardFields(card: any): Record<string, unknown> {
   if (typeof card?.askKey === "string" && card.askKey) out.askKey = card.askKey;
   if (card?.noHold === true) out.noHold = true;
   if (card?.askTo && typeof card.askTo.id === "string" && typeof card.askTo.name === "string") out.askTo = { id: card.askTo.id, name: card.askTo.name };
+  // structured facts: re-validated, never trusted as given
+  const facts = parseAskFacts(card?.facts);
+  if (facts) out.facts = facts;
   return out;
 }
 import { questionCardTitle } from "../approvals/approval-words.ts";

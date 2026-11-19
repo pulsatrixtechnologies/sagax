@@ -3,7 +3,7 @@
 // dispatched by agents-call.ts. Never import server/index.ts.
 
 import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, FORM_HEADER_MAX, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
-import { ANSWER_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS } from "../../../shared/ask-question.ts";
+import { ANSWER_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_FACTS, MAX_FACT_LABEL, MAX_FACT_VALUE } from "../../../shared/ask-question.ts";
 import { CARD_LIMITS } from "../../../shared/card-rules.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
@@ -54,6 +54,20 @@ export const ASK_CHOICE_DEF = {
           maxItems: OPTIONS_CARD_LIMITS.maxOptions,
           items: { type: "string", maxLength: ASK_CHOICE_DETAIL_MAX },
           description: "Optional, same order: what each answer does.",
+        },
+        facts: {
+          type: "array",
+          maxItems: MAX_FACTS,
+          description: "Optional table rows above the question: {label, value, record?: {product, kind, id} for a ticket chip}. Keep the question text too.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", maxLength: MAX_FACT_LABEL },
+              value: { type: "string", maxLength: MAX_FACT_VALUE },
+              record: { type: "object", properties: { product: { type: "string" }, kind: { type: "string" }, id: { type: "string" } } },
+            },
+            required: ["label", "value"],
+          },
         },
         questions: {
           type: "array",

@@ -800,6 +800,9 @@ struct FormHeadContent: View {
                     onDismiss: WaitingCardSkip.waits(card) && !state.answering ? { skip() } : nil,
                     dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
                 )
+                if let facts = card.facts {
+                    AskFactsTableView(colors: colors, facts: facts)
+                }
                 if let context = FormCardPieces.contextLine(message) {
                     Text(context)
                         .font(colors.font(13))

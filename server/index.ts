@@ -16869,7 +16869,7 @@ type HarnessChoice = {
   questionOptions?: import("../shared/ask-question.ts").AskQuestionOption[];
   pageTargetChoice?: import("../shared/page-targets.ts").PageTargetChoiceCardData;
   /** #4205, #4219: the keyed card's key, hold and addressee. */
-  card?: { askKey?: string; noHold?: true; askTo?: import("../shared/wire.ts").AskAddressee };
+  card?: { askKey?: string; noHold?: true; askTo?: import("../shared/wire.ts").AskAddressee; facts?: import("../shared/ask-question.ts").AskFact[] };
   /** #4219: in a room, the member bot that asks. */
   askerBotId?: string;
   /** #4238: raised without ringing (the start-up back-fill rings its one

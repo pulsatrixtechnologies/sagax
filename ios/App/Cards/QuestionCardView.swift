@@ -110,6 +110,9 @@ struct QuestionCardView: View {
                     .font(colors.font(12))
                     .foregroundStyle(colors.inkSecondary)
             }
+            if let facts = card.facts {
+                AskFactsTableView(colors: colors, facts: facts)
+            }
             if !single {
                 tabs
                 Text(current.question)

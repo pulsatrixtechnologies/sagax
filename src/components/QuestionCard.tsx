@@ -31,6 +31,7 @@ import { answerWithoutNote } from "../../shared/options-card";
 import { ROUTINE_PROBLEM_KEY_PREFIX, serverCardKind } from "../../shared/fix-card-keys";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
 import { TechnicalDetails } from "./ApprovalParts";
+import { AskFactsTable } from "./AskFactsTable";
 import { ExpandableText } from "./ExpandableText";
 import { QuestionForm } from "./QuestionForm";
 import {
@@ -225,6 +226,7 @@ export function QuestionCard({
         cardId={message.id}
         title={card.title?.trim() || (bot ? t("question.card.named", { name: bot.name }) : t("question.card.title"))}
         context={card.subtitle}
+        facts={card.facts}
         questions={questions}
         settled={settled}
         answer={answer}
@@ -460,6 +462,8 @@ export function QuestionCard({
           ))}
         </div>
       )}
+
+      <AskFactsTable facts={card.facts} />
 
       {!questionIsTitle && (
         <ExpandableText text={current.question} className="mb-2 text-[13.5px] leading-relaxed text-ink" />

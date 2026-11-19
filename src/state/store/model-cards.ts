@@ -18,6 +18,8 @@ export interface OptionCardData {
   askKey?: string;
   /** #4438: when the card's words were last read from what they describe. */
   factsAt?: number;
+  /** ask_choice `facts`: label / value rows, a compact table above the sentence. */
+  facts?: import("../../../shared/ask-question").AskFact[];
   /** #4438: a server card's raw words (a tool's own error), under Details. */
   technicalDetails?: string;
   /** #4438: what the server did at once with the answer, in one line. */

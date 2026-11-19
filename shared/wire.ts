@@ -1595,6 +1595,9 @@ export interface OptionCardData extends WaitCardField {
    * raised, or replaced in place by its key. Absent: the message's `at`.
    * A card nothing re-checks says since when its facts were read. */
   factsAt?: number;
+  /** Structured facts of a bot's question (ask_choice `facts`): label / value
+   * rows drawn as a compact table above the card's sentence. */
+  facts?: import("./ask-question.ts").AskFact[];
   /** #4579: a routine fix card answered with Run a check: the run its line
    * then reports on, until that run ends. */
   checkRunId?: string;

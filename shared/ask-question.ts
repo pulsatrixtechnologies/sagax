@@ -14,6 +14,8 @@
  * so a runaway (or hostile) tool call cannot produce an unreadable card.
  */
 
+import { validRecordRef, type RecordRef } from "./record-cards.ts";
+
 /** The provider tool whose input this module understands. */
 export const ASK_USER_QUESTION_TOOL = "AskUserQuestion";
 export const QUESTION_DISMISS_MESSAGE = "The user closed this question without answering. Use your best judgment and continue.";
@@ -87,6 +89,42 @@ export interface AskQuestion {
    * permission-style question answers with an option id, never text). The
    * card then offers no free-text "Other". Absent means free text is fine. */
   custom?: false;
+}
+
+/** The most facts one card carries, and the longest label and value. The
+ * label is a few words ("Client"), the value a short line that may wrap
+ * ("Demande"). */
+export const MAX_FACTS = 12;
+export const MAX_FACT_LABEL = 40;
+export const MAX_FACT_VALUE = 400;
+
+/** One structured fact of a question card: a label and its value, drawn as a
+ * row of a compact two-column table above the card's sentence. `record`
+ * (the same ref a `sagax://record/` link carries) makes the value the
+ * clickable chip of that record (a ticket number); without it, or on a
+ * client that cannot serve record cards, the value is plain text. */
+export interface AskFact {
+  label: string;
+  value: string;
+  record?: RecordRef;
+}
+
+/** Untrusted `facts` (ask_choice input, a card read back) -> the valid rows,
+ * capped. A malformed row is dropped rather than refusing the whole ask: the
+ * card keeps its sentence either way. Undefined when nothing is left. */
+export function parseAskFacts(raw: unknown): AskFact[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const facts: AskFact[] = [];
+  for (const entry of raw) {
+    if (facts.length >= MAX_FACTS) break;
+    if (!isRecord(entry)) continue;
+    const label = text(entry.label, MAX_FACT_LABEL);
+    const value = text(entry.value, MAX_FACT_VALUE);
+    if (!label || !value) continue;
+    const ref = isRecord(entry.record) ? { product: entry.record.product, kind: entry.record.kind, id: entry.record.id } : null;
+    facts.push({ label, value, ...(validRecordRef(ref) ? { record: { product: ref.product, kind: ref.kind, id: ref.id } } : {}) });
+  }
+  return facts.length ? facts : undefined;
 }
 
 /** Durable payload on a question card. Versioned like the other card

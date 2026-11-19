@@ -1,0 +1,107 @@
+{
+ "bots": [
+  {
+   "id": "preview-scout",
+   "threadId": "preview-thread-scout",
+   "name": "Marc",
+   "title": "Dispatch",
+   "description": "Finds the facts and brings back sources.",
+   "notifications": true,
+   "color": "cyan",
+   "section": "Launch",
+   "chiefOfStaff": true,
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "ask-facts",
+   "tasks": [
+    {
+     "threadId": "preview-thread-scout",
+     "title": "Dispatch",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "role": "user",
+     "kind": "text",
+     "text": "Qu'est-ce qui reste à placer ?",
+     "id": "f-user",
+     "at": 1787028500000
+    },
+    {
+     "role": "bot",
+     "kind": "options",
+     "id": "ask-facts",
+     "at": 1787028600000,
+     "card": {
+      "title": "Nouveau billet #300769 sans plage",
+      "subtitle": "Nouveau billet #300769 : Client : Sherweb. Demande : « Auberge Godefroy - Potential - 1894992 - Sign-In from Unauthorized Location [Alliance:#1894992/] ». Site : Main. Priorité : 3 : Moyenne (Medium). Déjà touché par : personne (dernier geste 2026-11-19 07:39). Je ne l'ai pas placé : je n'ai trouvé aucune règle pour le placer.",
+      "options": [],
+      "requestId": "ask-facts-req",
+      "requestType": "question",
+      "askKey": "ticket-300769",
+      "facts": [
+       {
+        "label": "Billet",
+        "value": "#300769",
+        "record": {
+         "product": "connectwise",
+         "kind": "ticket",
+         "id": "300769"
+        }
+       },
+       {
+        "label": "Client",
+        "value": "Sherweb"
+       },
+       {
+        "label": "Demande",
+        "value": "Auberge Godefroy - Potential - 1894992 - Sign-In from Unauthorized Location [Alliance:#1894992/]"
+       },
+       {
+        "label": "Site",
+        "value": "Main"
+       },
+       {
+        "label": "Priorité",
+        "value": "3 : Moyenne (Medium)"
+       },
+       {
+        "label": "Déjà touché par",
+        "value": "personne (dernier geste 2026-11-19 07:39)"
+       }
+      ],
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Nouveau billet #300769 : Client : Sherweb. Demande : « Auberge Godefroy - Potential - 1894992 - Sign-In from Unauthorized Location [Alliance:#1894992/] ». Site : Main. Priorité : 3 : Moyenne (Medium). Déjà touché par : personne (dernier geste 2026-11-19 07:39). Je ne l'ai pas placé : je n'ai trouvé aucune règle pour le placer.",
+         "options": [
+          {
+           "label": "Le placer demain 8 h"
+          },
+          {
+           "label": "Le placer aujourd'hui"
+          },
+          {
+           "label": "Le laisser sans plage"
+          },
+          {
+           "label": "Me demander plus tard"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "pinned": true
+  }
+ ],
+ "groups": []
+}

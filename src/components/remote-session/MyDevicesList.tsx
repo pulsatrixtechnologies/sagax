@@ -122,7 +122,7 @@ export function DeviceRow({ device, aliases = [], card = false }: { device: MyDe
   const pencil = (
     <button type="button" data-my-device-rename="" aria-label={t("computer.rename.aria", { name })} title={t("computer.rename")}
       onClick={() => { setDraft(name); setEditing(true); }}
-      className={cn("rounded p-0.5 text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", card && "opacity-0 focus-visible:opacity-100 group-hover/device:opacity-100 [@media(hover:none)]:opacity-100")}>
+      className={cn("rounded p-0.5 text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", card && "opacity-0 focus-visible:opacity-100 group-hover/device:opacity-100 touch:opacity-100")}>
       <Pencil size={12} aria-hidden="true" />
     </button>
   );

@@ -78,6 +78,38 @@ describe("the person's devices", () => {
     await expect(pending).resolves.toEqual({ ok: true });
   });
 
+  it("M-20261119-034: two Macs in Always allow, the old one connected last and silent for hours: a bot reads and runs on the Mac online, no card, never for another person", async () => {
+    let at = 1_000_000;
+    const bridges = new DesktopBridges((session) => (session.startsWith("ada") ? ADA : session.startsWith("bob") ? BOB : null), () => at);
+    const mac = registration("Jean-Example-Macbook-Pro.local");
+    const old = registration("JeanExampleMBP.localdomain");
+    bridges.register(mac, "ada-now", secret);
+    at += 10;
+    bridges.register(old, "ada-old", secret);
+    bridges.setAccess(ADA, mac.id, "always");
+    bridges.setAccess(ADA, old.id, "always");
+    at += 3 * 60 * 60_000;
+    bridges.register(mac, "ada-now", secret); // its app keeps polling
+    expect(bridges.devices(ADA).map((device) => [device.name, device.online, device.access])).toEqual([
+      ["Jean-Example-Macbook-Pro.local", true, "always"], ["JeanExampleMBP.localdomain", false, "always"],
+    ]);
+    expect(bridges.current(ADA)?.id).toBe(mac.id);
+    bridges.setAskHook(async () => { throw new Error("Always allow raised a card"); });
+    const context = { botId: "b1", threadId: "t1" };
+    const read: DesktopBridgeOperation = { action: "read_file", path: "~/notes.md", max_bytes: 1000, encoding: "utf8" };
+    for (const operation of [read, shell]) {
+      const pending = bridges.request(ADA, operation, () => true, undefined, undefined, context);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const job = await bridges.poll(mac.id, "ada-now", secret, 0);
+      expect(job?.operation).toEqual(operation);
+      bridges.complete(mac.id, "ada-now", secret, job!.id, { content: [{ type: "text", text: "ok" }] });
+      await expect(pending).resolves.toEqual({ content: [{ type: "text", text: "ok" }] });
+    }
+    await expect(bridges.request(BOB, shell, () => true, undefined, undefined, context)).rejects.toMatchObject({ code: "not_connected" });
+    await expect(bridges.request(BOB, shell, () => true, undefined, mac.id, context)).rejects.toMatchObject({ code: "not_connected" });
+    expect(await bridges.poll(mac.id, "ada-now", secret, 0)).toBeNull();
+  });
+
   it("honors a device revocation while a bot approval is pending", async () => {
     const { bridges, mini } = setup();
     bridges.setAccess(ADA, mini.id, "ask");

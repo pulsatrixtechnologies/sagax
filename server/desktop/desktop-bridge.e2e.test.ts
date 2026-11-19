@@ -247,6 +247,11 @@ posixOnly("organization server: the desktop bridge", () => {
               { server: "sagax-computer", tool: "computer_select", arguments: { target: "cloud", reason: "scraping" }, when: "sur mon mac" },
               { server: "sagax-desktop", tool: "list_files", arguments: {}, when: "sur mon mac" },
               { server: "sagax-environment", tool: "list_files", arguments: {}, when: "sur mon mac" },
+              // M-20261119-034: a Cloud bot reads a file and runs a command
+              // on the person's Mac (Always allow) for a step that needs it.
+              { server: "sagax-computer", tool: "computer_select", arguments: { target: "this_computer", reason: "ses notes sont sur son Mac" }, when: "lis mes notes sur le Mac" },
+              { server: "sagax-desktop", tool: "read_file", arguments: { path: "~/notes.md" }, when: "lis mes notes sur le Mac" },
+              { server: "sagax-desktop", tool: "run_command", arguments: { command: "ls ~" }, when: "lis mes notes sur le Mac" },
               // Auto: a sub-agent sent to the cloud (start_thread workspace).
               { server: "agents", tool: "start_thread", arguments: { title: "Cloud job", message: "run it", workspace: "cloud" }, when: "ouvre un fil infonuagique" },
             ]),
@@ -475,7 +480,8 @@ posixOnly("organization server: the desktop bridge", () => {
   }, 120_000);
 
   it("Cloud: the attachment is copied to /workspace/attachments in the server environment", async () => {
-    // The old per-person switch says "my computer"; a fixed Cloud stays there.
+    // The old per-person switch says "my computer"; a Cloud bot starts there,
+    // her computer one computer_select away (M-20261119-034).
     expect((await api("PUT", "/api/me/preferences", alice, { preferences: { "sagax.botWorkplace.v1": JSON.stringify({ place: "computer", network: "all" }) } })).status).toBe(200);
     expect((await api("PATCH", `/api/bots/${aliceBot.id}`, alice, { computer: "cloud" })).status).toBe(200);
     expect((await api("GET", "/api/me/desktop-bridge", alice)).body.connected).toBe(true);
@@ -484,9 +490,10 @@ posixOnly("organization server: the desktop bridge", () => {
     const reply = await turn(alice, aliceBot, `read the attachment\n\n<attached-file path="${file.path}" name="notes.md" />`);
     expect(reply).toContain("mcp:read_file:ok");
     expect(reply).toContain("proxy:none");
-    expect(dump().servers).toEqual(expect.arrayContaining(["sagax-environment"]));
-    expect(dump().servers).not.toContain("sagax-desktop");
+    expect(dump().servers).toEqual(expect.arrayContaining(["sagax-environment", "sagax-desktop", "sagax-computer"]));
     expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-environment")).toMatchObject({ ok: true });
+    // not selected: the desktop tool is refused before anything reaches her computer
+    expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-desktop")).toMatchObject({ ok: false });
     expect(lastPrompt()).toMatch(/\/workspace\/attachments\/[0-9a-f]{8}-notes\.md/);
     const copies = docker.execs.filter((entry) => entry.exec.Env.some((value) => /^SAGAX_PATH=\/workspace\/attachments\/[0-9a-f]{8}-notes\.md$/.test(value)));
     expect(copies.length).toBeGreaterThan(0);
@@ -533,18 +540,92 @@ posixOnly("organization server: the desktop bridge", () => {
     expect(switches[0]!.who).toBe("Alice");
   }, 120_000);
 
-  it("a fixed Works on stays fixed: computer_select reports it", async () => {
-    expect((await api("PATCH", `/api/bots/${aliceBot.id}`, alice, { computer: "cloud" })).status).toBe(200);
+  it("M-20261119-034: two Macs paired in Always allow, her Cloud bot reads a file and runs a command on the Mac online, without a card; another person's bot never reaches it", async () => {
+    // Her old Mac: its own session, connected after this one, then gone (seen hours ago).
+    const aliceOld = await signIn(ALICE);
+    const oldMac = await connectFakeDesktop({ base: BASE, cookie: aliceOld.cookie!, name: "Alice-Old-MBP.localdomain", platform: "darwin", tunnel: false });
+    await oldMac.close();
+    for (const computer of ["Alice's Mac", "Alice-Old-MBP.localdomain"]) {
+      expect((await api("POST", "/api/me/desktop-bridge/computers/access", alice, { computer, access: "always" })).status).toBe(200);
+    }
+    const devices = (await api("GET", "/api/me/desktop-bridge", alice)).body.devices as Array<{ name: string; online: boolean; access: string }>;
+    expect(devices.map((device) => [device.name, device.online, device.access])).toEqual(expect.arrayContaining([
+      ["Alice's Mac", true, "always"], ["Alice-Old-MBP.localdomain", false, "always"],
+    ]));
+    const cloudBot = await createBot(alice, "Cloud helper");
+    expect((await api("PATCH", `/api/bots/${cloudBot.id}`, alice, { computer: "cloud" })).status).toBe(200);
     const before = desktop.operations.length;
-    await turn(alice, aliceBot, "liste mes fichiers sur mon mac");
+    const reply = await turn(alice, cloudBot, "lis mes notes sur le Mac puis liste le dossier");
     const { servers, calls } = dump();
-    expect(servers).not.toContain("sagax-desktop");
-    expect(calls[0]).toMatchObject({ tool: "computer_select", ok: false });
-    expect(calls[0]!.text).toContain("fixed to Cloud (server environment)");
-    expect(calls.find((call) => call.server === "sagax-environment" && call.tool === "run_command")).toMatchObject({ ok: true });
-    expect(desktop.operations.length).toBe(before);
-    expect(lastPrompt()).not.toContain("Workspace is Auto");
-    expect((await api("PATCH", `/api/bots/${aliceBot.id}`, alice, { computer: null })).status).toBe(200);
+    expect(servers).toEqual(expect.arrayContaining(["sagax-environment", "sagax-desktop", "sagax-computer"]));
+    expect(calls.map((call) => [call.server, call.tool, call.ok])).toEqual([
+      ["sagax-computer", "computer_select", true],
+      ["sagax-desktop", "read_file", true],
+      ["sagax-desktop", "run_command", true],
+    ]);
+    expect(reply).not.toContain("mcp:absent");
+    // the Mac online, never the old one, and no card asked her
+    expect(desktop.operations.slice(before).map((operation) => operation.action)).toEqual(["read_file", "run_command"]);
+    expect(oldMac.operations).toEqual([]);
+    expect((await threadMessages(alice, cloudBot.threadId)).some((message) => JSON.stringify(message).includes("use_computer"))).toBe(false);
+
+    // Bob's own bot, and Bob talking to her bot: his place, never her Mac.
+    const bobBot = await createBot(bob, "Bob cloud");
+    expect((await api("PATCH", `/api/bots/${bobBot.id}`, bob, { computer: "cloud" })).status).toBe(200);
+    expect((await api("PUT", `/api/bots/${cloudBot.id}/grants`, alice, { target: `user:${ids.bob}`, level: "use" })).status).toBe(200);
+    const bobView = ((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; threadId: string }>).find((bot) => bot.id === cloudBot.id)!;
+    for (const [bot, label] of [[bobBot, "his bot"], [{ id: cloudBot.id, threadId: bobView.threadId }, "her bot"]] as const) {
+      const bobReply = await turn(bob, bot, "lis mes notes sur le Mac puis liste le dossier");
+      const bobCalls = dump();
+      expect(bobCalls.servers, label).not.toContain("sagax-desktop");
+      expect(bobCalls.calls[0], label).toMatchObject({ tool: "computer_select", ok: false });
+      expect(bobReply, label).toContain("mcp:absent");
+    }
+    expect(desktop.operations.length).toBe(before + 2);
+  }, 180_000);
+
+  it("M-20261119-034: a routine of her Cloud bot reaches her Mac too, without a card (#4858)", async () => {
+    const routineBot = await createBot(alice, "Cloud routine");
+    expect((await api("PATCH", `/api/bots/${routineBot.id}`, alice, { computer: "cloud" })).status).toBe(200);
+    await waitFor(async () => (await api("GET", "/api/org/routine-delegation", alice)).body.state === "active");
+    const created = await api("POST", "/api/routines", alice, {
+      name: "Mac notes", botId: routineBot.id, prompt: "lis mes notes sur le Mac puis liste le dossier", enabled: false,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 },
+    });
+    expect(created.status, created.text).toBe(201);
+    const routineId = created.body.routine.id as string;
+    const before = desktop.operations.length;
+    const started = await api("POST", `/api/routines/${routineId}/run`, alice, {});
+    expect(started.status, started.text).toBe(201);
+    const runId = started.body.run.id as string;
+    const run = await waitFor(async () => (((await api("GET", "/api/routines", alice)).body.runs ?? []) as Array<{ id: string; status: string; error?: string }>)
+      .find((entry) => entry.id === runId && ["completed", "failed", "cancelled"].includes(entry.status)), 60_000);
+    expect(run.status, run.error ?? "").toBe("completed");
+    expect(dump().calls.map((call) => [call.server, call.tool, call.ok])).toEqual([
+      ["sagax-computer", "computer_select", true],
+      ["sagax-desktop", "read_file", true],
+      ["sagax-desktop", "run_command", true],
+    ]);
+    expect(desktop.operations.slice(before).map((operation) => operation.action)).toEqual(["read_file", "run_command"]);
+  }, 120_000);
+
+  it("a bot forced to the cloud (cloud-only) stays fixed: computer_select reports it", async () => {
+    const forced = await createBot(alice, "Cloud only");
+    expect((await api("PATCH", `/api/bots/${forced.id}`, alice, { computer: "cloud" })).status).toBe(200);
+    writeFileSync(join(home, ".openmausbot", "cloud-only-bots.json"), JSON.stringify({ bots: [forced.id] }));
+    try {
+      const before = desktop.operations.length;
+      await turn(alice, forced, "liste mes fichiers sur mon mac");
+      const { servers, calls } = dump();
+      expect(servers).not.toContain("sagax-desktop");
+      expect(calls[0]).toMatchObject({ tool: "computer_select", ok: false });
+      expect(calls[0]!.text).toContain("fixed to Cloud (server environment)");
+      expect(calls.find((call) => call.server === "sagax-environment" && call.tool === "run_command")).toMatchObject({ ok: true });
+      expect(desktop.operations.length).toBe(before);
+      expect(lastPrompt()).not.toContain("Workspace is Auto");
+    } finally {
+      rmSync(join(home, ".openmausbot", "cloud-only-bots.json"), { force: true });
+    }
   }, 120_000);
 
   it("refuses another person's session on Alice's desktop (poll, tunnel)", async () => {

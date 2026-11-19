@@ -355,7 +355,16 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   the bot's Works on (or the conversation's pin): Local VM or This computer,
   the speaker's desktop (when it is not connected, nothing runs there and
   the bot and the composer say so); Auto and Cloud, their server
-  environment. The `place` of `sagax.botWorkplace.v1` no longer decides.
+  environment first. The `place` of `sagax.botWorkplace.v1` no longer decides.
+- A bot's own Cloud is where its turns start, not a lock (M-20261119-034,
+  `workspaceStart` in `server/computer/auto-computer.ts`): the turn runs as
+  Auto starting in the cloud, so `sagax-desktop` is mounted when the
+  person's computer is connected and its execution access is not Never, and
+  `computer_select` moves there when a step needs it (Always allow: no card;
+  Ask every time: its card), routines included (#4858). Its start says no
+  Workspace line (the setting already says Cloud). Only a place forced on
+  the turn (`cloud-only-bots.json`, a routine with `runOn: "cloud"`) stays
+  fixed, and so do the bot's own Local VM, This computer, Browser and Off.
   Routines start in the server environment by default. They use the owner's
   desktop only when Works on (or an Auto `computer_select`) targets it, it
   is connected, and the device's execution access permits the operation. Rooms:
@@ -372,8 +381,8 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   (`autoComputerToolRefusal`: Local VM allows only the `local_vm` tool, and
   its `use` action sees and drives that VM's desktop, never the person's own
   screen) and resets with each message; the egress proxy still follows the
-  turn's start. A fixed Works on gets the tool too and it answers that the
-  setting is fixed. Each switch is `computer.switch` in the admin activity
+  turn's start. A fixed Works on (other than the bot's own Cloud, above)
+  gets the tool too and it answers that the setting is fixed. Each switch is `computer.switch` in the admin activity
   log (person, bot, from, to, reason); the transcript shows a "Working on"
   chip. Workspace fallback notices keep distinct reasons (`offline`,
   `routine-not-allowed`, `routine-default`; `shared/workspace-line.ts`).

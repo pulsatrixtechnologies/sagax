@@ -82,7 +82,7 @@ export function RemoteAgentSettingsPanel({ bot }: {
   };
 
   return (
-    <aside className="app-docked-panel animate-panel-in relative z-20 flex h-full w-[400px] shrink-0 flex-col border-l border-hairline/40 bg-panel">
+    <aside className="app-docked-panel animate-panel-in relative z-20 flex h-full w-[400px] shrink-0 flex-col border-l border-pane-edge bg-panel">
       {(macInset || browser) && <div className="content-topbar-strip" />}
       <div {...dragProps} className={cn("content-topbar flex items-center justify-between px-4 py-3", padClass)}>
         <button

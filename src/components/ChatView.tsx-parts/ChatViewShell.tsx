@@ -111,7 +111,7 @@ export function ChatViewShell(m: Record<string, any>) {
         className={cn(
           // Exchange sheet portals here (absolute inset-0), never over the page.
           "relative isolate flex min-h-0 min-w-0 flex-1 flex-col",
-          pageBeside && "order-2 w-[min(26rem,38%)] max-w-[28rem] flex-none border-l border-hairline/50",
+          pageBeside && "order-2 w-[min(26rem,38%)] max-w-[28rem] flex-none border-l border-pane-edge",
         )}
       >
       <ChatViewHeader

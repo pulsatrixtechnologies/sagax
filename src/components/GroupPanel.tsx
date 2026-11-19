@@ -202,7 +202,7 @@ export function GroupPanel({
       data-testid="group-panel"
       style={{ width: dockedPanel.width }}
       data-arriving={arriving ? "" : undefined}
-      className={cn("app-docked-panel relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!", arriving && "animate-panel-in")}
+      className={cn("app-docked-panel relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!", arriving && "animate-panel-in")}
     >
       <DockedPanelResizeHandle label={t("computer.resizeAria")} panel={dockedPanel} />
       {(macInset || browser) && <div className="content-topbar-strip" />}

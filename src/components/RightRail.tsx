@@ -63,7 +63,7 @@ export function RightRailPanel({ label, onCollapse, hideLabel, lead, className, 
       {...rest}
       aria-label={label}
       data-right-rail=""
-      className={cn("flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel pr-4 max-[1279px]:absolute max-[1279px]:inset-y-0 max-[1279px]:right-0 max-[1279px]:z-40 max-[1279px]:max-w-[calc(100%-48px)] max-[1279px]:shadow-xl", className)}
+      className={cn("flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-pane-edge bg-panel pr-4 max-[1279px]:absolute max-[1279px]:inset-y-0 max-[1279px]:right-0 max-[1279px]:z-40 max-[1279px]:max-w-[calc(100%-48px)] max-[1279px]:shadow-xl", className)}
     >
       {onCollapse && (
         <div className={cn("relative flex shrink-0 items-center gap-1 px-2", lead ? "pt-2.5" : "pt-2")} data-right-rail-head="">
@@ -99,7 +99,7 @@ export function RightRailStrip({ onOpen, showLabel, title, icon, text, ...rest }
       aria-label={showLabel}
       title={title ?? showLabel}
       data-right-rail-strip=""
-      className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink"
+      className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-pane-edge bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink"
     >
       {icon}
       <span className="[writing-mode:vertical-rl]">{text}</span>

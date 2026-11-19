@@ -39,7 +39,7 @@ export function ScreenPanel({ bot }: { bot: Bot }) {
       data-screen-place="browser"
       aria-label={t("screenPanel.aria", { name: bot.name })}
       style={{ width: panel.width }}
-      className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
+      className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
         const target = event.target as HTMLElement;

@@ -363,7 +363,7 @@ export function RunView({ runId, consoleUrl, onBack }: { runId: string; consoleU
   const right = panel !== "closed" && (
     <aside
       aria-label={t("code.panel.aria")}
-      className={cn("relative flex min-w-0 flex-col border-l border-hairline bg-panel", panel === "full" ? "flex-1" : "shrink-0")}
+      className={cn("relative flex min-w-0 flex-col border-l border-pane-edge bg-panel", panel === "full" ? "flex-1" : "shrink-0")}
       style={panel === "full" ? undefined : { width }}
     >
       {panel === "open" && (

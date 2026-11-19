@@ -266,7 +266,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
         tabIndex={-1}
         style={{ width: dockedPanel.width }}
         data-panel-bot={bot.id}
-        className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-[var(--bot-panel-bg)] outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
+        className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-[var(--bot-panel-bg)] outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
       >
         <DockedPanelResizeHandle label="Resize settings" panel={dockedPanel} />
         {(macInset || browser) && <div className="content-topbar-strip" />}

@@ -3397,3 +3397,41 @@ something ("avec une logique UX"), and approved v3. Code: `src/lib/team-map-layo
   connectors (arrow and count) between cards and between teams, "Sans équipe",
   and the busiest handoffs always listed below. A tapped bot opens in place with
   its handoffs.
+
+### 8.13 The composer's model menu: one right column, dense Auto, whole reasoning levels (owner, 2026-11-19, #5046)
+
+The one model menu (`src/components/ModelPanel.tsx`, every place it opens:
+composer chip, bot Model row, wizard, team settings), 360px wide
+(`MENU_WIDTH`).
+
+- Left edge: the headings ("Model", "Reasoning") start where the rows'
+  names start, 14px from the menu's edge (6px of list, 8px of row).
+- Right column, the same on every row (Auto, a bot's model followed, a
+  favorite, the model in use, All models, every row of All models): the
+  text at the right (the followed model's name, a context size) ends on one
+  edge, then a fixed icon zone of two slots, `ROW_SIDE_SLOT` (20px) then
+  `ROW_ICON_SLOT` (28px). The icon slot holds the row's one icon: the
+  check of the choice in use, a model's star, the All models chevron; all
+  fall on one centre. The side slot holds only the star of the model in
+  use, beside its check; it stays empty on every other row. The account
+  line sits under the model's name, at its left edge.
+- Auto: while it is on, "Optimize for" is one 32px line right under it, the
+  label in 12px grey at the names' edge, the small segmented control at the
+  right edge; no heading band, no full-width control.
+- Reasoning: "Reasoning" and "More effort is slower" on one 12px grey line,
+  then every level the model takes on the small segmented control across the
+  section's width. Up to four levels share one line; more take balanced
+  lines (seven read 4 and 3, Default first), each line's segments in equal
+  parts, a label never cut or shrunk in any language. The chosen level is
+  the lighter segment in medium weight.
+- One segmented control: `SegmentedChoice` (`src/components/SegmentedChoice.tsx`),
+  the reference's small one (24px, a 6% grey track, round, the chosen
+  segment a shade lighter), as a radio group; `PageSegment`'s compact look
+  takes the same constants and the models window's effort
+  (`EffortSegments`) is the same control.
+
+Captures: `node scripts/capture/model-menu.mjs --scenes` (the owner's menu
+followed and on Auto, a chosen model with no account or pill, a long name,
+and the right column zoomed with its guides). Tests:
+`src/components/ModelPanel.test.ts` ("the menu's layout"),
+`src/components/SegmentedChoice.test.ts`.

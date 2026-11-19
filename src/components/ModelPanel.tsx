@@ -23,6 +23,7 @@ import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
 import { foldItems, foldMoreLabel } from "./ShowMoreFold";
 import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { MODELS_SHOWN } from "./settings/ModelSwitchesSettings";
+import { SegmentedChoice } from "./SegmentedChoice";
 
 /** A provider with more models than this gets a search field over its list. */
 export const PANEL_SEARCH_FROM = 8;
@@ -80,7 +81,18 @@ export function rowDescription(row: ModelMenuRow): string | undefined {
 const SEGMENT_BASE = "flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:transition-none";
 const SEGMENT_ON = "flex-1 bg-popover font-medium text-popover-ink shadow-[0_1px_2px_rgb(0_0_0/0.18)]";
 const SEGMENT_OFF = "text-popover-ink-secondary hover:text-popover-ink";
-const HEADING = "shrink-0 px-2 pb-1 pt-2 text-[11.5px] text-popover-ink-secondary";
+// M-20261119-051: a heading starts where the rows' names start (6px of list, 8px of row)
+const HEADING = "shrink-0 px-3.5 pb-1 pt-2 text-[12px] leading-4 text-popover-ink-secondary";
+
+/** The right column of every row (M-20261119-051, "nothing lines up"): the
+ * row's text at the right ends on one edge, then a fixed icon zone of two
+ * slots, the same on every row. The icon slot (28px, the outer one) holds
+ * the row's one icon: the check of the choice in use, a model's star, the
+ * chevron of All models; every one of them falls on the same centre. The
+ * side slot (20px) holds the star of the model in use only, beside its
+ * check; it stays empty on every other row. */
+export const ROW_SIDE_SLOT = "flex w-5 shrink-0 items-center justify-center";
+export const ROW_ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
 
 /** Arrow keys over the radios of a group: moves the focus and picks, Home and End go to either end. */
 function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orientation: "horizontal" | "vertical" | "both") {
@@ -170,6 +182,18 @@ export function ModelPanel(props: ModelPanelProps) {
   const modelRow = (row: ModelMenuRow) => {
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
+    const check = row.current ? <Check size={14} aria-hidden="true" className="text-popover-accent" /> : null;
+    // a model's star: in the icon slot, or in the side slot beside the check of the model in use
+    const star = row.kind === "model" ? (slot: string) => (
+      <button type="button" aria-pressed={starred} data-model-favorite={row.key}
+        aria-label={t(starred ? "model.favorite.remove" : "model.favorite.add", { name: row.label })}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => favorites.onToggle(row)}
+        className={cn(slot, "h-7 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus",
+          starred ? "text-popover-accent" : "text-popover-ink-secondary opacity-0 hover:text-popover-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100")}>
+        <Star size={13} aria-hidden="true" fill={starred ? "currentColor" : "none"} />
+      </button>
+    ) : undefined;
     const nameLine = (
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate text-[13px] text-popover-ink">{row.label}</span>
@@ -179,13 +203,13 @@ export function ModelPanel(props: ModelPanelProps) {
       </span>
     );
     return (
-      <div key={`${all ? view : "short"}:${row.key}`} className={cn("group flex", row.account ? "min-h-11 py-0.5" : "h-9", "items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover")}>
+      <div key={`${all ? view : "short"}:${row.key}`} className={cn("group flex", row.account ? "min-h-11 py-0.5" : "h-9", "items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover")}>
         <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
           disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? ([row.title ?? (description ? `${row.label} · ${description}` : undefined), row.account].filter(Boolean).join(" · ") || undefined)}
           tabIndex={row.current || (!rovingHasCurrent && row === rovingFirst) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(row)}
-          className={cn("flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
+          className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded-lg pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
           {row.account ? (
             // M-20261119-015: the account this row runs on, under its name, while the provider has several
             <span className="flex min-w-0 flex-1 flex-col justify-center">
@@ -199,21 +223,17 @@ export function ModelPanel(props: ModelPanelProps) {
               </span>
             </span>
           ) : nameLine}
-          {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="max-w-[45%] shrink-0 truncate text-[12px] text-popover-ink-secondary">{description}</span>}
-          <span className="flex size-3.5 shrink-0 items-center justify-center">
-            {row.current && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
-          </span>
+          {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="max-w-[45%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{description}</span>}
+          {/* the icon zone (ROW_SIDE_SLOT, ROW_ICON_SLOT); a model's star is a button of its own beside this one */}
+          {!(star && row.current) && <span aria-hidden="true" className={ROW_SIDE_SLOT} />}
+          {!star && <span aria-hidden="true" className={ROW_ICON_SLOT}>{check}</span>}
         </button>
-        {row.kind === "model" && (
-          <button type="button" aria-pressed={starred} data-model-favorite={row.key}
-            aria-label={t(starred ? "model.favorite.remove" : "model.favorite.add", { name: row.label })}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => favorites.onToggle(row)}
-            className={cn("flex size-7 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus",
-              starred ? "text-popover-accent" : "text-popover-ink-secondary opacity-0 hover:text-popover-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100")}>
-            <Star size={13} aria-hidden="true" fill={starred ? "currentColor" : "none"} />
-          </button>
-        )}
+        {star && (row.current ? (
+          <>
+            {star(ROW_SIDE_SLOT)}
+            <span aria-hidden="true" className={ROW_ICON_SLOT}>{check}</span>
+          </>
+        ) : star(ROW_ICON_SLOT))}
       </div>
     );
   };
@@ -304,33 +324,25 @@ export function ModelPanel(props: ModelPanelProps) {
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
             {autoOn && optimize && (
-              <div role="radiogroup" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
-                onKeyDown={(event) => arrowRadios(event, "[data-model-auto-optimize-option]", "horizontal")}
-                className="mx-2 mb-1.5 mt-0.5">
-                <div className="pb-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
-                <div className="flex min-w-0 gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
-                  {AUTO_OPTIMIZE_VALUES.map((value) => {
-                    const on = optimize.value === value;
-                    return (
-                      <button key={value} type="button" role="radio" aria-checked={on} disabled={disabled} tabIndex={on ? 0 : -1}
-                        data-model-auto-optimize-option={value} onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => optimize.onPick(value)}
-                        className={cn("min-h-7 flex-1 whitespace-nowrap rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:transition-none",
-                          on ? "bg-popover font-medium text-popover-ink shadow-[0_1px_2px_rgb(0_0_0/0.18)]" : "text-popover-ink-secondary hover:text-popover-ink")}>
-                        {t(`model.auto.optimize.${value}`)}
-                      </button>
-                    );
-                  })}
-                </div>
+              // M-20261119-051: Auto's one setting on one 32px line under it, the
+              // shared small segmented control at the right, no empty band
+              <div data-model-auto-optimize-row className="flex h-8 items-center justify-between gap-3 pl-2 pr-2">
+                <span className="min-w-0 truncate text-[12px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</span>
+                <SegmentedChoice data-model-auto-optimize="" label={t("model.auto.optimizeTitle")} disabled={disabled}
+                  value={optimize.value} onPick={optimize.onPick}
+                  options={AUTO_OPTIMIZE_VALUES.map((value) => ({
+                    value, label: t(`model.auto.optimize.${value}`), data: { "data-model-auto-optimize-option": value },
+                  }))} />
               </div>
             )}
             {lead.map(modelRow)}
             {shortModels.map(modelRow)}
             {providers.length > 0 && (
               <button type="button" data-model-panel-all onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(true)}
-                className="flex h-9 w-full items-center justify-between gap-2 rounded-lg px-2 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
-                <span>{t("model.auto.rail")}</span>
-                <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
+                className="flex h-9 w-full items-center gap-1 rounded-lg pl-2 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
+                <span className="min-w-0 flex-1 truncate">{t("model.auto.rail")}</span>
+                <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+                <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
               </button>
             )}
           </>
@@ -357,32 +369,28 @@ export function ModelPanel(props: ModelPanelProps) {
       </div>
 
       {hasReasoning && (
-        <div data-model-panel-reasoning data-model-settings-effort="" className="shrink-0 border-t border-popover-hairline px-3.5 pb-2 pt-1.5">
-          <div className="flex items-baseline justify-between gap-3 pb-1">
-            <span className="text-[11.5px] text-popover-ink-secondary">{t("model.reasoning")}</span>
-            {!variantRow && <span className="text-[11.5px] text-popover-ink-secondary">{t("model.effort.slowerHint")}</span>}
+        // M-20261119-051: every level the model takes stays whole at the menu's
+        // width (seven read on two balanced lines), the shared segmented control
+        <div data-model-panel-reasoning data-model-settings-effort="" className="shrink-0 border-t border-popover-hairline px-3.5 pb-2.5 pt-2">
+          <div className="flex items-baseline justify-between gap-3 pb-1.5">
+            <span className="shrink-0 text-[12px] leading-4 text-popover-ink-secondary">{t("model.reasoning")}</span>
+            {!variantRow && <span className="min-w-0 truncate text-[12px] leading-4 text-popover-ink-secondary">{t("model.effort.slowerHint")}</span>}
           </div>
           {variantRow ?? (effort && (
-            <div role="radiogroup" aria-label={effort.title} data-model-effort-menu
-              onKeyDown={(event) => arrowRadios(event, "[data-model-effort-choice]", "horizontal")}
-              className="flex min-w-0 gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
-              {effortChoices.map((level) => {
-                const on = level === undefined ? effortValue === undefined : level === effortValue;
-                return (
-                  <button key={level ?? "default"} type="button" role="radio" aria-checked={on} disabled={disabled}
-                    tabIndex={on ? 0 : -1} data-model-effort-choice={level ?? "default"}
-                    title={level === undefined ? t("model.effort.defaultTitle") : isUltracodeEffort(level) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level) })}
-                    // the model's own default level is picked as "no level sent"
-                    onClick={() => effort.onPick(level === undefined || level === effort.modelDefault ? undefined : level)}
-                    className={cn("min-h-7 flex-1 whitespace-nowrap rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:transition-none",
-                      on ? "bg-popover font-medium text-popover-ink shadow-[0_1px_2px_rgb(0_0_0/0.18)]" : "text-popover-ink-secondary hover:text-popover-ink")}>
-                    <span className={cn(level !== undefined && isUltracodeEffort(level) && "ultracode-effort-option")}>
-                      {level === undefined ? t("model.defaultTag") : effortLabel(level)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedChoice<EffortLevel | "default"> data-model-effort-menu="" label={effort.title} disabled={disabled} fill
+              value={effortValue ?? "default"}
+              // the model's own default level is picked as "no level sent"
+              onPick={(key) => effort.onPick(key === "default" || key === effort.modelDefault ? undefined : key)}
+              options={effortChoices.map((level) => ({
+                value: level ?? "default",
+                title: level === undefined ? t("model.effort.defaultTitle") : isUltracodeEffort(level) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level) }),
+                data: { "data-model-effort-choice": level ?? "default" },
+                label: (
+                  <span className={level !== undefined && isUltracodeEffort(level) ? "ultracode-effort-option" : undefined}>
+                    {level === undefined ? t("model.defaultTag") : effortLabel(level)}
+                  </span>
+                ),
+              }))} />
           ))}
         </div>
       )}

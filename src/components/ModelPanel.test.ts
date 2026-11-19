@@ -149,6 +149,70 @@ describe("the model panel", () => {
   });
 });
 
+// M-20261119-051: the owner's menu (Auto, the bot's model followed, favorites
+// with a pill and an account, seven reasoning levels): every level whole, a
+// dense Auto block, one right column
+describe("the menu's layout", () => {
+  const owner = (followed: boolean): ModelMenuSection[] => [
+    { key: "top", rows: [
+      { key: "auto", kind: "auto", label: "Auto", current: !followed },
+      { key: "follow", kind: "follow", label: "Use Scout's model", detail: "Claude Opus 5.5", current: followed },
+    ] },
+    { key: "favorites", label: "Favorites", rows: [row("grok", { tags: ["Default"], description: "Context 256k" }), row("mythos", { account: "ada.admin@acme.test", description: "Context 1M" })] },
+    { key: "claude", label: "Claude", rows: [row("mythos", { account: "ada.admin@acme.test", description: "Context 1M" }), row("grok", { description: "Context 256k" })] },
+  ];
+  const seven = { title: "Reasoning effort", levels: ["low", "medium", "high", "xhigh", "max", "ultracode"] as const, value: "high" as const, onPick: vi.fn() };
+  const ownerHtml = (followed: boolean, extra: Partial<ModelPanelProps> = {}) => html({
+    view: "short", sections: owner(followed), autoOn: !followed, effort: seven, optimize: { value: "balance", onPick: vi.fn() },
+    favorites: { keys: ["e\u0000grok", "e\u0000mythos"], onToggle: vi.fn() }, ...extra,
+  });
+  const block = (markup: string, attribute: string) => {
+    const at = markup.indexOf(attribute);
+    return at < 0 ? "" : markup.slice(markup.lastIndexOf("<div", at), markup.indexOf("</div></div>", at) + 12);
+  };
+
+  it("draws the seven reasoning levels on two balanced lines of the shared control, Default first", () => {
+    const reasoning = block(ownerHtml(true), "data-model-effort-menu");
+    const choices = [...reasoning.matchAll(/data-model-effort-choice="([^"]+)"/g)].map((match) => match[1]);
+    expect(choices).toEqual(["default", "low", "medium", "high", "xhigh", "max", "ultracode"]);
+    expect([...reasoning.matchAll(/<div class="flex min-w-0 gap-0.5">/g)]).toHaveLength(2);
+    expect(reasoning).toMatch(/aria-checked="true"[^>]*data-model-effort-choice="high"/);
+  });
+
+  it("puts Optimize for on one line under Auto, the shared small segmented control at its right", () => {
+    const markup = ownerHtml(false);
+    const line = markup.slice(markup.indexOf("data-model-auto-optimize-row"));
+    expect(line).toMatch(/^data-model-auto-optimize-row="true" class="flex h-8[^"]*"><span[^>]*>Optimize for<\/span><div data-model-auto-optimize="" role="radiogroup" aria-label="Optimize for"[^>]*rounded-full/);
+    expect([...block(markup, "data-model-auto-optimize=").matchAll(/role="radio"/g)]).toHaveLength(3);
+  });
+
+  it("ends every row on the same icon zone: one side slot, then one icon slot, whatever the row holds", () => {
+    for (const followed of [true, false]) {
+      const markup = ownerHtml(followed);
+      const rows = markup.split(/(?=<div class="group flex)|(?=<button type="button" data-model-panel-all)/).slice(1);
+      expect(rows).toHaveLength(5);
+      for (const part of rows) {
+        const end = part.startsWith("<button") ? part.slice(0, part.indexOf("</button>")) : part;
+        expect([...end.matchAll(/class="flex w-5 shrink-0/g)], end).toHaveLength(1);
+        expect([...end.matchAll(/class="flex size-7 shrink-0/g)], end).toHaveLength(1);
+      }
+    }
+  });
+
+  it("keeps the check of the model in use in the icon column and moves its star beside it", () => {
+    const sections = owner(false);
+    sections[1]!.rows[1] = { ...sections[1]!.rows[1]!, current: true };
+    const markup = ownerHtml(false, { autoOn: false, sections });
+    const starClass = (key: string) => {
+      const at = markup.indexOf(`aria-pressed="true" data-model-favorite="e\u0000${key}"`);
+      return at < 0 ? undefined : /class="([^"]*)"/.exec(markup.slice(at))?.[1];
+    };
+    // the model in use: its star in the side slot, its check in the icon column
+    expect(starClass("mythos")).toMatch(/^flex w-5 shrink-0/);
+    expect(starClass("grok")).toMatch(/^flex size-7 shrink-0/);
+  });
+});
+
 // M-20261119-015: a person's accounts of one provider each list their own models
 describe("the accounts of one provider", () => {
   const personal = row("opus", { instanceId: "personal", key: "personal\u0000opus", account: "ada@example.com", current: true });

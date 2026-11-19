@@ -250,7 +250,7 @@ export function ModelManager({
             ) : efforts.length > 0 && (
               <div className="flex flex-wrap items-center gap-2" data-model-settings-effort="">
                 <span className="text-[12.5px] text-ink-secondary">{effortTitle}</span>
-                <EffortSegments tone="panel" title={effortTitle} levels={efforts} disabled={busy}
+                <EffortSegments title={effortTitle} levels={efforts} disabled={busy}
                   value={selection.effort && efforts.includes(selection.effort) ? selection.effort : undefined}
                   modelDefault={modelDefaultEffort(activeOption, engineEfforts)} onPick={setEffort} />
               </div>

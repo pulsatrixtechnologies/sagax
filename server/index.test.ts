@@ -1610,7 +1610,9 @@ describe("harness HTTP API", () => {
         await removeTempDir(isolatedHome);
       }
     }
-  }, 30_000);
+  // two cold boots of index.ts, each allowed the 60 s of waitForServerReady:
+  // 30 s for the whole test ran out on a loaded build VM before the restart
+  }, 180_000);
 
   it("reconciles durable working goal cards with scheduler truth after a restart", async () => {
     const state = await api("GET", "/api/bots?messages=30");

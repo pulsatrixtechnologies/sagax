@@ -213,7 +213,10 @@ const BUDGET_BASELINE: Record<string, number> = {
   // raised on purpose to the measured wire; direct profiles defer both tools).
 
   // 2026-11-13 (#4242): ask_choice says a question in a repeating routine holds
-  // nothing; the goldens move to the measured wire (room+non-chief to 86,598).
+  // nothing; #4252 then raised room+non-chief alone to its measured 86,598.
+  // That raise is gone (#4923, liberty audit 2026-11-19 T4): #4518 trimmed the
+  // text and set every profile to its wire, so room+non-chief sits again under
+  // its pre-#4242 baseline (84,882) and one voice step under room+voice+non-chief.
   // 2026-11-16 (#4490): ask_choice takes a form (questions) and a checklist
   // (items, actions) and says a card is one question per control; raised on
   // purpose to the measured wire. Every profile grows by the same ask_choice
@@ -529,6 +532,26 @@ describe("agents proxy tools/list wire size", () => {
     ];
     console.log(lines.join("\n"));
     expect(rows.length).toBeGreaterThan(0);
+  });
+
+  // #4923 (liberty audit 2026-11-19 T4): one baseline raised alone to its
+  // measured wire (#4252, room+non-chief to 86,598 while room+voice+non-chief
+  // stayed at 85,846) hides growth from the 2% check. A profile with one more
+  // switch (but non-chief, which takes tools away) lists a superset of tools,
+  // so its baseline is never below the profile without it.
+  it("no baseline sits above the baseline of the same profile with one more switch", () => {
+    const names = Object.keys(BUDGET_BASELINE);
+    const parts = (name: string) => new Set(name.split("+"));
+    const out: string[] = [];
+    for (const small of names) for (const big of names) {
+      const a = parts(small);
+      const b = parts(big);
+      if (b.size !== a.size + 1 || ![...a].every((part) => b.has(part)) || small.startsWith("external")) continue;
+      // non-chief takes tools away: it is the one switch that never adds
+      if (!a.has("non-chief") && b.has("non-chief")) continue;
+      if (BUDGET_BASELINE[small]! > BUDGET_BASELINE[big]!) out.push(`${small} (${BUDGET_BASELINE[small]}) > ${big} (${BUDGET_BASELINE[big]})`);
+    }
+    expect(out).toEqual([]);
   });
 
   it.each(Object.keys(PROFILES))("%s stays within 2% of its budget baseline", (name) => {

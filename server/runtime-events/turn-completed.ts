@@ -128,7 +128,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
           });
         }
       }
-      if (completedTurnId) {
+      // A call turn the person cut (a barge-in, cancelledVoiceTurns): what it
+      // wrote before the cut stays as written, never as its answer (#4923)
+      const cutCallTurn = Boolean(completedTurnId) && host.cancelledVoiceTurns?.get(event.threadId)?.has(completedTurnId) === true;
+      if (completedTurnId && !cutCallTurn) {
         const terminal = host.store.markTerminalAssistantMessage(event.threadId, completedTurnId);
         if (terminal) host.store.patchMessage(event.threadId, terminal.id, { turnSucceeded: event.ok });
         if (bot && event.ok) host.store.suggestTaskLink(bot.id, event.threadId, host.store.activePath(event.threadId)

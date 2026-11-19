@@ -171,6 +171,6 @@ describe("ask_choice teaches the wizard form (#4910)", () => {
     expect(row.details!.description).toMatch(/what it does/);
   });
   it("tells every bot in its system prompt", () => {
-    expect(buildSystemPrompt("You are Nimbus.", "", []).stable).toMatch(/one question at a time[\s\S]*when \(the parent question and option\)/);
+    expect(buildSystemPrompt("You are Nimbus.", "", []).stable).toMatch(/12-char header[\s\S]*options\+details[\s\S]*best first[\s\S]*follow-up: when row/);
   });
 });

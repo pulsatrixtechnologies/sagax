@@ -215,8 +215,11 @@ describe("never the same card twice (#5025, point 2)", () => {
 
   it("reads an open card on the same ticket, the same ask, or an earlier run's nearly same words as that ask's card", () => {
     const open = (question: string, near = false): OpenAskCard => ({ question, at: 1, ...(near ? { near: true } : {}) });
-    // the same ticket, anywhere in the person's scope
-    expect(claimedAskOpen("Billet #123456 : scinder le bloc ? Approuver ou refuser ?", [open("Le temps du billet #123456 attend ton GO : approuver ou refuser ?")])).toBe(true);
+    // the same ticket from this trigger's own run, whatever the words
+    expect(claimedAskOpen("Billet #123456 : scinder le bloc ? Approuver ou refuser ?", [open("Le temps du billet #123456 attend ton GO : approuver ou refuser ?", true)])).toBe(true);
+    // the same ticket from another source: only a nearly same ask is that card, a different question is never lost
+    expect(claimedAskOpen("Billet #123456 : fermer le billet ? Oui ou non ?", [open("Billet #123456 : scinder le bloc en deux plages ? Approuver ou refuser ?")])).toBe(false);
+    expect(claimedAskOpen("Billet #123456 : scinder le bloc en deux plages ? Approuver ou refuser ?", [open("Billet #123456 : scinder le bloc en deux plages. Approuver ou refuser ?")])).toBe(true);
     // the same ask
     expect(claimedAskOpen("Envoyer le rapport ?", [open("envoyer le rapport ?")])).toBe(true);
     // nearly the same words, from this trigger's earlier run only

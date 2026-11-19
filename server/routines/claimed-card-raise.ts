@@ -68,7 +68,10 @@ export function claimedAskOpen(question: string, open: readonly OpenAskCard[], s
     if (since !== undefined && card.at >= since) return true;
     if (askTextKey(card.question) === key) return true;
     const theirs = askReferences(card.question);
-    for (const reference of references) if (theirs.has(reference)) return true;
+    // the same ticket carries a different ask only from this trigger's own
+    // runs (the routine asks again once that card is answered); a card of
+    // another source on that ticket never swallows a different question
+    for (const reference of references) if (theirs.has(reference)) return Boolean(card.near) || alike(words, askWords(card.question)) >= CLAIMED_ASK_ALIKE;
     // two asks that each name their ticket, none shared, are two subjects
     if (references.size && theirs.size) return false;
     return Boolean(card.near) && alike(words, askWords(card.question)) >= CLAIMED_ASK_ALIKE;

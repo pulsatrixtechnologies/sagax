@@ -2054,7 +2054,7 @@ export type ServerFrame =
    * is the deferred client-model extraction (see j1-phase-bc-progress). */
   | ({ kind: "config" } & Record<string, unknown>)
   // an update check changed something, or an update ran (to the person only)
-  | { kind: "capability.updates"; count: number; checkedAt: number };
+  | { kind: "capability.updates"; count: number; checkedAt: number; autoUpdated?: Array<{ name: string; from?: string; to?: string; notes?: string }> };
 
 /** One line of what a purchase buys: an article, or a flight. */
 export interface PurchaseLine {

@@ -475,3 +475,45 @@ describe("second review of #4504", () => {
     expect(sent).toEqual([["pr_owner", 1]]);
   });
 });
+
+describe("automatic update of plugins (#4504, #475)", () => {
+  const behind = (key: string, over: Partial<UpdateItem> = {}) => item({ key, kind: "plugin", name: key, updateAvailable: true, installedVersion: "1.0.0", availableVersion: "1.1.0", ...over });
+
+  it("updates the person's own plugins by itself when a check finds a newer one, and tells them in the frame", async () => {
+    const calls: string[] = [];
+    const sent: Array<[string, string[] | undefined]> = [];
+    const updates = new CapabilityUpdates({
+      providers: [fakeProvider("plugin", { pr_ada: [behind("plugin:me:me:a@m"), behind("plugin:bot:b1:a@m", { scope: "bot" }), behind("plugin:installation:installation:a@m", { scope: "installation" }), behind("plugin:organization:organization:x", { scope: "organization", canUpdate: false })] },
+        async (_person, one) => { calls.push(one.key); return { to: "1.1.0" }; }, async () => true)],
+      people: () => [ADA],
+      autoUpdate: { kinds: ["plugin"] },
+      notify: (person, _view, auto) => sent.push([person, auto?.map((one) => one.name)]),
+      log: () => {},
+    });
+    await updates.check();
+    expect(calls).toEqual(["plugin:me:me:a@m", "plugin:bot:b1:a@m"]);
+    expect(sent.find(([, names]) => names?.length)).toEqual(["pr_ada", ["plugin:me:me:a@m", "plugin:bot:b1:a@m"]]);
+  });
+
+  it("a failed automatic update leaves the old version and is not retried for the same version", async () => {
+    const update = vi.fn(async () => { throw new Error("The source is unreachable."); });
+    const updates = new CapabilityUpdates({
+      providers: [fakeProvider("plugin", { pr_ada: [behind("plugin:me:me:a@m")] }, update, async () => true)],
+      people: () => [ADA],
+      autoUpdate: { kinds: ["plugin"] },
+      log: () => {},
+    });
+    await updates.check();
+    await updates.check();
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing by itself unless asked, and never touches skills or connectors", async () => {
+    const update = vi.fn(async () => ({}));
+    const off = new CapabilityUpdates({ providers: [fakeProvider("plugin", { pr_ada: [behind("plugin:me:me:a@m")] }, update, async () => true)], people: () => [ADA], log: () => {} });
+    await off.check();
+    const skills = new CapabilityUpdates({ providers: [fakeProvider("skill", { pr_ada: [behind("skill:me:me:s", { kind: "skill" })] }, update, async () => true)], people: () => [ADA], autoUpdate: { kinds: ["plugin"] }, log: () => {} });
+    await skills.check();
+    expect(update).not.toHaveBeenCalled();
+  });
+});

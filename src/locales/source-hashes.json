@@ -19244,7 +19244,10 @@
       "question.wizard.skip": "28d03596d24eeb4eab2d6fe21ca1cb95be7cb1fa6f92933db05e2cc4f4cdfa06",
       "question.wizard.change": "c0bf75bd78bf9572596720d596bd5a20a5b9145cde0fe50dec1e783cb184d69b",
       "question.wizard.other": "45bd072b6a13baf5698ebf3b996dba5a402e30df697a3f17ea313b7971a47ab2",
-      "question.wizard.hint": "2a6a771d19dc5b38c3f6bdf14d76d3ccfb05e31ebf230cf338000807ba1a82f3"
+      "question.wizard.hint": "2a6a771d19dc5b38c3f6bdf14d76d3ccfb05e31ebf230cf338000807ba1a82f3",
+      "connectApps.updates.autoUpdated": "99f5586733abbb36d24e8de5a04a9286d5d3525029bd8826bb6577f7ed39ad45",
+      "connectApps.updates.autoUpdatedFromTo": "690559efb2fc831fbf9e7cad02c3147cea680a1acf2309ae98298540aec0bac0",
+      "connectApps.updates.routinesFollow": "8275b87bfa4166f32219f46ab6c42688ef7ab7a3d3674cde56116204508cd2d7"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

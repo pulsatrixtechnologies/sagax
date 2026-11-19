@@ -29,7 +29,7 @@ import { usePanelSlot } from "./panel-slot";
 export const DETAIL_PANEL_BOUNDS: DockedPanelBounds = { key: "sagax.detailPanelWidth.v1", min: 360, max: 760, fallback: 480 };
 
 export const DETAIL_PANEL_CLASS =
-  "app-docked-panel detail-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!";
+  "app-docked-panel detail-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!";
 
 export type DetailPanelProps = {
   /** The panel's accessible name (also its region label). */

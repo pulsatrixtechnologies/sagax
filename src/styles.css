@@ -442,6 +442,15 @@
   --color-sidebar-card: color-mix(in srgb, var(--color-sidebar-ink) 7%, var(--color-sidebar));
   --color-sidebar-elevated-hover: color-mix(in srgb, #777777 20%, var(--color-sidebar-elevated));
   --color-sidebar-hairline-weak: color-mix(in srgb, var(--color-sidebar-ink) 10%, transparent);
+  /* The edge between two panes (the rail and the chat, the chat and a docked
+     panel): the reference's tertiary translucent border, 8% of the ink,
+     measured in the installed reference app (stroke tertiary: #f5f5f5 at 8%
+     on its #101010 rail = #222222; Sagax's rail #0e0e0e gives #212121; light
+     is the same 8% of the dark ink). One token for every pane edge, so none
+     is painted by a one-off colour. The rail has its own because it reads
+     the rail's ink (navy chrome on Pulsatrix Light). */
+  --color-pane-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --color-sidebar-pane-edge: color-mix(in srgb, var(--color-sidebar-ink) 8%, transparent);
   /* The round controls (search, New, "...", gear, close: CIRCLE_BUTTON,
      SIDEBAR_CIRCLE_BUTTON) and the chat header's pill, measured on the
      reference in the owner's configuration (#4163): its "elevated" layer
@@ -5090,6 +5099,7 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --color-sidebar-hairline: color-mix(in srgb, var(--color-sidebar-ink) 55%, transparent);
 }
 :root[data-contrast="high"] aside[data-sidebar-surface] {
+  border-color: var(--color-sidebar-hairline);
   background-color: color-mix(in srgb, var(--color-sidebar) 90%, var(--color-sidebar-ink));
 }
 :root[data-contrast="high"] :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--color-ink); outline-offset: 2px; }

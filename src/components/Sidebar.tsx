@@ -2569,7 +2569,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       data-sidebar-surface=""
       style={density === "icons" ? { width: SIDEBAR_RAIL_WIDTH } : { width: sidebarWidth }}
       className={cn(
-        "relative flex h-full shrink-0 flex-col border-r border-sidebar-hairline bg-sidebar",
+        "relative flex h-full shrink-0 flex-col border-r border-sidebar-pane-edge bg-sidebar",
         // The width never transitions: it follows the pointer exactly, and a
         // snap (rail in or out) is drawn with transforms (animateSidebarSnap).
         // Below sm only (a phone): the sidebar leaves the flow and slides in

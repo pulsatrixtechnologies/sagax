@@ -107,7 +107,7 @@ export function ActivityPanel({ bot }: { bot: Bot }) {
   };
 
   return (
-    <aside aria-label={t("botActivity.aria", { name: bot.name })} className="animate-panel-in flex h-full w-[400px] max-w-full shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30">
+    <aside aria-label={t("botActivity.aria", { name: bot.name })} className="animate-panel-in flex h-full w-[400px] max-w-full shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-app max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30">
       {/* 2026-10-16: Settings' type: a 13 px title, round buttons,
           grey day headings over the rows. */}
       <div {...dragProps} className={cn("flex items-center justify-between px-4 py-3", padClass)}>

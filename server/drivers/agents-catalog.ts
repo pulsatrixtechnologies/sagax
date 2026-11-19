@@ -72,7 +72,7 @@ export interface CatalogProfile {
    * Sagax tool (memory, files, pages, tasks) and loses only the tools that
    * would start another hop (PEER_HOP_ABSENT_TOOLS): the one stop against
    * A to B to C chains and loops. The routes refuse a second hop anyway. */
-  peerHop?: boolean | "exchange";
+  peerHop?: boolean;
   /** In a coordinating turn, may the bot open separate jobs on itself. */
   ownThreadCreation: boolean;
   skillAuthoring: boolean;
@@ -161,7 +161,6 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     coordinating: !externalRuntime && env.SAGAX_ROOM_TURN === "1",
     room: !externalRuntime && env.SAGAX_GROUP_TURN === "1",
     ...(!externalRuntime && env.SAGAX_PEER_HOP === "1" ? { peerHop: true } : {}),
-    ...(!externalRuntime && env.SAGAX_PEER_HOP === "exchange" ? { peerHop: "exchange" as const } : {}),
     ownThreadCreation: env.SAGAX_OWN_THREAD_CREATION === "1",
     skillAuthoring: env.SAGAX_SKILL_AUTHORING_ENABLED === "1",
     sharedComputers: env.SAGAX_SHARED_COMPUTERS_ENABLED === "1",
@@ -375,11 +374,6 @@ export const PEER_HOP_ABSENT_TOOLS: ReadonlySet<string> = new Set([
   // a part run on another engine is one hop already (server/run-with-engine.ts)
   "run_with_engine",
 ]);
-/** Lot S1: a surface bot's turn (profile.peerHop "exchange") reaches no
- * other bot: of the tools above it is shown none but its own work, a thread
- * of its own and a part run on another engine. */
-const SURFACE_KEEPS = new Set(["start_thread", "run_with_engine"]);
-export const PEER_EXCHANGE_TOOLS: ReadonlySet<string> = new Set([...PEER_HOP_ABSENT_TOOLS].filter((name) => !SURFACE_KEEPS.has(name)));
 const EXTERNAL_TOOL_NAMES = new Set(["list_bots", "coordinate_bots", "assignment_status", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation"]);
 const WATCHER_TOOL_NAMES = new Set(["create_options_card"]);
 
@@ -604,22 +598,11 @@ function withOfferedReferences<T extends { name: string; description: string; in
   });
 }
 
-/** A tool whose description drops each sentence that names one of `names`
- * (a tool this turn is not shown). */
-function withoutSentencesNaming<T extends { description?: string }>(tool: T, names: ReadonlySet<string>): T {
-  if (!tool.description) return tool;
-  const sentences = tool.description.split(/(?<=\.)\s+/);
-  const kept = sentences.filter((sentence) => ![...sentence.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].some((match) => names.has(match[0])));
-  return kept.length === sentences.length ? tool : { ...tool, description: kept.join(" ") };
-}
-
 /** The tools one turn is shown, exactly as tools/list serializes them. */
 export function availableTools(profile: CatalogProfile) {
   const all = catalogTools(profile);
-  const absent = profile.peerHop === "exchange" ? PEER_EXCHANGE_TOOLS : profile.peerHop ? PEER_HOP_ABSENT_TOOLS : null;
-  const kept = absent ? all.filter((tool) => !absent.has(tool.name)) : all;
-  // lot S1: a surface bot's kept tools never point it to a tool it lacks
-  const tools = withOfferedReferences(profile.peerHop === "exchange" ? kept.map((tool) => withoutSentencesNaming(tool, PEER_EXCHANGE_TOOLS)) : kept);
+  const kept = profile.peerHop ? all.filter((tool) => !PEER_HOP_ABSENT_TOOLS.has(tool.name)) : all;
+  const tools = withOfferedReferences(kept);
   return profile.cloudHome
     ? tools.filter(tool => !LOCAL_VM_TOOL_NAMES.has(tool.name)).map(tool => tool.name === "select_computer"
       ? { ...tool, inputSchema: { ...tool.inputSchema, properties: { surface: CLOUD_HOME_SURFACE } } }

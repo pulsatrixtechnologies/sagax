@@ -259,19 +259,12 @@ answer in their name through one service bot of theirs, the **surface bot**:
   the organization admin's bots and files, admin approvals (but the server
   command card above), the decision history of the console, Today (but the
   waiting line above), a team manager's list, or search.
-- It reaches no other bot and no bot reaches it (peers, both ways): its
-  turns list no tool that reaches another bot (`PEER_HOP_ABSENT_TOOLS`
-  without `start_thread` and `run_with_engine`, `PEER_EXCHANGE_TOOLS`, the
-  `exchange` value of `SAGAX_PEER_HOP`), and the routes refuse them anyway.
-  Everything else of its turn stays as for any bot: skills, `/setup`, its
-  own threads, a part on another engine. It joins no room (`POST /api/groups` and adding members
-  answer `403`). The bots a host chat invites are the host product's to
-  orchestrate.
-- It never holds a routine or an automation: the routine store and the
-  triggers treat it as no bot. Asked for a routine in a chat, it proposes one
-  for one of the person's bots (`for_bot_id`, the bot they named, or it asks
-  which) through the same card and approvals as anywhere; a proposal on
-  itself answers `409 routine_needs_bot` with the person's bots listed.
+- It has the rights of any bot of its person, by its access level (#4920,
+  liberty audit 2026-11-19): it reaches the person's other bots (`ask_bot`,
+  `delegate_bot`, `send_to_bot` and the rest of the peer tools), joins a room
+  the person places it in, and holds routines and automations of its own. It
+  may also propose a routine for one of the person's bots (`for_bot_id`).
+  Being in no list, no other bot reaches it.
 - Notifications: as any outside agent's conversation, only what someone must
   act on (an approval, a question) is notified.
 - Usage: the person reads every row in their own usage (`/api/me/usage...`).

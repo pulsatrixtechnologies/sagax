@@ -23,9 +23,10 @@
 // home) drives through the member API to answer as Sagax in their name. It
 // is the person's, pinned (it never expires), outside the quota, and it
 // leaves every list on top of the temporary agent's: the agent API, the
-// catalogue, peers (both ways), rooms, admin routes, the person's Today and
-// search; it never holds a routine or an automation (isSurfaceBot, the one
-// test, imported wherever it applies).
+// catalogue, other bots' peers, admin routes, the person's Today and search
+// (isSurfaceBot, the one test, imported wherever it applies). Otherwise it
+// has the rights of any bot of its person (#4920): it reaches their bots,
+// joins rooms and holds routines.
 
 export const TEMP_AGENT_IDLE_HOURS_DEFAULT = 24;
 export const TEMP_AGENT_IDLE_HOURS_MAX = 720;

@@ -215,9 +215,9 @@ export function archivedAgent(bot: Pick<RosterMember, "temporary">): boolean {
 /** The one reach rule: another visible bot of the same person (canAccessBot),
  * narrowed by the sender's explicit peers and the audience (peerAllowed). */
 export function canReachPeer(from: RosterMember, target: RosterMember): boolean {
-  // lot S1: a surface bot is driven by its host product only: no bot
-  // reaches it, and it reaches no bot (its host invites bots itself)
-  return from.id !== target.id && !target.hidden && !archivedAgent(target) && !isSurfaceBot(target) && !isSurfaceBot(from) && canAccessBot(from, target) && peerAllowed(from, target) && peerInScope(from, target);
+  // lot S1: a surface bot stays out of every bot's list (no bot reaches it);
+  // it reaches its person's bots like any of them (#4920)
+  return from.id !== target.id && !target.hidden && !archivedAgent(target) && !isSurfaceBot(target) && canAccessBot(from, target) && peerAllowed(from, target) && peerInScope(from, target);
 }
 
 /** The peers a bot can both see and reach right now. The roster, list_bots

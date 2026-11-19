@@ -60,3 +60,38 @@ mode back), `server/index-leaves/autoPickForTurn.mode.test.ts`,
 `server/model-mode.e2e.test.ts`, `src/components/ModeMenu.dom.test.ts`,
 `src/components/ModelPicker.interaction.test.ts`. Captures:
 `scripts/capture/mode-menu.mjs`.
+
+## Heavy: the Team of Experts (#4901)
+
+A Heavy turn runs the team before the Leader (the turn's own model, Expert's
+pick) answers. `server/index-leaves/runHeavyTeam.ts`, called from `startTurn`
+before the prompt is built:
+
+- Each agent is a hidden thread of the same bot, for the same person (the turn's
+  speaker, so their sign-ins, keys and connectors apply), at the bot's approval
+  level (Ask where the agent's engine cannot carry it), run through
+  `askBotAndWait` like `run_with_engine`. The agents run all at once, each with
+  its own angle (`HEAVY_ANGLES`), at a step less effort than the Leader, and are
+  told to take no outward action: the Leader does those.
+- The agents do not count toward the bot's limit of parallel threads
+  (`heavyAgentThreads`): they are one turn's work, and the Leader plus five agents
+  would never fit under the default three.
+- The Leader's prompt gets a "Team of Experts" section with each agent's findings
+  (`leaderNotes`). An agent that fails or times out (4 minutes,
+  `SAGAX_HEAVY_AGENT_WAIT_MS`) is left out and counted; with nothing usable the
+  Leader answers alone. The person's Stop stops the agents.
+- Only the person's own typed turn runs a team. A call turn, work a bot hands out,
+  a card continuation, a confidential conversation and a thread that is itself an
+  agent's answer with the Leader alone.
+
+The whole run lives on one activity row of the conversation (`tool.team`,
+`shared/heavy-team.ts`), patched at most every 400 ms. The chat draws it
+(`HeavyTeamRow`): "Agents thinking · 6s" with the agents' owls and a live preview
+(Agent 1, Agent 2, the Leader's "Sent to All" or "Processing…"), then "Thought
+for 8s", which opens the Thoughts panel (`ThoughtsPanel`, the right-hand detail
+panel): the Leader's steps with their time, then each agent, collapsible. The
+final answer is the Leader's ordinary reply.
+
+Tests: `server/heavy-team.test.ts`, `server/heavy-team.e2e.test.ts` (real server:
+hidden threads, the row, the Leader's notes), `src/components/HeavyTeamRow.dom.test.ts`.
+Captures: `scripts/capture/heavy-team.mjs`.

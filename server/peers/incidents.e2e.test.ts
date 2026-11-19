@@ -4,7 +4,7 @@
 // place to read. Pinned against the real server with the fake CLI failing
 // exactly the runs each test names.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,6 +68,14 @@ async function launch(boat?: string, enterprise?: { dir: string; licenseKey: str
     await expect.poll(async () => (await botsNow()).find((b) => b.id === botId)?.tasks?.some((t: any) => t.title === "Team incidents"), { timeout: 20_000 }).toBe(true);
     return (await botsNow()).find((b) => b.id === botId).tasks.find((t: any) => t.title === "Team incidents") as { threadId: string };
   };
+  // #2695: engine and environment noise (a run that could not start among
+  // it) lands as one line in the Primary Bot's "Ops incidents" thread, with
+  // no Chief turn and no push of its own.
+  const opsThread = async (botId: string) => {
+    await expect.poll(async () => (await botsNow()).find((b) => b.id === botId)?.tasks?.some((t: any) => t.title === "Ops incidents"), { timeout: 20_000 }).toBe(true);
+    return (await botsNow()).find((b) => b.id === botId).tasks.find((t: any) => t.title === "Ops incidents") as { threadId: string };
+  };
+  const hasThread = async (botId: string, title: string) => Boolean((await botsNow()).find((b) => b.id === botId)?.tasks?.some((t: any) => t.title === title));
   // Every push the person would get, from this point on.
   const pushes = async () => {
     const stream = await openSse(`${url}/api/events`, { origin: url });
@@ -83,7 +91,7 @@ async function launch(boat?: string, enterprise?: { dir: string; licenseKey: str
       },
     };
   };
-  return { url, dataDir, api, control, file, dump, messages, botsNow, useCli, turnEnded, incidentsThread, pushes, close: () => fixture.close() };
+  return { url, dataDir, api, control, file, dump, messages, botsNow, useCli, turnEnded, incidentsThread, opsThread, hasThread, pushes, close: () => fixture.close() };
 }
 
 it("reports a crashed run to the Chief, who retries it from the incidents thread", async () => {
@@ -322,7 +330,7 @@ it("keeps the team computer for a report turn, and answers without it once it is
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const address = upstream.address();
   if (!address || typeof address === "string") throw new Error("fixture failed to bind");
-  const { api, control, file, dump, messages, useCli, incidentsThread, close } = await launch(`http://127.0.0.1:${address.port}`);
+  const { api, control, file, dump, messages, useCli, incidentsThread, opsThread, close } = await launch(`http://127.0.0.1:${address.port}`);
   try {
     // The Chief and its teammates work on Auto, so all of them inherit the
     // Ops team's shared computer — except Ben, set to Off.
@@ -371,28 +379,27 @@ it("keeps the team computer for a report turn, and answers without it once it is
     releaseListing();
     await changing;
 
-    // The machine disappears. Cara's run cannot start on it; the Chief's
-    // report turn still runs, with nothing of that machine mounted, the
-    // cause in front of it, and no seat on it held: Dan's run, behind it,
-    // learns of the missing machine at once instead of waiting its turn.
+    // The machine disappears. Cara's run cannot start on it: since #2695
+    // that is an ops incident, one line in "Ops incidents", and no Chief
+    // turn holds a seat on the missing machine: Dan's run, behind it, learns
+    // of the missing machine at once instead of waiting its turn.
     gone = true;
-    rmSync(file(incidents, "gate"));
+    const before = (await messages(incidents)).length;
     await control(["send", "--bot", team.cara.id, "--text", "File the expense report."]);
-    await expect.poll(async () => (await messages(incidents)).some((m) =>
-      m.kind === "activity" && /^Incident: Cara's run in its thread #File the expense report\. could not start: .*cloud computer is missing/.test(m.tool?.name ?? ""),
+    const ops = (await opsThread(chief.id)).threadId;
+    const opsLine = (name: string, request: string) => expect.poll(async () => (await messages(ops)).some((m) =>
+      m.kind === "activity" && (m.tool?.name ?? "").startsWith(`Incident: ${name}'s run in its thread #${request} could not start`) && /cloud computer is missing/.test(m.tool?.name ?? ""),
     ), { timeout: 20_000 }).toBe(true);
-    await reportRan("Cara's run in its thread #File the expense report. could not start");
-    const run = await dump(incidents);
-    expect(Object.keys(run.mcpConfig.mcpServers)).not.toContain("computer");
-    expect(JSON.stringify(run.prompt)).toContain("your computer could not be prepared for it (The team's cloud computer is missing");
-    expect(run.systemPrompt).not.toContain("Your team shares the cloud computer");
+    await opsLine("Cara", "File the expense report.");
     await control(["send", "--bot", team.dan.id, "--text", "Book the venue."]);
     await expect.poll(async () => (await messages(team.dan.activeTaskId)).some((m) => /cloud computer is missing/.test(m.tool?.name ?? "")), { timeout: 20_000 }).toBe(true);
     expect((await messages(team.dan.activeTaskId)).some((m) => /Waiting for its turn/.test(m.tool?.name ?? ""))).toBe(false);
-    writeFileSync(file(incidents, "gate"), "finish");
-    await reportRan("Dan's run in its thread #Book the venue. could not start");
-    expect((await control(["wait", "--bot", chief.id, "--task", incidents, "--timeout", "30"])).status).toBe("settled");
-    expect((await messages(incidents)).some((m) => /could not reach|error:/.test(m.tool?.name ?? ""))).toBe(false);
+    await opsLine("Dan", "Book the venue.");
+    // neither reached the Chief's "Team incidents" thread nor ran a report
+    expect((await messages(incidents)).length).toBe(before);
+    expect(JSON.stringify((await dump(incidents)).prompt)).not.toContain("could not start");
+    expect((await control(["wait", "--bot", chief.id, "--timeout", "30"])).status).toBe("settled");
+    expect((await messages(ops)).some((m) => m.role === "bot" && m.kind === "text")).toBe(false);
   } finally {
     await close();
     upstream.closeAllConnections();
@@ -400,11 +407,11 @@ it("keeps the team computer for a report turn, and answers without it once it is
   }
 }, 150_000);
 
-it("adds no push for answering reports that waited, about failures the person already heard of", async () => {
-  const { api, control, file, dump, messages, useCli, incidentsThread, pushes, close } = await launch();
+it("adds no push and no Chief turn for runs that could not start, about failures the person already heard of (#2695)", async () => {
+  const { api, control, messages, useCli, opsThread, hasThread, pushes, close } = await launch();
   try {
     // The Chief works on Auto. Ada, Ben and Cara work on a cloud computer
-    // this home has no Boat key for, so none of their runs can start — and
+    // this home has no Boat key for, so none of their runs can start, and
     // each of those already buzzes the person ("couldn't start").
     const chief = (await control(["new-bot", "--name", "Clive", "--section", "Ops"])).bot;
     await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true });
@@ -417,34 +424,28 @@ it("adds no push for answering reports that waited, about failures the person al
     await useCli('"slow"');
     const watch = await pushes();
     try {
-      const cannotStart = async (bot: { id: string }, name: string, request: string, incidents?: string) => {
+      // #2695: each is an ops incident, one line in "Ops incidents".
+      const cannotStart = async (bot: { id: string }, name: string, request: string) => {
         await control(["send", "--bot", bot.id, "--text", request]);
-        const thread = incidents ?? (await incidentsThread(chief.id)).threadId;
+        const thread = (await opsThread(chief.id)).threadId;
         await expect.poll(async () => (await messages(thread)).some((m) =>
           m.kind === "activity" && (m.tool?.name ?? "").startsWith(`Incident: ${name}'s run in its thread #${request} could not start`),
         ), { timeout: 20_000 }).toBe(true);
         return thread;
       };
-      // Ada's run cannot start; the Chief takes her report at once.
-      const incidents = await cannotStart(team[0], "Ada", "Reconcile the September invoices.");
-      await expect.poll(async () => JSON.stringify((await dump(incidents)).prompt), { timeout: 20_000 }).toContain("Ada's run in its thread");
-      // Ben's and Cara's cannot either while the Chief is still on Ada's:
-      // their reports wait, and are answered together next.
-      await cannotStart(team[1], "Ben", "Draft the vendor letter.", incidents);
-      await cannotStart(team[2], "Cara", "File the expense report.", incidents);
-      writeFileSync(file(incidents, "gate"), "finish");
-      await expect.poll(async () => JSON.stringify((await dump(incidents)).prompt), { timeout: 20_000 }).toContain("Cara's run in its thread");
-      expect(JSON.stringify((await dump(incidents)).prompt)).toContain("Ben's run in its thread");
-      expect((await control(["wait", "--bot", chief.id, "--task", incidents, "--timeout", "30"])).status).toBe("settled");
-      expect((await messages(incidents)).filter((m) => m.role === "bot" && m.kind === "text" && m.turnTerminal)).toHaveLength(2);
+      const ops = await cannotStart(team[0], "Ada", "Reconcile the September invoices.");
+      await cannotStart(team[1], "Ben", "Draft the vendor letter.");
+      await cannotStart(team[2], "Cara", "File the expense report.");
+      expect((await control(["wait", "--bot", chief.id, "--timeout", "30"])).status).toBe("settled");
+      // no Chief turn: no report in "Team incidents", no reply in "Ops incidents"
+      expect(await hasThread(chief.id, "Team incidents")).toBe(false);
+      expect((await messages(ops)).filter((m) => m.role === "bot" && m.kind === "text")).toHaveLength(0);
+      expect((await messages(ops)).filter((m) => m.kind === "activity" && (m.tool?.name ?? "").startsWith("Incident: "))).toHaveLength(3);
 
-      // One "couldn't start" per failure, and the Chief's one "finished" for
-      // the report it took at once: what reached the person when a report
-      // that found the Chief busy was dropped. Answering the two that
-      // waited adds nothing.
+      // One "couldn't start" per failure, and nothing more.
       const sent = await watch.sent(chief.id);
       expect(sent.map((push: any) => [push.kind, push.botId])).toEqual([
-        ["turn-failed", team[0].id], ["turn-failed", team[1].id], ["turn-failed", team[2].id], ["done", chief.id],
+        ["turn-failed", team[0].id], ["turn-failed", team[1].id], ["turn-failed", team[2].id],
       ]);
     } finally {
       watch.stream.close();
@@ -454,44 +455,36 @@ it("adds no push for answering reports that waited, about failures the person al
   }
 }, 150_000);
 
-it("keeps a report that waited quiet through the work it hands on, when the person already heard of the failure", async () => {
-  const { api, control, file, dump, messages, useCli, incidentsThread, pushes, close } = await launch();
+it("keeps a run that could not start quiet while the Chief is busy, with no report waiting for its slot (#2695)", async () => {
+  const { api, control, file, dump, messages, useCli, opsThread, hasThread, pushes, close } = await launch();
   try {
-    // One thread at a time per bot: a Chief busy anywhere makes a report wait.
+    // One thread at a time per bot: a Chief busy anywhere would make a report wait.
     await api("PATCH", "/api/config", { threads: { maxConcurrentPerBot: 1 } });
     const chief = (await control(["new-bot", "--name", "Clive", "--section", "Ops"])).bot;
     await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true });
     const ben = (await control(["new-bot", "--name", "Ben", "--section", "Ops"])).bot;
     await api("PATCH", `/api/bots/${ben.id}`, { computer: "cloud" });
-    const dan = (await control(["new-bot", "--name", "Dan", "--section", "Ops"])).bot;
     await useCli('"slow"');
     const watch = await pushes();
     try {
       // The person has the Chief on something of their own.
       await control(["send", "--bot", chief.id, "--text", "Plan the offsite."]);
       await dump(chief.activeTaskId);
-      // Ben's run cannot start — which buzzes the person — and his report
-      // waits for the Chief's slot.
+      // Ben's run cannot start, which buzzes the person; #2695: one line in
+      // "Ops incidents", no report waiting for the Chief's slot.
       await control(["send", "--bot", ben.id, "--text", "Draft the vendor letter."]);
-      const incidents = (await incidentsThread(chief.id)).threadId;
-      await expect.poll(async () => (await messages(incidents)).some((m) =>
+      const ops = (await opsThread(chief.id)).threadId;
+      await expect.poll(async () => (await messages(ops)).some((m) =>
         m.kind === "activity" && (m.tool?.name ?? "").startsWith("Incident: Ben's run in its thread #Draft the vendor letter. could not start")), { timeout: 20_000 }).toBe(true);
 
-      // The person's task ends; the report runs, and hands the work to Dan,
-      // whose result comes back for review.
+      // The person's task ends; no report turn follows it.
       writeFileSync(file(chief.activeTaskId, "gate"), "finish");
-      await expect.poll(async () => JSON.stringify((await dump(incidents)).prompt), { timeout: 20_000 }).toContain("Ben's run in its thread #Draft the vendor letter. could not start");
-      const token = (await dump(incidents)).mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN;
-      const handed = await api("POST", "/api/internal/coordinate-bots", { botIds: [dan.id], message: "Draft the vendor letter; Ben could not start." }, token);
-      writeFileSync(file(incidents, "gate"), "finish");
-      writeFileSync(file(handed.receipts[0].threadId as string, "gate"), "finish");
-      await expect.poll(async () => (await messages(incidents)).some((m) =>
-        m.kind === "activity" && m.tool?.name === "Resumed with Dan results, reviewing"), { timeout: 20_000 }).toBe(true);
-      expect((await control(["wait", "--bot", chief.id, "--task", incidents, "--timeout", "30"])).status).toBe("settled");
+      expect((await control(["wait", "--bot", chief.id, "--timeout", "30"])).status).toBe("settled");
+      expect(await hasThread(chief.id, "Team incidents")).toBe(false);
+      expect((await messages(ops)).some((m) => m.role === "bot" && m.kind === "text")).toBe(false);
 
       // Ben's "couldn't start" and the Chief's "finished" for the person's
-      // own task — what reached the person when that report was dropped.
-      // Nothing for the report, the work it handed on, or the review.
+      // own task. Nothing for the ops line.
       const sent = await watch.sent(chief.id);
       expect(sent.map((push: any) => [push.kind, push.botId])).toEqual([["turn-failed", ben.id], ["done", chief.id]]);
     } finally {

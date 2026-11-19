@@ -30,7 +30,16 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       } else if (bot && turnWaitedOnPerson(host.store.taskByThread(bot.id, event.threadId))) {
         host.store.setTaskActivity(bot.id, event.threadId, "working");
       } else if (!bot && turnWaitedOnPerson(waiting)) host.store.setActivity(waiting.id, "working");
-      const messageId = event.requestId ? host.askMessageByRequest.get(`${event.threadId}:${event.requestId}`) : null;
+      // #4753: the in-flight mapping is dropped when the person's next
+      // message makes a safe-point cut that keeps the permission card
+      // (closeOpenApprovals keepPermissions, #4528), yet the turn that asked
+      // may still be live and its engine answers here: read the open card
+      // from the transcript then, as answerRequest does after a restart.
+      const messageId = event.requestId
+        ? host.askMessageByRequest.get(`${event.threadId}:${event.requestId}`)
+          ?? host.store.messagesFor(event.threadId).find((m) => m.card?.requestId === event.requestId
+            && !m.card.answered && !m.card.dismissed && !m.card.expired)?.id
+        : null;
       if (messageId) {
         const existing = host.store.messagesFor(event.threadId).find((m) => m.id === messageId);
         // 2026-10-11: a permission card nobody answered before its own

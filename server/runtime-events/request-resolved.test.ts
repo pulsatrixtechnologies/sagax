@@ -19,6 +19,11 @@ function hostWith(rows: Row[], { turnRunning = true } = {}) {
     withdrawApprovalNotice: () => undefined,
     settleWaitingOnPersonChips: () => undefined,
     askMessageByRequest: new Map(),
+    // the card's own patch (#4753: found from the transcript when the
+    // in-flight mapping is gone)
+    shouldSettleRequestCard: () => true,
+    unansweredApprovals: { record: () => undefined, answered: () => undefined },
+    botForThread: () => undefined,
     isPersistentQuestionCard: (c: { requestType?: string }) => c?.requestType === "question",
     store: {
       bot: () => undefined,
@@ -28,6 +33,7 @@ function hostWith(rows: Row[], { turnRunning = true } = {}) {
         activity[t] = value;
       },
       setActivity: () => undefined,
+      patchMessage: () => undefined,
     },
   };
   host.agentPendingApproval = createAgentPendingApproval(() => host);
@@ -83,5 +89,26 @@ describe("#4250 (S9): how a resolved request's card ended, for the signal ledger
       system: "retired", "full-access": "retired", "admin-rule": "retired", engine_cap: "retired",
       "custom-rule-deny": "retired", "unknown-tool": "retired", auto: "retired", undefined: "retired",
     });
+  });
+});
+
+describe("request.resolved for a card the safe-point cut kept (#4753)", () => {
+  it("a permission card whose in-flight mapping the person's next message dropped is still marked answered", () => {
+    const { host } = hostWith([prompt("p", 10), perm("m0", 11, "req_a")]);
+    const patched: Array<{ id: string; card: Record<string, unknown> }> = [];
+    host.store.patchMessage = (_thread: string, id: string, patch: { card: Record<string, unknown> }) => { patched.push({ id, card: patch.card }); };
+    // closeOpenApprovals(keepPermissions) forgot req_a; the engine still held it
+    expect(host.askMessageByRequest.size).toBe(0);
+    resolve(host, "req_a");
+    expect(patched).toEqual([{ id: "m0", card: expect.objectContaining({ requestId: "req_a", answered: "allow", dismissed: false }) }]);
+  });
+  it("a card already closed (answered, dismissed or expired) is left as it is", () => {
+    for (const extra of [{ answered: "unavailable" }, { dismissed: true }, { expired: true }]) {
+      const { host } = hostWith([prompt("p", 10), perm("m0", 11, "req_a", extra)]);
+      const patched: unknown[] = [];
+      host.store.patchMessage = (...args: unknown[]) => { patched.push(args); };
+      resolve(host, "req_a");
+      expect(patched).toEqual([]);
+    }
   });
 });

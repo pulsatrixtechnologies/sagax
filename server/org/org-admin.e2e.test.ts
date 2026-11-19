@@ -9,7 +9,8 @@
 //   S7-C  bots: an admin sees all; a manager sees their reach; metadata only
 //   S7-D  usage attributed to principals; a manager sees their reach only
 //   S7-E  approvals: owner cards to the owner, admin cards to admins; a console
-//         decision resumes the waiting turn once
+//         decision resumes the waiting turn once; a member's server command is
+//         refused without a card (#4449)
 //   S7-F  the audit: rights, org, approval, people rows, paged
 //   S7-G  a bot's files (read only): roots, list, read, download, the path
 //         refusals, the reach, the audit rows
@@ -27,6 +28,9 @@ import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+/** A tool of a server that is not the person's: since #4449 the card a
+ * member's bot still raises for an admin (a server command is refused). */
+const FOREIGN_TOOL = "mcp__ledger__post_entry";
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
 const TEAM_T = "01J9S7TEAMT0000000000000TT";
@@ -310,6 +314,7 @@ posixOnly("Perspicax organization, slice 7: the console admin API", () => {
       socket.on("data", (chunk) => { buffer += chunk; if (buffer.includes("\n")) answer = JSON.parse(buffer.split("\n")[0]!); });
       socket.write(JSON.stringify({ t: "ask", id, kind: "permission", tool, input }) + "\n");
       await waitFor(async () => {
+        if (answer) return true;
         const got = await api("GET", `/api/threads/${bots.z!.threadId}/messages?limit=100`, carol);
         return (got.body.messages as Array<{ card?: any }> | undefined)?.some((m) => m.card?.requestId === id);
       });
@@ -317,15 +322,19 @@ posixOnly("Perspicax organization, slice 7: the console admin API", () => {
     };
     try {
       const data = realpathSync(join(home, ".sagax"));
-      // a server command of a member's bot: an admin card
-      const command = await ask("Bash", { command: "cat /proc/1/environ" });
+      // #4449, shipped in #4506: a server command of a member's bot never
+      // runs on the shared host and asks no admin: refused at once, no card
+      const shell = await ask("Bash", { command: "cat /proc/1/environ" });
+      expect(shell.answer()).toMatchObject({ behavior: "deny", message: expect.stringContaining("no admin is asked") });
+      // a tool of a server that is not the person's still waits for an admin
+      const command = await ask(FOREIGN_TOOL, { entry: "x" });
       // a file in its own workspace: the owner's card
       const own = await ask("Write", { file_path: join(data, "task-workspaces", bots.z!.id, bots.z!.threadId, "notes.md"), content: "hi" });
 
       const forAlice = (await admin("GET", "approvals", ALICE)).body.approvals as Array<any>;
       expect(forAlice.map((card) => card.requestId)).toEqual([command.id]);
       expect(forAlice[0]).toMatchObject({
-        botId: bots.z!.id, botName: "Zed", threadId: bots.z!.threadId, kind: "admin", type: "tool", tool: "Bash",
+        botId: bots.z!.id, botName: "Zed", threadId: bots.z!.threadId, kind: "admin", type: "tool", tool: expect.stringContaining("post_entry"),
         owner: { principalId: ids.carol, name: "Carol" }, decidable: true,
         link: `${BASE}/#thread=${bots.z!.threadId}&bot=${bots.z!.id}`,
       });
@@ -376,7 +385,7 @@ posixOnly("Perspicax organization, slice 7: the console admin API", () => {
     for (const action of ["grant.set", "grant.remove", "org.link", "approval.answer", "person.disabled"]) expect(actions, action).toContain(action);
     expect(actions).not.toContain("config.update");
     expect(rows[0].at).toBeGreaterThanOrEqual(rows.at(-1).at);
-    const answer = rows.find((row) => row.action === "approval.answer" && row.after?.requestId?.startsWith("s7-Bash"));
+    const answer = rows.find((row) => row.action === "approval.answer" && row.after?.requestId?.startsWith(`s7-${FOREIGN_TOOL}`));
     expect(answer).toMatchObject({ category: "approval", actor: { kind: "person", principalId: ids.alice, name: "Alice", via: "console" }, target: { kind: "bot", id: bots.z!.id }, after: { decision: "allow", kind: "admin" } });
     const grant = rows.find((row) => row.action === "grant.set" && row.target?.id === bots.x!.id);
     expect(grant).toMatchObject({ category: "rights", actor: { kind: "person", principalId: ids.alice, via: "sagax" }, after: { target: `team:${TEAM_T}`, level: "run" } });

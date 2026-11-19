@@ -31,6 +31,9 @@ import { waitForServerReady } from "../testing/server-ready.ts";
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+/** A tool of a server that is not the person's: since #4449 the card a
+ * member's bot still raises for an admin (a server command is refused). */
+const FOREIGN_TOOL = "mcp__ledger__post_entry";
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
 const TEAM_T = "01J9C1TEAMT0000000000000TT";
@@ -193,7 +196,9 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     routineId = routine.body.routine.id;
     // one settled turn on Atlas (usage, latency)
     expect((await api("POST", `/api/bots/${bots.atlas.id}/messages`, alice, { text: "hello" })).status).toBe(202);
-    // a pending admin card on Beacon (a member's server command)
+    // a pending admin card on Beacon: a tool of a server that is not Bob's
+    // (#4449, shipped in #4506: a member's server command is refused with no
+    // card, so it no longer makes one)
     expect((await api("POST", `/api/bots/${bots.beacon.id}/messages`, bob, { text: "hold for cards" })).status).toBe(202);
     const holdDump = join(home, "hold-dump.json");
     await waitFor(async () => existsSync(holdDump), 20_000);
@@ -201,8 +206,8 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const socket = connect(socketPath);
     sockets.push(socket);
     await new Promise<void>((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
-    cardId = "c1-bash-1";
-    socket.write(JSON.stringify({ t: "ask", id: cardId, kind: "permission", tool: "Bash", input: { command: "uptime" } }) + "\n");
+    cardId = "c1-foreign-1";
+    socket.write(JSON.stringify({ t: "ask", id: cardId, kind: "permission", tool: FOREIGN_TOOL, input: { entry: "x" } }) + "\n");
     await waitFor(async () => {
       const got = await api("GET", `/api/threads/${bots.beacon.threadId}/messages?limit=100`, bob);
       return (got.body.messages as Array<{ card?: any }> | undefined)?.some((m) => m.card?.requestId === cardId);
@@ -437,7 +442,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const queue = await admin("GET", "approvals?scope=org", ALICE);
     expect(queue.status, queue.text).toBe(200);
     const card = (queue.body.approvals as Array<any>).find((entry) => entry.requestId === cardId);
-    expect(card).toMatchObject({ botId: bots.beacon!.id, kind: "admin", tool: "Bash", decidable: true, owner: { principalId: ids.bob } });
+    expect(card).toMatchObject({ botId: bots.beacon!.id, kind: "admin", tool: expect.stringContaining("post_entry"), decidable: true, owner: { principalId: ids.bob } });
     expect((await admin("GET", "approvals?scope=org", MONA)).body.code).toBe("forbidden_role");
     // Bob's own list never carries the admin card
     expect(((await admin("GET", "approvals", BOB)).body.approvals as Array<any>).map((entry) => entry.requestId)).not.toContain(cardId);
@@ -448,7 +453,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
       return (got.body.items as Array<any> | undefined)?.find((entry) => entry.requestId === cardId) ? got : null;
     });
     expect((history.body.items as Array<any>).find((entry) => entry.requestId === cardId)).toMatchObject({
-      botId: bots.beacon!.id, threadId: bots.beacon!.threadId, type: "tool", tool: "Bash", decision: "allow", by: { principalId: ids.alice, name: "Alice" }, at: expect.any(Number),
+      botId: bots.beacon!.id, threadId: bots.beacon!.threadId, type: "tool", tool: expect.stringContaining("post_entry"), decision: "allow", by: { principalId: ids.alice, name: "Alice" }, at: expect.any(Number),
     });
     expect(((await admin("GET", "approvals?scope=org", ALICE)).body.approvals as Array<any>).map((entry) => entry.requestId)).not.toContain(cardId);
     expect((await admin("GET", "approvals/history", MONA)).body.code).toBe("forbidden_role");

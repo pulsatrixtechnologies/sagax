@@ -21,13 +21,13 @@ import {
 const count = <T,>(items: readonly T[]) => items.reduce((map, item) => map.set(item, (map.get(item) ?? 0) + 1), new Map<T, number>());
 
 describe("V6 bot page map", () => {
-  it("puts each setting on exactly one sub-page or card in place (the header, Appearance and Stats aside)", () => {
+  it("puts each setting on exactly one sub-page or card in place (the header, Appearance, Shared with, Who can see it and Stats aside)", () => {
     const placed = count([
       ...BOT_PROFILE_SUBPAGES.flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
       ...BOT_PROFILE_CARDS.flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
     ]);
     for (const category of PERSONA_CATEGORIES) {
-      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" || category === "appearance" ? 0 : 1;
+      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" || category === "appearance" || category === "sharing" || category === "visibility" ? 0 : 1;
       expect(placed.get(category) ?? 0, category).toBe(expected);
       if (!expected) continue;
       const page = botProfileSubPageOf(category);
@@ -36,36 +36,38 @@ describe("V6 bot page map", () => {
     }
   });
 
-  it("lists each sub-page in exactly one group of one tab", () => {
+  // the owner 2026-11-19: Personality has no row (Knowledge's SOUL.md opens its page)
+  it("lists each sub-page in exactly one group of one tab, Personality (reached from Folder and memory) aside", () => {
     const listed = count(BOT_PROFILE_TABS.flatMap((tab) => BOT_PROFILE_TAB_GROUPS[tab].flatMap((group) => group.pages)));
-    for (const page of BOT_PROFILE_SUBPAGES) expect(listed.get(page), page).toBe(1);
-    expect([...listed.keys()].sort()).toEqual([...BOT_PROFILE_SUBPAGES].sort());
+    for (const page of BOT_PROFILE_SUBPAGES) expect(listed.get(page) ?? 0, page).toBe(page === "personality" ? 0 : 1);
+    expect([...listed.keys()].sort()).toEqual(BOT_PROFILE_SUBPAGES.filter((page) => page !== "personality").sort());
   });
 
   // #3398: General is section cards with their controls in place, as the
   // reference app. The channels and the bot's accounts are cards of the
   // tab, not sub-pages; Shared with is under More (the Channels card holds
   // channels only).
-  it("draws the channels and the accounts in place on General, Shared with under More", () => {
+  it("draws the channels and the accounts in place on General, with no Shared with row", () => {
     expect(BOT_PROFILE_SUBPAGES).not.toContain("channels");
     expect(BOT_PROFILE_SUBPAGES).not.toContain("accounts");
     expect(BOT_PROFILE_TAB_GROUPS.general.map((group) => group.card ?? group.id)).toEqual(["settings", "channels", "accounts", "more"]);
-    expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "more")!.pages[0]).toBe("sharing");
+    expect(BOT_PROFILE_TAB_GROUPS.general.flatMap((group) => group.pages)).not.toContain("sharing");
+    expect((BOT_PROFILE_SUBPAGES as readonly string[]).includes("sharing")).toBe(false);
     for (const id of ["slack", "access"] as const) {
       expect(botProfileSubPageOf(id), id).toBeNull();
       expect(botProfileTabOf(id), id).toBe("general");
     }
   });
 
-  // #4420 (the owner 2026-11-15, "Déplace apparence en Tab"): Appearance is
-  // a tab of the bot page again, beside General, Outcomes, Knowledge and
-  // Analytics; no row of General > Settings opens it any more.
-  it("regression #4420: Appearance is a tab, not a row of General > Settings", () => {
-    expect(BOT_PROFILE_TABS).toEqual(["general", "outcomes", "appearance", "knowledge", "stats"]);
-    expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "settings")!.pages).toEqual(["personality", "model", "beforeActing"]);
+  // the owner 2026-11-19: Appearance is no longer a tab, it is the modal the header's
+  // mascot opens; Personality and Shared with are no longer rows of General.
+  it("regression: Appearance is not a tab, Personality and Shared with are not rows of General", () => {
+    expect(BOT_PROFILE_TABS).toEqual(["general", "outcomes", "knowledge", "stats"]);
+    expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "settings")!.pages).toEqual(["model", "beforeActing"]);
     expect((BOT_PROFILE_SUBPAGES as readonly string[]).includes("appearance")).toBe(false);
     expect(botProfileSubPageOf("appearance")).toBeNull();
-    expect(botProfileTabOf("appearance")).toBe("appearance");
+    expect(botProfileTabOf("appearance")).toBe("general");
+    expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "more")!.pages).toEqual(["rules", "actsAlone", "voice", "advanced", "versions"]);
   });
 
   // #3400: Knowledge is To review and Skills in place, then Its work

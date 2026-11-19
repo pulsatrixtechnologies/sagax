@@ -374,9 +374,14 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   haut à droite (Partager reste la seule porte du partage des personnes et des
   groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
   passe dessous.
-- Onglets en pilules : Général, Objectifs, Apparence, Connaissances, Analytique (Simple
-  masque Analytique). Apparence est un onglet (#4420), plus une rangée de Général. La
-  loupe à droite cherche dans tous les réglages.
+- Onglets en pilules : Général, Objectifs, Connaissances, Analytique (Simple
+  masque Analytique). Apparence n'est plus un onglet (owner 2026-11-19, remplace #4420) :
+  c'est une modale que la mascotte de l'en-tête ouvre (infobulle et aria-label
+  « Apparence », curseur main), avec tout le contenu de l'ancien onglet. Personnalité
+  n'a plus de rangée (Connaissances > Dossier et mémoire > SOUL.md ouvre sa page),
+  Partagé avec non plus (la bulle Partager de la barre tient les personnes, les niveaux
+  et Qui peut le voir), et l'Accès n'a plus de rangée de moteur (Réglages > Modèle).
+  La loupe à droite cherche dans tous les réglages.
 - Chaque bouton ou rangée de la page qui ouvre une autre surface l'ouvre dans une
   fenêtre modale par-dessus la page, comme la référence, jamais comme une page à sa
   place (#4470, qui corrige #4420). Une seule coquille, `BotPageModal`
@@ -391,10 +396,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   `DialogCloseButton`, `useModalDialog`). Une fenêtre ouverte depuis une fenêtre
   s'empile par-dessus avec son propre voile ; Échap ferme celle du dessus et le focus
   revient au bouton qui l'a ouverte ; une liste ouverte dedans garde son Échap.
-  - Dans les modales : chaque rangée (Personnalité, Modèle, Avant d'agir, Partagé
-    avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions, Routines,
-    Dossier et mémoire), le Gérer ou Connecter de chaque canal, le Gérer du moteur
-    d'Accès (la modale Modèle), Ajouter > Connexion du coffre (son formulaire), et la
+  - Dans les modales : chaque rangée (Modèle, Avant d'agir, Règles, Quand il agit seul, Voix, Réglages avancés, Versions, Routines,
+    Dossier et mémoire), le Gérer ou Connecter de chaque canal, Ajouter > Connexion du coffre (son formulaire), et la
     rangée Mémoire de Dossier et mémoire (la page Mémoire, à la taille de la fenêtre
     des Réglages, empilée sur la modale de Dossier et mémoire ; son propre X la
     ferme).
@@ -402,9 +405,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     là : Connecter des apps (Ajouter > Applications ou Serveurs MCP, Connecter d'une
     rangée d'Accès, Messages sur ce Mac) ouvre la fenêtre que la barre latérale
     ouvre ; « Tous les bots » d'Analytique ouvre la fenêtre des Réglages à
-    Utilisation. Gérer de Partagé avec ferme sa modale et ouvre la bulle Partager de
-    la barre.
-  - Restent sur place : l'Apparence (un onglet), les interrupteurs de Réglages, les
+    Utilisation. Un lien vers Partagé avec ouvre la bulle Partager de la barre.
+  - Restent sur place : les interrupteurs de Réglages, les
     objectifs (une rangée s'ouvre sur place, #4098) et Afficher N de plus.
   - Un lien vers une section d'une sous-page ouvre la page avec la modale de cette
     sous-page. La recherche montre l'onglet et marque la rangée de la sous-page qui

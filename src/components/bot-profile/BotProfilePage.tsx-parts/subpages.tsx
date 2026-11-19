@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   UserRound,
-  Users,
   Zap,
 } from "lucide-react";
 
@@ -34,7 +33,6 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   personality: meta(<UserRound />, "botProfile.v6.page.personality.title", "botProfile.v6.page.personality.desc", "botProfile.v6.page.personality.intro"),
   model: meta(<Cpu />, "botProfile.v6.page.model.title", "botProfile.v6.page.model.desc", "botProfile.v6.page.model.intro"),
   beforeActing: meta(<ShieldCheck />, "botProfile.v6.page.beforeActing.title", "botProfile.v6.page.beforeActing.desc", "botProfile.v6.page.beforeActing.intro"),
-  sharing: meta(<Users />, "botProfile.v6.page.sharing.title", "botProfile.v6.page.sharing.desc", "botProfile.v6.page.sharing.intro"),
   rules: meta(<ScrollText />, "botProfile.v6.page.rules.title", "botProfile.v6.page.rules.desc", "botProfile.v6.page.rules.intro"),
   actsAlone: meta(<Zap />, "botProfile.v6.page.actsAlone.title", "botProfile.v6.page.actsAlone.desc", "botProfile.v6.page.actsAlone.intro"),
   voice: meta(<AudioLines />, "botProfile.v6.page.voice.title", "botProfile.v6.page.voice.desc", "botProfile.v6.page.voice.intro"),
@@ -50,7 +48,6 @@ export const SUBPAGE_SIZE: Record<BotProfileSubPage, BotPageModalSize> = {
   personality: "large",
   model: "medium",
   beforeActing: "wide",
-  sharing: "medium",
   rules: "large",
   actsAlone: "large",
   voice: "medium",

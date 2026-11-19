@@ -12,6 +12,7 @@ import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PillSelect, PLAIN_FIELD } from "../SettingsPrimitives";
 import { grantEditable, levelLabel, useGrantEditor } from "../bot-settings/GrantEditor";
 import { useBotSharing } from "../bot-settings/SharingSection";
+import { VisibilitySection } from "../bot-settings/VisibilitySection";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -293,14 +294,28 @@ function SharePanel({ bot, directory, rows, administer, isOwner, mayShare, title
 }
 
 /** Loads the directory and the grants only while the popover is open. */
-function SharePopoverBody({ bot, titleId }: { bot: Bot; titleId: string }) {
+function SharePopoverBody({ bot, titleId, grants, visibility }: { bot: Bot; titleId: string; grants: boolean; visibility: boolean }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {grants ? <GrantsPanel bot={bot} titleId={titleId} /> : <h2 id={titleId} className="text-[15px] font-medium leading-5 text-ink">{t("botSettings.visibility.title")}</h2>}
+      {/* Who can see it (everyone, admins or listed people), moved here from the Shared with row (owner 2026-11-19) */}
+      {visibility && <div data-bot-share-visibility=""><VisibilitySection bot={bot} /></div>}
+    </div>
+  );
+}
+
+function GrantsPanel({ bot, titleId }: { bot: Bot; titleId: string }) {
   const sharing = useBotSharing(bot);
   // Rebuilt once the directory answers, so the rows carry its labels.
   return <SharePanel key={`${bot.id}:${sharing.directory ? "directory" : "loading"}`} {...sharing} bot={bot} titleId={titleId} />;
 }
 
-export function ShareBotButton({ bot, open, onOpenChange, style, className }: {
+export function ShareBotButton({ bot, open, onOpenChange, style, className, grants = true, visibility = false }: {
   bot: Bot;
+  /** The people and groups (an organization server); false where only Who can see it is offered. */
+  grants?: boolean;
+  /** Who can see it, under the people (this viewer may set it). */
+  visibility?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   style?: CSSProperties;
@@ -343,7 +358,7 @@ export function ShareBotButton({ bot, open, onOpenChange, style, className }: {
           data-bot-share-popover
           className="w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-2xl border-[0.5px] border-border popover-surface bg-elevated p-4 text-ink shadow-xl"
         >
-          <SharePopoverBody bot={bot} titleId={titleId} />
+          <SharePopoverBody bot={bot} titleId={titleId} grants={grants} visibility={visibility} />
         </AnchoredPopover>
       )}
     </>

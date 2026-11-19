@@ -26,10 +26,14 @@ export function BotProfileInsetStrip() {
   return <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />;
 }
 
-export function BotProfileTopBar({ bot, onClose, shareShown, shareOpen, onShareOpenChange, condensed }: {
+export function BotProfileTopBar({ bot, onClose, shareShown, shareGrants, shareVisibility, shareOpen, onShareOpenChange, condensed }: {
   bot: Bot;
   onClose: () => void;
   shareShown: boolean;
+  /** the people and groups part of the popover (an organization server) */
+  shareGrants: boolean;
+  /** Who can see it, in the popover */
+  shareVisibility: boolean;
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
   /** The name has scrolled under the bar: show the small mascot and the name on a blurred ground. */
@@ -73,7 +77,7 @@ export function BotProfileTopBar({ bot, onClose, shareShown, shareOpen, onShareO
         {/* Share (Grok Bot): the popover where the people and groups the
             bot is shared with are managed, the one place for it; then the
             round close button, the last control of the bar (#4420). */}
-        {shareShown && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={onShareOpenChange} />}
+        {shareShown && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={onShareOpenChange} grants={shareGrants} visibility={shareVisibility} />}
         <WindowCloseButton onClose={onClose} place="relative shrink-0" />
       </div>
     </div>

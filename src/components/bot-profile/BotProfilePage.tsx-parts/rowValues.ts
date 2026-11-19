@@ -14,7 +14,6 @@ import type { LocaleKey } from "@/locales";
 import { fetchRules, type RuleSetWire } from "@/lib/rule-sets";
 import { relativeTime } from "@/lib/memory";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { personaSharingSummary } from "@/lib/bot-sharing";
 import type { BotProfileSubPage, BotProfileTab } from "@/lib/persona-sections";
 import { approvalModeFor } from "../../../../shared/approval-mode";
 import { proactiveModeFor } from "../../../../shared/proactive-mode";
@@ -69,8 +68,6 @@ export function useBotRowValues(bot: Bot, { tab, listing }: { tab: BotProfileTab
       }
       case "beforeActing":
         return t(`approvalMode.${approvalModeFor(bot)}.chip` as LocaleKey);
-      case "sharing":
-        return personaSharingSummary(bot);
       case "rules":
         return rules ? counted(ruleCount(rules.sets), "botProfile.v6.value.rules.one", "botProfile.v6.value.rules.other") : null;
       case "actsAlone":

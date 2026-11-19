@@ -186,7 +186,10 @@ async function column(view: View): Promise<HTMLElement> {
     return node;
   }
   const node = await home(botProfileTabOfPage(view.page));
-  await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${view.page}"]`), `row ${view.page}`);
+  // Personality has no row (owner 2026-11-19): Folder and memory's SOUL.md opens it through this link
+  if (view.page === "personality") await act(async () => { dispatch({ type: "personaEditorSection", section: "soul" } as never); });
+  else await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${view.page}"]`), `row ${view.page}`);
+  await settle();
   expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe(view.page);
   const modal = document.querySelector<HTMLElement>(`[data-bot-page-modal="page-${view.page}"]`)!;
   expect(modal, `the modal of ${view.page}`).not.toBeNull();
@@ -265,7 +268,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     // General: the rows that open a page (the channels and the accounts are
     // cards in place, #3398; Shared with is under More), Knowledge its work.
     expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
-      ["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
+      ["model", "beforeActing", "rules", "actsAlone", "voice", "advanced", "versions"],
     );
     expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "folder"]);
   });
@@ -298,9 +301,6 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     for (const [view, ids] of views) {
       const node = await column(view);
       for (const id of ids) {
-        // Who can see it (one person signs in) and Shared with (an
-        // organization) stand for each other; the gallery is an organization.
-        if (id === "visibility" && node.querySelector('[data-bot-profile-section="sharing"]')) continue;
         const section = node.querySelector<HTMLElement>(`[data-bot-profile-section="${id}"]`);
         expect(section, `section ${id} on ${viewName(view)}`).not.toBeNull();
         expect(section!.getAttribute("aria-label")?.trim(), `section ${id} is named`).toBeTruthy();
@@ -308,7 +308,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         seen.add(id);
       }
     }
-    expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "sharing", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
+    expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
   });
 
   it("names every section and sub-page in French too", async () => {
@@ -355,11 +355,11 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     }
     const at = (selector: string) => where.get(selector) ?? [];
     expect(at("[data-bot-payer]"), "who pays").toEqual(["page:model"]);
-    expect(at("[data-bot-profile-share-open]"), "the Manage pill of People and groups").toEqual(["page:sharing"]);
+    expect(at("[data-bot-profile-share-open]"), "no Manage pill of People and groups (owner 2026-11-19)").toEqual([]);
     expect(at("[data-bot-profile-share]"), "the Share button of the banner").toEqual(["banner"]);
     expect(at("[data-bot-profile-section='usage']"), "usage").toEqual(["tab:stats"]);
     expect(at("[data-bot-profile-section='history']"), "changes").toEqual(["page:versions"]);
-    expect(at("[data-bot-profile-section='sharing']"), "sharing").toEqual(["page:sharing"]);
+    expect(at("[data-bot-profile-section='sharing']"), "no Shared with section on the page").toEqual([]);
     expect(at("[data-manage-in-connect-apps]").length, "Manage in Plugins").toBeLessThanOrEqual(1);
     expect(at("[data-sharing-permission]"), "the people list lives in the Share popover only").toEqual([]);
   });
@@ -382,7 +382,10 @@ describe("bot profile page: General cards in place (#3398)", () => {
     const accounts = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-accounts"]');
     expect(accounts, "the Access card on General").not.toBeNull();
     expect(accounts!.querySelector("[data-bot-profile-add]"), "the Add button").not.toBeNull();
-    expect(accounts!.querySelector('[data-bot-profile-row="engine"] [data-bot-profile-action="engine"]'), "the engine row and its Manage").not.toBeNull();
+    // the owner 2026-11-19: the engine is Settings > Model's, not a row of Access
+    expect(accounts!.querySelector('[data-bot-profile-row="engine"]'), "no engine row in Access").toBeNull();
+    expect(accounts!.querySelector('[data-bot-profile-action="engine"]'), "no engine Manage in Access").toBeNull();
+    expect(panel.querySelector('[data-bot-profile-subpage-open="model"]'), "the Model row opens the engine page").not.toBeNull();
     expect(panel.textContent).not.toContain("What it can use");
     // #4470: a channel's Manage opens its settings in a modal over the page
     const reachButton = channels!.querySelector<HTMLElement>('[data-bot-profile-action="reachMe"]')!;
@@ -412,8 +415,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(switches).toEqual([t("botPanel.voice.notifyHelp")]);
     expect(panel.textContent).not.toContain(t("botPanel.routines.collaboratorsCreate"));
     expect(panel.textContent).not.toContain(t("botSettings.sharing.empty"));
-    // one person signs in: the bot has nobody to be seen by, so neither
-    // Shared with nor Who can see it is listed
+    // one person signs in: the bot has nobody to be seen by, and Shared with is no row anywhere
     expect(panel.querySelector('[data-bot-profile-subpage-open="sharing"]')).toBeNull();
     expect(panel.textContent).not.toContain(t("botProfile.v6.page.sharing.title"));
   });
@@ -457,6 +459,66 @@ describe("bot profile page: General cards in place (#3398)", () => {
     });
     await settle();
     expect(host.querySelector("[data-bot-profile-page]")).toBeNull();
+  });
+
+  // the owner 2026-11-19 [M-20261119-023]: Appearance is the header mascot's modal, not a tab;
+  // Personality, Shared with and the engine row of Access are gone from General.
+  it("Appearance is a modal opened by the header mascot (tooltip, hand cursor, aria-label), not a tab", async () => {
+    await mount("en");
+    const panel = await home("general");
+    expect(host.querySelector('[data-bot-profile-tab="appearance"]'), "no Appearance tab").toBeNull();
+    const mascot = host.querySelector<HTMLElement>("[data-bot-profile-hero] button[data-mascot-stage]");
+    expect(mascot, "the header mascot is a button").not.toBeNull();
+    expect(mascot!.getAttribute("aria-label")).toBe(t("botProfile.tab.appearance"));
+    expect(mascot!.getAttribute("title")).toBe(t("botProfile.tab.appearance"));
+    expect(mascot!.className).toContain("cursor-pointer");
+    // the rows that left General
+    expect(panel.querySelector('[data-bot-profile-subpage-open="personality"]'), "no Personality row").toBeNull();
+    expect(panel.querySelector('[data-bot-profile-subpage-open="sharing"]'), "no Shared with row").toBeNull();
+    expect(panel.textContent).not.toContain(t("botProfile.v6.page.personality.desc"));
+    expect(panel.textContent).not.toContain(t("botProfile.v6.page.sharing.desc"));
+    mascot!.focus();
+    await click(mascot, "the mascot");
+    await until(() => document.querySelector("[data-appearance-reset]"));
+    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"]');
+    expect(modal, "the shared modal").not.toBeNull();
+    expect(modal!.querySelector("[data-appearance-pane]"), "the whole editor of the old tab").not.toBeNull();
+    expect(modal!.querySelector("[data-appearance-reset]"), "Reset is in it").not.toBeNull();
+    expect(modal!.contains(document.activeElement) || document.activeElement === document.body, "focus in the modal").toBe(true);
+    await act(async () => { modal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await settle();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "Escape closed it").toBeNull();
+    expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
+  });
+
+  it("a link to Appearance opens the modal; a link to Shared with opens the Share popover; Personality still opens from its link", async () => {
+    await mount("en");
+    await home("general");
+    await act(async () => { dispatch({ type: "personaEditorSection", section: "appearance" } as never); });
+    await settle();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "Appearance modal").not.toBeNull();
+    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"] > [data-dialog-close]'), "close");
+    await act(async () => { dispatch({ type: "personaEditorSection", section: "sharing" } as never); });
+    await settle();
+    expect(host.querySelector("[data-bot-profile-share]")!.getAttribute("aria-expanded"), "the Share popover").toBe("true");
+    expect(document.querySelector("[data-bot-share-popover]"), "its popover").not.toBeNull();
+    expect(host.querySelector('[data-bot-page-modal="page-sharing"]'), "no Shared with page").toBeNull();
+    await act(async () => { dispatch({ type: "personaEditorSection", section: "soul" } as never); });
+    await settle();
+    expect(document.querySelector('[data-bot-page-modal="page-personality"]'), "Personality's page, from SOUL.md's link").not.toBeNull();
+  });
+
+  it("the engine of Settings > Model opens the page the removed Access engine row opened; the Share popover keeps who has access and the levels", async () => {
+    await mount("en");
+    const panel = await home("general");
+    expect(panel.querySelector('[data-settings-group="bot-profile-accounts"] [data-bot-profile-row="engine"]')).toBeNull();
+    await click(panel.querySelector<HTMLElement>('[data-bot-profile-subpage-open="model"]'), "Model row");
+    expect(document.querySelector('[data-bot-page-modal="page-model"]'), "Model page").not.toBeNull();
+    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="page-model"] > [data-dialog-close]'), "close");
+    await click(host.querySelector<HTMLElement>("[data-bot-profile-share]"), "Share");
+    const popover = document.querySelector<HTMLElement>("[data-bot-share-popover]")!;
+    expect(popover.querySelector("[data-bot-share-access]"), "who has access, with the levels (who sets it up)").not.toBeNull();
+    // (Who can see it is for a served page with no organization: ShareBotButton.test.ts holds it)
   });
 
   it("Escape in a pill list inside Share closes the list only, then Share only, then the profile", async () => {
@@ -611,7 +673,7 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(empty!.textContent).toContain(t("botProfile.accounts.emptyLine"));
     expect(empty!.querySelector("[data-bot-profile-add]"), "Add in the row").not.toBeNull();
     expect(card.querySelectorAll("[data-bot-profile-add]").length, "one Add").toBe(1);
-    expect(card.querySelector('[data-bot-profile-row="engine"]'), "the engine row stays").not.toBeNull();
+    expect(card.querySelector('[data-bot-profile-row="engine"]'), "no engine row").toBeNull();
   });
 
   it("the Add menu: a plus, described items, focus on the first, arrows move, Escape closes the menu only", async () => {
@@ -660,8 +722,7 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(card.querySelector("[data-team-vault-form]"), "nothing unfolds in the card").toBeNull();
     expect(modal!.textContent).toContain(t("botPanel.teamVault.help", { bot: fixture.bot.name }));
     expect(document.activeElement?.getAttribute("aria-label")).toBe(t("botPanel.teamVault.name"));
-    const sharing = await column({ page: "sharing" });
-    expect(sharing.querySelector('[data-settings-card="bot.teamVault"]'), "no vault on Shared with").toBeNull();
+    expect(document.querySelector('[data-settings-card="bot.teamVault"]'), "no vault on Shared with").toBeNull();
   });
 
   // #4470: Connect apps opened from the bot page is its own window (the one
@@ -710,7 +771,7 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
   const MANY = ["Billing", "Calendar", "Chat", "Contacts", "Docs", "Drive", "Forms", "Inventory", "Mail", "Notes", "Sheets", "Tasks", "Tickets", "Wiki", "Zoom"];
   const rowIds = (card: HTMLElement) => Array.from(card.querySelectorAll("[data-bot-profile-row]")).map((node) => node.getAttribute("data-bot-profile-row"));
 
-  it("#4075: the group is named Access, and sixteen rows fold to the engine and two rows, then Show 13 more that unfolds in place and folds back", async () => {
+  it("#4075: the group is named Access, and fifteen rows fold to three rows, then Show 12 more that unfolds in place and folds back", async () => {
     capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.map(app) };
     serversAnswer = { servers: [] };
     vaultAnswer = { items: [] };
@@ -718,16 +779,15 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     const card = await folded();
     expect(card.querySelector("h3")?.textContent).toBe("Access");
     expect(card.textContent).not.toContain("Bot accounts");
-    expect(rowIds(card), "the engine first, then two rows").toEqual(["engine", "account-0", "account-1"]);
+    expect(rowIds(card), "three rows").toEqual(["account-0", "account-1", "account-2"]);
     const more = card.querySelector<HTMLElement>("[data-bot-profile-accounts-fold]")!;
     expect(more, "one Show more line").not.toBeNull();
-    expect(more.textContent).toBe("Show 13 more");
+    expect(more.textContent).toBe("Show 12 more");
     expect(more.getAttribute("aria-expanded")).toBe("false");
-    await click(more, "Show 13 more");
-    expect(rowIds(card).length, "every row once unfolded").toBe(16);
-    expect(rowIds(card)[0]).toBe("engine");
+    await click(more, "Show 12 more");
+    expect(rowIds(card).length, "every row once unfolded").toBe(15);
     for (const name of MANY) expect(card.textContent).toContain(name);
-    expect(card.querySelector('[data-bot-profile-action="engine"]'), "Manage stays on the engine").not.toBeNull();
+    expect(card.querySelector('[data-bot-profile-action="engine"]'), "no engine Manage").toBeNull();
     const less = card.querySelector<HTMLElement>("[data-bot-profile-accounts-fold]")!;
     expect(less.textContent).toBe("Show less");
     expect(less.getAttribute("aria-expanded")).toBe("true");
@@ -735,19 +795,19 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(rowIds(card).length, "folded back").toBe(3);
   });
 
-  it("#4075: two rows show no fold control, and French names the group Accès", async () => {
+  it("#4075: one row shows no fold control, and French names the group Accès", async () => {
     capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: [app("Calendar")] };
     serversAnswer = { servers: [] };
     vaultAnswer = { items: [] };
     await mount("fr");
     const card = await folded();
     expect(card.querySelector("h3")?.textContent).toBe("Accès");
-    expect(rowIds(card)).toEqual(["engine", "account-0"]);
-    expect(card.querySelector("[data-bot-profile-accounts-fold]"), "no control for two rows").toBeNull();
+    expect(rowIds(card)).toEqual(["account-0"]);
+    expect(card.querySelector("[data-bot-profile-accounts-fold]"), "no control for one row").toBeNull();
   });
 
   it("#4075: French counts the hidden rows (Afficher 2 autres)", async () => {
-    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.slice(0, 4).map(app) };
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.slice(0, 5).map(app) };
     serversAnswer = { servers: [] };
     vaultAnswer = { items: [] };
     await mount("fr");

@@ -10,12 +10,14 @@
 //
 // - General: section cards with their controls in place (#3398). Settings
 //   (the switches "Collaborators can create routines" and "Notify me", then
-//   the rows Personality, Model, Before it acts), the Channels card, the Bot
-//   accounts card, More (Shared with, Rules, When it acts alone, Voice,
-//   Advanced settings, Versions).
-// - Appearance: the whole mascot editor (character, shape, colour, style,
-//   moves, Play a move, Randomize); the character picked previews in the
-//   hero.
+//   the rows Model, Before it acts), the Channels card, the Bot
+//   accounts card, More (Rules, When it acts alone, Voice, Advanced
+//   settings, Versions). Personality is reached from Knowledge > Folder and
+//   memory (SOUL.md); Shared with and Who can see it are in the Share
+//   popover of the top bar (owner 2026-11-19).
+// - Appearance is not a tab: the header's mascot opens the whole mascot
+//   editor (character, shape, colour, style, moves, Play a move, Randomize)
+//   in a modal.
 // - Knowledge (#3400): To review (the learnings that wait, approved or
 //   declined in place) and Skills in place, then Its work (Routines, Folder
 //   and memory).
@@ -28,7 +30,7 @@
 // modal over the page, as the reference app does (#4470, BotPageModal): a
 // row opens its sub-page (its title and one line of intro in the modal's
 // header, then the cards), a channel's Manage its settings, the Access
-// card's engine the Model sub-page and Add > Shared vault login its form,
+// card's Add > Shared vault login its form,
 // Folder and memory's Memory row the Memory page stacked over that modal;
 // Connect apps and Analytics' All bots open their own windows over the page
 // (a window stays a window). Escape closes the top modal and the focus goes
@@ -48,7 +50,7 @@
 // lack of a permission.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
+import { Bell, Brain, ChevronRight, Repeat } from "lucide-react";
 
 import { openNotificationTarget, openRoutineRun, useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { shallowEqual, useStoreSelector } from "@/state/store-selector";
@@ -56,7 +58,6 @@ import { botRoutineRuns } from "@/state/view-slices";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
@@ -78,13 +79,12 @@ import {
   botProfileTabPages,
   personaCategoryForSection,
 } from "@/lib/persona-sections";
-import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
 import { botAvatarProfile } from "../../../shared/bot-avatar";
 import { mascotDominantColor } from "@/lib/mascot-dominant";
 import { profileBannerColors } from "@/lib/profile-banner";
-import { DescribedRow, PILL, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
+import { DescribedRow, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
 import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
@@ -96,7 +96,7 @@ import { AccessSection } from "../bot-settings/AccessSection";
 import { teamVaultOffered } from "../bot-settings/TeamBotVaultSection";
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
-import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
+import { AccountsCard, Block, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
@@ -136,6 +136,11 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const offered = (id: PersonaCategory) =>
     id === "slack" || id === "sharing" || id === "visibility" ? available(id) : true;
   const shown = (id: PersonaCategory) => (advanced || !simpleHidesBotSection(id)) && offered(id);
+  // The top bar's Share button holds the people and groups (an organization
+  // server) and Who can see it: both are no longer rows of the page.
+  const shareGrants = shown("sharing");
+  const shareVisibility = shown("visibility");
+  const shareShown = shareGrants || shareVisibility;
 
   // A link to a section this viewer does not get lands on its stand-in:
   // Who can see it and Shared with stand for each other.
@@ -162,7 +167,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // A tab with nothing to show this viewer (Stats in Simple mode) is not
   // listed; a link to it lands on General.
   const tabShown = (id: BotProfileTab) =>
-    id === "outcomes" ? true : id === "stats" ? shown("usage") : id === "appearance" ? shown("appearance") : botProfileTabPages(id).some(subPageShown);
+    id === "outcomes" ? true : id === "stats" ? shown("usage") : botProfileTabPages(id).some(subPageShown);
   const resolveTab = (next: BotProfileTab): BotProfileTab => (tabShown(next) ? next : "general");
   const tabOf = (id: PersonaCategory): BotProfileTab => resolveTab(botProfileTabOf(resolve(id)) ?? "general");
   const pageOf = (id: PersonaCategory): BotProfileSubPage | null => resolvePage(botProfileSubPageOf(resolve(id)));
@@ -177,6 +182,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // The Share popover of the top bar (Grok Bot): the one place the people
   // and groups the bot is shared with are managed.
   const [shareOpen, setShareOpen] = useState(false);
+  // The Appearance modal (the mascot editor), opened by the header's mascot
+  // (the owner 2026-11-19: no longer a tab).
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   // The Memory page (Knowledge > Folder and memory > Memory): a modal
   // stacked over Folder and memory's (#4470).
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -185,6 +193,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // returns to the row (the modal gives the focus back to its button).
   const openPage = (next: BotProfileSubPage) => {
     setMemoryOpen(false);
+    setAppearanceOpen(false);
     setTab(botProfileTabOfPage(next));
     setPage(next);
   };
@@ -196,6 +205,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   };
   const openTab = (next: BotProfileTab) => {
     setMemoryOpen(false);
+    setAppearanceOpen(false);
     setTab(next);
     setPage(null);
   };
@@ -224,9 +234,21 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // Opens a section where it lives: its tab and sub-page, scrolled into
   // view. A search shows the tab and marks the sub-page's row (`open`
   // false) until Enter opens its modal (#4470).
+  const pageListed = (id: BotProfileSubPage) => BOT_PROFILE_TABS.some((each) => botProfileTabPages(each).includes(id));
   const openCategory = (category: PersonaCategory, query?: string, open = true) => {
     setMemoryOpen(false);
     setSearchRow(null);
+    // Three sections are not rows of a tab: Appearance is the header
+    // mascot's modal; Shared with and Who can see it are in the top bar's
+    // Share popover. A search shows them on Enter only, never while typing.
+    if (category === "appearance" || category === "sharing" || category === "visibility") {
+      if (!open) return;
+      setPage(null);
+      if (category === "appearance") { setAppearanceOpen(true); return; }
+      setAppearanceOpen(false);
+      setShareOpen(true);
+      return;
+    }
     // A search for one of the two switches in place (#3398) opens General
     // at the Settings card, where the switch is now.
     if (query && settingsSwitchSelector(query)) {
@@ -239,6 +261,11 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const hit = query ? resolvePage(personaSubPageForQuery(resolve(category), query)) : null;
     const next = hit ?? pageOf(category);
     setTab(hit ? botProfileTabOfPage(hit) : tabOf(category));
+    // a page with no row (Personality: reached from Folder and memory's SOUL.md) is not marked while typing
+    if (next && !open && !pageListed(next)) {
+      setPage(null);
+      return;
+    }
     if (next && !open) {
       setPage(null);
       setSearchRow(next);
@@ -255,6 +282,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     if (target === "routines") { openPage("routines"); return; }
     const { category, selector } = placeOf(target);
     if (!category) return;
+    if (category === "appearance" || category === "sharing" || category === "visibility") {
+      if (category === "appearance" ? shown("appearance") : shareShown) openCategory(category);
+      return;
+    }
     if (category !== "overview") openCategory(category);
     scrollTo.current = selector;
   };
@@ -265,7 +296,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     if (firstSection.current) {
       firstSection.current = false;
       const { category, selector } = placeOf(section);
-      if (category && category !== "overview") scrollTo.current = selector;
+      // a deep link to Appearance or Shared with opens its modal or popover (after mount, where its anchor is)
+      if (category === "appearance" && shown("appearance")) setAppearanceOpen(true);
+      else if ((category === "sharing" || category === "visibility") && shareShown) setShareOpen(true);
+      else if (category && category !== "overview") scrollTo.current = selector;
       return;
     }
     reveal(section);
@@ -302,7 +336,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     ? page === "versions" ? "history"
       : page === "routines" ? "routines"
         : page === "folder" ? "skills"
-            : page === "personality" || page === "sharing" ? "overview"
+            : page === "personality" ? "overview"
               : "model"
     : tab === "stats" ? "usage" : tab === "knowledge" ? "skills" : "overview";
   const { renderSectionBody, dialogs, derived } = useBotSectionContent(bot, {
@@ -345,40 +379,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     // What the server says the bot does, reaches and won't do, the prompt
     // preview and the recent changes.
     if (id === "summary") return renderSectionBody("overview");
-    // Shared with: one summary row whose Manage opens the top bar's Share
-    // popover (the people and groups are edited there, nowhere else). The
-    // shared vault is under Access (#3399); who pays for the replies
-    // is on Model (#2625).
-    if (id === "sharing") {
-      return (
-        <>
-          <ProfileCard title={sectionLabel("sharing")} groupId="botSharing">
-            <CardRow
-              rowId="sharing"
-              icon={<Users strokeWidth={1.5} />}
-              label={t("botProfile.sharing.people")}
-              state={personaSharingSummary(bot)}
-              action={
-                <button
-                  type="button"
-                  data-bot-profile-share-open=""
-                  onClick={() => {
-                    // the Share popover is the top bar's, under this modal:
-                    // the modal closes and the popover opens (#4470)
-                    if (page === "sharing") setPage(null);
-                    setShareOpen(true);
-                  }}
-                  className={cn(PILL, "shrink-0")}
-                >
-                  {t("botProfile.manage")}
-                </button>
-              }
-            />
-          </ProfileCard>
-          {renderSectionBody("sharing")}
-        </>
-      );
-    }
     const lock = lockOf(id);
     if (lock) {
       // A locked section is still a card (its label, the reason as a row),
@@ -442,8 +442,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return <>{block("model")}{block("worksOn")}</>;
       case "beforeActing":
         return permissions("beforeActing");
-      case "sharing":
-        return <>{block("sharing")}{block("visibility")}</>;
       case "rules":
         return <>{block("rules")}{permissions("rules")}</>;
       case "actsAlone":
@@ -482,12 +480,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   // The short value every row shows on its right (the canvas, #2621).
   const rowValue = useBotRowValues(bot, { tab, listing: page === null });
-  // #4360: with no organization the bot cannot be shared, only seen: the
-  // page reads Who can see it, and a bot nobody else sees is Private to you.
-  const pageTitle = (id: BotProfileSubPage): LocaleKey | undefined => id === "sharing" && !available("sharing") ? "botSettings.visibility.title" : undefined;
-  const sharingSummary = rowValue("sharing");
-  const sharingValue = !available("sharing") && sharingSummary === t("botSettings.sharing.empty") ? t("botProfile.privateToYou") : sharingSummary;
-
   // General > Settings starts with its two switches in place (#3398): who
   // may create routines on the bot (#2622, for whoever may change it) and
   // this person's own "Notify me" (with its per-person override).
@@ -521,7 +513,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         // #3399: one card, each app, server and vault login once, with its
         // control in its row (the MCP servers card is gone from this page).
         <Block key={group.id} id="access" locked={lockOf("access") !== null}>
-          <AccountsCard bot={bot} onEngine={() => openPage("model")} derived={derived} vault={teamVaultOffered(state.config, bot)} />
+          <AccountsCard bot={bot} derived={derived} vault={teamVaultOffered(state.config, bot)} />
           {lockOf("access") ? body("access") : null}
         </Block>
       );
@@ -532,7 +524,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     return (
       <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
         {switches}
-        {rows.map((id) => <SubPageRow key={id} page={id} title={pageTitle(id)} value={id === "sharing" ? sharingValue : rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />)}
+        {rows.map((id) => <SubPageRow key={id} page={id} value={rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />)}
       </ProfileCard>
     );
   };
@@ -656,7 +648,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
   const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
 
-  const { heroSlot, hero } = useBotProfileHero({ bot, derived });
+  const { heroSlot, hero } = useBotProfileHero({ bot, derived, onOpenAppearance: shown("appearance") ? () => openCategory("appearance") : undefined });
 
   // Once the name scrolls under the top bar, the bar turns opaque (blurred)
   // and shows the small mascot and the name: the content scrolls under it,
@@ -688,13 +680,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       data-persona-modal=""
       data-bot-profile-tab-current={tab}
       data-bot-profile-subpage-current={page ?? undefined}
-      data-bot-profile-modal-open={page || memoryOpen || channel ? "" : undefined}
+      data-bot-profile-modal-open={page || memoryOpen || appearanceOpen || channel ? "" : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
         // Connect apps' window takes its own Escape.
         if (connectAppsOpen) return;
         // A modal of the page is open: its own Escape closes it (BotPageModal).
-        if (page || memoryOpen || channel) return;
+        if (page || memoryOpen || appearanceOpen || channel) return;
         // A popover of the page is open (Share, Add, a pill list): this
         // Escape is its own, so it closes that popover only (its dismiss
         // hook on the window) and the page stays (#3398).
@@ -712,7 +704,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
-          shareShown={shown("sharing")}
+          shareShown={shareShown}
+          shareGrants={shareGrants}
+          shareVisibility={shareVisibility}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
           condensed={condensed}
@@ -750,17 +744,24 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
                     <BotUsageBreakdownSection bot={bot} />
                   </>
                 )
-              : tab === "appearance"
-                ? block("appearance")
-                : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
+              : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
           </div>
         </div>
       </div>
       {/* The modals over the page (#4470): a sub-page, and Memory stacked over Folder and memory's. */}
       {page && (
-        <SubPageModal key={page} page={page} title={pageTitle(page)} onClose={closePage}>
+        <SubPageModal key={page} page={page} onClose={closePage}>
           {subPageBody(page)}
         </SubPageModal>
+      )}
+      {/* Appearance: the mascot editor, exactly the old tab's content, in the page's shared modal. Its editor draws its own
+          preview (no header slot: the header's mascot is behind this modal and follows each pick). */}
+      {appearanceOpen && shown("appearance") && (
+        <BotPageModal id="appearance" title={t("botProfile.tab.appearance")} size="large" onClose={() => setAppearanceOpen(false)}>
+          <MascotHeroSlotContext.Provider value={null}>
+            {block("appearance")}
+          </MascotHeroSlotContext.Provider>
+        </BotPageModal>
       )}
       {page === "folder" && memoryOpen && (
         <BotPageModal id="memory" title={t("memoryManager.title")} size="large" bare onClose={() => setMemoryOpen(false)}>

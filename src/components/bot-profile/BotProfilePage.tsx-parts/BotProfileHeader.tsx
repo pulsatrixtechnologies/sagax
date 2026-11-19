@@ -3,7 +3,7 @@
 // label on ONE line "Name · Label", then who sees it and who owns it, all
 // aligned left and tight. No description line: the bot changes its own
 // description when asked (update_agent_settings). The mascot editor
-// itself is the Appearance tab.
+// itself is the Appearance modal, opened by a click on the mascot.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
 
@@ -32,17 +32,19 @@ import { sectionLabel } from "./cards";
 type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 
 // The character registry and its labels: fetched with the page's hero card,
-// the same chunk the Appearance pane's editor loads.
+// the same chunk the Appearance modal's editor loads.
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
 /** The header's hero: the mascot, large and bare over the banner, with the
- * name and label stacked under it. The Appearance tab's editor draws it
- * into this slot (so a character picked in its grid previews here), the
- * page draws it for the bot's own look otherwise. A picture dropped on it
+ * name and label stacked under it. A click on the mascot calls
+ * `onOpenAppearance` (the Appearance modal, the owner 2026-11-19); the page draws
+ * the hero for the bot's own look. A picture dropped on it
  * or pasted becomes the bot's. */
-export function useBotProfileHero({ bot, derived }: {
+export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
   bot: Bot;
   derived: Derived;
+  /** Opens the Appearance modal; absent where this viewer is not offered it (the mascot is then not a button of its own). */
+  onOpenAppearance?: (() => void) | undefined;
 }): { heroSlot: MascotHeroSlot; hero: ReactNode } {
   const { state, dispatch } = useStore();
   const canName = canEditBotField(state.config, bot, "name");
@@ -96,6 +98,7 @@ export function useBotProfileHero({ bot, derived }: {
     claim: claimHero,
     heading: heroTitle,
     profile: true,
+    ...(onOpenAppearance ? { onOpen: onOpenAppearance, openLabel: t("botProfile.tab.appearance") } : {}),
     state: derived.activeState,
     motion: derived.mascotMotion,
   };
@@ -121,6 +124,8 @@ export function useBotProfileHero({ bot, derived }: {
       heading={heroTitle}
       profile
       picture={heroPicture}
+      onActivate={onOpenAppearance}
+      activateLabel={onOpenAppearance ? t("botProfile.tab.appearance") : undefined}
       liveState={derived.activeState}
       liveMotion={derived.mascotMotion}
     />

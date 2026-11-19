@@ -106,7 +106,7 @@ describe("bot page modals are larger (owner: we barely see anything)", () => {
     expect(Object.keys(SUBPAGE_SIZE).sort()).toEqual(Object.keys(SUBPAGE_META).sort());
     for (const page of ["rules", "personality", "versions", "actsAlone", "advanced"] as const) expect(SUBPAGE_SIZE[page], page).toBe("large");
     for (const page of ["beforeActing", "folder", "routines"] as const) expect(SUBPAGE_SIZE[page], page).toBe("wide");
-    for (const page of ["model", "voice", "sharing"] as const) expect(SUBPAGE_SIZE[page], page).toBe("medium");
+    for (const page of ["model", "voice"] as const) expect(SUBPAGE_SIZE[page], page).toBe("medium");
   });
 });
 

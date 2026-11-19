@@ -26,6 +26,7 @@
 // A confidential thread (server/threads/confidential-threads.ts) is not here at all:
 // its folder under tasks and its attachments are left out of every listing
 // and read as missing (404), so an admin learns nothing, not even its id.
+// The member API shows it to its own person only (#4921, their Library).
 //
 // Path rules: a relative path of `/`-separated segments, at most 1,024 bytes,
 // no empty, `.` or `..` segment, no backslash, no NUL; every segment is

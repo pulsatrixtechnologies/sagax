@@ -442,7 +442,8 @@ the server's data folder), `attachments` (uploads and attached outputs of
 its conversations, by opaque id); `sandbox` and `desktop` are listed as
 unavailable. In `tasks` and `attachments` only the conversations the
 person may read are there (the private threads rule: another person's
-conversation with their bot is not), never a confidential one.
+conversation with their bot is not). A confidential conversation is
+there for its own person only (#4921), never for anyone else.
 
 - `roots`: `{bot: {id, name}, roots: [{id, available, reason?}]}`.
 - `list?root&path`: one folder, `{root, path, entries: [{name, path,

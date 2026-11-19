@@ -51,10 +51,9 @@ Tests: `src/lib/voice-mode/stt-stream.e2e.test.ts`, `server/tts/openai-stt.test.
 
 ## A call turn runs fast (2026-10-29)
 
-On a live call every turn (and the warm at call start) runs on the bot's own
-engine, model and effort, exactly like a typed turn (its signed-out backup and
-Auto included; never a fast model Sagax picks, on any engine, 2026-11-18), in
-a session of its own started from a short view of the
+On a live call every turn (and the warm at call start) runs on a fast model
+(`pickVoiceModel`: the bot's fast model, else its engine's fast tier, else
+another engine's), in a session of its own started from a short view of the
 conversation (summary plus the latest 12 messages, 6,000 bytes,
 `server/voice/voice-turn.ts`) and kept warm turn to turn. The call never resumes
 or writes the conversation's cursor (`VoiceTurnSessions.noteSession` takes
@@ -335,8 +334,10 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   events; the next spoken turn starts a fresh process (#1717).
   A hangup closes the idle process
   (`releaseWarmSession`). Codex and the API drivers are not warmed (no
-  hidden prompt is sent). A call turn and its warm run on the bot's own
-  engine, model and effort, exactly like a typed turn (2026-11-18). The
+  hidden prompt is sent). A call turn and its warm run at the engine's low
+  effort (`server/voice/voice-call-effort.ts`: "low", never "none", a bot set
+  lower keeps its level, a Codex bot with no effort is left alone); the
+  model is unchanged (the call's model tier belongs to Auto, PR #153). The
   call's start and each heartbeat mark the person's server environment
   used (`UserSandboxManager.markUsed`, sandboxd `POST .../used`, starts
   nothing) so its 10 minute idle stop never hits mid-call. Do not put a
@@ -344,7 +345,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   relaunches or re-establishes the engine on every turn. Tests:
   `server/voice-call-latency.e2e.test.ts` (Claude and Grok),
   `server/drivers/acp/acp.test.ts` (call session, warm),
-  `server/voice/voice-call-warmup.test.ts`,
+  `server/voice/voice-call-effort.test.ts`, `server/voice/voice-call-warmup.test.ts`,
   `server/sandbox/user-sandbox-manager.test.ts`, `call.test.ts` ("latency"), bench
   `scripts/voice-latency-bench.ts` (Claude and Grok).
 

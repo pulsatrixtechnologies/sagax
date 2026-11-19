@@ -62,6 +62,21 @@ describe("the usage-limit line", () => {
     expect(limitFailoverText({ kind: "waiting", from: "Claude", resetsAt: AT, estimated: true }, clock)).not.toMatch(/when it resets/);
   });
 
+  // 2026-11-02: a quick model Sagax picked for the turn (a call's, a wake's)
+  // is not the conversation's: the line never says it goes back to it.
+  it("says Sagax skips a refused quick model it picked, never that the conversation goes back to it", () => {
+    const detour: LimitFailoverLine = { kind: "switched", from: "Codex (gpt-6.1-luna)", to: "Grok", resetsAt: AT, detour: true };
+    setLocale("en");
+    expect(limitFailoverLineText(detour, NOW)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets (around 2:05 PM).");
+    expect(limitFailoverLineText({ ...detour, estimated: true }, NOW)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Codex (gpt-6.1-luna) gave no reset time: Sagax skips it for quick turns until around 2:05 PM.");
+    setLocale("fr");
+    expect(limitFailoverLineText(detour, NOW)).toBe("Limite atteinte sur Codex (gpt-6.1-luna), un modèle rapide choisi par Sagax pour ce tour : je continue sur un autre modèle. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation (vers 14 h 05).");
+    expect(limitFailoverLineText({ ...detour, estimated: true }, NOW)).toBe("Limite atteinte sur Codex (gpt-6.1-luna), un modèle rapide choisi par Sagax pour ce tour : je continue sur un autre modèle. Codex (gpt-6.1-luna) n'a pas donné d'heure de réinitialisation : Sagax l'évite pour les tours rapides jusque vers 14 h 05.");
+    // The English words other clients show say the same.
+    const clock = (at: number) => resetClockText(at, "en-US", undefined, NOW);
+    expect(limitFailoverText(detour, clock)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets (around 2:05 PM).");
+    expect(limitFailoverText(detour, clock)).not.toMatch(/continuing on Grok|back on/i);
+  });
 
   // 2026-11-02 (review): a backup standing in for the conversation's own engine is refused in turn. The line names
   // both, and the return is to the conversation's own engine at its own reset, never to the backup that refused.

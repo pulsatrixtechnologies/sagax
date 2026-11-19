@@ -12,11 +12,15 @@
 export type LimitFailoverLine =
   /** The turn continues on `to` until `from` resets. `reason: "model"`: the
    * engine had no conversation model left (#1696), so the thread stays on
-   * `to` (no return after a reset). `home`: `from` was a backup standing
+   * `to` (no return after a reset). `detour`: `from` is a quick model Sagax
+   * picked for this turn (a call's, a proactive wake's, #1694), not the
+   * conversation's own: the turn continues on another model, the
+   * conversation never goes back to `from`, and Sagax skips it for quick
+   * turns until it resets (2026-11-02). `home`: `from` was a backup standing
    * in for `home`, the conversation's own engine (an earlier takeover): the
    * conversation goes back to `home` at `resetsAt`, `home`'s own reset,
    * never to `from` (2026-11-02). */
-  | { kind: "switched"; from: string; to: string; resetsAt: number; owner?: true; reason?: "model"; estimated?: true; home?: string }
+  | { kind: "switched"; from: string; to: string; resetsAt: number; owner?: true; reason?: "model"; estimated?: true; detour?: true; home?: string }
   /** `engine`'s limit has reset: the conversation is back on it. `refused`:
    * a limit refused the backup that stood in for `engine`, so the
    * conversation went back to `engine` at once (2026-11-02). */
@@ -75,6 +79,9 @@ export function limitFailoverWords(line: LimitFailoverLine): { key: string; vars
   switch (line.kind) {
     case "switched":
       if (line.reason === "model") return { key: line.to === "Auto" ? "limitFailover.modelSwitchedAuto" : "limitFailover.modelSwitched", vars: { from: line.from, to: line.to } };
+      // A quick model Sagax picked for this turn: the conversation never goes
+      // back to it, Sagax only skips it for quick turns until it resets.
+      if (line.detour) return timed(line.estimated ? "limitFailover.detourNoReset" : "limitFailover.detour", { from: line.from });
       // A backup standing in for the conversation's own engine refused in
       // turn: the conversation goes back to its own engine, never to it.
       if (line.home) {
@@ -138,6 +145,10 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       if (line.reason === "model") {
         if (line.to === "Auto") return `${line.from} had no model left for this conversation: Auto continued the same turn on another engine.`;
         return `${line.from} had no model left for this conversation: continuing on ${line.to}.`;
+      }
+      if (line.detour) {
+        if (line.estimated) return `Limit reached on ${line.from}, a quick model Sagax picked for this turn: continuing on another model. ${line.from} gave no reset time: Sagax skips it for quick turns until around ${clock(line.resetsAt)}.`;
+        return `Limit reached on ${line.from}, a quick model Sagax picked for this turn: continuing on another model. Sagax skips ${line.from} for quick turns until it resets (around ${clock(line.resetsAt)}).`;
       }
       if (line.home) {
         if (line.owner) {

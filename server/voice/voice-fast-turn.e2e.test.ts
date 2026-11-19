@@ -1,7 +1,7 @@
 // Fast voice turns (server/voice/voice-turn.ts, docs/voice-mode-xai.md "A call
 // turn runs fast"), end to end through the real server and the fake Claude
-// CLI and its fake speech: a call turn runs on the bot's own model and effort
-// (exactly like a typed turn, never a fast model Sagax picks), in a session
+// CLI and its fake speech: a call turn runs on the fast model of the bot's own
+// engine at low effort (#4886: never another engine's), in a session
 // of its own started from a short view of the conversation and kept warm
 // from turn to turn, while the conversation keeps its own session; a
 // barge-in cuts the answer being written; lines said while the bot cannot
@@ -14,8 +14,13 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { VOICE_BRIEF_PREAMBLE } from "./voice-turn.ts";
+import { STATIC_CLAUDE_MODELS } from "../drivers/claude/config.ts";
 
 const CALL_ID = "call-fast-0123456";
+// The fast tier of Claude Code is its newest Haiku (pickVoiceModel, the tiers
+// Auto uses): the first Haiku of the engine's list, newest first. Claude Haiku
+// 5.5 took it from 4.5 when it was listed (#3257, #4386).
+const FAST = STATIC_CLAUDE_MODELS.options.find((option) => /haiku/.test(option.id))!.id;
 
 async function fixture(env: Record<string, string> = {}) {
   const server = await launchVerificationServer();
@@ -66,7 +71,7 @@ async function fixture(env: Record<string, string> = {}) {
 
 const said = (turn: number, text: string) => ({ text, sendId: `send-fast-00000${turn}`, voiceCall: { callId: CALL_ID, utteranceId: `utt-fast-00${turn}` } });
 
-it("runs a call on the bot's own model and effort from a short context in one warm session, and the conversation keeps its own", async () => {
+it("runs a call on the fast model from a short context in one warm session, and the conversation keeps its own", async () => {
   const t = await fixture();
   try {
     // a long written conversation first, on the bot's main model
@@ -76,20 +81,19 @@ it("runs a call on the bot's own model and effort from a short context in one wa
     }
     const written = t.launched().at(-1)!;
     const mainModel = t.arg(written.argv, "--model");
-    const mainEffort = t.arg(written.argv, "--effort");
     const mainSession = t.arg(written.argv, "--resume") ?? t.arg(written.argv, "--session-id");
-    expect(mainModel).toBeTruthy();
+    expect(mainModel).not.toBe(FAST);
     const before = t.launched().length;
     const promptsBefore = t.prompts().length;
 
     await t.call("start");
-    // the warm: the bot's own model and effort, a new session, never the conversation's
+    // the warm: the fast model of the bot's engine, a new session, never the conversation's
     await expect.poll(() => t.launched().length, { timeout: 15_000 }).toBe(before + 1);
     const warm = t.launched().at(-1)!;
-    expect(t.arg(warm.argv, "--model")).toBe(mainModel);
+    expect(t.arg(warm.argv, "--model")).toBe(FAST);
     expect(t.arg(warm.argv, "--resume")).toBeUndefined();
     expect(t.arg(warm.argv, "--session-id")).not.toBe(mainSession);
-    expect(t.arg(warm.argv, "--effort")).toBe(mainEffort);
+    expect(t.arg(warm.argv, "--effort")).toBe("low");
 
     const started = performance.now();
     for (let turn = 1; turn <= 3; turn++) {
@@ -114,8 +118,8 @@ it("runs a call on the bot's own model and effort from a short context in one wa
       expect(prompt).not.toContain(VOICE_BRIEF_PREAMBLE);
       expect(prompt).not.toContain("[old-4]");
     }
-    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: new call session on claude/${mainModel}`));
-    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: call session resumed on claude/${mainModel}`));
+    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: new call session on claude/${FAST}`));
+    expect(t.log()).toMatch(new RegExp(String.raw`\[voice-turn\] thread \S+: call session resumed on claude/${FAST}`));
     await expect.poll(() => /\[voice-latency\] utt=utt-fast-003 /.test(t.log()), { timeout: 5_000 }).toBe(true);
     console.log(`[voice-fast-turn] fake engine: ${Math.round(perTurnMs)} ms per call turn, send to settled reply\n${t.log().split("\n").filter((line) => line.includes("[voice-latency] utt=utt-fast")).join("\n")}`);
 

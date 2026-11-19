@@ -17,6 +17,7 @@ import {
   orderEngines,
   pickEquivalentModel,
   pickOrchestrationModel,
+  pickVoiceModel,
   pickWorkerModel,
   tierOfModel,
   type AutoEngine,
@@ -530,6 +531,63 @@ describe("#1154: the same tier on another engine", () => {
     expect(pickEquivalentModel({ base, engines: [], catalog }, "top")).toBeNull();
   });
 });
+
+describe("pickVoiceModel", () => {
+  it("runs a call turn on the fast tier of the bot's own engine, pinned or Auto", () => {
+    const pinned = { instanceId: "claude", model: "claude-fable-5-1", effort: "high" as const };
+    expect(pickVoiceModel({ base: pinned, engines: [codex, grok, claude], catalog })?.selection).toEqual({ instanceId: "claude", model: "claude-haiku-4-5", effort: "high" });
+    expect(pickVoiceModel({ base: claudeBase, engines: [claude], catalog })?.tier).toBe("fast");
+  });
+
+  it("takes the bot's own fast model first", () => {
+    const base = { ...claudeBase, fast: { instanceId: "grok-build", model: "grok-4-fast" } };
+    const engines = [claude, { ...grok, fast: { id: "grok-4-fast", label: "Grok 4 Fast" } }];
+    expect(pickVoiceModel({ base, engines, catalog })?.selection).toEqual({ instanceId: "grok-build", model: "grok-4-fast" });
+  });
+
+  it("goes to another engine's fast model only when its own has none, and keeps the model when none has one", () => {
+    const noFast: AutoEngine = { ...claude, models: { default: "claude-fable-5-1", options: [{ id: "claude-fable-5-1", label: "Claude Fable 5.1" }] } };
+    expect(pickVoiceModel({ base: claudeBase, engines: [noFast, grok], catalog })?.selection.model).toBe("grok-4-fast");
+    expect(pickVoiceModel({ base: claudeBase, engines: [noFast], catalog })).toBeNull();
+  });
+
+  // 2026-11-02 (the maintainer's call on a Grok 4.7 Fast bot): models.dev has no row for
+  // "grok-4.7-build-fast", so the own engine looked fast-less and the call
+  // went to Codex, whose ChatGPT usage limit came back as the bot's error.
+  it("keeps a Grok-engine bot on its own fast model even when the catalogue does not list it", () => {
+    const grokCli: AutoEngine = {
+      instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", effortLevels: ["low", "medium", "high"],
+      models: { default: "grok-4.7", options: [{ id: "grok-4.7", label: "Grok 4.7" }, { id: "grok-4.7-build-fast", label: "Grok 4.7 Fast" }] },
+    };
+    const engines = [grokCli, codex, claude];
+    const onFast = pickVoiceModel({ base: { instanceId: "grok", model: "grok-4.7-build-fast" }, engines, catalog });
+    expect(onFast?.selection).toEqual({ instanceId: "grok", model: "grok-4.7-build-fast" });
+    const onTop = pickVoiceModel({ base: { instanceId: "grok", model: "grok-4.7", effort: "high" }, engines, catalog });
+    expect(onTop?.selection).toEqual({ instanceId: "grok", model: "grok-4.7-build-fast", effort: "high" });
+    // a catalogued fast model of the engine still wins
+    expect(pickVoiceModel({ base: { instanceId: "grok-build", model: "grok-4.7" }, engines: [grok, codex], catalog })?.selection.model).toBe("grok-4-fast");
+  });
+
+  // #4886 (2026-11-18): a bot pinned on Grok 4.7 called on Claude Haiku, which
+  // the organization's plan refused (HTTP 403). A pinned bot's call turn or
+  // wake takes a fast model of its own engine only, never another engine's.
+  it("keeps a pinned bot's fast pick on its own engine, never another engine's fast tier", () => {
+    const grokNoFast: AutoEngine = {
+      instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", effortLevels: ["low", "medium", "high", "xhigh"],
+      models: { default: "grok-4.7", options: [{ id: "grok-4.7", label: "Grok 4.7" }] },
+    };
+    const pinned = { instanceId: "grok", model: "grok-4.7", effort: "xhigh" as const };
+    expect(pickVoiceModel({ base: pinned, engines: [grokNoFast, claude, codex], catalog })).toBeNull();
+    // the bot's own fast model set on another engine is not taken either
+    const withFast = { ...pinned, fast: { instanceId: "claude", model: "claude-haiku-4-5" } };
+    const claudeFast = { ...claude, fast: { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" } };
+    expect(pickVoiceModel({ base: withFast, engines: [grokNoFast, claudeFast], catalog })).toBeNull();
+    // its own engine's fast model is still picked
+    const grokFast: AutoEngine = { ...grokNoFast, models: { default: "grok-4.7", options: [...grokNoFast.models.options, { id: "grok-4.7-build-fast", label: "Grok 4.7 Fast" }] } };
+    expect(pickVoiceModel({ base: pinned, engines: [grokFast, claude], catalog })?.selection).toEqual({ instanceId: "grok", model: "grok-4.7-build-fast", effort: "xhigh" });
+  });
+});
+
 
 describe("active fallback chain", () => {
   it("never appends an old base model that was switched off or refused", () => {

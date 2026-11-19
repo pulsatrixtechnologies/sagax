@@ -23,7 +23,7 @@ function plain(text: string): void {
 }
 
 describe("a run another engine took over", () => {
-  // The conversation's own engine refused: the line names the engine alone, and the run goes back to it.
+  // The conversation's own engine refused (no detour): the line names the engine alone, and the run goes back to it.
   it("says which engine refused, where the run goes on, and when the first one is back", () => {
     const text = routineLimitSwitchedText({ ...codex, from: "Codex", to: "Grok" }, UTC);
     expect(text).toBe("Usage limit reached on Codex: this run continues on Grok. Back on Codex once it resets, around Nov 2, 3:16 PM (UTC).");
@@ -67,6 +67,57 @@ describe("a run another engine took over", () => {
     const back = { ...chain, home: { name: "Claude", resetsAt: NOW - HOUR, estimated: false }, to: "Claude", backHome: true as const };
     expect(routineLimitSwitchedText(back, UTC)).toBe("Usage limit reached on Codex: this run goes back to Claude, whose limit has reset.");
     expect(routineLimitSwitchedText(back, FR)).toBe("Limite d'utilisation atteinte sur Codex : cette exécution revient sur Claude, dont la limite s'est réinitialisée.");
+    plain(en);
+    plain(fr);
+  });
+});
+
+// 2026-11-02: a quick model Sagax picked for the run (a proactive wake's fast model) is not the bot's engine: the run
+// never goes back to it, Sagax only skips it for quick turns until it resets, and no line tells the person to change
+// the bot's engine over it.
+describe("a run whose quick model, picked by Sagax, a limit refused", () => {
+  const detour: RoutineUsageLimit = { ...codex, detour: true };
+
+  it("says Sagax skips that model until it resets, never that the run goes back to it", () => {
+    const en = routineLimitSwitchedText({ ...detour, to: "Grok" }, UTC);
+    expect(en).toBe("Usage limit reached on Codex (gpt-6.1-luna): this run continues on Grok. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets, around Nov 2, 3:16 PM (UTC).");
+    expect(en).not.toMatch(/back on/i);
+    const fr = routineLimitSwitchedText({ ...detour, to: "Grok" }, FR);
+    expect(fr).toBe("Limite d'utilisation atteinte sur Codex (gpt-6.1-luna) : cette exécution continue sur Grok. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation, vers le 2 nov. à 15 h 16 (UTC).");
+    expect(fr).not.toMatch(/retour sur/i);
+    plain(en);
+    plain(fr);
+  });
+
+  it("names Sagax's estimate as one when the engine gave no reset time", () => {
+    const guessed = { ...detour, resetsAt: NOW + HOUR, estimated: true };
+    expect(routineLimitSwitchedText({ ...guessed, to: "Grok" }, UTC))
+      .toBe("Usage limit reached on Codex (gpt-6.1-luna): this run continues on Grok. Codex (gpt-6.1-luna) gave no reset time: Sagax skips it for quick turns until around Nov 2, 2:16 PM (UTC).");
+    expect(routineLimitSwitchedText({ ...guessed, to: "Grok" }, FR))
+      .toBe("Limite d'utilisation atteinte sur Codex (gpt-6.1-luna) : cette exécution continue sur Grok. Codex (gpt-6.1-luna) n'a pas donné d'heure de réinitialisation : Sagax l'évite pour les tours rapides jusque vers le 2 nov. à 14 h 16 (UTC).");
+  });
+
+  it("never advises choosing another engine for the bot when nothing could take the run", () => {
+    const en = routineLimitStoppedText({ ...detour, noTaker: "none" }, UTC);
+    expect(en).toBe("Usage limit reached on Codex (gpt-6.1-luna). No other engine can take over. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets, around Nov 2, 3:16 PM (UTC).");
+    const fr = routineLimitStoppedText({ ...detour, noTaker: "none" }, FR);
+    expect(fr).toBe("Limite d'utilisation atteinte sur Codex (gpt-6.1-luna). Aucun autre moteur ne peut prendre le relais. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation, vers le 2 nov. à 15 h 16 (UTC).");
+    // Not even with automatic switching off: that quick model is not the bot's engine.
+    expect(routineLimitStoppedText({ ...detour, noTaker: "off" }, UTC)).not.toMatch(/choose another engine/i);
+    expect(en).not.toMatch(/choose another engine/i);
+    expect(fr).not.toMatch(/autre moteur pour ce bot/i);
+    plain(en);
+    plain(fr);
+  });
+
+  it("words a quick model out of credit the same way, with no advice to change the bot's engine", () => {
+    const credit = { ...detour, resetsAt: NOW + HOUR, estimated: true, noTaker: "off" as const };
+    const en = routineLimitCreditsText(credit, UTC);
+    expect(en).toBe("Codex (gpt-6.1-luna), a quick model Sagax picked for this run, is out of credit: Sagax skips it for quick turns until around Nov 2, 2:16 PM (UTC). Automatic switching to another engine is off on this server.");
+    const fr = routineLimitCreditsText(credit, FR);
+    expect(fr).toBe("Codex (gpt-6.1-luna), un modèle rapide choisi par Sagax pour cette exécution, n'a plus de crédit : Sagax l'évite pour les tours rapides jusque vers le 2 nov. à 14 h 16 (UTC). Le passage automatique à un autre moteur est désactivé sur ce serveur.");
+    expect(en).not.toMatch(/choose another engine|this bot/i);
+    expect(fr).not.toMatch(/pour ce bot/i);
     plain(en);
     plain(fr);
   });

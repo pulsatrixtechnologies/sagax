@@ -77,12 +77,12 @@ function languageName(code: string | undefined): string | null {
   return VOICE_MODE_LANGUAGES.find((entry) => entry.code === code)?.label ?? null;
 }
 
-/** A call turn runs on the bot's own model from a short view of the
- * conversation (server/voice/voice-turn.ts): real work goes to a parallel
- * task with the whole conversation, whose result comes back into the
- * conversation and is read aloud, so the call stays fluent. */
+/** A call turn runs on a fast model from a short view of the conversation
+ * (server/voice/voice-turn.ts): real work goes to a parallel task on the bot's
+ * main model, whose result comes back into the conversation and is read
+ * aloud, so the call stays fluent. */
 export const VOICE_CALL_DELEGATE_LINE =
-  "- On this call you answer from a shortened view of the conversation, so they hear you quickly. When they ask for real work (writing or changing code, a long search or a long read, many tool steps, anything that takes more than about half a minute), say in one short sentence that you are on it, then call start_thread with report_back true and a message that carries the complete request with every detail they gave and the context it needs. That task runs in the background with the whole conversation, and its result comes back here to be read to them. Do not do that work yourself on the call; quick lookups and short answers you give yourself.";
+  "- On this call you answer on a fast model with a shortened view of the conversation, so they hear you quickly. When they ask for real work (writing or changing code, a long search or a long read, many tool steps, anything that takes more than about half a minute), say in one short sentence that you are on it, then call start_thread with report_back true and a message that carries the complete request with every detail they gave and the context it needs. That task runs in the background on your main model with the whole conversation, and its result comes back here to be read to them. Do not do that work yourself on the call; quick lookups and short answers you give yourself.";
 
 export const VOICE_CALL_INTERRUPTED_NOTE =
   "They interrupted your previous answer while you were speaking: stop that thought, do not finish or repeat it unless they ask, and answer what they just said. A brief, natural acknowledgement is fine.";

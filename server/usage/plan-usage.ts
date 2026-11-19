@@ -483,7 +483,7 @@ export async function loadPlanUsage(input: {
   }
   return report;
 }
-export { PLAN_ALERT_DEFAULT_PERCENT, clearPlanUsageAlerts, newPlanUsageAlerts, claudeHasExtraUsageRoom, planUsedPercent, planUsageAlertText, type PlanUsageAlert } from "./plan-usage-alerts.ts";
+export { PLAN_ALERT_DEFAULT_PERCENT, clearPlanUsageAlerts, newPlanUsageAlerts, claudeHasExtraUsageRoom, spentPlanUntil, planUsedPercent, planUsageAlertText, type PlanUsageAlert } from "./plan-usage-alerts.ts";
 
 /** Claude's session window is five hours by its own definition (five_hour). */
 const CLAUDE_SESSION_HOURS = 5;

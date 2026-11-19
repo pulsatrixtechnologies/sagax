@@ -2,7 +2,7 @@
 // (2026-11-18, owner rule: one confirmation, one click, never a block).
 import { describe, expect, it } from "vitest";
 
-import { createAccountMovesHost, planAccountMoves, type AccountMoveEngine } from "./account-moves.ts";
+import { createAccountMovesHost, ownerReachable, planAccountMoves, type AccountMoveEngine } from "./account-moves.ts";
 import { accountUserNames } from "./account-users.ts";
 
 const engines: AccountMoveEngine[] = [
@@ -104,5 +104,41 @@ describe("createAccountMovesHost", () => {
     host.apply(plan, ["claude"], { forget: true, moveDefault: true });
     expect(moved).toEqual([[["claude"], ["b1"], true]]);
     expect(defaults).toEqual([{ instanceId: "claude-work", model: "opus" }]);
+  });
+});
+
+describe("an organization server: each person's bots stay within their own accounts (2026-11-19)", () => {
+  // claude: shared; claude-work: Alex's own; claude-sam: Sam's own; codex: shared
+  const owners: Record<string, string> = { "claude-work": "alex@example.com", "claude-sam": "Sam@example.com" };
+  const botOwners: Record<string, string> = { mine: "alex@example.com", theirs: "sam@example.com", other: "kim@example.com" };
+  const reachable = ownerReachable({ engineOwner: (id) => owners[id], botOwner: (id) => botOwners[id] });
+  const all: AccountMoveEngine[] = [...engines, { instanceId: "claude-sam", defaultModel: "opus", usable: true }];
+
+  it("never moves another person's bot onto the remover's own account", () => {
+    const plan = planAccountMoves({
+      bots: ["mine", "theirs", "other"].map((id) => ({ id, name: id, modelSelection: { instanceId: "claude", model: "sonnet" } })),
+      tasks: noTasks, leaving, sameProvider: ["claude-work", "claude-sam"], engines: all, reachable,
+    });
+    expect(plan.moves.map((move) => [move.botId, move.via, move.to?.instanceId])).toEqual([
+      ["mine", "account", "claude-work"],
+      ["theirs", "account", "claude-sam"],
+      // nobody else's own account: a shared engine
+      ["other", "default", "codex"],
+    ]);
+  });
+
+  it("drops a backup that would land on another person's account, and the default model moves to a shared engine", () => {
+    const plan = planAccountMoves({
+      bots: [{ id: "theirs", name: "Atlas", modelSelection: { instanceId: "codex", model: "gpt" }, fallback: [{ instanceId: "claude", model: "opus" }] }],
+      tasks: noTasks, leaving, sameProvider: ["claude-work"], engines, reachable, personDefault: { instanceId: "claude", model: "opus" }, moveDefault: true,
+    });
+    expect(plan.moves[0]).toMatchObject({ via: "stays", fallback: [] });
+    expect(plan.defaultModel).toMatchObject({ via: "default", to: { instanceId: "codex", model: "gpt" } });
+  });
+
+  it("a server of one person: every account is theirs", () => {
+    const solo = ownerReachable({});
+    expect(solo("anyone", "claude-work")).toBe(true);
+    expect(solo(null, "claude-work")).toBe(true);
   });
 });

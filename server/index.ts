@@ -11572,6 +11572,10 @@ function accountMovesHost(): AccountMovesHost {
     moveBots: (leaving, moves, forget) => {
       store.moveAccountUsers(leaving, moves, { driverOf: (instanceId) => registry.get(instanceId)?.driverKind, forget });
     },
+    // 2026-11-19: on an organization server a bot never moves onto another
+    // person's own account (or own server); the shared ones serve everyone
+    botOwner: (botId) => { const bot = store.bot(botId); return bot ? effectiveBotOwner(bot) : null; },
+    engineOwner: (instanceId) => IDENTITY.kind === "perspicax" ? personalProviderInstances.ownerOf(instanceId) : undefined,
     setDefault: (selection) => {
       // both saved defaults in one write, as moveOffComputerEngine does
       const newBotDefaults = cfg.newBotDefaults && newBotDefaultsSchema.parse({
@@ -34505,6 +34509,9 @@ const agentApi = createAgentApi({
   },
   // Fleet writes (#1944): person's AI client reuses the same PATCH routes as
   // the Edit bot window and Automations editor (performAsMember).
+  // 2026-11-19 (the Perspicax picker): the models the person turned off by
+  // hand (Settings > Models), listed with enabled false
+  personTurnedOffModels: (caller) => caller.kind === "person" ? personDisabledModels(caller.id) : [],
   async listModels(caller, agentId) {
     // agentId null: what the person may pick for a new bot (no bot yet).
     const bot = agentId === null ? null : store.bot(agentId);

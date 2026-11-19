@@ -130,14 +130,15 @@ export interface InstancesRouteDeps {
   accountMoves?: AccountMovesHost;
 }
 
-/** The other accounts of `instanceId`'s provider a viewer may move bots to:
- * same tool, not a key, not another person's own. */
-function sameProviderAccounts(cfg: AppConfig, instanceId: string, viewer: string | null): string[] {
+/** The other accounts of `instanceId`'s provider its bots may move to: same
+ * tool, not a key. 2026-11-19: every person's, since the plan (accountMoves,
+ * ownerReachable) moves each bot only within its own person's accounts or the
+ * organization's shared ones, never onto the remover's own account. */
+function sameProviderAccounts(cfg: AppConfig, instanceId: string): string[] {
   const instances = persistableInstanceConfigs(cfg);
   const entry = instances[instanceId];
   if (!entry) return [];
-  return Object.keys(instances).filter((id) => id !== instanceId && instances[id]?.driver === entry.driver && instances[id]?.access !== "api"
-    && (!instances[id]?.ownerPrincipalId || instances[id]?.ownerPrincipalId === viewer));
+  return Object.keys(instances).filter((id) => id !== instanceId && instances[id]?.driver === entry.driver && instances[id]?.access !== "api");
 }
 
 /** Selections of engines that currently have a turn in flight. */
@@ -162,14 +163,13 @@ export type AddedAccountRemoval =
   | { ok: false; status: number; body: { error: string; code?: string; [key: string]: unknown } };
 
 /** Removes one account of a provider, the first one too while another
- * remains (#4415, #4426, #4435). `inUse` is the caller's refusal for bots
- * that still use it; a turn in flight on it always waits. `beforeRemove`
- * runs once nothing refuses, while the entry is still there (a sign-out
- * reads it). */
+ * remains (#4415, #4426, #4435). Neither a bot on it nor a turn in flight
+ * holds the removal back. `beforeRemove` runs while the entry is still there
+ * (the bots move, a sign-out reads it). */
 export async function removeAddedAccount(
   deps: AddedAccountRemovalDeps,
   instanceId: string,
-  options: { inUse?: () => AddedAccountRemoval | undefined; beforeRemove?: () => Promise<void> } = {},
+  options: { beforeRemove?: () => Promise<void> } = {},
 ): Promise<AddedAccountRemoval> {
   if (deps.getProviderConfigBusy()) return { ok: false, status: 409, body: { error: "provider settings are already being updated" } };
   const instances = persistableInstanceConfigs(deps.cfg);
@@ -185,11 +185,9 @@ export async function removeAddedAccount(
   if (entry.access === "api" || !(addedAccount(instanceId, entry.driver) || removableAccount(instanceId, accounts))) {
     return { ok: false, status: 400, body: { error: ONLY_ACCOUNT_ERROR } };
   }
-  const refused = options.inUse?.();
-  if (refused) return refused;
-  if (busyProviderSelections(deps).some((selection) => selection.instanceId === instanceId)) {
-    return { ok: false, status: 409, body: { error: "Wait for the bots using this account to finish, then remove it.", code: "account_busy" } };
-  }
+  // 2026-11-19 (owner rule: removing an account never waits): a turn in
+  // flight on it finishes on its live engine (persistProviderInstance stops
+  // that engine once the turn is over); its bots already moved for the next.
   deps.setProviderConfigBusy(true);
   deps.providerInstancesChanging.add(instanceId);
   try {
@@ -485,16 +483,18 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
         if (action === "auth/sign-out") {
           const instance = deps.registry.get(instanceId);
           if (!instance) return json(res, 404, { error: "unknown instance" });
-          // 2026-11-18: the confirmation's one click moves its bots first
-          const body = await readBody(req, 4096).catch(() => null);
-          if (body?.move === true && deps.accountMoves) {
-            const viewer = viewerOf(auth);
-            const plan = await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true });
-            deps.accountMoves.apply(plan, [instanceId], { forget: false, moveDefault: true });
-          }
+          // 2026-11-18, 2026-11-19: a sign-out always moves the bots on the
+          // account first, from every app (no flag); GET .../moves shows the
+          // same plan beforehand and the answer says what moved
+          await readBody(req, 4096).catch(() => null);
+          const viewer = viewerOf(auth);
+          const plan = deps.accountMoves
+            ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId), moveDefault: true })
+            : null;
+          if (plan) deps.accountMoves!.apply(plan, [instanceId], { forget: false, moveDefault: true });
           await deps.providerAuthSessions.signOut(instance, owner);
           deps.registry.forgetSnapshots();
-          return json(res, 200, { instances: await deps.instancesForViewer(viewerOf(auth)) });
+          return json(res, 200, { instances: await deps.instancesForViewer(viewer), ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
         }
         if (action === "auth/complete") {
           const body = await readBody(req);
@@ -631,9 +631,8 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
     if (movesOf) {
       const instanceId = movesOf[1];
       if (!Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)) return json(res, 404, { error: "unknown instance" });
-      const viewer = viewerOf(auth);
       const plan = deps.accountMoves
-        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true })
+        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId), moveDefault: true })
         : { moves: [], noEngine: false };
       return json(res, 200, plan);
     }
@@ -644,7 +643,7 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       // move as the confirmation showed, then it goes, in one gesture
       const viewer = viewerOf(auth);
       const plan = deps.accountMoves && Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)
-        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId, viewer), moveDefault: true })
+        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId), moveDefault: true })
         : null;
       const removed = await removeAddedAccount(deps, instanceId, {
         beforeRemove: async () => { if (plan) deps.accountMoves!.apply(plan, [instanceId], { forget: true, moveDefault: true }); },

@@ -137,9 +137,8 @@ describe("#4435: an added account runs only for the person who added it", () => 
     expect(engines.map((engine: { id: string }) => engine.id)).toEqual(["claude"]);
   });
 
-  it("removing an added account, from a person's own list or the instance routes, waits for a turn in flight on it", async () => {
+  it("removing an added account, from a person's own list or the instance routes, never waits for a turn in flight on it", async () => {
     const cfg = { instances: { claude: { driver: "claudeAgent" }, [ALEX_ACCOUNT]: { driver: "claudeAgent", ownerPrincipalId: ALEX } } } as unknown as AddedAccountRemovalDeps["cfg"];
-    let busy = true;
     const steps: string[] = [];
     let configBusy = false;
     const deps: AddedAccountRemovalDeps = {
@@ -151,18 +150,14 @@ describe("#4435: an added account runs only for the person who added it", () => 
       persistProviderInstance: async (_id, instances) => { steps.push("persist"); (cfg as { instances: unknown }).instances = instances; },
       bots: () => [{ id: "bot-1", busy: false, modelSelection: { instanceId: "claude", model: "m" } }] as never,
       tasks: () => [{ threadId: "t-1" }] as never,
-      threadBusy: () => busy,
+      // a turn runs on the account right now
+      threadBusy: () => true,
       botForThread: () => ({ modelSelection: { instanceId: ALEX_ACCOUNT, model: "m" } }),
       activeGroupTurnForBot: () => false,
     };
-    const beforeRemove = async () => { steps.push("sign-out"); };
-    const waiting = await removeAddedAccount(deps, ALEX_ACCOUNT, { beforeRemove });
-    expect(waiting).toMatchObject({ ok: false, status: 409, body: { code: "account_busy" } });
-    expect(steps).toEqual([]);
-    expect(Object.keys((cfg as { instances: object }).instances)).toContain(ALEX_ACCOUNT);
-    busy = false;
+    const beforeRemove = async () => { steps.push("move and sign out"); };
     expect(await removeAddedAccount(deps, ALEX_ACCOUNT, { beforeRemove })).toEqual({ ok: true });
-    expect(steps).toEqual(["sign-out", "persist"]);
+    expect(steps).toEqual(["move and sign out", "persist"]);
     expect(Object.keys((cfg as { instances: object }).instances)).not.toContain(ALEX_ACCOUNT);
     expect(configBusy).toBe(false);
   });

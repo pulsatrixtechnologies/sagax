@@ -225,7 +225,7 @@ describe("createMeEnginesRoutes", () => {
     expect((listed.sent[0]!.body as { engines: Array<{ instanceId: string }> }).engines.map((engine) => engine.instanceId)).toEqual(["codex", "chatgpt"]);
   });
 
-  it("moves the bots before a sign-out the confirmation asked for, never on a plain one (2026-11-18)", async () => {
+  it("moves the bots before every sign-out, from any app, no flag needed (2026-11-19)", async () => {
     const plan = { moves: [], noEngine: true };
     const accountMoves = { plan: vi.fn(async () => plan), apply: vi.fn() };
     const deps = personDeps({
@@ -235,15 +235,16 @@ describe("createMeEnginesRoutes", () => {
       registry: { entries: () => [{ instanceId: "codex", live: { driverKind: "codex" } }], get: () => null },
     });
     const route = createMeEnginesRoutes(deps);
+    // the iOS app and the engine cards send an empty body
     const plain = ctx("/api/me/engines/codex/login/sign-out", "POST", {});
     await route(plain.context);
-    expect(plain.sent[0]).toEqual({ status: 200, body: { ok: true } });
-    expect(accountMoves.apply).not.toHaveBeenCalled();
-    const moved = ctx("/api/me/engines/codex/login/sign-out", "POST", { move: true });
-    await route(moved.context);
-    expect(moved.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    expect(plain.sent[0]).toEqual({ status: 200, body: { ok: true, moved: [], noEngine: true } });
     // Codex and the ChatGPT plan read one sign-in: both leave together
     expect(accountMoves.apply).toHaveBeenCalledWith(plan, ["codex", "chatgpt"], { forget: false, moveDefault: false });
+    const moved = ctx("/api/me/engines/codex/login/sign-out", "POST", { move: true });
+    await route(moved.context);
+    expect(moved.sent[0]).toEqual({ status: 200, body: { ok: true, moved: [], noEngine: true } });
+    expect(accountMoves.apply).toHaveBeenCalledTimes(2);
     expect(deps.logins.signOut).toHaveBeenCalledTimes(2);
   });
 

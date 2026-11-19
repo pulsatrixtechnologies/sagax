@@ -183,8 +183,8 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     };
     if (own) {
       // the removal of the instance routes (server/routes/instances.ts
-      // removeAddedAccount): a turn in flight on it waits, then the person
-      // signs out and the entry goes
+      // removeAddedAccount): its bots move, the person signs out and the
+      // entry goes, a turn in flight on it included (it ends on its engine)
       const removed = await deps.removeAccountEntry(instanceId, async () => { move(); await signOut(); });
       if (!removed.ok) return json(res, removed.status, removed.body);
       if (separateAccountInstance(instanceId)) rmSync(join(deps.DATA_DIR, "principals", principalId, "accounts", instanceId), { recursive: true, force: true });
@@ -226,17 +226,19 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       return json(res, 200, { auth: started });
     }
     if (verb === "sign-out") {
-      // 2026-11-18: the confirmation's one click moves the bots on the
-      // account first (a second sign-in is never what a bot names)
-      const body = await readBody(req, 4096).catch(() => null);
-      const found = body?.move === true && moves && slot !== "second" ? accountOf(instanceId) : null;
+      // 2026-11-18, 2026-11-19: a sign-out always moves the bots on the
+      // account first, from every app (no flag; a second sign-in is never
+      // what a bot names); GET .../moves shows the same plan beforehand
+      await readBody(req, 4096).catch(() => null);
+      const found = moves && slot !== "second" ? accountOf(instanceId) : null;
+      let plan: Awaited<ReturnType<AccountMovesHost["plan"]>> | null = null;
       if (found) {
         const own = deps.personalProviderInstances.ownerOf?.(instanceId) === principalId.toLowerCase();
-        const plan = await moves!.plan({ person: principalId, leaving: found.ids, sameProvider: found.others, moveDefault: own });
+        plan = await moves!.plan({ person: principalId, leaving: found.ids, sameProvider: found.others, moveDefault: own });
         moves!.apply(plan, found.ids, { forget: false, moveDefault: own });
       }
       await deps.logins.signOut(principalId, instanceId, owner, slot);
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
     }
     const body = await readBody(req, 4096);
     const flowId = typeof body?.flowId === "string" ? body.flowId : "";

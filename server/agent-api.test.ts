@@ -590,6 +590,25 @@ describe("list_agent_models before a bot exists", () => {
     expect(r.body).toMatchObject({ agent_id: null, current: null });
     expect((r.body.models as AgentModelChoice[]).map((model) => model.instance_id)).toEqual(["claude-work", "claude-home", "grok"]);
   });
+
+  it("says per model whether the person turned it off by hand in their settings (2026-11-19, the Perspicax picker)", async () => {
+    const w = world();
+    const asked: string[] = [];
+    w.deps.personTurnedOffModels = (caller) => { asked.push(caller.id); return ["claude-work/claude-opus", "grok/grok-4"]; };
+    const api = createAgentApi(w.deps);
+    for (const args of [{}, { agent_id: "bot-a" }]) {
+      const r = await api.call(person("pr_1"), "list_agent_models", args);
+      expect(r.status).toBe(200);
+      const enabled = (r.body.models as AgentModelChoice[]).flatMap((engine) => engine.models.map((model) => `${engine.instance_id}/${model.id}:${model.enabled}`));
+      expect(enabled).toEqual([
+        "claude-work/claude-sonnet:true", "claude-work/claude-opus:false", "claude-home/claude-sonnet:true", "grok/grok-3:true", "grok/grok-4:false",
+      ]);
+    }
+    expect(asked).toEqual(["pr_1", "pr_1"]);
+    // no list of the person's: every model is on
+    const plain = await world().api.call(person("pr_1"), "list_agent_models", {});
+    expect((plain.body.models as AgentModelChoice[]).every((engine) => engine.models.every((model) => model.enabled === true))).toBe(true);
+  });
 });
 
 describe("refusals always say why", () => {

@@ -15,6 +15,7 @@ import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
 import { parseRoutineModel } from "../shared/routine-model.ts";
 import type { EffortLevel } from "../shared/model-selection.ts";
+import { modelKey } from "../shared/offered-models.ts";
 // The agent-to-agent API: tools that let one agent (a Sagax bot, or a
 // person's AI client attached to Perspicax) find, create, prompt, read and
 // configure other Sagax bots, with the semantics, parameters and limits of the
@@ -360,7 +361,9 @@ export interface AgentProfile {
 export interface AgentModelChoice {
   instance_id: string;
   label: string;
-  models: Array<{ id: string; label: string }>;
+  /** `enabled`: false when the person turned the model off by hand in
+   * their settings (Settings > Models); it stays listed, greyed. */
+  models: Array<{ id: string; label: string; enabled?: boolean }>;
   effort_levels?: string[];
   /** True when Auto may be chosen on this engine. */
   auto?: boolean;
@@ -583,6 +586,10 @@ export interface AgentApiDeps {
   /** Engines and models the caller may pick for this agent (#1944), or for
    * a new bot when agentId is null (current is then null). */
   listModels?(caller: AgentCaller, agentId: string | null): Promise<{ models: AgentModelChoice[]; current: AgentModelSummary | null } | Refusal>;
+  /** The models (`<engine>/<model>`, shared/offered-models.ts) the person
+   * turned off by hand in their settings: list_agent_models marks them
+   * enabled false. */
+  personTurnedOffModels?(caller: AgentCaller): readonly string[];
   /** Change the agent's default model/engine (same checks as PATCH /api/bots/:id). */
   updateModel?(caller: AgentCaller, agentId: string, selection: {
     instanceId?: string;
@@ -1976,7 +1983,14 @@ function createAgentApiConfigHandlers(env: {
       }
       const listed = await deps.listModels(caller, agentId);
       if (isRefusal(listed)) return listed;
-      return ok({ agent_id: agentId, current: agentId === null ? null : listed.current, models: listed.models });
+      // 2026-11-19 (the Perspicax picker): each model says whether it is on
+      // for this person; one they turned off stays listed, enabled false
+      const off = new Set(deps.personTurnedOffModels?.(caller) ?? []);
+      const models = listed.models.map((engine) => ({
+        ...engine,
+        models: engine.models.map((model) => ({ ...model, enabled: !off.has(modelKey(engine.instance_id, model.id)) })),
+      }));
+      return ok({ agent_id: agentId, current: agentId === null ? null : listed.current, models });
     },
 
     async update_agent_model(caller, args) {

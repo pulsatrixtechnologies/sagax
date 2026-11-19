@@ -392,10 +392,19 @@ describe("the Files list", () => {
     expect((await answer(`/api/bots/${BOT}/workspace/file?path=RULES.md`)).reply!.body).toMatchObject({ text: "- Ask first.\n", exists: true });
     expect((await answer(`/api/bots/${BOT}/workspace/file`, "PUT", { path: "MEMORY.md", text: "x" })).reply!.status).toBe(400);
     expect((await answer(`/api/bots/${BOT}/workspace/file?path=memory/a.md`)).reply!.status).toBe(400);
+    // #5019: one rule or one document change as rules_update and docs_update
+    // make them, for update_agent_settings rules and docs
+    expect((await answer(`/api/bots/${BOT}/workspace/rules`, "POST", { action: "append", text: "Never quote a price." })).reply).toMatchObject({ status: 200, body: { ok: true, path: "RULES.md", entry: "- Never quote a price." } });
+    expect((await answer(`/api/bots/${BOT}/workspace/rules`, "POST", { action: "remove", old_text: "- Never quote a price.\n" })).reply!.status).toBe(200);
+    expect((await answer(`/api/bots/${BOT}/workspace/rules`, "POST", { action: "append", text: "x".repeat(501) })).reply!.status).toBe(400);
+    expect((await answer(`/api/bots/${BOT}/workspace/docs`, "POST", { action: "write", path: "docs/fleet.md", text: "Ada: QA" })).reply).toMatchObject({ status: 200, body: { ok: true, path: "docs/fleet.md" } });
+    expect((await answer(`/api/bots/${BOT}/workspace/docs`, "POST", { action: "write", path: "../x.md", text: "x" })).reply!.status).toBe(400);
     // the Soul's gate: refused for anyone who may not edit the bot
     allowed = false;
     for (const [path, method] of [
       [`/api/bots/${BOT}/workspace`, "GET"],
+      [`/api/bots/${BOT}/workspace/rules`, "POST"],
+      [`/api/bots/${BOT}/workspace/docs`, "POST"],
       [`/api/bots/${BOT}/workspace/file`, "PUT"],
       [`/api/bots/${BOT}/workspace/download?path=RULES.md`, "GET"],
       [`/api/bots/${BOT}/workspace/docs/rename`, "POST"],

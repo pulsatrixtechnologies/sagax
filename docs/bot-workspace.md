@@ -8,7 +8,7 @@ in any editor, and that the persona editor shows under **Rules**, **Memory** and
 
 | Path | What it holds | When the bot sees it | Budget | Edited in |
 |---|---|---|---|---|
-| `SOUL.md` | Who the bot is: standing instructions. Lives on the bot record; `~/.sagax/bots/<botId>/SOUL.md` is a mirror outside the workspace | Every turn, first | 24 KB | Persona > Soul (changes from the bot need the person's OK, `propose_profile`) |
+| `SOUL.md` | Who the bot is: identity, persona and voice only; a rule, a procedure, a reference or a fact a write adds is filed in the files below (`server/bots/soul-sort.ts`, #5019). Lives on the bot record; `~/.sagax/bots/<botId>/SOUL.md` is a mirror outside the workspace | Every turn, first | 24 KB | Persona > Soul (changes from the bot need the person's OK, `propose_profile`) |
 | `RULES.md` | The first rule set: hard constraints the bot checks every turn ("never email a client without my OK") | Every turn while its set is on, right after the soul, before memory | 100 lines / 12 KB of loaded text per set; 250 lines / 24 KB for every set that is on | Persona > Rules, Files (owner or admin), or `rules_update` in chat |
 | `rules/<set>.md` | The other rule sets, one file each | Every turn while the set is on, in the sets' order | same as RULES.md | Persona > Rules, Files, `rules_update` with `set` |
 | `rules/.sets.json` | The sets' order, names and on/off switches (hidden) | Never | none | Persona > Rules |

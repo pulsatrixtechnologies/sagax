@@ -458,6 +458,14 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === "/api/bots") return json({ bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {}, botQueuedMessages: {} });
   // the bot's shared vault (#3399, under Access): one login, never its value
   if (path === `${bots}/credentials/list`) return json({ items: ACCOUNTS === "two" ? [] : [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.northwind.example"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false }] });
+  // #5019: where a pasted rule will go, then what was filed when the editor is left
+  if (method === "POST" && path === `${bots}/soul/preview`) {
+    const typed = typeof (body as { soul?: unknown } | null)?.soul === "string" ? (body as { soul: string }).soul : "";
+    return json(/never|jamais/i.test(typed.replace(SOUL, "")) ? { moves: [{ kind: "rule", to: "RULES.md", text: "Never send an email to a client without showing me the draft first." }, { kind: "reference", to: "docs/clients.md", text: "Clients: Northwind (Ada), Acme (Bea)" }], unsorted: 0 } : { moves: [], unsorted: 0 });
+  }
+  if (method === "POST" && path === `${bots}/soul/settle`) {
+    return json({ bot, soulSorted: { moved: [{ kind: "rule", to: "RULES.md", text: "Never send an email to a client without showing me the draft first.", entries: 1 }, { kind: "reference", to: "docs/clients.md", text: "Clients: Northwind (Ada), Acme (Bea)", entries: 1 }], kept: [] } });
+  }
   if (method !== "GET" && (path === bots || path.startsWith(`${bots}/`) || path.startsWith("/api/"))) {
     if (path.endsWith("/history/restore")) return json({ ok: true, revision: HISTORY.length + 1 });
     if (!/\/(analytics|history)$/.test(path)) return json(body ?? { ok: true });

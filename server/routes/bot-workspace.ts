@@ -46,7 +46,7 @@ import {
 import { MemoryStoreError, RULES_PATH, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";
 import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { renameDoc } from "../workspace/workspace-tools.ts";
+import { renameDoc, updateDoc, updateRules, type WorkspaceWriteResult } from "../workspace/workspace-tools.ts";
 import { workspaceUsage } from "../workspace/workspace-usage.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -237,6 +237,24 @@ export function createBotWorkspaceRoutes(deps: BotWorkspaceRouteDeps): RouteHand
       } catch (error) {
         return reply(error);
       }
+    }
+    // #5019: one rule or one document change as rules_update and
+    // docs_update make them (the same functions, journaled as the
+    // person's): what update_agent_settings `rules` and `docs` call, so a
+    // person's AI client files a rule in RULES.md, never in the soul.
+    m = path.match(/^\/api\/bots\/([\w-]+)\/workspace\/(rules|docs)$/);
+    if (m && method === "POST") {
+      const botId = m[1];
+      const body = await readBody(req);
+      const row = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const str = (value: unknown) => typeof value === "string" ? value : undefined;
+      const oldText = str(row.oldText) ?? str(row.old_text);
+      const result: WorkspaceWriteResult = write(botId, () => m![2] === "rules"
+        ? updateRules(botId, { action: row.action as never, text: str(row.text), oldText, ...(str(row.set) !== undefined ? { set: str(row.set) } : {}) }, { actor: "person", via: "api" })
+        : updateDoc(botId, { action: row.action as never, path: str(row.path) ?? "", text: str(row.text), oldText }, { actor: "person", via: "api" }));
+      if (!result.ok) return json(res, result.code === "conflict" || result.code === "exists" ? 409 : result.code === "over-budget" ? 413 : result.code === "missing" ? 404 : 400, result);
+      const { journal: _journal, ...reply } = result;
+      return json(res, 200, reply);
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/workspace\/docs\/rename$/);
     if (m && method === "POST") {

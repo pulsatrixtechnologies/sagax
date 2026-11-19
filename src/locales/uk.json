@@ -1697,7 +1697,6 @@
   "botPanel.soul.driftHelp": "Bot і далі використовує збережену версію, доки ви не виберете. Файл:",
   "botPanel.soul.useFile": "Використати файл",
   "botPanel.soul.keepSaved": "Залишити збережену версію",
-  "botPanel.soul.placeholder": "Хто цей bot і правила, яких він ніколи не порушує. Пишіть коротко. Покрокову процедуру покладіть у навичку.",
   "botPanel.soul.mirrored": "Віддзеркалено в",
   "botPanel.soul.notSaved": " (не збережено)",
   "botPanel.history.refresh": "Не вдалося оновити історію.",

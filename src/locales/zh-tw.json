@@ -1969,7 +1969,6 @@
   "botPanel.soul.driftHelp": "在你選擇之前，bot 繼續使用已儲存的版本。檔案:",
   "botPanel.soul.useFile": "使用該檔案",
   "botPanel.soul.keepSaved": "保留已儲存的版本",
-  "botPanel.soul.placeholder": "這個 bot 是誰，以及它從不打破的規則。請保持簡短。把逐步流程放到一項技能中。",
   "botPanel.soul.mirrored": "鏡像到",
   "botPanel.soul.notSaved": " (未儲存)",
   "botPanel.history.refresh": "無法重新整理歷史。",

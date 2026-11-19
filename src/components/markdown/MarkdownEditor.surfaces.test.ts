@@ -89,7 +89,32 @@ describe("markdown fields", () => {
     expect(markdownText(editor)).toBe("# Scout\n\nBe brief.");
     expect(editor.getAttribute("aria-labelledby")).toBe("bot-soul-label-scout");
     typeMarkdown(editor, "# Scout\n\n- Be brief.");
-    expect(onPatch).toHaveBeenLastCalledWith({ soul: "# Scout\n\n- Be brief." });
+    // #5019: typing is a draft, filed by the server when the editor is left
+    expect(onPatch).toHaveBeenLastCalledWith({ soul: "# Scout\n\n- Be brief.", soulDraft: true });
+  });
+
+  it("#5019: SOUL.md shows where a pasted rule will go, then files it when the editor is left", async () => {
+    const preview = { moves: [{ kind: "rule", to: "RULES.md", text: "Never quote a price." }], unsorted: 0 };
+    const sorted = { moved: [{ kind: "rule", to: "RULES.md", text: "Never quote a price.", entries: 1 }], kept: [] };
+    const request = vi.fn(async (path: string): Promise<any> => path.endsWith("/soul/preview") ? preview : path.endsWith("/soul/settle") ? { soulSorted: sorted } : { soul: bot.soul, revision: "r1", bytes: 18, limit: 16_000, file: "/bots/scout/SOUL.md", drift: false });
+    const onOpenRules = vi.fn();
+    render(createElement(BotEditorContext.Provider, { value: { request } }, createElement(SoulField, { bot, onPatch: vi.fn(), onOpenRules })));
+    const editor = await markdownEditorIn(host, "soul");
+    expect(host.querySelector("[data-soul-sort-preview]")).toBeNull();
+    typeMarkdown(editor, "# Scout\n\nBe brief.\n\nNever quote a price.");
+    await new Promise((resolve) => setTimeout(resolve, 1_400));
+    await settle();
+    expect(request).toHaveBeenCalledWith("/api/bots/scout/soul/preview", expect.objectContaining({ method: "POST", body: JSON.stringify({ soul: "# Scout\n\nBe brief.\n\nNever quote a price." }) }));
+    const notice = host.querySelector("[data-soul-sort-preview]");
+    expect(notice?.textContent).toContain("Never quote a price.");
+    expect(notice?.textContent).toContain(t("botPanel.soul.sortToRules"));
+    flushSync(() => editor.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null })));
+    await settle();
+    expect(request).toHaveBeenCalledWith("/api/bots/scout/soul/settle", expect.objectContaining({ method: "POST" }));
+    expect(host.querySelector("[data-soul-sorted]")?.textContent).toContain(t("botPanel.soul.sorted"));
+    expect(host.querySelector("[data-soul-sort-preview]")).toBeNull();
+    (host.querySelector("[data-soul-open-rules]") as HTMLButtonElement).click();
+    expect(onOpenRules).toHaveBeenCalled();
   });
 
   it("MEMORY.md: mounts with the file and reports edits to the dialog", async () => {

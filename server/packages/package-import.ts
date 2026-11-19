@@ -358,7 +358,8 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
           section,
           ...(options.visibility ? { visibility: options.visibility } : {}),
         },
-        { seedMessages: false },
+        // #5019: an import keeps its soul as it was (its rules come with it)
+        { seedMessages: false, soulWrite: "restore" },
       );
       importedBots.push(created);
       botIds.set(member.key, created.id);

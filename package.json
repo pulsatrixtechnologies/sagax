@@ -79,6 +79,7 @@
     "build:server": "tsc -p server/tsconfig.build.json && node scripts/bundle-server.mjs",
     "gen:self-knowledge": "node --experimental-strip-types scripts/self-knowledge/generate.ts",
     "gen:settings-doc": "node --experimental-strip-types scripts/settings-actions/doc.ts",
+    "soul-audit": "node --experimental-strip-types scripts/soul-audit.ts",
     "build:companion": "tsc -p companion/tsconfig.build.json && node scripts/mark-module-scope.mjs dist-companion",
     "build:speech": "node electron/build-speech-helper.mjs && node electron/build-automation-helper.mjs",
     "build:cua": "node scripts/prepare-cua.mjs",

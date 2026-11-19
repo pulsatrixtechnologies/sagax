@@ -300,7 +300,8 @@ export function useBotSectionContent(bot: Bot, {
         return <AppearancePane bot={bot} onPatch={derived.patch} />;
       case "soul":
         if (!canEditBotField(config, bot, "soul")) return null;
-        return <SoulSection bot={bot} patch={derived.patch} />;
+        // #5019: the soul and the rules are two editors; the soul links to Rules
+        return <SoulSection bot={bot} patch={derived.patch} onOpenRules={() => onOpenSection("rules")} />;
       case "slack":
         return slackUrl ? <SlackSection managementUrl={slackUrl} /> : null;
       case "skills":

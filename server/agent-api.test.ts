@@ -1960,6 +1960,30 @@ describe("fleet tools (#1944)", () => {
     expect(seen).toEqual({ skills: { "tidy-notes": false }, plugins: { "docs@market": true }, grants: { "user:pr_2": "use" } });
   });
 
+  it("#5019: update_agent_settings passes rules and docs, and answers where the soul's added text went", async () => {
+    const w = world();
+    let seen: Record<string, unknown> | undefined;
+    w.deps.updateSettings = async (_caller, _agentId, fields) => {
+      seen = fields;
+      return {
+        changed: Object.keys(fields),
+        refused: [],
+        soulSorted: { moved: [{ kind: "rule", to: "RULES.md", text: "Never assign without checking.", entries: 1 }], kept: [] },
+      };
+    };
+    const api = createAgentApi(w.deps);
+    const r = await api.call(person("pr_1"), "update_agent_settings", {
+      agent_id: "bot-a",
+      soul: "You are Marc.\n\nNever assign without checking.",
+      rules: { action: "append", text: "Always copy the client." },
+      docs: [{ action: "write", path: "docs/fleet.md", text: "Ada: QA" }],
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(seen).toMatchObject({ rules: { action: "append", text: "Always copy the client." }, docs: [{ action: "write", path: "docs/fleet.md" }] });
+    expect(r.body.soul_sorted).toMatchObject({ moved: [{ kind: "rule", to: "RULES.md" }], kept: [] });
+    expect(String((r.body.soul_sorted as { note: string }).note)).toContain("a rule to RULES.md");
+  });
+
   it("update_routine sets and clears \"Needs its computer\" (#1996)", async () => {
     const w = world();
     const on = await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", requires_computer: true });

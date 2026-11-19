@@ -20,6 +20,7 @@ import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
 import type { PermissionKey } from "../../shared/permissions.ts";
 import type { BotVisibility } from "../../shared/wire.ts";
+import type { SoulSorter, SoulWriteMode } from "../bots/soul-sort.ts";
 
 export const BOTS_READ_ONLY = { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only." } as const;
 export const MEMBER_BOT_FULL_ACCESS = {
@@ -43,11 +44,11 @@ export interface BotsCoreStore {
   bot(id: string): BotRecord | null | undefined;
   createBot(input: Record<string, unknown>, opts?: { language?: "fr" | "en" }): BotRecord;
   patchBot(id: string, patch: Record<string, unknown>): BotRecord | null | undefined;
-  patchBotProfile(id: string, patch: Record<string, unknown>): BotRecord | null | undefined;
+  patchBotProfile(id: string, patch: Record<string, unknown>, opts?: { soulWrite?: SoulWriteMode }): BotRecord | null | undefined;
   deleteBot(id: string): void;
   setPrimaryBot(id: string): BotRecord[] | null;
   clearPrimaryBot(id: string): BotRecord[] | null;
-  setSoul(id: string, soul: string): BotRecord | null | undefined;
+  setSoul(id: string, soul: string, opts?: { soulWrite?: SoulWriteMode }): BotRecord | null | undefined;
   projectBotForTask(botId: string, threadId: string): BotRecord | null | undefined;
   tasks(botId: string): readonly TaskRecord[];
   taskByThread(botId: string, threadId: string): TaskRecord | null | undefined;
@@ -98,6 +99,9 @@ export interface BotsCoreRoutines {
 
 export interface BotsCoreRouteDeps {
   store: BotsCoreStore;
+  /** #5019: files what a soul write adds where it belongs (server/bots/soul-sort.ts). */
+  soulSorter?: SoulSorter;
+
   /** #2045: stable section id for a display name (org servers). */
   resolveSectionId?: (section: string, auth: RequestAuth, bot?: { ownerUserId?: string }) => string | undefined;
   /** I2: the caller's team model and computer for a new bot in that team. */

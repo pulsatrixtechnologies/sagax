@@ -1955,7 +1955,6 @@
   "botPanel.soul.driftHelp": "在你选择之前，bot 继续使用已保存的版本。文件:",
   "botPanel.soul.useFile": "使用该文件",
   "botPanel.soul.keepSaved": "保留已保存的版本",
-  "botPanel.soul.placeholder": "这个 bot 是谁，以及它从不打破的规则。请保持简短。把分步流程放到一项技能中。",
   "botPanel.soul.mirrored": "镜像到",
   "botPanel.soul.notSaved": " (未保存)",
   "botPanel.history.refresh": "无法刷新历史。",

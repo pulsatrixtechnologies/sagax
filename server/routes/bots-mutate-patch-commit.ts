@@ -3,6 +3,8 @@
 import type { BotRecord } from "../store.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { historyWriterOf } from "../history-writer.ts";
+import type { SoulSorter, SoulWriteMode } from "../bots/soul-sort.ts";
+import { soulSortSaysSomething, type SoulSortReport } from "../../shared/soul-sort.ts";
 
 export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): Promise<void> {
   const {
@@ -156,6 +158,7 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
     return;
   }
   // #1373: what each running turn answers at before this change
+  let soulSorted: SoulSortReport | undefined;
   const liveApprovalBefore = existingBot && patch.approvalMode !== undefined && requestedApprovalMode !== currentApprovalMode
     && env.liveApprovalChange(currentApprovalMode, requestedApprovalMode) && env.botRunning(existingBot.id)
     ? env.runningTurnLevels(existingBot.id) : null;
@@ -167,7 +170,22 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
     const runtimePatch = { ...patch };
     for (const field of Object.keys(profile.patch)) delete runtimePatch[field];
     if (Object.keys(runtimePatch).length) env.store.patchBot(m[1], runtimePatch, { actorPrincipalId: env.sessionPrincipal(env.auth) });
-    bot = env.store.patchBotProfile(m[1], profile.patch);
+    // #5019: the soul holds identity, persona and voice only. What this
+    // write adds that is not (a rule, a procedure, a fact) is filed where it
+    // belongs before the soul is saved, and the answer says where. The app's
+    // typing (soulDraft) is sorted when the editor is left (/soul/settle).
+    const sorter = env.soulSorter as SoulSorter | undefined;
+    let soulWrite: SoulWriteMode | undefined;
+    if (sorter && typeof profile.patch.soul === "string") {
+      if (body.soulDraft === true) soulWrite = "draft";
+      else {
+        const sorted = await sorter.sort(m[1], sorter.baseFor(m[1], existingBot?.soul ?? ""), profile.patch.soul, "person");
+        profile.patch.soul = sorted.soul;
+        if (soulSortSaysSomething(sorted.report)) soulSorted = sorted.report;
+        soulWrite = "sorted";
+      }
+    }
+    bot = env.store.patchBotProfile(m[1], profile.patch, soulWrite ? { soulWrite } : {});
   } else {
     if (freshBrowserBot) env.assertTeamComputerChangeIdle(freshBrowserBot, { ...freshBrowserBot, ...patch } as BotRecord);
     // omb #2701: Full over HTTP records consent so new conversations and
@@ -232,6 +250,6 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
       return;
     }
   }
-  env.json(env.res, 200, { bot: env.wireBot(env.store.bot(bot.id)!) });
+  env.json(env.res, 200, { bot: env.wireBot(env.store.bot(bot.id)!), ...(soulSorted ? { soulSorted } : {}) });
   return;
 }

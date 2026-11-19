@@ -9,6 +9,7 @@ import { RuleRequestError } from "../rules/rule-requests.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import type { SoulSortReport } from "../../shared/soul-sort.ts";
 
 const ROUTINE_WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 
@@ -152,6 +153,9 @@ type AskedProof =
   | string;
 
 export interface InternalRequestsDeps {
+  /** #5019: what an applied soul change added that is not persona, once
+   * Sagax filed it (server/bots/soul-sort.ts); null when nothing moved. */
+  soulSorted?(botId: string): Promise<SoulSortReport | null>;
   bot(id: string): InternalRequestsBot | undefined;
   bots(): readonly InternalRequestsBot[];
   ownsThread(botId: string, threadId: string): InternalRequestsThreadOwner | null;
@@ -666,12 +670,18 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
     const byRule = proposed.state !== "applied" && proposed.messageId
       ? deps.settleProposalByRule(from, body.fromThreadId, { requestId: proposed.requestId, messageId: proposed.messageId }, (args) => deps.resolveProfile(args))
       : undefined;
+    // #5019: an applied change answers what Sagax filed out of the soul
+    const sortedFor = async (applied: boolean) => {
+      if (!applied || !deps.soulSorted || !(body.changes && typeof body.changes === "object" && typeof (body.changes as { soul?: unknown }).soul === "string")) return {};
+      const report = await deps.soulSorted(targetBotId);
+      return report && (report.moved.length || report.kept.length) ? { soulSorted: report } : {};
+    };
     if (byRule) {
       if (byRule.result.state === "applied" && byRule.result.targetBotId) {
         const target = deps.bot(byRule.result.targetBotId);
         if (target) deps.broadcastBot(target);
       }
-      return json(res, 201, { ...proposed, state: byRule.result.state === "applied" ? "applied" : proposed.state, result: byRule.result, appliedBy: "rule" });
+      return json(res, 201, { ...proposed, state: byRule.result.state === "applied" ? "applied" : proposed.state, result: byRule.result, appliedBy: "rule", ...await sortedFor(byRule.result.state === "applied") });
     }
     deps.appendDecision({
       threadId: body.fromThreadId,
@@ -683,7 +693,7 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
       decision: proposed.state === "applied" ? "auto-approved" : "card-shown",
       source: proposed.state === "applied" ? proposed.appliedBy ?? "full-access" : "profile",
     });
-    return json(res, 201, proposed);
+    return json(res, 201, { ...proposed, ...await sortedFor(proposed.state === "applied") });
   }
 
   return PASS;

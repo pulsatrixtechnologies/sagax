@@ -502,3 +502,19 @@ describe("the turn depth of a process kept across turns", () => {
     }
   });
 });
+
+// port of OpenMausBot #4611: a model fills every optional argument with "".
+describe("blank optional arguments", () => {
+  it("hands work off without a blank group_id reaching the coordination route", async () => {
+    const sent: unknown[] = [];
+    const result = await callTool("coordinate_bots", { bot_ids: ["dev"], message: "Fix it", group_id: "", reason: "", done_when: "" }, context({
+      client: {
+        api: async (_path: string, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return { message: "Sent." }; },
+        apiResponse: async () => ({ ok: true, status: 200, body: {} }),
+      },
+    }));
+    expect(result.isError).toBeFalsy();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).not.toHaveProperty("groupId");
+  });
+});

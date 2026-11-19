@@ -28,6 +28,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import localOriginModule from "./local-origin.cjs";
 import { createHelperRestarts, followLinuxConnection } from "./cua-restart.mjs";
+import { watchDriver } from "./cua-watch.mjs";
 
 // Local control answers only the local server's UI (electron/local-origin.cjs).
 const { localOnly } = localOriginModule;
@@ -64,6 +65,7 @@ const WIN_INSTALLED_DRIVERS = [
   path.join(app.getPath("home"), "AppData", "Local", "Programs", "CuaDriver", "cua-driver.exe"),
 ];
 let embeddedHost = null; // EmbeddedCuaDriverHost | null
+let driverWatch = null;
 let embeddedGeneration = null;
 let startupAbort = null;
 let lifecycleGeneration = 0;
@@ -382,7 +384,28 @@ export async function startCua() {
   signal.throwIfAborted();
   if (nextConnection.mode === "embedded") watchEmbeddedHost(embeddedHost, embeddedGeneration);
   if (nextConnection.mode === "embedded" || nextConnection.mode === "standalone") helperRestarts.started();
+  watchMacDriver(nextConnection);
   return persistAndNotify(nextConnection);
+}
+
+/** A Mac driver that stopped answering without exiting, or a standalone one
+ * whose exit nothing here sees, counts as one that died: the helper's bounded
+ * restarts take it from there (port of OpenMausBot #5126). */
+function watchMacDriver(connection) {
+  driverWatch?.stop();
+  driverWatch = null;
+  if (process.platform !== "darwin" || (connection.mode !== "embedded" && connection.mode !== "standalone")) return;
+  const host = connection.mode === "embedded" ? embeddedHost : null;
+  driverWatch = watchDriver({ alive: () => socketAlive(connection.socketPath), restart: () => {
+    if (host) {
+      // already gone and handled by the exit watch, or replaced since
+      if (host !== embeddedHost) return;
+      embeddedHost = null;
+      embeddedGeneration = null;
+      void host.stop().catch(() => {}).finally(() => host.uniffiDestroy?.());
+    }
+    helperRestarts.exited("its socket stopped answering");
+  } });
 }
 
 /** The helper can die while the app runs (a crash in the driver): it is started again by itself, and readiness says it
@@ -422,6 +445,8 @@ export async function cuaPermissionsStatus() {
 
 export async function stopCua() {
   helperRestarts.reset();
+  driverWatch?.stop();
+  driverWatch = null;
   lifecycleGeneration++;
   startupAbort?.abort();
   startupAbort = null;

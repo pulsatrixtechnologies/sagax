@@ -1137,6 +1137,9 @@ export interface WireMessage extends WaitLineField {
     place?: PlaceRow;
     /** error rows: epoch ms when the usage limit that stopped this turn resets, when the engine said. */
     limitResetsAt?: number;
+    /** A failed step on one of the person's MCP servers: which server and
+     * why, said in the reader's language (shared/mcp-failure.ts). */
+    mcpProblem?: import("./mcp-failure.ts").McpStepProblem;
     /** Provider item identity, scoped to the owning turn. */
     itemId?: string;
     /** A failed one-way send's row: the runtime id of the notice it reports.

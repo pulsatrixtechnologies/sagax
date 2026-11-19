@@ -207,7 +207,7 @@ posixOnly("engine hooks e2e: a shell call that hit its time limit", () => {
     expect(shell?.text).toContain('"prompt:shell"');
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.systemPrompt).toContain(shell.text.trim());
-    expect(seen.env.BASH_MAX_TIMEOUT_MS).toBe("600000");
+    expect(seen.env.BASH_MAX_TIMEOUT_MS).toBe("86400000");
   }, 60_000);
 });
 

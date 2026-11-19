@@ -208,5 +208,15 @@ describe("a connector's refused sign-in in the step detail (#3515)", () => {
     expect(html).toContain("This connector refused its sign-in (HTTP 401).");
     expect(html).toContain("open Capabilities &gt; Installed and sign in to it again");
   });
+
+  // port of OpenMausBot #5105
+  it("says which MCP server failed and why on the row, and what to do in its detail", () => {
+    const tool = { name: "mcp__mail__search", ok: false, output: "MCP request timed out", mcpProblem: { kind: "timeout" as const, server: "mail" } };
+    const html = renderToStaticMarkup(createElement(ToolActivity, { tool, defaultOpen: true }));
+    expect(html).toContain("mail did not answer in time");
+    expect(html).toContain("Open Capabilities &gt; Installed");
+    const worked = renderToStaticMarkup(createElement(ToolActivity, { tool: { ...tool, ok: true } }));
+    expect(worked).not.toContain("did not answer in time");
+  });
 });
 

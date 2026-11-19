@@ -108,6 +108,10 @@ function disabledToolsFor(incoming: string[] | undefined, existing?: StoredMcpSe
   return list.length ? { disabledTools: list } : {};
 }
 const MCP_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+
+/** A server the request named is not saved here: its name, in the words
+ * every route answers with (port of OpenMausBot #5105). */
+export const mcpServerNotFound = (name: string): string => `MCP server "${name}" not found. It may have been removed.`;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** An HTTP header field name: RFC 9110 token characters. */
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
@@ -306,7 +310,7 @@ export type McpServerRename =
  * reserved name may move here; the entry is re-read under its new name and
  * saved off, so it never runs again without the person turning it on. */
 export function renameReservedMcpServer(current: Record<string, unknown>, from: string, to: unknown): McpServerRename {
-  if (!Object.hasOwn(current, from)) return { ok: false, status: 404, error: "MCP server not found." };
+  if (!Object.hasOwn(current, from)) return { ok: false, status: 404, error: mcpServerNotFound(from) };
   if (!reservedMcpServerName(from)) return { ok: false, status: 400, error: "Only a server whose name is reserved can be renamed here." };
   if (typeof to !== "string") return { ok: false, status: 400, error: "Send the new name as { \"to\": \"name\" }." };
   const nameError = mcpServerNameError(to);

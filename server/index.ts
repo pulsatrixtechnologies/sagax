@@ -660,7 +660,7 @@ import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnse
 import { extractTurnImages, videoFramesWithin } from "./turns/turn-images.ts";
 import { fitImageForModel, fitTurnImagesForModel, MODEL_IMAGE_MAX_BYTES, modelImageCopyPath } from "./models/model-image.ts";
 import { callTitleExcerpt } from "./threads/thread-title.ts";
-import { engineProcessGone, stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
+import { engineCommandCpuMs, engineProcessExited, engineProcessGone, ENGINE_EXIT_STALL_MS, stallLimitMs, stallNotice, TurnWatchdog } from "./turns/turn-watchdog.ts";
 import { createIdleThreads } from "./host/idle-threads.ts";
 import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
 import { ensureWorkspace,
@@ -17663,9 +17663,14 @@ const watchdog = new TurnWatchdog({
   parkedStallMs: COMPUTER_WAIT_MAX_MS + TURN_STALL_MS,
   checkMs: 60_000,
   engineGone: (turn) => engineProcessGone(runningTurnInstance(botForThread(turn.botId, turn.threadId), turn.threadId)?.adapter, turn.threadId),
+  // port of OpenMausBot #5967: a turn whose engine process exited waits two minutes, not the tool limit
+  engineExitStallMs: ENGINE_EXIT_STALL_MS,
+  engineExited: (turn) => engineProcessExited(runningTurnInstance(botForThread(turn.botId, turn.threadId), turn.threadId)?.adapter, turn.threadId),
+  // port of OpenMausBot #5585: a long command whose processes still use CPU is working
+  commandCpuMs: (turn, since) => engineCommandCpuMs(runningTurnInstance(botForThread(turn.botId, turn.threadId), turn.threadId)?.adapter, turn.threadId, since),
   // #3300: a conversation shown working that nothing holds is freed.
   unheld: { threads: () => idleThreads.unheld(), free: (threadId, botId) => idleThreads.free(botId, threadId) },
-  onStall: (turn, silentMs) => {
+  onStall: (turn, silentMs, reason) => {
     const stalledResourceOwner = turnResourceOwners.get(turn.threadId);
     const stalledGeneration = directTurnGenerationByThread.get(turn.threadId);
     const stalledProviderTurn = directRequestOwners.get(turn.threadId);
@@ -17689,12 +17694,12 @@ const watchdog = new TurnWatchdog({
     void Promise.resolve(runningTurnInstance(bot, turn.threadId)?.adapter.interruptTurn(turn.threadId))
       .catch(reportBackgroundError)
       .then(() => { if (stillStalledTurn()) closeOpenApprovals(turn.threadId); }).catch(reportBackgroundError);
-    const minutes = Math.round(silentMs / 60_000), cause = stallCause(silentMs);
+    const minutes = Math.round(silentMs / 60_000), cause = stallNotice(turn, silentMs, Date.now(), reason);
     // its calls and sub-agents end with it, even if the engine never settles
     closeCutToolRows(turn.threadId, endedToolOutput({ stopped: false }));
     const stalled = stoppedTurnText(turn.threadId, liveTurnByThread.get(turn.threadId), cause);
     if (routineRun?.target === "bot") {
-      routines?.failThread(turn.threadId, `No activity for ${minutes} minutes — the routine was stopped`, { cause: "stalled" });
+      routines?.failThread(turn.threadId, reason === "engine-exited" ? cause : `No activity for ${minutes} minutes — the routine was stopped`, { cause: "stalled" });
       pendingDelegationWakes.delete(turn.threadId);
     }
     store.appendMessage(turn.threadId, {
@@ -19048,6 +19053,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get connectorSetupProofs() { return connectorSetupProofs; },
   get connectorSetupSpeaker() { return connectorSetupSpeaker; },
   get noteConnectorReauth() { return noteConnectorReauth; },
+  get mcpServerNames() { return () => Object.keys(cfg.mcpServers ?? {}); },
   get continueComputerSelection() { return continueComputerSelection; },
   get conversationOrStart() { return conversationOrStart; },
   get customRules() { return customRules; },

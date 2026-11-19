@@ -552,7 +552,7 @@ describe("longCommandsPrompt", () => {
   it("names Bash's limit everywhere and vm_exec's own limit only with a Local VM", () => {
     for (const kind of [null, "local", "vps", "box"] as const) {
       const text = longCommandsPrompt(kind);
-      expect(text).toContain("`timeout` in milliseconds, up to 600000");
+      expect(text).toContain("`timeout` in milliseconds, up to 86400000, which is 1440 minutes");
       expect(text).not.toContain("vm_exec");
     }
     for (const kind of ["vm-private", "vm-shared"] as const) {

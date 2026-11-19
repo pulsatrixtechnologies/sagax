@@ -398,10 +398,14 @@ export const IMAGE_PROMPT =
   "\nImages: to create an image, or to change an image the person attached (\"put this person in Paris\", \"make it a cartoon\"), call make_image { prompt } right away: it edits their attached image by default and posts the result in this chat."
   + " Do not search skills or tools for an image capability first, and do not load a skill for it. Say at most one short sentence before the call, and after it at most one short line (the image is already shown)."
   + " If it answers that no image provider is connected, tell the person in one line to connect xAI or OpenAI in Settings > Providers, and stop.";
-/** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
-export const BASH_MAX_TIMEOUT_MS = 600_000;
+/** A day: a long command that keeps working is not cut short. The turn
+ * watchdog stops one whose processes show neither output nor CPU use for its
+ * tool limit, and names it as looking stuck (port of OpenMausBot #5585). */
+export const BASH_MAX_TIMEOUT_MS = 24 * 60 * 60_000;
+/** The default cap; a person's own BASH_MAX_TIMEOUT_MS can be lower. */
+export const BASH_MAX_TIMEOUT_TEXT = `${BASH_MAX_TIMEOUT_MS}, which is ${BASH_MAX_TIMEOUT_MS / 60_000} minutes, unless a lower limit is set here`;
 const LONG_COMMANDS_TEXT =
-  ` Long-running shell commands: a shell call is stopped after a default limit (2 minutes for a Bash call) and the output of a stopped command is lost. Before running anything that can take more than a minute, such as transcription (whisper), ffmpeg or ffprobe over long media, renders, large builds or big file transfers, either pass a longer per-call timeout (Bash takes \`timeout\` in milliseconds, up to ${BASH_MAX_TIMEOUT_MS}) or start it detached with its output in a file (\`nohup <command> > /tmp/<job>.log 2>&1 &\`) and check that file in later calls. Never scan the whole disk with \`find /\` or similar: search by name with \`mdfind -name\` on macOS, or search a specific folder such as your workspace or home with a depth limit. If a command times out, do not rerun it the same way.`;
+  ` Long-running shell commands: a shell call is stopped after a default limit (2 minutes for a Bash call) and the output of a stopped command is lost. Before running anything that can take more than a minute, such as transcription (whisper), ffmpeg or ffprobe over long media, renders, large builds or big file transfers, either pass a longer per-call timeout (Bash takes \`timeout\` in milliseconds, up to ${BASH_MAX_TIMEOUT_TEXT}) or start it detached with its output in a file (\`nohup <command> > /tmp/<job>.log 2>&1 &\`) and check that file in later calls. Never scan the whole disk with \`find /\` or similar: search by name with \`mdfind -name\` on macOS, or search a specific folder such as your workspace or home with a depth limit. If a command times out, do not rerun it the same way.`;
 const VM_LONG_COMMANDS_TEXT =
   " In your Local VM, vm_exec takes `timeout_seconds` instead (default 60, at most 300); start anything longer detached the same way, inside the VM, and check its log with later vm_exec calls.";
 export function longCommandsPrompt(computer: ComputerPromptKind | null): string {

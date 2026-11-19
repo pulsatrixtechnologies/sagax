@@ -14,6 +14,23 @@ import { CustomRuleNoticeLine } from "./CustomRuleNotice";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
 import { connectorRefusalIn } from "../../shared/connector-refusal";
 import type { LocaleKey } from "@/locales";
+import type { McpFailureKind } from "../../shared/mcp-failure";
+
+/** port of OpenMausBot #5105: a failed MCP step names its server and why. */
+const MCP_PROBLEM_KEY: Readonly<Record<McpFailureKind, LocaleKey>> = {
+  "sign-in": "step.mcpProblem.signIn",
+  refused: "step.mcpProblem.refused",
+  "not-found": "step.mcpProblem.notFound",
+  timeout: "step.mcpProblem.timeout",
+  "cant-connect": "step.mcpProblem.cantConnect",
+};
+
+/** The line a failed step on one of the person's MCP servers reads with. */
+export function mcpProblemLine(tool: Tool, phase: string): string | undefined {
+  const problem = phase === "failed" ? tool.mcpProblem : undefined;
+  const key = problem ? MCP_PROBLEM_KEY[problem.kind] : undefined;
+  return problem && key ? t(key, { name: problem.server }) : undefined;
+}
 
 type Tool = NonNullable<Message["tool"]>;
 
@@ -47,19 +64,20 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false, 
   }
   const phase = stepPhase(tool, live);
   const reading = readStep(tool, nameOf, live);
+  const problem = mcpProblemLine(tool, phase);
   // Where the tool ran: the person's server environment or their own computer.
   const target = toolExecutionTarget(tool.name, place);
   const status = phase === "running" ? t("toolDetail.running") : phase === "unverified" ? t("toolDetail.unverified") : phase === "failed" ? t("toolDetail.failed") : t("toolDetail.completed");
   const row = (
     <StepRow
       testId="tool-activity"
-      label={reading.label}
-      target={reading.target}
+      label={problem ?? reading.label}
+      target={problem ? undefined : reading.target}
       phase={phase}
       defaultOpen={defaultOpen}
       duration={phase === "running" ? undefined : stepDuration(tool.durationMs)}
       title={reading.title}
-      ariaLabel={t("toolDetail.label", { name: reading.label, status })}
+      ariaLabel={t("toolDetail.label", { name: problem ?? reading.label, status })}
       icon={place ? <PlaceIcon place={place} size={13} className="shrink-0" role="img" aria-label={t(placeLabelKey(place))} data-testid="tool-place" /> : undefined}
       extra={target ? (
         <span className="shrink-0 text-[11px] text-ink-tertiary" data-testid="tool-target" data-target={target}>
@@ -129,8 +147,10 @@ export function ToolStepDetail({ tool, status, nameOf, place = null, live = fals
   const said = phase === "failed" && failure ? connectorRefusalIn(failure, (key) => t(key as LocaleKey)) : undefined;
   const result = stepResult(said ?? failure);
   const duration = stepDuration(tool.durationMs);
+  const problem = mcpProblemLine(tool, phase);
   return (
     <div className="space-y-2 py-1 text-[12px] text-ink-secondary" data-testid="tool-step-detail">
+      {problem && <p className="text-[12px] text-ink" data-testid="tool-mcp-problem">{t("step.mcpProblem.fix")}</p>}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className={KEY}>{t("step.detail.tool")}</span>
         <span className="min-w-0 break-words text-[12px] text-ink" data-testid="tool-step-name">{toolName}</span>

@@ -20,7 +20,7 @@ import {
 import { CODEX_SHELL_SET, extendShellExclusions } from "./shell-policy.ts";
 import { isDeepStrictEqual } from "node:util";
 import { plainRecord } from "./plain.ts";
-import { CodexRpcError, archivedNativeCodexThread, missingNativeCodexThread } from "./rpc.ts";
+import { CodexRpcError, archivedNativeCodexThread, codexProviderMismatch, missingNativeCodexThread } from "./rpc.ts";
 import { codexShellDisabled } from "./launch-args.ts";
 import type { CodexSession } from "./session-types.ts";
 import { redactSecretsInText } from "../../redact.ts";
@@ -267,7 +267,7 @@ try {
         producedOutput: s.state.sawStreamDelta,
       });
       if (s.recoveredMissingSession || s.stopRequested || s.state.settled ||
-          !turn.recoveryText?.trim() || !(missingNativeCodexThread(error, cursor) || archivedNativeCodexThread(error, cursor)) || !mayReplay(failure)) throw error;
+          !turn.recoveryText?.trim() || !(missingNativeCodexThread(error, cursor) || archivedNativeCodexThread(error, cursor) || codexProviderMismatch(error)) || !mayReplay(failure)) throw error;
       // The prompt has never been submitted and Codex no longer has the
       // thread: without a rebuild every later turn resumes the same
       // missing rollout and fails the same way. Rebuild it from the

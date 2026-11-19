@@ -22,6 +22,12 @@ export function object(value: unknown): Record<string, unknown> | undefined {
 
 /** Opaque provider reasoning blocks must keep their original order/signatures.
  * OpenRouter streams the sequence as arrays of blocks, not tool-call deltas. */
+/** One completion's reasoning blocks, as JSON. Streamed blocks repeat their
+ * type/format/index on every delta, so this counts many times the reasoning
+ * text itself; a long tool chain on a reasoning model can pass 256 KB.
+ * Upstream #4802. */
+export const MAX_REASONING_DETAIL_CHARS = 4_000_000;
+
 export class ChatReasoningDetails {
   readonly blocks: Record<string, unknown>[] = [];
   private chars = 0;
@@ -32,8 +38,9 @@ export class ChatReasoningDetails {
       throw new ChatProtocolError("provider returned invalid reasoning details");
     }
     this.chars += JSON.stringify(value).length;
-    if (this.chars > 256_000) throw new ChatProtocolError("provider reasoning details exceeded the size limit");
-    this.blocks.push(...value);
+    if (this.chars > MAX_REASONING_DETAIL_CHARS) throw new ChatProtocolError("provider reasoning details exceeded the size limit");
+    // One push per block: spreading a huge array into push() can pass the engine's argument limit.
+    for (const block of value) this.blocks.push(block);
   }
 }
 

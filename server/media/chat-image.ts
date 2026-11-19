@@ -83,7 +83,8 @@ export async function chatImageCredential(input: {
 
 const NAMES: Record<ChatImageProvider, string> = { xai: "xAI", openai: "OpenAI", custom: "Custom" };
 const responseSchema = z.object({
-  data: z.array(z.object({ b64_json: z.string().min(1).optional(), url: z.string().optional() })).min(1),
+  // OpenAI-compatible gateways send unused fields such as url as null (upstream #4802).
+  data: z.array(z.object({ b64_json: z.string().min(1).nullish(), url: z.string().nullish() })).min(1),
 });
 
 /** One generation or edit; the result is the decoded raster. */

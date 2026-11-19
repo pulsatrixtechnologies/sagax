@@ -266,9 +266,16 @@ export function requestOrigin(req: IncomingMessage): string | null {
  * server a loopback Host (or forwards `Host: localhost` from a stranger)
  * must not turn a remote client into the owner. */
 export function isProxied(req: IncomingMessage): boolean {
-  const h = req.headers;
-  return ipcPeer(req) || Boolean(h["x-forwarded-for"] || h["x-forwarded-proto"] || h["x-forwarded-host"] || h["forwarded"]);
+  if (ipcPeer(req)) return true;
+  return PROXY_HEADERS.some((name) => req.headers[name] !== undefined);
 }
+
+/** Every header a reverse proxy uses to name its client, so one that sets
+ * only X-Real-IP (or a CDN's own header) is still not loopback (upstream #4803). */
+const PROXY_HEADERS = [
+  "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "forwarded",
+  "x-real-ip", "cf-connecting-ip", "true-client-ip", "x-client-ip",
+] as const;
 
 /** A request over an IPC listener (a unix socket or a named pipe) has no peer
  * address. Only a gateway on this machine can reach such a listener, and it

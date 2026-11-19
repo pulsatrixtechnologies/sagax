@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { operatorEnvKey } from "./operator-env-key.ts";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { imageTransportAllowed } from "./chat-images.ts";
@@ -65,7 +66,7 @@ export const MistralDriver: ProviderDriver<MistralConfig> = {
   defaultConfig: () => decodeConfig({}),
   async create(input) {
     const { config } = input;
-    const apiKey = (input.environment.MISTRAL_API_KEY ?? process.env.MISTRAL_API_KEY ?? "").trim();
+    const apiKey = (input.environment.MISTRAL_API_KEY ?? operatorEnvKey("MISTRAL_API_KEY") ?? "").trim();
     const withConfiguredModel = (options: ModelCatalog["options"]): ModelCatalog => {
       const preferred = config.model ?? DEFAULT_MODELS.default;
       if (config.model && !options.some((option) => option.id === config.model)) {

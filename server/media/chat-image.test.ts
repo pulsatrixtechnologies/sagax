@@ -58,6 +58,12 @@ describe("renderChatImage (#2954)", () => {
     expect(body.image.url).toMatch(/^data:image\/png;base64,/);
   });
 
+  it("accepts a gateway that sends url and revised_prompt as null next to the image (upstream #4802)", async () => {
+    const { fetchImpl } = recorder(() => new Response(JSON.stringify({ created: 1, data: [{ b64_json: PNG_B64, url: null, revised_prompt: null }] }), { status: 200 }));
+    const out = await renderChatImage({ provider: "openai", key: "k", baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL }, { prompt: "owl" }, fetchImpl);
+    expect(out.mime).toBe("image/png");
+  });
+
   it("edits on OpenAI as multipart and generates as JSON", async () => {
     const { calls, fetchImpl } = recorder();
     const cred = { provider: "openai" as const, key: "k", baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL };

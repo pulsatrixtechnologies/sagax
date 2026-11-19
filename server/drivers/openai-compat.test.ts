@@ -23,6 +23,26 @@ describe("OpenAICompatDriver", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the desktop store's workspace key away from an instance with its own URL (upstream #5280)", async () => {
+    vi.stubEnv("SAGAX_DESKTOP_PARENT", "1");
+    process.env.OPENAI_COMPAT_API_KEY = "sk-or-STORE";
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      seen.push(JSON.stringify(init?.headers ?? {}));
+      return new Response('{"data":[]}', { headers: { "content-type": "application/json" } });
+    }));
+    try {
+      const inst = await OpenAICompatDriver.create({
+        instanceId: "router", displayName: "Router", enabled: true,
+        config: OpenAICompatDriver.decodeConfig({ url: "https://third-party.example.test/v1" }), environment: {},
+      });
+      await inst.refreshModels?.();
+      await inst.snapshot();
+      expect(JSON.stringify(seen)).not.toContain("STORE");
+      await inst.dispose();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("registers with the openai-compat kind and a display name", () => {
     expect(OpenAICompatDriver.driverKind).toBe("openai-compat");
     expect(OpenAICompatDriver.metadata.displayName).toBe("Other (OpenAI-compatible)");

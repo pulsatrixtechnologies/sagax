@@ -204,3 +204,42 @@ describe("Grok voice key fold (2026-10-14)", () => {
     expect(grokVoiceFoldLog(null)).toBeNull();
   });
 });
+
+// Port of upstream #5280: every AI provider key goes to the encrypted store.
+const AI_PROVIDER_KEYS = [
+  ["openai", "openaiApiKey", "SAGAX_OPENAI_API_KEY"],
+  ["anthropic", "anthropicApiKey", "SAGAX_ANTHROPIC_API_KEY"],
+  ["openrouter", "openrouterApiKey", "SAGAX_OPENROUTER_API_KEY"],
+  ["mistral", "mistralApiKey", "MISTRAL_API_KEY"],
+  ["cerebras", "cerebrasApiKey", "CEREBRAS_API_KEY"],
+  ["groq", "groqApiKey", "SAGAX_GROQ_API_KEY"],
+  ["meta", "metaApiKey", "SAGAX_META_API_KEY"],
+  ["deepseek", "deepseekApiKey", "SAGAX_DEEPSEEK_API_KEY"],
+  ["openaiCompat", "openaiCompatApiKey", "OPENAI_COMPAT_API_KEY"],
+];
+
+describe("AI provider keys in the encrypted store", () => {
+  it.each(AI_PROVIDER_KEYS)("moves %s into its slot and hands it to the server under its own variable", (section, name, env) => {
+    const result = migrateWorkspaceCredentials({ [section]: { key: `fixture-${section}` } }, {});
+    expect(result.credentials).toEqual({ [name]: `fixture-${section}` });
+    expect(result.config).toEqual({ [section]: {} });
+    expect(workspaceCredentialEnv(result.credentials)).toEqual({ [env]: `fixture-${section}` });
+  });
+
+  it("keeps the Anthropic and OpenAI-compatible settings that are not secrets", () => {
+    const { config } = migrateWorkspaceCredentials({
+      anthropic: { key: "ant", url: "https://claude.example.test", everyClaudeBot: false },
+      openaiCompat: { key: "compat", url: "http://127.0.0.1:1234/v1", model: "local", provider: "pin" },
+    }, {});
+    expect(config).toEqual({
+      anthropic: { url: "https://claude.example.test", everyClaudeBot: false },
+      openaiCompat: { url: "http://127.0.0.1:1234/v1", model: "local", provider: "pin" },
+    });
+  });
+
+  it("has a save patch for every slot, and a first Anthropic key keeps Claude bots on their sign-in", async () => {
+    const { CREDENTIAL_PATCH } = await import("./credential-patch.mjs");
+    for (const [section, name] of AI_PROVIDER_KEYS) expect(CREDENTIAL_PATCH[name]?.("k")).toEqual({ [section]: { key: "k" } });
+    expect(CREDENTIAL_PATCH.anthropicApiKey("k", { everyClaudeBot: false })).toEqual({ anthropic: { key: "k", everyClaudeBot: false } });
+  });
+});

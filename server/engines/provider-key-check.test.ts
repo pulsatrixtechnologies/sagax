@@ -1,6 +1,17 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { allowedProviderTestUrl, checkProviderKey, providerModelsUrl } from "./provider-key-check.ts";
+import { allowedProviderTestUrl, checkProviderKey, isLoopback, providerModelsUrl } from "./provider-key-check.ts";
+
+// upstream #4803: only a literal 127.x address is loopback, never a host name.
+describe("loopback hosts for HTTP key checks", () => {
+  it.each(["localhost", "127.0.0.1", "127.0.0.2", "127.255.255.255", "::1", "[::1]"])("accepts the local host %s", host => {
+    expect(isLoopback(host)).toBe(true);
+  });
+
+  it.each(["127.example.test", "127.0.0.1.example.test", "127.0.0.999", "127.", "128.0.0.1", "example.test"])("rejects the non-loopback host %s", host => {
+    expect(isLoopback(host)).toBe(false);
+  });
+});
 
 // A local stand-in for a provider's models endpoint. It records the
 // headers it saw and answers per the key it was given; no real provider

@@ -12,7 +12,7 @@ import { qualifiedModelLabel } from "../contracts.ts";
 import { engineStartGate } from "../engines/engine-start-gate.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { codexHome } from "./codex-identity.ts";
-import { mergeLocalInject } from "./local-inject.ts";
+import { codexLocalProviderArgs, mergeLocalInject } from "./local-inject.ts";
 import { parseModelEffortFacts } from "../../shared/model-capabilities.ts";
 
 export const STATIC_CODEX_MODELS: ModelCatalog = {
@@ -57,6 +57,14 @@ export function decodeCodexSelection(id: string | null | undefined): {
   // always provider-qualified above, so a newly released cloud model must not
   // silently fall through to the user's configured local provider.
   return { model: id, modelProvider: MODEL_ID.test(id) ? OFFICIAL_CODEX_PROVIDER : null };
+}
+
+/** Starts Codex on the chosen model's provider: codex-cli refuses a turn
+ * whose thread provider differs from its current one, whatever config.toml's
+ * model_provider says. Upstream #4802. */
+export function codexSelectedProviderArgs(env: Record<string, string | undefined>, modelId: string | null | undefined): string[] {
+  const provider = decodeCodexSelection(modelId).modelProvider;
+  return [...codexLocalProviderArgs(env, modelId), ...(provider ? ["-c", `model_provider=${JSON.stringify(provider)}`] : [])];
 }
 
 interface CodexAppServerModel {

@@ -17,6 +17,16 @@ export const WORKSPACE_CREDENTIALS = [
   { section: "imageGen", field: "customApiKey", name: "customImageApiKey", env: "SAGAX_CUSTOM_IMAGE_KEY" },
   { section: "openai", field: "key", name: "openaiApiKey", env: "SAGAX_OPENAI_API_KEY" },
   { section: "opencodeGo", field: "apiKey", name: "opencodeGoApiKey", env: "OPENCODE_API_KEY" },
+  // Every AI provider key, not only OpenAI's (port of upstream #5280). The
+  // env names are the ones server/config.ts loadConfig already reads.
+  { section: "anthropic", field: "key", name: "anthropicApiKey", env: "SAGAX_ANTHROPIC_API_KEY" },
+  { section: "openrouter", field: "key", name: "openrouterApiKey", env: "SAGAX_OPENROUTER_API_KEY" },
+  { section: "mistral", field: "key", name: "mistralApiKey", env: "MISTRAL_API_KEY" },
+  { section: "cerebras", field: "key", name: "cerebrasApiKey", env: "CEREBRAS_API_KEY" },
+  { section: "groq", field: "key", name: "groqApiKey", env: "SAGAX_GROQ_API_KEY" },
+  { section: "meta", field: "key", name: "metaApiKey", env: "SAGAX_META_API_KEY" },
+  { section: "deepseek", field: "key", name: "deepseekApiKey", env: "SAGAX_DEEPSEEK_API_KEY" },
+  { section: "openaiCompat", field: "key", name: "openaiCompatApiKey", env: "OPENAI_COMPAT_API_KEY" },
 ];
 
 /** One boot-time sweep of config.json: move every plaintext workspace secret

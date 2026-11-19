@@ -589,6 +589,15 @@ export function createApplyConfigHttpPatch(getHost: () => ConfigHttpPatchHost): 
         if (persisted.imageGen?.key !== undefined) persisted.imageGen.key = "";
         if (persisted.imageGen?.customApiKey !== undefined) persisted.imageGen.customApiKey = "";
         if (persisted.openai?.key !== undefined) persisted.openai.key = "";
+        // Every AI provider key the desktop keeps encrypted (upstream #5280).
+        if (persisted.anthropic?.key !== undefined) persisted.anthropic.key = "";
+        if (persisted.openrouter?.key !== undefined) persisted.openrouter.key = "";
+        if (persisted.mistral?.key !== undefined) persisted.mistral.key = "";
+        if (persisted.cerebras?.key !== undefined) persisted.cerebras.key = "";
+        if (persisted.groq?.key !== undefined) persisted.groq.key = "";
+        if (persisted.meta?.key !== undefined) persisted.meta.key = "";
+        if (persisted.deepseek?.key !== undefined) persisted.deepseek.key = "";
+        if (persisted.openaiCompat?.key !== undefined) persisted.openaiCompat.key = "";
         saveConfig(persisted);
         configWriteCommitted = true;
         syncCredentialEnv(patch);

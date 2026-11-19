@@ -7,6 +7,7 @@ import { refusedModelsStore } from "../models/refused-models.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { anthropicTransport } from "./anthropic-compat.ts";
 import { currentEnvName, readEnvName } from "../../electron/legacy-names.mjs";
+import { operatorEnvKey } from "./operator-env-key.ts";
 import {
   azureDeploymentLabel,
   azureDeployments,
@@ -189,8 +190,8 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       config.key ??
       readEnvName(config.apiKeyEnv, input.environment) ??
       (ownKeyVariable ? undefined : input.environment[DEFAULT_KEY_ENV]) ??
-      readEnvName(config.apiKeyEnv) ??
-      (ownKeyVariable ? undefined : process.env[DEFAULT_KEY_ENV]) ??
+      operatorEnvKey(config.apiKeyEnv) ??
+      (ownKeyVariable ? undefined : operatorEnvKey(DEFAULT_KEY_ENV)) ??
       "";
     // The default key and the built-in providers' keys are saved in
     // Settings → API keys; any other variable is configured where it was written.

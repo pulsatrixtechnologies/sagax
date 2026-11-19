@@ -551,7 +551,7 @@ const bridge = {
   /** For each path, its absolute form when it exists on this computer, else null. */
   localFilesExist: (filePaths) => ipcRenderer.invoke("desktop:files-exist", filePaths),
   /** Store a provider credential with OS-backed encryption. */
-  setCredential: (name, value) => ipcRenderer.invoke("credential:set", name, value),
+  setCredential: (name, value, options) => ipcRenderer.invoke("credential:set", name, value, options),
   /** Saved keys this launch could not read, and "Reset saved keys": main moves the unreadable file aside (kept) and restarts. */
   credentialStore: {
     unreadable: () => ipcRenderer.invoke("credential-store:unreadable"),

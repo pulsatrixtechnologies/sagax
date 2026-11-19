@@ -11,6 +11,17 @@ const create = (config = {}) => MistralDriver.create({
 });
 
 describe("Mistral provider", () => {
+  it("keeps the desktop store's workspace key away from an instance with its own URL (upstream #5280)", async () => {
+    vi.stubEnv("SAGAX_DESKTOP_PARENT", "1");
+    vi.stubEnv("MISTRAL_API_KEY", "fixture-workspace-key");
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+    const instance = await MistralDriver.create({ instanceId: "own-url", displayName: "Mine", enabled: true,
+      config: MistralDriver.decodeConfig({ url: "https://mine.example.test/v1" }), environment: {} });
+    expect(await instance.snapshot()).toMatchObject({ state: "unavailable" });
+    expect(fetcher).not.toHaveBeenCalled();
+    await instance.dispose();
+  });
+
   it("uses each turn's personal key and never falls back to the organization's key for a personal turn", async () => {
     const sent: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url, init) => {

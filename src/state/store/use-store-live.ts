@@ -4,7 +4,6 @@ import { flushSync } from "react-dom";
 import type { ServerFrame } from "../../../shared/wire";
 import { openLiveEvents, publishLiveFrame, publishMissedFrames } from "@/lib/live-events";
 import { loadServerFeatures, noteRoutinesListing } from "@/lib/server-features";
-import { noteAutoUpdated } from "@/lib/capability-updates";
 import { readLastConversation } from "@/lib/last-conversation";
 import { foldLiveFrame } from "./fold-live-frame";
 import {
@@ -260,7 +259,6 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
     // transcript on a reconnect it already covered is pure waste.
     handleFrame = (frame) => {
       // #4504: updates changed (a check, an update): the Connect Apps window reads the list again
-      if (frame.kind === "capability.updates" && frame.autoUpdated?.length) noteAutoUpdated(frame.autoUpdated);
       if (frame.kind === "capability.updates" && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("sagax:capability-updates"));
       if (frame.kind === "config") bumpPeripheralVersion("config", "instances");
       else if (frame.kind === "routine" || frame.kind === "routine.deleted" || frame.kind === "routine.run" || frame.kind === "routine.folders") {

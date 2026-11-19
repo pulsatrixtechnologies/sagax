@@ -1168,6 +1168,7 @@ import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { resolveGithubClientId } from "./github/builtin-client.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, type OrgCapabilityMount, type OrgCapabilityView } from "./org/org-capabilities.ts";
+import { FileUpdateHistory } from "./capabilities/update-history.ts";
 import { CAPABILITY_UPDATES_FRAME, CHECK_INTERVAL_MS, CapabilityUpdates, type UpdatePerson } from "./capabilities/capability-updates.ts";
 import { connectorUpdateProvider, pluginUpdateProvider, skillUpdateProvider, type InstalledConnectorRecord, type InstalledPluginRecord, type InstalledSkillRecord } from "./capabilities/capability-update-providers.ts";
 import { createCapabilityUpdatesRoutes } from "./routes/capability-updates.ts";
@@ -27510,11 +27511,11 @@ const capabilityUpdates = new CapabilityUpdates({
   // the bots' owners, as their own GET sees them (an admin manages this
   // installation's items); the people who read their list are known too
   people: () => updatePeople().map((person) => ({ id: person, manager: IDENTITY.kind !== "perspicax" || principalIsOrgAdmin(person) })),
-  // a plugin the catalog moved on is updated by itself (#475 side of the host); the frame says what changed in one line
+  // a plugin the catalog moved on is updated by itself (#475 side of the host); no banner, the item page keeps the history
   autoUpdate: { kinds: ["plugin"] },
-  notify: (person, view, autoUpdated) => broadcast({
+  history: new FileUpdateHistory(join(DATA_DIR, "capability-update-history.json")),
+  notify: (person, view) => broadcast({
     kind: CAPABILITY_UPDATES_FRAME, audience: person, count: view.count, checkedAt: view.checkedAt,
-    ...(autoUpdated?.length ? { autoUpdated: autoUpdated.map((one) => ({ name: one.name, ...(one.from ? { from: one.from } : {}), ...(one.to ? { to: one.to } : {}), ...(one.updateNotes ? { notes: one.updateNotes } : {}) })) } : {}),
   }),
 });
 ROUTES.push(createCapabilityUpdatesRoutes({

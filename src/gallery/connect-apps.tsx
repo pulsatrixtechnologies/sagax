@@ -33,7 +33,6 @@ import { capabilityFixture } from "../lib/capabilities.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore } from "../state/store";
 import { parsePersonProducts } from "../../shared/person-products";
-import { noteAutoUpdated } from "../lib/capability-updates";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -400,9 +399,10 @@ let galleryUpdates = [
   { key: "skill:me:me:weekly-summary", kind: "skill", name: "weekly-summary", scope: "me", installedVersion: "a1b2c3d", availableVersion: "e4f5a6b", updateAvailable: true, canUpdate: true },
   { key: "plugin:organization:organization:compliance-pack", kind: "plugin", name: "Compliance Pack", scope: "organization", organization: "required", pinned: "0.9.4", installedVersion: "0.9.4", availableVersion: "0.9.5", updateAvailable: true, canUpdate: false },
 ] as Array<Record<string, unknown> & { key: string; name: string; canUpdate: boolean; installedVersion?: string; availableVersion?: string }>;
-if (params.get("updates") === "auto") noteAutoUpdated([{ name: "Dispatch Kit", from: "1.4.0", to: "1.5.0", notes: "Routing rules are faster." }]);
+// ?updates=history: plugins updated by themselves; no banner, the plugin's own page keeps one line (M-20261119-040)
+const galleryHistory = params.get("updates") === "history" ? [{ kind: "plugin", name: "Code Review", at: Date.UTC(2026, 10, 18, 15), from: "0.33.6", to: "0.33.8" }] : [];
 if (params.has("updates")) {
-  MANAGE_API["/api/me/capability-updates"] = { get count() { return galleryUpdates.filter((item) => item.canUpdate).length; }, checkedAt: Date.now(), checking: false, get items() { return galleryUpdates; } };
+  MANAGE_API["/api/me/capability-updates"] = { history: galleryHistory, get count() { return params.get("updates") === "history" ? 0 : galleryUpdates.filter((item) => item.canUpdate).length; }, checkedAt: Date.now(), checking: false, get items() { return params.get("updates") === "history" ? [] : galleryUpdates; } };
 }
 
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.

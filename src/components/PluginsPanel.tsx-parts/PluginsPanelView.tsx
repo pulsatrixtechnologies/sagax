@@ -31,8 +31,8 @@ import { productPlugins } from "@/lib/product-plugins";
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
 import { statusState, type RowState } from "../plugins/StateIcon";
-import { AutoUpdatedNotice, UpdateNotice } from "../plugins/UpdateNotice";
-import { updateKindOf, updateOf, useCapabilityUpdates, type UpdateKind } from "@/lib/capability-updates";
+import { UpdateNotice } from "../plugins/UpdateNotice";
+import { lastUpdateOf, updateKindOf, updateOf, useCapabilityUpdates, type UpdateKind } from "@/lib/capability-updates";
 import { usePersonProducts } from "@/lib/person-products";
 import { ConnectAppsView, DiscoverFilter, SortControl, UpdateAllPill, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
@@ -236,6 +236,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       s={s}
       a={a}
       products={products}
+      lastUpdateInfo={(kind, name) => lastUpdateOf(updates.data, kind, name)}
       updateInfo={(kind, name, key, organizationId) => updateOf(updates.data, kind, name, key, organizationId)}
       itemUpdate={(kind, name, key) => {
         const info = updateOf(updates.data, kind, name, key);
@@ -550,7 +551,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         <UpdateNotice key={failure.key} failure={failure} onClose={() => updates.dismissFailure(failure.key)}
           onRetry={() => { updates.dismissFailure(failure.key); void updates.update([failure.key]); }} />
       ))}
-      {updates.autoUpdated.map((line) => <AutoUpdatedNotice key={line.name} line={line} onClose={() => updates.dismissAutoUpdated(line.name)} />)}
       {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
       <SavedKeysResetNotice panel />
     </>

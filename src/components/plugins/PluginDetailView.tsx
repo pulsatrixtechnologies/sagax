@@ -22,7 +22,7 @@ import type { RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
 import { ItemTrailer } from "./ItemTrailer";
-import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, UpdateNote, VersionPill, type ConnectorWord, type TreeFile, DETAIL_BODY, HEADER_ACTION } from "./DetailParts";
+import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, LastUpdateNote, UpdateNote, VersionPill, type ConnectorWord, type TreeFile, DETAIL_BODY, HEADER_ACTION } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 
 export interface DetailTool {
@@ -128,12 +128,14 @@ export interface PluginDetailProps {
   files?: { listUrl: string; /** the version the pill names (the install's) */ version?: string; extra?: readonly TreeFile[]; count?: number; onDownload?: () => void };
   /** the update waiting: its versions and notes, said once in the Overview (the header holds the button); the Contents pill reads the same */
   update?: { from?: string; to?: string; notes?: string };
+  /** the last update it had (from the history the server keeps), said in one line when none is waiting */
+  lastUpdate?: { at: number; from?: string; to?: string };
 }
 
 type DetailTab = "overview" | "contents" | "skills" | "connectors";
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, uninstallLabel, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files, update } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, uninstallLabel, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files, update, lastUpdate } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
@@ -214,7 +216,7 @@ export function PluginDetailView(props: PluginDetailProps) {
         <OverviewColumns
           description={description}
           categories={categories}
-          beneath={update ? <UpdateNote from={update.from} to={update.to} notes={update.notes} /> : undefined}
+          beneath={update ? <UpdateNote from={update.from} to={update.to} notes={update.notes} /> : lastUpdate ? <LastUpdateNote at={lastUpdate.at} from={lastUpdate.from} to={lastUpdate.to} /> : undefined}
           reach={connectors && connectors.length > 0 ? (
             <ReachPanel network={network === true} rows={connectors.map((connector) => ({ key: connector.key, name: connector.name, state: connector.state, icon: <PluginIcon item={connector.item} className="size-5 rounded-md" /> }))} />
           ) : undefined}

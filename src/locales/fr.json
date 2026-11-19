@@ -15267,7 +15267,7 @@
   "connectApps.count.pluginOne": "1 plugin",
   "connectApps.count.pluginMany": "{count} plugins",
   "connectApps.showAllRows": "Afficher les {count}",
-  "connectApps.showMoreRows": "Afficher {count} de plus",
+  "connectApps.showMoreRows": "Afficher {count} autres",
   "connectApps.add.fromCatalog": "Depuis le catalogue",
   "connectApps.add.fromMarketplace": "Depuis une marketplace",
   "connectApps.add.marketplace": "Ajouter une marketplace",

@@ -9,7 +9,7 @@
  * call ends, the state turns into posted (with the link) or failed. */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { X_POST_PASS_MS, isXAccountTool, isXurlWhoAmI, isXMediaHost, isXPostTool, normalizeXDraft, parseXPostsFence, xAccountFromOutput, xAvatarSized, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, xReplyFromInput, type XAccount, type XPostRequest } from "../../shared/x-post.ts";
+import { X_POST_PASS_MS, isXAccountTool, isXurlWhoAmI, isXMediaHost, isXPostTool, normalizeXDraft, parseXPostsFence, xAccountFromOutput, xAvatarSized, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, xReplyFromInput, type XAccount, type XBrowserPost, type XPostRequest } from "../../shared/x-post.ts";
 export type Host = Record<string, any>;
 
 interface Pass { threadId: string; botId: string; messageId: string; draftKey: string; text: string; handle?: string; expires: number }
@@ -288,5 +288,34 @@ export function createXPostCard(getHost: () => Host): any {
     remember(getHost(), botId, found);
   }
 
-  return { post, discard, status, takePass, finish, account, learnAccount, key: xDraftKey };
+  /** A post made by clicking Post in the bot's own browser, with no X tool call: the same Posted card.
+   * A draft the person approved on its card and the bot then posted by hand turns posted instead. */
+  function browserPost(botId: string, threadId: string, found: XBrowserPost) {
+    const host = getHost();
+    const bot = host.store.bot(botId);
+    if (!bot || !host.store.botByThread(threadId) && !host.store.groupByThread(threadId)) return;
+    const rows = host.store.messagesFor(threadId);
+    // told once: a card (or a draft state) already holds this post
+    if (rows.slice(-40).some((row: any) => String(row.text ?? "").includes(`"id":"${found.id}"`) || Object.values(row.xPosts ?? {}).some((request: any) => request?.url === found.url))) return;
+    learnHandleFromUrl(host, botId, found.url);
+    const normal = (value: string) => value.replace(/\s+/g, " ").trim();
+    for (const row of rows) {
+      for (const request of Object.values(row.xPosts ?? {}) as XPostRequest[]) {
+        if (request.status !== "sending" || (found.text && normal(request.text) !== normal(found.text))) continue;
+        drop(threadId, request.draftKey);
+        patchState(host, threadId, row.id, request.draftKey, { status: "posted", url: found.url });
+        return;
+      }
+    }
+    if (!found.text) return;
+    showPosted(host, threadId, { botId: bot.id, name: bot.name, ...(bot.color ? { color: bot.color } : {}) }, found.text, found.url);
+  }
+  /** The link names the account that posted: enough for the card when the page showed no menu. */
+  function learnHandleFromUrl(host: Host, botId: string, url: string) {
+    const handle = /^https:\/\/x\.com\/([A-Za-z0-9_]{1,15})\//.exec(url)?.[1];
+    if (!handle || accounts(host)[botId]?.handle?.toLowerCase() === handle.toLowerCase()) return;
+    if (!accounts(host)[botId]) remember(host, botId, { handle, name: handle, verified: false });
+  }
+
+  return { post, discard, status, takePass, finish, account, learnAccount, browserPost, key: xDraftKey };
 }

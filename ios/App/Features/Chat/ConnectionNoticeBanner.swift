@@ -115,8 +115,12 @@ final class ConnectionNoticeCenter: ObservableObject {
                         guard let self, self.machine.probing else { break }
                         guard let client = self.session?.settingsClient else { continue }
                         let result = await client.connectionHealth()
+                        let wasOk = self.machine.probe == .ok
                         self.machine.probed(result, at: Self.now)
                         self.update()
+                        // the server answers again: reconnect now instead of
+                        // at the end of the stream's backoff (up to 15 s)
+                        if result == .ok, !wasOk { self.session?.retryStreamNow() }
                     }
                     self?.prober = nil
                 }

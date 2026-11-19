@@ -553,6 +553,56 @@ export function parseXIdentity(result: unknown): XAccount | null {
   return { handle, name, verified: value.verified === true, ...(picture && isXMediaHost(picture) ? { avatarUrl: picture } : {}) };
 }
 
+/** Run in the signed-in x.com page after a browser tool call: what the composer holds now (kept, so
+ * the post's text is known once the composer closes) and the toast X draws after "Post" with the
+ * link to the new post. It reads the page and nothing else: no request, no third party. */
+export const X_POST_SCRIPT = String.raw`(() => {'use strict';
+const box = document.querySelector('[data-testid="tweetTextarea_0"]');
+const draft = box ? String(box.innerText || '').trim() : '';
+const toast = document.querySelector('[data-testid="toast"]');
+let url = '';
+let text = '';
+if (toast) {
+  const link = toast.querySelector('a[href*="/status/"]');
+  if (link) {
+    url = new URL(link.getAttribute('href') || '', location.origin).href;
+    const id = (/\/status\/(\d{5,25})/.exec(url) || [])[1];
+    const own = id && Array.from(document.querySelectorAll('article')).find((item) => item.querySelector('a[href$="/status/' + id + '"]'));
+    const body = own && own.querySelector('[data-testid="tweetText"]');
+    text = body ? String(body.innerText || '').trim() : '';
+  }
+}
+return JSON.stringify({ draft, url, text });
+})()`;
+
+/** A post made by clicking in the browser: its link, and its text when the page still shows it. */
+export interface XBrowserPost { url: string; id: string; text?: string }
+/** What X_POST_SCRIPT saw: the composer's text, and a post that was just published. */
+export interface XPostWatch { draft?: string; post?: XBrowserPost }
+
+/** The answer of X_POST_SCRIPT. A link counts only when it is a post of x.com itself. */
+export function parseXPostWatch(result: unknown): XPostWatch | null {
+  const answer = result as { content?: unknown; isError?: unknown } | null;
+  if (!answer || answer.isError === true || !Array.isArray(answer.content)) return null;
+  const part = (answer.content as unknown[]).find((item) => typeof (item as { text?: unknown } | null)?.text === "string") as { text: string } | undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(part?.text ?? "");
+    if (typeof value === "string") value = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!isRow(value)) return null;
+  const draft = text(value.draft)?.slice(0, MAX_DRAFT_CHARS);
+  const link = text(value.url);
+  const match = link && isXSitePage(link) ? /^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})(?:[/?#]|$)/i.exec(link) : null;
+  const body = text(value.text)?.slice(0, MAX_DRAFT_CHARS);
+  return {
+    ...(draft ? { draft } : {}),
+    ...(match ? { post: { url: `https://x.com/${match[1]}/status/${match[2]}`, id: match[2]!, ...(body ? { text: body } : {}) } } : {}),
+  };
+}
+
 /** `xurl whoami` (the xurl CLI's own "who am I") run by a bot's shell tool. */
 export function isXurlWhoAmI(input: string | undefined): boolean {
   return Boolean(input && /(^|[^\w-])xurl\s+(whoami|\/2\/users\/me)\b/.test(input));

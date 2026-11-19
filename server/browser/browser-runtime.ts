@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
 import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
 import { itemIdFromHandle } from "../../shared/credential-vault.ts";
-import { isXSitePage, parseXIdentity, X_IDENTITY_SCRIPT, type XAccount } from "../../shared/x-post.ts";
+import { isXSitePage, parseXIdentity, parseXPostWatch, X_IDENTITY_SCRIPT, X_POST_SCRIPT, type XAccount, type XBrowserPost } from "../../shared/x-post.ts";
 import { MASK_SENSITIVE_SCRIPT, NO_PAGE_TEXT_TOOLS, parseSensitiveValues, SENSITIVE_VALUES_SCRIPT, UNMASK_SENSITIVE_SCRIPT, withSensitiveValues } from "../../shared/sensitive-fields.ts";
 import {
   parsePurchaseCall, parseReceiptCall, RECORD_PURCHASE_TOOL, RECORD_PURCHASE_TOOL_SPEC, REQUEST_PURCHASE_TOOL, REQUEST_PURCHASE_TOOL_SPEC,
@@ -600,7 +600,12 @@ export class BrowserRuntime {
   private onTiming?: (timing: BrowserTiming) => void;
   /** A signed-in x.com page showed who it is (the account menu): the host keeps it for the bot. */
   private onXAccount?: (session: string, account: XAccount) => void;
+  /** A post made by clicking on a signed-in x.com page (its toast with the link): the host shows its card. */
+  private onXPost?: (session: string, post: XBrowserPost) => void;
   private xReadAt = new Map<string, number>();
+  /** The text last seen in x.com's composer, per browser: the post's text once the composer has closed. */
+  private xDraft = new Map<string, { text: string; at: number }>();
+  private xPosted = new Map<string, Set<string>>();
   /** Sessions where a person is signing in themselves (armForPerson until
    * Done): kept apart from the redactor, which a restart forgets. */
   /** The clock of a person's sign-in (PERSON_SIGN_IN_MS), for tests. */
@@ -619,7 +624,7 @@ export class BrowserRuntime {
   /** One line when a signature cannot be attached. The page still opens. */
   private signatureFailureLogged = false;
 
-  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, scrub, onTiming, onXAccount, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void; onXAccount?: (session: string, account: XAccount) => void } = {}) {
+  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, scrub, onTiming, onXAccount, onXPost, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void; onXAccount?: (session: string, account: XAccount) => void; onXPost?: (session: string, post: XBrowserPost) => void } = {}) {
     this.now = now ?? Date.now;
     this.egressNotice = egressNotice;
     this.signNavigation = signNavigation;
@@ -630,6 +635,7 @@ export class BrowserRuntime {
     this.scrub = scrub ?? scrubHeldSecrets;
     this.onTiming = onTiming;
     this.onXAccount = onXAccount;
+    this.onXPost = onXPost;
   }
 
   private timed<T>(session: string, tool: string, phases: Partial<BrowserTiming>, fn: () => Promise<T>): Promise<T> {
@@ -986,7 +992,7 @@ export class BrowserRuntime {
         // typed during a takeover, a card number, a code) is hidden the same
         // way, whoever typed it. A page action learned it in its observation.
         if (toolName !== undefined && !NO_PAGE_TEXT_TOOLS.has(toolName) && !PAGE_ACTIONS.has(toolName)) await this.learnSensitiveValues(session, entry.client);
-        if (method === "tools/call" && toolName !== undefined && this.onXAccount) await this.learnXAccount(session, entry.client);
+        if (method === "tools/call" && toolName !== undefined && (this.onXAccount || this.onXPost)) await this.watchX(session, entry.client);
         if (this.redactor.hasTaint(session)) await this.refreshFilledValues(session, entry.client);
         result = this.redactor.redact(session, result);
         if (before) before = this.redactor.redact(session, before);
@@ -1095,17 +1101,52 @@ export class BrowserRuntime {
     try { return href ? new URL(href).origin : ""; } catch { return ""; }
   }
 
+  /** The page is x.com: read who the person is, and notice a post just made by clicking. */
+  private async watchX(session: string, client: BrowserClient): Promise<void> {
+    try {
+      if (!isXSitePage(await this.engineUrl(client))) return;
+      if (this.onXAccount) await this.learnXAccount(session, client);
+      if (this.onXPost) await this.learnXPost(session, client);
+    } catch (error) {
+      if (error instanceof TransportError) throw error;
+    }
+  }
+
   /** The page is x.com, signed in: read who the person is from the account menu the page itself
    * draws (never a request to anyone else), at most every 20 s per browser. Never returned to the bot. */
   private async learnXAccount(session: string, client: BrowserClient): Promise<void> {
     const now = this.now();
     if (now - (this.xReadAt.get(session) ?? 0) < 20_000) return;
+    this.xReadAt.set(session, now);
     try {
-      if (!isXSitePage(await this.engineUrl(client))) return;
-      this.xReadAt.set(session, now);
       const answer = await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: X_IDENTITY_SCRIPT, timeoutMs: 5_000 } });
       const account = parseXIdentity(answer);
       if (account) this.onXAccount?.(session, account);
+    } catch (error) {
+      if (error instanceof TransportError) throw error;
+    }
+  }
+
+  /** A post made by clicking "Post" on x.com has no X tool call: X's own toast, with the link to the
+   * new post, is the proof. The text is what the composer held just before (or what the page shows
+   * of the post). Each post is told once per browser. Never returned to the bot. */
+  private async learnXPost(session: string, client: BrowserClient): Promise<void> {
+    try {
+      const answer = await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: X_POST_SCRIPT, timeoutMs: 5_000 } });
+      const watch = parseXPostWatch(answer);
+      if (!watch) return;
+      const now = this.now();
+      if (watch.draft) this.xDraft.set(session, { text: watch.draft, at: now });
+      const post = watch.post;
+      if (!post) return;
+      const seen = this.xPosted.get(session) ?? new Set<string>();
+      this.xPosted.set(session, seen);
+      if (seen.has(post.id)) return;
+      seen.add(post.id);
+      const kept = this.xDraft.get(session);
+      this.xDraft.delete(session);
+      const text = post.text ?? (kept && now - kept.at < 10 * 60_000 ? kept.text : undefined);
+      this.onXPost?.(session, { ...post, ...(text ? { text } : {}) });
     } catch (error) {
       if (error instanceof TransportError) throw error;
     }

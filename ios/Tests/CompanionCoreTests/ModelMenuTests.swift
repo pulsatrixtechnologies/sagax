@@ -137,4 +137,26 @@ final class ModelMenuTests: XCTestCase {
         XCTAssertEqual(menu.filter { $0.key == "compat" }.flatMap(\.rows).map(\.modelId), ["vendor/small"])
     }
 
+    func testProviderPinsParseKeepThreeAndDropBrokenEntries() {
+        XCTAssertEqual(ModelProviderPins.parse(#"["a","b","a",5,"","c","d"]"#), ["a", "b", "c"])
+        XCTAssertEqual(ModelProviderPins.parse("nope"), [])
+        XCTAssertEqual(ModelProviderPins.serialize(["a", "b", "c", "d"]), #"["a","b","c"]"#)
+    }
+
+    func testProviderPinsDefaultToTheCurrentThenTheMostStarred() {
+        let candidates: [ModelProviderPins.Candidate] = [
+            .init(key: "a", starred: 0, current: false), .init(key: "b", starred: 2, current: false),
+            .init(key: "c", starred: 0, current: true), .init(key: "d", starred: 2, current: false),
+        ]
+        XCTAssertEqual(ModelProviderPins.defaults(candidates), ["c", "b", "d"])
+        // the person's own pins win, minus a provider that is gone
+        XCTAssertEqual(ModelProviderPins.effective(stored: ["gone", "a"], candidates: candidates), ["a"])
+        XCTAssertEqual(ModelProviderPins.effective(stored: ["gone"], candidates: candidates), ["c", "b", "d"])
+    }
+
+    func testAFourthPinIsRefusedAndAPinTogglesOff() {
+        XCTAssertEqual(ModelProviderPins.toggled(["a", "b"], "c"), .pins(["a", "b", "c"]))
+        XCTAssertEqual(ModelProviderPins.toggled(["a", "b", "c"], "d"), .full)
+        XCTAssertEqual(ModelProviderPins.toggled(["a", "b", "c"], "b"), .pins(["a", "c"]))
+    }
 }

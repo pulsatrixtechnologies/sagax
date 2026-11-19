@@ -6222,6 +6222,7 @@ bindLeafHost({
   get cancelDirectTurnDispatch() { return cancelDirectTurnDispatch; },
   get sharedEgressHost() { return sharedEgressHost; },
   get browserSessionBots() { return browserSessionBots; },
+  get browserSessionThreads() { return browserSessionThreads; },
   get webBotAuthStore() { return webBotAuthStore; },
   get signedVisits() { return signedVisits; },
   get browserRuntime() { return browserRuntime; },
@@ -11019,6 +11020,8 @@ const compactionControllers = new Map<string, { generation: string; controller: 
 const sharedEgressHost = !DESKTOP_MANAGED && (IDENTITY.kind === "perspicax" || HOSTED_WORKSPACE || LOOPBACK.trust === "service");
 /** The bot each browser session this server launched is for. */
 const browserSessionBots = new Map<string, string>();
+/** The conversation each of those browsers last worked for (a post made by clicking shows its card there). */
+const browserSessionThreads = new Map<string, string>();
 browserEgress.configure({
   host: DESKTOP_MANAGED ? "desktop" : "server", config: () => cfg.browserEngine?.egress,
   ...(sharedEgressHost ? { sameOwner: (session: string, engineBot: string | undefined) => sameOwnerBrowserBots(browserSessionBots.get(session), engineBot, (id) => store.bot(id)) } : {})
@@ -11029,6 +11032,8 @@ const signedVisits = new Map<string, { authority: string; path: string; expiresA
 const browserRuntime = new BrowserRuntime({
   // A bot's browser is on a signed-in x.com page: that account is who its posts go out as (#4895).
   onXAccount: (session, account) => { const botId = browserSessionBots.get(session); if (botId) xPostCard().learnAccount(botId, account); },
+  // ... and one made by clicking Post there, with no X tool call, gets its Posted card all the same.
+  onXPost: (session, post) => { const botId = browserSessionBots.get(session); const threadId = browserSessionThreads.get(session); if (botId && threadId) xPostCard().browserPost(botId, threadId, post); },
   egressNotice: (session) => browserEgress.takeNotice(session),
   // Sign the bot's own browser visits unless this person turned it off.
   // The person's attached browser (CDP) is not the bot's. A failed signature

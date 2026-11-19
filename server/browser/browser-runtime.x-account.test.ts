@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
 import { BrowserRuntime, type BrowserSpawnSpec } from "./browser-runtime.ts";
-import type { XAccount } from "../../shared/x-post.ts";
+import type { XAccount, XBrowserPost } from "../../shared/x-post.ts";
 
 // A bot posts to X by driving a browser signed in to x.com. The runtime reads who the
 // person is from the account menu of that page (demo data: nobody real).
@@ -38,10 +38,11 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(
 
 function run(url: string, html: string) {
   const seen: Array<{ session: string; account: XAccount }> = [];
-  const browser = new BrowserRuntime({ requestTimeoutMs: 5_000, takeoverTimeoutMs: 100, idleMs: 5_000, onXAccount: (session, account) => seen.push({ session, account }) });
+  const posts: Array<{ session: string; post: XBrowserPost }> = [];
+  const browser = new BrowserRuntime({ requestTimeoutMs: 5_000, takeoverTimeoutMs: 100, idleMs: 5_000, onXAccount: (session, account) => seen.push({ session, account }), onXPost: (session, post) => posts.push({ session, post }) });
   cleanups.push(() => browser.closeAll());
   const call = (name: string) => browser.agentRpc("s", spec(url, html), "tools/call", { name, arguments: {} });
-  return { seen, call };
+  return { seen, posts, call };
 }
 
 describe("a bot's browser on a signed-in x.com page", () => {
@@ -61,5 +62,24 @@ describe("a bot's browser on a signed-in x.com page", () => {
     const out = run("https://x.com/home", SIGNED_OUT);
     await out.call("agent_browser_snapshot");
     expect(out.seen).toHaveLength(0);
+  });
+  it("notices a post made by clicking Post: X's toast links the new post, the composer text before it is the post's text", async () => {
+    const composing = run("https://x.com/compose/post", `<div data-testid="tweetTextarea_0">Hello from the browser</div>`);
+    await composing.call("agent_browser_click");
+    expect(composing.posts).toHaveLength(0);
+    const sent = run("https://x.com/home", `<div data-testid="toast"><span>Your post was sent.</span><a href="/sample/status/1234567890777">View</a></div>`);
+    await sent.call("agent_browser_click");
+    await sent.call("agent_browser_snapshot");
+    // no text was ever seen here: the host decides (no card without one)
+    expect(sent.posts).toEqual([{ session: "s", post: { id: "1234567890777", url: "https://x.com/sample/status/1234567890777" } }]);
+  });
+
+  it("another site's toast, or one without a post link, is no post", async () => {
+    const elsewhere = run("https://shop.example.test/", `<div data-testid="toast"><a href="/sample/status/1234567890777">View</a></div>`);
+    await elsewhere.call("agent_browser_click");
+    const saved = run("https://x.com/home", `<div data-testid="toast"><span>Saved to drafts</span></div>`);
+    await saved.call("agent_browser_click");
+    expect(elsewhere.posts).toHaveLength(0);
+    expect(saved.posts).toHaveLength(0);
   });
 });

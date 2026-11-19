@@ -102,7 +102,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
               </ul>
               {vendor.products.length > CHIPS_SHOWN && (
                 <button type="button" data-vendor-chips-more="" onClick={() => setAllChips((value) => !value)} className={cn(PLUGINS.groupLink, "-ml-2 mt-2")}>
-                  {allChips ? t("connectApps.manage.showFewer") : t("connectApps.showMoreRows", { count: vendor.products.length - CHIPS_SHOWN })}
+                  {allChips ? t("connectApps.manage.showFewer") : t(vendor.products.length - CHIPS_SHOWN === 1 ? "fold.showMoreOne" : "connectApps.showMoreRows", { count: vendor.products.length - CHIPS_SHOWN })}
                 </button>
               )}
             </section>

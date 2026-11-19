@@ -9,7 +9,9 @@ import Foundation
 /// time, and asks `evaluate(now:)` what to show.
 ///
 /// Rules:
-/// - a server disconnect shorter than `blipMs` shows nothing;
+/// - a server disconnect shorter than `blipMs` shows nothing, and a restart
+///   (announced, draining, an edge gateway answer, the health already back)
+///   shorter than `restartQuietMs`;
 /// - "updating" when a restart was announced within `announceWindowMs`
 ///   of the disconnect, or the health probe says the server drains or is in
 ///   maintenance; after `updatingMaxMs` of updating with no return, it is
@@ -44,11 +46,23 @@ public struct ConnectionNoticeMachine: Equatable, Sendable {
         case ok
         /// 503 with `shuttingDown`, or `x-sagax-maintenance`: a planned restart.
         case draining
-        /// Anything else: no answer, a proxy's 502/503/504, another error.
+        /// A bare 502/503/504 from the edge in front of the server: the
+        /// network and the edge answer, the server behind them is starting
+        /// again (#4794). Reads as a restart, not as unreachable.
+        case gateway
+        /// Anything else: no answer at all, another error.
         case failed
     }
 
-    public static let blipMs: Double = 2_500
+    /// A drop with no answer at all shows nothing before this (a wake from
+    /// sleep, a network change).
+    public static let blipMs: Double = 8_000
+    /// A restart (announced, draining, an edge gateway answer, or the
+    /// health already back while the stream reconnects) shows nothing
+    /// before this: a roll is over well within it most times (#4794).
+    public static let restartQuietMs: Double = 30_000
+    /// An edge answering 502/503/504 this long reads as unreachable.
+    public static let gatewayMaxMs: Double = 2 * 60_000
     public static let announceWindowMs: Double = 10 * 60_000
     public static let updatingMaxMs: Double = 5 * 60_000
     public static let reconnectedMs: Double = 3_000
@@ -143,17 +157,22 @@ public struct ConnectionNoticeMachine: Equatable, Sendable {
     /// The condition as it stands, dismissed or not.
     func condition(now: Double) -> Notice? {
         if let down = disconnectedAt {
-            guard now - down >= Self.blipMs else {
-                // a blip: nothing yet, but a Perspicax notice already up stays
-                return perspicaxNotice
-            }
             let announced = restartAnnouncedAt.map { now - $0 <= Self.announceWindowMs } ?? false
             let draining = probe == .draining
+            let gateway = probe == .gateway
+            let restarting = announced || draining || gateway || probe == .ok
+            guard now - down >= (restarting ? Self.restartQuietMs : Self.blipMs) else {
+                // quiet: nothing yet, but a Perspicax notice already up stays
+                return perspicaxNotice
+            }
             if announced || draining {
                 let since = announced ? down : (drainingSince ?? down)
                 if now - since < Self.updatingMaxMs {
                     return Notice(kind: .updating, occurrence: "updating:\(Int64(down))")
                 }
+            }
+            if gateway, now - down < Self.gatewayMaxMs {
+                return Notice(kind: .updating, occurrence: "updating:\(Int64(down))")
             }
             return Notice(kind: .serverUnreachable, occurrence: "unreachable:\(Int64(down))")
         }
@@ -210,7 +229,8 @@ public struct ConnectionNoticeMachine: Equatable, Sendable {
 
     /// Reads a health answer (GET /api/health or /healthz): 503 with
     /// `shuttingDown: true`, or the `x-sagax-maintenance` header on a 503,
-    /// is a planned restart; 2xx is up; anything else failed.
+    /// is a planned restart; any other 502/503/504 is the edge covering a
+    /// server that is starting again; 2xx is up; anything else failed.
     public static func classifyHealth(status: Int, maintenanceHeader: Bool, body: Data?) -> Probe {
         if (200..<300).contains(status) { return .ok }
         if status == 503 {
@@ -220,6 +240,7 @@ public struct ConnectionNoticeMachine: Equatable, Sendable {
                 return .draining
             }
         }
+        if status == 502 || status == 503 || status == 504 { return .gateway }
         return .failed
     }
 }

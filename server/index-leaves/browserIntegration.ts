@@ -52,6 +52,7 @@ async function browserIntegration(botId: string, requestedProfile: string | unde
     });
   host.usedBrowserSessions.set(session, spec);
   host.browserSessionBots.set(session, botId);
+  if (threadForSession) host.browserSessionThreads.set(session, threadForSession);
   await prepareBrowserSessionState(status.binaryPath, session, { env: spec.env, persistent, isCurrent: () => {
     const current = host.store.bot(botId);
     return !!current && current.browser !== false && builtInBrowserEnabled(host.cfg)

@@ -157,3 +157,14 @@ describe("the account of a signed-in x.com session (#4895)", () => {
     expect(isXurlWhoAmI(JSON.stringify({ command: "xurl post hello" }))).toBe(false);
   });
 });
+
+describe("a post made in the browser (X's toast)", () => {
+  const answer = (value: unknown) => ({ content: [{ type: "text", text: JSON.stringify(JSON.stringify(value)) }] });
+  it("reads the composer text and the new post's link, x.com links only", async () => {
+    const { parseXPostWatch } = await import("./x-post.ts");
+    expect(parseXPostWatch(answer({ draft: " Hello ", url: "https://x.com/sample/status/1234567890123?s=20", text: "" }))).toEqual({ draft: "Hello", post: { id: "1234567890123", url: "https://x.com/sample/status/1234567890123" } });
+    expect(parseXPostWatch(answer({ draft: "", url: "https://evil.example.test/sample/status/1234567890123" }))).toEqual({});
+    expect(parseXPostWatch(answer({ draft: "", url: "https://x.com/sample" }))).toEqual({});
+    expect(parseXPostWatch({ content: [], isError: true })).toBeNull();
+  });
+});

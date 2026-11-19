@@ -53,6 +53,7 @@ import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
 import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
+import { checkWriteVersion, expectedVersionArg, mustReadFirst, readerKey, versionConflictWords, writeQueue, type VersionReads, type WriteTarget } from "./write-versions.ts";
 import { readRouteRefusal } from "./route-refusal.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import type { BotSpeech } from "../shared/voice-mode.ts";
@@ -608,6 +609,15 @@ export interface AgentApiDeps {
   createRoutine?(caller: AgentCaller, agentId: string, input: AgentRoutinePatch & { name: string; instructions: string; schedule: Record<string, unknown> }): Promise<{ routine: Record<string, unknown> } | Refusal>;
   /** #4172: delete a routine the caller may change (the editor's own route). */
   deleteRoutine?(caller: AgentCaller, routineId: string): Promise<{ deleted: true } | Refusal>;
+  /** #4939: conditional writes (server/write-versions.ts). The current
+   * version of an agent's profile and settings or of a routine, null when it
+   * does not exist; and the reads each caller made. Absent: no version is
+   * answered or checked. */
+  writeVersions?: {
+    agent(agentId: string): string | null;
+    routine(routineId: string): string | null;
+    reads: VersionReads;
+  };
   /** The conversations with this agent the caller may read. */
   threads(caller: AgentCaller, agentId: string): TranscriptThread[];
   /** A conversation's stored messages, oldest first. Never wakes anything. */
@@ -1458,7 +1468,12 @@ function createAgentApiHandlers(env: {
       const profile = await deps.profile(caller, agentId);
       if (isRefusal(profile)) return profile;
       const model = profile.model ?? agent.model ?? null;
+      // #4939: the version a write passes back as expected_version; this
+      // read lets this caller write without it until its next write.
+      const version = deps.writeVersions?.agent(agentId) ?? null;
+      if (version) deps.writeVersions!.reads.note(readerKey(caller), { kind: "agent", id: agentId }, version);
       return ok({
+        ...(version ? { version } : {}),
         agent: {
           ...wireSummary(agent), title: profile.title, ...(model ? { model } : {}),
           ...(profile.persona ? { persona: profile.persona } : {}), ...(profile.speech ? { speech: profile.speech } : {}),
@@ -1965,6 +1980,34 @@ function createAgentApiConfigHandlers(env: {
   "list_agent_models" | "update_agent_model" | "update_agent_settings" | "update_routine" | "create_routine" | "delete_routine"
 > {
   const { deps, ok, reachable } = env;
+  // #4939: a write checks the version the caller read, then writes, with no
+  // other write to the same target in between; it answers the new version.
+  const versioned = async (
+    caller: AgentCaller,
+    target: WriteTarget,
+    args: Args,
+    current: () => string | null,
+    work: () => Promise<AgentApiAnswer | Refusal>,
+  ): Promise<AgentApiAnswer | Refusal> => {
+    const versions = deps.writeVersions;
+    if (!versions) return work();
+    const expected = expectedVersionArg(args, VERSION_ARG_KEYS);
+    if (expected && typeof expected === "object") return refuse(400, "bad_request", expected.error);
+    return writeQueue.run(target, async () => {
+      const reader = readerKey(caller);
+      // The person and a bot write as before; an AI client reads first.
+      const verdict = checkWriteVersion({ current: current(), expected, readFirst: mustReadFirst(caller.via), read: versions.reads.read(reader, target) });
+      if (!verdict.ok) {
+        const words = versionConflictWords(target, verdict.reason);
+        return refuse(409, "version_conflict", words.message, { current_version: verdict.current, conflict: verdict.reason, hint: words.hint });
+      }
+      const answer = await work();
+      if (isRefusal(answer) || answer.status >= 300) return answer;
+      const version = current();
+      versions.reads.wrote(reader, target, version);
+      return version ? { ...answer, body: { ...answer.body, version } } : answer;
+    });
+  };
   return {
     async list_agent_models(caller, args) {
       const bad = onlyKeys(args, ["agent_id"]);
@@ -2035,11 +2078,11 @@ function createAgentApiConfigHandlers(env: {
     },
 
     async update_agent_settings(caller, args) {
-      const bad = onlyKeys(args, ["agent_id", ...AGENT_SETTINGS_FIELDS]);
+      const bad = onlyKeys(args, ["agent_id", ...VERSION_ARG_KEYS, ...AGENT_SETTINGS_FIELDS]);
       if (bad) {
         // Name the refused key plainly when it is a model field (wrong tool).
         const keys = args && typeof args === "object" && !Array.isArray(args) ? Object.keys(args as object) : [];
-        const unknown = keys.find((key) => key !== "agent_id" && !AGENT_SETTINGS_FIELDS.includes(key));
+        const unknown = keys.find((key) => key !== "agent_id" && !VERSION_ARG_KEYS.includes(key) && !AGENT_SETTINGS_FIELDS.includes(key));
         if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "instance" || unknown === "engine" || unknown === "effort" || unknown === "auto" || unknown === "harness") {
           return refuse(400, "bad_request", "Model changes use update_agent_model, not update_agent_settings.");
         }
@@ -2062,18 +2105,21 @@ function createAgentApiConfigHandlers(env: {
       if (!Object.keys(fields).length) {
         return refuse(400, "bad_request", "Pass at least one Edit bot field (name, approval level, tools, computer, runtime, primary, …). Call get_agent first; the same checks as the Sagax Edit bot window apply.");
       }
-      const updated = await deps.updateSettings(caller, agentId, fields);
-      if (isRefusal(updated)) return updated;
-      return ok({
-        agent_id: agentId,
-        changed: updated.changed,
-        refused: updated.refused,
-        ...(updated.agent ? { agent: wireSummary(updated.agent) } : {}),
+      const updateSettings = deps.updateSettings;
+      return versioned(caller, { kind: "agent", id: agentId }, args, () => deps.writeVersions?.agent(agentId) ?? null, async () => {
+        const updated = await updateSettings(caller, agentId, fields);
+        if (isRefusal(updated)) return updated;
+        return ok({
+          agent_id: agentId,
+          changed: updated.changed,
+          refused: updated.refused,
+          ...(updated.agent ? { agent: wireSummary(updated.agent) } : {}),
+        });
       });
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", ...ROUTINE_FIELD_KEYS]);
+      const bad = onlyKeys(args, ["routine_id", "expected_version", ...ROUTINE_FIELD_KEYS]);
       if (bad) return bad;
       const routineId = routineIdArg(args);
       if (isRefusal(routineId)) return routineId;
@@ -2085,9 +2131,12 @@ function createAgentApiConfigHandlers(env: {
       if (!Object.keys(patch).length) {
         return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort, goal.");
       }
-      const updated = await deps.updateRoutine(caller, routineId, patch);
-      if (isRefusal(updated)) return updated;
-      return ok({ routine_id: routineId, routine: updated.routine });
+      const updateRoutine = deps.updateRoutine;
+      return versioned(caller, { kind: "routine", id: routineId }, args, () => deps.writeVersions?.routine(routineId) ?? null, async () => {
+        const updated = await updateRoutine(caller, routineId, patch);
+        if (isRefusal(updated)) return updated;
+        return ok({ routine_id: routineId, routine: updated.routine });
+      });
     },
 
     // #4172: a new routine on one of the caller's agents, as the Automations
@@ -2111,24 +2160,33 @@ function createAgentApiConfigHandlers(env: {
       const made = await deps.createRoutine(caller, agentId, { ...fields, name, instructions, schedule });
       if (isRefusal(made)) return made;
       const madeId = typeof made.routine.id === "string" ? made.routine.id : null;
-      return ok({ routine_id: madeId, routine: made.routine });
+      // #4939: the version a later update_routine passes as expected_version.
+      const version = madeId ? deps.writeVersions?.routine(madeId) ?? null : null;
+      return ok({ routine_id: madeId, routine: made.routine, ...(version ? { version } : {}) });
     },
 
     // #4172: the Automations editor's Delete, as the person.
     async delete_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id"]);
+      const bad = onlyKeys(args, ["routine_id", "expected_version"]);
       if (bad) return bad;
       const routineId = routineIdArg(args);
       if (isRefusal(routineId)) return routineId;
       if (!deps.deleteRoutine) {
         return refuse(501, "not_supported", "This server does not delete routines through the agent API yet.");
       }
-      const deleted = await deps.deleteRoutine(caller, routineId);
-      if (isRefusal(deleted)) return deleted;
-      return ok({ deleted: true, routine_id: routineId });
+      const deleteRoutine = deps.deleteRoutine;
+      return versioned(caller, { kind: "routine", id: routineId }, args, () => deps.writeVersions?.routine(routineId) ?? null, async () => {
+        const deleted = await deleteRoutine(caller, routineId);
+        if (isRefusal(deleted)) return deleted;
+        return ok({ deleted: true, routine_id: routineId });
+      });
     },
   };
 }
+
+/** #4939: the expected version a write takes; update_agent_settings also
+ * gets the camelCase spelling Perspicax remaps its snake_case keys to. */
+const VERSION_ARG_KEYS: readonly string[] = ["expected_version", "expectedVersion"];
 
 /** The routine fields update_routine and create_routine take (snake_case on the wire). */
 const ROUTINE_FIELD_KEYS = ["enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort", "goal"] as const;

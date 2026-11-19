@@ -9,6 +9,8 @@ import type { Json } from "../agents-client.ts";
  * names, parameters and limits of the reference design's own agent tools. Every send
  * lands in that agent's single chat with its person (#1170), the sender named. */
 const AGENT_ID = { type: "string", description: "Id from list_agents or find_agents." } as const;
+/** #4939: the version get_agent or sagax_routines answered; a stale one is refused (409 version_conflict, current_version). */
+const EXPECTED_VERSION = { type: "string", minLength: 1, maxLength: 200, description: "version from get_agent / sagax_routines; stale: 409 version_conflict" } as const;
 const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page." } as const;
 
 /** #2023: update_agent_settings accepts any Edit-bot / runtime / primary key
@@ -47,7 +49,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "get_agent",
-    description: "Read one agent's full profile for an audit: owner, model, instructions, voice settings, expiry and a link to its sheet.",
+    description: "Read one agent's full profile for an audit: owner, model, instructions, voice settings, expiry, a link to its sheet and its version (expected_version of your next change).",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {
@@ -164,12 +166,13 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_agent_settings",
-    description: "Partial patch of an agent's Edit bot fields (identity, soul, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary), skills {name: bool}, plugins {key: bool}, grants {user:<id> or team:<id>: use|run|edit|manage|null}. Same rights as Edit bot. Returns changed and refused. Model: update_agent_model.",
+    description: "Partial patch of an agent's Edit bot fields (identity, soul, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary), skills {name: bool}, plugins {key: bool}, grants {user:<id> or team:<id>: use|run|edit|manage|null}. Same rights as Edit bot. Pass expected_version from get_agent. Returns changed, refused and version. Model: update_agent_model.",
     inputSchema: {
       type: "object",
       additionalProperties: true,
       properties: {
         agent_id: AGENT_ID,
+        expected_version: EXPECTED_VERSION,
       },
       required: ["agent_id"],
     },
@@ -182,6 +185,7 @@ export const AGENT_API_TOOLS = [
       additionalProperties: false,
       properties: {
         routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." },
+        expected_version: EXPECTED_VERSION,
         ...ROUTINE_TOOL_FIELDS,
       },
       required: ["routine_id"],
@@ -215,7 +219,7 @@ export const AGENT_API_TOOLS = [
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." } },
+      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." }, expected_version: EXPECTED_VERSION },
       required: ["routine_id"],
     },
   },

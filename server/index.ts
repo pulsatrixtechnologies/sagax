@@ -1278,6 +1278,7 @@ import { createModerationRoutes, isReportPath } from "./routes/moderation.ts";
 import { createModerationStore } from "./safety/moderation.ts";
 import { createGroupFolderRoutes } from "./routes/group-folders.ts";
 import { createNudgeRoutes } from "./routes/nudges.ts";
+import { agentSettingsVersion, routineVersion, VersionReads } from "./write-versions.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
@@ -34340,7 +34341,21 @@ async function agentsReachedBy(caller: AgentCaller, options?: { archived?: boole
   return store.bots.filter((bot) => !isSurfaceBot(bot) && (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
     .map((bot) => (bot.hidden || bot.temporary?.archived ? { ...agentSummary(bot), archived: true } : agentSummary(bot)));
 }
+// #4939: the versions each AI client read, shared by the agent API and the
+// member API (server/write-versions.ts).
+const writeVersionReads = new VersionReads();
 const agentApi = createAgentApi({
+  writeVersions: {
+    agent: (agentId) => {
+      const bot = store.bot(agentId);
+      return bot ? agentSettingsVersion(bot as unknown as Record<string, unknown>) : null;
+    },
+    routine: (routineId) => {
+      const routine = routines?.routineById(routineId);
+      return routine ? routineVersion(routine) : null;
+    },
+    reads: writeVersionReads,
+  },
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
     caller.kind === "bot" && caller.speakerPrincipalId ? { kind: "user", id: caller.speakerPrincipalId } : null, toolGrants, target),
@@ -35082,6 +35097,7 @@ async function stageMemberSendFiles(person: MemberPerson, botId: string, text: s
   return agentApiStageFiles(caller, target, files, text);
 }
 const orgMember = createOrgMemberRoutes({
+  versionReads: writeVersionReads,
   agentApi: agentApiForMember,
   identity: IDENTITY.kind,
   issuer: IDENTITY.kind === "perspicax" ? IDENTITY.issuer : "",

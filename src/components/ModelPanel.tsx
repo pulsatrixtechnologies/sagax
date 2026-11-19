@@ -371,8 +371,8 @@ export function ModelPanel(props: ModelPanelProps) {
       {hasReasoning && (
         // M-20261119-051: every level the model takes stays whole at the menu's
         // width (seven read on two balanced lines), the shared segmented control
-        <div data-model-panel-reasoning data-model-settings-effort="" className="shrink-0 border-t border-popover-hairline px-3.5 pb-2.5 pt-2">
-          <div className="flex items-baseline justify-between gap-3 pb-1.5">
+        <div data-model-panel-reasoning data-model-settings-effort="" className="shrink-0 border-t border-popover-hairline px-3.5 pb-2 pt-2">
+          <div className="flex items-baseline justify-between gap-3 pb-2">
             <span className="shrink-0 text-[12px] leading-4 text-popover-ink-secondary">{t("model.reasoning")}</span>
             {!variantRow && <span className="min-w-0 truncate text-[12px] leading-4 text-popover-ink-secondary">{t("model.effort.slowerHint")}</span>}
           </div>

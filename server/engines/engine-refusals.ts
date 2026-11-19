@@ -103,7 +103,7 @@ export function activeEngineRefusal(engine: string, account: string | undefined,
  * on; the caller keeps the accounts that are its own (agent-model-health.ts). */
 export function activeEngineRefusals(engine: string, now: number): EngineRefusal[] {
   const out: EngineRefusal[] = [];
-  for (const row of [...refusals.values()]) {
+  for (const row of refusals.values()) {
     if (row.engine !== engine) continue;
     const live = activeEngineRefusal(row.engine, row.account, now);
     if (live) out.push(live);

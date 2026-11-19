@@ -11024,6 +11024,8 @@ const webBotAuthStore = new WebBotAuthStore(DATA_DIR);
 /** Host already signed for this browser session, until the signature expires. */
 const signedVisits = new Map<string, { authority: string; path: string; expiresAtMs: number }>();
 const browserRuntime = new BrowserRuntime({
+  // A bot's browser is on a signed-in x.com page: that account is who its posts go out as (#4895).
+  onXAccount: (session, account) => { const botId = browserSessionBots.get(session); if (botId) xPostCard().learnAccount(botId, account); },
   egressNotice: (session) => browserEgress.takeNotice(session),
   // Sign the bot's own browser visits unless this person turned it off.
   // The person's attached browser (CDP) is not the bot's. A failed signature

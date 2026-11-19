@@ -5337,7 +5337,20 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 }
 /* #4640: the fan of published posts. The cards move only when motion is welcome. */
 .x-stack-card {
-  transform-origin: 50% 100%;
+  transform-origin: 50% 50%;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+/* the cards behind: a lifted face and an edge, their words unseen until they come to the front */
+.x-stack-card:not([data-x-stack-card="front"]) {
+  background: color-mix(in srgb, var(--x-bg) 84%, var(--x-ink) 16%);
+  border: 1px solid var(--x-quote-line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+.x-stack-card:not([data-x-stack-card="front"]) > article {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 @media (prefers-reduced-motion: no-preference) {
   .x-stack-card {

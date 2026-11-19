@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
 import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
 import { itemIdFromHandle } from "../../shared/credential-vault.ts";
+import { isXSitePage, parseXIdentity, X_IDENTITY_SCRIPT, type XAccount } from "../../shared/x-post.ts";
 import { MASK_SENSITIVE_SCRIPT, NO_PAGE_TEXT_TOOLS, parseSensitiveValues, SENSITIVE_VALUES_SCRIPT, UNMASK_SENSITIVE_SCRIPT, withSensitiveValues } from "../../shared/sensitive-fields.ts";
 import {
   parsePurchaseCall, parseReceiptCall, RECORD_PURCHASE_TOOL, RECORD_PURCHASE_TOOL_SPEC, REQUEST_PURCHASE_TOOL, REQUEST_PURCHASE_TOOL_SPEC,
@@ -597,6 +598,9 @@ export class BrowserRuntime {
    * every tool result before the bot reads it. */
   private scrub: (text: string) => string;
   private onTiming?: (timing: BrowserTiming) => void;
+  /** A signed-in x.com page showed who it is (the account menu): the host keeps it for the bot. */
+  private onXAccount?: (session: string, account: XAccount) => void;
+  private xReadAt = new Map<string, number>();
   /** Sessions where a person is signing in themselves (armForPerson until
    * Done): kept apart from the redactor, which a restart forgets. */
   /** The clock of a person's sign-in (PERSON_SIGN_IN_MS), for tests. */
@@ -615,7 +619,7 @@ export class BrowserRuntime {
   /** One line when a signature cannot be attached. The page still opens. */
   private signatureFailureLogged = false;
 
-  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, scrub, onTiming, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void } = {}) {
+  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, scrub, onTiming, onXAccount, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void; onXAccount?: (session: string, account: XAccount) => void } = {}) {
     this.now = now ?? Date.now;
     this.egressNotice = egressNotice;
     this.signNavigation = signNavigation;
@@ -625,6 +629,7 @@ export class BrowserRuntime {
     this.pauseStream = pauseStream;
     this.scrub = scrub ?? scrubHeldSecrets;
     this.onTiming = onTiming;
+    this.onXAccount = onXAccount;
   }
 
   private timed<T>(session: string, tool: string, phases: Partial<BrowserTiming>, fn: () => Promise<T>): Promise<T> {
@@ -981,6 +986,7 @@ export class BrowserRuntime {
         // typed during a takeover, a card number, a code) is hidden the same
         // way, whoever typed it. A page action learned it in its observation.
         if (toolName !== undefined && !NO_PAGE_TEXT_TOOLS.has(toolName) && !PAGE_ACTIONS.has(toolName)) await this.learnSensitiveValues(session, entry.client);
+        if (method === "tools/call" && toolName !== undefined && this.onXAccount) await this.learnXAccount(session, entry.client);
         if (this.redactor.hasTaint(session)) await this.refreshFilledValues(session, entry.client);
         result = this.redactor.redact(session, result);
         if (before) before = this.redactor.redact(session, before);
@@ -1087,6 +1093,22 @@ export class BrowserRuntime {
   private async engineOrigin(client: BrowserClient): Promise<string> {
     const href = await this.engineUrl(client);
     try { return href ? new URL(href).origin : ""; } catch { return ""; }
+  }
+
+  /** The page is x.com, signed in: read who the person is from the account menu the page itself
+   * draws (never a request to anyone else), at most every 20 s per browser. Never returned to the bot. */
+  private async learnXAccount(session: string, client: BrowserClient): Promise<void> {
+    const now = this.now();
+    if (now - (this.xReadAt.get(session) ?? 0) < 20_000) return;
+    try {
+      if (!isXSitePage(await this.engineUrl(client))) return;
+      this.xReadAt.set(session, now);
+      const answer = await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: X_IDENTITY_SCRIPT, timeoutMs: 5_000 } });
+      const account = parseXIdentity(answer);
+      if (account) this.onXAccount?.(session, account);
+    } catch (error) {
+      if (error instanceof TransportError) throw error;
+    }
   }
 
   /** Learn what the filled fields of the page hold now, so an edited or

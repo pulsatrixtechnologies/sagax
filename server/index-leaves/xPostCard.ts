@@ -9,7 +9,7 @@
  * call ends, the state turns into posted (with the link) or failed. */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { X_POST_PASS_MS, isXAccountTool, isXMediaHost, isXPostTool, normalizeXDraft, parseXPostsFence, xAccountFromOutput, xAvatarSized, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, xReplyFromInput, type XAccount, type XPostRequest } from "../../shared/x-post.ts";
+import { X_POST_PASS_MS, isXAccountTool, isXurlWhoAmI, isXMediaHost, isXPostTool, normalizeXDraft, parseXPostsFence, xAccountFromOutput, xAvatarSized, xDraftKey, xPostCallMatches, xPostInstruction, xPostTextOfInput, xPostUrlFromResult, xReplyFromInput, type XAccount, type XPostRequest } from "../../shared/x-post.ts";
 export type Host = Record<string, any>;
 
 interface Pass { threadId: string; botId: string; messageId: string; draftKey: string; text: string; handle?: string; expires: number }
@@ -84,7 +84,13 @@ export function createXPostCard(getHost: () => Host): any {
     return { status: 200, body: { account: accountOf(host, target.bot.id) } };
   }
   /** An X tool answered: a "who am I" call or a post names the account. */
-  function learn(host: Host, botId: string | undefined, tool: string, ok: boolean, output: string | undefined) {
+  function learn(host: Host, botId: string | undefined, tool: string, ok: boolean, output: string | undefined, input?: string) {
+    // a shell tool running `xurl whoami` answers with the account the CLI is signed in as
+    if (ok && botId && isXurlWhoAmI(input)) {
+      const mine = xAccountFromOutput(output, true);
+      if (mine) remember(host, botId, mine);
+      return;
+    }
     if (!ok || !botId || !X_TOOL_WORD.test(` ${tool.toLowerCase().replace(/__+/g, " ").replace(/[^a-z0-9]+/g, " ")} `)) return;
     const found = xAccountFromOutput(output, isXAccountTool(tool));
     if (found) remember(host, botId, found);
@@ -254,7 +260,7 @@ export function createXPostCard(getHost: () => Host): any {
    * on the held draft card (no state yet) gets its published-post card here. */
   function finish(threadId: string, tool: string, ok: boolean, output: string | undefined, input: string | undefined, speaker?: { botId: string; name: string; color?: string }) {
     const host = getHost();
-    learn(host, speaker?.botId ?? host.store.botByThread(threadId)?.id, tool, ok, output);
+    learn(host, speaker?.botId ?? host.store.botByThread(threadId)?.id, tool, ok, output, input);
     for (const row of host.store.messagesFor(threadId)) {
       for (const request of Object.values(row.xPosts ?? {}) as XPostRequest[]) {
         if (request.status !== "sending" || !xPostCallMatches(request.text, tool, input)) continue;
@@ -277,5 +283,10 @@ export function createXPostCard(getHost: () => Host): any {
     return false;
   }
 
-  return { post, discard, status, takePass, finish, account, key: xDraftKey };
+  /** The browser showed who the bot is signed in as on x.com: keep it, and its picture. */
+  function learnAccount(botId: string, found: XAccount) {
+    remember(getHost(), botId, found);
+  }
+
+  return { post, discard, status, takePass, finish, account, learnAccount, key: xDraftKey };
 }

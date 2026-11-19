@@ -10,6 +10,7 @@ import type { ModelSelection } from "../../shared/model-selection.ts";
 import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { routeRefusal } from "../agent-api.ts";
+import { VersionReads } from "../write-versions.ts";
 import { createOrgMemberRoutes, describeMemberApproval, queuedSendWillStart, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
@@ -1073,6 +1074,41 @@ describe("owner-scoped routine and bot reads", () => {
       after: { fields: ["enabled", "name", "instructions", "schedule"] },
     }]);
     expect(JSON.stringify(recorded)).not.toContain("Report the close");
+  });
+
+  it("answers each routine's version and refuses a write from a stale or unread copy with the current one (#4939)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRead", "clients.routinesWrite");
+    let updatedAt = 5;
+    respond = (request) => {
+      if (request.method === "GET" && request.path === "/api/routines") {
+        return { status: 200, body: { routines: [{ id: "r_bob", name: "Morning", botId: "b1", enabled: true, prompt: "a", updatedAt, owner: { id: "pr_bob" } }], runs: [] } };
+      }
+      if (request.method === "PATCH" && request.path === "/api/routines/r_bob") {
+        updatedAt += 1;
+        return { status: 200, body: { routine: { id: "r_bob", name: "Morning", botId: "b1", enabled: false, prompt: "a", updatedAt, owner: { id: "pr_bob" } } } };
+      }
+      return { status: 404, body: { error: "no" } };
+    };
+    deps.versionReads = new VersionReads();
+    try {
+      const blind = await call("PATCH", "routines/r_bob", token("bob"), { enabled: false });
+      expect(blind.status).toBe(409);
+      expect(blind.body).toMatchObject({ code: "version_conflict", current_version: "5", conflict: "not_read" });
+      const listed = await call("GET", "routines", token("bob"));
+      expect(listed.body.routines[0].version).toBe("5");
+      const stale = await call("PATCH", "routines/r_bob", token("bob"), { enabled: false, expected_version: "4" });
+      expect(stale.status).toBe(409);
+      expect(stale.body).toMatchObject({ current_version: "5", conflict: "stale" });
+      expect(performed.filter((entry) => entry.request.method === "PATCH")).toEqual([]);
+      const written = await call("PATCH", "routines/r_bob", token("bob"), { enabled: false });
+      expect(written.status).toBe(200);
+      expect(written.body.routine.version).toBe("6");
+      // The person in the console writes as before.
+      const fromConsole = await call("PATCH", "routines/r_bob", token("bob", "employee", "console"), { enabled: true });
+      expect(fromConsole.status).toBe(200);
+    } finally {
+      delete deps.versionReads;
+    }
   });
 
   it("refuses a routine write without clients.routinesWrite and never performs (#1891 Ask/Deny)", async () => {

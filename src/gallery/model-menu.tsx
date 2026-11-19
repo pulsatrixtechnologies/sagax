@@ -38,7 +38,7 @@ function Menu() {
     { key: "openai", label: "OpenAI", rows: gpt },
   ];
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface p-6">
+    <div className="flex min-h-screen items-center justify-center bg-app p-6">
       <div className={`${MENU_BOX} w-[320px] py-1 text-popover-ink`} data-model-menu>
         <ModelPanel
           sections={sections}

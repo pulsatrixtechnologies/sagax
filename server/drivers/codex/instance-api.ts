@@ -39,10 +39,14 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     } else if (planAuth) {
       if (bag.planSigningOut) throw new Error("This ChatGPT account is being disconnected.");
       if (!bag.models.options.length) await refreshModels();
-      env.SAGAX_CHATGPT_TOKEN = await planAuth.accessToken();
+      const token = await planAuth.accessToken();
       if (bag.planSigningOut || bag.disposed) throw new Error("This ChatGPT account is being disconnected.");
+      // upstream #4063: a Codex that renews its token reads it from the account's bridge.
+      const bridge: Record<string, string> | null = await bag.planTokens?.bridgeEnv() ?? null;
+      if (bag.planSigningOut || bag.disposed) throw new Error("This ChatGPT account is being disconnected.");
+      Object.assign(env, bridge ?? { SAGAX_CHATGPT_TOKEN: token });
       mkdirSync(join(planDirectory, "codex"), { recursive: true, mode: 0o700 });
-      providerArgs = chatgptPlanCodexArgs();
+      providerArgs = chatgptPlanCodexArgs(bridge !== null);
     } else if (config.managed) {
       if (!input.environment.SAGAX_COMPANY_API_KEY || !input.environment.CODEX_HOME) {
         throw new Error("Company model access is unavailable. Reconnect your organization; personal billing will not be used.");
@@ -77,6 +81,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   });
   if (!("version" in probe)) return { state: "unavailable", reason: probe.reason, ...(plan ? { chatgptPlan: true } : {}) };
   const { version } = probe;
+  bag.planTokens?.renewal.noteVersion(version);
   if (planAuth) return { state: "available", version, chatgptPlan: true, billing: "subscription", ...await planAuth.snapshot(), update: await codexReleaseUpdate(version, config.cli),
     ...(bag.planWarning ? { warning: { title: "Check ChatGPT connection", message: bag.planWarning } } : {}) };
   if (config.managed) return { state: "available", version, authenticated: Boolean(input.environment.SAGAX_COMPANY_API_KEY && input.environment.CODEX_HOME), billing: "metered" };
@@ -146,6 +151,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
       const stopped = [...await sessions.closeAll(), ...await Promise.all([...active.values()].map(({ stop }) => stop()))];
       if (stopped.some(value => !value)) throw new Error("A ChatGPT task could not stop safely. Stop the task before signing out.");
       bag.models = { default: "", options: [] };
+      bag.planTokens?.close();
       await planAuth.signOut();
       bag.planWarning = undefined;
     } catch (error) {
@@ -244,6 +250,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   dispose: async () => {
     bag.disposed = true;
     bag.planGeneration += 1;
+    bag.planTokens?.close();
     await authentication.dispose();
     await planAuth?.dispose();
     await Promise.all([...active.values()].map(({ stop }) => stop()));

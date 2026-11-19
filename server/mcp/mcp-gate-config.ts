@@ -65,6 +65,39 @@ export function customServerGate(
   };
 }
 
+/** Claude Code keeps an MCP result in the thread up to MAX_MCP_OUTPUT_TOKENS (25k by default) and
+ * saves a bigger one whole to a file the bot reads in parts. Above the browser's 32k-character
+ * budget (about 8k tokens), so harness results stay inline (upstream #5817). */
+export const UNGATED_MCP_OUTPUT_TOKENS = 10_000;
+
+/** A bot server the gate leaves untrimmed (a URL server keeps its native connection) has the CLI
+ * save big results to a file instead of filling the thread. The limit is process-wide, so it stays
+ * unset when any untrimmed server asks for whole payloads (a limit of 0), and an explicit
+ * MAX_MCP_OUTPUT_TOKENS (the process's or the turn folder's settings) wins. */
+export function limitUngatedOutput(
+  env: NodeJS.ProcessEnv,
+  mounted: Readonly<Record<string, unknown>>,
+  owned: Iterable<string>,
+  perServer: Readonly<Record<string, number>> | undefined,
+  configured?: unknown,
+): void {
+  if (env.MAX_MCP_OUTPUT_TOKENS || configured !== undefined) return;
+  let untrimmed = false;
+  for (const name of owned) {
+    const server = Object.hasOwn(mounted, name) ? mounted[name] as { env?: Record<string, string> } | undefined : undefined;
+    if (!server) continue;
+    // A gate trims on its own budget; one set to 0 passes whole payloads through, so it needs the limit unset too.
+    const gateBudget = server.env?.SAGAX_GATE_BUDGET;
+    if (gateBudget !== undefined) {
+      if (Number(gateBudget) <= 0) return;
+      continue;
+    }
+    if (serverResultBudget(name, perServer, env) <= 0) return;
+    untrimmed = true;
+  }
+  if (untrimmed) env.MAX_MCP_OUTPUT_TOKENS = String(UNGATED_MCP_OUTPUT_TOKENS);
+}
+
 /** Where a thread's oversized results are kept so the bot can read them back.
  * Under the app's data directory, not the user's project folder: these are
  * the harness's spill, and it sweeps them after a day. */

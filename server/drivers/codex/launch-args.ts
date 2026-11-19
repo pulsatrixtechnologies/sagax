@@ -4,6 +4,7 @@ import type { ProviderSnapshot, TurnAccessInput } from "../../contracts.ts";
 import { splitCliString } from "../../env-path.ts";
 import { codexVersionBehind, readLatestCodexRelease } from "../codex-release.ts";
 import { plainRecord } from "./plain.ts";
+import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import type { CodexConfig } from "./config.ts";
 
 /** Ask the configured executable to update itself. This matters when the user
@@ -38,13 +39,19 @@ export async function codexReleaseUpdate(version: string, cli: string): Promise<
 /** The documented token-sharing Responses bridge carries no hosted
  * tool_search (#2035 verified Codex 0.159.0 sends none), so a plan turn's
  * MCP tools are all loaded up front. Its URL servers go through the remote
- * proxy's tool directory instead (mcp-directory.ts). */
-export function chatgptPlanCodexArgs(): string[] {
+ * proxy's tool directory instead (mcp-directory.ts). `renewing` hands Codex
+ * the token command (plan-token.ts, upstream #4063) in place of a fixed token. */
+export function chatgptPlanCodexArgs(renewing = false): string[] {
   return [
     "-c", 'model_provider="openai_chatgpt_plan"',
     "-c", 'model_providers.openai_chatgpt_plan.name="ChatGPT plan"',
     "-c", 'model_providers.openai_chatgpt_plan.base_url="https://api.openai.com/v1"',
-    "-c", 'model_providers.openai_chatgpt_plan.env_key="SAGAX_CHATGPT_TOKEN"',
+    ...(renewing ? [
+      "-c", `model_providers.openai_chatgpt_plan.auth.command=${JSON.stringify(process.execPath)}`,
+      "-c", `model_providers.openai_chatgpt_plan.auth.args=[${JSON.stringify(SPAWNED_PROXIES.chatgptPlanToken)}]`,
+      "-c", "model_providers.openai_chatgpt_plan.auth.refresh_interval_ms=30000",
+      "-c", "model_providers.openai_chatgpt_plan.auth.timeout_ms=60000",
+    ] : ["-c", 'model_providers.openai_chatgpt_plan.env_key="SAGAX_CHATGPT_TOKEN"']),
     "-c", 'model_providers.openai_chatgpt_plan.wire_api="responses"',
     "-c", "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
     "-c", "model_providers.openai_chatgpt_plan.supports_websockets=false",

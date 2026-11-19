@@ -52,6 +52,8 @@ export { codexNamedApprovalParams } from "./codex/approvals.ts";
 
 import { DRIVER_KIND, decodeConfig, type CodexConfig } from "./codex/config.ts";
 import { codexAccessLaunch } from "./codex/launch-args.ts";
+import { planTokenBridges, planTokenRenewal } from "./codex/plan-token.ts";
+import { cliVersionReader, execCli } from "../procs.ts";
 
 export type { CodexConfig } from "./codex/config.ts";
 export {
@@ -105,6 +107,9 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       // keys, env-injected at boot); none of them are this CLI's to see.
       stripWorkspaceCredentialEnv(env);
       delete env.SAGAX_CHATGPT_TOKEN;
+      // upstream #4063: only a plan launch sets its own bridge (codex/plan-token.ts)
+      delete env.SAGAX_CODEX_AUTH_SOCKET;
+      delete env.SAGAX_CODEX_AUTH_SECRET;
       if (plan) env.CODEX_HOME = join(planDirectory, "codex");
       return env;
     };
@@ -115,6 +120,23 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
     let disposed = false;
     const sessions = new CodexSessions();
     let planWarning: string | undefined;
+    // upstream #4063: one token bridge per plan account generation, kept while the instance lives.
+    const planVersionOf = cliVersionReader(config.cli);
+    const planRenewal = planTokenRenewal(() => new Promise((resolve) => {
+      execCli(config.cli, ["--version"], { timeout: 8000, env: catalogEnv }, (err, stdout) => resolve(planVersionOf(err, stdout)));
+    }));
+    const planBridges = planAuth ? planTokenBridges(() => planAuth.accessToken()) : null;
+    const planTokens = {
+      renewal: planRenewal,
+      async bridgeEnv(): Promise<Record<string, string> | null> {
+        if (!planBridges || !await planRenewal.supported()) return null;
+        const generation = planGeneration;
+        return planBridges.env(generation, () => {
+          if (disposed || planSigningOut || generation !== planGeneration) throw new Error("This ChatGPT account changed.");
+        });
+      },
+      close: () => planBridges?.close(),
+    };
     let models = plan ? { default: "", options: [] } : config.managed ? { default: config.managed.models[0], options: config.managed.models.map(id => ({ id, label: id })) } : STATIC_CODEX_MODELS;
     const refreshModels = async (preserveExisting = false) => {
       if (config.managed) return;
@@ -240,6 +262,9 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       if (planUnavailable) throw new Error(planUnavailable);
       const planToken = planAuth ? await planAuth.accessToken() : undefined;
       assertPlanCurrent();
+      // upstream #4063: a Codex that renews its token reads it from the bridge, so a long turn outlives the token.
+      const planBridge = await planTokens.bridgeEnv();
+      assertPlanCurrent();
       if (planAuth) {
         if (!turn.model || !models.options.some(model => model.id === turn.model)) {
           await refreshModels();
@@ -355,6 +380,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           sessions,
           chatgptTurn,
           planToken,
+          planBridge,
           turn,
           plan,
           config,
@@ -424,6 +450,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       plan,
       planUnavailable,
       planAuth,
+      planTokens,
       get planWarning() { return planWarning; },
       set planWarning(v) { planWarning = v; },
       planDirectory,

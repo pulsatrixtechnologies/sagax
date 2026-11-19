@@ -13954,6 +13954,7 @@
   "chat.keepWarm.until": "jusqu'à {time}",
   "chat.keepWarm.warm": "cache chaud",
   "chat.limit.continueAt": "Continuer à {time} quand ta limite se réinitialise",
+  "chat.limit.tryAgainNow": "Réessayer maintenant",
   "chat.codingJob.ariaLabel": "Travail de codage {title} : {status}",
   "chat.codingJob.openPrAria": "Ouvrir {name} sur GitHub",
   "chat.codingJob.pr": "PR #{number}",

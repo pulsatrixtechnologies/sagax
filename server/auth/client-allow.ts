@@ -593,9 +593,10 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["POST"], path: /^\/api\/routines\/bulk$/ },
   // Limit-reset automations (routes/limit-resets.ts): the person's own engines
   // and bots. Continue and after-reset go through routine submit / defer; a
-  // member uses them in their sandbox without an admin right.
+  // member uses them in their sandbox without an admin right. Release is
+  // "Try again now" on the person's own engine (upstream #5199).
   { methods: ["GET"], path: /^\/api\/limit-resets$/ },
-  { methods: ["POST"], path: /^\/api\/limit-resets\/(?:continue|after-reset)$/ },
+  { methods: ["POST"], path: /^\/api\/limit-resets\/(?:continue|after-reset|release)$/ },
   // "Only when I'm here" (routes/routine-away.ts): the page's beat, the
   // person's own state, and dismissing their report (the route checks whose)
   // "Create a Team Bot from this conversation" (routes/team-bot-from-thread.ts):

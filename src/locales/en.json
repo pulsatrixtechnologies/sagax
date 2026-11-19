@@ -14002,6 +14002,7 @@
   "limits.markerDrop": "Drop a bot or an automation here to run it when {engine}'s limit resets",
   "limits.callNotOnReset": "A call keeps its time. Drop a bot or an automation on a reset instead.",
   "chat.limit.continueAt": "Continue at {time} when your limit resets",
+  "chat.limit.tryAgainNow": "Try again now",
   "chat.codingJob.ariaLabel": "Coding job {title}: {status}",
   "chat.codingJob.openPrAria": "Open {name} on GitHub",
   "chat.codingJob.pr": "PR #{number}",

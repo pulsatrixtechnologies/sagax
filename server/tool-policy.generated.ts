@@ -205,6 +205,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"exact","route":"/api/limit-resets","tier":"read","readOnly":true,"scope":"limit-resets:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/limit-resets/after-reset","tier":"write","readOnly":false,"scope":"limit-resets:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/limit-resets/continue","tier":"write","readOnly":false,"scope":"limit-resets:write","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/limit-resets/release","tier":"write","readOnly":false,"scope":"limit-resets:write","defaultEnabled":true},
   {"method":"POST","kind":"prefix","route":"/api/live/","tier":"write","readOnly":false,"scope":"live:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/live/call","tier":"read","readOnly":true,"scope":"live:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/live/call/end","tier":"write","readOnly":false,"scope":"live:write","defaultEnabled":true},

@@ -244,6 +244,79 @@ describe("LimitResetClock", () => {
   });
 });
 
+// upstream #5199: a hold ends once fresh usage shows room, usage is re-read
+// while a hold lasts, and the person can end it at once ("Try again now").
+describe("LimitResetClock hold release", () => {
+  const accounts = [{ id: "claude", name: "Claude", driver: "claude" as const, environment: {} }];
+  afterEach(() => vi.useRealTimers());
+
+  it("ends a Claude hold once fresh usage shows room, but not while a window is still at its limit", () => {
+    const instance = new LimitResetClock({ accounts: () => accounts, now: () => NOW });
+    instance.noteRefusal("claude", NOW + 23 * HOUR);
+    instance.noteUsage(report(claude([100, NOW + 2 * HOUR], [8, NOW + 5 * 24 * HOUR])));
+    expect(instance.blockedUntil("claude"), "a window still full keeps it held").not.toBeNull();
+    instance.noteUsage(report(claude([3, NOW + 4 * HOUR], [8, NOW + 5 * 24 * HOUR])));
+    expect(instance.blockedUntil("claude")).toBeNull();
+    instance.stop();
+  });
+
+  it("keeps a hold whose window still resets at the refusal's time", () => {
+    const instance = new LimitResetClock({ accounts: () => accounts, now: () => NOW });
+    instance.noteRefusal("claude", NOW + 4 * HOUR);
+    instance.noteUsage(report(claude([97, NOW + 4 * HOUR + 60_000], [8, NOW + 5 * 24 * HOUR])));
+    expect(instance.blockedUntil("claude")).toBe(NOW + 4 * HOUR);
+    instance.stop();
+  });
+
+  it("re-reads usage every few minutes while an engine is held, with nothing else waiting, and so ends a hold that reset early", async () => {
+    vi.useFakeTimers({ now: NOW });
+    let usage = report(claude([100, NOW + 23 * HOUR], [8, NOW + 5 * 24 * HOUR]));
+    const loadUsage = vi.fn(async () => ({ ...usage, fetchedAt: iso(Date.now()) }));
+    const instance = new LimitResetClock({ accounts: () => accounts, loadUsage, waiting: () => false });
+    instance.start();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(loadUsage, "nothing held, nothing waiting: no reads").not.toHaveBeenCalled();
+    instance.noteRefusal("claude", Date.now() + 23 * HOUR);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(instance.blockedUntil("claude"), "the read soon after the refusal still shows the full window").not.toBeNull();
+    usage = report(claude([2, NOW + 5 * HOUR], [8, NOW + 5 * 24 * HOUR]));
+    await vi.advanceTimersByTimeAsync(6 * 60_000);
+    expect(instance.blockedUntil("claude")).toBeNull();
+    instance.stop();
+  });
+
+  it("ends a hold at once on Try again now, saved across a restart, and a new refusal holds it again", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-limit-release-"));
+    try {
+      const file = join(dir, "holds.json");
+      const changed = vi.fn();
+      const boot = () => new LimitResetClock({ accounts: () => accounts, now: () => NOW, file, onChange: changed });
+      const instance = boot();
+      expect(instance.release("claude"), "nothing held").toBe(false);
+      instance.noteRefusal("claude", NOW + 23 * HOUR);
+      expect(instance.limit("claude")?.held, "only a hold offers Try again now").toBe(true);
+      changed.mockClear();
+      expect(instance.release("claude")).toBe(true);
+      expect(changed).toHaveBeenCalled();
+      expect(instance.blockedUntil("claude")).toBeNull();
+      expect(boot().blockedUntil("claude"), "still released after a restart").toBeNull();
+      instance.noteRefusal("claude", NOW + 23 * HOUR);
+      expect(instance.blockedUntil("claude")).toBe(NOW + 23 * HOUR);
+      instance.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("says a window at its limit is not a hold Try again now can end", () => {
+    const instance = new LimitResetClock({ accounts: () => accounts, now: () => NOW });
+    instance.noteUsage(report(claude([100, NOW + 2 * HOUR], [8, NOW + 5 * 24 * HOUR])));
+    instance.noteRefusal("claude", NOW + 2 * HOUR);
+    expect(instance.limit("claude")?.held).toBeUndefined();
+    instance.stop();
+  });
+});
+
 describe("LimitResetClock holds across a restart", () => {
   it("keeps a hold and the time it began after a restart, including a hold saved without its start", () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-limit-held-at-"));
@@ -261,7 +334,9 @@ describe("LimitResetClock holds across a restart", () => {
       restarted.noteUsage({ fetchedAt: iso(NOW - 30_000), providers: [room] });
       expect(restarted.blockedUntil("codex"), "a cached read from before the refusal").toBe(NOW + 23 * HOUR);
       restarted.noteUsage({ fetchedAt: iso(now), providers: [room] });
-      expect(restarted.blockedUntil("codex"), "only a turn that succeeds ends the hold").toBe(NOW + 23 * HOUR);
+      // upstream #5199: a read from after the refusal that shows room ends the hold
+      expect(restarted.blockedUntil("codex"), "a read from after it").toBeNull();
+      expect(boot().blockedUntil("codex"), "and the release is saved").toBeNull();
       // A file an earlier version wrote names no start: the hold counts from this start.
       writeFileSync(file, JSON.stringify({ codex: { until: NOW + 23 * HOUR } }));
       now = NOW + 10 * 60_000;

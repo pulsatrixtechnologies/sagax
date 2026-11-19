@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 
-import { customServerGate, gateQueryTools, gateServer, hasOwnResultBudget, mcpStdioServer, resultBudget, serverResultBudget } from "./mcp-gate-config.ts";
+import {
+  customServerGate, gateQueryTools, gateServer, hasOwnResultBudget, limitUngatedOutput, mcpStdioServer, resultBudget, serverResultBudget,
+  UNGATED_MCP_OUTPUT_TOKENS,
+} from "./mcp-gate-config.ts";
 
 const server = { command: "example-mcp", args: ["--stdio"], env: { TOKEN: "disposable-test-token" } };
 const input = { name: "notes", server, threadId: "disposable-thread", budget: 0 };
@@ -214,5 +217,41 @@ describe("the gate's own query tool", () => {
       lookalike: { ...server, env: { SAGAX_GATE_BUDGET: "8000" } } }))
       .toEqual(["mcp__shop__query_result"]);
     expect(gateQueryTools({ files: privateTrimming, broken: { args: trimming.args, env: {} } })).toEqual(["mcp__files__query_result"]);
+  });
+});
+
+// upstream #5817
+describe("untrimmed bot servers", () => {
+  const gated = { command: "node", args: ["gate"], env: { SAGAX_GATE_BUDGET: "8000" } };
+  const limit = (env: NodeJS.ProcessEnv, mounted: Record<string, unknown>, perServer?: Record<string, number>) => {
+    limitUngatedOutput(env, mounted, Object.keys(mounted), perServer);
+    return env.MAX_MCP_OUTPUT_TOKENS;
+  };
+
+  it("has the CLI save big results to a file only when a bot server reaches it untrimmed", () => {
+    expect(limit({}, { docs: remote })).toBe(String(UNGATED_MCP_OUTPUT_TOKENS));
+    expect(limit({}, { docs: gated })).toBeUndefined();
+    expect(limit({}, {})).toBeUndefined();
+    expect(limit({}, { docs: remote }, { docs: 0 })).toBeUndefined();
+    expect(limit({ SAGAX_MCP_RESULT_BUDGET: "0" }, { docs: remote })).toBeUndefined();
+    expect(limit({ MAX_MCP_OUTPUT_TOKENS: "40000" }, { docs: remote })).toBe("40000");
+  });
+
+  it("keeps a limit the turn's folder settings set", () => {
+    const env: NodeJS.ProcessEnv = {};
+    limitUngatedOutput(env, { docs: remote }, ["docs"], undefined, "40000");
+    expect(env.MAX_MCP_OUTPUT_TOKENS).toBeUndefined();
+  });
+
+  it("leaves the process-wide limit unset when another untrimmed server asks for whole payloads", () => {
+    expect(limit({}, { whole: remote, docs: remote }, { whole: 0 })).toBeUndefined();
+    expect(limit({}, { docs: remote, whole: remote }, { whole: 0 })).toBeUndefined();
+    expect(limit({}, { whole: gated, docs: remote }, { whole: 0 })).toBe(String(UNGATED_MCP_OUTPUT_TOKENS));
+  });
+
+  it("leaves it unset when a gate passes whole payloads through (a budget of 0)", () => {
+    const whole = { ...gated, env: { SAGAX_GATE_BUDGET: "0" } };
+    expect(limit({}, { whole, docs: remote })).toBeUndefined();
+    expect(limit({}, { docs: remote, whole })).toBeUndefined();
   });
 });

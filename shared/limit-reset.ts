@@ -39,6 +39,8 @@ export interface EngineLimit {
   resetsAt: number | null;
   /** The engine refuses work until resetsAt. */
   blocked: boolean;
+  /** Blocked only by a refusal's hold, which "Try again now" can end; absent when a window at its limit blocks it. */
+  held?: boolean;
 }
 
 export interface EngineLimitsReport {

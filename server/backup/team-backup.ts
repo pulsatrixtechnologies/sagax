@@ -259,7 +259,8 @@ export function importTeamBackup(store: Store, routines: RoutineManager, input: 
         // who may see the imported team is the importing admin's choice
         ...(options.visibility ? { visibility: options.visibility } : {}),
         ...(options.ownerUserId ? { ownerUserId: options.ownerUserId } : {}),
-      }, { seedMessages: false });
+        // #5019: a backup comes back as it was
+      }, { seedMessages: false, soulWrite: "restore" });
       bots.push(bot);
       botIds.set(source.key, bot.id);
       store.patchBot(bot.id, { computer: "off", browser: false, approvalMode: "ask", autoApprove: false,

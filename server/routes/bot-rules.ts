@@ -30,8 +30,7 @@ import {
   isRuleSetId,
   listRuleSets,
   measureRules,
-  newRuleSetId,
-  ruleSetFile,
+  planNewRuleSet,
   setOverBudget,
   totalOverBudget,
   writeRuleSets,
@@ -151,10 +150,10 @@ export function createBotRulesRoutes(deps: BotRulesRouteDeps): RouteHandler {
       try {
         const created = write(() => {
           const sets = listRuleSets(botId);
-          if (sets.length >= RULE_SETS_MAX) throw new RouteError(409, "too-many", `A bot has at most ${RULE_SETS_MAX} rule sets.`);
-          if (sets.some((set) => (set.name ?? "").toLowerCase() === name.toLowerCase())) throw new RouteError(409, "exists", `A rule set named "${name}" already exists.`);
-          const id = newRuleSetId(name, sets.map((set) => set.id));
-          const set: RuleSet = { id, name, enabled: true, file: ruleSetFile(id) };
+          // the same plan rules_update follows when it names a new set (#5019)
+          const planned = planNewRuleSet(sets, name);
+          if (!planned.ok) throw new RouteError(planned.code === "invalid" ? 400 : 409, planned.code, planned.error);
+          const set: RuleSet = planned.set;
           const text = parsed.data.text ?? `# ${name}\n\n`;
           journalMemoryWrite(botId, set.file, text, { actor: "person", via: "ui", expectedHash: readMemoryDoc(botId, set.file).hash });
           writeRuleSets(botId, [...sets, set]);

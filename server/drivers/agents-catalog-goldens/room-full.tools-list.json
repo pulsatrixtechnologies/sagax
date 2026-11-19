@@ -1452,7 +1452,7 @@
                     },
                     "soul": {
                       "type": "string",
-                      "description": "Standing instructions; required with name/title/modelSelection for every new bot."
+                      "description": "Identity, persona and voice; required with name/title/modelSelection for every new bot."
                     },
                     "cwd": {
                       "type": "string",
@@ -2000,7 +2000,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 60,
-            "description": "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set."
+            "description": "Optional: the rule set to change, by its name as your rules block shows it. Omit for the first set. An append with a new name creates that set (when a set is full)."
           }
         },
         "required": [
@@ -3222,7 +3222,7 @@
     },
     {
       "name": "propose_profile",
-      "description": "Submit user-requested changes to your own name, title, description, standing instructions (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). Keep SOUL.md short: who you are and the rules you never break; put step-by-step procedure into a skill instead. A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result.",
+      "description": "Submit user-requested changes to your own name, title, description, soul (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). SOUL.md holds identity, persona and voice only: rules go to rules_update, procedures to a skill, references to docs_update; Sagax files anything else and says where. A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person. Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

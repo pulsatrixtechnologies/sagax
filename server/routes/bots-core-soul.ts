@@ -11,6 +11,7 @@ import { historyWriterOf } from "../history-writer.ts";
 import { sessionPrincipal } from "../auth/request-auth.ts";
 
 import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile.ts";
+import { soulSortSaysSomething } from "../../shared/soul-sort.ts";
 
 import type { BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -26,9 +27,30 @@ export function createBotsCoreSoulRoutes(deps: BotsCoreRouteDeps): RouteHandler 
       computerOwner,
       previewSystemPrompt,
       botOverview,
+      soulSorter,
     } = deps;
     let m: RegExpMatchArray | null = null;
 
+    // #5019: where the text the editor added will go once it is saved
+    // (nothing is written), and the editor's draft sorted when it is left.
+    m = path.match(/^\/api\/bots\/([\w-]+)\/soul\/(preview|settle)$/);
+    if (m && method === "POST") {
+      const bot = store.bot(m[1]);
+      if (!bot) return json(res, 404, { error: "no such bot" });
+      if (!ownerOrAdminOf(auth, bot)) return json(res, 403, { error: "forbidden: only the bot owner or someone who may edit it can change its instructions", code: "bot_instructions_owner_only" });
+      if (m[2] === "preview") {
+        const body = await readBody(req);
+        const soul = typeof body?.soul === "string" ? body.soul : null;
+        if (soul === null || Buffer.byteLength(soul, "utf8") > BOT_PROFILE_LIMITS.soul) return json(res, 400, { error: "send { soul }, at most the soul's limit" });
+        if (!soulSorter) return json(res, 200, { moves: [], unsorted: 0 });
+        const aborted = new AbortController();
+        res.on("close", () => aborted.abort());
+        return json(res, 200, await soulSorter.preview(bot.id, soulSorter.baseFor(bot.id, bot.soul ?? ""), soul, aborted.signal));
+      }
+      const report = soulSorter ? await soulSorter.settle(bot.id) : null;
+      const now = store.bot(bot.id) ?? bot;
+      return json(res, 200, { bot: wireBot(now), ...(soulSortSaysSomething(report) ? { soulSorted: report } : {}) });
+    }
     m = path.match(/^\/api\/bots\/([\w-]+)\/soul$/);
     if (m && method === "GET") {
       const bot = store.bot(m[1]);
@@ -70,9 +92,11 @@ export function createBotsCoreSoulRoutes(deps: BotsCoreRouteDeps): RouteHandler 
       if (!updated) return json(res, 404, { error: "no such bot" });
       recordProfileChange(bot.id, "file", "ui", beforeProfile, profileSnapshot(updated), historyWriterOf(auth));
       recordPersonaSave(auth, bot.id, beforeProfile, profileSnapshot(updated));
-      const visible = wireBot(updated);
+      // #5019: what the file added is filed like any other soul write
+      const report = soulSorter ? await soulSorter.flush(bot.id) : null;
+      const visible = wireBot(store.bot(bot.id) ?? updated);
       broadcast({ kind: "bot", bot: visible });
-      return json(res, 200, { bot: visible });
+      return json(res, 200, { bot: visible, ...(soulSortSaysSomething(report) ? { soulSorted: report } : {}) });
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/soul\/discard-file$/);
     if (m && method === "POST") {

@@ -119,6 +119,54 @@ replay carries `x-sagax-bot-act`), and stays undoable. The level decides:
 a card at Ask, none at Approve for me or Full for the person's own bot.
 Tests: `server/routes/bot-memory.test.ts`, `server/settings-actions.test.ts`.
 
+## The soul holds identity, persona and voice only (2026-11-19, #5019)
+
+Every path that wrote a bot used to put rules, decisions, procedures and
+fleet lists into SOUL.md. Now every soul write in the store reaches the soul
+sort (`server/bots/soul-sort.ts`, `store.onSoulWrite`). It looks only at the
+units a write adds (a paragraph, or one list item; what the soul already held
+never moves) and classifies them with the bot's own fast model
+(`botTextEngine`, `soul-sort` booking), the headings as context: persona
+(identity, persona, role, values, voice: "Never open the way you opened the
+previous reply" is voice), rule, procedure, reference or fact. A mixed
+paragraph may name its exact non-persona sentences; a part the model did not
+copy word for word throws the verdict away. Destinations go through the bot
+tools' own functions (`server/bots/soul-sort-writers.ts`): a rule is appended
+to RULES.md by `updateRules`, cut under `RULE_MAX_CHARS` word for word and
+skipped when RULES.md already has it; a procedure or a reference is written to
+`docs/<title>.md` by `updateDoc`; a fact goes to MEMORY.md by `updateMemory`
+(kept when memory is off). A failed, timed out or malformed classification
+keeps the text in the soul; so does a destination that refuses it (the rules
+budget). A heading or a "Rules:" lead the write added goes when its whole
+section went. The answer says what moved where and what stayed
+(`shared/soul-sort.ts` `SoulSortReport`).
+
+When each write is sorted (`SoulWriteMode`):
+
+- `PATCH /api/bots/:id` (the app, `update_agent_settings`, `sagax_settings`
+  `bot.persona`, the Bot Designer's "Write it for me" and template): before it
+  is saved, the answer carries `soulSorted`.
+- The app's soul editor marks its typing `soulDraft: true`: saved as typed;
+  `POST /api/bots/:id/soul/preview` shows where the new text will go (nothing
+  written) and `POST /api/bots/:id/soul/settle`, when the editor is left, files
+  it; a draft nobody settles is filed after ten minutes without a keystroke.
+- A bot's `propose_profile` once applied, `propose_team_setup`, a new bot and
+  SOUL.md applied from disk: right after the write (the bot's change is
+  journaled as the bot's); `propose_profile` waits for it and its answer says
+  where the text went.
+- A version restore, an undo, an import and a backup: written as they were.
+
+`update_agent_settings` also takes `rules` and `docs` (one change or a list,
+the shape of `rules_update` and `docs_update`), performed as the person
+through `POST /api/bots/:id/workspace/rules` and `/docs`, and `get_agent`
+answers `profile.files` (each rule set's text, the per-rule limit, the docs).
+`sagax_settings` has `bot.rules` and `bot.docs` on the same routes.
+`pnpm soul-audit` (read only, `scripts/soul-audit.ts`) lists the souls that
+still hold more than identity, persona and voice. The guard
+`server/bots/soul-sort.guard.test.ts` fails a soul write that bypasses the
+store's hook. Tests: `server/bots/soul-sort.test.ts`,
+`server/bots/soul-sort-paths.test.ts`, `scripts/soul-audit.test.ts`.
+
 ## Work style: one section every turn reads (2026-10-29)
 
 Measured against the reference app, our bots asked for what one search

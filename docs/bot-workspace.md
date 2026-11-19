@@ -8,7 +8,7 @@ in any editor, and that the persona editor shows under **Rules**, **Memory** and
 
 | Path | What it holds | When the bot sees it | Budget | Edited in |
 |---|---|---|---|---|
-| `SOUL.md` | Who the bot is: standing instructions. Lives on the bot record; `~/.sagax/bots/<botId>/SOUL.md` is a mirror outside the workspace | Every turn, first | 24 KB | Persona > Soul (changes from the bot need the person's OK, `propose_profile`) |
+| `SOUL.md` | Who the bot is: identity, persona and voice only; a rule, a procedure, a reference or a fact a write adds is filed in the files below (`server/bots/soul-sort.ts`, #5019). Lives on the bot record; `~/.sagax/bots/<botId>/SOUL.md` is a mirror outside the workspace | Every turn, first | 24 KB | Persona > Soul (changes from the bot need the person's OK, `propose_profile`) |
 | `RULES.md` | The first rule set: hard constraints the bot checks every turn ("never email a client without my OK") | Every turn while its set is on, right after the soul, before memory | 100 lines / 12 KB of loaded text per set; 250 lines / 24 KB for every set that is on | Persona > Rules, Files (owner or admin), or `rules_update` in chat |
 | `rules/<set>.md` | The other rule sets, one file each | Every turn while the set is on, in the sets' order | same as RULES.md | Persona > Rules, Files, `rules_update` with `set` |
 | `rules/.sets.json` | The sets' order, names and on/off switches (hidden) | Never | none | Persona > Rules |
@@ -69,6 +69,10 @@ the Soul and Memory budgets); past the total, the last sets are cut or left out 
 The persona editor's Rules section shows a gauge per set and for the total, and adds, renames,
 switches, reorders and deletes sets through `server/routes/bot-rules.ts` (`/api/bots/:id/rules`,
 the Soul's gate, audited as `bot.rules-set.*`; text changes are journaled). At most 20 sets.
+An append through `rules_update`, `update_agent_settings` `rules` or `sagax_settings`
+`bot.rules` that names a set the bot does not have creates it, on, with the same plan as the
+page (`planNewRuleSet`), so a full `RULES.md` never stops a rule from being filed (#5019); the
+soul sort files a rule in the next set that is on when the one before is full.
 
 HTML comments in `RULES.md` are notes for the person and never load, which is how the starter
 template (three example rules inside a comment) costs nothing. Past 60 lines or 8 KB the
@@ -88,7 +92,7 @@ internal routes in `server/index.ts`:
 
 | Tool | What it does | Guard rails |
 |---|---|---|
-| `rules_update` | append one rule, replace or remove an exact unique passage of a rule set (`set`: its name; default the first set) | only when the person asks in this conversation; one rule of at most 500 characters; a change that would not load whole (the set's budget, or the total for a set that is on) is refused (413); secrets redacted; not from a room fewer people can see; on a Cloud home only from the owner's conversations; three refusals close it for the turn; journaled as the bot's |
+| `rules_update` | append one rule, replace or remove an exact unique passage of a rule set (`set`: its name; default the first set; an append with a new name creates that set) | only when the person asks in this conversation; one rule of at most 500 characters; a change that would not load whole (the set's budget, or the total for a set that is on) is refused (413); secrets redacted; not from a room fewer people can see; on a Cloud home only from the owner's conversations; three refusals close it for the turn; journaled as the bot's |
 | `docs_update` | write, append, replace or delete `docs/<name>.md` | flat names only (no folders, no dot names); 256 KB per file; same room, Cloud home, refusal and journal rules |
 | `workspace_read` | read a text file of the workspace by relative path, 64 KB at a time with `next_offset` | traversal (`..`), absolute paths, backslashes, hidden names, links and binary files refused; read-only annotation |
 | `workspace_search` | full-text search over `docs/` | same FTS index as memory (`message-db.ts`, `memory_files`); `session_search` and automatic recall keep to memory files, `workspace_search` to `docs/` |

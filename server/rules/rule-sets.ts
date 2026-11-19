@@ -230,6 +230,21 @@ export function newRuleSetId(name: string, taken: Iterable<string>): string {
   }
 }
 
+/** A new set called `input`, as the Rules page adds one and rules_update
+ * does when it names a set the bot does not have yet (#5019): a clean name
+ * no other set has, a free id, under RULE_SETS_MAX. Pure. */
+export function planNewRuleSet(
+  sets: readonly RuleSet[],
+  input: unknown,
+): { ok: true; set: RuleSet } | { ok: false; code: "invalid" | "too-many" | "exists"; error: string } {
+  const name = cleanRuleSetName(input);
+  if (!name) return { ok: false, code: "invalid", error: `A rule set name is 1 to ${RULE_SET_NAME_MAX} characters.` };
+  if (sets.length >= RULE_SETS_MAX) return { ok: false, code: "too-many", error: `A bot has at most ${RULE_SETS_MAX} rule sets.` };
+  if (sets.some((set) => (set.name ?? "").toLowerCase() === name.toLowerCase())) return { ok: false, code: "exists", error: `A rule set named "${name}" already exists.` };
+  const id = newRuleSetId(name, sets.map((set) => set.id));
+  return { ok: true, set: { id, name, enabled: true, file: ruleSetFile(id) } };
+}
+
 /** The set a rules_update or a route names: its id, or its name (case and
  * spacing ignored). Without one, the first set. */
 export function findRuleSet(sets: readonly RuleSet[], ref: string | undefined): RuleSet | undefined {
@@ -390,7 +405,7 @@ export function rulesSystemPrompt(botId: string, opts: { writes?: boolean } = {}
     const writes = writesOn
       ? single
         ? " Change RULES.md only with rules_update, and only when the person asks for it in this conversation."
-        : " Change your rules only with rules_update (set: the set's name; without it, the first set), and only when the person asks for it in this conversation."
+        : " Change your rules only with rules_update (set: the set's name; without it, the first set; an append with a new name creates that set), and only when the person asks for it in this conversation."
       : "";
     const intro = single
       ? "\n\nYour rules follow: hard constraints the person set for you."

@@ -192,7 +192,9 @@ function botField(key: string, field: string, value: SettingValue, label: string
 botField("bot.name", "name", "string", "Name", "Bot editor > Identity");
 botField("bot.title", "title", "string", "Title", "Bot editor > Identity");
 botField("bot.description", "description", "text", "Description", "Bot editor > Identity");
-botField("bot.persona", "soul", "text", "Persona and instructions", "Bot editor > Persona");
+// #5019: the soul is identity, persona and voice only; a rule goes to
+// bot.rules (RULES.md), a procedure or a reference to bot.docs (docs/)
+botField("bot.persona", "soul", "text", "Soul: identity, persona and voice only (a rule: bot.rules; a procedure or a reference: bot.docs; anything else added here is filed there by Sagax)", "Bot editor > Persona");
 botField("bot.avatar", "avatarUrl", "string?", "Avatar picture", "Bot editor > Identity > Avatar");
 botField("bot.color", "color", "string", "Color", "Bot editor > Look");
 botField("bot.skin", "mascotSkin", "string", "Mascot skin", "Bot editor > Look");
@@ -298,6 +300,23 @@ add({
   label: "Who pays for replies (owner, speaker = each person, default)", where: "Bot editor > Model > Who pays for replies",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/runtime-settings`, field: "settings.turnPayer" }),
   write: (ids, v) => ({ method: "PATCH", path: `/api/bots/${enc(ids.target!)}/runtime-settings`, body: { turnPayer: v === "default" ? null : v } }),
+});
+// #5019: a bot's RULES.md and docs/, by the routes rules_update's and
+// docs_update's own functions answer for the person (bot-workspace.ts)
+add({
+  key: "bot.rules", family: "bot", target: "bot", value: "object",
+  label: "Its rules, RULES.md (get: every rule set's text; set: {action: append, text} | {action: replace, oldText, text} | {action: remove, oldText}, optional set, a new name creates it; one rule, at most 500 characters)", where: "Bot editor > Rules",
+  read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/workspace/file`, query: { path: "RULES.md" }, maxChars: 30_000 }),
+  write: (ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/workspace/rules`, body: v } : "value is {action: append, text} | {action: replace, oldText, text} | {action: remove, oldText}.",
+});
+add({
+  key: "bot.docs", family: "bot", target: "bot", value: "object",
+  label: "A reference document in docs/ (get: value its path, docs/<name>.md; set: {action: write|append|replace|delete, path, text?, oldText?}): procedures, lists, references", where: "Bot editor > Files",
+  read: (ids, arg) => memoryPathOf(arg)
+    ? { path: `/api/bots/${enc(ids.target!)}/workspace/file`, query: { path: memoryPathOf(arg)! }, maxChars: 60_000 }
+    : { path: `/api/bots/${enc(ids.target!)}/workspace`, shape: (v) => ({ docs: (((v ?? {}) as { entries?: Array<{ path?: unknown }> }).entries ?? []).map((entry) => entry.path).filter((path): path is string => typeof path === "string" && path.startsWith("docs/")) }) },
+  write: (ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/workspace/docs`, body: v } : "value is {action, path: docs/<name>.md, text?, oldText?}.",
+  classes: (v) => (v as { action?: unknown } | null)?.action === "delete" ? ["delete"] : ["own"],
 });
 add({
   key: "bot.memory", family: "bot", target: "bot", value: "text", label: "Memory text", where: "Bot editor > Memory",

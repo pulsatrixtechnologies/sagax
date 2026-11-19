@@ -58,6 +58,7 @@ import { checkWriteVersion, expectedVersionArg, mustReadFirst, readerKey, versio
 import { readRouteRefusal } from "./route-refusal.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import type { BotSpeech } from "../shared/voice-mode.ts";
+import { soulSortNote, type SoulSortReport } from "../shared/soul-sort.ts";
 
 export {
   AGENT_PRIMARY_FIELD,
@@ -339,6 +340,14 @@ export interface AgentProfile {
     anti_jobs: string | null;
     headings: string[];
     voice_settings: { voice: string | null; speak_replies: boolean; voice_notes: boolean };
+    /** #5019: the bot's rule sets (RULES.md first) with their text, the
+     * per-rule limit, and its docs/ files: where rules and references go,
+     * changed with update_agent_settings `rules` and `docs`. */
+    files?: {
+      rules: Array<{ set: string; path: string; enabled: boolean; text: string }>;
+      rule_max_chars: number;
+      docs: string[];
+    };
   } | null;
   temporary: {
     created_at: number;
@@ -380,6 +389,9 @@ export interface AgentSettingsResult {
   changed: string[];
   refused: Array<{ field: string; reason: string }>;
   agent?: AgentSummary;
+  /** #5019: what the soul write added that is not identity, persona or
+   * voice, and where Sagax filed it (RULES.md, docs/, MEMORY.md). */
+  soulSorted?: SoulSortReport;
 }
 
 export interface AgentRoutinePatch {
@@ -2120,7 +2132,7 @@ function createAgentApiConfigHandlers(env: {
         if (Object.hasOwn(args, key)) fields[key] = args[key];
       }
       if (!Object.keys(fields).length) {
-        return refuse(400, "bad_request", "Pass at least one Edit bot field (name, approval level, tools, computer, runtime, primary, …). Call get_agent first; the same checks as the Sagax Edit bot window apply.");
+        return refuse(400, "bad_request", "Pass at least one Edit bot field (name, approval level, tools, computer, runtime, primary, rules, docs, …). Call get_agent first; the same checks as the Sagax Edit bot window apply.");
       }
       const updateSettings = deps.updateSettings;
       return versioned(caller, { kind: "agent", id: agentId }, args, () => deps.writeVersions?.agent(agentId) ?? null, async () => {
@@ -2131,6 +2143,9 @@ function createAgentApiConfigHandlers(env: {
           changed: updated.changed,
           refused: updated.refused,
           ...(updated.agent ? { agent: wireSummary(updated.agent) } : {}),
+          // #5019: the soul holds identity, persona and voice only; what the
+          // write added beyond that, and where it went
+          ...(updated.soulSorted ? { soul_sorted: { ...updated.soulSorted, note: soulSortNote(updated.soulSorted) } } : {}),
         });
       });
     },

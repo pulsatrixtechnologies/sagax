@@ -1230,6 +1230,10 @@ import { createBotSkillUploadRoutes } from "./routes/bot-skill-upload.ts";
 import { createShownPathRoutes } from "./routes/shown-path.ts";
 import { docsIndexPrompt, readWorkspaceText, rulesSystemPrompt } from "./workspace/workspace-files.ts";
 import { updateDoc, updateRules } from "./workspace/workspace-tools.ts";
+import { createSoulSorter } from "./bots/soul-sort.ts";
+import { botFilesForProfile, soulSortWriters } from "./bots/soul-sort-writers.ts";
+import type { SoulSortReport } from "../shared/soul-sort.ts";
+import { RULE_MAX_CHARS } from "./rules/rule-sets.ts";
 import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usage.ts";
 import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
 import { createBotTeamWorkRoutes } from "./routes/bot-team-work.ts";
@@ -18276,7 +18280,7 @@ function botOneShotText<O extends TextGenerationOptions>(bot: BotRecord, instanc
 function botTitleEngine(bot: BotRecord, instance: ProviderInstance): Pick<ProviderInstance, "generateText"> {
   return instance.generateText ? { generateText: botOneShotText(bot, instance, instance.generateText.bind(instance)) } : instance;
 }
-function botTextEngine(botId: string, purpose: string): { generateText: (prompt: string, options?: { noThinking?: boolean }) => Promise<string> } | null {
+function botTextEngine(botId: string, purpose: string): { generateText: (prompt: string, options?: Pick<TextGenerationOptions, "noThinking" | "signal" | "model" | "maxTokens">) => Promise<string> } | null {
   const bot = store.bot(botId);
   const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
   if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
@@ -18304,6 +18308,43 @@ function botTextEngine(botId: string, purpose: string): { generateText: (prompt:
     },
   };
 }
+
+// #5019: the soul holds identity, persona and voice only. Every soul write
+// in the store reaches the sorter (store.onSoulWrite); what a write adds
+// that is a rule, a procedure, a reference or a fact is filed in RULES.md,
+// docs/ or MEMORY.md through rules_update's, docs_update's and
+// memory_update's own functions, classified by the bot's fast model on its
+// own engine (botTextEngine, booked like the skill review). A failed
+// classification keeps the text in the soul and says so.
+const soulSorter = createSoulSorter({
+  classifier: (botId) => {
+    const engine = botTextEngine(botId, "soul-sort");
+    if (!engine) return null;
+    // the bot's fast model when it is on the same engine as the bot
+    const selection = store.bot(botId)?.modelSelection;
+    const fast = selection?.fast && selection.fast.instanceId === selection.instanceId ? selection.fast.model : undefined;
+    return (prompt, signal) => engine.generateText(prompt, { noThinking: true, signal, maxTokens: 2_000, ...(fast ? { model: fast } : {}) });
+  },
+  botName: (botId) => store.bot(botId)?.name ?? "",
+  writers: soulSortWriters({ memoryOn: (botId) => store.bot(botId)?.memoryEnabled !== false }),
+  ruleMax: RULE_MAX_CHARS,
+  currentSoul: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? bot.soul ?? "" : null;
+  },
+  commitSoul: (botId, soul, expected) => {
+    const bot = store.bot(botId);
+    if (!bot || (bot.soul ?? "") !== expected) return false;
+    return Boolean(store.patchBotProfile(botId, { soul }, { soulWrite: "sorted" }));
+  },
+  sortedAfter: (botId, _report, before, after, actor) => {
+    const bot = store.bot(botId);
+    if (!bot) return;
+    if (before !== after) recordProfileChange(botId, actor === "bot" ? "bot" : "system", "soul-sort", { soul: before }, { soul: after });
+    broadcast({ kind: "bot", bot: wireBot(bot) });
+  },
+});
+store.onSoulWrite((write) => soulSorter.noted(write));
 
 // Learn skills automatically (server/skills/skill-review.ts): tool steps are counted
 // per bot and conversation, and past the threshold the bot's own engine
@@ -25082,6 +25123,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     submitRoutine: (input) => routineRequests.submit(input as unknown as Parameters<typeof routineRequests.submit>[0]),
     resolveRoutine: (args) => routineRequests.resolve(args),
     submitProfile: (input) => profileRequests.submit(input as unknown as Parameters<typeof profileRequests.submit>[0]),
+    soulSorted: (botId) => soulSorter.flush(botId),
     resolveProfile: (args) => profileRequests.resolve(args) as { claimed: boolean; state: string; targetBotId: string },
     submitModel: (input) => modelRequests.submit(input as unknown as Parameters<typeof modelRequests.submit>[0]),
     resolveModel: (args) => modelRequests.resolve(args) as { claimed: boolean; state: string; targetBotId: string },
@@ -26208,7 +26250,8 @@ ROUTES.push(createBotVersionRoutes({
     const parsed = parseBotProfilePatch(patch, true);
     if (!parsed.ok) return { status: 400, error: parsed.error };
     const before = profileSnapshot(bot);
-    const updated = store.patchBotProfile(botId, parsed.patch);
+    // #5019: a version comes back as it was, never sorted again
+    const updated = store.patchBotProfile(botId, parsed.patch, { soulWrite: "restore" });
     if (!updated) return { status: 404, error: "no such bot" };
     recordProfileChange(botId, "user", "restore", before, profileSnapshot(updated), historyWriterOf(auth));
     recordPersonaSave(auth, botId, before, profileSnapshot(updated));
@@ -34567,7 +34610,9 @@ const agentApi = createAgentApi({
         instructions: instructions.text,
         instructions_truncated: instructions.truncated,
         ...profileSections(soul),
-        voice_settings: { voice: bot.voice ?? null, speak_replies: bot.speakReplies === true, voice_notes: bot.voiceNotes !== false }
+        voice_settings: { voice: bot.voice ?? null, speak_replies: bot.speakReplies === true, voice_notes: bot.voiceNotes !== false },
+        // #5019: the files beside the soul, where rules and references go
+        files: botFilesForProfile(bot.id),
       } : null,
       temporary: temporary ? {
         created_at: temporary.createdAt,
@@ -34779,10 +34824,15 @@ const agentApi = createAgentApi({
     if (caller.kind !== "person") {
       return agentRefuse(403, "forbidden_caller", "update_agent_settings is for a person's AI client. A bot uses propose_team_setup or asks the person in Sagax.");
     }
-    const { patch, runtime, primary, primaryInvalid, switches, switchesInvalid } = partitionAgentSettings(fields);
+    const { patch, runtime, primary, primaryInvalid, switches, switchesInvalid, workspace } = partitionAgentSettings(fields);
     const changed: string[] = [];
     const refused: Array<{ field: string; reason: string }> = [...switchesInvalid];
     const member = memberForAgentCaller(caller);
+    let soulSorted: SoulSortReport | undefined;
+    const soulSortOf = (body: unknown) => {
+      const report = body && typeof body === "object" ? (body as { soulSorted?: SoulSortReport }).soulSorted : undefined;
+      if (report) soulSorted = report;
+    };
     const refuseOne = (field: string, body: unknown) => {
       const record = body && typeof body === "object" ? body as { error?: unknown; message?: unknown; permission?: unknown } : {};
       refused.push({ field, reason: plainFieldRefusalReason(field, record) });
@@ -34827,6 +34877,7 @@ const agentApi = createAgentApi({
       });
       if (whole.status >= 200 && whole.status < 300) {
         changed.push(...Object.keys(patch));
+        soulSortOf(whole.body);
       } else {
         for (const [field, value] of Object.entries(patch)) {
           const one = await performAsMember(member, {
@@ -34834,10 +34885,27 @@ const agentApi = createAgentApi({
             path: `/api/bots/${encodeURIComponent(agentId)}`,
             body: { [field]: value },
           });
-          if (one.status >= 200 && one.status < 300) changed.push(field);
-          else refuseOne(field, one.body);
+          if (one.status >= 200 && one.status < 300) {
+            changed.push(field);
+            soulSortOf(one.body);
+          } else refuseOne(field, one.body);
         }
       }
+    }
+
+    // #5019: RULES.md and docs/ beside the soul, one change at a time,
+    // through the routes the bot page's Rules and Files call (the functions
+    // rules_update and docs_update run), as the person.
+    const workspaceOne = async (field: string, kind: "rules" | "docs", body: Record<string, unknown>) => {
+      const done = await performAsMember(member, { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/workspace/${kind}`, body });
+      if (done.status >= 200 && done.status < 300) changed.push(field);
+      else refused.push({ field, reason: String((done.body as { error?: unknown } | null)?.error ?? `the ${kind === "rules" ? "rule" : "document"} change was refused`) });
+    };
+    for (const [index, change] of (workspace.rules ?? []).entries()) {
+      await workspaceOne(workspace.rules!.length === 1 ? "rules" : `rules[${index}]`, "rules", { ...change });
+    }
+    for (const [index, change] of (workspace.docs ?? []).entries()) {
+      await workspaceOne(workspace.docs!.length === 1 ? "docs" : `docs[${index}]`, "docs", { ...change });
     }
 
     // #4172: the bot page's skill and plugin switches and its sharing, each
@@ -34868,7 +34936,7 @@ const agentApi = createAgentApi({
         hint: "Only fields the Edit bot window lets you change on this agent are accepted; ownership and grants apply as in Sagax.",
       });
     }
-    return { changed, refused, agent: agentSummary(store.bot(agentId) ?? bot) };
+    return { changed, refused, agent: agentSummary(store.bot(agentId) ?? bot), ...(soulSorted ? { soulSorted } : {}) };
   },
   async updateRoutine(caller, routineId, patch) {
     if (caller.kind !== "person") {
@@ -36331,6 +36399,7 @@ ROUTES.push(createGroupsHttpRoutes({
 }));
 /** #2045: resolve (and ensure) the caller's team channel id for a display name. */
 ROUTES.push(createBotsCoreRoutes({
+  soulSorter,
   harnessChoice,
   newBotSelection,
   store,
@@ -37086,6 +37155,8 @@ ROUTES.push(createBotSecretCardRoutes({
   },
 }));
 ROUTES.push(createBotsMutateRoutes({
+  // #5019: what a soul write adds is filed out of the soul before it is saved
+  soulSorter,
   resolveSectionId,
   // #4329 lot 5: a bot's engine and model are resolved together when written
   harnessChoice,

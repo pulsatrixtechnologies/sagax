@@ -68,6 +68,8 @@ export type BotPatch = Partial<
   acknowledgeLocalAuto?: boolean;
   confirmFullAccess?: boolean;
   acknowledgePeerScope?: boolean;
+  /** #5019: the soul editor's typing, sorted when the editor is left. */
+  soulDraft?: boolean;
 };
 
 export function useBotSettingsDerived(bot: Bot) {

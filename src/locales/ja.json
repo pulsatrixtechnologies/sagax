@@ -1205,7 +1205,6 @@
   "botPanel.soul.driftHelp": "選ぶまで、bot は保存済みの版を使い続けます。ファイル:",
   "botPanel.soul.useFile": "ファイルを使う",
   "botPanel.soul.keepSaved": "保存済みの版を残す",
-  "botPanel.soul.placeholder": "この bot が誰で、決して破らない規則です。短くしてください。手順はスキルに置きます。",
   "botPanel.soul.mirrored": "複製先",
   "botPanel.soul.notSaved": " (未保存)",
   "botPanel.history.refresh": "履歴を更新できませんでした。",

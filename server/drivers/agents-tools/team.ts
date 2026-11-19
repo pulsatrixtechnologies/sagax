@@ -4,6 +4,7 @@
 
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
+import { soulSortNote, type SoulSortReport } from "../../../shared/soul-sort.ts";
 import {
   CHIEF_PROFILE_TARGET,
   PERSON_QUOTE,
@@ -84,7 +85,7 @@ export const DEF_PROPOSE_TEAM_SETUP = {
             fields: { type: "object", additionalProperties: false, properties: {
               name: { type: "string", maxLength: 100 }, title: { type: "string", maxLength: 200 },
               chiefOfStaff: { type: "boolean", description: "Give or remove the Primary Bot role. One per person: step the current one down in the same plan when replacing it. Grants no team access or permissions." },
-              description: { type: "string", maxLength: 4000 }, soul: { type: "string", description: "Standing instructions; required with name/title/modelSelection for every new bot." },
+              description: { type: "string", maxLength: 4000 }, soul: { type: "string", description: "Identity, persona and voice; required with name/title/modelSelection for every new bot." },
               cwd: { type: "string", maxLength: 1024, description: "Create only: absolute path of an existing folder its tools use; omit for a private workspace." },
               section: { type: "string", maxLength: 60, description: "Exact authorized existing team, or a team explicitly named in newTeams. Empty string means General." },
               modelSelection: { type: "object", additionalProperties: false, properties: {
@@ -199,7 +200,7 @@ export const DEF_RETRY_THREAD = {
 export const DEF_PROPOSE_PROFILE = {
     name: "propose_profile",
     description:
-      "Submit user-requested changes to your own name, title, description, standing instructions (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). Keep SOUL.md short: who you are and the rules you never break; put step-by-step procedure into a skill instead." + CHIEF_PROFILE_TARGET + SELF_CHANGE_OUTCOME,
+      "Submit user-requested changes to your own name, title, description, soul (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). SOUL.md holds identity, persona and voice only: rules go to rules_update, procedures to a skill, references to docs_update; Sagax files anything else and says where." + CHIEF_PROFILE_TARGET + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -603,7 +604,12 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
         ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
       }),
     });
-    return confirmationResult(r, "the profile change", "profile");
+    const answer = confirmationResult(r, "the profile change", "profile");
+    // #5019: what the change added to SOUL.md that is not persona, and where it went
+    const sorted = (r as { soulSorted?: unknown }).soulSorted;
+    return sorted && typeof sorted === "object" && Array.isArray((sorted as SoulSortReport).moved) && Array.isArray((sorted as SoulSortReport).kept)
+      ? { ...answer, text: `${answer.text}\n\n${soulSortNote(sorted as SoulSortReport)}` }
+      : answer;
   }
   if (name === "propose_model") {
     const raw = args.model_selection;

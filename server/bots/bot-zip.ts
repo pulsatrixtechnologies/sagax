@@ -869,7 +869,8 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       modelSelection: selection, ...(section ? { section } : {}),
       ...(options.ownerPrincipalId ? { ownerUserId: options.ownerPrincipalId } : {}),
       ...(toolScope.ok && toolScope.scope ? { toolScope: toolScope.scope } : {}),
-    }, { seedMessages: false });
+      // #5019: an import keeps its soul as it was (its RULES.md comes with it)
+    }, { seedMessages: false, soulWrite: "restore" });
     botId = bot.id;
     const id = bot.id;
 

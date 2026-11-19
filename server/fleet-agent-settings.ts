@@ -43,6 +43,10 @@ const MODEL_ROUTE_FIELDS = new Set([
   "harness",
 ]);
 
+/** The app's own soul editor flag (#5019): its typing is a draft. An AI
+ * client's soul write is sorted at once, so it is not offered here. */
+const APP_ONLY_FIELDS = new Set(["soulDraft"]);
+
 /** Primary Bot switch (POST/DELETE /api/bots/:id/primary). */
 export const AGENT_PRIMARY_FIELD = "primary" as const;
 
@@ -53,6 +57,17 @@ export const AGENT_PRIMARY_FIELD = "primary" as const;
  * /api/bots/:id/grants, DELETE /api/bots/:id/grants/:target). */
 export const AGENT_SWITCH_FIELDS = ["skills", "plugins", "grants"] as const;
 export type AgentSwitchField = (typeof AGENT_SWITCH_FIELDS)[number];
+
+/** #5019: the bot's other files, beside its soul: `rules` changes RULES.md
+ * and its rule sets (the shape and the limits of rules_update), `docs` its
+ * docs/ folder (the shape of docs_update). Each is one change or a list,
+ * performed as the person through POST /api/bots/:id/workspace/rules and
+ * /docs, the functions rules_update and docs_update call. */
+export const AGENT_WORKSPACE_FIELDS = ["rules", "docs"] as const;
+export const AGENT_WORKSPACE_CHANGES_MAX = 50;
+
+export interface AgentRulesChange { action: "append" | "replace" | "remove"; text?: string; oldText?: string; set?: string }
+export interface AgentDocsChange { action: "write" | "append" | "replace" | "delete"; path: string; text?: string; oldText?: string }
 
 /** The sharing levels the bot page offers (PUT /api/bots/:id/grants). */
 export const AGENT_GRANT_LEVELS = ["use", "run", "edit", "manage"] as const;
@@ -67,12 +82,13 @@ function uniqueSorted(fields: Iterable<string>): string[] {
  * Primary Bot route. modelSelection and harness stay on update_agent_model.
  */
 export const AGENT_SETTINGS_FIELDS: readonly string[] = uniqueSorted([
-  ...MEMBER_BOT_FIELDS.filter((field) => !MODEL_ROUTE_FIELDS.has(field)),
+  ...MEMBER_BOT_FIELDS.filter((field) => !MODEL_ROUTE_FIELDS.has(field) && !APP_ONLY_FIELDS.has(field)),
   ...Object.keys(BOT_FIELD_PERMISSIONS).filter((field) => !MODEL_ROUTE_FIELDS.has(field)),
   ...RUNTIME_SETTINGS_FIELDS,
   ...PATCH_ACK_FIELDS,
   ...PATCH_EXTRA_FIELDS,
   ...AGENT_SWITCH_FIELDS,
+  ...AGENT_WORKSPACE_FIELDS,
   AGENT_PRIMARY_FIELD,
 ]);
 
@@ -197,6 +213,8 @@ export function partitionAgentSettings(fields: Record<string, unknown>): {
   switches: AgentSwitches;
   /** Each switch field whose value is not a valid map, with why. */
   switchesInvalid: Array<{ field: string; reason: string }>;
+  /** #5019: the changes to RULES.md and docs/, in order. */
+  workspace: { rules?: AgentRulesChange[]; docs?: AgentDocsChange[] };
 } {
   const patch: Record<string, unknown> = {};
   const runtime: Record<string, unknown> = {};
@@ -204,7 +222,15 @@ export function partitionAgentSettings(fields: Record<string, unknown>): {
   const switchesInvalid: Array<{ field: string; reason: string }> = [];
   let primary: boolean | undefined;
   let primaryInvalid = false;
+  const workspace: { rules?: AgentRulesChange[]; docs?: AgentDocsChange[] } = {};
   for (const [field, value] of Object.entries(fields)) {
+    if (field === "rules" || field === "docs") {
+      const parsed = field === "rules" ? parseRulesChanges(value) : parseDocsChanges(value);
+      if (typeof parsed === "string") switchesInvalid.push({ field, reason: parsed });
+      else if (field === "rules") workspace.rules = parsed as AgentRulesChange[];
+      else workspace.docs = parsed as AgentDocsChange[];
+      continue;
+    }
     if (field === AGENT_PRIMARY_FIELD) {
       if (typeof value === "boolean") primary = value;
       else primaryInvalid = true;
@@ -220,7 +246,56 @@ export function partitionAgentSettings(fields: Record<string, unknown>): {
     if (isRuntimeSettingsField(field)) runtime[field] = value;
     else patch[field] = value;
   }
-  return { patch, runtime, primary, ...(primaryInvalid ? { primaryInvalid: true } : {}), switches, switchesInvalid };
+  return { patch, runtime, primary, ...(primaryInvalid ? { primaryInvalid: true } : {}), switches, switchesInvalid, workspace };
+}
+
+const text = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
+const listOf = (value: unknown): unknown[] => Array.isArray(value) ? value : [value];
+
+/** rules as rules_update takes it: { action: append with text | replace
+ * with text and old_text | remove with old_text, set? }, or a list. */
+function parseRulesChanges(value: unknown): AgentRulesChange[] | string {
+  const shape = "rules is { action: \"append\", text } | { action: \"replace\", old_text, text } | { action: \"remove\", old_text }, with an optional set (a rule set's name; an append with a new name creates that set), or a list of them; one rule per change, at most 500 characters";
+  const items = listOf(value);
+  if (!items.length || items.length > AGENT_WORKSPACE_CHANGES_MAX) return `${shape}, at most ${AGENT_WORKSPACE_CHANGES_MAX} changes.`;
+  const out: AgentRulesChange[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return `${shape}.`;
+    const row = item as Record<string, unknown>;
+    const action = row.action;
+    if (action !== "append" && action !== "replace" && action !== "remove") return `${shape}.`;
+    const oldText = text(row.old_text) ?? text(row.oldText);
+    out.push({
+      action,
+      ...(text(row.text) !== undefined ? { text: text(row.text) } : {}),
+      ...(oldText !== undefined ? { oldText } : {}),
+      ...(text(row.set) !== undefined ? { set: text(row.set) } : {}),
+    });
+  }
+  return out;
+}
+
+/** docs as docs_update takes it: { action: write | append | replace |
+ * delete, path: docs/<name>.md, text?, old_text? }, or a list. */
+function parseDocsChanges(value: unknown): AgentDocsChange[] | string {
+  const shape = "docs is { action: \"write\" | \"append\" | \"replace\" | \"delete\", path: \"docs/<name>.md\", text, old_text (for replace) }, or a list of them";
+  const items = listOf(value);
+  if (!items.length || items.length > AGENT_WORKSPACE_CHANGES_MAX) return `${shape}, at most ${AGENT_WORKSPACE_CHANGES_MAX} changes.`;
+  const out: AgentDocsChange[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return `${shape}.`;
+    const row = item as Record<string, unknown>;
+    const action = row.action;
+    if ((action !== "write" && action !== "append" && action !== "replace" && action !== "delete") || typeof row.path !== "string" || !row.path.trim()) return `${shape}.`;
+    const oldText = text(row.old_text) ?? text(row.oldText);
+    out.push({
+      action,
+      path: row.path,
+      ...(text(row.text) !== undefined ? { text: text(row.text) } : {}),
+      ...(oldText !== undefined ? { oldText } : {}),
+    });
+  }
+  return out;
 }
 
 export type AgentGrantLevel = (typeof AGENT_GRANT_LEVELS)[number];

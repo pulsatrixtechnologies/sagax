@@ -18,6 +18,9 @@ export const CLIENT_BOT_PATCH_FIELDS = [
 export const MEMBER_BOT_FIELDS = [
   ...CLIENT_BOT_PATCH_FIELDS,
   "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "harness", "contextWindow", "requireAvailableModel",
+  // #5019: the app's soul editor marks its typing as a draft, sorted when
+  // the editor is left (server/bots/soul-sort.ts); never stored on the bot
+  "soulDraft",
 ] as const;
 
 const MEMBER_BOT_FIELD_SET = new Set<string>(MEMBER_BOT_FIELDS);

@@ -16,6 +16,7 @@ import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { recordProfileChange } from "./profile-versions.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { BotRecord } from "../store.ts";
+import type { SoulWriteActor, SoulWriteMode } from "../bots/soul-sort.ts";
 
 const MAX_REASON = 500;
 const STALE = "This bot's profile changed after this card was prepared. Ask the bot to review it and propose again.";
@@ -63,7 +64,7 @@ export interface ProfileRequestStore {
     },
   ): { id: string };
   patchMessage(threadId: string, messageId: string, patch: { card: OptionCardLike }): { id: string } | null;
-  patchBotProfile(id: string, patch: Partial<Pick<BotRecord, "name" | "title" | "description" | "cwd" | "soul" | "notifications" | "speakReplies" | "lastProfileRequestId">>): BotRecord | null;
+  patchBotProfile(id: string, patch: Partial<Pick<BotRecord, "name" | "title" | "description" | "cwd" | "soul" | "notifications" | "speakReplies" | "lastProfileRequestId">>, opts?: { soulWrite?: SoulWriteMode; soulActor?: SoulWriteActor }): BotRecord | null;
 }
 
 export interface ProfileRequestServiceOptions {
@@ -418,7 +419,8 @@ export class ProfileRequestService {
       if (!checked.ok) return cannot(checked.error);
       patch.cwd = checked.cwd ?? undefined;
     }
-    if (!this.store.patchBotProfile(target.id, patch)) return cannot(NO_SUCH_BOT, 404);
+    // #5019: an undo puts the profile back as it was, never sorted again
+    if (!this.store.patchBotProfile(target.id, patch, { soulWrite: "restore" })) return cannot(NO_SUCH_BOT, 404);
     recordProfileChange(target.id, "user", `undo:${message.id}`, payload.changes, payload.before);
     this.store.patchMessage(args.threadId, message.id, { card: { ...card, undone: true } });
     return { claimed: true, state: "undone", targetBotId: target.id };
@@ -495,7 +497,8 @@ export class ProfileRequestService {
         if (!checked.ok) throw new ProfileRequestError(checked.error, 409, { terminal: true });
         patch.cwd = checked.cwd ?? undefined;
       }
-      if (!this.store.patchBotProfile(target.id, patch)) throw new ProfileRequestError(NO_SUCH_BOT, 404);
+      // #5019: the bot's own change: what it adds to the soul is filed out after
+      if (!this.store.patchBotProfile(target.id, patch, { soulActor: "bot" })) throw new ProfileRequestError(NO_SUCH_BOT, 404);
       recordProfileChange(target.id, "bot", `card:${message.id}`, payload.before, payload.changes);
 
       const appliedAt = this.now();

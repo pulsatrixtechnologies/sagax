@@ -356,6 +356,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         applyToAllThreads: _allThreads,
         organizationFullAccess: _orgFull,
         threadId: _threadId,
+        soulDraft: _soulDraft,
         host,
         computer,
         ...rest

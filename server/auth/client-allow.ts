@@ -357,7 +357,7 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // MEMORY.md and memory/ are the memory routes below.
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/workspace(?:\/(?:download|count))?$/ },
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/bots\/[\w-]+\/workspace\/file$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/workspace\/(?:docs\/rename|mkdir|touch|rename|upload)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/workspace\/(?:docs\/rename|mkdir|touch|rename|upload|rules|docs)$/ },
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/workspace\/entry$/ },
   // 2026-10-26: the bot's memory (server/routes/bot-memory.ts):
   // MEMORY.md, memory/ topics, the journal and its revert, upkeep and tidy.
@@ -936,7 +936,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/event-subscriptions(?:\/[\w-]+(?:\/test)?)?$/ },
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/direct-grants\/[^/]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/reviewed$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/soul\/(?:apply-file|discard-file)$/, owner: "bot" },
+  // #5019: preview where added soul text will go, and sort the editor's draft when it is left
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/soul\/(?:apply-file|discard-file|preview|settle)$/, owner: "bot" },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/history$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/history\/restore$/, feature: "orgDirectory" },
   { methods: ["PUT"], path: /^\/api\/bots\/[\w-]+\/temporary-pin$/ },

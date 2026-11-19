@@ -166,7 +166,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_agent_settings",
-    description: "Partial patch of an agent's Edit bot fields (identity, soul, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary), skills {name: bool}, plugins {key: bool}, grants {user:<id> or team:<id>: use|run|edit|manage|null}. Same rights as Edit bot. Pass expected_version from get_agent. Returns changed, refused and version. Model: update_agent_model.",
+    description: "Partial patch of an agent's Edit bot fields (identity, soul, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary), skills {name: bool}, plugins {key: bool}, grants {user:<id> or team:<id>: use|run|edit|manage|null}, rules (as rules_update) and docs (as docs_update). soul is identity, persona and voice only; anything else in it is filed in RULES.md or docs/ (soul_sorted). Same rights as Edit bot. Pass expected_version from get_agent. Returns changed, refused and version. Model: update_agent_model.",
     inputSchema: {
       type: "object",
       additionalProperties: true,

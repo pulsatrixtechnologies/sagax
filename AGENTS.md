@@ -141,6 +141,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Bots
 
 - The Primary Bot does everything the person asks, payments included; the approval level is the only barrier (2026-10-20).
+- A soul holds identity, persona and voice only: every soul write goes through the store's soul sort (`server/bots/soul-sort.ts`), which files an added rule in RULES.md, a procedure or reference in docs/, a fact in memory, and keeps what it cannot sort (2026-11-19, #5019).
 - Every setting is an action of `sagax_settings`; a raised level runs up to the speaking bot's own level, never Full (2026-10-19).
 - The bot panel has only the Activity and Library tabs, plus Coding while a coding chat is open: no Roles, Computer or Capabilities tab (2026-11-05, 2026-11-06, #2085, #2125).
 - An orchestrator names a piece of work, its step and its plan only through the optional fields of its hand-over tools: no form, second tool or status to keep up (2026-11-10, #3463).

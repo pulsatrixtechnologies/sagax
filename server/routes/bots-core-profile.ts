@@ -7,6 +7,7 @@ import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileSnapshot } from "../profiles/profile-revision.ts";
 import { recordProfileChange } from "../profiles/profile-versions.ts";
 import { historyWriterOf } from "../history-writer.ts";
+import { soulSortSaysSomething } from "../../shared/soul-sort.ts";
 
 import type { BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -51,9 +52,11 @@ export function createBotsCoreProfileRoutes(deps: BotsCoreRouteDeps): RouteHandl
       if (!bot) return json(res, 404, { error: "no such bot" });
       if (beforeProfile) recordProfileChange(bot.id, "user", "api", beforeProfile, profileSnapshot(bot), historyWriterOf(auth));
       recordPersonaSave(auth, bot.id, beforeProfile, profileSnapshot(bot));
-      const visible = wireBot(bot);
+      // #5019: what the soul write added that is not persona, once filed
+      const report = parsed.patch.soul !== undefined && deps.soulSorter ? await deps.soulSorter.flush(bot.id) : null;
+      const visible = wireBot(store.bot(bot.id) ?? bot);
       broadcast({ kind: "bot", bot: visible });
-      return json(res, 200, { bot: visible });
+      return json(res, 200, { bot: visible, ...(soulSortSaysSomething(report) ? { soulSorted: report } : {}) });
     }
     return PASS;
   };

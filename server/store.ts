@@ -16,6 +16,7 @@ import { ensureSections, readSections, changeEmptySection } from "./rooms/sectio
 import { isSectionId, migrateSectionLinks, sameTeamLink } from "./rooms/section-link.ts";
 import type { TeamComputers } from "./computer/team-computers.ts";
 import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bots/bot-folder.ts";
+import type { SoulWrite, SoulWriteActor, SoulWriteMode } from "./bots/soul-sort.ts";
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
 import { createdByBotMark, type BotCreatedBy } from "./bots/bot-creation.ts";
 import type { BotProfilePatch } from "./bots/bot-profile.ts";
@@ -770,6 +771,9 @@ export class Store {
   private newBotApprovalMode: () => "ask" | "auto" | "full";
   private greetingLanguage: (ownerUserId: string | undefined) => "fr" | "en";
   private listeners = new Set<(change: StoreChange) => void>();
+  /** #5019: every soul write, so what it added is filed out of the soul
+   * (server/bots/soul-sort.ts). */
+  private soulWriteListeners = new Set<(write: SoulWrite) => void>();
   /** A broken team registry must not prevent loading independent chat data. */
   private registeringInitialSections = true;
   /** bots.json existed but could not be read or was not an array. Saves and
@@ -870,6 +874,7 @@ export class Store {
         b.soul = "";
         boot.botsMigrated = true;
       }
+      // soul write: load (the hash of the soul already stored, nothing new)
       if (b.soulHash !== soulHash(b.soul)) {
         b.soulHash = soulHash(b.soul);
         boot.botsMigrated = true;
@@ -1791,6 +1796,25 @@ export class Store {
     return () => this.listeners.delete(listener);
   }
 
+  /** #5019: told of every soul write after it is saved, with the soul it
+   * replaced. Every store method that writes a soul calls noteSoulWrite;
+   * server/bots/soul-sort.guard.test.ts fails on one that does not. */
+  onSoulWrite(listener: (write: SoulWrite) => void): () => void {
+    this.soulWriteListeners.add(listener);
+    return () => this.soulWriteListeners.delete(listener);
+  }
+
+  private noteSoulWrite(botId: string, before: string, after: string, mode: SoulWriteMode = "sort", actor: SoulWriteActor = "person"): void {
+    if (before === after && mode !== "draft") return;
+    for (const listener of Array.from(this.soulWriteListeners)) {
+      try {
+        listener({ botId, before, after, mode, actor });
+      } catch (error) {
+        console.error("store: soul write listener threw", error);
+      }
+    }
+  }
+
   private emit(change: StoreChange) {
     for (const listener of Array.from(this.listeners)) {
       try {
@@ -2599,6 +2623,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       /** The creating device's language for the greeting and the intro card
        * (#2803); absent reads the owner's or the server's language. */
       language?: "fr" | "en";
+      /** #5019: how its soul is treated: sorted after (the default), or an
+       * import's, written as it was. */
+      soulWrite?: SoulWriteMode;
+      soulActor?: SoulWriteActor;
     } = {},
   ): BotRecord {
     const toolScope = parseToolScope(profile.toolScope);
@@ -2615,6 +2643,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       title: profile.title ?? "",
       description: profile.description ?? "",
       soul: profile.soul ?? "",
+      // soul write: noted below, once the bot is announced
       soulHash: soulHash(profile.soul ?? ""),
       notifications: true,
       color: profile.color ?? COLORS[this.bots.length % COLORS.length],
@@ -2674,6 +2703,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // Announce the owner before its onboarding transcript. SSE clients need
     // the bot/thread mapping before they can place either message.
     this.emit({ type: "bot", botId: bot.id });
+    this.noteSoulWrite(bot.id, "", bot.soul ?? "", opts.soulWrite, opts.soulActor);
     // Keep the greeting valid for configured bots and every engine.
     if (opts.seedMessages !== false) {
       const language = opts.language ?? this.greetingLanguage(bot.ownerUserId);
@@ -2700,6 +2730,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
         request.newTeams.some((name) => !name) || (request.newTeams.length && !chief.chiefOfStaff)) throw new Error("Invalid reviewed Primary Bot team scope");
     const nextBots = [...this.bots];
     const changed: BotRecord[] = [];
+    const soulWrites: Array<{ botId: string; before: string; after: string }> = [];
     for (const operation of request.operations) {
       const at = nextBots.findIndex((bot) => bot.id === operation.botId);
       let next: BotRecord;
@@ -2738,7 +2769,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       }
       if (operation.fields.chiefOfStaff === false) delete next.managedSections;
       next.section = sectionKey(next.section) || undefined;
+      // soul write: noted after the save below (a Primary Bot's reviewed plan)
       if (operation.fields.soul !== undefined) { next.soulHash = soulHash(operation.fields.soul); next.soulDrift = false; }
+      if (operation.fields.soul !== undefined) soulWrites.push({ botId: next.id, before: at >= 0 ? this.bots.find((bot) => bot.id === next.id)?.soul ?? "" : "", after: next.soul ?? "" });
       changed.push(next);
     }
     const result: TeamSetupResult = { state: "applied", newTeams: request.newTeams, bots: changed.map((bot, index) => ({
@@ -2762,6 +2795,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       this.emit({ type: "bot", botId: bot.id });
     }
     this.emit({ type: "bot", botId: chief.id });
+    for (const write of soulWrites) this.noteSoulWrite(write.botId, write.before, write.after, "sort", "bot");
     return result;
   }
 
@@ -2893,6 +2927,12 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // Saving the same level again also brings every thread back to it: that
     // is what "apply to every thread" used to do, and now always does.
     const levelChanged = Object.hasOwn(patch, "approvalMode") || Object.hasOwn(patch, "autoApprove");
+    // #5019: a soul that reaches this path is hashed and sorted like any other
+    const soulBefore = bot.soul ?? "";
+    if (typeof patch.soul === "string") {
+      // soul write: noted after the save below
+      patch = { ...patch, soulHash: soulHash(patch.soul), soulDrift: false };
+    }
     // Runtime revocations must become effective in memory even when disk is
     // unavailable. Profile edits use the separate atomic path below.
     Object.assign(bot, patch);
@@ -2923,6 +2963,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       bot.toolScope = nextToolScope;
     } else this.saveBots();
     this.emit({ type: "bot", botId: id });
+    if (typeof patch.soul === "string") {
+      try { writeSoulMirror(id, patch.soul); } catch {}
+      this.noteSoulWrite(id, soulBefore, patch.soul);
+    }
     return bot;
   }
 
@@ -2944,11 +2988,20 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
 
   /** Commit a validated profile change before publishing its fields. Unlike
    * runtime revocation, a failed user edit must leave the old profile intact. */
-  patchBotProfile(id: string, patch: BotProfilePatch & Partial<Pick<BotRecord, "cwd" | "lastProfileRequestId">>): BotRecord | null {
+  patchBotProfile(
+    id: string,
+    patch: BotProfilePatch & Partial<Pick<BotRecord, "cwd" | "lastProfileRequestId">>,
+    /** #5019: how a soul in the patch is treated (server/bots/soul-sort.ts):
+     * sorted right after (the default), a draft the person is typing, sorted
+     * already by the caller, or a restore written as it was. */
+    opts: { soulWrite?: SoulWriteMode; soulActor?: SoulWriteActor } = {},
+  ): BotRecord | null {
     const bot = this.bot(id);
     if (!bot) return null;
+    const soulBefore = bot.soul ?? "";
     const next = { ...bot, ...patch };
     if (patch.soul !== undefined) {
+      // soul write: noted after the save below
       next.soulHash = soulHash(patch.soul);
       next.soulDrift = false;
     }
@@ -2962,13 +3015,14 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       }
     }
     this.emit({ type: "bot", botId: id });
+    if (patch.soul !== undefined) this.noteSoulWrite(id, soulBefore, patch.soul, opts.soulWrite, opts.soulActor);
     return bot;
   }
 
   /** Convenience for a soul-only change. The record is canonical; a failed
    * mirror write is reported in logs and can be retried by discarding drift. */
-  setSoul(id: string, soul: string): BotRecord | null {
-    return this.patchBotProfile(id, { soul });
+  setSoul(id: string, soul: string, opts: { soulWrite?: SoulWriteMode; soulActor?: SoulWriteActor } = {}): BotRecord | null {
+    return this.patchBotProfile(id, { soul }, opts);
   }
 
   /** File visible bots into one sidebar section as a single durable write.

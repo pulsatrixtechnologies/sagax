@@ -100,12 +100,15 @@ export type BotUpdatePatch = Partial<BotPatchBody> & {
   teamApply?: boolean;
   /** I2, body only: the bot drops its own model or computer and follows its team again. */
   teamInherit?: Array<"model" | "computer">;
+  /** #5019, body only, with soul: the person is typing in the soul editor;
+   * the server files what is not persona when the editor is left. */
+  soulDraft?: boolean;
 };
 
 /** A wire patch after clear-only values have been normalized for Bot state. */
 export type BotStatePatch = Omit<
   BotUpdatePatch,
-  "computer" | "host" | "acknowledgeLocalAuto" | "confirmFullAccess" | "applyToAllThreads" | "organizationFullAccess" | "keepThreadModels" | "threadId" | "teamApply" | "teamInherit"
+  "computer" | "host" | "acknowledgeLocalAuto" | "confirmFullAccess" | "applyToAllThreads" | "organizationFullAccess" | "keepThreadModels" | "threadId" | "teamApply" | "teamInherit" | "soulDraft"
 
 > & {
   computer?: BotComputer;
@@ -169,6 +172,7 @@ const stateOverlay = (patch: BotUpdatePatch): BotStatePatch => {
     threadId: _threadId,
     teamApply: _teamApply,
     teamInherit: _teamInherit,
+    soulDraft: _soulDraft,
     host: _host,
     computer,
     ...fields
@@ -270,6 +274,8 @@ export function createBotPatchQueue<B>(options: BotPatchQueueOptions<B>): BotPat
       // An all-threads scope belongs to the level it came with: a newer level
       // without one (a quick switch from Full back to Ask) is the default only.
       if (hasOwn(patch, "approvalMode") && !hasOwn(patch, "applyToAllThreads")) delete entry.pending.applyToAllThreads;
+      // #5019: a soul sent without the editor's draft flag is a whole write, sorted at once
+      if (hasOwn(patch, "soul") && !hasOwn(patch, "soulDraft")) delete entry.pending.soulDraft;
       // I2: the team flags belong to the edit they came with; a later own
       // model or computer edit is the bot's own.
       if ((hasOwn(patch, "modelSelection") || hasOwn(patch, "computer")) && !hasOwn(patch, "teamApply")) delete entry.pending.teamApply;

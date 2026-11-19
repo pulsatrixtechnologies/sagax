@@ -18,7 +18,8 @@ describe("fleet-agent-settings (#1944)", () => {
   it("derives AGENT_SETTINGS_FIELDS from MEMBER_BOT_FIELDS and BOT_FIELD_PERMISSIONS (no drifting hand list)", () => {
     for (const field of MEMBER_BOT_FIELDS) {
       // #4329 lot 5: what runs the bot changes with its model (update_agent_model)
-      if (field === "modelSelection" || field === "harness") {
+      // #5019: soulDraft is the app editor's own flag
+      if (field === "modelSelection" || field === "harness" || field === "soulDraft") {
         expect(AGENT_SETTINGS_FIELDS.includes(field)).toBe(false);
         continue;
       }
@@ -112,6 +113,25 @@ describe("fleet-agent-settings (#1944)", () => {
     expect(bad.switches).toEqual({});
     expect(bad.switchesInvalid.map((entry) => entry.field)).toEqual(["skills", "grants"]);
     expect(bad.switchesInvalid[1]!.reason).toContain("use, run, edit or manage");
+  });
+
+  it("#5019: rules and docs are the bot's other files, in the shape of rules_update and docs_update", () => {
+    expect(AGENT_SETTINGS_FIELDS).toEqual(expect.arrayContaining(["rules", "docs"]));
+    expect(AGENT_SETTINGS_FIELDS).not.toContain("soulDraft");
+    const parts = partitionAgentSettings({
+      soul: "You are Osprey.",
+      rules: [{ action: "append", text: "Never quote a price." }, { action: "replace", old_text: "- Old rule.", text: "New rule." }, { action: "remove", oldText: "- Gone." }],
+      docs: { action: "write", path: "docs/fleet.md", text: "Ada: QA" },
+    });
+    expect(parts.patch).toEqual({ soul: "You are Osprey." });
+    expect(parts.workspace).toEqual({
+      rules: [{ action: "append", text: "Never quote a price." }, { action: "replace", oldText: "- Old rule.", text: "New rule." }, { action: "remove", oldText: "- Gone." }],
+      docs: [{ action: "write", path: "docs/fleet.md", text: "Ada: QA" }],
+    });
+    const bad = partitionAgentSettings({ rules: "Never quote a price.", docs: [{ action: "write" }] });
+    expect(bad.workspace).toEqual({});
+    expect(bad.switchesInvalid.map((entry) => entry.field)).toEqual(["rules", "docs"]);
+    expect(bad.switchesInvalid[0]!.reason).toContain("at most 500 characters");
   });
 
   describe("#4172: skill and plugin switches, as the person, through the bot page's routes", () => {

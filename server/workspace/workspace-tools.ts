@@ -15,7 +15,10 @@ import {
   activeRulesTotal,
   effectiveRulesText,
   findRuleSet,
+  hasRules,
   listRuleSets,
+  measureRules,
+  planNewRuleSet,
   rulesOverBudget,
   totalOverBudget,
   writeRuleSets,
@@ -25,14 +28,15 @@ import { MEMORY_FILE_MAX_BYTES, isMemoryTopicName, memoryLineCount } from "./wor
 import { markWorkspaceUse } from "./workspace-usage.ts";
 
 export type WorkspaceWriteResult =
-  | { ok: true; path: string; set?: string; entry?: string; lines?: number; bytes?: number; journal: MemoryJournalEntry | null }
+  | { ok: true; path: string; set?: string; created?: boolean; entry?: string; lines?: number; bytes?: number; journal: MemoryJournalEntry | null }
   | { ok: false; code: "invalid" | "conflict" | "over-budget" | "exists" | "missing"; error: string };
 
 export interface RulesUpdate {
   action: "append" | "replace" | "remove";
   text?: string;
   oldText?: string;
-  /** The rule set: its name or id. Absent: the first set. */
+  /** The rule set: its name or id. Absent: the first set. An append that
+   * names a set the bot does not have creates it (#5019). */
   set?: string;
 }
 
@@ -87,7 +91,7 @@ export function applyRulesUpdate(current: string, update: RulesUpdate, file = RU
     return {
       ok: false,
       code: "over-budget",
-      error: `${file} would be ${memoryLineCount(text)} lines and ${Buffer.byteLength(text, "utf8")} bytes, over what one rule set loads each turn (${RULES_MAX_LINES} lines / ${RULES_MAX_BYTES} bytes). Nothing was saved. Ask the person which rule to shorten or remove.`,
+      error: `${file} would be ${memoryLineCount(text)} lines and ${Buffer.byteLength(text, "utf8")} bytes, over what one rule set loads each turn (${RULES_MAX_LINES} lines / ${RULES_MAX_BYTES} bytes). Nothing was saved. Append it to another set (a new set name creates one), or ask the person which rule to shorten or remove.`,
     };
   }
   return { ok: true, next, entry };
@@ -102,16 +106,29 @@ export function updateRules(botId: string, update: RulesUpdate, opts: { threadId
   if (!set && sets.length === 0 && (update.set === undefined || !update.set.trim())) {
     set = { id: DEFAULT_RULE_SET_ID, name: null, enabled: true, file: RULES_PATH };
   }
+  // #5019: an append that names a set the bot does not have yet creates it,
+  // with the Rules page's own plan (name, free id, at most RULE_SETS_MAX): a
+  // full RULES.md never stops a rule from being filed.
+  let created = false;
+  if (!set && update.action === "append" && update.set?.trim()) {
+    const planned = planNewRuleSet(sets, update.set);
+    if (!planned.ok) return { ok: false, code: planned.code === "exists" ? "exists" : "invalid", error: planned.error };
+    set = planned.set;
+    created = true;
+  }
   if (!set) {
     const names = sets.map((candidate) => JSON.stringify(candidate.name ?? "Rules")).join(", ");
-    return { ok: false, code: "missing", error: `There is no rule set ${JSON.stringify(update.set)}. Sets: ${names || "none"}. Only the person adds a set, in Persona > Rules.` };
+    return { ok: false, code: "missing", error: `There is no rule set ${JSON.stringify(update.set)}. Sets: ${names || "none"}. An append with a new set name creates that set.` };
   }
   try {
     const current = readMemoryDoc(botId, set.file);
-    const applied = applyRulesUpdate(current.text, update, set.file);
+    const applied = applyRulesUpdate(created && !current.text.trim() ? `# ${set.name}\n\n` : current.text, update, set.file);
     if (!applied.ok) return applied;
     if (set.enabled) {
-      const total = activeRulesTotal(botId, { id: set.id, raw: applied.next });
+      // a set created here is not listed yet: its text adds to the total
+      const added = created && hasRules(effectiveRulesText(applied.next)) ? measureRules(applied.next) : null;
+      const active = activeRulesTotal(botId, created ? undefined : { id: set.id, raw: applied.next });
+      const total = added ? { lines: active.lines + added.lines, bytes: active.bytes + added.bytes } : active;
       const before = activeRulesTotal(botId);
       if (totalOverBudget(total) && (total.lines > before.lines || total.bytes > before.bytes)) {
         return {
@@ -132,7 +149,7 @@ export function updateRules(botId: string, update: RulesUpdate, opts: { threadId
     if (!sets.some((candidate) => candidate.id === set!.id)) writeRuleSets(botId, [...sets, set]);
     markWorkspaceUse(botId, [set.file]);
     const text = effectiveRulesText(doc.text);
-    return { ok: true, path: set.file, set: set.name ?? "Rules", entry: applied.entry, lines: memoryLineCount(text), bytes: Buffer.byteLength(text, "utf8"), journal: entry };
+    return { ok: true, path: set.file, set: set.name ?? "Rules", ...(created ? { created: true } : {}), entry: applied.entry, lines: memoryLineCount(text), bytes: Buffer.byteLength(text, "utf8"), journal: entry };
   } catch (error) {
     return storeRefusal(error);
   }

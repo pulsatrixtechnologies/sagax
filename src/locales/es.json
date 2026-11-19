@@ -1203,7 +1203,6 @@
   "botPanel.soul.driftHelp": "El bot sigue usando la versión guardada hasta que elijas. Archivo:",
   "botPanel.soul.useFile": "Usar el archivo",
   "botPanel.soul.keepSaved": "Conservar la versión guardada",
-  "botPanel.soul.placeholder": "Quién es este bot y las reglas que nunca rompe. Sé breve. Pon el procedimiento paso a paso en una habilidad.",
   "botPanel.soul.mirrored": "Reflejado en",
   "botPanel.soul.notSaved": " (no guardado)",
   "botPanel.history.refresh": "No se pudo actualizar el historial.",

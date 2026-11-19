@@ -154,7 +154,7 @@ export function RemoteLiveScreen({ botId, view, control }: { botId: string; view
   const ratio = live.aspect ?? 16 / 10;
   const problem = remoteScreenProblem(view, fallback.missed);
   return (
-    <div data-remote-live-screen="" data-remote-input={control && live.phase === "active" ? "control" : "none"}
+    <div data-remote-live-screen="" data-remote-frame-source={live.frameUrl ? "stream" : "poll"} data-remote-input={control && live.phase === "active" ? "control" : "none"}
       className="absolute inset-0 flex items-center justify-center" style={{ containerType: "size" }}>
       {frame ? (
         <div

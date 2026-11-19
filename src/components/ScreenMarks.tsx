@@ -18,6 +18,7 @@ import {
 import { browserFrameSize } from "./BrowserViewport";
 import type { BrowserDescriber } from "./BrowserPanel";
 import { PRIMARY_PILL } from "./SettingsPrimitives";
+import type { ScreenPlace } from "@/lib/screen-places";
 import type { Action, Bot } from "@/state/store";
 
 const TOOL_ICON = { highlight: Highlighter, arrow: MoveUpRight, circle: Circle, pen: Pencil } as const;
@@ -25,21 +26,31 @@ const button = "rounded-md p-1.5 text-ink-secondary hover:bg-inset hover:text-in
 
 export type ScreenMarksState = ReturnType<typeof useScreenMarks>;
 
-/** The frame picture the live browser draws, with its size in the page's pixels. */
+/** The picture a place draws, with its size in the page's pixels: the live
+ * browser's frame, the remote computer's or Local VM's picture, or the VM's
+ * VNC canvas. One finder for every place of the panel (#4452). */
+const FRAME_PICTURE = "img[data-browser-frame], img[data-remote-session-shot], img[data-local-live-frame]";
 function frameImage(host: HTMLElement | null) {
-  const image = host?.querySelector<HTMLImageElement>("img[data-browser-frame]") ?? null;
-  if (!image?.complete || !image.naturalWidth) return null;
-  const page = browserFrameSize(image.naturalWidth, image.naturalHeight, Number(image.dataset.frameWidth) || image.naturalWidth, Number(image.dataset.frameHeight) || image.naturalHeight);
-  return { image, page };
+  const picture = host?.querySelector<HTMLImageElement>(FRAME_PICTURE) ?? null;
+  if (picture) {
+    if (!picture.complete || !picture.naturalWidth) return null;
+    const page = browserFrameSize(picture.naturalWidth, picture.naturalHeight, Number(picture.dataset.frameWidth) || picture.naturalWidth, Number(picture.dataset.frameHeight) || picture.naturalHeight);
+    return { image: picture, width: picture.naturalWidth, height: picture.naturalHeight, page };
+  }
+  const canvas = host?.querySelector<HTMLCanvasElement>("[data-sandbox-desktop] canvas") ?? null;
+  if (!canvas?.width || !canvas.height) return null;
+  return { image: canvas, width: canvas.width, height: canvas.height, page: { width: canvas.width, height: canvas.height } };
 }
 
-export function useScreenMarks({ bot, host, describer, dispatch, onSent, renderImage = renderMarkedFrame }: {
+export function useScreenMarks({ bot, host, describer, dispatch, onSent, place = "browser", renderImage = renderMarkedFrame }: {
   bot: Bot;
   /** Holds the live browser (and so its frame picture). */
   host: RefObject<HTMLElement | null>;
   describer: RefObject<BrowserDescriber | null>;
   dispatch: (action: Action) => void;
   onSent: () => void;
+  /** Which place is marked: the words of the message follow it. */
+  place?: ScreenPlace;
   renderImage?: typeof renderMarkedFrame;
 }) {
   const [tool, setTool] = useState<MarkTool>("highlight");
@@ -66,7 +77,7 @@ export function useScreenMarks({ bot, host, describer, dispatch, onSent, renderI
     const found = frameImage(host.current);
     if (!found) return null;
     const rect = found.image.getBoundingClientRect();
-    return containedBox({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }, found.image.naturalWidth, found.image.naturalHeight);
+    return containedBox({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }, found.width, found.height);
   }, [host]);
 
   const aspect = () => { const box = frameBox(); return box && box.height ? box.width / box.height : 1; };
@@ -104,7 +115,7 @@ export function useScreenMarks({ bot, host, describer, dispatch, onSent, renderI
       let described: DescribedMark[] = [];
       try { if (marks.length && describer.current) described = await describer.current(points); } catch { /* the picture and the note still go */ }
       const picture = marks.length ? await imageAttachmentFromFile(await renderImage(found.image, marks)) : null;
-      const text = composeMessage(feedbackText(marks, described, note), picture ? [picture] : []);
+      const text = composeMessage(feedbackText(marks, described, note, place), picture ? [picture] : []);
       dispatch({
         type: "send", botId: bot.id, text,
         // the current turn takes it as a steer; an idle bot starts a turn

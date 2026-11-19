@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { driverKeyBacked, type AppConfig } from "../config.ts";
-import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, memberOwnHostToolCall, perspicaxOwnerScopedServer, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
+import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberBotAdminReason, memberOwnedBot, memberOwnHostToolCall, perspicaxOwnerScopedServer, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexNotSignedIn, codexSignInExpired } from "../drivers/codex-errors.ts";
 
 const ALICE = "pr_aaaaaaaa-0000-4000-8000-000000000001";
@@ -209,7 +209,9 @@ describe("the admin gate on a member's bot", () => {
     expect(memberBotAdminApproval({ tool: "agents__act", workspaceRoot: root, rawInput: get })).toBe(true);
     expect(gate("agents__manage_settings")).toBe(false);
     expect(gate("agents__act", undefined, { command: "ls", cwd: root })).toBe(true);
-    expect(memberBotAdminApproval({ tool: "agents__act", workspaceRoot: root, foreignMcpServers: ["agents"], rawInput: get, ownsBot: owns })).toBe(true);
+    // M-20261119-008: a server of the person's own list spelled like the
+    // built-in is theirs: their card, never Sagax's auto-answer, never an admin's
+    expect(memberBotAdminApproval({ tool: "agents__act", workspaceRoot: root, foreignMcpServers: ["agents"], rawInput: get, ownsBot: owns })).toBe(false);
   });
   it("still needs an admin for a host-level agents tool or a command dressed as one", () => {
     expect(gate("agents__add_mcp_server")).toBe(true);
@@ -217,7 +219,8 @@ describe("the admin gate on a member's bot", () => {
     expect(gate("agents__vm_exec")).toBe(true);
     expect(gate("agents__shared_computer")).toBe(true);
     expect(gate("agents__list_bots", undefined, { command: "ls", cwd: root })).toBe(true);
-    expect(gate("other")).toBe(true);
+    // M-20261119-008: a tool nobody classified is no evidence: the person's card
+    expect(gate("other")).toBe(false);
   });
   it("needs an admin for every other tool and every server command", () => {
     expect(gate("Bash", [join(root, "thread-1")], { command: "ls", cwd: root })).toBe(true);
@@ -281,24 +284,28 @@ describe("the admin gate on a member's bot", () => {
     expect(grokGate(own, "subscription", { command: "ls", cwd: root })).toBe(true);
   });
   it("still sends to an admin what goes beyond the owner's rights", () => {
-    // an unknown server, a host-level built-in server, a shell, a fetch from the host
-    expect(ownerGate("mcp__someone_else__query")).toBe(true);
+    // a host-level built-in server, a shell, a fetch from the host
     expect(ownerGate("mcp__computer__click")).toBe(true);
     expect(ownerGate("mcp__browser__navigate")).toBe(true);
-    expect(ownerGate("mcp__sagax-computer__run")).toBe(true);
     expect(ownerGate("agents__vm_exec")).toBe(true);
     expect(ownerGate("Bash", { command: "ls", cwd: root })).toBe(true);
     expect(ownerGate("WebFetch")).toBe(true);
-    expect(ownerGate("other")).toBe(true);
+    // M-20261119-008: no evidence that it leaves the person's place (a
+    // server Sagax mounted that no list names, a tool nobody classified,
+    // the person's own places): their own card, never an admin's
+    expect(ownerGate("mcp__someone_else__query")).toBe(false);
+    expect(ownerGate("mcp__sagax-computer__run")).toBe(false);
+    expect(ownerGate("other")).toBe(false);
     // #4449: a tool of the person's own remote server named like a shell
-    // runs remotely as them, never on the shared host: their own card. The
-    // same name on a server that is not theirs stays an admin's.
+    // runs remotely as them, never on the shared host: their own card
     expect(ownerGate("mcp__my_remote__run_shell")).toBe(false);
-    expect(ownerGate("mcp__someone_else__run_shell")).toBe(true);
+    expect(ownerGate("mcp__someone_else__run_shell")).toBe(false);
+    // a server of the organization's own list not mounted for this person
+    expect(memberBotAdminReason({ tool: "mcp__org_tools__query", workspaceRoot: root, orgSharedMcpServer: (server) => server === "org_tools" })).toBe("foreign-tool");
     expect(ownerGate("mcp__perspicax_quasar__query", { command: "ls", cwd: root })).toBe(true);
   });
-  it("sends every MCP tool to an admin when nothing says which servers are the owner's", () => {
-    expect(gate("mcp__perspicax_quasar__cw_psa_query")).toBe(true);
+  it("never sends an MCP tool to an admin when nothing says whose server it is (M-20261119-008)", () => {
+    expect(gate("mcp__perspicax_quasar__cw_psa_query")).toBe(false);
   });
 
   it("keeps Sagax's file views of the bot's own workspace and inbox with the owner, and nothing else (#1169)", () => {
@@ -312,13 +319,19 @@ describe("the admin gate on a member's bot", () => {
     expect(own("mcp__files__search_files", [join(workspace, "inbox")])).toBe(false);
     expect(own("Read", [inbox])).toBe(false);
     expect(own("mcp__sagax-desktop__read_file", [join(root, "thread-1", "src")])).toBe(false);
-    // another bot's inbox, a dot folder, a write or a command in the workspace, an unknown server
-    expect(own("mcp__sagax-desktop__read_file", [join(data, "workspaces", "bot-2", "inbox", "x.txt")])).toBe(true);
-    expect(own("mcp__sagax-desktop__read_file", [join(workspace, "inbox", ".ssh", "id")])).toBe(true);
+    // the host's own files server: another bot's inbox, a dot folder; a
+    // write or a command on the host
+    expect(own("mcp__files__read_file", [join(data, "workspaces", "bot-2", "inbox", "x.txt")])).toBe(true);
+    expect(own("mcp__files__read_file", [join(workspace, "inbox", ".ssh", "id")])).toBe(true);
+    expect(own("mcp__files__read_file")).toBe(true);
     expect(own("Write", [inbox])).toBe(true);
     expect(own("Read", [inbox], { command: "cat note.txt" })).toBe(true);
-    expect(own("mcp__other__read_file", [inbox])).toBe(true);
-    expect(own("mcp__sagax-desktop__read_file")).toBe(true);
+    // M-20261119-006: sagax-desktop is the person's own computer, whatever
+    // path it reads there; a server Sagax mounted that no list names is no
+    // evidence either
+    expect(own("mcp__sagax-desktop__read_file", [join(data, "workspaces", "bot-2", "inbox", "x.txt")])).toBe(false);
+    expect(own("mcp__sagax-desktop__read_file")).toBe(false);
+    expect(own("mcp__other__read_file", [inbox])).toBe(false);
     expect(fileViewToolPaths("mcp__sagax-desktop__read_file", JSON.stringify({ path: inbox }))).toEqual([inbox]);
     expect(fileViewToolPaths("mcp__sagax-desktop__read_file", JSON.stringify({ path: "inbox/nova/note.txt" }))).toEqual([]);
     expect(fileViewToolPaths("mcp__other__read_file", JSON.stringify({ path: inbox }))).toEqual([]);
@@ -485,7 +498,8 @@ describe("host-level agents tools in the member's own environment", () => {
     expect(gate("mcp__agents__review_write", { id: "r", decision: "approve" }, all)).toBe(true);
     expect(memberOwnHostToolCall("mcp__agentsx__vm_exec", { command: "ls" }, all)).toBe(false);
     expect(memberBotAdminApproval({ tool: "mcp__agents__vm_exec", command: "rm -rf /", workspaceRoot: workspace, hostPlace: all })).toBe(true);
-    expect(memberBotAdminApproval({ tool: "mcp__agents__vm_exec", workspaceRoot: workspace, hostPlace: all, foreignMcpServers: ["agents"] })).toBe(true);
+    // a server of the person's own list named agents is theirs
+    expect(memberBotAdminApproval({ tool: "mcp__agents__vm_exec", workspaceRoot: workspace, hostPlace: all, foreignMcpServers: ["agents"] })).toBe(false);
   });
 });
 

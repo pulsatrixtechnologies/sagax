@@ -236,12 +236,16 @@ describe("2026-10-17: a built-in tool is Sagax's by identity", () => {
     expect(foreignToolSpelling("mcp__data__data_sql", ["dat"])).toBe(false);
   });
 
-  it("a member's bot keeps the admin card for a spoofed built-in", () => {
+  it("a spoofed built-in is never answered by Sagax, and is the person's card, not an admin's (M-20261119-008)", () => {
     const root = mkdtempSync(join(tmpdir(), "sagax-foreign-"));
     try {
       expect(memberBotAdminApproval({ tool: "mcp__data__data_sql", workspaceRoot: root })).toBe(false);
-      expect(memberBotAdminApproval({ tool: "mcp__data__data_sql", workspaceRoot: root, foreignMcpServers: ["mcp"] })).toBe(true);
-      expect(memberBotAdminApproval({ tool: "mcp__agents__list_bots", workspaceRoot: root, foreignMcpServers: ["mcp"] })).toBe(true);
+      // a server of the person's own list spelled like a built-in: theirs
+      expect(memberBotAdminApproval({ tool: "mcp__data__data_sql", workspaceRoot: root, foreignMcpServers: ["mcp"] })).toBe(false);
+      expect(memberBotAdminApproval({ tool: "mcp__agents__list_bots", workspaceRoot: root, foreignMcpServers: ["mcp"] })).toBe(false);
+      // and never one Sagax answers by itself
+      expect(sagaxInternalTool("mcp__data__data_sql", ["mcp"])).toBeNull();
+      expect(sagaxInternalTool("mcp__agents__list_bots", ["mcp"])).toBeNull();
       expect(memberBotAdminApproval({ tool: "agents__list_bots", workspaceRoot: root, foreignMcpServers: ["github"] })).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });

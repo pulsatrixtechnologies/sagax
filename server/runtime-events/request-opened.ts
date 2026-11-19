@@ -305,6 +305,16 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         ownDestination,
         ownComputerChoice,
         foreignMcpServers: foreignServers,
+        // M-20261119-006: the person-place mount (cloud computer, computer,
+        // their choice) is someone else's only when Sagax mounted it for a
+        // person other than the card's answerer; no record is no evidence
+        placeOfAnotherPerson: (() => {
+          const placeOwner = host.personPlaceOwnerOf(asker, event.threadId, event.mcpTool ?? event.tool);
+          return Boolean(placeOwner && placeOwner !== cardAnswerer.trim().toLowerCase());
+        })(),
+        // a server of the organization server's own list this turn did not
+        // mount for the person (mounted ones are owner-scoped above)
+        orgSharedMcpServer: (server: string) => Object.keys(host.cfg.mcpServers ?? {}).some((name) => name.toLowerCase() === server.toLowerCase()),
         // #1269: a read of the member's own bot is not an admin card
         rawInput: event.input,
         // 2026-10-28: vm_exec, shared_computer, attach_file and

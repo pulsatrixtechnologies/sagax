@@ -117,8 +117,10 @@ describe("member tool scope on an organization server", () => {
     // An arbitrary MCP server cannot borrow the built-in tool's exemption,
     // even when its mount name is agents. Nor can a command borrow it.
     expect(memberOwnScopeTool(`notes__${tool}`)).toBeNull();
-    expect(memberBotAdminApproval({ ...scope, tool: `notes__${tool}` })).toBe(true);
-    expect(memberBotAdminApproval({ ...scope, tool: name, foreignMcpServers: ["agents"] })).toBe(true);
+    // M-20261119-008: no exemption is borrowed: a server of the person's own
+    // list is their card (never answered by Sagax), never an admin's
+    expect(memberBotAdminApproval({ ...scope, tool: `notes__${tool}` })).toBe(false);
+    expect(memberBotAdminApproval({ ...scope, tool: name, foreignMcpServers: ["agents"] })).toBe(false);
     expect(memberBotAdminApproval({ ...scope, tool: name, command: "echo changed" })).toBe(true);
   });
 

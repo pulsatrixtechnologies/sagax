@@ -77,9 +77,11 @@ describe("the owner's own environment (2026-10-16)", () => {
     expect(mcpServerNameError(DESKTOP_BRIDGE_MCP_NAME)).toMatch(/reserved/);
   });
 
-  it("is never an admin approval, and everything else keeps the admin route", () => {
+  it("is never an admin approval; only a mount for another person or a host shell keeps the admin route", () => {
     const base = { tool: "mcp__sagax-environment__run_command", workspaceRoot: "/tmp/none" };
-    expect(memberBotAdminApproval(base)).toBe(true);
+    // M-20261119-006: no record of the mount is no evidence: the person's card
+    expect(memberBotAdminApproval(base)).toBe(false);
+    expect(memberBotAdminApproval({ ...base, placeOfAnotherPerson: true })).toBe(true);
     expect(memberBotAdminApproval({ ...base, ownEnvironment: true })).toBe(false);
     expect(memberBotAdminApproval({ tool: "Bash", command: { command: "ls" }, workspaceRoot: "/tmp/none" })).toBe(true);
   });
@@ -307,8 +309,10 @@ describe("a member's own destinations (2026-10-19)", () => {
 
   it("an own destination is never an admin's card, whatever the tool", () => {
     for (const tool of ["mcp__sagax-desktop__run_command", "mcp__sagax-desktop__list_files", "mcp__sagax-environment__run_command"]) {
-      expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere" })).toBe(true);
+      expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere" })).toBe(false);
       expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere", ownDestination: true })).toBe(false);
+      // a place Sagax mounted for another person stays someone else's
+      expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere", placeOfAnotherPerson: true })).toBe(true);
     }
     expect(memberBotAdminApproval({ tool: "Bash", command: { command: "ls" }, workspaceRoot: "/nowhere" })).toBe(true);
     expect(memberBotAdminApproval({ tool: "Bash", command: { command: "ls" }, workspaceRoot: "/nowhere", ownerRunsServerCommands: true })).toBe(false);

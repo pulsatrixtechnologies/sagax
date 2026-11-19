@@ -11,8 +11,10 @@ final class ModelAccountsUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = [
-            "-store-preview", "-chat-presentation-preview", "-model-accounts-preview",
+            // the steps preview leaves Pepper's turn done, so the model can change
+            "-store-preview", "-chat-presentation-preview", "-chat-steps-preview", "-model-accounts-preview",
             "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA",
+            "-companion.prefs.activityDetail", "full",
             "-companion.prefs.rosterDensity", "comfortable",
             "-companion.onboarding.welcomeSeen", "YES",
             "-companion.onboarding.notificationsSeen", "YES",
@@ -25,10 +27,14 @@ final class ModelAccountsUITests: XCTestCase {
         pepper.tap()
         app.buttons["chat-name"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["profile-name"].firstMatch.waitForExistence(timeout: 10), "bot panel")
-        let persona = app.descendants(matching: .any)["panel-edit-persona"].firstMatch
-        for _ in 0..<8 where !(persona.exists && persona.isHittable) { app.swipeUp() }
-        persona.tap()
-        let modelRow = app.descendants(matching: .any)["panel-row.model"].firstMatch
+        let edit = app.descendants(matching: .any)["panel-edit"].firstMatch
+        _ = edit.waitForExistence(timeout: 10)
+        for _ in 0..<8 where !(edit.exists && edit.isHittable) { app.swipeUp() }
+        edit.tap()
+        // the Edit pill opens the bot profile: Model is on its General tab
+        let tab = app.descendants(matching: .any)["bot-profile-tab.general"].firstMatch
+        if tab.waitForExistence(timeout: 10) { tab.tap() }
+        let modelRow = app.descendants(matching: .any)["bot-profile-settings.model"].firstMatch
         _ = modelRow.waitForExistence(timeout: 10)
         for _ in 0..<8 where !(modelRow.exists && modelRow.isHittable) { app.swipeUp() }
         modelRow.tap()

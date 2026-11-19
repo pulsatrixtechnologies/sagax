@@ -1083,7 +1083,6 @@ function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[]
   return out;
 }
 
-/** An agent as list_agents, find_agents and create_agent answer it. */
 /** #4939: a create is its caller's own write: the new agent's or routine's
  * version is that caller's copy now ("answered by its own last write",
  * server/write-versions.ts), so an AI client changes what it just made
@@ -1096,6 +1095,7 @@ function createdVersion(deps: Pick<AgentApiDeps, "writeVersions">, caller: Agent
   return version;
 }
 
+/** An agent as list_agents, find_agents and create_agent answer it. */
 const wireSummary = (agent: AgentSummary) => ({
   id: agent.id,
   name: agent.name,

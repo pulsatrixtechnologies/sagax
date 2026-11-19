@@ -35,7 +35,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 // the same chunk the Appearance pane's editor loads.
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
-/** The header's hero: the mascot, small and bare over the banner, with the
+/** The header's hero: the mascot, large and bare over the banner, with the
  * name and label stacked under it. The Appearance tab's editor draws it
  * into this slot (so a character picked in its grid previews here), the
  * page draws it for the bot's own look otherwise. A picture dropped on it
@@ -155,8 +155,8 @@ export function useBotProfileHero({ bot, derived }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        // the mascot's middle (70px frame) on the banner's lower edge (#4420)
-        className={cn("relative -mt-[35px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+        // the mascot's middle (168px frame) on the banner's lower edge (#4420)
+        className={cn("relative -mt-[84px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
         {!heroClaimed && (

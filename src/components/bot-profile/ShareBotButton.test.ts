@@ -1,4 +1,4 @@
-// The profile page's Share pill and its popover, the reference app style (2026-11-06):
+// The profile page's Share button and its popover, the reference app style (2026-11-06):
 // the title with Copy link, the field that adds people or groups, "Who has
 // access" (the organization, the owner, each grant with its level and
 // "Remove access" last), no outline on any row, and the same rights as the
@@ -120,10 +120,12 @@ describe("ShareBotButton", () => {
     fixture.editor = null;
   });
 
-  it("draws the Share pill, closed", () => {
+  it("draws the round Share icon button, closed", () => {
     const markup = render(false);
     expect(markup).toContain("data-bot-profile-share");
-    expect(markup).toContain(">Share<");
+    expect(markup).toContain('aria-label="Share"');
+    expect(markup).toContain('title="Share"');
+    expect(markup).not.toContain(">Share<");
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain("data-bot-share-popover");
   });

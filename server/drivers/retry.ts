@@ -70,7 +70,7 @@ export const PROVIDER_NOT_CONFIGURED = /\bprovider_not_configured\b|\bbilling wi
  * person's access: a 403 or 402 whose body names why (X's
  * `client-forbidden` / `billing-scope-missing` / `required_scope`, OAuth's
  * `insufficient_scope`, GitHub's "Resource not accessible by integration").
- * Durable until the person's access changes, so never retried; a bare 403
+ * Durable until the person's access changes (the bot is told, never forbidden to call it again, #4919); a bare 403
  * "Forbidden" or a 401 stays `auth`, a 429 or a 5xx stays transient (#4720). */
 export const PERMISSION_REFUSAL =
   /\bclient[-_ ]forbidden\b|\bbilling[-_ ]scope[-_ ]missing\b|\brequired[-_ ]scopes?\b|\binsufficient[-_ ]scopes?\b|\bnot accessible by integration\b|\b40[23]\b[^\n]{0,200}\b(?:missing|lacks?|requires?|grant(?:s|ed)?)\b[^\n]{0,40}\b(?:scopes?|permissions?)\b/i;

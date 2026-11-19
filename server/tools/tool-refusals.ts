@@ -3,8 +3,10 @@
 // 403 client-forbidden, billing-scope-missing, when the connection may not
 // bill the person's own developer account; an OAuth server answers
 // insufficient_scope; GitHub "Resource not accessible by integration".
-// Calling again changes nothing until the person's access changes, so a bot
-// that is told nothing retries it on every turn and every routine run.
+// A bot that is told nothing reports the raw scope on every turn and every
+// routine run; told why and when, it explains the refusal and may still call
+// the tool again: access can change at the provider without a new sign-in
+// (#4919, never an order not to call).
 //
 // One memory for every connector and every engine, fed by the runtime bus
 // (server/host/tool-refusal-guard.ts): a key (person, connector, tool) holds
@@ -245,9 +247,16 @@ export function createToolRefusalMemory(deps: { dataDir?: string; now?: () => nu
 
 const LINE_TOOLS_MAX = 8;
 
+/** When a refusal was received, in UTC (`2026-11-18 14:02 UTC`). */
+const refusedAt = (at: number) => `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
 /** One line per connector for the model (server/turns/turn-reach.ts): the
- * tools refused for this person, why, never retried, and the way around
- * when the connector's knowledge has one. */
+ * tools the provider last refused for this person, why and when, and the way
+ * around when the connector's knowledge has one. Information only, never an
+ * order not to call (#4919, owner 2026-11-09: no block without a decision;
+ * 2026-11-18: the bots give up too fast): access can change at the provider
+ * or in the Perspicax console without a new sign-in, so the tool stays
+ * callable. */
 export function refusalLines(refused: readonly RefusedTool[]): string[] {
   const byConnector = new Map<string, RefusedTool[]>();
   for (const row of refused) byConnector.set(row.connector, [...(byConnector.get(row.connector) ?? []), row]);
@@ -255,7 +264,9 @@ export function refusalLines(refused: readonly RefusedTool[]): string[] {
     const reason = rows[0]!.reason;
     const instead = connectorKnowledge(connector, reason)?.instead;
     const tools = rows.map((row) => row.tool).slice(0, LINE_TOOLS_MAX).join(", ");
-    return `${connector} refused for this person (${reason}), never call or retry: ${tools}.${instead ? ` Instead: ${instead}` : ""}`;
+    const last = Math.max(...rows.map((row) => row.at));
+    // kept under turn-reach.ts LINE_MAX (280) with five tools and a way around
+    return `${connector} refused ${tools} for this person (${reason}, ${refusedAt(last)}); may answer now, retry when needed.${instead ? ` Else: ${instead}` : ""}`;
   });
 }
 
@@ -263,7 +274,7 @@ export function refusalLines(refused: readonly RefusedTool[]): string[] {
 export function refusalSentence(connector: string, tool: string, refusal: ToolRefusal): string {
   const known = connectorKnowledge(connector, refusal.reason);
   const scope = refusal.requiredScope ? `, it needs ${refusal.requiredScope}` : "";
-  return `${connector} refused ${tool} for your access (${refusal.reason}${scope}). ${known ? `${known.cause}.` : "Calling it again will not help until that access changes."}`;
+  return `${connector} refused ${tool} for your access (${refusal.reason}${scope}). ${known ? `${known.cause}.` : `It answers once that access is granted; signing in to ${connector} again picks up a new grant.`}`;
 }
 
 /** Why a tool is refused, for the bot's note (server/host/loop-guard.ts). */

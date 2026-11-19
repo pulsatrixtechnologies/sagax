@@ -1298,19 +1298,10 @@ beforeAll(async () => {
   });
   child.stderr!.on("data", (c) => (stderr += c));
 
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      const res = await fetch(`${BASE}/api/health`);
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up. stderr:\n${stderr}`);
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}. stderr:\n${stderr}`);
-    await new Promise((r) => setTimeout(r, 150));
-  }
-}, 30_000);
+  // ready when this child's health answers: a fixed 20 s window ran out on a
+  // loaded build VM during the cold strip-types boot of index.ts
+  await waitForServerReady(child, BASE, () => stderr);
+}, 90_000);
 
 afterAll(async () => {
   boatStub?.close();

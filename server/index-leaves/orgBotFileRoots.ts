@@ -4,16 +4,27 @@ import { join, relative, sep, isAbsolute } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
 export type Host = Record<string, any>;
 
+/** #4921: a confidential conversation of the viewer's own (the member API,
+ * their Library): theirs to see. An admin's view (no viewer) never is. */
+export function ownConfidential(host: Host, threadId: string, viewerId: string | undefined): boolean {
+  if (viewerId === undefined || !viewerId.trim()) return false;
+  const owner = host.confidentialThreadOwner?.(threadId);
+  return typeof owner === "string" && owner.trim().toLowerCase() === viewerId.trim().toLowerCase();
+}
+
 export function createOrgBotFileRoots(getHost: () => Host): any {
 /** `viewerId` (#4625, the member API): the conversation folders shown are
  * only those of the conversations this person may read (botThreadReadable,
- * the private threads rule), never a confidential one. */
+ * the private threads rule). A confidential one is shown to its own person
+ * only (#4921): never to an admin (no viewer) nor anyone else. */
 function orgBotFileRoots(bot: BotRecord, viewerId?: string) {
   const host = getHost();
   const { ATTACHMENTS_DIR, TASK_WORKSPACES_DIR, workspaceDir } = host;
 
-  // A confidential thread's folder is never in the console (server/threads/confidential-threads.ts).
-  const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
+  // A confidential thread's folder is never in the console (server/threads/confidential-threads.ts),
+  // nor shown to anyone but the person it belongs to (#4921)
+  const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId)
+    .filter((threadId) => !ownConfidential(host, threadId, viewerId)));
   const shown = viewerId === undefined ? null : new Set([bot.threadId, ...host.store.tasks(bot.id).map((task) => task.threadId)]
     .filter((threadId) => typeof threadId === "string" && threadId !== "" && !confidential.has(threadId) && host.botThreadReadable(bot, threadId, viewerId, "thread.read")));
   const folder = (id: "workspace" | "tasks", dir: string): BotFileRoot => existsSync(dir)

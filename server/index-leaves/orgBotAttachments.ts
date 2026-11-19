@@ -1,16 +1,20 @@
 // @ts-nocheck
 /** orgBotAttachments (#1388). Pure move from server/index.ts. */
+import { ownConfidential } from "./orgBotFileRoots.ts";
 export type Host = Record<string, any>;
 
 export function createOrgBotAttachments(getHost: () => Host): any {
 /** `viewerId` (#4625, the member API): only the conversations this person
- * may read (botThreadReadable, the private threads rule). */
+ * may read (botThreadReadable, the private threads rule), their own
+ * confidential ones included (#4921). */
 async function orgBotAttachments(bot: BotRecord, viewerId?: string) {
   const host = getHost();
   const { listThreadFiles, statMessageFile, store, threadFileRefs } = host;
   // A confidential thread's uploads and outputs are never listed, and a file
-  // it shares with an ordinary thread is left out too.
-  const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
+  // it shares with an ordinary thread is left out too; to its own person
+  // (#4921) it is listed like any of their conversations.
+  const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId)
+    .filter((threadId) => !ownConfidential(host, threadId, viewerId)));
   const threads = [...new Set([bot.threadId, ...store.tasks(bot.id).map((task) => task.threadId)])].filter((threadId) => !confidential.has(threadId))
     .filter((threadId) => viewerId === undefined || (typeof threadId === "string" && threadId !== "" && host.botThreadReadable(bot, threadId, viewerId, "thread.read")));
   const confidentialFiles = new Set<string>();

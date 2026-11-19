@@ -2,7 +2,7 @@
 // socket said only "The call dropped. Try again.").
 import { describe, expect, it } from "vitest";
 
-import { REALTIME_DROP_TEXT, RealtimeVoiceCall, realtimeDrop, realtimeStatusUrl } from "./realtime-call";
+import { REALTIME_DROP_TEXT, RealtimeVoiceCall, realtimeDrop, realtimeRefusalText, realtimeStatusUrl } from "./realtime-call";
 
 class FakeSocket {
   readyState = 0;
@@ -88,6 +88,14 @@ describe("realtime call drop reasons", () => {
     frame({ type: "ready", sampleRate: 24_000 });
     frame({ type: "ended", by: "upstream", reason: "key" });
     expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.key, code: "dropped_key" }]);
+  });
+
+  it("keeps the server's own sentence when neither side could place the call", () => {
+    const english = "No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.";
+    const french = "Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.";
+    expect(realtimeRefusalText("realtime_key_refused", english)).toBe(english);
+    expect(realtimeRefusalText("realtime_key_refused", french)).toBe(french);
+    expect(realtimeRefusalText("realtime_key_refused", "xAI rejected the key.")).toBe("The realtime voice key was refused. Fix it in Settings > Voice.");
   });
 
   it("a hang-up by the person or the bot is no drop", () => {

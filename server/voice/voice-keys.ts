@@ -210,9 +210,10 @@ export function providerName(candidate: { provider?: VoiceProviderId }): string 
 
 /** A key for the log: its source and last four characters, never more. */
 export function describeVoiceKey(candidate: VoiceKeyRef): string {
-  const name = candidate.source === "voice-key" ? "person's voice key"
-    : candidate.source === "perspicax-key" ? "person's Perspicax key"
-      : candidate.source === "org-key" ? "organization's key" : "server's key";
+  const name = candidate.source === "grok-account" ? "connected Grok account"
+    : candidate.source === "voice-key" ? "person's voice key"
+      : candidate.source === "perspicax-key" ? "person's Perspicax key"
+        : candidate.source === "org-key" ? "organization's key" : "server's key";
   const named = candidateProvider(candidate) === "xai" ? name : `${name} (${providerName(candidate)})`;
   return candidate.last4 ? `${named} ···${candidate.last4}` : named;
 }

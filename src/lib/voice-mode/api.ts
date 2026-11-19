@@ -536,16 +536,16 @@ export function forgetVoiceModeStatus(): void {
 
 /** The live call's streaming voice socket (GET /voice/speech): the voice,
  * speed and language are fixed for the socket. */
-export function voiceModeSpeechUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin): string {
+export function voiceModeSpeechUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin, locale = voiceLocale()): string {
   const view = voiceSettingsForBot(settings, botId);
-  const query = new URLSearchParams({ language: view.language, speed: String(view.speed), ...(view.voice ? { voice: view.voice } : {}), ...(threadId ? { threadId } : {}), ...voiceQuery(botId, view) });
+  const query = new URLSearchParams({ language: view.language, speed: String(view.speed), ...(view.voice ? { voice: view.voice } : {}), ...(view.language === "auto" && locale ? { locale } : {}), ...(threadId ? { threadId } : {}), ...voiceQuery(botId, view) });
   return `${origin.replace(/^http/, "ws")}${base(botId)}/speech?${query}`;
 }
 
 /** A call's realtime voice socket (GET /voice/realtime, server/voice/realtime-call.ts). */
-export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin): string {
+export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin, locale = voiceLocale()): string {
   const view = voiceSettingsForBot(settings, botId);
-  const query = new URLSearchParams({ language: view.language, ...(view.voice ? { voice: view.voice } : {}), ...(threadId ? { threadId } : {}) });
+  const query = new URLSearchParams({ language: view.language, ...(view.voice ? { voice: view.voice } : {}), ...(locale ? { locale } : {}), ...(threadId ? { threadId } : {}) });
   return `${origin.replace(/^http/, "ws")}${base(botId)}/realtime?${query}`;
 }
 

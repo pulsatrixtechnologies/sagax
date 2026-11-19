@@ -9,7 +9,7 @@ let audio = Buffer.from([0xff, 0xfb, 0x90, 0x00]);
 let voices: unknown = { voices: [{ voice_id: "ara", name: "Ara", description: "Warm" }] };
 /** the error body a refusal answers (xAI's own shape) */
 let errorBody: unknown = { error: "fixture-xai-key private text" };
-const seen: Array<{ url: string; authorization?: string; body: string }> = [];
+const seen: Array<{ url: string; authorization?: string; tokenAuth?: string; body: string }> = [];
 // Since 2026-10-14 Grok voice runs on the xAI key, the one bots on Grok use.
 const config: AppConfig = { xai: { key: "fixture-voice-key" }, tts: { provider: "xai", voice: "ara" } };
 const voice = () => import("./index.ts");
@@ -19,7 +19,8 @@ beforeAll(async () => {
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
-      seen.push({ url: req.url ?? "", authorization: req.headers.authorization, body });
+      const tokenAuth = req.headers["x-xai-token-auth"];
+      seen.push({ url: req.url ?? "", authorization: req.headers.authorization, ...(typeof tokenAuth === "string" ? { tokenAuth } : {}), body });
       if (status !== 200) {
         res.writeHead(status, { "content-type": "application/json" });
         res.end(JSON.stringify(errorBody));
@@ -74,8 +75,25 @@ describe("Grok voice", () => {
     const { listVoices } = await voice();
     expect(await listVoices(config)).toEqual([{ id: "ara", label: "Ara", description: "Warm" }]);
     expect(seen[0]).toMatchObject({ url: "/v1/tts/voices", authorization: "Bearer fixture-voice-key" });
+    expect(seen[0]?.tokenAuth).toBeUndefined();
     voices = { voices: [{ name: "Missing ID" }] };
     await expect(listVoices(config)).rejects.toThrow("invalid voice list");
+  });
+
+  it("sends a connected Grok account through the account voice host, and an API key stays on api.x.ai", async () => {
+    vi.stubEnv("SAGAX_GROK_ACCOUNT_VOICE_API", process.env.SAGAX_XAI_TTS_API!);
+    const grok = await import("./grok.ts");
+    await grok.withVoiceAuth("grok-account", () => grok.listVoices("fixture-grok-account-token"));
+    expect(seen.at(-1)).toMatchObject({
+      url: "/v1/tts/voices",
+      authorization: "Bearer fixture-grok-account-token",
+      tokenAuth: "xai-grok-cli",
+    });
+    await grok.withVoiceAuth("grok-account", () => {
+      expect(grok.realtimeSocketUrl("wss://api.x.ai/v1/realtime?model=grok")).toBe("wss://cli-chat-proxy.grok.com/v1/realtime?model=grok");
+      expect(grok.realtimeSocketUrl("ws://127.0.0.1:9/v1/realtime")).toBe("ws://127.0.0.1:9/v1/realtime");
+    });
+    expect(grok.realtimeSocketUrl("wss://api.x.ai/v1/realtime")).toBe("wss://api.x.ai/v1/realtime");
   });
 
   it("preserves Polish text, requests MP3 with language detection and honors the bot voice", async () => {

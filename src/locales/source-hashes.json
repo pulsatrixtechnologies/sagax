@@ -19176,7 +19176,10 @@
       "routine.investigation.unavailable": "f753921d086194708e02dcf1ce9b66572bab21fd07000389a8b2deabb5e32eac",
       "routine.investigation.retry": "85ae78d321b2425c7ab425efe929666ef81c55d29df1c010cff14127d84ce60c",
       "routine.investigation.recovered": "7baf297de3e965de0a6cad995b71a233322c038daf08089a5255076485374215",
-      "routine.investigation.started": "3ecdec832f7d7535a232e53498ee9d951ada8331e4d83200a898c68de0acac77"
+      "routine.investigation.started": "3ecdec832f7d7535a232e53498ee9d951ada8331e4d83200a898c68de0acac77",
+      "voiceMode.key.grokAccount": "d1041728dfb03a0a726ce434c13cf45ecefa0e90a19254c905d7810436d8c5d2",
+      "voiceMode.keyAction.grokAccount": "2bc4c480a58587c6c66bdc89a44f81da73e072085c99d3c964748ec276c526cf",
+      "voiceMode.noCall": "7d69be066afadf29f48f945be20f351572871de1d3cbc147df63b76c44ed6912"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

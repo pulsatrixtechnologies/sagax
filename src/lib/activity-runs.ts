@@ -39,8 +39,10 @@ export type TranscriptItem = ActivityTranscriptItem;
  * changes this conversation's engine, `notice:` when the engine runs another
  * model than the saved one, `stopped:` when the person or the client stopped
  * the turn. All three must remain visible and are never folded. */
-export function statusActivity(message: Message): { kind: "recovery" | "notice" | "stopped"; text: string } | null {
+export function statusActivity(message: Message): { kind: "recovery" | "notice" | "stopped" | "team"; text: string } | null {
   const name = message.kind === "activity" ? message.tool?.name : undefined;
+  // #4901: a Heavy run's row (the Team of Experts), drawn by HeavyTeamRow; the name is its fallback line
+  if (message.kind === "activity" && message.tool?.team) return { kind: "team", text: name ?? "" };
   // 2026-10-18: the bot left a provider the organization no longer offers
   // (shared/offered-engines.ts), in the reader's language.
   const move = message.kind === "activity" ? message.tool?.engineMove : undefined;

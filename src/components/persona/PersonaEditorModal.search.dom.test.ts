@@ -125,7 +125,7 @@ async function frame() {
 
 beforeEach(() => {
   setLocale("en");
-  fixture.section = "appearance";
+  fixture.section = "overview";
   fixture.listeners.clear();
   actions.length = 0;
   fixture.dispatch = (action) => {
@@ -150,10 +150,10 @@ afterEach(() => {
 
 describe("bot profile settings search", () => {
   it("opens from the magnifier beside the tabs, under them, and dims no tab while empty", () => {
-    // a link to Appearance lands on its own tab (#2969: General | Appearance | Knowledge | Stats)
-    expect(selectedTab()).toBe("appearance");
-    expect(shownTab()).toBe("appearance");
-    expect(opened()).toContain("appearance");
+    // the page opens on General (Appearance is the header mascot's modal, not a tab)
+    expect(selectedTab()).toBe("general");
+    expect(shownTab()).toBe("general");
+    expect(host.querySelector('[data-bot-profile-tab="appearance"]')).toBeNull();
     expect(host.querySelector("[data-persona-search]")).toBeNull();
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     act(() => toggle().click());
@@ -165,40 +165,17 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     expect(host.querySelector("[data-persona-search]")).toBeNull();
   });
-  it("shows the tab that holds a word, in English and in French, and marks the tabs that do", () => {
+  it("leads a word of the Appearance modal to it on Enter, the tabs staying on General", () => {
     act(() => toggle().click());
     type("mascot");
-    // the mascot is on the Appearance tab (#2969): that tab is the match, General dims
-    expect(selectedTab()).toBe("appearance");
-    expect(matching()).toEqual(["appearance"]);
-    expect(opened()).toContain("appearance");
-    expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(true);
-    type("effort");
-    // V6 (#2612): the Model sub-page sits on General; #4470: typing marks
-    // its row on the tab and keeps the field, Enter opens its modal
+    // the mascot is Appearance's, a modal and no tab: the query leads to it, the tab stays on General,
+    // nothing opens while typing (#4470) and Enter opens the modal with its rows marked
     expect(selectedTab()).toBe("general");
-    expect(matching()[0]).toBe("general");
-    expect(host.querySelector("[data-persona-modal]")!.hasAttribute("data-bot-profile-subpage-current")).toBe(false);
-    expect(host.querySelector('[data-bot-profile-subpage-open="model"]')!.hasAttribute("data-settings-search-hit")).toBe(true);
-    expect(document.querySelector("[data-bot-page-modal]")).toBeNull();
-    expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(false);
+    expect(document.querySelector('[data-bot-page-modal="appearance"]')).toBeNull();
     key(input(), "Enter");
-    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("model");
-    expect(document.querySelector('[data-bot-page-modal="page-model"]')).not.toBeNull();
-    expect(opened()).toContain("model");
-    act(() => setLocale("fr"));
-    act(() => root.render(createElement(PersonaEditorModal)));
-    type("modèle");
-    expect(selectedTab()).toBe("general");
-  });
-  it("hides the rows that do not match on the tab shown and marks the first", () => {
-    act(() => toggle().click());
-    type("effort");
-    key(input(), "Enter");
-    const rows = [...document.querySelectorAll('[data-bot-page-modal] [data-bot-profile-section="model"] [data-settings-row]')];
-    expect(rows.map((row) => row.hasAttribute("data-settings-search-miss"))).toEqual([false, true]);
-    expect(rows[0]!.hasAttribute("data-settings-search-hit")).toBe(true);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]')).not.toBeNull();
+    expect(opened()).not.toContain("appearance");
+    expect(document.querySelector('[data-bot-page-modal="appearance"] [data-bot-profile-section="appearance"]')).not.toBeNull();
     type("");
     expect(host.querySelector("[data-settings-search-miss]")).toBeNull();
   });
@@ -206,7 +183,7 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     type("zzzxq");
     expect(matching()).toEqual([]);
-    expect(selectedTab()).toBe("appearance");
+    expect(selectedTab()).toBe("general");
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
   it("opens the field with a slash or Command-F from any tab, but not while typing", async () => {

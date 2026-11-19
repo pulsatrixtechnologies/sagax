@@ -683,6 +683,8 @@ export default function MascotLookEditor({
         heading={slot?.heading}
         subheading={slot?.subheading}
         profile={slot?.profile}
+        onActivate={slot?.onOpen}
+        activateLabel={slot?.openLabel}
         liveState={slot?.state}
         liveMotion={slot?.motion}
       />

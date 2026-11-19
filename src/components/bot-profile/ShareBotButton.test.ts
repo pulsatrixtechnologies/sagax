@@ -64,6 +64,9 @@ vi.mock("../bot-settings/SharingSection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../bot-settings/SharingSection")>()),
   useBotSharing: () => fixture.sharing,
 }));
+vi.mock("../bot-settings/VisibilitySection", () => ({
+  VisibilitySection: () => createElement("div", { "data-bot-visibility": "" }, "Who can see it"),
+}));
 vi.mock("../bot-settings/GrantEditor", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../bot-settings/GrantEditor")>();
   return {
@@ -118,6 +121,18 @@ describe("ShareBotButton", () => {
     fixture.viewerId = OWNER;
     fixture.org = { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://id.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
     fixture.editor = null;
+  });
+
+  // the owner 2026-11-19: the Shared with row left General; Who can see it moved here
+  it("holds Who can see it under the people when this viewer may set it, and alone where nobody can be shared with", () => {
+    fixture.sharing = { directory, rows, administer: ownerRights, isOwner: true, mayShare: true };
+    const withBoth = renderToStaticMarkup(createElement(ShareBotButton, { bot, open: true, onOpenChange: () => {}, visibility: true }));
+    expect(withBoth).toContain("data-bot-share-access");
+    expect(withBoth).toContain("data-bot-share-visibility");
+    expect(render(true)).not.toContain("data-bot-share-visibility");
+    const alone = renderToStaticMarkup(createElement(ShareBotButton, { bot, open: true, onOpenChange: () => {}, grants: false, visibility: true }));
+    expect(alone).toContain("data-bot-share-visibility");
+    expect(alone).not.toContain("data-bot-share-access");
   });
 
   it("draws the round Share icon button, closed", () => {

@@ -84,13 +84,14 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * same section bodies as before) only for a setting too long for a card.
  * Stats shows the usage in place.
  *
- * - General: Settings (two switches in place, then Personality, Model,
- *   Before it acts), the Channels card and the Access card in place,
- *   More (Shared with, Rules, When it acts alone, Voice, Advanced settings,
- *   Versions).
- * - Appearance: the whole mascot editor in place (character, shape, colour,
- *   style, moves), its own tab like Grok Bot's (JC 2026-11-08: no dropdown
- *   under the header any more).
+ * - General: Settings (two switches in place, then Model, Before it
+ *   acts), the Channels card and the Access card in place, More (Rules,
+ *   When it acts alone, Voice, Advanced settings, Versions). Personality
+ *   has no row: Knowledge > Folder and memory > SOUL.md opens its page.
+ *   Shared with has no row either: the Share button of the top bar holds
+ *   the people and groups and Who can see it.
+ * - Appearance is not a tab: the mascot editor is a modal that the header's
+ *   mascot opens (owner 2026-11-19). A link to the Appearance section opens it.
  * - Knowledge (#3400): To review and Skills in place (the learnings that
  *   wait, decided in place; the skills with their "+ Add"), then Its work
  *   (Routines, Folder and memory).
@@ -99,15 +100,14 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  *   true, read from the bot's routines (shared/outcomes.ts); it holds no
  *   section of its own. No Updates tab: what a bot reports is told once,
  *   in its one conversation. */
-export type BotProfileTab = "general" | "outcomes" | "appearance" | "knowledge" | "stats";
-export const BOT_PROFILE_TABS = ["general", "outcomes", "appearance", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
+export type BotProfileTab = "general" | "outcomes" | "knowledge" | "stats";
+export const BOT_PROFILE_TABS = ["general", "outcomes", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
 
 /** The sub-pages a row of a tab opens. */
 export const BOT_PROFILE_SUBPAGES = [
   "personality",
   "model",
   "beforeActing",
-  "sharing",
   "rules",
   "actsAlone",
   "voice",
@@ -124,7 +124,6 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
   personality: ["summary", "soul"],
   model: ["model", "worksOn"],
   beforeActing: ["permissions"],
-  sharing: ["sharing", "visibility"],
   rules: ["rules"],
   actsAlone: [],
   voice: ["voice"],
@@ -162,13 +161,12 @@ export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = 
  * Share button of the top bar). */
 export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArray<{ id: string; pages: readonly BotProfileSubPage[]; card?: BotProfileCard }>>> = {
   general: [
-    { id: "settings", pages: ["personality", "model", "beforeActing"] },
+    { id: "settings", pages: ["model", "beforeActing"] },
     { id: "channels", pages: [], card: "channels" },
     { id: "accounts", pages: [], card: "accounts" },
-    { id: "more", pages: ["sharing", "rules", "actsAlone", "voice", "advanced", "versions"] },
+    { id: "more", pages: ["rules", "actsAlone", "voice", "advanced", "versions"] },
   ],
   outcomes: [],
-  appearance: [],
   knowledge: [
     { id: "skills", pages: [], card: "skills" },
     { id: "work", pages: ["routines", "folder"] },
@@ -198,7 +196,6 @@ export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly P
     ...botProfileTabCards("general").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
   ],
   outcomes: [],
-  appearance: ["appearance"],
   knowledge: [
     ...botProfileTabCards("knowledge").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
     ...botProfileTabPages("knowledge").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
@@ -232,7 +229,6 @@ export function botProfileTabOfPage(page: BotProfileSubPage): BotProfileTab {
 export function botProfileTabOf(category: PersonaCategory): BotProfileTab | null {
   if (isHeaderSection(category)) return null;
   if (category === "usage") return "stats";
-  if (category === "appearance") return "appearance";
   const page = botProfileSubPageOf(category);
   if (page) return botProfileTabOfPage(page);
   const card = botProfileCardOf(category);

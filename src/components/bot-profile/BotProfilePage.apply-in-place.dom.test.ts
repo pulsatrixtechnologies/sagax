@@ -100,7 +100,10 @@ async function openSub(page: BotProfileSubPage): Promise<HTMLElement> {
   // a sub-page is a modal over the page (#4470): close the one open first
   for (const modal of Array.from(document.querySelectorAll<HTMLElement>("[data-bot-page-modal]")).reverse()) await click(modal.querySelector<HTMLElement>(":scope > [data-dialog-close]"), "close");
   await click(host.querySelector<HTMLElement>(`[data-bot-profile-tab="${botProfileTabOfPage(page)}"]`), "tab");
-  await click(host.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${page}"]`), `row ${page}`);
+  // Personality has no row (owner 2026-11-19): Folder and memory's SOUL.md opens it through this link
+  if (page === "personality") await act(async () => { dispatch({ type: "personaEditorSection", section: "soul" } as never); });
+  else await click(host.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${page}"]`), `row ${page}`);
+  await settle();
   return document.querySelector<HTMLElement>(`[data-bot-page-modal] [data-bot-profile-subpage="${page}"]`)!;
 }
 

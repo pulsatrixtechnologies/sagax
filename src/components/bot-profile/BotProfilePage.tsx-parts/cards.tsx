@@ -2,7 +2,7 @@
 // the grey-label card, its rows, a locked section's note, a tab's block,
 // and the General tab's Channels and Access cards.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { BellRing, Cpu, KeyRound, Lock, Mail, MessageCircle, Plug, ServerCog, Trash2 } from "lucide-react";
+import { BellRing, KeyRound, Lock, Mail, MessageCircle, Plug, ServerCog, Trash2 } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -43,11 +43,10 @@ export function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The tabs' names (V6, #2612; Appearance its own tab, JC 2026-11-08). */
+/** The tabs' names (V6, #2612; Appearance is the header mascot's modal, the owner 2026-11-19). */
 export const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
   general: "botProfile.tab.general",
   outcomes: "botProfile.tab.outcomes",
-  appearance: "botProfile.tab.appearance",
   knowledge: "botProfile.tab.knowledge",
   stats: "botProfile.tab.stats",
 };
@@ -297,18 +296,16 @@ function AccountLogo({ name, form }: { name: string; form: "app" | "mcp" }) {
   return <PluginIcon item={{ kind: form, name, logo: mark.logo ?? undefined, domain: mark.site ?? undefined }} className="size-5 rounded-md text-[11px]" />;
 }
 
-/** The Access card's rows shown before "Show N more", the engine's included (#4075). */
+/** The Access card's rows shown before "Show N more" (#4075; the engine row is gone, the Model row holds the engine, the owner 2026-11-19). */
 const ACCESS_ROWS_SHOWN = 3;
 
-/** General > Access (#3399, named in #4075): what this bot has, one row each (its
- * engine, then each app or server that is on, off, set by the organization
+/** General > Access (#3399, named in #4075): what this bot has, one row each (each app or server that is on, off, set by the organization
  * or in need of attention, then the shared vault's logins), each with its
  * control at the right. An app or server still to connect is listed in the
  * Plugins window that Add opens for this bot. "+ Add" sits at the right of
  * the label, or in the empty row when the bot has nothing yet. */
-export function AccountsCard({ bot, onEngine, derived, vault }: {
+export function AccountsCard({ bot, derived, vault }: {
   bot: Bot;
-  onEngine: () => void;
   derived: { patch: (patch: { mcpServers: string[] | null } | { mcpAccounts: Record<string, string> | null }) => void };
   /** this viewer manages the bot's shared vault (teamVaultOffered) */
   vault: boolean;
@@ -475,16 +472,9 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
         <div role="status" className="px-4 py-3 text-[12px] leading-4 text-ink-secondary">{loading ? t("botProfile.accounts.loading") : null}</div>
       ) : (
         <>
-          <CardRow
-            rowId="engine"
-            icon={<Cpu />}
-            label={data.engine.label}
-            state={t("botProfile.engine")}
-            action={<button type="button" data-bot-profile-action="engine" onClick={onEngine} className={cn(PILL, "shrink-0")}>{t("botProfile.manage")}</button>}
-          />
-          {/* #4075: a long list shows its first rows (the engine first), then
+          {/* #4075: a long list shows its first rows, then
               the shared "Show N more" line that unfolds the rest in place. */}
-          <ShowMoreFold items={rows} shown={ACCESS_ROWS_SHOWN - 1} render={(row) => row} toggleAttr="data-bot-profile-accounts-fold" />
+          <ShowMoreFold items={rows} shown={ACCESS_ROWS_SHOWN} render={(row) => row} toggleAttr="data-bot-profile-accounts-fold" />
           {empty && (
             <div data-bot-profile-accounts-empty="">
               <CardRow rowId="accounts-empty" icon={<Plug />} label={t("botProfile.accounts.emptyTitle")} state={t("botProfile.accounts.emptyLine")} action={add} />

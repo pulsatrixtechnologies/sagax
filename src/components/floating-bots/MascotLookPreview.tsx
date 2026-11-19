@@ -53,12 +53,16 @@ export interface MascotLookPreviewProps {
   profile?: boolean;
   /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
+  /** The profile hero's mascot opens something (the Appearance modal): a click calls it,
+   * the button is named `activateLabel` and shows it as its tooltip, the cursor is a hand. */
+  onActivate?: (() => void) | undefined;
+  activateLabel?: string | undefined;
   /** The bot's live state and the moves it plays across the app. */
   liveState?: MausState;
   liveMotion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
 }
 
-type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState"> & {
+type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState" | "onActivate" | "activateLabel"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
   profile?: boolean;
@@ -70,16 +74,18 @@ type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "
   clip?: boolean;
 };
 
-function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, profile, pad = 20, clip = false }: StageProps) {
+function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion, size, profile, pad = 20, clip = false }: StageProps) {
   return (
     <button
       type="button"
       data-mascot-stage=""
-      aria-label={t("appearance.preview", { name: shownName })}
+      aria-label={activateLabel ?? t("appearance.preview", { name: shownName })}
+      title={activateLabel}
+      data-mascot-activate={onActivate ? "" : undefined}
       onMouseEnter={() => { if (moves[0]) onPlay(moves[0]); }}
-      onClick={onPlayNext}
+      onClick={onActivate ?? onPlayNext}
       style={{ width: size + pad, height: size + pad }}
-      className={cn("relative grid shrink-0 place-items-center rounded-2xl", clip && "overflow-hidden", focusRing)}
+      className={cn("relative grid shrink-0 place-items-center rounded-2xl", onActivate && "cursor-pointer", clip && "overflow-hidden", focusRing)}
     >
       <span aria-hidden="true" className={cn("pointer-events-none", profile && "profile-mascot-shadow", shownLock.locked && "opacity-60 grayscale")}>
         <BotAvatar
@@ -124,11 +130,13 @@ export function MascotLookPreview({
   subheading,
   profile,
   picture,
+  onActivate,
+  activateLabel,
   liveState,
   liveMotion,
 }: MascotLookPreviewProps): ReactNode {
   const motion = owlMotion ?? liveMotion ?? null;
-  const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion };
+  const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion };
   if (heading !== undefined) {
     // The profile page's hero (Grok Bot, the owner 2026-11-09): the mascot small
     // and bare on the left of the column, over the banner's lower edge, the

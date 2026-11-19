@@ -205,7 +205,6 @@ describe("Claude account HTTP API", () => {
     expect((await bot(secondBot.id)).modelSelection.instanceId).toBe(second.id);
     const changeDirectory = () => api("PATCH", `/api/instances/${first.id}`, { configDir: join(home, "different-history-account") });
     expect((await changeDirectory()).status).toBe(409);
-    expect((await api("DELETE", `/api/instances/${first.id}`)).status).toBe(409);
     expect((await api("POST", `/api/bots/${firstBot.id}/messages`, { text: "record fixture history" })).status).toBe(202);
     await idle(firstBot.id);
     expect((await bot(firstBot.id)).messages.some((message: any) => message.text === replyOf(first.dir))).toBe(true);
@@ -215,6 +214,24 @@ describe("Claude account HTTP API", () => {
     expect((await changeDirectory()).status).toBe(409);
     expect(saved().instances[first.id].config.configDir).toBe(first.dir);
     expect((await bot(secondBot.id)).modelSelection.instanceId).toBe(second.id);
+  });
+
+  it("removing an account a bot uses moves the bot to the person's other account, same model, then removes it (2026-11-18)", async () => {
+    const leaving = await addAccount("Leaving account");
+    const staying = await addAccount("Staying account");
+    const user = await addBot(leaving.id);
+    const plan = await api("GET", `/api/instances/${leaving.id}/moves`);
+    expect(plan.status).toBe(200);
+    const move = plan.body.moves.find((entry: any) => entry.botId === user.id);
+    expect(move.via).toBe("account");
+    expect(move.to.model).toBe(MODEL);
+    const removed = await api("DELETE", `/api/instances/${leaving.id}`);
+    expect(removed.status).toBe(200);
+    expect(saved().instances).not.toHaveProperty(leaving.id);
+    // the account it moved to is the one the confirmation named
+    expect((await bot(user.id)).modelSelection).toMatchObject({ instanceId: move.to.instanceId, model: MODEL });
+    expect(move.to.instanceId).not.toBe(leaving.id);
+    expect(saved().instances, "the other account stays").toHaveProperty(staying.id);
   });
 
   it("rejects busy-account edits while sibling changes preserve the running process and later SSE events", async () => {

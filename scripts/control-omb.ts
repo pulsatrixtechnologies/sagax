@@ -14,6 +14,7 @@ import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 import { handleToolCall, request, validateBaseUrl } from "./mcp-server.ts";
 import { launchUi, runControlOmbUi } from "./testing/control-omb-ui.ts";
 import { removeTempDir, waitForExit } from "../server/testing/cleanup.ts";
+import { assertIsolatedDataDir } from "../server/testing/isolated-data-dir.ts";
 import { freePortBlock } from "../server/testing/ports.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -375,6 +376,8 @@ export function fixtureNodeDir(): string {
  * nothing else from the parent shell or this machine's installed CLIs. A
  * test that restarts its own fixture server on the same data uses this too. */
 export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, dataDir: string, port: number): NodeJS.ProcessEnv {
+  // never a person's real data folder (2026-11-18)
+  assertIsolatedDataDir(dataDir);
   const childEnv: NodeJS.ProcessEnv = {};
   const platformKeys = new Set(["SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TZ"]);
   for (const [key, value] of Object.entries(parentEnv)) {

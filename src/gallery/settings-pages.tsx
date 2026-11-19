@@ -12,11 +12,13 @@
  * &empty=1 (#4329): no engine and no key, Providers' empty list
  * &keyonly=1 (#4376): a key engine with no key row and no key; &expired=1 (with org=1): a second xAI account to sign in again
  * &accounts=claude|claude-one|openai|openai-solo|xai (#4415, #4426): a provider's Accounts in each state (with subPage=providers.provider:<id>), &member=1 as an organization member (#4435)
+ * &moves=1|none (2026-11-18): Remove and Sign out list where each bot on the account goes; none: no other engine
  * &firstKey=1 (#4360): Security with no key and no recent proof; &vault=unpaired|noperson: the vault refused
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu; ?picker=chip: the chat head's chip
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { ConfirmProvider } from "../components/ConfirmProvider";
 import { ModelPicker } from "../components/ModelPicker";
 import { SettingsModal } from "../components/SettingsModal";
 import { loadLocale } from "../lib/i18n";
@@ -83,9 +85,23 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.pathname === "/api/me/credentials/list" && (refusedVault === "unpaired" || refusedVault === "noperson")) {
     return json(refusedVault === "unpaired" ? { error: "Pair this device.", code: "not_paired" } : { error: "Sign in to use your credential vault.", code: "no_person" }, 403);
   }
-  // &accounts= (#4415): removing an account answers that two bots still use it
-  if (params.get("accounts") && (init?.method ?? "GET").toUpperCase() === "DELETE" && /^\/api\/(me\/engines|instances)\/[\w.-]+$/.test(url.pathname)) {
-    return json({ error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"] }, 409);
+  // &moves=1|none (2026-11-18): where each bot on an account goes when it is
+  // removed or signed out of; none: no other engine exists
+  if (/^\/api\/(me\/engines|instances)\/[\w.-]+\/moves$/.test(url.pathname)) {
+    const moves = params.get("moves");
+    if (moves === "none") return json({ moves: [{ botId: "b1", name: "Scout", via: "none" }, { botId: "b2", name: "Atlas", via: "none" }], noEngine: true });
+    if (moves) {
+      return json({
+        moves: [
+          { botId: "b1", name: "Scout", via: "account", engine: "Work" },
+          { botId: "b2", name: "Atlas", via: "fallback", engine: "Codex" },
+          { botId: "b3", name: "Juniper", via: "stays", engine: "Codex" },
+        ],
+        defaultModel: { via: "account", engine: "Work" },
+        noEngine: false,
+      });
+    }
+    return json({ moves: [], noEngine: false });
   }
   // #4376: a rename, a model switch, a key change the page's data in memory
   const written = answerGalleryWrite(API, url, init);
@@ -132,10 +148,13 @@ function OpenSettings() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
-      <div className="flex h-screen bg-app text-ink" data-gallery-settings-pages="">
-        <OpenSettings />
-        {params.has("picker") ? <OpenModelPicker /> : <SettingsModal />}
-      </div>
+      {/* the app's one confirmation, as App mounts it (Remove and Sign out read it) */}
+      <ConfirmProvider>
+        <div className="flex h-screen bg-app text-ink" data-gallery-settings-pages="">
+          <OpenSettings />
+          {params.has("picker") ? <OpenModelPicker /> : <SettingsModal />}
+        </div>
+      </ConfirmProvider>
     </StoreProvider>
   </StrictMode>,
 );

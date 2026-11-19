@@ -625,7 +625,8 @@ import { hostedModelPolicy, HOSTED_PROVIDER_SETTINGS_ERROR } from "./models/host
 import { holdIncludedServices, voiceCredential } from "./included-services.ts";
 import { createModelAccessRefusals, personPayer, type RefusalPayer } from "./models/model-access-refusals.ts";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../shared/model-access-disabled.ts";
-import { withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./models/default-model-selection.ts";
+import { readyToRun, withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./models/default-model-selection.ts";
+import { createAccountMovesHost, type AccountMovesHost } from "./engines/account-moves.ts";
 import { threadModelFallback } from "./threads/thread-model.ts";
 import { engineProblem, namesEngine, noEngineError } from "./bots/bot-engine.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
@@ -11527,6 +11528,53 @@ function engineEligibility(bot: BotRecord): string | undefined {
 function teammateEngineProblem(bot: BotRecord): string | undefined {
   const healed = healBotEngine(bot);
   return engineProblem(healed.modelSelection, (id) => registry.get(id)?.enabled !== false && Boolean(registry.get(id)));
+}
+
+/** 2026-11-18: where an account's bots go when the person removes it or
+ * signs out of it (server/engines/account-moves.ts), shared by the server's
+ * account routes (person null: every bot) and a person's own list. */
+let accountMovesHostImpl: AccountMovesHost | undefined;
+function accountMovesHost(): AccountMovesHost {
+  const samePerson = (a: string | null | undefined, b: string) => (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+  return accountMovesHostImpl ??= createAccountMovesHost({
+    bots: (person) => store.bots.filter((bot) => !person || samePerson(effectiveBotOwner(bot), person)),
+    tasks: (botId, person) => store.tasks(botId).filter((task) => !person || !task.ownerPrincipalId || samePerson(task.ownerPrincipalId, person)),
+    engines: async (person) => {
+      if (person && IDENTITY.kind === "perspicax") {
+        // the person's own access: their sign-in, their key or the organization's key
+        const access = personEngineAccess(person) as Array<{ id: string; via: string }>;
+        return orgOfferedEngines(registry.entries(), person)
+          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId))
+          .map((entry) => ({
+            instanceId: entry.instanceId,
+            defaultModel: registry.get(entry.instanceId)?.models.default ?? "",
+            usable: (access.find((candidate) => candidate.id === entry.instanceId)?.via ?? "none") !== "none",
+          }));
+      }
+      return selectableInstances(await registry.describe()).map((instance) => ({
+        instanceId: instance.instanceId,
+        defaultModel: instance.models.default.trim() || instance.models.options.find((model) => model.id.trim())?.id || "",
+        usable: readyToRun(instance, selectionContext),
+      }));
+    },
+    personDefault: () => cfg.defaultModelSelection,
+    label: (selection, person) => {
+      const live = registry.get(selection.instanceId);
+      return live ? engineNameForPerson(selection.instanceId, engineDisplayName(live), live.driverKind, person) : selection.instanceId;
+    },
+    moveBots: (leaving, moves, forget) => {
+      store.moveAccountUsers(leaving, moves, { driverOf: (instanceId) => registry.get(instanceId)?.driverKind, forget });
+    },
+    setDefault: (selection) => {
+      // both saved defaults in one write, as moveOffComputerEngine does
+      const newBotDefaults = cfg.newBotDefaults && newBotDefaultsSchema.parse({
+        ...cfg.newBotDefaults, profile: { ...cfg.newBotDefaults.profile, modelSelection: selection }
+      });
+      saveConfig(newBotDefaults ? { newBotDefaults } : { defaultModelSelection: selection });
+      cfg.defaultModelSelection = selection;
+      if (newBotDefaults) cfg.newBotDefaults = newBotDefaults;
+    }
+  });
 }
 
 /** The Computer engine was removed: it ran a whole turn on Boat's own agent.
@@ -29751,11 +29799,8 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
     serverEngineAllowedFor,
     engineNotAvailableReason,
     engineNameForPerson, accountNames,
-    // #4415: the person's own bots that still use one of their accounts
-    accountUsers: (principalId: string, instanceId: string) => accountUserNames(
-      store.bots.filter((bot) => effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase()),
-      (botId) => store.tasks(botId).filter((task) => !task.ownerPrincipalId || task.ownerPrincipalId.trim().toLowerCase() === principalId.trim().toLowerCase()),
-      instanceId),
+    // 2026-11-18: the person's bots on an account move before it goes
+    accountMoves: accountMovesHost(),
     // #4435: the entry of a person's own account, removed with it
     removeAccountEntry: (instanceId: string, beforeRemove: () => Promise<void>) => removeAddedAccount(addedAccountRemoval, instanceId, { beforeRemove }),
     engineDisplayName,
@@ -36556,6 +36601,7 @@ const addedAccountRemoval: AddedAccountRemovalDeps = {
 };
 ROUTES.push(createInstancesRoutes({
   ...addedAccountRemoval,
+  accountMoves: accountMovesHost(),
   dataDir: DATA_DIR,
   hostedModels: Boolean(hostedModels),
   identityKind: () => IDENTITY.kind,

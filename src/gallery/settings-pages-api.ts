@@ -256,8 +256,8 @@ function accountProviders(accounts: string | null): { providers?: unknown[] } {
  * each state the owner met: several accounts all signed out, one sign-in
  * read by two engines (one row), a second sign-in of one engine, and the
  * answers a sign-in in progress gets (a pasted code, a device code, the
- * vendor's page alone). Removing answers that two bots still use it
- * (src/gallery/settings-pages.tsx). &member=1 shows them to an organization
+ * vendor's page alone). &moves=1|none lists where each bot on an account
+ * goes when it is removed (src/gallery/settings-pages.tsx). &member=1 shows them to an organization
  * member, who adds their own accounts too (#4435). Made-up names only. */
 function accountScenes(scene: string, config: Record<string, unknown>, role: "admin" | "member"): Record<string, unknown> {
   const id = (driver: string, n: number) => `${driver}-0000000${n}-aaaa-4bbb-8ccc-dddddddddddd`;

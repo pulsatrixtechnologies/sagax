@@ -1,6 +1,6 @@
-// Who still uses an account (#4415): the server refuses to remove an
-// account a bot runs on, falls back to, or a conversation of it chose, and
-// says which bots, so the person knows what to move (never a dead button).
+// Who still uses an account (#4415): an account a bot runs on, falls back
+// to, or a conversation of it chose. Removing or signing out of it moves
+// those bots first (server/engines/account-moves.ts), never a refusal.
 import type { ModelSelection } from "../contracts.ts";
 
 export interface AccountUserBot {
@@ -8,33 +8,39 @@ export interface AccountUserBot {
   name?: string;
   modelSelection: ModelSelection;
   fallback?: ModelSelection[];
+  /** A temporary agent (create_agent); an archived one is gone from every
+   * list and purged later, so it uses nothing any more. */
+  temporary?: { archived?: unknown } | null;
 }
 
 export interface AccountUserTask {
   modelSelection?: ModelSelection | null;
 }
 
-/** The names of the bots that use `instanceId` (their model, a backup, a
- * conversation's own model), each once, in the bots' order. */
-export function accountUserNames(bots: readonly AccountUserBot[], tasks: (botId: string) => readonly AccountUserTask[], instanceId: string): string[] {
-  const names: string[] = [];
-  for (const bot of bots) {
-    const uses = bot.modelSelection.instanceId === instanceId
-      || bot.fallback?.some((candidate) => candidate.instanceId === instanceId)
-      || tasks(bot.id).some((task) => task.modelSelection?.instanceId === instanceId);
-    const name = bot.name?.trim() || bot.id;
-    if (uses && !names.includes(name)) names.push(name);
-  }
-  return names;
+/** Whether a bot still counts: an archived temporary agent never does
+ * (2026-11-18: a leftover archived agent was named as a user of the
+ * account the person wanted to remove). */
+export function liveAccountUser(bot: AccountUserBot): boolean {
+  return !bot.temporary?.archived;
 }
 
-/** The refusal's body: the old sentence for apps that read `error` only,
- * and what the page says in the person's words. */
-export function accountInUseRefusal(bots: readonly string[], defaultModel: boolean): { error: string; code: "account_in_use"; bots: string[]; defaultModel?: true } {
-  return {
-    error: "Choose another account for the bots and default model using this account before removing it.",
-    code: "account_in_use",
-    bots: [...bots],
-    ...(defaultModel ? { defaultModel: true as const } : {}),
-  };
+/** Whether `bot` uses one of `instanceIds`: its model, a backup, or a
+ * conversation's own model. */
+export function usesAccount(bot: AccountUserBot, tasks: (botId: string) => readonly AccountUserTask[], instanceIds: ReadonlySet<string>): boolean {
+  return instanceIds.has(bot.modelSelection.instanceId)
+    || Boolean(bot.fallback?.some((candidate) => instanceIds.has(candidate.instanceId)))
+    || tasks(bot.id).some((task) => Boolean(task.modelSelection && instanceIds.has(task.modelSelection.instanceId)));
+}
+
+/** The names of the bots that use `instanceId`, each once, in the bots'
+ * order. Archived temporary agents are left out. */
+export function accountUserNames(bots: readonly AccountUserBot[], tasks: (botId: string) => readonly AccountUserTask[], instanceId: string): string[] {
+  const names: string[] = [];
+  const ids = new Set([instanceId]);
+  for (const bot of bots) {
+    if (!liveAccountUser(bot) || !usesAccount(bot, tasks, ids)) continue;
+    const name = bot.name?.trim() || bot.id;
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }

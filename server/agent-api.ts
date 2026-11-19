@@ -53,7 +53,7 @@ import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
 import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
-import { checkWriteVersion, expectedVersionArg, readerKey, TargetQueue, versionConflictWords, type VersionReads, type WriteTarget } from "./write-versions.ts";
+import { checkWriteVersion, expectedVersionArg, mustReadFirst, readerKey, versionConflictWords, writeQueue, type VersionReads, type WriteTarget } from "./write-versions.ts";
 import { readRouteRefusal } from "./route-refusal.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import type { BotSpeech } from "../shared/voice-mode.ts";
@@ -1982,7 +1982,6 @@ function createAgentApiConfigHandlers(env: {
   const { deps, ok, reachable } = env;
   // #4939: a write checks the version the caller read, then writes, with no
   // other write to the same target in between; it answers the new version.
-  const queue = new TargetQueue();
   const versioned = async (
     caller: AgentCaller,
     target: WriteTarget,
@@ -1994,18 +1993,18 @@ function createAgentApiConfigHandlers(env: {
     if (!versions) return work();
     const expected = expectedVersionArg(args, VERSION_ARG_KEYS);
     if (expected && typeof expected === "object") return refuse(400, "bad_request", expected.error);
-    return queue.run(target, async () => {
+    return writeQueue.run(target, async () => {
       const reader = readerKey(caller);
-      // The person in their console writes as before; an AI client reads first.
-      const verdict = checkWriteVersion({ current: current(), expected, readFirst: caller.via !== "console", read: versions.reads.read(reader, target) });
+      // The person and a bot write as before; an AI client reads first.
+      const verdict = checkWriteVersion({ current: current(), expected, readFirst: mustReadFirst(caller.via), read: versions.reads.read(reader, target) });
       if (!verdict.ok) {
         const words = versionConflictWords(target, verdict.reason);
         return refuse(409, "version_conflict", words.message, { current_version: verdict.current, conflict: verdict.reason, hint: words.hint });
       }
       const answer = await work();
       if (isRefusal(answer) || answer.status >= 300) return answer;
-      versions.reads.consume(reader, target);
       const version = current();
+      versions.reads.wrote(reader, target, version);
       return version ? { ...answer, body: { ...answer.body, version } } : answer;
     });
   };

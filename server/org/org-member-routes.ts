@@ -78,7 +78,7 @@ import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 import { readRouteRefusal } from "../route-refusal.ts";
 import { isRefusal, parseSendFiles, type FileInput } from "../agent-api.ts";
-import { checkWriteVersion, expectedVersionArg, readerKey, routineVersion, versionConflictWords, type VersionReads } from "../write-versions.ts";
+import { checkWriteVersion, expectedVersionArg, mustReadFirst, readerKey, routineVersion, versionConflictWords, writeQueue, type VersionReads } from "../write-versions.ts";
 import { SEND_ID_PATTERN } from "../messages/send-idempotency.ts";
 import { sensitiveEnvironmentPath } from "../safety/sensitive-path.ts";
 import { answerBotFiles, type BotAttachment, type BotFileRoot, type FilesView } from "./org-admin-files.ts";
@@ -2040,43 +2040,47 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         }
         if (!fields.length) return fail(400, "bad_request", "Send at least one of enabled, name, instructions, schedule.");
 
-        const rows = await ownRoutineRows(person);
-        if ("status" in rows) return rows;
-        const owned = rows.routines.find((row) => row.id === params.id);
-        if (!owned) return fail(404, "not_found", "No such routine.");
-        // #4939: a stale copy is refused; an AI client without
-        // expected_version must have read this version first.
+        // #4939: one write at a time per routine, on the queue the agent API
+        // shares, so the version check and the write are never split.
         const target = { kind: "routine" as const, id: params.id! };
-        const reader = readerKey(person);
-        const verdict = checkWriteVersion({
-          current: routineVersion(owned), expected,
-          readFirst: person.actor !== "console" && deps.versionReads !== undefined,
-          read: deps.versionReads?.read(reader, target),
-        });
-        if (!verdict.ok) {
-          const words = versionConflictWords(target, verdict.reason);
-          return fail(409, "version_conflict", words.message, { current_version: verdict.current, conflict: verdict.reason, hint: words.hint });
-        }
+        return writeQueue.run(target, async () => {
+          const rows = await ownRoutineRows(person);
+          if ("status" in rows) return rows;
+          const owned = rows.routines.find((row) => row.id === params.id);
+          if (!owned) return fail(404, "not_found", "No such routine.");
+          // #4939: a stale copy is refused; an AI client without
+          // expected_version must have read this version first.
+          const reader = readerKey(person);
+          const verdict = checkWriteVersion({
+            current: routineVersion(owned), expected,
+            readFirst: mustReadFirst(person.actor) && deps.versionReads !== undefined,
+            read: deps.versionReads?.read(reader, target),
+          });
+          if (!verdict.ok) {
+            const words = versionConflictWords(target, verdict.reason);
+            return fail(409, "version_conflict", words.message, { current_version: verdict.current, conflict: verdict.reason, hint: words.hint });
+          }
 
-        const reply = await deps.perform(person, {
-          method: "PATCH",
-          path: `/api/routines/${encodeURIComponent(params.id!)}`,
-          body: patch,
+          const reply = await deps.perform(person, {
+            method: "PATCH",
+            path: `/api/routines/${encodeURIComponent(params.id!)}`,
+            body: patch,
+          });
+          if (!okStatus(reply)) return passThrough(reply, "The routine could not be updated.");
+          const updated = objectOf(objectOf(reply.body)?.routine) ?? objectOf(reply.body);
+          deps.record(person, {
+            action: "client.routine_update",
+            target: { kind: "routine", id: params.id!, ...(typeof owned.name === "string" ? { name: scrubText(owned.name).slice(0, 80) } : {}) },
+            after: { fields },
+          });
+          // Prefer the live Sagax row; fall back to the owned list row with the
+          // patch applied so the answer still matches projectRoutine.
+          const row = updated && typeof updated.id === "string"
+            ? { ...owned, ...updated, ...(typeof updated.prompt === "string" ? { prompt: updated.prompt } : {}), ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) }
+            : { ...owned, ...patch, ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) };
+          deps.versionReads?.wrote(reader, target, routineVersion(row as Record<string, unknown>));
+          return answer({ routine: projectRoutine(row, rows.runs, true) });
         });
-        if (!okStatus(reply)) return passThrough(reply, "The routine could not be updated.");
-        const updated = objectOf(objectOf(reply.body)?.routine) ?? objectOf(reply.body);
-        deps.versionReads?.consume(reader, target);
-        deps.record(person, {
-          action: "client.routine_update",
-          target: { kind: "routine", id: params.id!, ...(typeof owned.name === "string" ? { name: scrubText(owned.name).slice(0, 80) } : {}) },
-          after: { fields },
-        });
-        // Prefer the live Sagax row; fall back to the owned list row with the
-        // patch applied so the answer still matches projectRoutine.
-        const row = updated && typeof updated.id === "string"
-          ? { ...owned, ...updated, ...(typeof updated.prompt === "string" ? { prompt: updated.prompt } : {}), ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) }
-          : { ...owned, ...patch, ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) };
-        return answer({ routine: projectRoutine(row, rows.runs, true) });
       },
     },
     {

@@ -74,9 +74,10 @@ Two sessions can no longer overwrite each other's change (owner decision, 2026-1
   `stale`, and a `hint` to read again, apply the change to what it answers and
   write with `expected_version` set to `current_version`.
 - Without `expected_version`, an AI client (via `perspicax-mcp`) writes only
-  when the same person and AI client (`client_name`) read the current version
-  and have not written since; else the same 409, `conflict` `not_read` or
-  `stale`. The person in the console, and the Sagax app, write as before.
+  when the copy of the same person and AI client (`client_name`) is the
+  current version (read by `get_agent` or `sagax_routines`, or answered by its
+  own last write); else the same 409, `conflict` `not_read` or `stale`. The
+  person in the console, the Sagax app and a bot write as before.
 - One write at a time per bot or routine: the check and the write are never
   split by another write.
 - Notes: Perspicax `memory_save` takes `base_version` (Perspicax side).

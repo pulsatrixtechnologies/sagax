@@ -1103,6 +1103,13 @@ describe("owner-scoped routine and bot reads", () => {
       const written = await call("PATCH", "routines/r_bob", token("bob"), { enabled: false });
       expect(written.status).toBe(200);
       expect(written.body.routine.version).toBe("6");
+      // Two writes from the same copy at once: one lands, the other is refused.
+      const read = await call("GET", "routines/r_bob", token("bob"));
+      const both = await Promise.all([
+        call("PATCH", "routines/r_bob", token("bob"), { enabled: true, expected_version: read.body.routine.version }),
+        call("PATCH", "routines/r_bob", token("bob"), { enabled: false, expected_version: read.body.routine.version }),
+      ]);
+      expect(both.map((answer) => answer.status).sort()).toEqual([200, 409]);
       // The person in the console writes as before.
       const fromConsole = await call("PATCH", "routines/r_bob", token("bob", "employee", "console"), { enabled: true });
       expect(fromConsole.status).toBe(200);

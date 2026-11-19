@@ -12,12 +12,12 @@
 //   - A stale `expected_version` is refused: HTTP 409, code
 //     `version_conflict`, `current_version` the version now, `conflict`
 //     `stale`. Nothing is written.
-//   - Without `expected_version`, an AI client's write (via perspicax-mcp or
-//     a bot) goes through only when this same caller read the current
-//     version (get_agent, sagax_routines) and has not written since; else the
-//     same 409 with `conflict` `not_read` or `stale`. The person in an app
-//     (via console, and the Sagax app itself, which never comes through
-//     here) writes as before.
+//   - Without `expected_version`, an AI client's write (via perspicax-mcp)
+//     goes through only when this same caller's copy is the current version
+//     (read by get_agent or sagax_routines, or answered by its own last
+//     write); else the
+//     same 409 with `conflict` `not_read` or `stale`. The person (console,
+//     Sagax app) and a bot write as before.
 // The version is opaque: compare it, never parse it.
 import { createHash } from "node:crypto";
 
@@ -97,9 +97,11 @@ export class VersionReads {
     return this.reads.get(VersionReads.key(reader, target));
   }
 
-  /** After a write, this reader's copy is no longer the current one. */
-  consume(reader: string, target: WriteTarget): void {
-    this.reads.delete(VersionReads.key(reader, target));
+  /** After a write: the version it answered is this reader's copy now
+   * (null: the target is gone). */
+  wrote(reader: string, target: WriteTarget, version: string | null): void {
+    if (version) this.note(reader, target, version);
+    else this.reads.delete(VersionReads.key(reader, target));
   }
 }
 
@@ -167,4 +169,15 @@ export class TargetQueue {
     }).catch(() => undefined);
     return next;
   }
+}
+
+/** The one queue every write path shares (the agent API and the member
+ * API), so two paths never split each other's check and write. */
+export const writeQueue = new TargetQueue();
+
+/** Whether a caller without expected_version must have read first: an AI
+ * client through Perspicax. The person in the console, the Sagax app and a
+ * bot are not asked (a stale expected_version is refused for everyone). */
+export function mustReadFirst(via: string | undefined): boolean {
+  return via === "perspicax-mcp";
 }

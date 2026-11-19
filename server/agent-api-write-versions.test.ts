@@ -76,7 +76,7 @@ describe("conditional writes (#4939)", () => {
     expect(w.bot.soul).toBe("v1 + decisions + plugin refs");
   });
 
-  it("without expected_version an AI client must have read the current version, once per write", async () => {
+  it("without expected_version an AI client's copy must be the current version", async () => {
     const w = world();
     const a = caller("session-a");
     const b = caller("session-b");
@@ -93,11 +93,19 @@ describe("conditional writes (#4939)", () => {
     const stale = await w.api.call(b, "update_agent_settings", { agent_id: "bot-marc", soul: "b1" });
     expect(stale.status).toBe(409);
     expect(stale.body.conflict).toBe("stale");
-    // A's read was used by its write: its next write reads again first.
+    // A's own write answered the current version: its copy is current.
     const again = await w.api.call(a, "update_agent_settings", { agent_id: "bot-marc", soul: "a2" });
-    expect(again.status).toBe(409);
-    expect(again.body.conflict).toBe("not_read");
-    expect(w.bot.soul).toBe("a1");
+    expect(again.status).toBe(200);
+    expect(w.bot.soul).toBe("a2");
+  });
+
+  it("a bot writes as before without a version, but never from a stale one", async () => {
+    const w = world();
+    const bot: AgentCaller = { kind: "bot", id: "bot-chief", name: "Chief", scopes: new Set(ALL), via: "agents-mcp" };
+    expect((await w.api.call(bot, "update_agent_settings", { agent_id: "bot-marc", soul: "from bot" })).status).toBe(200);
+    const stale = await w.api.call(bot, "update_agent_settings", { agent_id: "bot-marc", soul: "old", expected_version: "0".repeat(32) });
+    expect(stale.status).toBe(409);
+    expect(w.bot.soul).toBe("from bot");
   });
 
   it("the person in their console writes as before, with no version", async () => {

@@ -12,7 +12,7 @@ import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubE
 import { cleanProductEventSchedule, productEventScheduleLabel, type RoutineProductEventSchedule } from "../../shared/routine-product-event.ts";
 import { newId } from "../contracts.ts";
 import { SELF_ROUTINE_CAP, UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
-import { redactSecretsInText, restoreMaskedSecrets } from "../redact.ts";
+import { redactSecretsInText, restoredInstructions } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
@@ -1034,8 +1034,8 @@ function normalizedOperation(
     // and the text unchanged leaves the instructions alone, even when its
     // masks could not be placed (a plain read of the same text).
     if (changes.instructions !== undefined) {
-      const restored = restoreMaskedSecrets(current.prompt, changes.instructions);
-      if (restored === current.prompt.trim() || changes.instructions === redactSecretsInText(current.prompt).trim()) delete changes.instructions;
+      const restored = restoredInstructions(current.prompt, changes.instructions);
+      if (restored === null) delete changes.instructions;
       else changes.instructions = restored;
     }
     return {

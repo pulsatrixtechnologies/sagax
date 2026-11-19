@@ -122,6 +122,17 @@ export function restoreMaskedSecrets(original: string, received: string): string
   });
 }
 
+/** The instructions to save for a routine whose stored text is `current`
+ * and whose caller sent `received` after reading them with numbered masks:
+ * the text with each mask restored, or null when nothing changes (the text
+ * read, sent back as it was, even if its masks could not be placed). One
+ * rule for every writer of routine instructions. */
+export function restoredInstructions(current: string, received: string): string | null {
+  const restored = restoreMaskedSecrets(current, received);
+  if (restored === current.trim() || received === redactSecretsInText(current).trim()) return null;
+  return restored;
+}
+
 // ── content-shaped secrets ────────────────────────────────────────────
 // What a bot's own reply, a tool title, or a permission card can carry —
 // and, since the rebuild replays activity into every handed-over context,

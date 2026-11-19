@@ -193,6 +193,11 @@ export function PinnedWaitingCard({
   const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
   const frame = "mb-2 overflow-hidden rounded-3xl menu-edge bg-composer";
+  // M-20261119-007: the dock floats over the transcript, so a long ask (a
+  // report opened with "Show less", a form) must never outgrow the window:
+  // the open card is bounded and scrolls inside itself, the transcript above
+  // stays in view and reachable
+  const openFrame = "mb-2 max-h-[min(55dvh,32rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-3xl menu-edge bg-composer";
 
   if (collapsed) {
     return (
@@ -222,7 +227,7 @@ export function PinnedWaitingCard({
     <section
       aria-label={t("pinned.aria", { name })}
       data-pinned-waiting="open"
-      className={frame}
+      className={openFrame}
     >
       {current.kind === "other" ? (
         // #3543: a kind this app does not know: its text, and its

@@ -80,8 +80,11 @@ describe("a code host's plugin server mounted for the person", () => {
     for (const tool of ["mcp__github__exec", "github__run_shell", "mcp__github__bash"]) {
       expect(memberBotAdminReason({ tool, workspaceRoot: root, ownerScopedMcpServer: owned })).toBeNull();
     }
-    // a server nobody mounted for the person keeps its reading
-    expect(memberBotAdminReason({ tool: "mcp__elsewhere__exec", workspaceRoot: root, ownerScopedMcpServer: owned })).toBe("host-shell");
+    // M-20261119-008: a server no list names is no evidence either: the
+    // engines load only what Sagax mounts, never a shell of the shared host
+    expect(memberBotAdminReason({ tool: "mcp__elsewhere__exec", workspaceRoot: root, ownerScopedMcpServer: owned })).toBeNull();
+    // the shared host's own shell server keeps its reading
+    expect(memberBotAdminReason({ tool: "mcp__shell__exec", workspaceRoot: root, ownerScopedMcpServer: owned })).toBe("host-shell");
   });
 
   it("is cleared when the turn ends, never by another turn's end", async () => {
@@ -126,8 +129,10 @@ describe("a code host's plugin server mounted for the person", () => {
     const host = fakeHost({ turnWorkplaces: new Map([["t1", { botId: bot.id, messagesPrincipal: "bob" }]]) });
     const owned = createOwnerScopedMcpServerFor(() => host)(bot, "t1");
     expect(memberBotAdminApproval({ tool: "messages__mac_notes_search", workspaceRoot: root, ownerScopedMcpServer: owned })).toBe(false);
+    // M-20261119-008: with no record of the mount, still no evidence it is
+    // someone else's: the person's card
     const other = createOwnerScopedMcpServerFor(() => fakeHost())(bot, "t1");
-    expect(memberBotAdminApproval({ tool: "messages__mac_notes_search", workspaceRoot: root, ownerScopedMcpServer: other })).toBe(true);
+    expect(memberBotAdminApproval({ tool: "messages__mac_notes_search", workspaceRoot: root, ownerScopedMcpServer: other })).toBe(false);
   });
 });
 
@@ -164,14 +169,19 @@ describe("what can still wait for an organization admin on a member's bot", () =
     expect(reason({ tool: "agents__act", workspaceRoot: root, rawInput: { method: "GET", path: "/api/bots/someone-else" }, ownsBot: () => false })).toBe("other-bot-act");
     expect(reason({ tool: "Bash", command: { command: "ls", cwd: root }, workspaceRoot: root })).toBe("host-shell");
     expect(reason({ tool: "agents__vm_exec", workspaceRoot: root })).toBe("host-tool");
-    expect(reason({ tool: "mcp__elsewhere__list_issues", workspaceRoot: root })).toBe("foreign-tool");
     expect(reason({ tool: "Read", paths: ["/etc/passwd"], workspaceRoot: root })).toBe("outside-own-folders");
     // the engine's own tools of the shared host: work on the host, like the shell
     for (const tool of ["WebFetch", "mcp__computer__click", "browser__navigate"]) {
       expect(reason({ tool, workspaceRoot: root })).toBe("host-engine-tool");
     }
-    // the sagax-* places are a person's: when not this person's, someone else's
-    expect(reason({ tool: "mcp__sagax-desktop__screenshot", workspaceRoot: root })).toBe("foreign-tool");
+    // foreign-tool: provably someone else's place, the organization's own
+    // server list, or the organization's account connectors
+    expect(reason({ tool: "mcp__sagax-desktop__screenshot", workspaceRoot: root, placeOfAnotherPerson: true })).toBe("foreign-tool");
+    expect(reason({ tool: "mcp__org_list__query", workspaceRoot: root, orgSharedMcpServer: (server) => server === "org_list" })).toBe("foreign-tool");
+    expect(reason({ tool: "mcp__claude_ai_Microsoft_365__outlook_email_search", workspaceRoot: root })).toBe("foreign-tool");
+    // M-20261119-008: no evidence is the person's card
+    expect(reason({ tool: "mcp__sagax-desktop__screenshot", workspaceRoot: root })).toBeNull();
+    expect(reason({ tool: "mcp__elsewhere__list_issues", workspaceRoot: root })).toBeNull();
     // the person's own place: never an admin's
     expect(reason({ tool: "Bash", command: { command: "ls", cwd: root }, workspaceRoot: root, ownEnvironment: true })).toBeNull();
     expect(reason({ tool: "agents__list_bots", workspaceRoot: root })).toBeNull();

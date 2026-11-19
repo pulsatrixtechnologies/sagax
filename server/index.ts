@@ -1478,7 +1478,7 @@ import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./bots/cloud-only-bots.ts";
 import { TypingPrewakeThrottle } from "./sandbox/sandbox-typing-prewake.ts";
-import { AUTO_COMPUTER_RULES, autoComputerToolRefusal, autoStartLine, autoStartTarget, parseAutoComputerTarget, type AutoComputerState, type AutoComputerTarget, type AutoStart, type FixedWorksOn } from "./computer/auto-computer.ts";
+import { AUTO_COMPUTER_MCP_NAME, AUTO_COMPUTER_RULES, autoComputerToolRefusal, autoStartLine, autoStartTarget, parseAutoComputerTarget, type AutoComputerState, type AutoComputerTarget, type AutoStart, type FixedWorksOn } from "./computer/auto-computer.ts";
 import { parseWorkspaceLine, workspaceLineName } from "../shared/workspace-line.ts";
 import { computerSelectTarget } from "../shared/execution-target.ts";
 import { attachDesktopTerminal, attachDesktopTunnel, createBridgeAudit, createDesktopBridgeRoutes } from "./desktop/desktop-bridge-routes.ts";
@@ -1487,7 +1487,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberBotAdminReason, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberBotAdminReason, memberOwnedBot, personPlaceServer, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
 import { assignBotHost, createTurnBell, createWorkerRoutes, destinationForBot, directMachinePlan, enqueueOfflineTurn, expireWorkers, failPulledOnAuthorCancel, selectionOnMachine, type DeviceQueuedTurn, type Worker } from "./workers.ts";
 import { createMachineRunRoutes, createMachineRuns } from "./machine-run.ts";
 import { createDeciderRoutes } from "./routes/decider.ts";
@@ -2917,6 +2917,7 @@ bindLeafHost({
   get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
   get safetyOwnEnvironment() { return safetyOwnEnvironment; },
   get mountedDestinationOf() { return mountedDestinationOf; },
+  get personPlaceOwnerOf() { return personPlaceOwnerOf; },
   get cardAnswererId() { return cardAnswererId; },
   get noteCard() { return noteCard; },
   get principalCan() { return principalCan; },
@@ -19161,6 +19162,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get modelFallbackByThread() { return modelFallbackByThread; },
   get modelFallbackPayerKey() { return modelFallbackPayerKey; },
   get mountedDestinationOf() { return mountedDestinationOf; },
+  get personPlaceOwnerOf() { return personPlaceOwnerOf; },
   get narrateTool() { return narrateTool; },
   get nativeReviewNoticed() { return nativeReviewNoticed; },
   get noteAppRead() { return noteAppRead; },
@@ -28878,6 +28880,21 @@ function mountedDestinationOf(bot: BotRecord, threadId: string, tool: string | u
   const match = /^(?:mcp__)?([a-z][a-z-]{0,63})__[a-z][a-z0-9_]{0,63}$/.exec(tool?.trim() ?? "");
   if (!match || !(workplace.ownEnvironmentServers ?? new Set<string>()).has(match[1]!)) return null;
   return workplace.decision.principal.trim().toLowerCase();
+}
+/** M-20261119-006: the person whose place (PERSON_PLACE_MCP_SERVERS: their
+ * cloud computer, their computer, the choice among them) Sagax mounted for
+ * this bot's turn when the tool is on one of those servers, or null when
+ * no record of the mount is left (engine-access.ts memberBotAdminReason
+ * reads null as the person's own). The cloud computer and the computer are
+ * the record mountedDestinationOf already reads; the choice among places is
+ * the turn's computer_select mount (TurnWorkplace.computerChoice). */
+function personPlaceOwnerOf(bot: BotRecord, threadId: string, tool: string | undefined): string | null {
+  const server = personPlaceServer(tool);
+  if (!server) return null;
+  if (server !== AUTO_COMPUTER_MCP_NAME) return mountedDestinationOf(bot, threadId, tool);
+  const workplace = turnWorkplaces.get(threadId);
+  if (workplace?.botId !== bot.id || !workplace.computerChoice) return null;
+  return workplace.decision.principal?.trim().toLowerCase() || null;
 }
 /** Whether `person` wrote this turn themselves (member-environment.ts
  * ownEnvironmentTurnOrigin, for the person whose destination it is). */

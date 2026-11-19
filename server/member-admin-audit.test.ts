@@ -27,8 +27,13 @@ function answerer(tool: string, options: { environment?: string | null; mounted?
     identity: "perspicax", tool, environmentPrincipalId: options.environment === undefined ? OWNER : options.environment,
     ownerPrincipalId: OWNER, guestDriven: false, mountedServers: options.mounted ?? MOUNTED,
   });
+  // M-20261119-006: a person place is someone else's only when Sagax
+  // mounted it for another person (request-opened.ts personPlaceOwnerOf)
+  const environment = options.environment === undefined ? OWNER : options.environment;
+  const server = /^mcp__([a-z-]+)__/.exec(tool)?.[1] ?? "";
+  const placeOfAnotherPerson = Boolean(environment && environment !== OWNER && (options.mounted ?? MOUNTED).has(server));
   return memberBotAdminApproval({
-    tool, command: options.command, workspaceRoot: "/nowhere", ownDestination, ownerRunsServerCommands: options.holder === true,
+    tool, command: options.command, workspaceRoot: "/nowhere", ownDestination, ownerRunsServerCommands: options.holder === true, placeOfAnotherPerson,
   }) ? "admin" : "owner";
 }
 
@@ -51,7 +56,9 @@ describe("member admin audit, section 1: bot tool calls", () => {
       choicePrincipalId: options.places === undefined ? OWNER : options.places,
       personPrincipalIds: options.persons ?? [OWNER], guestDriven: options.guest === true,
     });
-    if (memberBotAdminApproval({ tool, workspaceRoot: "/nowhere", ownComputerChoice })) return "admin";
+    const places = options.places === undefined ? OWNER : options.places;
+    const placeOfAnotherPerson = Boolean((options.mounted ?? true) && places && !(options.persons ?? [OWNER]).includes(places));
+    if (memberBotAdminApproval({ tool, workspaceRoot: "/nowhere", ownComputerChoice, placeOfAnotherPerson })) return "admin";
     return autoVerdict(mode, tool, { ownComputerChoice }).approve ? "none" : "owner";
   };
   const MODES: ApprovalMode[] = [...APPROVAL_MODES];
@@ -82,25 +89,39 @@ describe("member admin audit, section 1: bot tool calls", () => {
     }
   });
   it.each([
-    ["not mounted by Sagax this turn", { mounted: false }],
     ["someone else's places", { places: "pr_someone_else" }],
-    ["no person decided", { places: null }],
     ["the turn is for someone else", { persons: ["pr_someone_else"] }],
-    ["a guest drives the turn", { guest: true }],
-  ] as const)("computer_select not the person's own choice (%s): an admin's card", (_label, options) => {
+  ] as const)("computer_select among another person's places (%s): an admin's card", (_label, options) => {
     expect(choice("mcp__sagax-computer__computer_select", "ask", options)).toBe("admin");
   });
-  it.each(["mcp__sagax-computer__computer_use", "mcp__computer__computer_select", "mcp__agents__shared_computer", "computer_select"])("%s is not the computer choice (a shared computer keeps its card): an admin's card", (tool) => {
+  // M-20261119-006: no record of whose places (not mounted, nobody decided)
+  // or a guest's turn in the person's own places is no evidence: their card
+  it.each([
+    ["not mounted by Sagax this turn", { mounted: false }],
+    ["no person decided", { places: null }],
+    ["a guest drives the turn", { guest: true }],
+  ] as const)("computer_select not the person's own choice (%s): the person's card, never an admin's", (_label, options) => {
+    expect(choice("mcp__sagax-computer__computer_select", "ask", options)).toBe("owner");
+  });
+  it.each(["mcp__computer__computer_select", "mcp__agents__shared_computer"])("%s is the shared host's or a shared computer: an admin's card", (tool) => {
     expect(choice(tool, "ask")).toBe("admin");
   });
+  it.each(["mcp__sagax-computer__computer_use", "computer_select"])("%s is not the computer choice, and no evidence it leaves the person's place: the person's card", (tool) => {
+    expect(choice(tool, "ask")).toBe("owner");
+  });
 
+  it("someone else's destination: an admin's card", () => {
+    expect(answerer(`mcp__${DESKTOP_BRIDGE_MCP_NAME}__run_command`, { environment: "pr_someone_else" })).toBe("admin");
+    expect(answerer(`mcp__${USER_SANDBOX_MCP_NAME}__run_command`, { environment: "pr_someone_else" })).toBe("admin");
+  });
+  // M-20261119-006: the record of the mount is gone (turn ended, restart,
+  // another bot's turn in the thread): no evidence, the person's card
   it.each([
-    ["someone else's destination", { environment: "pr_someone_else" }],
     ["no destination mounted this turn", { mounted: new Set<string>() }],
     ["no environment decided", { environment: null }],
-  ] as const)("not the owner's own destination (%s): an admin's card", (_label, options) => {
-    expect(answerer(`mcp__${DESKTOP_BRIDGE_MCP_NAME}__run_command`, options)).toBe("admin");
-    expect(answerer(`mcp__${USER_SANDBOX_MCP_NAME}__run_command`, options)).toBe("admin");
+  ] as const)("not provably the owner's destination (%s): still the owner's card, never an admin's", (_label, options) => {
+    expect(answerer(`mcp__${DESKTOP_BRIDGE_MCP_NAME}__run_command`, options)).toBe("owner");
+    expect(answerer(`mcp__${USER_SANDBOX_MCP_NAME}__run_command`, options)).toBe("owner");
   });
 
   it.each(["Bash", "shell", "exec_command", "run_shell_command", "local_shell"])("the engine's own %s on the shared host: an admin's, or the owner's by hand with host.commands", (tool) => {
@@ -131,9 +152,9 @@ describe("member admin audit, section 1: bot tool calls", () => {
     expect(card({ method: "GET", path: "/api/bots/bot-2" }, owns)).toBe(true);
     expect(card({ method: "GET", path: "/api/bots/bot-1" })).toBe(true);
   });
-  it("the terminal offer still goes to an admin when a command is described or another server spells it", () => {
+  it("the terminal offer still goes to an admin when a command is described; another server of the person's that spells it is theirs", () => {
     expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", command: { command: "ls" }, workspaceRoot: "/nowhere" })).toBe(true);
-    expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", workspaceRoot: "/nowhere", foreignMcpServers: ["agents"] })).toBe(true);
+    expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", workspaceRoot: "/nowhere", foreignMcpServers: ["agents"] })).toBe(false);
     expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", workspaceRoot: "/nowhere" })).toBe(false);
   });
   it.each(["browser", "computer", "files", "shell", "terminal"])("the %s MCP server on the shared host: an admin's", (server) => {

@@ -658,7 +658,13 @@ let everyAgentTool: ReadonlySet<string> | undefined;
 export function knownAgentToolName(name: string): boolean {
   if (isOpenApiTool(name)) return true;
   // a renamed tool's old name is a hidden alias of the new one
-  name = currentAgentToolName(name);
+  return everyAgentToolName().has(currentAgentToolName(name));
+}
+
+/** Every agents tool any catalog profile lists (the widest profile, on a
+ * call and off, coordinating and not). M-20261119-008: the member admin
+ * guard test enumerates it, so a tool added later is covered by itself. */
+export function everyAgentToolName(): ReadonlySet<string> {
   if (!everyAgentTool) {
     const widest: Omit<CatalogProfile, "coordinating" | "voiceCall"> = {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
@@ -669,7 +675,7 @@ export function knownAgentToolName(name: string): boolean {
     everyAgentTool = new Set([false, true].flatMap((voiceCall) => [false, true].flatMap((coordinating) =>
       availableTools({ ...widest, voiceCall, coordinating }).map((tool) => tool.name))));
   }
-  return everyAgentTool.has(name);
+  return everyAgentTool;
 }
 
 /** Tools of a Tailcat remote session (opened through Perspicax remote_support_*), and the bot computer on an enrolled host that rides on it. */

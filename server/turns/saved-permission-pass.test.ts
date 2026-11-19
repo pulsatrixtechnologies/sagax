@@ -44,3 +44,29 @@ describe("a saved permission is used once (#4528)", () => {
     })).toBe("keep");
   });
 });
+
+describe("a saved permission survives a restart (#4528)", () => {
+  it("is still used once after a restart, and the file keeps no words of the step", async () => {
+    const { mkdtempSync, readFileSync, rmSync, statSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "saved-permission-"));
+    try {
+      savePermissionPass({ DATA_DIR: dir }, { threadId: "t", tool: "Bash", summary: "SECRET_STEP ls memory" });
+      const file = join(dir, "permission-passes.json");
+      expect(readFileSync(file, "utf8")).not.toContain("SECRET_STEP");
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+      // the server stops between the answer and the follow-up call
+      const restarted = { DATA_DIR: dir };
+      expect(allowSavedPermission(restarted, {
+        threadId: "t", tools: ["Bash"], summary: "SECRET_STEP ls memory", safety: "ok", alreadyApproved: false, canRespond: true,
+      })).toBe("allow");
+      // once: a second restart does not bring it back
+      expect(allowSavedPermission({ DATA_DIR: dir }, {
+        threadId: "t", tools: ["Bash"], summary: "SECRET_STEP ls memory", safety: "ok", alreadyApproved: false, canRespond: true,
+      })).toBe("keep");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

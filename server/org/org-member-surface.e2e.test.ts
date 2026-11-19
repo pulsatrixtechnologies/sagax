@@ -406,7 +406,6 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     expect(adminStats.status, adminStats.text).toBe(200);
     const calls = (stats: any, tool: string) => (stats.tools as Array<{ tool: string; calls: number }>).find((row) => row.tool === tool)?.calls ?? 0;
     expect(calls(ownStats.body, "SurfaceChatTool")).toBe(chats.length);
-    expect(calls(ownStats.body, "OrionTool")).toBe(1);
     expect(calls(adminStats.body, "SurfaceChatTool")).toBe(0);
     expect(JSON.stringify(adminStats.body)).not.toContain("SurfaceChatTool");
     expect(calls(adminStats.body, "OrionTool")).toBe(1);

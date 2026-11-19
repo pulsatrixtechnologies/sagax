@@ -112,7 +112,8 @@ describe("deferred rare agents tools", () => {
     const budgets = [
       // 2026-11-08 (#2954): +1.5 KB for make_image, always loaded so an image edit is one call.
       // 2026-11-19 (#4910): +0.3 KB for the form follow-up link (when) and the per-option details of ask_choice.
-      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 34_800 },
+      // 2026-11-19 (#4990): +0.5 KB for the facts table rows of ask_choice.
+      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 35_300 },
       { name: "everything", env: EVERYTHING, maxTools: 66, maxBytes: 66_000 },
     ];
     for (const budget of budgets) {

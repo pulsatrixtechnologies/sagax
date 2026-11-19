@@ -204,6 +204,9 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// The model's own questions and options (Claude's `AskUserQuestion`).
     /// Present only on a structured ask; every other card leaves it nil.
     public var questionRequest: QuestionRequestCardData? = nil
+    /// ask_choice `facts`: label / value rows drawn as a compact table above
+    /// the card's sentence (`AskFact`). Nil on every other card.
+    public var facts: [AskFact]? = nil
     /// What an answered question was answered WITH. `answered` only records
     /// the behavior once the harness settles a live ask, so without this a
     /// settled question card would read "answer" instead of the reply.

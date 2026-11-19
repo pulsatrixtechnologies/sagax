@@ -26,10 +26,12 @@ import {
   MAX_CUSTOM_ANSWER,
   NOTHING_PICKED,
   questionAnswersByQuestion,
+  type AskFact,
   type AskQuestion,
 } from "../../shared/ask-question";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
+import { AskFactsTable } from "./AskFactsTable";
 import { ExpandableText } from "./ExpandableText";
 import { picksInAnswer, QuestionSheet, SHEET_FIELD, SheetChoices, SheetField, SheetNote, SheetSend, type SheetChoice } from "./QuestionSheet";
 
@@ -179,6 +181,7 @@ function FormWizard({
   cardId,
   title,
   context,
+  facts,
   questions,
   embedded,
   failed,
@@ -191,6 +194,7 @@ function FormWizard({
   cardId: string;
   title: string;
   context?: string;
+  facts?: readonly AskFact[];
   questions: readonly AskQuestion[];
   embedded: boolean;
   failed: boolean;
@@ -415,6 +419,7 @@ function FormWizard({
       dismissLabel={dismissLabel}
       onKeyDown={onKeyDown}
     >
+      <AskFactsTable facts={facts} className="-mt-1" />
       {context && <div data-form-context=""><ExpandableText text={context} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
       {steps.length > 1 && (
         <div role="tablist" aria-label={t("question.wizard.steps")} data-wizard-steps="" className="mb-2.5 flex flex-wrap items-center gap-1">
@@ -510,6 +515,7 @@ export function QuestionForm({
   cardId,
   title,
   context,
+  facts,
   questions,
   settled,
   answer,
@@ -527,6 +533,7 @@ export function QuestionForm({
   cardId: string;
   title: string;
   context?: string;
+  facts?: readonly AskFact[];
   questions: readonly AskQuestion[];
   settled: boolean;
   answer?: string | null;
@@ -607,6 +614,7 @@ export function QuestionForm({
         onDismiss={onDismiss}
         dismissLabel={dismissLabel}
       >
+        <AskFactsTable facts={facts} className="-mt-1" />
         {contextLine && <div data-form-context=""><ExpandableText text={contextLine} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" /></div>}
         <div data-form-list="" className="max-h-[360px] overflow-y-auto">
           <SheetChoices
@@ -631,6 +639,7 @@ export function QuestionForm({
       cardId={cardId}
       title={title}
       context={contextLine}
+      facts={facts}
       questions={questions}
       embedded={embedded}
       failed={failed}

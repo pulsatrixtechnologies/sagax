@@ -218,10 +218,10 @@ function plainQuestion(question: AskQuestion): AskQuestion {
 }
 
 /** The pending card's new words: same card, same request, same place. */
-export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }>; questions?: AskQuestion[]; askTo?: Card["askTo"]; factsAt?: number }): Card {
+export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }>; questions?: AskQuestion[]; askTo?: Card["askTo"]; factsAt?: number; facts?: Card["facts"] }): Card {
   const questionOptions = next.questionOptions ?? next.options.map((label) => ({ label }));
   const questions = card.questionRequest?.questions;
-  const { noHold: _held, ...rest } = card;
+  const { noHold: _held, facts: _facts, ...rest } = card;
   return {
     ...rest,
     subtitle: next.question,
@@ -229,6 +229,8 @@ export function replacedAskCard(card: Card, next: { question: string; options: s
     factsAt: next.factsAt ?? Date.now(),
     options: next.options,
     ...(next.noHold ? { noHold: true as const } : {}),
+    // the new ask's facts replace the old ones whole (none: no table)
+    ...(next.facts ? { facts: next.facts } : {}),
     // #4219: re-addressed to another person of the room
     ...(next.askTo ? { askTo: next.askTo } : {}),
     // #4490: a form's or a checklist's rows replace the old ones whole

@@ -34,7 +34,7 @@ import {
   type PageTargetChoiceCardData,
   type PageTargetIntent,
 } from "../../shared/page-targets.ts";
-import type { AskQuestion, AskQuestionOption } from "../../shared/ask-question.ts";
+import type { AskFact, AskQuestion, AskQuestionOption } from "../../shared/ask-question.ts";
 import type { Message } from "../store.ts";
 import { askTextKey, closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 import { BOOKING_ACTION } from "../../shared/widget-booking.ts";
@@ -180,7 +180,7 @@ export function createAgentCard(args: {
     pageTargetChoice?: PageTargetChoiceCardData;
     /** #4205, #4219: what the card carries from its first frame (its key,
      * whether it holds, its addressee), so its notification reads them. */
-    card?: { askKey?: string; noHold?: true; askTo?: AskAddressee };
+    card?: { askKey?: string; noHold?: true; askTo?: AskAddressee; facts?: AskFact[] };
     /** #4490: a form's or a checklist's rows, each with its control. */
     questions?: AskQuestion[];
   }): { messageId: string } | null;
@@ -366,7 +366,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // #4233: an unkeyed card a repeating routine's run raises holding nothing
   // is keyed by its text, so the next run's same ask replaces it in place
   const askKey = value.key ?? (!holds && args.repeatingRun && !inRoom ? askTextKey(value.subtitle) : undefined);
-  const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
+  const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}), ...(value.facts ? { facts: value.facts } : {}) };
   // #4250 (S7): the person's usual answer first, and "Always do this for
   // this routine" after three identical answers
   const { standing, ...learned } = askKey && !inRoom && !form && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
@@ -388,7 +388,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   if (askKey && (!from.from || roomAsk)) {
     const found = findKeyed(askKey);
     if (found) {
-      const { answerLearning: _before, ...replaced } = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(form ? { questions: form } : {}), ...(askTo ? { askTo } : {}) });
+      const { answerLearning: _before, ...replaced } = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(form ? { questions: form } : {}), ...(askTo ? { askTo } : {}), ...(value.facts ? { facts: value.facts } : {}) });
       const card = { ...replaced, ...learned };
       const patched = args.store.patchMessage(found.threadId, found.message.id, { card });
       if (patched) {
@@ -448,7 +448,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     // Never a passive card here: nobody would see it, and the bot would say it showed one.
     if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
     // #4205: the card carries its key and whether it holds the run
-    if (keyed.askKey || keyed.noHold || keyed.askTo) {
+    if (keyed.askKey || keyed.noHold || keyed.askTo || keyed.facts) {
       const row = args.store.messagesFor(args.threadId).find((message) => message.id === raised.messageId);
       if (row?.card) args.store.patchMessage(args.threadId, row.id, { card: { ...row.card, ...keyed, ...learned } });
       if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, raised.messageId);

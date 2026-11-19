@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OPTIONS_CARD_LIMITS, parseOptionsCardInput } from "./options-card.ts";
+import { OPTIONS_CARD_LIMITS, parseAskChoiceInput, parseOptionsCardInput } from "./options-card.ts";
 
 describe("parseOptionsCardInput", () => {
   it("trims a valid card and preserves option order", () => {
@@ -59,5 +59,38 @@ describe("parseOptionsCardInput", () => {
       subtitle: "Subtitle",
       options: ["A", "x".repeat(OPTIONS_CARD_LIMITS.option + 1)],
     })).toMatchObject({ ok: false, error: `options[1] must be at most ${OPTIONS_CARD_LIMITS.option} characters.` });
+  });
+});
+
+describe("ask_choice facts", () => {
+  const base = { question: "Place it?", options: ["Yes, tomorrow", "Leave it"] };
+  it("keeps valid label / value rows and a valid record ref, drops the rest", () => {
+    const parsed = parseAskChoiceInput({
+      ...base,
+      facts: [
+        { label: "Billet", value: "#300769", record: { product: "connectwise", kind: "ticket", id: "300769" } },
+        { label: "Client", value: " Sherweb " },
+        { label: "", value: "blank label" },
+        { label: "No value" },
+        "junk",
+        { label: "Bad ref", value: "x", record: { product: "Connect Wise", kind: "ticket", id: "1" } },
+      ],
+    });
+    expect(parsed.ok && "value" in parsed && parsed.value.facts).toEqual([
+      { label: "Billet", value: "#300769", record: { product: "connectwise", kind: "ticket", id: "300769" } },
+      { label: "Client", value: "Sherweb" },
+      { label: "Bad ref", value: "x" },
+    ]);
+  });
+  it("an ask without facts, or with none valid, carries no field", () => {
+    for (const facts of [undefined, [], [{ label: "x" }], "nope"]) {
+      const parsed = parseAskChoiceInput({ ...base, facts });
+      expect(parsed.ok && "value" in parsed && "facts" in parsed.value).toBe(false);
+    }
+  });
+  it("caps the rows", () => {
+    const facts = Array.from({ length: 30 }, (_, index) => ({ label: `L${index}`, value: `V${index}` }));
+    const parsed = parseAskChoiceInput({ ...base, facts });
+    expect(parsed.ok && "value" in parsed && parsed.value.facts).toHaveLength(12);
   });
 });

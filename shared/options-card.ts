@@ -1,4 +1,4 @@
-import { ANSWER_KINDS, CHOICE_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_QUESTION_TEXT, type AnswerKind, type AskQuestion, type AskQuestionOption } from "./ask-question.ts";
+import { ANSWER_KINDS, CHOICE_KINDS, FORM_MAX_OPTIONS, FORM_MAX_QUESTIONS, MAX_DESCRIPTION, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_QUESTION_TEXT, parseAskFacts, type AnswerKind, type AskFact, type AskQuestion, type AskQuestionOption } from "./ask-question.ts";
 import { cardRefusalText, cardRuleBreak } from "./card-rules.ts";
 import { CHOICE_LABEL_MAX, choiceQuestionMismatch } from "./notification-context.ts";
 
@@ -70,6 +70,10 @@ export interface AskChoiceInput extends OptionsCardInput {
    * a checklist (one multi-select row of items with its action buttons);
    * `subtitle` is then the card's one line of context, `options` empty. */
   questions?: AskQuestion[];
+  /** Structured facts (label / value rows, a record chip for a ticket),
+   * drawn as a compact table above `subtitle`. Optional: the sentence still
+   * says everything, so a client that ignores the rows loses nothing. */
+  facts?: AskFact[];
 }
 
 export type ParsedAskChoiceInput =
@@ -148,7 +152,9 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
     if (typeof given !== "string") return { ok: false, error: given.error };
     to = given;
   }
-  const extra: Pick<AskChoiceInput, "key" | "wait" | "decision" | "to"> = {
+  const facts = parseAskFacts(value.facts);
+  const extra: Pick<AskChoiceInput, "key" | "wait" | "decision" | "to" | "facts"> = {
+    ...(facts ? { facts } : {}),
     ...(key ? { key } : {}),
     ...(to ? { to } : {}),
     ...(typeof value.wait === "boolean" ? { wait: value.wait } : {}),

@@ -40,6 +40,42 @@
             },
             "description": "Optional, same order: what each answer does."
           },
+          "facts": {
+            "type": "array",
+            "maxItems": 12,
+            "description": "Optional table rows above the question: {label, value, record?: {product, kind, id} for a ticket chip}. Keep the question text too.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 400
+                },
+                "record": {
+                  "type": "object",
+                  "properties": {
+                    "product": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "label",
+                "value"
+              ]
+            }
+          },
           "questions": {
             "type": "array",
             "minItems": 1,

@@ -432,6 +432,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // the same check as an email draft, the bot owner's act (#4781)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/x-posts\/(post|discard)$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/x-posts\/[\w-]{1,80}\/[\w-]{1,64}$/ },
+  // #4894: the X account a draft card shows the bot posting as
+  { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/x-account$/ },
   // published pages: a person's own pages only (server/routes/published-pages.ts
   // checks the owner on every call; a bot's shell never publishes)
   { methods: ["GET"], path: /^\/api\/pages$/ },
@@ -478,6 +480,9 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // session's person with their own sign-in (server/routes/record-cards.ts);
   // only the organization's Refuse and Ask first rules apply there.
   { methods: ["GET"], path: /^\/api\/me\/records\/[^/]{1,128}\/[^/]{1,128}\/[^/]{1,300}$/ },
+  // #4857: the ticket card's tabs and inline field changes, read and written
+  // the same way, as the person with their own sign-in
+  { methods: ["GET", "POST"], path: /^\/api\/me\/records\/[^/]{1,128}\/[^/]{1,128}\/[^/]{1,300}\/detail$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin
   // scope: it can hold the owner's signed-in sessions.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/sign-in-cards\/[\w-]+\/(?:done|cancel)$/ },
@@ -803,6 +808,9 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // one off their own list (theirs alone; the organization's engine stays)
   { methods: ["PUT"], path: /^\/api\/me\/engines\/[\w.-]+\/name$/, feature: "orgDirectory" },
   { methods: ["DELETE"], path: /^\/api\/me\/engines\/[\w.-]+$/, feature: "orgDirectory" },
+  // #4918: where each of the person's own bots on that account goes if they
+  // remove it or sign out of it
+  { methods: ["GET"], path: /^\/api\/me\/engines\/[\w.-]+\/moves$/, feature: "orgDirectory" },
   // #4435: a person adds an account of their own beside a provider's first
   // one (theirs alone, server/engines/account-owner.ts); no administrator
   { methods: ["POST"], path: /^\/api\/instances\/(?:claude|chatgpt|antigravity)-accounts$/, feature: "orgDirectory" },

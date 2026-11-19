@@ -93419,6 +93419,54 @@
         }
       }
     },
+    "Special access": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accès spécial"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acesso especial"
+          }
+        }
+      }
+    },
+    "Only %@ offers this model": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul %@ offre ce modèle"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente %@ oferece este modelo"
+          }
+        }
+      }
+    },
+    "Account %lld": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compte %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conta %lld"
+          }
+        }
+      }
+    },
     "Use Apple Passwords, 1Password, Bitwarden, or paste. The value is encrypted for your computer and never added to chat.": {
       "localizations": {
         "fr": {

@@ -7,8 +7,22 @@ import {
   type AccountCreditState,
   type PoolAccount,
 } from "../../shared/model-account-pool.ts";
+import { accountOwnedBy } from "../engines/account-owner.ts";
 
 export type { AccountCreditState, PoolAccount };
+
+/** M-20261119-015 (isolation): the accounts a turn may move to are the
+ * organization's and the person's own; another person's added account never
+ * runs this person's turn. The account picked stays in. `ownerOf` answers
+ * undefined on a solo server (one person, nothing to tell apart). */
+export function accountsOpenTo<T extends { instanceId: string }>(
+  accounts: readonly T[],
+  ownerOf: (instanceId: string) => string | undefined,
+  person: string | null | undefined,
+  picked: string,
+): T[] {
+  return accounts.filter((account) => account.instanceId === picked || accountOwnedBy(ownerOf(account.instanceId), person));
+}
 
 /** Sibling subscription accounts that offer the same models as the pick. */
 export interface ResolveModelAccountInput {

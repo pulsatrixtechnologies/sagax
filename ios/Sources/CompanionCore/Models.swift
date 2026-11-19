@@ -1871,8 +1871,19 @@ public struct ProviderSnapshot: Codable, Hashable, Sendable {
     public var chatgptPlan: Bool? = nil
     /// A newer engine version unlocks capabilities (the installed one stays usable).
     public var update: EngineUpdateNotice? = nil
+    /// M-20261119-015: the signed-in account's address, when the server says it.
+    public var account: ProviderSnapshotAccount? = nil
 
     public var isAvailable: Bool { state == "available" }
+}
+
+/// `snapshot.account`: what names the signed-in account (never a secret).
+public struct ProviderSnapshotAccount: Codable, Hashable, Sendable {
+    public var email: String?
+
+    public init(email: String? = nil) {
+        self.email = email
+    }
 }
 
 /// `snapshot.update`: what a newer engine version brings, and the command

@@ -4,8 +4,10 @@
  * ModelPanel (gallery model-menu, real Chrome headless, DPR 2, no window):
  * the short menu (Auto, favorites, All models) and All models with its stars,
  * light and dark, English and French.
- * Usage: node scripts/capture/model-menu.mjs [--out DIR] [--port N] [--mode before|after]
+ * Usage: node scripts/capture/model-menu.mjs [--out DIR] [--port N] [--mode before|after] [--accounts]
  * Files: <mode>-<lang>-<theme>-<short|all|auto>.png
+ * --accounts (M-20261119-015): two Claude accounts through the real menu
+ * sections; files <mode>-<lang>-<theme>-accounts-<short|all|choose|team>.png
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -20,6 +22,7 @@ const arg = (name, fallback) => {
 const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "model-menu")));
 const port = Number(arg("--port", "5343"));
 const mode = arg("--mode", "after");
+const accounts = process.argv.includes("--accounts");
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -50,6 +53,20 @@ try {
   const page = await browser.newPage({ viewport: { width: 420, height: 640 }, deviceScaleFactor: 2 });
   for (const lang of ["en", "fr"]) {
     for (const theme of ["light", "dark"]) {
+      if (accounts) {
+        for (const view of ["short", "all", "choose", "team"]) {
+          const query = view === "short" ? "view=short" : view === "team" ? "view=all&on=team" : "view=all";
+          await page.goto(`${base}?lang=${lang}&theme=${theme}&accounts=1&${query}`, { waitUntil: "networkidle" });
+          await page.waitForTimeout(400);
+          // before the change there is no Account line: the capture shows the plain list
+          if (view === "choose" && (await page.locator('[data-model-line="account"]').count()) > 0) await page.locator('[data-model-line="account"]').click();
+          await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+          const file = join(outDir, `${mode}-${lang}-${theme}-accounts-${view}.png`);
+          await page.locator("[data-model-menu]").screenshot({ path: file });
+          console.log(file);
+        }
+        continue;
+      }
       for (const view of ["short", "all", "auto"]) {
         await page.goto(`${base}?lang=${lang}&theme=${theme}&view=${view === "auto" ? "short" : view}${view === "auto" ? "&auto=1" : ""}`, { waitUntil: "networkidle" });
         await page.waitForTimeout(400);

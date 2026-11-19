@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextAccountAfterFailure, resolveModelAccount, type PoolAccount } from "./resolve-model-account.ts";
+import { accountsOpenTo, nextAccountAfterFailure, resolveModelAccount, type PoolAccount } from "./resolve-model-account.ts";
 
 const account = (partial: Partial<PoolAccount> & Pick<PoolAccount, "instanceId">): PoolAccount => ({
   models: ["claude-sonnet-5"],
@@ -48,5 +48,34 @@ describe("resolveModelAccount (#2106)", () => {
         account({ instanceId: "claude-b" }),
       ],
     })).toEqual({ ...selection, instanceId: "claude-b" });
+  });
+});
+
+// M-20261119-015: a turn moves only among the organization's accounts and
+// the person's own; another person's added account never runs it.
+describe("accountsOpenTo", () => {
+  const owners: Record<string, string | undefined> = { claude: undefined, "claude-ada": "ada", "claude-nimbus": "nimbus" };
+  const ownerOf = (instanceId: string) => owners[instanceId];
+  const all = [{ instanceId: "claude" }, { instanceId: "claude-ada" }, { instanceId: "claude-nimbus" }];
+
+  it("keeps the organization's accounts and the person's own", () => {
+    expect(accountsOpenTo(all, ownerOf, "ada", "claude").map((entry) => entry.instanceId)).toEqual(["claude", "claude-ada"]);
+  });
+
+  it("keeps the account picked, whoever holds it", () => {
+    expect(accountsOpenTo(all, ownerOf, "ada", "claude-nimbus").map((entry) => entry.instanceId)).toEqual(["claude", "claude-ada", "claude-nimbus"]);
+  });
+
+  it("a solo server has one person: every account", () => {
+    expect(accountsOpenTo(all, () => undefined, null, "claude")).toHaveLength(3);
+  });
+
+  it("never moves a person's turn onto another person's account with more credit", () => {
+    const accounts = accountsOpenTo([
+      account({ instanceId: "claude-ada", credit: "rate_limited" }),
+      account({ instanceId: "claude-nimbus", credit: "ok" }),
+    ], ownerOf, "ada", "claude-ada");
+    const next = resolveModelAccount({ selection: { ...selection, instanceId: "claude-ada" }, accounts });
+    expect(next.instanceId).toBe("claude-ada");
   });
 });

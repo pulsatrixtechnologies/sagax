@@ -29,6 +29,49 @@ passes a Claude sign-in as well as a key. `SAGAX_DISABLE_LIVE_MODEL_LISTS=1`
 `server/drivers/claude-catalog.test.ts`,
 `server/index-leaves/viewerAccountModels.test.ts`.
 
+## Each account says its models (M-20261119-015, #4996, 2026-11-19)
+
+A person's accounts of one provider (several Claude sign-ins, each an engine
+instance; several ChatGPT plans) each list their own models, read live with
+that account (above). The menu still pools one model into one row
+(`buildSections.ts`), and while the provider has two or more sign-ins of one
+tool there, every row says its account (`row.account`: the name the person
+gave it in Providers, else its address, else "Account N";
+`shared/model-accounts.ts` `accountWords`), on the row, in the short list and
+on the composer's chip. A model several accounts offer is drawn on the one a
+pick takes (the one in use, else the bot's account) and the panel's
+"Account" footer line moves it to another (`row.accountRows`). A model only
+one of the sign-in accounts offers wears "Special access"
+(`onlyAccountOffering`). Codex and the ChatGPT plan are two tools of one
+sign-in, never two accounts. The pick is `ModelSelection.instanceId` (the
+account), and favorites stay `<engine>/<model>`.
+
+Where the badge comes from: Anthropic's `/v1/models` rows carry no access
+attribute (`id`, `display_name`, `created_at`, `max_input_tokens`,
+`max_tokens`, `capabilities`, `line`, `lifecycle`, `deprecated_at`,
+`retires_at`), and Claude Code's bootstrap answers `model_access: null` on an
+account that lists Mythos as on one that does not; the account's plan names
+(`organization_type`, `seat_tier`) say nothing about that access. So the badge
+is the exclusivity, never a field and never a name.
+
+`GET /api/me/providers/catalog` gives each model `accounts` (its provider's
+account and key connections that list it) and `onlyAccount`; on an
+organization server the person's own sign-in decides which accounts are
+connected (`accountConnected`). The phone ports the rule
+(`ios/Sources/CompanionCore/ModelMenu.swift` `namingAccounts`).
+
+A read that cannot be made (an access token past its life, which Claude Code
+renews on its next turn; no network; a restart) serves the list that account
+gave last (`accountModelsOrKept`, kept under
+`providers/engine-models/accounts/<fingerprint>.json`), never the written
+list, so a model only one account offers does not vanish. A turn moved to a
+sibling account (#2106) moves only among the organization's accounts and the
+person's own (`accountsOpenTo`). Tests: `shared/model-accounts.test.ts`,
+`shared/provider-catalog.test.ts`, `buildSections.providers.test.ts`,
+`ModelPanel.test.ts`, `labels.test.ts`, `account-models.test.ts`,
+`startup-model-catalog.test.ts`, `resolve-model-account.test.ts`,
+`ios/Tests/CompanionCoreTests/ModelMenuTests.swift`.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via

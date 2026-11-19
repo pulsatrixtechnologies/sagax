@@ -32,8 +32,10 @@ export function modelPickerComposerLabel(opts: {
   selectedVariantLabel: string | undefined;
   /** #4329: the provider of the model in use (Claude, OpenAI, a server, this computer). */
   providerLabel?: string;
+  /** M-20261119-015: the account it runs on, while the provider has several. */
+  accountLabel?: string;
 }): string {
-  const { autoOn, active, selection, selectedVariantLabel, providerLabel } = opts;
+  const { autoOn, active, selection, selectedVariantLabel, providerLabel, accountLabel } = opts;
   // #2106: "Auto Balance" / "Claude Fable 5.1 High" in the chat bar.
   if (autoOn) return `Auto ${t(`model.auto.optimize.${autoOptimizeOf(selection.autoOptimize)}`)}`;
   const model = [
@@ -45,7 +47,7 @@ export function modelPickerComposerLabel(opts: {
   // ("OpenAI · GPT-5.6 High"); a model whose name already starts with its
   // provider reads alone ("Claude Fable 5.1 High").
   const named = providerLabel && !foldSearch(model).startsWith(foldSearch(providerLabel)) ? providerLabel : "";
-  return [named, model].filter(Boolean).join(" · ");
+  return [named, model, accountLabel].filter(Boolean).join(" · ");
 }
 
 export function modelPickerFollowLine(opts: {

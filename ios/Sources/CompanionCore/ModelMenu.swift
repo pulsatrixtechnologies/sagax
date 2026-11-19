@@ -33,10 +33,18 @@ public struct ModelMenuRow: Hashable, Sendable, Identifiable {
     public var keywords: String?
     /// The model in use cannot run a turn now: said beside it.
     public var notResponding = false
+    /// M-20261119-015: the account this row runs on (the name the person
+    /// gave it, else its address), while the provider has two or more.
+    public var account: String?
+    /// M-20261119-015: "Special access": only this one of the person's
+    /// sign-in accounts offers the model (shared/model-accounts.ts).
+    public var badge: String?
+    /// The badge's explanation ("Only <account> offers this model").
+    public var badgeHint: String?
 
     public var id: String { key }
 
-    public init(key: String, kind: Kind, instanceId: String? = nil, modelId: String? = nil, label: String, detail: String? = nil, tags: [String] = [], current: Bool, keywords: String? = nil, notResponding: Bool = false) {
+    public init(key: String, kind: Kind, instanceId: String? = nil, modelId: String? = nil, label: String, detail: String? = nil, tags: [String] = [], current: Bool, keywords: String? = nil, notResponding: Bool = false, account: String? = nil, badge: String? = nil, badgeHint: String? = nil) {
         self.key = key
         self.kind = kind
         self.instanceId = instanceId
@@ -47,6 +55,9 @@ public struct ModelMenuRow: Hashable, Sendable, Identifiable {
         self.current = current
         self.keywords = keywords
         self.notResponding = notResponding
+        self.account = account
+        self.badge = badge
+        self.badgeHint = badgeHint
     }
 }
 
@@ -90,14 +101,27 @@ public struct ModelMenuLabels: Sendable {
     public var local: String
     public var defaultTag: String
     public var loadedTag: String
+    /// M-20261119-015: the badge of a model only one account offers.
+    public var specialAccess: String
+    public var specialAccessHint: @Sendable (String) -> String
+    /// An account with neither a name nor an address ("Account 2").
+    public var accountNumbered: @Sendable (Int) -> String
 
-    public init(auto: String, autoHint: String, useBotModel: @escaping @Sendable (String) -> String, local: String, defaultTag: String, loadedTag: String) {
+    public init(
+        auto: String, autoHint: String, useBotModel: @escaping @Sendable (String) -> String, local: String, defaultTag: String, loadedTag: String,
+        specialAccess: String = "Special access",
+        specialAccessHint: @escaping @Sendable (String) -> String = { "Only \($0) offers this model" },
+        accountNumbered: @escaping @Sendable (Int) -> String = { "Account \($0)" }
+    ) {
         self.auto = auto
         self.autoHint = autoHint
         self.useBotModel = useBotModel
         self.local = local
         self.defaultTag = defaultTag
         self.loadedTag = loadedTag
+        self.specialAccess = specialAccess
+        self.specialAccessHint = specialAccessHint
+        self.accountNumbered = accountNumbered
     }
 }
 
@@ -233,9 +257,81 @@ public enum ModelMenu {
             let cloud = rows.filter { !localIds.contains($0.modelId ?? "") }
             if !cloud.isEmpty { sections.append(ModelMenuSection(key: instance.instanceId, label: engineLabel(instance), rows: cloud)) }
         }
+        sections = namingAccounts(sections, instances: hidden + menuInstances, labels: labels, engineLabel: engineLabel)
         let unique = uniqueLocalRows(localRows, localTag: labels.local)
         if !unique.isEmpty { sections.append(ModelMenuSection(key: localSectionKey, label: labels.local, rows: unique)) }
         return sections
+    }
+
+    // MARK: Accounts (shared/model-accounts.ts, M-20261119-015)
+
+    /// A tool's own name never names an account (shared/harness-matrix.ts HARNESS_TOOL_NAME).
+    static let toolNames: Set<String> = [
+        "claude code", "claude api", "codex", "grok", "xai api", "pi", "openai-compatible", "mistral", "groq", "cerebras",
+        "meta", "antigravity", "gemini cli", "opencode", "qwen code", "cline", "cursor",
+    ]
+
+    /// The words that name an account: the name the person gave it, else its
+    /// sign-in address; nil with neither (the caller numbers it).
+    public static func accountWords(displayName: String?, email: String?, providerLabel: String) -> String? {
+        let name = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let provider = providerLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !name.isEmpty, name.lowercased() != provider, !toolNames.contains(name.lowercased()) { return name }
+        let address = email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return address.isEmpty ? nil : address
+    }
+
+    /// Sign-ins of one tool are accounts (several Claude accounts, several
+    /// ChatGPT plans); two tools of one sign-in (Codex and the ChatGPT plan)
+    /// are not, nor a pasted key or an engine with no catalogue of its own.
+    static func signInKind(_ instance: Instance) -> String? {
+        guard instance.access != "api", instance.access != "custom" else { return nil }
+        return "\(instance.driverKind):\(instance.snapshot.chatgptPlan == true ? "plan" : "tool")"
+    }
+
+    /// The person's accounts beside `instance`: the sign-ins of the same tool
+    /// under the same provider name, in order (it among them).
+    static func providerAccounts(of instance: Instance, among instances: [Instance], engineLabel: (Instance) -> String) -> [Instance] {
+        guard let kind = signInKind(instance) else { return [] }
+        let label = engineLabel(instance)
+        var seen = Set<String>()
+        return instances.filter { signInKind($0) == kind && engineLabel($0) == label && seen.insert($0.instanceId).inserted }
+    }
+
+    /// The account an engine stands for, while its provider has two or more
+    /// accounts among `instances` (the menu, the composer's chip); nil otherwise.
+    public static func accountLabel(_ instance: Instance, among instances: [Instance], labels: ModelMenuLabels, engineLabel: (Instance) -> String) -> String? {
+        let accounts = providerAccounts(of: instance, among: instances, engineLabel: engineLabel)
+        guard accounts.count >= 2, let at = accounts.firstIndex(where: { $0.instanceId == instance.instanceId }) else { return nil }
+        return accountWords(displayName: instance.displayName, email: instance.snapshot.account?.email, providerLabel: engineLabel(instance))
+            ?? labels.accountNumbered(at + 1)
+    }
+
+    /// Each engine is its own section here: while a provider has two or more
+    /// accounts, each heading and row says its account, and a model only one
+    /// of the sign-in accounts offers wears the "Special access" badge.
+    static func namingAccounts(_ sections: [ModelMenuSection], instances: [Instance], labels: ModelMenuLabels, engineLabel: (Instance) -> String) -> [ModelMenuSection] {
+        let listed = instances.filter { instance in sections.contains { $0.key == instance.instanceId } }
+        return sections.map { section in
+            guard let instance = listed.first(where: { $0.instanceId == section.key }),
+                  let account = accountLabel(instance, among: listed, labels: labels, engineLabel: engineLabel) else { return section }
+            let signIns = providerAccounts(of: instance, among: listed, engineLabel: engineLabel)
+            var next = section
+            next.label = "\(engineLabel(instance)) · \(account)"
+            next.rows = section.rows.map { row in
+                var row = row
+                row.account = account
+                if let model = row.modelId {
+                    let offering = signIns.filter { other in sections.first { $0.key == other.instanceId }?.rows.contains { $0.modelId == model } == true }
+                    if offering.count == 1 {
+                        row.badge = labels.specialAccess
+                        row.badgeHint = labels.specialAccessHint(account)
+                    }
+                }
+                return row
+            }
+            return next
+        }
     }
 
     /// Every engine may offer the same local model: each once, the one in

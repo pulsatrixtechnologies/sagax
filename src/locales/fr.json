@@ -3509,6 +3509,8 @@
   "model.computerProvider": "Cet ordinateur",
   "model.step.providersTitle": "Fournisseurs",
   "model.thinkingEffort": "Effort de réflexion",
+  "model.specialAccess": "Accès spécial",
+  "model.specialAccessHint": "Seul {account} offre ce modèle",
   "model.runsWith": "Roule avec",
   "model.contextSize": "Taille du contexte",
   "model.contextSize.eachModel": "Celle de chaque modèle",

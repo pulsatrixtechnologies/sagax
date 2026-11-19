@@ -258,3 +258,35 @@ export async function claudeEnvironmentAuth(
 export function claudeAuthKey(auth: ClaudeModelsAuth): string {
   return auth.kind === "key" ? `key:${auth.key}` : `${auth.oauth ? "oauth" : "bearer"}:${auth.token}`;
 }
+
+/** M-20261119-015: the name a Claude sign-in folder's list is kept under
+ * (one folder is one account of one person). */
+export function claudeLoginAccountKey(loginDir: string): string {
+  return `claude-login:${resolve(loginDir)}`;
+}
+
+/** Where the last list of each account is kept between reads
+ * (server/models/startup-model-catalog.ts `readAccountModelCache`). */
+export interface AccountModelStore {
+  read(accountKey: string): ModelCatalog | null;
+  write(accountKey: string, catalog: ModelCatalog): void;
+}
+
+/** M-20261119-015: the account's live list, kept for it on a good read; the
+ * list kept from its last good read when this one cannot be made (an access
+ * token past its life that Claude Code renews only on its next turn, no
+ * network, a restart before the next read). Null when the account never
+ * listed anything here. Every connected account keeps its own models, a
+ * model only one of them offers (Mythos on one account) included. */
+export async function accountModelsOrKept(
+  accountKey: string,
+  read: () => Promise<ModelCatalog | null>,
+  store: AccountModelStore,
+): Promise<ModelCatalog | null> {
+  const live = await read().catch(() => null);
+  if (live && live.options.length) {
+    store.write(accountKey, live);
+    return live;
+  }
+  return store.read(accountKey);
+}

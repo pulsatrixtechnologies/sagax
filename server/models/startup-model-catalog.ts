@@ -2,6 +2,7 @@
 // the last list and refreshes it behind listen. The first run still waits, so
 // the seeded bot's default model is the one discovery just chose. The file is
 // a derived cache under providers/, which backups and Move to Cloud skip.
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -102,10 +103,41 @@ export function writeStartupModelCache(instanceId: string, catalog: ModelCatalog
   if (!catalog.options.length) return;
   const path = startupModelCachePath(instanceId);
   if (!path) return;
+  writeCatalog(path, catalog);
+}
+
+function writeCatalog(path: string, catalog: ModelCatalog): void {
   const stored = catalogFrom(catalog);
   if (!stored) return;
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(path, JSON.stringify(stored), { durable: false });
+}
+
+/** M-20261119-015: the last list one account's provider gave (a Claude
+ * sign-in folder, an instance's own account), kept so a restart or an
+ * expired sign-in still lists what that account offers until the next good
+ * read. Named by a one-way fingerprint of the account's key: no path, id
+ * or token in the file name. Same derived cache as the instances' lists. */
+export function accountModelCachePath(accountKey: string): string {
+  const name = createHash("sha256").update(accountKey).digest("hex").slice(0, 32);
+  return join(DATA_DIR, "providers", "engine-models", "accounts", `${name}.json`);
+}
+
+export function readAccountModelCache(accountKey: string): ModelCatalog | null {
+  try {
+    return catalogFrom(JSON.parse(readFileSync(accountModelCachePath(accountKey), "utf8")) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+export function writeAccountModelCache(accountKey: string, catalog: ModelCatalog): void {
+  if (!catalog.options.length) return;
+  try {
+    writeCatalog(accountModelCachePath(accountKey), catalog);
+  } catch {
+    // A derived cache: the list in memory is what this process serves.
+  }
 }
 
 /** A later start returns this object, not a promise, so `await` does not

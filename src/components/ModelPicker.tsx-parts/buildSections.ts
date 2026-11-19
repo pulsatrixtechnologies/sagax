@@ -18,7 +18,8 @@ import type { ModelSwitches } from "../../../shared/offered-models";
 import type { ModelOption } from "./helpers";
 import { modelLabel } from "./helpers";
 import { providerCatalog } from "../../../shared/provider-catalog";
-import { canonicalModelId, COMPUTER_PROVIDER_ID, providerOfModel, splitEngine, type ProviderRef } from "../../../shared/model-provider";
+import { canonicalModelId, COMPUTER_PROVIDER_ID, providerOfInstance, providerOfModel, splitEngine, type ProviderRef } from "../../../shared/model-provider";
+import { accountWords, onlyAccountOffering } from "../../../shared/model-accounts";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 import { isModelServerOption } from "../../../shared/model-server-option";
 
@@ -278,6 +279,41 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     const at = order.indexOf(id);
     return at < 0 ? order.length : at;
   };
+  // M-20261119-015: each account of a provider lists its own models. While
+  // the provider has two or more accounts here, every row says the account it
+  // runs on, a model several offer can move to another one (the "Account"
+  // line), and a model only one of the sign-in accounts offers wears
+  // "Special access" (shared/model-accounts.ts).
+  // The accounts are the sign-ins of one tool (several Claude accounts,
+  // several ChatGPT plans), never two tools of one sign-in (Codex and the
+  // ChatGPT plan), and, beside them, the provider's keys.
+  const signInKind = (instance: InstanceInfo) => (instance.access === "api" || instance.access === "custom" ? undefined
+    : `${instance.driverKind}:${instance.snapshot.chatgptPlan ? "plan" : "tool"}`);
+  const accountsOf = (pool: Pool): { signIns: InstanceInfo[]; all: InstanceInfo[] } => {
+    if (pool.ref.kind !== "vendor") return { signIns: [], all: [] };
+    const own = pool.instances.filter((instance) => providerOfInstance(instance)?.id === pool.ref.id);
+    const kinds = new Map<string, InstanceInfo[]>();
+    for (const instance of own) {
+      const kind = signInKind(instance);
+      if (kind) kinds.set(kind, [...(kinds.get(kind) ?? []), instance]);
+    }
+    const signIns = [...kinds.values()].filter((group) => group.length > 1).flat();
+    return { signIns, all: signIns.length ? [...signIns, ...own.filter((instance) => instance.access === "api")] : [] };
+  };
+  const withAccounts = (pool: Pool, candidates: readonly ModelMenuRow[]): ModelMenuRow[] => {
+    const { signIns, all: accounts } = accountsOf(pool);
+    if (signIns.length < 2) return [...candidates];
+    const words = (instance: InstanceInfo) => accountWords({ displayName: instance.displayName, email: instance.snapshot.account?.email }, pool.ref.label)
+      ?? (instance.access === "api" ? t("model.simple.apiKey") : t("providers.account.numbered", { number: accounts.indexOf(instance) + 1 }));
+    const named = candidates.map((row) => {
+      const instance = accounts.find((candidate) => candidate.instanceId === row.instanceId);
+      return instance ? { ...row, account: words(instance) } : row;
+    });
+    const only = onlyAccountOffering(named.flatMap((row) => (row.instanceId ? [row.instanceId] : [])), signIns.map((instance) => instance.instanceId));
+    return only ? named.map((row) => row.instanceId === only
+      ? { ...row, badge: { label: t("model.specialAccess"), title: t("model.specialAccessHint", { account: row.account ?? "" }) } }
+      : row) : named;
+  };
   const providerSections: ModelMenuSection[] = [...pools.values()]
     .sort((a, b) => rank(a.ref.id) - rank(b.ref.id))
     .map((pool) => ({
@@ -285,13 +321,18 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       label: pool.ref.label,
       // every engine behind it waits for a sign-in
       note: pool.instances.every((instance) => needsSignIn(instance)) ? t("model.signInRequired") : undefined,
-      rows: [...pool.models.values()].map((candidates) => {
+      rows: [...pool.models.values()].map((pooled) => {
+        const candidates = withAccounts(pool, pooled);
         const shownRow = lead(candidates);
         const others = candidates.filter((row) => row !== shownRow);
         if (others.length === 0) return shownRow;
+        // the same model on each account, the one a pick takes first
+        const onAccounts = [shownRow, ...others].filter((row, at, all) => row.account !== undefined
+          && all.findIndex((other) => other.account !== undefined && other.instanceId === row.instanceId) === at);
         return {
           ...shownRow,
           alternatives: others,
+          ...(onAccounts.length > 1 && shownRow.account !== undefined ? { accountRows: onAccounts } : {}),
           keywords: [shownRow.keywords, ...others.map((row) => row.keywords)].filter(Boolean).join(" "),
         };
       }),

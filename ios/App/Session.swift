@@ -3532,8 +3532,10 @@ final class Session: ObservableObject {
     /// depends on which engines are installed and signed in there.
     func modelInstances() async -> [Instance] {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-model-menu-preview"),
-           let url = Bundle.main.url(forResource: "ModelMenuPreview", withExtension: "json"),
+        // M-20261119-015: -model-accounts-preview adds a second Claude account with its own list
+        let accountsPreview = ProcessInfo.processInfo.arguments.contains("-model-accounts-preview")
+        if accountsPreview || ProcessInfo.processInfo.arguments.contains("-model-menu-preview"),
+           let url = Bundle.main.url(forResource: accountsPreview ? "ModelAccountsPreview" : "ModelMenuPreview", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let list = try? JSONDecoder().decode(InstanceList.self, from: data) {
             return list.instances

@@ -148,3 +148,35 @@ describe("the model panel", () => {
     });
   });
 });
+
+// M-20261119-015: a person's accounts of one provider each list their own models
+describe("the accounts of one provider", () => {
+  const personal = row("opus", { instanceId: "personal", key: "personal\u0000opus", account: "ada@example.com", current: true });
+  const team = row("opus", { instanceId: "team", key: "team\u0000opus", account: "Team" });
+  const mythos = row("mythos", { instanceId: "team", key: "team\u0000mythos", account: "Team", badge: { label: "Special access", title: "Only Team offers this model" } });
+  const accountSections = (): ModelMenuSection[] => [
+    { key: "top", rows: [{ key: "auto", kind: "auto", label: "Auto", current: false }] },
+    { key: "anthropic", label: "Claude", rows: [{ ...personal, alternatives: [team], accountRows: [personal, team] }, mythos] },
+  ];
+
+  it("names each row's account under the model, and badges the model one account alone offers", () => {
+    const markup = html({ sections: accountSections() });
+    expect(markup).toMatch(/data-model-row-account="true"[^>]*>ada@example\.com</);
+    expect(markup).toMatch(/data-model-row-account="true"[^>]*>Team</);
+    expect(markup).toMatch(/data-model-badge="true" title="Only Team offers this model"[^>]*>Special access</);
+    // the same in the short list, for the model in use
+    expect(html({ view: "short", sections: accountSections() })).toMatch(/data-model-row-account="true"[^>]*>ada@example\.com</);
+  });
+
+  it("lets the model in use move to another account that offers it", () => {
+    const markup = html({ sections: accountSections() });
+    expect(markup).toContain('data-model-line="account"');
+    expect(markup).toMatch(/data-model-line="account"[\s\S]*Account[\s\S]*ada@example\.com/);
+  });
+
+  it("no Account line for a model only one account offers", () => {
+    const sections = accountSections();
+    sections[1]!.rows = [{ ...mythos, current: true }];
+    expect(html({ sections })).not.toContain('data-model-line="account"');
+  });
+});

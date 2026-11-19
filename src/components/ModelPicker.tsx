@@ -358,7 +358,9 @@ export function ModelPicker({
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
   // #4329: the chip names the provider of the model in use (never a tool)
   const providerLabel = currentProvider(menuSections)?.section.label;
-  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel });
+  // M-20261119-015: and the account it runs on, while the provider has several
+  const accountLabel = autoOn ? undefined : currentProvider(menuSections)?.section.rows.find((row) => row.current)?.account;
+  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel });
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
@@ -416,7 +418,8 @@ export function ModelPicker({
     autoRecord,
     autoInstance,
     active,
-    showActiveAccount,
+    showActiveAccount: showActiveAccount || accountLabel !== undefined,
+    accountLabel,
     selectedVariantLabel,
     // #2080: the settings chips always read "Model · Effort" (Bot > Model
     // has no Effort row of its own any more)

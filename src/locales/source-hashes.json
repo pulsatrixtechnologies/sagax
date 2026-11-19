@@ -3594,6 +3594,8 @@
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "fr": {
+      "model.specialAccess": "a7f5116bb6f723bcabbb5a215a5906f0d0366259367b3294406a0a21ce5f84fb",
+      "model.specialAccessHint": "a1331efe9da03d07fdf3a7ddb1af423c65e12bed63e07ebeefe60d6fd7bb518f",
       "routineEditor.goal.label": "cdbf6975e8a35b0d03558be6822dfae166482c24fb86b0433f60e8167f5c91e4",
       "routineEditor.goal.placeholder": "d5477fea886ea5e544da9f9af89d2260a7ec628d21e433601e05b93a53000194",
       "routineEditor.goal.deadline": "6fcb38ddc858fc8592e4f693d04a2ed1f7d607fa95b660f456bce18a97bee884",

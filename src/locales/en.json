@@ -4465,6 +4465,8 @@
   "model.computerProvider": "This computer",
   "model.step.providersTitle": "Providers",
   "model.thinkingEffort": "Thinking effort",
+  "model.specialAccess": "Special access",
+  "model.specialAccessHint": "Only {account} offers this model",
   "model.runsWith": "Runs with",
   "model.contextSize": "Context size",
   "model.contextSize.eachModel": "Each model's own",

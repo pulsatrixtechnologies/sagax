@@ -2,7 +2,9 @@
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
-import { resolveModelAccount } from "../models/resolve-model-account.ts";
+import { accountsOpenTo, resolveModelAccount } from "../models/resolve-model-account.ts";
+import { accountOwnerOf } from "../engines/account-owner.ts";
+import { speakerPrincipal } from "../engines/engine-access.ts";
 import { activeEngineRefusal } from "../engines/engine-refusals.ts";
 import { pluginKey, pluginsNamedIn, type AccountCreditState } from "../../shared/model-account-pool.ts";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
@@ -395,8 +397,18 @@ export function createPrepareValidateStartTurn(
         if (refusal.cause === "usage_limit") return "rate_limited";
         return "unknown";
       };
-      const accounts = registry.instances()
-        .filter((inst) => inst.driverKind === home.driverKind && registry.access(inst.instanceId) !== "api")
+      // M-20261119-015: only the organization's accounts and this person's own
+      const person = IDENTITY.kind === "perspicax" ? speakerPrincipal(resolveTurnSpeaker({
+        speaker: state.opts?.speaker,
+        sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
+        peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
+        trigger: state.opts?.trigger,
+        automationSource: state.opts?.automationSource
+      }), effectiveBotOwner(state.bot) ?? "") : null;
+      const ownerOf = (instanceId: string) => IDENTITY.kind === "perspicax" ? accountOwnerOf(cfg.instances, instanceId) : undefined;
+      const siblings = registry.instances()
+        .filter((inst) => inst.driverKind === home.driverKind && registry.access(inst.instanceId) !== "api");
+      const accounts = accountsOpenTo(siblings, ownerOf, person, selection.instanceId)
         .map((inst) => ({
           instanceId: inst.instanceId,
           models: (inst.models?.options ?? []).map((option: { id: string }) => option.id),

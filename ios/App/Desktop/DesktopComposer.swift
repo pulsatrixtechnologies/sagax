@@ -451,7 +451,16 @@ struct DesktopComposerPill: View {
         let instance = instances.first { $0.instanceId == selection.instanceId }
         let modelId = selection.model.isEmpty ? (instance?.models.default ?? "") : selection.model
         let label = instance?.models.options.first { $0.id == modelId }?.label ?? modelId
-        modelLabel = label.isEmpty ? nil : label
+        // M-20261119-015: and the account it runs on, while the provider has several
+        let listed = instances.filter { $0.snapshot.isAvailable && $0.snapshot.authenticated != false }
+        let account = instance.flatMap {
+            ModelMenu.accountLabel($0, among: listed, labels: ModelMenuLabels(
+                auto: "", autoHint: "", useBotModel: { $0 }, local: "", defaultTag: "", loadedTag: "",
+                accountNumbered: { String(localized: "Account \($0)") }
+            ), engineLabel: { DesktopEngineRail.label($0) })
+        }
+        let chip = [label, account].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        modelLabel = chip.isEmpty ? nil : chip
     }
 }
 

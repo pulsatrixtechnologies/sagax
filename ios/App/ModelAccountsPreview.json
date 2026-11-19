@@ -1,0 +1,209 @@
+{
+  "instances": [
+    {
+      "instanceId": "preview",
+      "driverKind": "claudeAgent",
+      "displayName": "Claude",
+      "snapshot": {
+        "state": "available",
+        "authenticated": true,
+        "version": "2.1.0",
+        "account": {
+          "email": "ada@example.com"
+        }
+      },
+      "models": {
+        "default": "preview",
+        "options": [
+          {
+            "id": "preview",
+            "label": "Claude Sonnet 4.5"
+          },
+          {
+            "id": "claude-opus-4-5",
+            "label": "Claude Opus 4.5"
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "label": "Claude Haiku 4.5"
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    },
+    {
+      "instanceId": "preview-team",
+      "driverKind": "claudeAgent",
+      "displayName": "ada.admin@acme.test",
+      "snapshot": {
+        "state": "available",
+        "authenticated": true,
+        "version": "2.1.0",
+        "account": {
+          "email": "ada.admin@acme.test"
+        }
+      },
+      "models": {
+        "default": "preview",
+        "options": [
+          {
+            "id": "claude-mythos-5-2",
+            "label": "Claude Mythos 5.2"
+          },
+          {
+            "id": "claude-mythos-5-1",
+            "label": "Claude Mythos 5.1"
+          },
+          {
+            "id": "preview",
+            "label": "Claude Sonnet 4.5"
+          },
+          {
+            "id": "claude-opus-4-5",
+            "label": "Claude Opus 4.5"
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "label": "Claude Haiku 4.5"
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    },
+    {
+      "instanceId": "codex",
+      "driverKind": "codex",
+      "displayName": "OpenAI",
+      "snapshot": {
+        "state": "available",
+        "authenticated": false,
+        "version": "2.1.0"
+      },
+      "models": {
+        "default": "gpt-5.1",
+        "options": [
+          {
+            "id": "gpt-5.1",
+            "label": "GPT-5.1"
+          },
+          {
+            "id": "gpt-5.1-codex",
+            "label": "GPT-5.1 Codex"
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    },
+    {
+      "instanceId": "grok-api",
+      "driverKind": "grok",
+      "displayName": "Grok (API key)",
+      "snapshot": {
+        "state": "available",
+        "authenticated": true,
+        "version": "2.1.0"
+      },
+      "models": {
+        "default": "grok-4",
+        "options": [
+          {
+            "id": "grok-4",
+            "label": "Grok 4"
+          },
+          {
+            "id": "grok-4-fast",
+            "label": "Grok 4 Fast"
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "access": "api"
+    },
+    {
+      "instanceId": "qwen",
+      "driverKind": "qwen",
+      "displayName": "Qwen",
+      "snapshot": {
+        "state": "missing",
+        "authenticated": null,
+        "version": "2.1.0"
+      },
+      "models": {
+        "default": "qwen3-coder",
+        "options": [
+          {
+            "id": "qwen3-coder",
+            "label": "Qwen3 Coder"
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    },
+    {
+      "instanceId": "dwarfstar",
+      "driverKind": "pi",
+      "displayName": "DwarfStar",
+      "snapshot": {
+        "state": "available",
+        "authenticated": true,
+        "version": "2.1.0"
+      },
+      "models": {
+        "default": "ds::llama-3.3-70b",
+        "options": [
+          {
+            "id": "ds::llama-3.3-70b",
+            "label": "DwarfStar: Llama 3.3 70B",
+            "custom": true,
+            "local": true,
+            "loaded": true
+          },
+          {
+            "id": "ds::qwen2.5-32b",
+            "label": "DwarfStar: Qwen 2.5 32B",
+            "custom": true,
+            "local": true
+          }
+        ]
+      },
+      "capabilities": {
+        "effortLevels": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "access": "custom"
+    }
+  ]
+}

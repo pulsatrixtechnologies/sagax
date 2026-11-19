@@ -36,6 +36,28 @@ function pagePicture(): string {
   return canvas.toDataURL("image/png").split(",")[1]!;
 }
 
+/** A desktop the VM and the remote computer stand-ins show. */
+function desktopPicture(title: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280; canvas.height = 800;
+  const g = canvas.getContext("2d")!;
+  g.fillStyle = "#2b3a55"; g.fillRect(0, 0, 1280, 800);
+  g.fillStyle = "#e9edf3"; g.fillRect(120, 90, 1040, 600);
+  g.fillStyle = "#1f6feb"; g.fillRect(120, 90, 1040, 52);
+  g.fillStyle = "#fff"; g.font = "bold 24px sans-serif"; g.fillText(title, 144, 125);
+  g.fillStyle = "#222"; g.font = "28px sans-serif"; g.fillText("Mise à jour du système", 160, 230);
+  g.fillStyle = "#cfd6e0"; g.fillRect(160, 270, 960, 26);
+  g.fillStyle = "#1f6feb"; g.fillRect(160, 270, 610, 26);
+  g.fillStyle = "#333"; g.font = "24px sans-serif"; g.fillText("Redémarrage requis dans 12 minutes", 160, 360);
+  g.fillStyle = "#0f1626"; g.fillRect(0, 760, 1280, 40);
+  return canvas.toDataURL("image/png");
+}
+// The Local VM shows through the desktop app's picture and a connected remote
+// session through its polled picture (no stream here, so its time shows); the
+// capture clicks the tabs. ?tabs=0 keeps the browser alone.
+const withTabs = params.get("tabs") !== "0";
+(window as unknown as { ogb: unknown }).ogb = { screenFrame: async () => desktopPicture("Ordinateur de Osprey") };
+
 class StandInSource {
   private listeners = new Map<string, Array<(event: MessageEvent) => void>>();
   constructor(url: string) {
@@ -54,13 +76,18 @@ class StandInSource {
 const bot = {
   id: "osprey", threadId: "t-osprey", name: "Osprey", title: lang === "fr" ? "Recherche" : "Research", description: "",
   notifications: true, color: "green", unread: false, mascotLook: { character: "shape" },
-  messages: [], tasks: [], computer: "local", browserProfile: "own", modelSelection: { instanceId: "x", model: "x" },
+  messages: [], tasks: [], computer: "vm", browserProfile: "own", modelSelection: { instanceId: "x", model: "x" },
 } as unknown as Bot;
 
+const realFetch = window.fetch.bind(window);
 const json = (data: unknown) => Promise.resolve(new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL) => {
   const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   if (/\/auth\/session/.test(url)) return json({ scopes: ["admin"] });
+  if (/\/api\/me\/server-environment/.test(url)) return json({ configured: false });
+  if (/\/api\/me\/desktop-bridge/.test(url)) return withTabs ? json({ connected: true, tunnel: false, desktops: [], workplace: "auto", activity: [] }) : Promise.resolve(new Response("{}", { status: 404 }));
+  if (/\/remote-sessions\/[^/]+\/screen/.test(url)) return realFetch(desktopPicture("Poste distant"));
+  if (/\/remote-sessions/.test(url)) return json({ sessions: withTabs ? [{ id: "0123456789ab", code: "ABCDEF", state: "connected", os: "windows", elevated: false, endAt: "2099-01-01T00:00:00Z", hostname: "PC-COMPTA-02", inventory: "ready", osKnown: true, suggestions: [] }] : [] });
   if (/\/team-work/.test(url)) return Promise.resolve(new Response("{}", { status: 404, headers: { "content-type": "application/json" } }));
   if (/\/task-list/.test(url)) return json({ tasks: [] });
   if (/\/activity/.test(url)) return json({ items: [], subagents: [], launchedAgents: [] });

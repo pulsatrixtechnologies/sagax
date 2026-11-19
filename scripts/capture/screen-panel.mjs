@@ -61,6 +61,23 @@ try {
     await page.fill("[data-mark-note]", lang === "fr" ? "Ce montant est faux" : "This amount is wrong");
     await page.waitForTimeout(300);
     await page.locator("[data-gallery-sample]").screenshot({ path: join(outDir, `${prefix}-marks-${label}.png`) });
+    // Lot (d): the same panel on the VM and on the remote computer, tabs and marks.
+    for (const place of ["vm", "remote"]) {
+      await page.goto(`${base}?skin=${id}&lang=fr`, { waitUntil: "load" });
+      await page.waitForSelector("[data-screen-tab]");
+      await page.click(`[data-screen-tab=${place}]`);
+      await page.waitForSelector(`[data-screen-pane=${place}] img`, { timeout: 15000 });
+      await page.waitForTimeout(1500);
+      await page.locator("[data-gallery-sample]").screenshot({ path: join(outDir, `${prefix}-${place}-${label}.png`) });
+      await page.click("[data-screen-panel-marks]");
+      const area = await page.locator("[data-screen-marks-overlay]").boundingBox();
+      await page.click("[data-mark-tool=circle]");
+      await page.mouse.move(area.x + 120, area.y + 150); await page.mouse.down();
+      await page.mouse.move(area.x + 300, area.y + 230, { steps: 6 }); await page.mouse.up();
+      await page.fill("[data-mark-note]", "Ce redémarrage peut attendre");
+      await page.waitForTimeout(300);
+      await page.locator("[data-gallery-sample]").screenshot({ path: join(outDir, `${prefix}-${place}-marks-${label}.png`) });
+    }
   }
   console.log(`screenshots in ${outDir}`);
 } catch (error) {

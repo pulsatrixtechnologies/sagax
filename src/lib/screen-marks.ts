@@ -70,10 +70,10 @@ export function toolLabel(tool: MarkTool): string {
 
 /** The words that go with the picture: where the marks are, what sits under
  * each one, and the person's note. */
-export function feedbackText(marks: readonly Mark[], described: readonly DescribedMark[], note: string): string {
+export function feedbackText(marks: readonly Mark[], described: readonly DescribedMark[], note: string, place: "browser" | "vm" | "remote" = "browser"): string {
   const lines: string[] = [];
   const url = described.find((entry) => entry?.url)?.url;
-  lines.push(url ? t("screenMarks.msg.introAt", { url }) : t("screenMarks.msg.intro"));
+  lines.push(place === "vm" ? t("screenMarks.msg.introVm") : place === "remote" ? t("screenMarks.msg.introRemote") : url ? t("screenMarks.msg.introAt", { url }) : t("screenMarks.msg.intro"));
   marks.forEach((mark, index) => {
     const element = described[index];
     const kind = element?.role || element?.tag || "";
@@ -119,8 +119,9 @@ export function drawMarks(ctx: CanvasRenderingContext2D, marks: readonly Mark[],
 }
 
 /** The frame and the marks in one PNG, at the frame's own pixel size. */
-export async function renderMarkedFrame(image: HTMLImageElement, marks: readonly Mark[]): Promise<File> {
-  const width = image.naturalWidth, height = image.naturalHeight;
+export async function renderMarkedFrame(image: HTMLImageElement | HTMLCanvasElement, marks: readonly Mark[]): Promise<File> {
+  const width = image instanceof HTMLCanvasElement ? image.width : image.naturalWidth;
+  const height = image instanceof HTMLCanvasElement ? image.height : image.naturalHeight;
   const canvas = document.createElement("canvas");
   canvas.width = width; canvas.height = height;
   const ctx = canvas.getContext("2d");
@@ -129,5 +130,5 @@ export async function renderMarkedFrame(image: HTMLImageElement, marks: readonly
   drawMarks(ctx, marks, width, height);
   const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
   if (!blob) throw new Error(t("screenMarks.error.image"));
-  return new File([blob], "marked-browser.png", { type: "image/png" });
+  return new File([blob], "marked-screen.png", { type: "image/png" });
 }

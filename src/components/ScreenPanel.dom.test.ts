@@ -16,6 +16,14 @@ vi.mock("./BrowserPanel", () => ({
     return null;
   },
 }));
+const found = vi.hoisted(() => ({ places: ["browser"] as string[], vm: null as string | null, remote: null as unknown }));
+vi.mock("./ScreenPlaces", () => ({
+  useScreenPlaces: () => found,
+  placeControllable: (place: string, vm: string | null) => place === "vm" && vm === "server",
+  ControlSwitch: ({ control, onChange }: { control: boolean; onChange: (next: boolean) => void }) => createElement("button", { "data-screen-control": control ? "driving" : "watching", onClick: () => onChange(!control) }),
+  VmPane: ({ source, control }: { source: string; control: boolean }) => createElement("div", { "data-pane": "vm", "data-source": source, "data-control": String(control) }),
+  RemotePane: () => createElement("div", { "data-pane": "remote" }),
+}));
 vi.mock("@/state/store", () => ({ useStore: () => ({ dispatch: vi.fn(), state: {} }) }));
 import { ScreenPanel } from "./ScreenPanel";
 
@@ -24,6 +32,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  found.places = ["browser"]; found.vm = null; found.remote = null;
   seen.live = undefined; seen.botId = "";
   host = document.createElement("div");
   document.body.append(host);
@@ -66,5 +75,42 @@ describe("ScreenPanel", () => {
     expect(isScreenPanelOpen()).toBe(true);
     act(() => { aside.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     expect(isScreenPanelOpen()).toBe(false);
+  });
+
+  it("shows no tabs while the bot has one place, and tabs for each place when it has several", () => {
+    expect(host.querySelector("[role=tablist]")).toBeNull();
+    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1" };
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const tabs = [...host.querySelectorAll<HTMLElement>("[role=tab]")];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Browser", "VM", "Remote computer"]);
+    expect(host.querySelector("[data-screen-pane]")).toBeNull();
+  });
+
+  it("switches to the VM and the remote computer in the same panel, watching first", () => {
+    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1" };
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("vm");
+    expect(host.textContent).toContain("Ada’s VM");
+    expect(host.querySelector("[data-pane=vm]")!.getAttribute("data-control")).toBe("false");
+    act(() => { (host.querySelector("[data-screen-control]") as HTMLElement).click(); });
+    expect(host.querySelector("[data-pane=vm]")!.getAttribute("data-control")).toBe("true");
+    // the marks tools are the same ones as the browser's
+    act(() => { (host.querySelector("[data-screen-panel-marks]") as HTMLElement).click(); });
+    expect(host.querySelector("[data-screen-marks-bar]")).not.toBeNull();
+    act(() => { (host.querySelector("[data-screen-tab=remote]") as HTMLElement).click(); });
+    expect(host.querySelector("[data-pane=remote]")).not.toBeNull();
+    expect(host.textContent).toContain("Ada’s remote computer");
+    // a new place starts watching again with the marks tools closed
+    expect(host.querySelector("[data-screen-marks-bar]")).toBeNull();
+  });
+
+  it("falls back to the first place when the picked one goes away", () => {
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    found.places = ["browser"]; found.vm = null;
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("browser");
   });
 });

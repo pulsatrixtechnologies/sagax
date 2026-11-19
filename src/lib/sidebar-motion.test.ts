@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { animateSidebarSnap, SIDEBAR_SNAP_MS, sidebarSnapFrames } from "./sidebar-motion";
 import { EASE } from "./motion";
@@ -111,13 +113,22 @@ describe("no layout property animates where a transform or a clip does the job",
 });
 
 describe("sidebar thread rows off screen cost nothing", () => {
-  it("each row skips layout and paint until it nears the view, with a remembered height", () => {
+  it("each row skips layout and paint until it nears the view, with a remembered height", async () => {
     const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
     const rule = css.match(/\[data-sidebar\] \.group\\\/thread \{([^}]*)\}/)?.[1] ?? "";
     expect(rule).toContain("content-visibility: auto;");
     expect(rule).toContain("contain-intrinsic-block-size: auto 32px;");
-    // the row the rule targets is still the thread row's own box
-    const row = readFileSync(new URL("../components/SidebarThreadRow.tsx", import.meta.url), "utf8");
-    expect(row).toContain('"group/thread relative flex min-w-0 items-center rounded-lg"');
+    // The row the rule targets is still the thread row's own box: the
+    // outermost element of a drawn row carries the class, whatever else it
+    // carries. Read from the drawn row, not from the row's source: the exact
+    // class string this held went red when #2732 gave the same box a colour
+    // transition, while every row still skipped as before (#5068).
+    const { SidebarThreadRow } = await import("../components/SidebarThreadRow");
+    const noop = () => undefined;
+    const markup = renderToStaticMarkup(createElement(SidebarThreadRow, {
+      task: { threadId: "report", title: "Monthly report" }, ownerId: "scout", current: false, locale: "en", onSelect: noop, onRename: noop, onDelete: noop,
+    }));
+    const box = /^<div\b[^>]*?\sclass="([^"]*)"/.exec(markup)?.[1]?.split(/\s+/) ?? [];
+    expect(box).toContain("group/thread");
   });
 });

@@ -62,7 +62,7 @@ export const UI_GUARD_TESTS = [
  * with the other guards. A file with a known failure is not listed (a guard
  * is fixed, never listed): src/components/ChatErrorBanner.test.ts, src/components/lazy-screens.test.ts,
  * src/components/skin-fx/skin-fx.test.ts and src/lib/{bubble-colors,
- * native-controls-scheme,sidebar-motion,switch-colors}.test.ts join when
+ * native-controls-scheme,switch-colors}.test.ts join when
  * their entries leave scripts/testing/known-failures.json. */
 export const SOURCE_TEXT_TESTS = [
   "electron/skin-overlay.test.mjs",
@@ -167,6 +167,8 @@ export const SOURCE_TEXT_TESTS = [
   "src/lib/popover-contrast.test.ts",
   "src/lib/retro98.test.ts",
   "src/lib/shell-parity.test.ts",
+  // #5068: reads src/styles.css and components as text; green again, its entry left the known failures
+  "src/lib/sidebar-motion.test.ts",
   "src/lib/simple-mode-connect-apps.test.ts",
   "src/lib/skin-families.test.ts",
   "src/lib/skins.test.ts",

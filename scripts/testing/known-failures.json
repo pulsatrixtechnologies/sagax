@@ -652,18 +652,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "src/lib/sidebar-motion.test.ts",
-      "test": "sidebar thread rows off screen cost nothing > each row skips layout and paint until it nears the view, with a remembered height",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/org/org-mcp.e2e.test.ts",
       "test": "Perspicax organization, slice 5: MCP for the person who speaks > scenario E: bob's turn reaches Perspicax as bob, named Pulsa Bot (<bot id>); his tokens are revoked after it",
       "platforms": [

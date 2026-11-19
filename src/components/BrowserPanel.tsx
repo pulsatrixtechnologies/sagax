@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import { api, useStore, type Bot } from "@/state/store";
 import { createBrowserInputQueue } from "@/lib/browser-input-queue";
 import { createBrowserControl, type BrowserInteraction } from "@/lib/browser-control";
+import type { DescribedMark } from "@/lib/screen-marks";
 import type { ScreenState } from "@/lib/desktop-local-vm";
 import { browserDot, reportScreenDot } from "@/lib/screen-status";
 import { ComputerScreen, type ScreenAction } from "./computer/ComputerScreen";
@@ -26,6 +27,10 @@ export const BROWSER_START_URL = "https://www.google.com/";
 
 /** A sign-in card's Open: take the browser for the person at once, and open
  * the site when the bot left the page blank (src/state/store.tsx signInFocus). */
+/** Asks the page what element sits under each point (the page's own pixels):
+ * the screen panel's marks (#4452). Read only, needs no control. */
+export type BrowserDescriber = (points: Array<{ x: number; y: number }>) => Promise<DescribedMark[]>;
+
 export type BrowserSignIn = { url: string; site: string; nonce: number };
 
 /** Closing a panel releases its lease. A new connection never silently
@@ -38,7 +43,7 @@ export type BrowserSignIn = { url: string; site: string; nonce: number };
  * `control`: false hands the browser back at once and leaves the page
  * view-only. `placeholder`: the preview's last picture, shown dimmed while
  * the live view connects, so the window never opens on an empty square. */
-export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined }) {
+export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn, onDescriber }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined }) {
   const confirm = useConfirm();
   const { state } = useStore();
   const {
@@ -394,6 +399,15 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const pageTitle = tabs.find((tab) => tab.active)?.title ?? "";
   const holder = mine ? t("sandboxDesktop.controlling") : heldElsewhere ? t("browser.live.heldElsewhere")
     : taking ? t("browser.control.waiting", { name: bot.name }) : t("browser.control.bot", { name: bot.name });
+  const describerFor = useRef(onDescriber);
+  describerFor.current = onDescriber;
+  useEffect(() => {
+    describerFor.current?.(async (points) => {
+      const answer = await action({ type: "describe", points });
+      return Array.isArray(answer?.elements) ? answer.elements as DescribedMark[] : [];
+    });
+    return () => describerFor.current?.(null);
+  }, [action]);
   return <LiveBrowserView
     bot={bot}
     allowed={allowed}
@@ -648,7 +662,7 @@ function BrowserNote({ caption, children }: { caption: string; children: ReactNo
 
 /** `live`: the screen side panel (#4452) draws the live browser in place, in its
  * own column, instead of the Computer tab's preview square and its window. */
-export function BrowserPanel({ bot, signIn, live = false }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean }) {
+export function BrowserPanel({ bot, signIn, live = false, onDescriber }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined }) {
   const { state } = useStore();
   const engine = state.config?.browserEngine;
   const [requested, setRequested] = useState(false);
@@ -667,7 +681,7 @@ export function BrowserPanel({ bot, signIn, live = false }: { bot: Bot; signIn?:
   // Watching and taking over a session the bot already opened is for anyone
   // who can use the bot. Installing the engine on this computer stays admin.
   if (engine?.kind === "engine" && !installing && !engine.installError) {
-    return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
+    return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} onDescriber={onDescriber} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
   }
   return <BrowserNote caption={caption}>
     <div className="text-[15px] font-medium text-ink">{engine?.kind === "engine" ? t("browser.panel.incomplete") : t("browser.panel.notInstalled")}</div>

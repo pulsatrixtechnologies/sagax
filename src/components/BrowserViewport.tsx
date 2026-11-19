@@ -130,6 +130,7 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
   }, [driving, input, frameWidth, frameHeight, src]);
   return <>
     <img ref={screen} src={src} alt={t("browser.viewport.alt")} draggable={false} tabIndex={driving ? 0 : -1}
+      data-browser-frame="" data-frame-width={frameWidth} data-frame-height={frameHeight}
       title={driving ? "Shift+Escape returns to the browser address bar." : undefined}
       aria-description={driving ? t("browser.viewport.keysHint") : undefined}
       aria-keyshortcuts={driving ? "Shift+Escape" : undefined}

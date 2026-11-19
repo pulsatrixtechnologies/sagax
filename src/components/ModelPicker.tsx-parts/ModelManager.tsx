@@ -5,7 +5,7 @@
 // choices, a search on top. An engine that is not installed or connected is
 // not listed: "Connect a provider" opens Settings > Providers.
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Monitor, Pin, Search, Sparkles, Star } from "lucide-react";
+import { Check, ChevronRight, Monitor, Search, Sparkles, Star } from "lucide-react";
 import { api, useStore, type Bot, type InstanceInfo, type ModelSelection } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -13,7 +13,6 @@ import { canEditConfig } from "@/lib/viewer";
 import { t } from "@/lib/i18n";
 import { filterModelSections, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
 import { favoriteKey, toggleModelFavorite } from "@/lib/model-favorites";
-import { effectiveProviderPins, useProviderPins, withProviderPinToggled, writeProviderPins } from "@/lib/model-provider-pins";
 import { modelKey, modelOffer, type ModelSwitches } from "../../../shared/offered-models";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
@@ -106,23 +105,6 @@ export function ModelManager({
   const mayEdit = org !== null || canEditConfig(state.config);
 
   const engines = managerSections(sections, state.instances, switches);
-  // the providers pinned to the picker's segment row (at most three); with none chosen, the ones it shows by default
-  const storedPins = useProviderPins();
-  const [pinNote, setPinNote] = useState<string | null>(null);
-  const pins = effectiveProviderPins(storedPins, engines.map((section) => ({
-    key: section.key,
-    starred: section.rows.filter((row) => favoriteKeys.includes(row.key)).length,
-    current: section.rows.some((row) => row.current),
-  })));
-  const togglePin = (key: string) => {
-    const change = withProviderPinToggled(pins, key);
-    if ("refused" in change) {
-      setPinNote(t("model.pins.unpinFirst"));
-      return;
-    }
-    setPinNote(null);
-    writeProviderPins(change.pins);
-  };
   const shown = filterModelSections(engine ? engines.filter((section) => section.key === engine) : engines, query);
   const top = (sections.find((section) => section.key === "top")?.rows ?? []).filter((row) => row.kind === "auto" || row.kind === "follow");
 
@@ -164,10 +146,9 @@ export function ModelManager({
             <EngineButton key={section.key} selected={engine === section.key} onClick={() => setEngine(section.key)}
               mark={engineMark(section.key) ?? <Monitor size={15} aria-hidden="true" />}
               label={section.label ?? section.key} note={section.note} engineKey={section.key}
-              pin={{ pinned: pins.includes(section.key), onToggle: () => togglePin(section.key) }} />
+              />
           ))}
         </div>
-        {pinNote && <p role="status" data-model-manager-pin-note="" className="mx-4 mb-2 text-[12px] leading-4 text-ink-secondary">{pinNote}</p>}
         <button type="button" data-model-manager-connect="" onClick={openProviders}
           className="mx-2 mb-3 flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-ink-secondary transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
           <span>{t("model.manager.connect")}</span>
@@ -187,18 +168,9 @@ export function ModelManager({
           <div className="mt-2 flex flex-wrap gap-1 sm:hidden">
             <button type="button" className={activityChip(engine === null)} onClick={() => setEngine(null)}>{t("model.engines.all")}</button>
             {engines.map((section) => (
-              <span key={section.key} className="inline-flex items-center gap-0.5">
-                <button type="button" className={activityChip(engine === section.key)} onClick={() => setEngine(section.key)}>
-                  {section.label ?? section.key}
-                </button>
-                <button type="button" aria-pressed={pins.includes(section.key)} data-model-manager-pin={section.key}
-                  aria-label={t(pins.includes(section.key) ? "model.pins.unpin" : "model.pins.pin", { name: section.label ?? section.key })}
-                  onClick={() => togglePin(section.key)}
-                  className={cn("flex size-6 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
-                    pins.includes(section.key) ? "text-accent" : "text-ink-tertiary")}>
-                  <Pin size={12} aria-hidden="true" fill={pins.includes(section.key) ? "currentColor" : "none"} />
-                </button>
-              </span>
+              <button key={section.key} type="button" className={activityChip(engine === section.key)} onClick={() => setEngine(section.key)}>
+                {section.label ?? section.key}
+              </button>
             ))}
           </div>
         </div>
@@ -297,15 +269,13 @@ export function ModelManager({
   );
 }
 
-function EngineButton({ selected, onClick, mark, label, note, engineKey, pin }: {
+function EngineButton({ selected, onClick, mark, label, note, engineKey }: {
   selected: boolean;
   onClick: () => void;
   mark: ReactNode;
   label: string;
   note?: string;
   engineKey: string;
-  /** A provider's pin: on the model panel's segment row, three at most. */
-  pin?: { pinned: boolean; onToggle: () => void };
 }) {
   return (
     <div className={cn("group flex w-full min-w-0 items-center rounded-lg transition-colors", selected ? "bg-selected text-ink" : "text-ink hover:bg-hover")}>
@@ -317,15 +287,6 @@ function EngineButton({ selected, onClick, mark, label, note, engineKey, pin }: 
           {note && <span className="block truncate text-[11.5px] leading-4 text-ink-secondary">{note}</span>}
         </span>
       </button>
-      {pin && (
-        <button type="button" aria-pressed={pin.pinned} data-model-manager-pin={engineKey}
-          aria-label={t(pin.pinned ? "model.pins.unpin" : "model.pins.pin", { name: label })} title={t(pin.pinned ? "model.pins.unpin" : "model.pins.pin", { name: label })}
-          onClick={pin.onToggle}
-          className={cn("mr-1 flex size-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:bg-hover focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 touch:opacity-100",
-            pin.pinned ? "text-accent opacity-100" : "text-ink-tertiary opacity-0 hover:text-ink-secondary group-hover:opacity-100 focus-visible:opacity-100 touch:opacity-100")}>
-          <Pin size={14} aria-hidden="true" fill={pin.pinned ? "currentColor" : "none"} />
-        </button>
-      )}
     </div>
   );
 }

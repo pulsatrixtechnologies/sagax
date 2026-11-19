@@ -1,15 +1,15 @@
 // The model panel (owner decision, 2026-11-17: the composer's model picker
-// becomes the reference's compact panel). One component for every place the
-// model menu opens (composer chip, bot Model row, wizard, team settings,
-// launch composer): a segmented row of providers, "Model" (that provider's
-// models, each with a one-line description), "Reasoning" (the levels the
-// model really takes) and a quiet footer (Runs with, Manage models). No
-// submenus: a long list scrolls inside, with a search field past a few rows.
-// Everything the old menu did stays reachable: Auto (and Optimize for) and
-// Favorites are segments, "Use the bot's model" and "Keep" are the first
-// rows of the list, Fast and Context size sit under Reasoning.
+// becomes the reference's compact panel; 2026-11-19: short by default). One
+// component for every place the model menu opens (composer chip, bot Model
+// row, wizard, team settings, launch composer). It opens short: Auto, the
+// person's favorites (and the model in use when it is not one), then "All
+// models". "All models" is the long list: a segment per provider, that
+// provider's models each with a star to add or remove a favorite, a search
+// field past a few rows. Below, "Reasoning" (the levels the model really
+// takes) and a quiet footer (Runs with, Manage models). Favorites follow the
+// person, not the bot (src/lib/model-favorites.ts, GET/PUT /api/me/models).
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Check, ChevronRight, MoreHorizontal, Search, Sparkles, Star } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -23,14 +23,11 @@ import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
 import { foldItems, foldMoreLabel } from "./ShowMoreFold";
 import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { MODELS_SHOWN } from "./settings/ModelSwitchesSettings";
-import { MAX_PROVIDER_PINS, effectiveProviderPins } from "@/lib/model-provider-pins";
 
 /** A provider with more models than this gets a search field over its list. */
 export const PANEL_SEARCH_FROM = 8;
 
 type ViewKey = string;
-const AUTO_VIEW = "view:auto";
-const FAVORITES_VIEW = "view:favorites";
 
 export interface ModelPanelProps {
   sections: ModelMenuSection[];
@@ -59,20 +56,15 @@ export interface ModelPanelProps {
   custom?: { label: (text: string) => string; onPick: (text: string) => void };
   /** Hide the settings (Simple mode keeps the panel's model list only). */
   showSettings: boolean;
-  /** The person's pinned providers (src/lib/model-provider-pins.ts), in the order pinned. */
-  pinnedProviders?: readonly string[];
-  /** Opens the Models window, where every provider lives and carries its pin. With it, the
-   * segment row shows the pinned providers (at most three) and a "More" segment;
-   * without it (a surface with no window) the row shows every provider. */
-  onMore?: () => void;
+  /** Which list opens: the short one (Auto, the person's favorites, "All models") or every provider's models. */
+  view?: "short" | "all";
 }
 
-/** The view the panel opens on: Auto when it is on, else the provider that
- * holds the current model, else the first provider. */
-export function initialPanelView(sections: readonly ModelMenuSection[], autoOn: boolean): ViewKey {
-  if (autoOn) return AUTO_VIEW;
+/** The provider the "All models" list opens on: the one that holds the current
+ * model, else the first provider. */
+export function initialPanelView(sections: readonly ModelMenuSection[]): ViewKey {
   const providers = panelProviders(sections);
-  return (providers.find((section) => section.rows.some((row) => row.current)) ?? providers[0])?.key ?? FAVORITES_VIEW;
+  return (providers.find((section) => section.rows.some((row) => row.current)) ?? providers[0])?.key ?? "";
 }
 
 export function panelProviders(sections: readonly ModelMenuSection[]): ModelMenuSection[] {
@@ -108,51 +100,42 @@ function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orient
 }
 
 export function ModelPanel(props: ModelPanelProps) {
-  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings, pinnedProviders, onMore } = props;
+  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings, view: openOn = "short" } = props;
   const providers = panelProviders(sections);
   const top = sections.filter((section) => !section.label).flatMap((section) => section.rows);
   const autoRow = top.find((row) => row.kind === "auto");
   const leadRows = top.filter((row) => row.kind === "follow" || row.kind === "keep");
   const favoriteRows = sections.find((section) => section.key === "favorites")?.rows ?? [];
-  const [chosen, setView] = useState<ViewKey>(() => initialPanelView(sections, autoOn));
+  const [all, setAll] = useState(openOn === "all");
+  const [chosen, setView] = useState<ViewKey>(() => initialPanelView(sections));
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   // no useId or useRef: the interaction harness runs this function outside React
   const modelsId = "model-panel-models";
   const [listRef] = useState(() => ({ current: null as HTMLDivElement | null }));
-  // a view that vanished (a provider went away) falls back to the first
-  const known = chosen === AUTO_VIEW ? Boolean(autoRow) : chosen === FAVORITES_VIEW ? favoriteRows.length > 0 : providers.some((section) => section.key === chosen);
-  const view = known ? chosen : initialPanelView(sections, false);
+  // a provider that vanished falls back to the one holding the current model
+  const view = providers.some((section) => section.key === chosen) ? chosen : initialPanelView(sections);
 
-  // at most three providers show as segments: the pinned ones (the bot's own and the most starred when none is
-  // pinned), plus the one being viewed while it is not pinned; "More" opens the Models window with all of them
-  const limited = Boolean(onMore) && providers.length > MAX_PROVIDER_PINS;
-  const pins = effectiveProviderPins(pinnedProviders ?? [], providers.map((candidate) => ({
-    key: candidate.key,
-    starred: candidate.rows.filter((row) => favorites.keys.includes(row.key)).length,
-    current: candidate.rows.some((row) => row.current),
-  })));
-  const visibleProviders = limited
-    ? [...pins.flatMap((key) => providers.filter((candidate) => candidate.key === key)), ...providers.filter((candidate) => candidate.key === view && !pins.includes(candidate.key))]
-    : providers;
-  const segments: Array<{ key: ViewKey; label: string; icon: ReactNode; current: boolean }> = [
-    ...(autoRow ? [{ key: AUTO_VIEW, label: t("model.auto.label"), icon: <Sparkles size={14} aria-hidden="true" />, current: autoOn }] : []),
-    ...(favoriteRows.length > 0 ? [{ key: FAVORITES_VIEW, label: t("model.favorites"), icon: <Star size={14} aria-hidden="true" />, current: false }] : []),
-    ...visibleProviders.map((section) => ({
-      key: section.key, label: section.label ?? section.key, icon: mark(section.key), current: !autoOn && section.rows.some((row) => row.current),
-    })),
-  ];
+  // "All models": every provider is a segment (the person's favorites replace the old pinned providers)
+  const segments: Array<{ key: ViewKey; label: string; icon: ReactNode; current: boolean }> = providers.map((section) => ({
+    key: section.key, label: section.label ?? section.key, icon: mark(section.key), current: !autoOn && section.rows.some((row) => row.current),
+  }));
 
   const section = providers.find((candidate) => candidate.key === view);
-  const viewRows: ModelMenuRow[] = view === FAVORITES_VIEW ? favoriteRows : section?.rows ?? [];
-  const searchable = view !== AUTO_VIEW && viewRows.length > PANEL_SEARCH_FROM;
+  const viewRows: ModelMenuRow[] = all ? section?.rows ?? [] : [];
+  const searchable = all && viewRows.length > PANEL_SEARCH_FROM;
   const typed = searchable ? query.trim() : "";
   const shownRows = typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
-  const lead = view === AUTO_VIEW || typed ? [] : leadRows;
+  const lead = typed ? [] : leadRows;
   // the first rows, then "Show N more"; the model in use is never folded away, a search lists every match
   const fold = typed ? { head: shownRows, rest: [] as ModelMenuRow[] } : foldItems(shownRows, MODELS_SHOWN, (candidate) => candidate.current);
   const listedRows = expanded ? [...fold.head, ...fold.rest] : fold.head;
+  // the short list: the favorites, then the model in use when it is not one of them (it never hides)
+  const shortModels: ModelMenuRow[] = all ? [] : [
+    ...favoriteRows,
+    ...(autoOn ? [] : providers.flatMap((candidate) => candidate.rows).filter((candidate) => candidate.current && !favoriteRows.some((fav) => fav.key === candidate.key))),
+  ];
 
   // the focus lands on the model in use (or the search field of a long list)
   useEffect(() => {
@@ -171,17 +154,25 @@ export function ModelPanel(props: ModelPanelProps) {
     setQuery("");
     setExpanded(false);
   };
+  const showAll = (next: boolean) => {
+    setAll(next);
+    setQuery("");
+    setExpanded(false);
+  };
 
   // every row is one line, the same height: the name and its markers at the left,
   // what the app knows (context size, origin, a warning) muted at the right
+  const rovingRows = all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
+  const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
+  const rovingFirst = rovingRows[0];
   const modelRow = (row: ModelMenuRow) => {
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
     return (
-      <div key={`${view}:${row.key}`} className="group flex h-9 items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
+      <div key={`${all ? view : "short"}:${row.key}`} className="group flex h-9 items-center gap-0.5 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover">
         <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
           disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title ?? (description ? `${row.label} · ${description}` : undefined)}
-          tabIndex={row.current || (!viewRows.some((candidate) => candidate.current) && row === listedRows[0]) ? 0 : -1}
+          tabIndex={row.current || (!rovingHasCurrent && row === rovingFirst) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(row)}
           className={cn("flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
@@ -220,36 +211,39 @@ export function ModelPanel(props: ModelPanelProps) {
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
-      <div className="mx-1.5 mb-1 mt-0.5 flex shrink-0 gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
-      <div role="radiogroup" aria-label={t("model.providers")} data-model-panel-segments
-        onKeyDown={(event) => arrowRadios(event, "[data-model-panel-segment]", "horizontal")}
-        className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
-        {segments.map((segment) => {
-          const on = segment.key === view;
-          return (
-            <button key={segment.key} type="button" role="radio" aria-checked={on} aria-label={segment.label} title={segment.label}
-              data-model-panel-segment={segment.key} data-model-provider={segment.key.startsWith("view:") ? undefined : segment.key} data-model-segment-current={segment.current ? "" : undefined}
-              tabIndex={on ? 0 : -1}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => switchView(segment.key)}
-              className={cn(SEGMENT_BASE, on ? SEGMENT_ON : SEGMENT_OFF, "shrink-0")}>
-              <span className="flex size-4 shrink-0 items-center justify-center">{segment.icon}</span>
-              {on && <span className="truncate">{segment.label}</span>}
-              {segment.current && !on && <span aria-hidden="true" className="size-1 rounded-full bg-popover-accent" />}
-            </button>
-          );
-        })}
-      </div>
-      {limited && onMore && (
-        <button type="button" data-model-panel-more aria-label={t("model.allProviders")} title={t("model.allProviders")}
-          onMouseDown={(event) => event.preventDefault()} onClick={onMore}
-          className={cn(SEGMENT_BASE, SEGMENT_OFF, "shrink-0")}>
-          <MoreHorizontal size={14} aria-hidden="true" />
-        </button>
+      {all && (
+        <div className="mx-1.5 mb-1 mt-0.5 flex shrink-0 flex-wrap gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
+          <div role="radiogroup" aria-label={t("model.providers")} data-model-panel-segments
+            onKeyDown={(event) => arrowRadios(event, "[data-model-panel-segment]", "horizontal")}
+            className="flex min-w-0 flex-1 flex-wrap gap-0.5">
+            {segments.map((segment) => {
+              const on = segment.key === view;
+              return (
+                <button key={segment.key} type="button" role="radio" aria-checked={on} aria-label={segment.label} title={segment.label}
+                  data-model-panel-segment={segment.key} data-model-provider={segment.key} data-model-segment-current={segment.current ? "" : undefined}
+                  tabIndex={on ? 0 : -1}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => switchView(segment.key)}
+                  className={cn(SEGMENT_BASE, on ? SEGMENT_ON : SEGMENT_OFF, "shrink-0")}>
+                  <span className="flex size-4 shrink-0 items-center justify-center">{segment.icon}</span>
+                  {on && <span className="truncate">{segment.label}</span>}
+                  {segment.current && !on && <span aria-hidden="true" className="size-1 rounded-full bg-popover-accent" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
-      </div>
 
-      <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>
+      {all ? (
+        <button type="button" data-model-panel-back id={modelsId} title={t("model.favorites")} onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(false)}
+          className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
+          <ChevronLeft size={13} aria-hidden="true" />
+          <span>{t("model.auto.rail")}</span>
+        </button>
+      ) : (
+        <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>
+      )}
       {searchable && (
         <label className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 border-b border-popover-hairline px-2 py-1.5">
           <Search size={13} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
@@ -285,22 +279,38 @@ export function ModelPanel(props: ModelPanelProps) {
           arrowRadios(event, "[data-model-panel-row]", "vertical");
         }}
         className="shrink-0">
-        {view === AUTO_VIEW ? (
+        {!all ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
-            {optimize && (
-              <div role="radiogroup" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize>
-                <div className={HEADING}>{t("model.auto.optimizeTitle")}</div>
-                {AUTO_OPTIMIZE_VALUES.map((value) => (
-                  <button key={value} type="button" role="radio" aria-checked={autoOn && optimize.value === value} disabled={disabled}
-                    data-model-auto-optimize-option={value} onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => optimize.onPick(value)}
-                    className="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
-                    <span>{t(`model.auto.optimize.${value}`)}</span>
-                    {autoOn && optimize.value === value && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
-                  </button>
-                ))}
+            {autoOn && optimize && (
+              <div role="radiogroup" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
+                onKeyDown={(event) => arrowRadios(event, "[data-model-auto-optimize-option]", "horizontal")}
+                className="mx-2 mb-1.5 mt-0.5">
+                <div className="pb-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
+                <div className="flex min-w-0 gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
+                  {AUTO_OPTIMIZE_VALUES.map((value) => {
+                    const on = optimize.value === value;
+                    return (
+                      <button key={value} type="button" role="radio" aria-checked={on} disabled={disabled} tabIndex={on ? 0 : -1}
+                        data-model-auto-optimize-option={value} onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => optimize.onPick(value)}
+                        className={cn("min-h-7 flex-1 whitespace-nowrap rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:transition-none",
+                          on ? "bg-popover font-medium text-popover-ink shadow-[0_1px_2px_rgb(0_0_0/0.18)]" : "text-popover-ink-secondary hover:text-popover-ink")}>
+                        {t(`model.auto.optimize.${value}`)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            )}
+            {lead.map(modelRow)}
+            {shortModels.map(modelRow)}
+            {providers.length > 0 && (
+              <button type="button" data-model-panel-all onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(true)}
+                className="flex h-9 w-full items-center justify-between gap-2 rounded-lg px-2 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
+                <span>{t("model.auto.rail")}</span>
+                <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
+              </button>
             )}
           </>
         ) : (
@@ -317,7 +327,7 @@ export function ModelPanel(props: ModelPanelProps) {
           </>
         )}
       </div>
-      {view !== AUTO_VIEW && fold.rest.length > 0 && (
+      {all && fold.rest.length > 0 && (
         <button type="button" data-model-panel-fold={expanded ? "less" : "more"} aria-expanded={expanded}
           onMouseDown={(event) => event.preventDefault()} onClick={() => setExpanded((open) => !open)} className={cn(SHOW_MORE_ROW, "text-popover-ink-secondary hover:text-popover-ink")}>
           {expanded ? t("fold.showLess") : foldMoreLabel(fold.rest.length)}

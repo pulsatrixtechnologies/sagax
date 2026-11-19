@@ -366,7 +366,9 @@ describe("BotModelsSettings page", () => {
     expect(menu, "the selector opened").not.toBeNull();
     expect(menu?.querySelector("[data-model-panes]"), "one column, the chat bar menu").toBeNull();
     expect(menu?.querySelector("[data-model-settings-effort]"), "effort bar at the bottom").not.toBeNull();
-    // the panel opens on the provider of the first bot's model: Grok is one segment over
+    // the short menu opens on Auto and the favorites: "All models" lists every provider, Grok is one segment over
+    act(() => { menu!.querySelector<HTMLElement>("[data-model-panel-all]")!.click(); });
+    await flush();
     act(() => { menu!.querySelector<HTMLElement>('[data-model-panel-segment="xai"]')!.click(); });
     await flush();
     const option = menu!.querySelector<HTMLElement>('[data-model-option="grok-4"]');

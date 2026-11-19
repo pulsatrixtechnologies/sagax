@@ -34,9 +34,8 @@ final class ModelFavoritesStore: ObservableObject {
         if let client = session.settingsClient, let list = try? await client.modelFavorites() {
             synced = true
             let legacy = ModelFavorites.parseLegacy(UserDefaults.standard.string(forKey: ModelFavorites.legacyPreferenceKey))
-            let local = ModelFavorites.clean(Self.cached() + legacy)
-            if list.isEmpty, !local.isEmpty {
-                keys = local
+            if list.isEmpty, !legacy.isEmpty {
+                keys = legacy
                 send(session)
             } else {
                 keys = list

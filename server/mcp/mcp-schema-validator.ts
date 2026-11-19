@@ -147,3 +147,72 @@ export function lenientToolValidator(schema: unknown): ValidateFunction | null {
     return null;
   }
 }
+
+// upstream #4701: a configured server's tools mount even when one schema will not compile strictly.
+const DRAFT_07 = "http://json-schema.org/draft-07/schema#";
+const DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
+/** What tool generators emit that never asserts: OpenAPI's `example`, `discriminator`, `externalDocs` and `xml`, and VS
+ * Code's editor hints. Vendor `x-` extensions too, except the two compileToolSchema checks. */
+const NON_ASSERTIONS = new Set(["example", "discriminator", "externalDocs", "xml", "markdownDescription", "markdownEnumDescriptions", "enumDescriptions"]);
+const CHECKED_EXTENSIONS = new Set(["x-mcp-header", "x-google-enum-descriptions"]);
+const SCHEMA_KEYWORD_MAPS = ["properties", "$defs", "definitions", "dependentSchemas", "patternProperties"];
+
+function localRefsOnly(schema: unknown, depth = 0): boolean {
+  if (Array.isArray(schema)) return schema.every((child) => localRefsOnly(child, depth + 1));
+  if (!isRecord(schema) || depth > 64) return true;
+  if (typeof schema.$ref === "string" && !schema.$ref.startsWith("#/") && schema.$ref !== "#") return false;
+  return Object.values(schema).every((child) => localRefsOnly(child, depth + 1));
+}
+
+/** The schema without what asserts nothing. Embedded `$id`s go too when every `$ref` is a JSON pointer: Effect Schema
+ * gives each `unknown` field the same `"$id": "/schemas/unknown"`, and Ajv refuses a schema holding one id twice.
+ * Undefined when nothing would change. */
+function withoutNonAssertions(schema: Record<string, unknown>): Record<string, unknown> | undefined {
+  const dropIds = localRefsOnly(schema);
+  let changed = false;
+  const visit = (node: unknown, depth: number): unknown => {
+    if (Array.isArray(node)) return node.map((child) => visit(child, depth));
+    if (!isRecord(node) || depth > 64) return node;
+    const copy: Json = {};
+    for (const [key, value] of Object.entries(node)) {
+      if (NON_ASSERTIONS.has(key) || (key.startsWith("x-") && !CHECKED_EXTENSIONS.has(key)) || (dropIds && depth > 0 && key === "$id")) { changed = true; continue; }
+      if (SCHEMA_KEYWORD_MAPS.includes(key) && isRecord(value)) copy[key] = Object.fromEntries(Object.entries(value).map(([name, child]) => [name, visit(child, depth + 1)]));
+      else if (SCHEMA_LISTS.includes(key) || SCHEMA_ONE.includes(key)) copy[key] = visit(value, depth + 1);
+      else copy[key] = value;
+    }
+    return copy;
+  };
+  const plain = visit(schema, 0) as Json;
+  if (plain.$schema === DRAFT_07.slice(0, -1)) { plain.$schema = DRAFT_07; changed = true; }
+  return changed ? plain : undefined;
+}
+
+/** A configured server's tool schema, strictly. MCP (2025-11-25) reads a schema without `$schema` as JSON Schema
+ * 2020-12, while older servers write draft-07 without naming it, so such a schema is tried as each. Where strict
+ * compilation refuses it, its copy without what asserts nothing is compiled instead, so a refusal still means a
+ * constraint this checker cannot hold. */
+export function compileServerToolSchema(schema: Record<string, unknown>): ValidateFunction {
+  const plain = withoutNonAssertions(schema);
+  const candidates = [schema, ...(plain ? [plain] : [])]
+    .flatMap((candidate) => candidate.$schema === undefined ? [candidate, { ...candidate, $schema: DRAFT_2020_12 }] : [candidate]);
+  let refusal: unknown;
+  for (const candidate of candidates) {
+    try { return compileToolSchema(candidate); }
+    catch (error) { refusal ??= error; }
+  }
+  throw refusal;
+}
+
+/** How much of a server tool's schema Sagax checks a call against before the server checks it: all of it, the lenient
+ * copy, or only that the arguments are an object. */
+export type ServerToolCheck = "full" | "lenient" | "object";
+
+/** A check for every tool a server lists, so one schema this checker cannot compile never costs the server its other
+ * tools. Security: no compiler here loads a schema, so an external `$ref` is never fetched; it leaves the check to the
+ * server. */
+export function serverToolValidator(schema: Record<string, unknown>): { validate: ValidateFunction; check: ServerToolCheck } {
+  try { return { validate: compileServerToolSchema(schema), check: "full" }; }
+  catch {}
+  const lenient = lenientToolValidator(schema);
+  return lenient ? { validate: lenient, check: "lenient" } : { validate: compileToolSchema({ type: "object" }), check: "object" };
+}

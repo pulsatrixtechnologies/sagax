@@ -45,6 +45,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
 
         return (msg: any, current: AcpTurn) => {
           current.state.startupActivity = true;
+          if (current.state.promptSent) current.acknowledge();
           if (msg.method === "fs/read_text_file" || msg.method === "fs/write_text_file") {
             void handleClientFileRequest(msg).catch(reportBackgroundError);
             return;

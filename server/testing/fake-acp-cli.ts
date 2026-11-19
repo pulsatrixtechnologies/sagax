@@ -213,7 +213,7 @@
 //   FAKE_ACP_RPC_FAILURE_METHOD  initialize, session/new or session/prompt (default).
 //   FAKE_ACP_RPC_FAILURE_GATE  hold the error until this file exists.
 //   FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT  emit text + a tool result before failing.
-//   FAKE_ACP_RPC_FAILURE_AFTER_USAGE  emit scripted usage updates before failing.
+//   FAKE_ACP_RPC_FAILURE_AFTER_USAGE  emit scripted usage updates (and FAKE_ACP_UPDATES_FILE's) before failing.
 //   FAKE_ACP_LOAD_ERROR  JSON-RPC error object returned by session/load.
 //   FAKE_ACP_MODELS      comma-separated model ids. Enables the opencode-shaped
 //                        surface: session/new and session/load return
@@ -1011,6 +1011,15 @@ function connectSessionMcp(entries: AnyMcpEntry[]): void {
 let liveSession: string | null = null;
 let rpcFailure: unknown = null;
 function emitUsageUpdates(): void {
+  // FAKE_ACP_UPDATES_FILE: session/update params ({update, _meta?}) sent as-is (upstream #3752)
+  const updatesFile = process.env.FAKE_ACP_UPDATES_FILE;
+  if (updatesFile && existsSync(updatesFile)) {
+    try {
+      for (const params of JSON.parse(readFileSync(updatesFile, "utf8")) as unknown[]) {
+        if (params && typeof params === "object") out({ jsonrpc: "2.0", method: "session/update", params });
+      }
+    } catch {}
+  }
   const usageFile = process.env.FAKE_ACP_USAGE_UPDATES_FILE;
   if (usageFile && existsSync(usageFile)) {
     try {

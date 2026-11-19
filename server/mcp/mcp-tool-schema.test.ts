@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createToolListNormalizer, fitToolList, fitToolListResult, providerSafeInputSchema, shortenedToolNote } from "./mcp-tool-schema.ts";
+import { createToolListNormalizer, fitToolList, fitToolListResult, providerSafeInputSchema, shortenedToolNote, withoutDanglingReferences } from "./mcp-tool-schema.ts";
 import { createPageSchema, wideSchema } from "../testing/oversized-tool-schema.ts";
 import { schemaBytes, toolSchemaProfile } from "../tool-schema-profile.ts";
 
@@ -221,5 +221,24 @@ describe("a tool list under a provider's schema profile", () => {
     expect(tools[0]).toEqual(small);
     expect(schemaBytes(tools[1].inputSchema)).toBeLessThanOrEqual(12_000);
     expect(lines).toHaveLength(1);
+  });
+});
+
+// upstream #4701: a provider never fetches a reference, and a strict one refuses the whole request over it.
+describe("withoutDanglingReferences", () => {
+  it("leaves out a reference the schema does not hold, and keeps one it does", () => {
+    const schema = { type: "object", $defs: { id: { type: "string" } }, properties: {
+      kept: { $ref: "#/$defs/id" }, external: { $ref: "https://example.invalid/x", description: "X" }, missing: { $ref: "#/$defs/none" },
+      literal: { const: { $ref: "https://example.invalid/literal" } },
+    } };
+    expect(withoutDanglingReferences(schema)).toEqual({ type: "object", $defs: { id: { type: "string" } }, properties: {
+      kept: { $ref: "#/$defs/id" }, external: { description: "X" }, missing: {},
+      literal: { const: { $ref: "https://example.invalid/literal" } },
+    } });
+  });
+
+  it("returns the same object when nothing dangles", () => {
+    const schema = { type: "object", properties: { a: { type: "string" } } };
+    expect(withoutDanglingReferences(schema)).toBe(schema);
   });
 });

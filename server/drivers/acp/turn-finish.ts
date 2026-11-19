@@ -2,7 +2,7 @@
 import { killCliTree } from "../../procs.ts";
 import { TurnNotStartedError } from "../../contracts.ts";
 import { deletePromptSplitReceipt } from "../prompt-split.ts";
-import { classifyError } from "../retry.ts";
+import { startupFailureRecoverable } from "./startup-recovery.ts";
 import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import { redactSecretsInText } from "../../redact.ts";
 import { isAccountError } from "./helpers.ts";
@@ -76,20 +76,17 @@ if (!state.settled) {
   // leave nothing between its [omb-turn] line and the next one.
   const rpcCode = (e as any)?.code;
   console.error(`[acp] ${support.displayName} turn failed: rpc ${typeof rpcCode === "number" || typeof rpcCode === "string" ? rpcCode : "none"}${code ? ` (${code})` : ""}: ${redactSecretsInText(message).slice(0, 400)}`);
-  const failure = classifyError({ text: message });
-  const transientStartup = failure.transient || (failure.reason === "unknown" && code === "upstream_outage");
-  const denied = /\b(?:(?:permission|access) denied|(?:approval|permission) (?:required|denied|rejected)|requires? (?:approval|permission)|policy (?:restriction|violation)|(?:blocked|denied|restricted) by (?:the )?policy)\b/i.test(message);
-  // An unconfirmed approval switch sent no prompt and its process
-  // is discarded either way, so a fresh one can take the turn.
-  const retryableStartup = approvalUnconfirmed || (transientStartup && (!code || code === "upstream_outage")
-    && ![-32700, -32600, -32601, -32602].includes((e as any)?.code));
-  if (turn.startupRecovery && retryableStartup && !needsAuth && !accountError && !denied
-      && !state.promptSent && !state.startupActivity && !state.producedItem && !state.text
+  // An unconfirmed approval switch sent no prompt and its process is
+  // discarded either way, so a fresh one can take the turn; a prompt the
+  // engine says never reached its model may go too (upstream #3752).
+  if (turn.startupRecovery && startupFailureRecoverable(e, message, code, { approvalUnconfirmed, promptSent: state.promptSent, promptUnreachedModel: support.promptUnreachedModel?.(e) === true })
+      && !needsAuth && !accountError && !state.startupActivity && !state.producedItem && !state.text
       && !state.stopped && !session.closing && !asks.size && !current.runningTools.size) {
     // Quiesce before killing: the child's close event must not
     // publish a terminal completion before the harness can recover.
     state.settled = true;
     session.current = null;
+    current.stopQuietWatch?.();
     if (current.interruptTimer) clearTimeout(current.interruptTimer);
     closeSession(threadId, "startup-recovery");
     const stopped = await killCliTree(session.child).catch(() => false);

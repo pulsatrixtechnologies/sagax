@@ -19,6 +19,7 @@ import { titleCaseModelId } from "../../contracts.ts";
 import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { execCli, killCliTree, spawnCli } from "../../procs.ts";
 import { reportBackgroundError } from "../../background-error.ts";
+import { openCodePromptUnreachedModel } from "./opencode-unreached.ts";
 
 /** Nothing is offered until OpenCode itself answers. An invented default is
  * exactly what broke bots when Zen retired `x-preview-f-free`. */
@@ -918,6 +919,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader): AcpSupport => ({
     || await canRunOpenCode(env, config.cli, loadCatalog)
   ),
   classifyError: classifyOpenCodeError,
+  promptUnreachedModel: openCodePromptUnreachedModel,
   describeAccountError: describeOpenCodeAccountError,
   resolveModels: async (environment, config) => mergeLocalInject(
     await loadCatalog(environment, config.cli),

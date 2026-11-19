@@ -7,12 +7,11 @@ export function createStartProactiveWake(getHost: () => Host): any {
 function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?: string) {
   const host = getHost();
   // A person's yes that cannot start says so (answerProactiveProposal).
-  if (!host.routines) {
-    if (accepted) throw new Error("Routines are not ready yet");
-    return;
-  }
+  // #4528: a wake that cannot start yet throws, so its events go back to
+  // the inbox and are tried again (ProactiveWaker.flush), never left running.
+  if (!host.routines) throw new Error("Routines are not ready yet");
   const bot = host.store.bot(batch.botId);
-  if (!bot) return;
+  if (!bot) return false;
   // Person isolation: explicit runAs when known (e.g. failed run's person),
   // else the bot owner. Never an arbitrary member's credentials.
   const person = runAs || host.effectiveBotOwner(bot) || undefined;

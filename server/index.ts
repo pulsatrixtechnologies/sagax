@@ -20852,6 +20852,8 @@ const proactiveWaker = new ProactiveWaker({
   // #4250: event keys in the person's signal ledger (a restart wakes once)
   signals: signalLedger,
   pendingChanged: (botId, events) => proactivePending.set(botId, events),
+  // #4528: a wake's end settles the rows a previous process left for its run
+  settled: (botId, runId) => proactivePending.settled(botId, runId),
   // 2026-11-03 (audit S-2): events gather per (bot, person); an event
   // without runAs is the owner's
   owner: (botId) => {
@@ -20864,7 +20866,8 @@ const proactiveWaker = new ProactiveWaker({
     return bot && !bot.hidden && !bot.temporary ? bot : undefined;
   },
   log: (botId, line) => proactiveEventsLine(botId, line),
-  wake: (batch) => Boolean(startProactiveWake(batch, false, batch.runAs)),
+  // #4528: the run itself, so its id settles this wake's events alone
+  wake: (batch) => startProactiveWake(batch, false, batch.runAs) || false,
   // 2026-11-02: a teammate's notice no wake will run for is still shown
   dropped: (botId, events) => {
     for (const event of events) {
@@ -21419,9 +21422,10 @@ routines = new RoutineManager({
     investigationTurns.changed(run);
     if (!investigationReportsFailure(run)) syncRoutineRunToSource(run);
     routineCheckFollowUps.runChanged(run);
-    if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
+    // #4528: by its run, so another wake of the bot keeps its own events
+    if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId, run.id);
     // #4621 review: every other end of a wake settles its events too
-    else if (run.proactive && proactiveWakeEndedOtherwise(run)) proactiveWaker.noteWakeEnded(run.botId);
+    else if (run.proactive && proactiveWakeEndedOtherwise(run)) proactiveWaker.noteWakeEnded(run.botId, run.id);
     if (run.proactive) proactiveMetrics.noteRun(run);
     void botEventSubscriptions.publish(run);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);
@@ -21451,7 +21455,7 @@ routines = new RoutineManager({
   onRunFailed: (run, alert) => {
     // 2026-11-05 (perspicax#880): a failed wake backs the bot's next wake
     // off. Who is told is the streak's rule below, a wake's as any run's.
-    if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED) proactiveWaker.noteWakeFailed(run.botId);
+    if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED) proactiveWaker.noteWakeFailed(run.botId, run.id);
     // #3695, #3990: a routine says a failure once, at the run of its streak
     // that tells the person (routineProblemToldAt: the third in a row,
     // whatever its schedule, then again only when its error changes; owner

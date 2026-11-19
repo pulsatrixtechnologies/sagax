@@ -33,21 +33,25 @@ export interface RecordRelatedTabsProps {
   notice?: string;
 }
 
+/** The tabs of the opened card (#5053). They take the room left under the
+ * record's text and grow with the card; the card's one scroller scrolls them
+ * (never a box of their own), and the tab row stays in view at its top while
+ * it does. A row too narrow for the six tabs wraps: no tab is ever cut. */
 export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, countError, notice }: RecordRelatedTabsProps) {
   const id = useId();
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section className="flex shrink-0 grow flex-col" data-record-related>
       <PillTabs
         tabs={RELATED_TABS} tab={tab} onTab={onTab} ariaLabel={t("recordCard.related.title")} idPrefix={id}
         label={(key) => t(`recordCard.related.${key}`)}
         after={(key) => counts[key] === undefined ? null : <PillTabCount count={counts[key]} />}
-        className="shrink-0 flex-nowrap overflow-x-auto border-b border-popover-hairline px-2 py-1"
+        className="sticky top-0 z-[1] shrink-0 gap-y-1 border-b border-popover-hairline [background-color:var(--float-fill)] px-4 py-2"
       />
-      {(countError || notice) && <span role="status" className="px-3 text-popover-ink-secondary">{countError || notice}</span>}
+      {(countError || notice) && <span role="status" className="px-6 pt-3 text-[13px] leading-[18px] text-popover-ink-secondary">{countError || notice}</span>}
       <div role="tabpanel" id={`${id}-panel-${tab}`} aria-labelledby={`${id}-tab-${tab}`}
-        key={tab} tabIndex={0} aria-busy={loading} className="record-scroll min-h-0 flex-1 overflow-y-auto px-3 py-1">
-        {error ? <p role="status">{error}</p> : page?.tab === tab ? page.tab === "notes" ? <TicketNotes notes={page.lines} /> : <RelatedLines page={page} /> :
-          <p role="status">{t("recordCard.loading")}</p>}
+        key={tab} tabIndex={0} aria-busy={loading} className="px-6 pb-5 pt-3 focus-visible:outline-none">
+        {error ? <p role="status" className="py-2 text-popover-ink-secondary">{error}</p> : page?.tab === tab ? page.tab === "notes" ? <TicketNotes notes={page.lines} /> : <RelatedLines page={page} /> :
+          <p role="status" className="py-2 text-popover-ink-secondary">{t("recordCard.loading")}</p>}
       </div>
     </section>
   );
@@ -56,7 +60,7 @@ export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, co
 function TimeNote({ note }: { note: string }) {
   const [expanded, setExpanded] = useState(false);
   return <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}
-    className={`w-full text-start text-popover-ink-secondary ${expanded ? "block whitespace-pre-wrap break-words" : "line-clamp-1"}`}>{note}</button>;
+    className={`w-full text-start text-popover-ink-secondary ${expanded ? "block whitespace-pre-wrap break-words" : "line-clamp-2"}`}>{note}</button>;
 }
 
 function RelatedLines({ page }: { page: Exclude<RelatedPage, { tab: "notes" | "schedule" }> }) {
@@ -79,12 +83,12 @@ function RelatedLines({ page }: { page: Exclude<RelatedPage, { tab: "notes" | "s
     }
   })();
   return <>
-    {rows.length ? <table className="w-full border-collapse text-start text-[13px] leading-[18px]">
-      <thead><tr>{columns[page.tab].map(column => <th key={column} scope="col" className="py-1 pe-2 text-start text-[12px] font-medium text-popover-ink-secondary">{t(`recordCard.related.${column}`)}</th>)}</tr></thead>
+    {rows.length ? <table className="w-full border-collapse text-start text-[15px] leading-[22px]">
+      <thead><tr>{columns[page.tab].map(column => <th key={column} scope="col" className="pb-2 pe-6 pt-1 text-start text-[13px] font-normal leading-[18px] text-popover-ink-secondary last:pe-0">{t(`recordCard.related.${column}`)}</th>)}</tr></thead>
       <tbody>{rows.map((cells, index) => <tr key={index} className="border-t border-popover-hairline">
-        {cells.map((cell, i) => <td key={i} className="max-w-64 break-words py-1 pe-2 align-top">{cell}</td>)}
+        {cells.map((cell, i) => <td key={i} className="max-w-[32rem] break-words py-2.5 pe-6 align-top last:pe-0">{cell}</td>)}
       </tr>)}</tbody>
     </table> : <p className="py-2 text-popover-ink-secondary">{t("recordCard.related.empty")}</p>}
-    {page.tab === "time" && page.totalHours && <p className="border-t border-popover-hairline py-1 font-medium">{t("recordCard.related.total", { hours: page.totalHours })}</p>}
+    {page.tab === "time" && page.totalHours && <p className="border-t border-popover-hairline py-2.5 font-medium">{t("recordCard.related.total", { hours: page.totalHours })}</p>}
   </>;
 }

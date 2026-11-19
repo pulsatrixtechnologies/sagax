@@ -11,6 +11,8 @@
  *   loading | noaccess | unknown | notconnected | signin | busy | down | orgrefused   one state
  *   neighbour  the link hover card (the conforming neighbour) beside a ticket card
  *   chat       live chips in a paragraph, a list and a table: click (pin), Escape; hover opens nothing (#4785)
+ *   related    the same chips with the ticket's detail route answered: a rich ticket (six notes of every kind, one
+ *              resource, two configurations, its editable fields) and a company with little content (#5053)
  * The time is held still (scene `now`), so a capture is the same every run. */
 import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -50,23 +52,31 @@ function read(raw: RecordCardAnswer | RecordCardMiss) {
   };
 }
 
+// a rich ticket (M-20261119-055): several notes of every kind, one resource, two configurations
+const L = (fr: string, en: string) => (lang === "fr" ? fr : en);
 const relatedPages = {
   schedule: { lines: [
-    { member: "Service desk", date: "2026-11-18 09:00", end: "2026-11-18 10:30", where: "Remote", doneFlag: false },
-    { member: "Dispatch", date: "", where: "On site", doneFlag: true },
+    { member: "Noor Haddad", date: "2026-11-18 09:00", end: "2026-11-18 10:30", where: L("À distance", "Remote"), doneFlag: false },
   ] },
   notes: { lines: [
-    { author: "Support", date: "2026-11-18 08:45", kind: "discussion", text: "The printer stops after the first page. The replacement tray is ready at reception." },
-    { author: "Dispatch", date: "2026-11-17 14:30", kind: "internal", text: "Bring the spare feed roller." },
+    { author: "Ada Lindqvist", date: "2026-11-18 08:45", kind: "discussion", text: L("L'imprimante s'arrête après la première page. Le bac de remplacement est prêt à l'accueil.\nNous imprimons à l'étage en attendant, mais la file du comptoir reste bloquée pour les étiquettes d'expédition.", "The printer stops after the first page. The replacement tray is ready at reception.\nWe print upstairs meanwhile, but the counter queue stays blocked for the shipping labels.") },
+    { author: "Noor Haddad", date: "2026-11-18 08:10", kind: "internal", text: L("Apporter le rouleau d'entraînement de rechange. Le pilote a été réinstallé hier sans effet durable : vérifier le port réseau et le câble avant de remplacer la pièce.", "Bring the spare feed roller. The driver was reinstalled yesterday with no lasting effect: check the network port and the cable before replacing the part.") },
+    { author: "Noor Haddad", date: "2026-11-17 16:20", kind: "discussion", text: L("Bonjour Ada, nous regardons le pilote et le port réseau de l'imprimante. Un technicien passe demain matin à 9 h.", "Hello Ada, we are looking at the printer's driver and network port. A technician comes by tomorrow morning at 9.") },
+    { author: "Dispatch", date: "2026-11-17 14:30", kind: "internal", text: L("Billet assigné à Noor. Fenêtre d'intervention confirmée avec le client.", "Ticket assigned to Noor. Visit window confirmed with the customer.") },
+    { author: "Ada Lindqvist", date: "2026-11-17 09:05", kind: "description", text: L("L'imprimante du comptoir ne répond plus au ping depuis lundi matin. Redémarrée deux fois, même résultat.", "The counter printer has not answered a ping since Monday morning. Restarted twice, same result.") },
+    { author: "Noor Haddad", date: "2026-11-18 11:15", kind: "resolution", text: L("Rouleau d'entraînement remplacé, port réseau changé. Vingt pages imprimées sans arrêt.", "Feed roller replaced, network port changed. Twenty pages printed without a stop.") },
   ] },
   time: { tab: "time", totalHours: "3.5 h", lines: [
-    { date: "Nov 18", member: "Support", hours: "1.5 h", note: "Reinstalled the printer driver and verified the queue on both workstations." },
-    { date: "Nov 17", member: "Service desk", hours: "2 h", note: "Traced the connection and checked the network settings." },
+    { date: L("18 nov.", "Nov 18"), member: "Noor Haddad", hours: "1.5 h", note: L("Pilote réinstallé et file vérifiée sur les deux postes.", "Reinstalled the printer driver and verified the queue on both workstations.") },
+    { date: L("17 nov.", "Nov 17"), member: "Noor Haddad", hours: "2 h", note: L("Connexion tracée et réglages réseau vérifiés.", "Traced the connection and checked the network settings.") },
   ] },
-  configurations: { tab: "configurations", lines: [{ name: "Reception printer", type: "Printer", status: "Active" }] },
-  expenses: { tab: "expenses", lines: [{ date: "Nov 17", member: "Support", type: "Travel", amount: "$12.50" }] },
-  activities: { tab: "activities", lines: [{ subject: "Confirm print quality", type: "Follow-up", date: "Nov 19", assigned: "Service desk" }] },
-  attachments: { tab: "attachments", lines: [{ name: "print-test.txt", size: "10 B", date: "Nov 18", id: "42" }] },
+  configurations: { tab: "configurations", lines: [
+    { name: L("Imprimante de l'accueil", "Reception printer"), type: L("Imprimante", "Printer"), status: L("Actif", "Active") },
+    { name: L("Poste du comptoir", "Counter workstation"), type: L("Poste de travail", "Workstation"), status: L("Actif", "Active") },
+  ] },
+  expenses: { tab: "expenses", lines: [{ date: L("17 nov.", "Nov 17"), member: "Noor Haddad", type: L("Déplacement", "Travel"), amount: "12,50 $" }] },
+  activities: { tab: "activities", lines: [{ subject: L("Confirmer la qualité d'impression", "Confirm print quality"), type: L("Suivi", "Follow-up"), date: L("19 nov.", "Nov 19"), assigned: "Noor Haddad" }] },
+  attachments: { tab: "attachments", lines: [{ name: "print-test.txt", size: "10 B", date: L("18 nov.", "Nov 18"), id: "42" }] },
 };
 const relatedCounts = Object.fromEntries(RELATED_TABS.map(key => [key, relatedPages[key].lines.length]));
 

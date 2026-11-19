@@ -3286,8 +3286,9 @@ mechanism for every hover card: open 300ms, close 150ms, a pointer rest of
 closing. The reference's 250 and 350ms are not adopted: the shared constants
 belong to all three users of `HoverCard`.
 
-Shape (owner, 2026-11-16: "La carte plus sur le largeur que la hauteur", then
-"parfait" on the landscape sketch): `min(40rem, 100vw - 1rem)` wide, at most
+Shape of the hovered card (owner, 2026-11-16: "La carte plus sur le largeur
+que la hauteur", then "parfait" on the landscape sketch; the opened card has
+its own size since #5053, below): `min(40rem, 100vw - 1rem)` wide, at most
 `min(20rem, 100vh - 1rem)` tall, never taller than wide. The head (mark, kind,
 number, then the priority and state chips) and the title across the top; two
 panes under a hairline, left about 40% (company, contact, owner, dates, key
@@ -3304,14 +3305,79 @@ organization refused and ask) keep the landscape width: the head, one icon,
 one centred sentence, one action. The priority chip sits in the head, not
 beside the owner: next to a long name it cut the name.
 
-A service ticket with detail support keeps this frame while its counted tabs
-switch. The schedule occupies the right pane. Notes open below the panes, with
-Discussion selected when present and All otherwise. Rows scroll inside the panel and a time note expands
-in place. The compact tabs use the bot profile's shared 26px pill tabs. A field
-picker uses the shared searchable list and keeps the card open after a choice.
+A service ticket with detail support has its counted tabs, in the opened card
+only (see "The opened record card is a window over the chat" below). The
+schedule sits in the right pane, the tabs under it, with Discussion selected
+when present and All otherwise; a time note expands in place. The tabs are the
+bot profile's shared 26px pill tabs. A field picker uses the shared searchable
+list and keeps the card open after a choice.
 
 Captures: `scripts/capture/record-hover-card.mjs` (headless Chrome, DPR 2) of
 `src/gallery/record-card.html`, scene `neighbour` beside the link card.
+
+#### The opened record card is a window over the chat (owner, 2026-11-19, #5053)
+
+The owner, on a ticket's card: "Faudrait que ça soit plus gros, on voit rien,
+c'est trop compact", then "Faudrait que tu autorises de resize l'infobulle et
+que tu saves sa grosseur en mémoire." A chip opens its card on a click (#4785),
+so the opened card is no longer the 40rem by 20rem tooltip above (that frame
+stays the hovered card's, untouched). It follows the file preview's family
+(2.13), a window over the conversation, without its veil: nothing is blocked,
+a click outside or Escape closes it.
+
+- **Size**: 1000px wide and 80% of the window's height (840px at most) by
+  default; never under 480 by 320; never past the window, 16px from its sides
+  and its foot. A window too small for the kept size bounds the card and
+  leaves the kept size alone.
+- **Place**: centred across the window, its top 8% of the window's height
+  under the window's top (16 to 72px), the same for every record whatever its
+  content: the head and its Back arrow never move from one card to the next,
+  and a scroll of the conversation moves nothing.
+- **Resize**: the two sides, the bottom edge and the two bottom corners, with
+  the app's one handle (`.app-resize-handle`, `ResizeHandle` in
+  `DockedPanelResize.tsx`): invisible at rest, the 2px accent line on hover,
+  drag and focus. The card stays centred, so a side moves the width by twice
+  the pointer's travel and the edge follows the pointer. A double-click on any
+  handle (Enter on a focused edge) returns to the default size. The right and
+  bottom edges take the arrow keys, 24px a step. A card as tall as its content
+  has its sides only: its bottom edge appears when it takes the height it may.
+- **Kept**: on the device, where the sidebar's width is (`localStorage`,
+  `sagax.recordCard.width.v1` and `sagax.recordCard.height.v1`), one size for
+  every record and every kind, read again when the app starts.
+- **Type and air**: the body at the chat's size, 15px on 22px; labels, dates
+  and meta 13px on 18px in the secondary ink; the title 20px on 28px semibold,
+  whole (never clamped); chips 24px high with 13px words; actions 32px high
+  with 14px words. 24px of gutter, 20px above and under a pane, 16px between
+  blocks, 10px between facts.
+- **Every fact has a label**: the company and the people sit in the same list
+  as the dates and the fields ("Company", then the person's own label), their
+  icon kept before the value. A person's detail (a phone) goes under the name
+  when the row is short of room, never cut.
+- **Nothing is cut**: the head, the title and the actions stay; everything
+  between them is one scroll (a 16px fade at its foot while there is more).
+  No pane has a box of its own, so no row can end under another part. No
+  name ends on an ellipsis either: a long company, person or value goes on a
+  second line, inside its chip or its picker too.
+- **Two panes**: left, the facts (three eighths of the width, 22rem at least);
+  right, what the record says: its text, its schedule, then its tabs. The tabs
+  take the height left and grow with the card; their row stays in view at the
+  top of the scroll, and wraps before it cuts a tab. Under 50rem the panes
+  stack; facts that have the card's whole width (stacked, or a record with no
+  right pane) lay two a row from 40rem.
+- **Height**: a card with tabs takes the whole height; any other is as tall as
+  its content, up to that height, so a record with little content is a short
+  card, never a large empty one.
+- **Notes**: several at once, each with its whole text. A note longer than
+  eight lines offers "Less" to fold it to three, and "More" to open it again.
+- Nothing was removed: the status and priority menus, the six tabs and their
+  counts, the notes' filters, the product's link, Ask, copy, "up to date at"
+  and refresh.
+
+Captures: `scripts/capture/record-card-size.mjs` (headless Chrome, DPR 2) of
+`src/gallery/record-card.html`, scene `related`: a rich ticket and a company,
+dark and light, a 1440 by 900 window and a 760 by 520 one, at the default
+size, pulled by the corner, opened again after a reload, and back to the
+default. It also checks the sizes it reads.
 
 ## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)
 

@@ -15,6 +15,32 @@ export interface RetireQuestionsDeps {
   forget?(threadId: string, requestId: string): void;
 }
 
+export interface AnsweredInChatDeps {
+  messagesFor(threadId: string): Message[];
+  /** Work is parked on this card: the person's words go to it instead. */
+  parkedOn(messageId: string): boolean;
+  patch(threadId: string, messageId: string, card: NonNullable<Message["card"]>): void;
+  forget?(threadId: string, requestId: string): void;
+}
+
+/** Port of OpenMausBot #5593: the person typed a new line instead of
+ * answering. Every open question card of the thread that no work is parked
+ * on closes as answered in the chat (a keyed card, a durable ask, stays).
+ * Returns the closed request ids. */
+export function closeQuestionsAnsweredInChat(deps: AnsweredInChatDeps, threadId: string): string[] {
+  const closed: string[] = [];
+  for (const message of deps.messagesFor(threadId)) {
+    const card = message.card;
+    if (!card?.requestId || card.answered || card.dismissed || card.expired || card.askKey) continue;
+    if (card.requestType !== "question" && !card.questionRequest) continue;
+    if (deps.parkedOn(message.id)) continue;
+    deps.patch(threadId, message.id, { ...card, expired: true, options: [], answeredInChat: true });
+    deps.forget?.(threadId, card.requestId);
+    closed.push(card.requestId);
+  }
+  return closed;
+}
+
 /** Retire every open persistent question card of a thread (#4205: or only
  * the card of row `messageId`, or only the cards drawn at or after `since`,
  * a routine run's own; #4438: `reason`, the line the closed card shows).

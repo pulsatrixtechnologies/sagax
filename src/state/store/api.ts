@@ -54,6 +54,9 @@ export async function createBotWithRole(role?: BotRole, request: typeof api = ap
  * Kept at the server's own page maximum so one page fills more than the
  * transcript window mounts. */
 export const MESSAGE_PAGE_SIZE = 200;
+/** Messages a switch into a conversation loads; older ones come on scroll
+ * (port of OpenMausBot #4842: about 3 MB and 7 s on a slow link before). */
+export const SWITCH_MESSAGE_COUNT = 80;
 
 export async function api<T = any>(path: string, init?: RequestInit & { timeoutMs?: number; stepUpTry?: "recent" | "fresh" }): Promise<T> {
   // timeoutMs races the fetch against AbortSignal.timeout, combined with any

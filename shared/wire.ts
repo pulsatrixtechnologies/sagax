@@ -1470,6 +1470,9 @@ export interface OptionCardData extends WaitCardField {
    * a superseding request). Nothing can answer it; a fresh proposal is
    * needed, and clients must not offer its options. */
   expired?: boolean;
+  /** The person wrote a new line instead of answering, once nothing waited
+   * on this question any more (port of OpenMausBot #5593). */
+  answeredInChat?: boolean;
   /** Catalog key for held when it is one of the fixed notes. */
   heldCode?: string;
   /** A permission card in plain words, made by shared/approval-describe.ts

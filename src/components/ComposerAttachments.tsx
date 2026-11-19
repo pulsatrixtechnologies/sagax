@@ -50,7 +50,7 @@ export function ComposerAttachments({
   onNotice: (notice: string | null) => void;
   onPendingChange?: (pending: boolean) => void;
   uploadImage: (file: File) => Promise<Attachment | null>;
-  uploadFile?: (file: File) => Promise<FileAttachment | null | "handled">;
+  uploadFile?: (file: File, anyType?: boolean) => Promise<FileAttachment | null | "handled">;
   onRetry?: (id: string) => void;
 }) {
   const [dragging, setDragging] = useState(false);

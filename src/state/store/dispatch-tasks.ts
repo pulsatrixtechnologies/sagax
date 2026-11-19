@@ -1,6 +1,6 @@
 import type { Action, Bot, BotAnnouncement, Group } from "./model";
 import { applyFolderOwner, folderOwnerPath, currentTaskBot, peopleDmReadTarget } from "./model";
-import { MESSAGE_PAGE_SIZE, api } from "./api";
+import { SWITCH_MESSAGE_COUNT, api } from "./api";
 import { readableError } from "@/lib/plain-error";
 import { approvalModeFor, botApprovalSetting } from "../../../shared/approval-mode";
 import { stepUpApprovals } from "@/lib/step-up-client";
@@ -141,7 +141,7 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
           // A new task's thread is empty, so only the switch needs a page.
           void ready.then(() => api<{ bot: Bot }>(action.type === "newTask"
             ? `/api/bots/${action.botId}/tasks`
-            : `/api/bots/${action.botId}/tasks/${action.threadId}${action.whole ? "" : `?messages=${MESSAGE_PAGE_SIZE}`}`, { method: "POST", body: JSON.stringify(action.type === "newTask" ? { projectId: action.projectId, cwd: action.cwd, ...(action.confidential !== undefined ? { confidential: action.confidential } : {}), ...(action.stream ?? singleStreamTurnField().singleStream ? { stream: true } : {}) } : {}) }))
+            : `/api/bots/${action.botId}/tasks/${action.threadId}${action.whole ? "" : `?messages=${SWITCH_MESSAGE_COUNT}`}`, { method: "POST", body: JSON.stringify(action.type === "newTask" ? { projectId: action.projectId, cwd: action.cwd, ...(action.confidential !== undefined ? { confidential: action.confidential } : {}), ...(action.stream ?? singleStreamTurnField().singleStream ? { stream: true } : {}) } : {}) }))
             .then((r) => {
               if (action.type === "newTask") action.onCreated?.();
               if (navigation.get(action.botId) !== revision) return;
@@ -192,7 +192,7 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
             .catch(showError);
           break;
         case "switchGroupTask":
-          api<{ group?: Partial<Group> & { id: string } }>(`/api/groups/${action.groupId}/tasks/${action.threadId}?messages=${MESSAGE_PAGE_SIZE}`, { method: "POST" })
+          api<{ group?: Partial<Group> & { id: string } }>(`/api/groups/${action.groupId}/tasks/${action.threadId}?messages=${SWITCH_MESSAGE_COUNT}`, { method: "POST" })
             .then((r) => {
               if (!r?.group) return;
               dispatch({ type: "groupPatched", group: r.group });

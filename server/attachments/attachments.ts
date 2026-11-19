@@ -468,8 +468,22 @@ async function withUploadLock<T>(uploadId: string | undefined, operation: () => 
  * whether a given upload ID is already committed, and under which content
  * type, can be answered with a handful of direct stats instead of a scan
  * over every file in the directory. */
+/** Port of OpenMausBot #5800: every other type a person attaches is kept as
+ * an inert `.bin` download, served as octet-stream with nosniff and never
+ * rendered. The content check still refuses executables. */
+export const GENERIC_FILE_MIME = "application/octet-stream";
+const GENERIC_FILE_EXTENSION = ".bin";
+
+/** The type and extension an attached file is stored under: its own when
+ * the app knows it, else the generic download. */
+export function storedFileType(mime: string | undefined): { mime: string; extension: string } {
+  const normalized = normalizedMime(mime);
+  const known = normalized ? extensionForFileMime(normalized) : null;
+  return known && normalized ? { mime: normalized, extension: known } : { mime: GENERIC_FILE_MIME, extension: GENERIC_FILE_EXTENSION };
+}
+
 const KNOWN_ATTACHMENT_EXTENSIONS = Array.from(
-  new Set([...Object.values(IMAGE_MIMES), ...Object.values(FILE_MIMES)]),
+  new Set([...Object.values(IMAGE_MIMES), ...Object.values(FILE_MIMES), GENERIC_FILE_EXTENSION]),
 );
 
 /** Missing or unreadable candidates count as absent here; the atomic link
@@ -536,20 +550,22 @@ export function extensionForFileMime(mime: string | undefined): string | null {
  * encoded separators are rejected rather than massaged so traversal attempts
  * remain visible as bad requests. */
 export function sanitizeSharedFileName(name: string, mime: string): string {
-  const extension = extensionForFileMime(mime);
-  if (!extension) throw statusError(400, "content-type must be a supported document, audio or archive type");
-
   const normalized = name.normalize("NFKC").trim();
   if (!normalized) throw statusError(400, "name is required");
   if (normalized.length > 512) throw statusError(400, "name is too long");
   if (/[\\/]/.test(normalized) || /%(?:00|2f|5c)/i.test(normalized)) {
     throw statusError(400, "name must be a filename, not a path");
   }
+  // port of OpenMausBot #5800: a type the app does not know keeps its own
+  // short extension, in the display name only (the stored file is .bin)
+  const ownDot = normalized.lastIndexOf(".");
+  const own = ownDot > 0 ? normalized.slice(ownDot).toLowerCase() : "";
+  const extension = extensionForFileMime(mime) ?? (/^\.[a-z0-9]{1,10}$/.test(own) ? own : "");
 
   // "project.tar.gz" keeps its double extension (stored as .tgz).
   const tarGz = extension === ".tgz" && /\.tar\.gz$/i.test(normalized);
   const dot = tarGz ? normalized.length - ".tar.gz".length : normalized.lastIndexOf(".");
-  const withoutExtension = dot > 0 ? normalized.slice(0, dot) : normalized;
+  const withoutExtension = dot > 0 && extension ? normalized.slice(0, dot) : normalized;
   const safeCharacters = Array.from(withoutExtension, (character) => {
     const code = character.charCodeAt(0);
     return code <= 31 || code === 127 || "<>:\"|?*".includes(character) ? "_" : character;
@@ -641,7 +657,7 @@ export function cleanupResumableUploads(now = Date.now(), recover?: (path: strin
       const paths = resumePaths(state.owner, state.id);
       if (paths.metadata !== metadata || uploadLocks.has(`resume:${paths.fileId}`)) continue;
       const mime = normalizedMime(state.mime);
-      const extension = state.image ? extensionForMime(mime ?? undefined) : extensionForFileMime(mime ?? undefined);
+      const extension = state.image ? extensionForMime(mime ?? undefined) : storedFileType(mime ?? undefined).extension;
       // Only a digest without a receipt can have crashed inside its
       // finalizer. Incomplete and successful sessions need no directory scan.
       if (state.digest && !state.result && extension) recover?.(join(ATTACHMENTS_DIR, `${paths.fileId}${extension}`));
@@ -669,8 +685,9 @@ export async function resumableAttachmentUpload(input: {
   recover?: (path: string) => void | Promise<void>;
 }): Promise<{ offset: number; total: number; saved?: UploadReceipt }> {
   const id = validateAttachmentUploadId(input.uploadId)!;
-  const mime = normalizedMime(input.mime);
-  const extension = input.image ? extensionForMime(mime ?? undefined) : extensionForFileMime(mime ?? undefined);
+  const stored = input.image ? null : storedFileType(input.mime);
+  const mime = stored ? stored.mime : normalizedMime(input.mime);
+  const extension = stored ? stored.extension : extensionForMime(mime ?? undefined);
   if (!mime || !extension) throw statusError(400, "unsupported content-type");
   const maximum = input.image ? imageMaxBytes() : maxBytesForFileMime(mime);
   if (!Number.isSafeInteger(input.total) || input.total <= 0) throw statusError(400, "total must be a positive integer");
@@ -822,10 +839,11 @@ async function saveAttachmentStream(
   chunks: AsyncIterable<Uint8Array>, originalName: string, mime: string,
   options: { uploadId?: string; expectedBytes?: number; owner?: string | null }, image = false,
 ): Promise<SavedFile> {
-  const normalized = normalizedMime(mime);
-  const extension = image ? extensionForMime(normalized ?? undefined) : extensionForFileMime(normalized ?? undefined);
+  const stored = image ? null : storedFileType(mime);
+  const normalized = stored ? stored.mime : normalizedMime(mime);
+  const extension = stored ? stored.extension : extensionForMime(normalized ?? undefined);
   if (!normalized || !extension) {
-    throw statusError(400, "content-type must be a supported document, audio or archive type");
+    throw statusError(400, "content-type must be an image type");
   }
   const maxBytes = image ? imageMaxBytes() : maxBytesForFileMime(normalized);
   const name = image ? `image${extension}` : sanitizeSharedFileName(originalName, normalized);

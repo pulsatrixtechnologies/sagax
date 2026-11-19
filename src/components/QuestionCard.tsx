@@ -229,7 +229,7 @@ export function QuestionCard({
         settled={settled}
         answer={answer}
         closed={closed}
-        closedNote={skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : undefined}
+        closedNote={skipped ? t("waitingCard.skipped") : card.answeredInChat ? t("waitingCard.answeredInChat") : card.expired ? t("waitingCard.expired") : undefined}
         answeredBy={closed ? undefined : answererName(card.answeredBy)}
         embedded={embedded}
         failed={failed}
@@ -250,7 +250,8 @@ export function QuestionCard({
     const closed = skipped || (!answer && card.expired === true) || (!answer && Boolean(card.answered) && card.answered !== "answer");
     // #3471: skipped or expired, it says so in one quiet line
     // #4438: a card closed because its matter is settled says why
-    const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? card.answerNote || t("waitingCard.expired") : undefined;
+    // port of OpenMausBot #5593: the person wrote back instead of tapping an answer
+    const closedNote = skipped ? t("waitingCard.skipped") : card.answeredInChat ? t("waitingCard.answeredInChat") : card.expired ? card.answerNote || t("waitingCard.expired") : undefined;
     return <SettledQuestion problemTitle={problemTitle} questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} answerNote={closed ? undefined : card.answerNote} technical={card.technicalDetails} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
   }
 

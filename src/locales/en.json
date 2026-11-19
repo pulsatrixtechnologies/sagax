@@ -15191,6 +15191,7 @@
   "waitingCard.skipAria": "Skip this without answering",
   "waitingCard.skipped": "Skipped, no answer",
   "waitingCard.expired": "Expired, no answer",
+  "waitingCard.answeredInChat": "Answered in the chat",
   "approval.pill.skipped": "Skipped",
   "approval.status.skipped": "Skipped, nothing was run",
   "proactive.briefOffer.title": "Keep today's brief?",

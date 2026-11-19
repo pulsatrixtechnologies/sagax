@@ -203,7 +203,7 @@ export function reduceTasks(state: AppState, action: Action, reduce: ReduceFn): 
       // background moving to another thread leaves it alone.
       const opened = switched.bots.find((bot) => bot.id === action.bot.id);
       if (opened && opened.id === switched.selectedId) {
-        switched = { ...switched, unreadDivider: openedUnreadDivider(switched, opened.threadId, threadOpensUnread(opened), visibleMessages(opened), threadReadCursor(opened)) };
+        switched = { ...switched, unreadDivider: openedUnreadDivider(switched, opened.threadId, threadOpensUnread(opened), visibleMessages(opened), threadReadCursor(opened), opened.hasMore) };
         // …and on screen it is read, as `select` reads the thread it opens. The
         // snapshot predates the switch's own announcement, which told the
         // server so (the "bot" frame), and must not put the dot back.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { retireOpenQuestions } from "./retire-open-questions.ts";
+import { closeQuestionsAnsweredInChat, retireOpenQuestions } from "./retire-open-questions.ts";
 
 type Row = { id: string; card?: Record<string, unknown>; approval?: boolean };
 
@@ -36,6 +36,40 @@ describe("retireOpenQuestions (#2608)", () => {
       { id: "f" },
     ]);
     expect(retireOpenQuestions(deps, "t1")).toEqual([]);
+    expect(patched).toEqual([]);
+  });
+});
+
+// port of OpenMausBot #5593: a typed reply closes the bot's earlier questions (stuck "Waiting")
+describe("closeQuestionsAnsweredInChat", () => {
+  function chat(rows: Row[], parked: string[] = []) {
+    const patched: Array<{ id: string; card: Record<string, unknown> }> = [];
+    const forgotten: string[] = [];
+    const deps = {
+      messagesFor: () => rows as never[],
+      parkedOn: (messageId: string) => parked.includes(messageId),
+      patch: (_t: string, id: string, card: Record<string, unknown>) => { patched.push({ id, card }); },
+      forget: (_t: string, requestId: string) => { forgotten.push(requestId); },
+    };
+    return { deps: deps as never, patched, forgotten };
+  }
+
+  it("closes an open question nothing waits on as answered in the chat", () => {
+    const { deps, patched, forgotten } = chat([{ id: "m1", card: { requestType: "question", requestId: "q1", options: ["A", "B"] } }]);
+    expect(closeQuestionsAnsweredInChat(deps, "t1")).toEqual(["q1"]);
+    expect(patched).toEqual([{ id: "m1", card: { requestType: "question", requestId: "q1", options: [], expired: true, answeredInChat: true } }]);
+    expect(forgotten).toEqual(["q1"]);
+  });
+
+  it("leaves a question work is parked on, a keyed ask, an approval and a settled card alone", () => {
+    const { deps, patched } = chat([
+      { id: "parked", card: { requestType: "question", requestId: "q1" } },
+      { id: "keyed", card: { requestType: "question", requestId: "q2", askKey: "proactive-mail" } },
+      { id: "approval", card: { requestType: "permission", requestId: "p1" } },
+      { id: "done", card: { requestType: "question", requestId: "q3", answered: "answer" } },
+      { id: "plain", card: { requestType: "question" } },
+    ], ["parked"]);
+    expect(closeQuestionsAnsweredInChat(deps, "t1")).toEqual([]);
     expect(patched).toEqual([]);
   });
 });

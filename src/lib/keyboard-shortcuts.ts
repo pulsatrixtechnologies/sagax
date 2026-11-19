@@ -101,6 +101,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     row("new-group", ["⌘", "⇧", "N"], ["Ctrl", "Shift", "N"]),
   ]),
   group("panels", [
+    row("toggle-screen-panel", ["⌘", "⇧", "B"], ["Ctrl", "Shift", "B"], true),
     row("close-panel", ["Esc"], ["Esc"], true),
   ]),
   // the View menu's roles (electron/menu.mjs `viewMenu`)
@@ -121,7 +122,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
 /** The app-wide chords added for parity with the reference design (2026-10-16). None was
  * bound before: ⌘B, ⌘I and ⌘L had no handler and no menu accelerator, ⌘⇧F
  * and ⌘⇧N were free (⌘F and ⌘N take only the unshifted chord). */
-export type AppShortcut = "toggle-sidebar" | "focus-composer" | "search-everything" | "quote-selection" | "new-group";
+export type AppShortcut = "toggle-sidebar" | "focus-composer" | "search-everything" | "quote-selection" | "new-group" | "toggle-screen-panel";
 
 /** Which app-wide chord a key press is: ⌘ on macOS, Ctrl elsewhere (never
  * both, never with ⌥), so an input method's keys and another modifier's own
@@ -137,6 +138,7 @@ export function appShortcutFor(
   if (event.shiftKey) {
     if (key === "f") return "search-everything";
     if (key === "n") return "new-group";
+    if (key === "b") return "toggle-screen-panel";
     return null;
   }
   if (key === "b") return "toggle-sidebar";

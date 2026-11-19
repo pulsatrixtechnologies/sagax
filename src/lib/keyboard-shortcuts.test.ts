@@ -137,6 +137,7 @@ describe("the reference design's app-wide chords", () => {
       ["F", true, "search-everything"],
       ["l", false, "quote-selection"],
       ["N", true, "new-group"],
+      ["B", true, "toggle-screen-panel"],
     ] as const;
     for (const [key, shiftKey, expected] of cases) {
       expect(appShortcutFor(press(key, { metaKey: true, shiftKey }), true)).toBe(expected);
@@ -152,7 +153,7 @@ describe("the reference design's app-wide chords", () => {
     // ⌘F finds in the conversation, ⌘N opens the compose picker, ⌘K the palette
     for (const key of ["f", "n", "k", "d", "1", "/"]) expect(appShortcutFor(press(key, { metaKey: true }), true)).toBeNull();
     // the shifted twins of the new unshifted chords are free
-    for (const key of ["B", "I", "L"]) expect(appShortcutFor(press(key, { metaKey: true, shiftKey: true }), true)).toBeNull();
+    for (const key of ["I", "L"]) expect(appShortcutFor(press(key, { metaKey: true, shiftKey: true }), true)).toBeNull();
     expect(appShortcutFor(press("b"), true)).toBeNull();
     expect(appShortcutFor(press("b", { metaKey: true, altKey: true }), true)).toBeNull();
     expect(appShortcutFor(press("b", { metaKey: true, ctrlKey: true }), true)).toBeNull();
@@ -168,6 +169,7 @@ describe("the reference design's app-wide chords", () => {
     expect(keysOf("search-everything")).toEqual(["⌘", "⇧", "F"]);
     expect(keysOf("quote-selection")).toEqual(["⌘", "L"]);
     expect(keysOf("new-group")).toEqual(["⌘", "⇧", "N"]);
+    expect(keysOf("toggle-screen-panel")).toEqual(["⌘", "⇧", "B"]);
     for (const platform of ["macKeys", "winKeys"] as const) {
       const chords = items.map((item) => item[platform].join("+"));
       expect(new Set(chords).size).toBe(chords.length);

@@ -7,10 +7,11 @@ import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
 import { SplitWorkspace } from "@/components/SplitWorkspace";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
+import { useScreenPanelOpen } from "@/lib/screen-panel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
 import {
   AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
-  MemoryManagerPanel, OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, StagedOrgImport, TeamMapPage,
+  MemoryManagerPanel, OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, ScreenPanel, SettingsModal, StagedOrgImport, TeamMapPage,
 } from "@/components/lazy-screens";
 import { ArchivedBotsPanel } from "@/components/Sidebar";
 import { AboutPrompt } from "@/components/AboutDialog";
@@ -93,6 +94,8 @@ export function ShellLayout(shell: ShellNavigation) {
     nativeViewOverlayOpen,
   } = shell;
   const profileFillsMain = !remoteClient && state.personaEditor !== null;
+  // Cmd+Shift+B (#4452): the selected bot's live screen beside its chat.
+  const screenPanelOpen = useScreenPanelOpen();
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
@@ -205,6 +208,8 @@ export function ShellLayout(shell: ShellNavigation) {
           Option-click on a thread row); one at a time. Threads shown only:
           with one conversation (#2081) no thread opens anywhere beside it. */}
       {showThreads && <SideThreadPanel />}
+      {/* The bot's live screen, a column beside the one conversation (#4452). */}
+      {screenPanelOpen && bot && state.activeView === "chat" && !profileFillsMain && <BotSurface key={`screen:${bot.id}`} id={bot.id}>{(current) => <ScreenPanel bot={current} />}</BotSurface>}
       {/* The panels below are siblings, so their keys must differ even
           though each is remounted per bot. Two siblings keyed `bot.id`
           collide in React's keyed reconciliation whenever both are open

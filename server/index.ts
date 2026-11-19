@@ -972,7 +972,6 @@ import { callHasParkableWork, classifyVoiceIntent } from "../src/lib/voice-mode/
 import { VoiceCallSessions, voiceCallTurnSettle } from "./voice/voice-call-session.ts";
 import { VoiceCallWarmup } from "./voice/voice-call-warmup.ts";
 import { namedTeammates, prewarmPerPersonPerMinute, prewarmWindowMs, ThreadPrewarm } from "./threads/thread-prewarm.ts";
-import { callTurnEffort } from "./voice/voice-call-effort.ts";
 import { VoiceTurnSessions, callLinesBlock, voiceBriefText, voiceTranscript, voiceUnseenBlock } from "./voice/voice-turn.ts";
 import { effortAcceptedByEngine, resolveEngineTurnEffort } from "../shared/ultracode-effort.ts";
 import { routeTurnModel } from "./turns/turn-model-routing.ts";
@@ -2126,7 +2125,6 @@ import { createAuthzViewerFromId } from "./index-leaves/authzViewerFromId.ts";
 import { createAttentionTicketUrl } from "./index-leaves/attentionTicketUrl.ts";
 import { createWorkplaceIntegration } from "./index-leaves/workplaceIntegration.ts";
 import { createWithdrawApprovalNotice } from "./index-leaves/withdrawApprovalNotice.ts";
-import { createVoicePickForTurn } from "./index-leaves/voicePickForTurn.ts";
 import { createVoiceFor } from "./index-leaves/voiceFor.ts";
 import { createVisibleTo } from "./index-leaves/visibleTo.ts";
 import { createVideoInputMessage } from "./index-leaves/videoInputMessage.ts";
@@ -3535,7 +3533,6 @@ bindLeafHost({
   get callHasParkableWork() { return callHasParkableWork; },
   get callLinesBlock() { return callLinesBlock; },
   get callTitleExcerpt() { return callTitleExcerpt; },
-  get callTurnEffort() { return callTurnEffort; },
   get callbackPage() { return callbackPage; },
   get can() { return can; },
   get canAccessBot() { return canAccessBot; },
@@ -4734,7 +4731,6 @@ bindLeafHost({
   get createVmScreenshotRoute() { return createVmScreenshotRoute; },
   get createVoiceFor() { return createVoiceFor; },
   get createVoiceModeRoutes() { return createVoiceModeRoutes; },
-  get createVoicePickForTurn() { return createVoicePickForTurn; },
   get createVoiceProviderKeys() { return createVoiceProviderKeys; },
   get createWaitForChatRoomMember() { return createWaitForChatRoomMember; },
   get createWaitForGroupMemberBot() { return createWaitForGroupMemberBot; },
@@ -7086,7 +7082,6 @@ bindLeafHost({
   get autoEnginesFor() { return autoEnginesFor; },
   get relayEnginesFor() { return relayEnginesFor; },
   get autoPickForTurn() { return autoPickForTurn; },
-  get voicePickForTurn() { return voicePickForTurn; },
   get _orgRefusalOfImpl() { return _orgRefusalOfImpl; },
   get orgEngineRefusal() { return orgEngineRefusal; },
   get orgTurnAccess() { return orgTurnAccess; },
@@ -8187,7 +8182,6 @@ const autoRefusalsFor = createAutoRefusalsFor(getLeafHost);
 const autoEnginesFor = createAutoEnginesFor(getLeafHost);
 const relayEnginesFor = createRelayEnginesFor(getLeafHost);
 const autoPickForTurn = createAutoPickForTurn(getLeafHost);
-const voicePickForTurn = createVoicePickForTurn(getLeafHost);
 const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
 const orgTurnAccess = createOrgTurnAccess(getLeafHost);
 const botOneShotAccess = createBotOneShotAccess(getLeafHost);
@@ -16357,8 +16351,7 @@ const limitFailover = createLimitFailoverHost({
     return limitCandidatesNow(botId, threadId, speaker);
   },
   candidatesNow: limitCandidatesNow,
-  // A wake's or a call's fast model the limit refused is skipped by the
-  // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
+  // A model the limit refused is skipped by Auto's next pick for this payer.
   refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
   // A plan window the person's usage report showed spent (J4), until a turn
   // on that engine works for them again: only Sagax's quick pick skips it.
@@ -19174,6 +19167,8 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get showWaitingOnPersonChip() { return showWaitingOnPersonChip; },
   get signInRefusalHeld() { return signInRefusalHeld; },
   get signInRefusalResent() { return signInRefusalResent; },
+  get signedOutBackupResent() { return signedOutBackupResent; },
+  get signedOutTurnSelection() { return signedOutTurnSelection; },
   get soloGoals() { return soloGoals; },
   get stepFromToolEvent() { return stepFromToolEvent; },
   get stoppedRowSinceLastPerson() { return stoppedRowSinceLastPerson; },
@@ -23701,6 +23696,8 @@ const signInRefusalHeld = new Set<string>();
  * turn there ends well. A second refusal right after a good renew is not a
  * sign-in problem: it shows the engine's error, never the card. */
 const signInRefusalResent = new Set<string>();
+/** Threads whose refused turn was sent again once to the backup (turn-completed.ts). */
+const signedOutBackupResent = new Set<string>();
 /** #2057 (on #2040): settles a refused subscription sign-in. A turn that
  * can be sent again waits on the renew (bounded): renewed means the same
  * message goes again once and no card; failed means the card. Anything else
@@ -37484,7 +37481,6 @@ const startTurnRunner = createStartTurn({
   bus,
   callLinesBlock,
   callLinesSince,
-  callTurnEffort,
   canWorkOnCloud,
   cfg,
   checkSoulDrift,
@@ -37872,7 +37868,6 @@ const startTurnRunner = createStartTurn({
   listeningSoFarFor,
   voiceCalls,
   voiceLatency,
-  voicePickForTurn,
   voiceSessions,
   voiceTranscript,
   voiceUnseenBlock,

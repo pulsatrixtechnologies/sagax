@@ -80,7 +80,6 @@ export type TurnState = {
   variant: any;
   voiceCallText: any;
   voiceCallTurn: any;
-  voiceTurnPick: any;
   warmOnly: any;
   /** #3431: the Proactive alerts section of an owner's one-to-one turn. */
   proactiveAskPrompt: any;
@@ -90,7 +89,6 @@ export type TurnState = {
   limitTakeover: any;
   /** Sagax runs this turn on a quick model of its own pick (a call's or a wake's, #1694), not on the
    * conversation's: a limit that refuses it is that model's (limit failover's LimitDispatch.detour). */
-  fastDetour: boolean;
 
   activeMessages: any;
   liveBot: any;
@@ -263,12 +261,10 @@ export function createTurnState(init: {
     variant: undefined,
     voiceCallText: undefined,
     voiceCallTurn: undefined,
-    voiceTurnPick: undefined,
     warmOnly: undefined,
     proactiveAskPrompt: undefined,
     autoContinuing: false,
     limitTakeover: undefined,
-    fastDetour: false,
 
     activeMessages: undefined,
     liveBot: undefined,

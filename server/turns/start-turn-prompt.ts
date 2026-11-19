@@ -346,8 +346,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     if (!state.warmOnly) limitFailover.noteDispatch(state.threadId, {
       botId: state.bot.id, engine: { instanceId: state.instance.instanceId, driverKind: state.instance.driverKind }, selection: state.bot.modelSelection,
       payer: autoPayerKey(state.bot, state.speaker), ...(ownerPaysForMember(state.bot, state.speaker, state.opts?.trigger?.kind === "user" ? state.opts.trigger.principalId : state.opts?.sender?.id) ? { owner: true } : {}), speaker: state.speaker, ...(state.opts?.trigger ? { trigger: state.opts.trigger } : {}), at: Date.now(),
-      ...(isLocalModelId(state.bot.modelSelection.model) ? { local: true } : {}),
-      ...(state.fastDetour ? { detour: true as const } : {})
+      ...(isLocalModelId(state.bot.modelSelection.model) ? { local: true } : {})
     });
     idleEngines.noteBusy(state.threadId);
     // The prompt carries the soul as saved now. If it changed during setup,

@@ -9,7 +9,8 @@ import { signedOutCarryOn } from "../engines/signed-out-carry-on.ts";
 export type Host = Record<string, any>;
 
 export function createSignedOutTurnSelection(getHost: () => Host): any {
-function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnSpeaker) {
+/** `probe`: only whether a backup would take the turn, with no row and no card. */
+function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnSpeaker, options: { probe?: boolean } = {}) {
   const host = getHost();
   const now = Date.now();
   const from = host.registry.get(bot.modelSelection.instanceId);
@@ -44,7 +45,7 @@ function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnS
       return checked.ok ? checked.selection : null;
     },
   });
-  if (!selection) return null;
+  if (!selection || options.probe) return selection;
   const to = host.registry.get(selection.instanceId);
   const words = { from: host.engineDisplayName(from), to: to ? host.engineDisplayName(to) : selection.instanceId };
   host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.limitFailoverRow(threadId, { kind: "signedOut", ...words }) });

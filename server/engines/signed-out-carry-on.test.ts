@@ -1,7 +1,7 @@
 // #3315: a signed-out engine's turns start on a backup the person chose, for
 // that turn only; the conversation keeps its own model.
 import { describe, expect, it } from "vitest";
-import { signedOutCarryOn } from "./signed-out-carry-on.ts";
+import { resendOnSignedOutBackup, signedOutCarryOn } from "./signed-out-carry-on.ts";
 
 const claude = { instanceId: "claude", model: "opus" };
 const codex = { instanceId: "codex", model: "gpt" };
@@ -28,5 +28,24 @@ describe("signed-out carry-on", () => {
   it("tries the engine as usual when no chosen backup can take the turn, and leaves Auto to its own pick", () => {
     expect(signedOutCarryOn({ selection: claude, backups: [], held: () => true, usable: (backup) => backup })).toBeNull();
     expect(signedOutCarryOn({ selection: { ...claude, auto: true }, backups: [codex], held: (id) => id === "claude", usable: (backup) => backup })).toBeNull();
+  });
+});
+
+describe("a refused turn sent again to the backup", () => {
+  const base = { refused: true, renewHeld: false, personTurn: true, alreadyResent: false, backupReady: () => true };
+
+  it("sends the person's refused turn again at once when a chosen backup can take it", () => {
+    expect(resendOnSignedOutBackup(base)).toBe(true);
+  });
+
+  it("sends it again once only, and never without a backup, a refusal or a person's turn", () => {
+    expect(resendOnSignedOutBackup({ ...base, alreadyResent: true })).toBe(false);
+    expect(resendOnSignedOutBackup({ ...base, backupReady: () => false })).toBe(false);
+    expect(resendOnSignedOutBackup({ ...base, refused: false })).toBe(false);
+    expect(resendOnSignedOutBackup({ ...base, personTurn: false })).toBe(false);
+  });
+
+  it("leaves a refusal held for a sign-in renew to the renew", () => {
+    expect(resendOnSignedOutBackup({ ...base, renewHeld: true })).toBe(false);
   });
 });

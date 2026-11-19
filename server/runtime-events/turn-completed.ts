@@ -6,6 +6,7 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
 import { firstSignedOut } from "../engines/engine-refusals.ts";
+import { resendOnSignedOutBackup } from "../engines/signed-out-carry-on.ts";
 import { routineReportsByStreak, routineRunRowInEveryChat } from "../../shared/routine-repeat.ts";
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 /** Whether a finished routine run rings "done": a completed result the
@@ -201,6 +202,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       } else if (event.ok) {
         host.emptyResponseRetry.clear(event.threadId);
         host.signInRefusalResent.delete(event.threadId);
+        host.signedOutBackupResent.delete(event.threadId);
       }
       // #2057: a sign-in refusal held for its renew reports when it settles.
       const signInHeld = host.signInRefusalHeld.delete(event.threadId);
@@ -216,6 +218,22 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
           const account = host.refusalAccount(access?.via ?? "server", access?.payerPrincipalId, host.turnSlotFor(bot, instance));
           host.noteEngineRefusal({ engine: instance.instanceId, account, cause: "signed_out", at: Date.now() });
           signedOutAgain = !firstSignedOut(instance.instanceId, account, `incident:${bot.id}`);
+          // The owner (2026-11-18): the backup the person chose answers this
+          // very turn (a call's words included), sent again once; the turn
+          // starts there (signedOutTurnSelection) while the engine is held.
+          const request = host.directRequestOwners.get(event.threadId);
+          const messageId = request?.messageId;
+          const resendSpeaker = host.turnSpeakers.get(event.threadId);
+          if (messageId && resendOnSignedOutBackup({
+            refused: true,
+            renewHeld: signInHeld,
+            personTurn: !request?.stopped && request?.origin?.kind === "user" && !routineRun && !host.routines?.runForThread(event.threadId),
+            alreadyResent: host.signedOutBackupResent.has(event.threadId),
+            backupReady: () => Boolean(resendSpeaker && host.signedOutTurnSelection(bot, event.threadId, resendSpeaker, { probe: true })),
+          })) {
+            host.signedOutBackupResent.add(event.threadId);
+            host.resendUserMessage(bot.id, event.threadId, messageId, resendSpeaker, "signed-out-backup");
+          }
         }
       }
       if (!event.ok && !stopped && !limitTaken && !emptyRetried && !signInHeld && !signedOutAgain && !lazyClaimAlreadyReported && !computerParked && !host.routines?.runForThread(event.threadId)) {

@@ -107,8 +107,9 @@ public struct VoiceModeSettings: Codable, Equatable, Sendable {
         return view
     }
 
-    /// Pick a voice for this bot's provider: the bot's own slot when the bot
-    /// has its own provider, else the person's.
+    /// Pick a voice for this bot's provider: always the bot's own slot (the
+    /// desktop's `writeVoiceForBot`), so no other bot changes. Without a bot
+    /// it is the person's default.
     public func withVoice(_ id: String, forBot botId: String?) -> VoiceModeSettings {
         var out = self
         out.ttsProvider = nil
@@ -116,7 +117,8 @@ public struct VoiceModeSettings: Codable, Equatable, Sendable {
         let provider = ttsChoice(botId: botId) ?? "xai"
         var record = extra
         var bots = record["bots"] as? [String: Any] ?? [:]
-        if let botId, var bot = bots[botId] as? [String: Any], bot["tts"] != nil {
+        if let botId {
+            var bot = bots[botId] as? [String: Any] ?? [:]
             var voices = bot["voices"] as? [String: Any] ?? [:]
             voices[provider] = id.isEmpty ? nil : id
             bot["voices"] = voices.isEmpty ? nil : voices

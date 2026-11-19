@@ -52,6 +52,20 @@ describe("voice providers in the person's settings", () => {
     expect(providerOrder("auto", ["openai", "xai"], ["xai", "openai"])).toEqual(["xai", "openai"]);
   });
 
+  it("keeps one voice per bot: two bots, two voices, the person's voice for a third", () => {
+    const store = memory({ voice: "eve", speed: 1, language: "auto" });
+    writeVoiceForBot("b-1", "rex", store);
+    writeVoiceForBot("b-2", "ara", store);
+    const settings = readVoiceModeSettings(store);
+    expect(voiceSettingsForBot(settings, "b-1").voice).toBe("rex");
+    expect(voiceSettingsForBot(settings, "b-2").voice).toBe("ara");
+    // never picked: it still speaks with the voice the person had (migration)
+    expect(voiceSettingsForBot(settings, "b-3").voice).toBe("eve");
+    expect(settings.voice).toBe("eve");
+    writeVoiceForBot("b-1", "leo", store);
+    expect(voiceSettingsForBot(readVoiceModeSettings(store), "b-2").voice).toBe("ara");
+  });
+
   it("gives a bot its own provider and voice, else the person's", () => {
     const store = memory({ voice: "eve", speed: 1, language: "auto" });
     writeVoiceProviders({ tts: "openai" }, store);
@@ -62,10 +76,10 @@ describe("voice providers in the person's settings", () => {
     const settings = readVoiceModeSettings(store);
     expect(voiceSettingsForBot(settings, "b-2")).toMatchObject({ tts: "elevenlabs", voice: "myClone" });
     expect(settings.voice).toBe("eve");
-    expect(settings.voices).toEqual({ openai: "cedar" });
+    expect(settings.voices).toBeUndefined();
     // back to "Same as my settings"
     writeBotVoiceChoice("b-2", null, store);
-    expect(readVoiceModeSettings(store).bots).toBeUndefined();
+    expect(readVoiceModeSettings(store).bots).toEqual({ "b-1": { voices: { openai: "cedar" } } });
   });
 });
 

@@ -124,15 +124,18 @@ export function botHasOwnVoice(settings: VoiceModeSettings, botId: string): bool
   return Boolean(settings.bots?.[botId]);
 }
 
-/** Pick a voice for the provider this bot speaks with: in the bot's own
- * choice when it has one, else the person's (xAI's in `voice`). */
+/** Pick a voice for the provider this bot speaks with. With a bot it is
+ * that bot's own setting (the same `bots[id].voices` the phone and the call
+ * read), so no other bot changes; a bot that never chose one keeps hearing
+ * the person's voice until now (effectiveVoiceChoice), which is the
+ * migration. Without a bot it is the person's default (Settings > Voice). */
 export function writeVoiceForBot(botId: string | undefined, voice: string, store: Storage | null = storage(), resolvedProvider?: VoiceTtsProvider): VoiceModeSettings {
   const settings = readVoiceModeSettings(store);
   const choice = effectiveVoiceChoice(settings, botId);
   const provider: VoiceTtsProvider = resolvedProvider ?? spokenVoice(choice).provider;
-  const own = botId ? settings.bots?.[botId] : undefined;
-  if (botId && own) {
-    const voices = { ...own.voices, [provider]: voice || undefined };
+  if (botId) {
+    const own = settings.bots?.[botId];
+    const voices = { ...own?.voices, [provider]: voice || undefined };
     return writeVoiceModeSettings({ bots: { ...settings.bots, [botId]: { ...own, voices } } }, store);
   }
   if (provider === "xai") return writeVoiceModeSettings({ voice }, store);

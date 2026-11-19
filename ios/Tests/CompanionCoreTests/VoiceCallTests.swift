@@ -911,6 +911,8 @@ final class VoiceModeWireTests: XCTestCase {
         let picked = again.withVoice("marin", forBot: "b-2")
         XCTAssertEqual(picked.voice, "eve")
         XCTAssertEqual(picked.forBot("b-2").voice, "marin")
+        // a voice picked for one bot never changes another bot's
+        XCTAssertEqual(picked.forBot("b-3").voice, "cedar")
         XCTAssertEqual(picked.withVoice("other", forBot: "b-1").forBot("b-1").voice, "other")
         let body = CompanionClient.voiceFields(picked, botId: "b-1")
         XCTAssertEqual(body["tts"] as? String, "elevenlabs")

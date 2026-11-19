@@ -19213,7 +19213,13 @@
       "question.wizard.hint": "2a6a771d19dc5b38c3f6bdf14d76d3ccfb05e31ebf230cf338000807ba1a82f3",
       "connectApps.updates.autoUpdated": "99f5586733abbb36d24e8de5a04a9286d5d3525029bd8826bb6577f7ed39ad45",
       "connectApps.updates.autoUpdatedFromTo": "690559efb2fc831fbf9e7cad02c3147cea680a1acf2309ae98298540aec0bac0",
-      "connectApps.updates.routinesFollow": "8275b87bfa4166f32219f46ab6c42688ef7ab7a3d3674cde56116204508cd2d7"
+      "connectApps.updates.routinesFollow": "8275b87bfa4166f32219f46ab6c42688ef7ab7a3d3674cde56116204508cd2d7",
+      "step.mcpProblem.signIn": "083b79d858de6af0501cef735e193bfe9a187040ef70840166fec4a884bbcd17",
+      "step.mcpProblem.refused": "492dd92665413981c186a3ceaaa0f1701d0eff3daab29017bbdefc8ec5712314",
+      "step.mcpProblem.notFound": "428c95075734049c2fd10ec8ca341130c1ffcbf999fed512972c0c0ba2fcc03b",
+      "step.mcpProblem.timeout": "9d198f6fcea31ec60c448cd34089ec9e1e66313bae52d609dc38f11618a08144",
+      "step.mcpProblem.cantConnect": "563ba5e638ae0f640959d8f014d95900e2c4094b32d10a24a4a7a84743d17c6b",
+      "step.mcpProblem.fix": "c39abbb98f5615c95bcf3336932879a7f18b5c9019dcd6476c859fc5fcfbf5c7"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

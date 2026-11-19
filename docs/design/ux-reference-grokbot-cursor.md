@@ -3427,8 +3427,9 @@ composer chip, bot Model row, wizard, team settings), 360px wide
 - One segmented control: `SegmentedChoice` (`src/components/SegmentedChoice.tsx`),
   the reference's small one (24px, a 6% grey track, round, the chosen
   segment a shade lighter), as a radio group; `PageSegment`'s compact look
-  takes the same constants and the models window's effort
-  (`EffortSegments`) is the same control.
+  takes the same constants; the models window's "Optimize for" and its
+  effort (`EffortSegments`) are the same control, so one window never shows
+  two looks of it.
 
 Captures: `node scripts/capture/model-menu.mjs --scenes` (the owner's menu
 followed and on Auto, a chosen model with no account or pill, a long name,

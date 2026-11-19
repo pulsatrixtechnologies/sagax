@@ -3,7 +3,8 @@
 // chosen segment a shade lighter), written once. PageSegment's compact look
 // (src/components/content-page.tsx) takes these constants; SegmentedChoice is
 // the same control as a radio group, for a menu or a settings row: the
-// model menu's Optimize for and Reasoning, the models window's effort.
+// model menu's Optimize for and Reasoning, the models window's Optimize for
+// and effort.
 // M-20261119-051: past four choices it splits into balanced lines (seven
 // reasoning levels read 4 and 3), so every choice stays whole at the menu's
 // width in every language, never cut at the edge.

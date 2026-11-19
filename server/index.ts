@@ -179,7 +179,8 @@ import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt, dropCommandReceipt, dropCommandReceiptsWhere, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
-import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
+import { AskKeyIndex, closedAskCard, openCardsNote, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
+import { openAskCard, raiseClaimedAsks, type OpenAskCard } from "./routines/claimed-card-raise.ts";
 import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
 import { serverCardKind } from "../shared/fix-card-keys.ts";
 import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
@@ -813,7 +814,7 @@ import { routineRunPostsResult } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
 import { runTaskModel } from "./routines/run-task-model.ts";
-import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoices, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
+import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
 import {
@@ -17183,6 +17184,32 @@ function askKeyScope(owning: { id: string; ownerUserId?: unknown }, threadId: st
   };
 }
 
+/** #5025: the open cards of `owning` for the person a routine
+ * run's claim in `threadId` would draw for (claimed-card-raise.ts
+ * claimedAskOpen): those of the run's conversation and of its routine's
+ * earlier runs, its keyed cards anywhere in the person's scope, and its
+ * conversation with that person. Another person's cards are never read. */
+function openCardsForClaim(owning: BotRecord, threadId: string, earlierThreads: readonly string[]): OpenAskCard[] {
+  const inScope = askKeyScope(owning, threadId, threadId);
+  const own = (message: Message) => !message.from || message.from.botId === owning.id;
+  const near = new Set([threadId, ...earlierThreads].filter(inScope));
+  const cards: OpenAskCard[] = [];
+  const read = (cardThreadId: string, isNear: boolean) => {
+    for (const message of store.messagesFor(cardThreadId)) {
+      if (openAskCard(message) && own(message)) cards.push({ question: message.card!.subtitle ?? "", at: message.at, ...(isNear ? { near: true } : {}) });
+    }
+  };
+  for (const cardThreadId of near) read(cardThreadId, true);
+  const run = routines?.runForThread(threadId);
+  const conversation = conversationThreadFor(owning, privateThreads() && run?.runAs ? run.runAs : undefined);
+  if (conversation && !near.has(conversation) && inScope(conversation)) read(conversation, false);
+  for (const row of askKeyIndex.pendingRows()) {
+    if (near.has(row.threadId) || row.threadId === conversation || !inScope(row.threadId) || !own(row.message)) continue;
+    cards.push({ question: row.message.card?.subtitle ?? "", at: row.message.at });
+  }
+  return cards;
+}
+
 /** #4205: the ask_choice keys of `owning` from `threadId` (chat-widgets.ts
  * createAgentCard askKeys), through the one key index. */
 function askKeysFor(owning: { id: string; ownerUserId?: unknown }, threadId: string, cardThread: string) {
@@ -21218,17 +21245,19 @@ routines = new RoutineManager({
     // #4233: a repeating routine's run raises them holding nothing, each
     // keyed by its text: the same ask in the next run replaces its pending
     // card in place (#4205 keys), never a second card nor a second ring
-    const owning = card ? store.botByThread(threadId) : undefined;
-    const keys = owning ? askKeysFor(owning, threadId, threadId) : null;
-    const raised = routineClaimedCardChoices(redactSecretsInText(claim)).filter((choice) => keys
-      ? raiseTextKeyedAsk(threadId, choice, {
+    // #5025: an ask an open card of the bot for the person already
+    // carries (same ask, same ticket, this trigger's earlier run) draws nothing
+    const owning = store.botByThread(threadId);
+    const keys = owning && card?.noHold ? askKeysFor(owning, threadId, threadId) : null;
+    return raiseClaimedAsks(threadId, redactSecretsInText(claim), card, {
+      open: () => (owning ? openCardsForClaim(owning, threadId, card?.earlierThreads ?? []) : []),
+      keys: keys && {
         find: (key) => keys.find(key, () => true),
         remember: keys.remember,
         patch: (cardThreadId, messageId, next) => Boolean(store.patchMessage(cardThreadId, messageId, { card: next })),
-        raise: (keyed) => raiseHarnessQuestion(threadId, keyed, "output"),
-      })
-      : raiseHarnessQuestion(threadId, choice, "output"));
-    return raised.length ? routineClaimedCardWaiting(raised) : null;
+      },
+      raise: (choice) => raiseHarnessQuestion(threadId, choice, "output"),
+    });
   },
   hasPendingDelegations: (threadId) => coordinator.awaitsTeammates(threadId) ||
     [...delegationWatch.values()].some((watch) => watch.sourceThreadId === threadId) ||

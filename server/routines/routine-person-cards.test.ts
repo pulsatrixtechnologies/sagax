@@ -129,14 +129,14 @@ describe("a routine run's question card reaches its person", () => {
       h.event(run.threadId!, { type: "item.started", itemType: "tool", itemId: id, title: "cw_psa_query" });
       h.event(run.threadId!, { type: "item.completed", itemType: "tool", itemId: id, ok: false, output: "500 server error" });
     }
-    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "À 40 %. J'ai affiché une carte pour continuer.\nGOAL_STATUS: in_progress: 40%" });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "À 40 %. J'ai affiché une carte pour continuer : je continue ?\nGOAL_STATUS: in_progress: 40%" });
     h.event(run.threadId!, { type: "turn.completed", ok: true });
     expect(h.manager.listRuns()[0]!.status).toBe("waiting");
     expect(h.manager.listRoutines()[0]!.goal?.checks ?? 0).toBe(0);
     // the card and the waiting run never show the goal's control lines
-    expect(claims).toEqual(["À 40 %. J'ai affiché une carte pour continuer."]);
-    expect(routineClaimedCardChoice(claims[0]!).question).toBe("À 40 %. J'ai affiché une carte pour continuer.");
-    expect(h.manager.listRuns()[0]!.output).toBe("À 40 %. J'ai affiché une carte pour continuer.");
+    expect(claims).toEqual(["À 40 %. J'ai affiché une carte pour continuer : je continue ?"]);
+    expect(routineClaimedCardChoice(claims[0]!)?.question).toBe("À 40 %. J'ai affiché une carte pour continuer : je continue ?");
+    expect(h.manager.listRuns()[0]!.output).toBe("À 40 %. J'ai affiché une carte pour continuer : je continue ?");
     h.event(run.threadId!, { type: "turn.started" });
     h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Fait, 50 %.\nGOAL_STATUS: in_progress: 50%" });
     h.event(run.threadId!, { type: "turn.completed", ok: true });
@@ -162,7 +162,7 @@ describe("a routine run's question card reaches its person", () => {
     h.event(run.threadId!, { type: "turn.completed", ok: true });
     expect(cards).toHaveLength(1);
     h.event(run.threadId!, { type: "turn.started" });
-    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend." });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend : envoyer ou annuler ?" });
     h.event(run.threadId!, { type: "turn.completed", ok: true });
     expect(cards).toHaveLength(2);
     expect(h.manager.listRuns()[0]!.status).toBe("waiting");
@@ -192,7 +192,7 @@ describe("a routine run's question card reaches its person", () => {
     const event = (rest: Record<string, unknown>) => restarted.handleRuntimeEvent({ eventId: `r-${at++}`, provider: "fake", threadId: run.threadId!, createdAt: new Date(at).toISOString(), ...rest } as never);
     open = false;
     event({ type: "turn.started" });
-    event({ type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend." });
+    event({ type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend : envoyer ou annuler ?" });
     event({ type: "turn.completed", ok: true });
     expect(cards).toHaveLength(2);
     expect(restarted.listRuns()[0]!.status).toBe("waiting");
@@ -200,32 +200,36 @@ describe("a routine run's question card reaches its person", () => {
 
   // #2939: a summary list of what the bot did is never the card's choices.
   it("never offers a summary list as the card's choices", () => {
-    const summary = "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.";
+    const summary = "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi. Je l'envoie ?";
     expect(routineClaimedCardChoice(summary)).toEqual({
       title: "Your bot has a question",
       // #4205: the question keeps its lines (the card draws them)
-      question: "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.",
+      question: "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi. Je l'envoie ?",
       options: ["Continuer", "Arrêter ici"],
     });
     // the choices offered after the account still win
-    expect(routineClaimedCardChoice("Fait :\n- Billet 1 fermé\n- Billet 2 fermé\nLa carte est affichée, lequel j'envoie?\n1. Rapport A\n2. Rapport B").options).toEqual(["Rapport A", "Rapport B"]);
+    expect(routineClaimedCardChoice("Fait :\n- Billet 1 fermé\n- Billet 2 fermé\nLa carte est affichée, lequel j'envoie?\n1. Rapport A\n2. Rapport B")?.options).toEqual(["Rapport A", "Rapport B"]);
     // a line that introduces the card opens its options
-    expect(routineClaimedCardChoice("Voici la carte de confirmation :\n- Envoyer\n- Annuler").options).toEqual(["Envoyer", "Annuler"]);
-    expect(routineClaimedCardChoice("Here is the card:\n- Send\n- Cancel").options).toEqual(["Send", "Cancel"]);
+    expect(routineClaimedCardChoice("Voici la carte de confirmation :\n- Envoyer\n- Annuler")?.options).toEqual(["Envoyer", "Annuler"]);
+    expect(routineClaimedCardChoice("Here is the card:\n- Send\n- Cancel")?.options).toEqual(["Send", "Cancel"]);
   });
 
   it("words the drawn card with the bot's own choices, else go on or stop in its language", () => {
     expect(routineClaimedCardChoice("Voici la carte, choisis :\n1. Lot A\n2. **Lot B**")).toEqual({
       title: "Your bot has a question", question: "Voici la carte, choisis :", options: ["Lot A", "Lot B"],
     });
-    expect(routineClaimedCardChoice("La carte est affichée.").options).toEqual(["Continuer", "Arrêter ici"]);
-    expect(routineClaimedCardChoice("The approval card is waiting for you.")).toMatchObject({ question: "The approval card is waiting for you.", options: ["Continue", "Stop here"] });
+    // #5025: go on or stop only for words that do ask something;
+    // words that ask nothing draw no card at all
+    expect(routineClaimedCardChoice("La carte est affichée. On continue ?")?.options).toEqual(["Continuer", "Arrêter ici"]);
+    expect(routineClaimedCardChoice("The approval card is waiting for you. Shall I go on?")).toMatchObject({ question: "The approval card is waiting for you. Shall I go on?", options: ["Continue", "Stop here"] });
+    expect(routineClaimedCardChoice("La carte est affichée.")).toBeNull();
+    expect(routineClaimedCardChoice("The approval card is waiting for you.")).toBeNull();
   });
 
   it("fails clearly, never Completed, when the bot says it showed a card and none could be drawn", async () => {
     const h = harness({ awaitsPerson: () => null, cardRaisedSince: () => false });
     const run = await startedRun(h);
-    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée. Rien n'est écrit tant que tu n'as pas choisi." });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée : approuver ou refuser ? Rien n'est écrit tant que tu n'as pas choisi." });
     h.event(run.threadId!, { type: "turn.completed", ok: true });
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: ROUTINE_CARD_CLAIM_WITHOUT_CARD });
     expect(h.failed).toHaveLength(1);

@@ -70,19 +70,20 @@ describe("a routine's question card carries the whole question (#4205, point 1)"
     const paragraph = "Le billet attend une décision sur le temps saisi pendant ces trois jours de migration. ";
     const long = paragraph.repeat(Math.ceil(3000 / paragraph.length)).trim();
     expect(long.length).toBeGreaterThanOrEqual(3000);
-    const claim = `${long}\n\nLa carte est affichée.`;
+    // #5025: a claimed card carries a real question
+    const claim = `${long}\n\nLa carte est affichée. On continue ?`;
     const choice = routineClaimedCardChoice(claim);
-    expect(choice.question).toBe(claim);
-    expect(choice.question).not.toContain("…");
+    expect(choice?.question).toBe(claim);
+    expect(choice?.question).not.toContain("…");
   });
 
   it("keeps the question's lines, so the card reads it as written", () => {
-    expect(routineClaimedCardChoice("Résumé :\n- Billet 1\n- Billet 2\n\n\n\nLa carte est affichée.").question)
-      .toBe("Résumé :\n- Billet 1\n- Billet 2\n\nLa carte est affichée.");
+    expect(routineClaimedCardChoice("Résumé :\n- Billet 1\n- Billet 2\n\n\n\nLa carte est affichée. On envoie ?")?.question)
+      .toBe("Résumé :\n- Billet 1\n- Billet 2\n\nLa carte est affichée. On envoie ?");
   });
 
   it("offers the choices one ask names in words, not a generic go on or stop", () => {
-    expect(routineClaimedCardChoice("Un rapport pareil roule déjà. La carte est affichée : continuer ou arrêter ?").options).toEqual(["Continuer", "Arrêter"]);
+    expect(routineClaimedCardChoice("Un rapport pareil roule déjà. La carte est affichée : continuer ou arrêter ?")?.options).toEqual(["Continuer", "Arrêter"]);
   });
 });
 
@@ -111,7 +112,9 @@ describe("one card per item a routine asks about (#4205, point 2)", () => {
     expect(cards).toHaveLength(9);
     expect(cards.every((card) => card.title === "Your bot has a question" && card.options.join() === CHOICES.join())).toBe(true);
     expect(routineClaimedCardWaiting(cards)).toMatch(/^Waiting for your answers to 9 questions: 1\. Billet #1000/);
-    expect(routineClaimedCardChoices("La carte est affichée.")).toEqual([routineClaimedCardChoice("La carte est affichée.")]);
+    expect(routineClaimedCardChoices("La carte est affichée. On continue ?")).toEqual([routineClaimedCardChoice("La carte est affichée. On continue ?")]);
+    // #5025: words that ask nothing draw no card
+    expect(routineClaimedCardChoices("La carte est affichée.")).toEqual([]);
   });
 
   it("never reads a summary or a yes-no question as choices", () => {
@@ -239,7 +242,7 @@ describe("one card per item a routine asks about (#4205, point 2)", () => {
       awaitsPerson: () => null,
       cardRaisedSince: () => false,
       raiseClaimedCard: (threadId, claim, card) => {
-        expect(card).toEqual({ noHold: true });
+        expect(card).toMatchObject({ noHold: true });
         const raised = routineClaimedCardChoices(claim).filter((choice) => raiseTextKeyedAsk(threadId, choice, {
           find: (key) => index.find(key, () => true),
           remember: (key, cardThreadId, messageId) => index.remember(key, cardThreadId, messageId),
@@ -294,7 +297,7 @@ describe("one card per item a routine asks about (#4205, point 2)", () => {
       awaitsPerson: () => null,
       cardRaisedSince: (threadId, since) => rowsOf(threadId).some((row) => row.kind === "options" && row.at >= since && Boolean(row.card)),
       raiseClaimedCard: (threadId, claim, card) => {
-        expect(card).toEqual({ noHold: true });
+        expect(card).toMatchObject({ noHold: true });
         const raised = routineClaimedCardChoices(claim).filter((choice) => raiseTextKeyedAsk(threadId, choice, {
           find: (key) => index.find(key, () => true),
           remember: (key, cardThreadId, messageId) => index.remember(key, cardThreadId, messageId),

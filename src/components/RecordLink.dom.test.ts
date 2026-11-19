@@ -12,7 +12,8 @@ import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
 import { openExternalLink } from "@/lib/app-links";
 import * as drafts from "@/lib/drafts";
-import { HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
+import { HOVER_EXIT_MS, HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
+import { RECORD_CARD_HEIGHT_KEY, RECORD_CARD_WIDTH_KEY, recordCardTop } from "@/lib/record-card-size";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 vi.mock("@/lib/app-links", async (original) => ({ ...(await original<typeof import("@/lib/app-links")>()), openExternalLink: vi.fn(async () => {}) }));
@@ -177,8 +178,10 @@ describe("the card", () => {
     expect(chip.getAttribute("aria-expanded")).toBe("true");
     // focus went to the first action
     expect(document.activeElement?.hasAttribute("data-hover-card-first")).toBe(true);
-    // Tab from the last control wraps to the first
-    const items = [...card()!.querySelectorAll<HTMLElement>("button")];
+    // Tab from the last control (the card's resize edge, #5053) wraps to the first
+    const items = [...card()!.querySelectorAll<HTMLElement>('button, [tabindex="0"]')].filter((item) => item.tabIndex >= 0);
+    expect(items.at(-1)!.getAttribute("role")).toBe("separator");
+    expect(items[0]!.tagName).toBe("BUTTON");
     items.at(-1)!.focus();
     act(() => { card()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })); });
     expect(card()!.contains(document.activeElement)).toBe(true);
@@ -286,6 +289,112 @@ describe("the card", () => {
       spy.mockRestore();
       offset.mockRestore();
     }
+  });
+
+  describe("the opened card's place and size (#5053)", () => {
+    const shell = () => card()!.querySelector<HTMLElement>("[data-record-card-body]")!;
+    let stored: Map<string, string>;
+    let restoreView: Array<() => void> = [];
+    beforeEach(() => {
+      stored = new Map();
+      vi.stubGlobal("localStorage", {
+        getItem: (name: string) => stored.get(name) ?? null,
+        setItem: (name: string, value: string) => { stored.set(name, value); },
+        removeItem: (name: string) => { stored.delete(name); },
+      });
+      // a laptop's window: 1440 by 900
+      for (const [name, value] of [["innerWidth", 1440], ["innerHeight", 900]] as const) {
+        const before = Object.getOwnPropertyDescriptor(window, name);
+        Object.defineProperty(window, name, { configurable: true, value });
+        restoreView.push(() => (before ? Object.defineProperty(window, name, before) : delete (window as unknown as Record<string, unknown>)[name]));
+      }
+    });
+    afterEach(() => {
+      restoreView.forEach((undo) => undo());
+      restoreView = [];
+    });
+
+    it("sits in the window, centred with its top held, wherever its chip is, and is given the room under it", async () => {
+      const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-record-card") ? 800 : 0; });
+      try {
+        await render(`[#481516](${LINK})`);
+        await act(async () => { chips()[0]!.click(); });
+        await advance(50);
+        const box = card()!;
+        const top = recordCardTop({ width: window.innerWidth, height: window.innerHeight });
+        expect(box.style.left).toBe(`${Math.round((window.innerWidth - 800) / 2)}px`);
+        expect(box.style.top).toBe(`${top}px`);
+        expect(box.style.getPropertyValue("--hover-card-room")).toBe(`${window.innerHeight - top - 16}px`);
+        expect(box.style.visibility).toBe("visible");
+        // a scroll of the conversation moves nothing: the card is the window's, not its chip's
+        const spot = [box.style.left, box.style.top];
+        act(() => { window.dispatchEvent(new Event("scroll")); });
+        expect([box.style.left, box.style.top]).toEqual(spot);
+        expect(card()).not.toBeNull();
+      } finally {
+        width.mockRestore();
+      }
+    });
+
+    it("opens at the default size, and again at the size the person left it, for another record too", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (input: string) => String(input).includes("/company/") ? json(answer(companyCard(Date.now(), "fr"))) : reply()));
+      await render(`[#481516](${LINK}) et [Acme Fabrication](sagax://record/nimbus_desk/company/7310)`);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1000px");
+      // the person pulls the right edge 50 px out
+      const edge = card()!.querySelector<HTMLElement>(".app-resize-handle[aria-orientation=vertical]:not([aria-hidden])")!;
+      fire(edge, "pointerdown", { pointerId: 1, clientX: 900, clientY: 300 });
+      fire(edge, "pointermove", { pointerId: 1, clientX: 950, clientY: 300 });
+      fire(edge, "pointerup", { pointerId: 1, clientX: 950, clientY: 300 });
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1100px");
+      expect(stored.get(RECORD_CARD_WIDTH_KEY)).toBe("1100");
+      expect(stored.has(RECORD_CARD_HEIGHT_KEY)).toBe(false);
+      // pulling a handle is not a click outside: the card is still open
+      expect(card()?.getAttribute("role")).toBe("dialog");
+      act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+      await advance(200);
+      expect(card()).toBeNull();
+      // the same chip again, then another record: both at the kept width
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1100px");
+      await act(async () => { chips()[1]!.click(); });
+      await advance(50);
+      expect(card()!.textContent).toContain("Entreprise");
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1100px");
+    });
+
+    it("keeps its size from one record to the next inside the card, and on the way back", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (input: string) => String(input).includes("/company/") ? json(answer(companyCard(Date.now(), "fr"))) : reply()));
+      stored.set(RECORD_CARD_WIDTH_KEY, "1240");
+      await render(`[#481516](${LINK})`);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1240px");
+      await act(async () => { card()!.querySelector<HTMLElement>("[data-record-company-link]")!.click(); });
+      await advance(50);
+      expect(card()!.textContent).toContain("Entreprise");
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1240px");
+      await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+      await advance(50);
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1240px");
+    });
+
+    it("stays the opened card while it fades out, never the tooltip's layout", async () => {
+      delete document.documentElement.dataset.reducedMotion;
+      await render(`[#481516](${LINK})`);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+      await advance(HOVER_EXIT_MS - 40);
+      // still drawn for its exit, at its size
+      expect(card()).not.toBeNull();
+      expect(shell().style.getPropertyValue("--record-card-w")).toBe("1000px");
+      expect(shell().className).not.toContain("40rem");
+      await advance(200);
+      expect(card()).toBeNull();
+    });
   });
 
   it("draws the chip of any kind the product declares with the product's mark, and reads its card at once, no button", async () => {

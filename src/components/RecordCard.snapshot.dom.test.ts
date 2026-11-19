@@ -2,7 +2,10 @@
 // The three kinds the card drew before it learned to draw any kind (a ticket,
 // a company, a project): their DOM is pinned here, taken on the code of
 // #4532 before the generic renderer (#4572), so the generic renderer is proved
-// to draw them exactly as they were.
+// to draw them exactly as they were. The hovered ones still are that DOM, to
+// the byte. The opened ones were taken again with #5053, which redrew the
+// opened card (a window over the chat: larger, resizable, a label on every
+// fact) and left the hovered tooltip alone.
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

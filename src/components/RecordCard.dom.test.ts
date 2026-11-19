@@ -307,16 +307,20 @@ describe("RecordCard without a layout engine's help", () => {
     expect(pinned.querySelector("[data-fit-more]")).toBeNull();
   });
 
-  it("keeps its notes behind one 'Notes (7)' row when it is not wider than tall, and opens them in place when pinned", () => {
+  it("hovered, keeps its notes behind one 'Notes (7)' row when it is not wider than tall; opened, shows them under that row, which folds them", () => {
     define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
     const card = show({ raw: ticketCard(NOW, "fr") });
     expect(card.querySelectorAll("[data-record-note]")).toHaveLength(0);
     expect(card.textContent).toContain("Notes (7)");
     expect(card.querySelector("[data-record-notes] button")).toBeNull();
+    // the opened card has the room and one scroll (#5053): nothing of it is folded until the person folds it
     const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
     const row = pinned.querySelector<HTMLButtonElement>("[data-record-notes] button")!;
-    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(3);
     act(() => { row.click(); });
+    expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(0);
+    act(() => { pinned.querySelector<HTMLButtonElement>("[data-record-notes] button")!.click(); });
     expect(pinned.querySelectorAll("[data-record-note]")).toHaveLength(3);
     // the identity rows and the description come first
     expect(pinned.textContent!.indexOf("Acme Fabrication")).toBeLessThan(pinned.textContent!.indexOf("L'imprimante du comptoir"));

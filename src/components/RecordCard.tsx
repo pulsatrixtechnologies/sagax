@@ -8,6 +8,17 @@
 // panes stack; a record with no description and no notes keeps the left pane
 // only, about 22 rem wide.
 //
+// Opened by its chip (pinned), the card is a window over the chat (#5053):
+// 1000 px wide and 80% of the window's height by default, bounded by the
+// window, the chat's own text size, a label on every fact, and one scroll for
+// its whole body, so no row is ever cut. Left, the facts; right, what the
+// record says: its text, then its tabs, which take the height left. Its edges
+// and bottom corners resize it with the app's one resize handle
+// (DockedPanelResize.tsx) and the size is kept on the device for every record
+// (src/lib/record-card-size.ts). A card with tabs takes the whole height; any
+// other card is as tall as its content, up to that height. Hovered, it stays
+// the tooltip above.
+//
 // Every word of a card is the console's data: this file names no product and
 // no kind, branches on neither, and reads only the tones, the levels, the two
 // roles `contact` and `owner` (for their icons), the date keys and the nine
@@ -22,7 +33,7 @@
 // Parts of the skeleton pulse and the notes rail are adapted from Arc,
 // Copyright (c) 2026 Elia Kuratli, used under the MIT License
 // (third_party/arc-library/LICENSE).
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Globe, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
@@ -31,7 +42,9 @@ import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
 import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
+import { RECORD_CARD_WIDTH, recordCardHeightBounds, recordCardRoom, recordCardStyle, windowView } from "@/lib/record-card-size";
 import type { UseRecordCard } from "@/lib/record-cards";
+import { ResizeHandle, useDockedPanelWidth, type DockedPanelSize } from "./DockedPanelResize";
 import { RecordFieldSelect, type RecordFieldEdit } from "./RecordFieldSelect";
 import { TicketSchedule } from "./TicketRecordSections";
 import { RecordRelatedTabs, type RecordRelatedTabsProps } from "./RecordRelatedTabs";
@@ -47,6 +60,8 @@ const SHORT_TEXT_MAX = 90;
 
 /** The width below which the panes stack (the available width, in rem). */
 export const RECORD_CARD_STACK_REM = 34;
+/** The opened card's (#5053): its facts keep 22rem beside what the record says. */
+export const RECORD_CARD_OPEN_STACK_REM = 50;
 
 export interface RecordCardProduct {
   name: string;
@@ -62,6 +77,7 @@ export interface RecordCardProps {
   kindName?: string;
   product?: RecordCardProduct;
   read: Pick<UseRecordCard, "card" | "miss" | "loading" | "at" | "refresh">;
+  /** the record's related tabs and schedule: the opened card's only (a hovered card holds no control) */
   related?: RecordRelatedTabsProps;
   edits?: Readonly<Record<string, RecordFieldEdit>>;
   pinned?: boolean;
@@ -83,6 +99,12 @@ export interface RecordCardProps {
 }
 
 const MARK = "size-4 shrink-0 rounded-[4px]";
+const MARK_ROOMY = "size-5 shrink-0 rounded-[5px]";
+
+/** The opened card (pinned) is a window over the chat (#5053): the chat's text
+ * size (15px on 22px), 13px labels, air between rows and blocks. Hovered, the
+ * card keeps the compact tooltip it was. Every part reads this. */
+const RoomyContext = createContext(false);
 
 /** The product's mark: the card's own icon when it came with one, else the
  * product list's, else a neutral tile with the product's first letter. */
@@ -96,6 +118,16 @@ const BUTTON = cn(BUTTON_BASE, "text-popover-ink");
 // the primary action wears the popover's accent, in both themes
 const BUTTON_PRIMARY = cn(BUTTON_BASE, "text-popover-accent");
 const ICON_BUTTON = "inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-popover-ink-secondary hover:bg-popover-hover hover:text-popover-ink focus-visible:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+// the opened card's actions: 32px controls, 14px words
+const ROOMY_BUTTON = "h-8 gap-2 px-2.5 text-[14px]";
+const ROOMY_ICON_BUTTON = "size-8";
+// a field's picker in the opened card's body: the value at the body's size, a soft hover. A 28px control on
+// the row's 22px line (-3px above and under), moved 8px back by its place and never by a margin across: a
+// negative margin there would narrow the box that caps the picker and cut its words
+// (a long value goes on a second line: nothing of the opened card ends on an ellipsis)
+const ROOMY_FIELD_UNSET = "relative -start-2 -my-[3px] inline-flex min-h-7 min-w-0 max-w-full items-center gap-1 rounded-lg px-2 py-[3px] text-start text-[15px] leading-[22px] text-popover-ink hover:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-expanded:bg-popover-hover disabled:opacity-50 [&>span]:whitespace-normal [&>span]:break-words";
+// a value the record has reads in the ink (the picker greys what is not one of its loaded choices)
+const ROOMY_FIELD_SELECT = `${ROOMY_FIELD_UNSET} [&>span]:text-popover-ink`;
 
 /** Hovered, the card is a tooltip: it holds no control in the tab order until
  * it is pinned (a dialog). Every button reads this. */
@@ -110,8 +142,9 @@ const SeeAllContext = createContext<{ url?: string; product?: string }>({});
 function MoreLine({ fitKey, text, className }: { fitKey: string; text: string; className?: string }) {
   const { url, product } = useContext(SeeAllContext);
   const tab = useContext(TabContext);
+  const roomy = useContext(RoomyContext);
   return (
-    <p data-fit-row={fitKey} className={cn("flex items-baseline gap-1.5 text-[12px] leading-4 text-popover-ink-secondary", className)}>
+    <p data-fit-row={fitKey} className={cn("flex items-baseline gap-1.5 text-[12px] leading-4 text-popover-ink-secondary", roomy && "text-[13px] leading-[18px]", className)}>
       <span>{text}</span>
       {url && (
         <button
@@ -168,7 +201,8 @@ const LEVEL_GLYPH: Record<RecordLevel, string> = {
 };
 
 function Chip({ className, children, title, role, label }: { className: string; children: ReactNode; title?: string; role?: "img"; label?: string }) {
-  return <span title={title} role={role} aria-label={label} className={cn("inline-flex h-5 min-w-0 max-w-full items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", className)}>{children}</span>;
+  const roomy = useContext(RoomyContext);
+  return <span title={title} role={role} aria-label={label} className={cn("inline-flex h-5 min-w-0 max-w-full items-center gap-1 rounded-full px-2 text-[12px] leading-4 text-popover-ink", roomy && "h-6 gap-1.5 px-2.5 text-[13px] leading-[18px]", className)}>{children}</span>;
 }
 
 function Bar({ className }: { className: string }) {
@@ -187,14 +221,22 @@ const MORE_ROOM = 16 + 8;
  * not fit (`data-fit-row`, a row being one or two elements sharing a key) are
  * left out, and a quiet "N more" at the pane's foot says how many and of what.
  * The pass runs when the pane's size or its content changes, never on a render.
+ * `still` is a pane of the opened card (#5053): it keeps its whole height and
+ * hides nothing, the card's one scroller around it scrolls.
  */
-function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM, children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; moreRoom?: number; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
+function Pane({ pinned, fit = false, still = false, className, moreClass, moreRoom = MORE_ROOM, children, ...data }: { pinned: boolean; fit?: boolean; still?: boolean; className?: string; moreClass?: string; moreRoom?: number; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ above: false, below: false });
   const [left, setLeft] = useState<{ count: number; kind: MoreKind } | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (still) {
+      for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
+      setLeft(null);
+      setEdges((current) => (current.above || current.below ? { above: false, below: false } : current));
+      return;
+    }
     const measureScroll = () => {
       const above = pinned && el.scrollTop > 2;
       const below = pinned && el.scrollHeight - el.scrollTop - el.clientHeight > 2;
@@ -248,7 +290,7 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       mutations?.disconnect();
       el.removeEventListener("scroll", measureScroll);
     };
-  }, [fit, pinned, moreRoom]);
+  }, [fit, pinned, still, moreRoom]);
   const label = left ? t(`recordCard.more.${left.kind}${left.count === 1 ? "One" : "Many"}` as Parameters<typeof t>[0], { count: left.count }) : "";
   return (
     <div
@@ -257,7 +299,7 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       data-more-above={edges.above ? "" : undefined}
       data-more-below={edges.below ? "" : undefined}
       tabIndex={pinned && (edges.above || edges.below) ? 0 : undefined}
-      className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
+      className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", still ? "" : pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
       {left && <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
@@ -287,19 +329,33 @@ function useStacked(ref: RefObject<HTMLElement | null>, below = RECORD_CARD_STAC
 /** A person: the small icon, the name (a chip that opens their record when they
  * are one the person may open), a quiet detail. One drawing for the people
  * block and for a `person` field. */
-function PersonLine({ role, label, name, detail, personRef }: { role?: string; label?: string; name: string; detail?: string; personRef?: RecordRef }) {
+function PersonLine({ role, label, name, detail, personRef, labelled = false }: { role?: string; label?: string; name: string; detail?: string; personRef?: RecordRef; /** the label is written beside the row (the opened card): it is not said twice */ labelled?: boolean }) {
   const Icon = role === "owner" || role === "manager" ? UserCheck : UserRound;
   const open = useOpenRef(personRef);
   const edits = useContext(EditContext);
+  const roomy = useContext(RoomyContext);
   const edit = role ? edits?.[role] : undefined;
+  const who = edit ? <RecordFieldSelect edit={edit} current={name} label={label ?? name} triggerClass={roomy ? ROOMY_FIELD_SELECT : undefined} /> : personRef && open ? <RecordRefChip name={name} refTo={personRef} onOpen={open} /> : <span dir="auto" className={roomy ? "min-w-0 break-words" : "min-w-0 truncate"}>{name}</span>;
+  const opener = edit && personRef && open && <button type="button" onClick={() => open(personRef, name)} aria-label={t("recordCard.open")} className="text-popover-ink-secondary hover:text-popover-ink"><ArrowUpRight size={roomy ? 16 : 14} /></button>;
+  const more = detail && <span dir="ltr" className="shrink-0 whitespace-nowrap text-popover-ink-secondary [unicode-bidi:isolate]">{detail}</span>;
+  if (roomy) {
+    // the opened card: the icon on the first line, and the detail (a phone) goes under the name when the row is short of room
+    return (
+      <>
+        <span aria-hidden="true" className="flex h-[22px] shrink-0 items-center text-popover-ink-secondary"><Icon size={16} /></span>
+        {label && !labelled && <span className="sr-only">{label}: </span>}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2">{who}{opener}{more}</span>
+      </>
+    );
+  }
   return (
     <>
       <Icon size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-      {label && <span className="sr-only">{label}: </span>}
+      {label && !labelled && <span className="sr-only">{label}: </span>}
       {/* the name gives way, the number beside it does not */}
-      {edit ? <RecordFieldSelect edit={edit} current={name} label={label ?? name} /> : personRef && open ? <RecordRefChip name={name} refTo={personRef} onOpen={open} /> : <span dir="auto" className="min-w-0 truncate">{name}</span>}
-      {edit && personRef && open && <button type="button" onClick={() => open(personRef, name)} aria-label={t("recordCard.open")} className="text-popover-ink-secondary hover:text-popover-ink"><ArrowUpRight size={14} /></button>}
-      {detail && <span dir="ltr" className="shrink-0 whitespace-nowrap text-popover-ink-secondary [unicode-bidi:isolate]">{detail}</span>}
+      {who}
+      {opener}
+      {more}
     </>
   );
 }
@@ -319,6 +375,7 @@ function PersonRow({ person, fitKey }: { person: NonNullable<Card["people"]>[num
  * attribute is kept for the captures and the tests). */
 function RecordRefChip({ name, refTo, onOpen, slot }: { name: string; refTo: RecordRef; onOpen: (ref: RecordRef, label: string) => void; slot?: "company" }) {
   const tab = useContext(TabContext);
+  const roomy = useContext(RoomyContext);
   return (
     <button
       type="button"
@@ -326,10 +383,11 @@ function RecordRefChip({ name, refTo, onOpen, slot }: { name: string; refTo: Rec
       dir="auto"
       title={name}
       {...(slot === "company" ? { "data-record-company-link": true } : { "data-record-ref-link": true })}
-      className={cn(REF_PILL_CLASS, "-ms-1.5 min-w-0 max-w-full cursor-pointer items-center truncate font-sans text-[1em] no-underline")}
+      // the opened card: a long name goes on a second line inside its chip (the same pill on one line: 11px is half its 22px)
+      className={cn(REF_PILL_CLASS, roomy ? "-ms-1.5 min-w-0 max-w-full cursor-pointer items-center whitespace-normal rounded-[11px] text-start font-sans text-[1em] no-underline" : "-ms-1.5 min-w-0 max-w-full cursor-pointer items-center truncate font-sans text-[1em] no-underline")}
       onClick={() => onOpen(refTo, name)}
     >
-      <span className="truncate">{name}</span>
+      <span className={roomy ? "min-w-0 break-words" : "truncate"}>{name}</span>
     </button>
   );
 }
@@ -351,9 +409,10 @@ function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> })
 function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label: string; now: number; lang: string; tz: string | undefined }) {
   const open = useOpenRef(field.ref);
   const edits = useContext(EditContext);
+  const roomy = useContext(RoomyContext);
   const edit = field.editKey ? edits?.[field.editKey] : undefined;
   if (edit) return <span className="inline-flex min-w-0 items-center gap-1">
-    <RecordFieldSelect edit={edit} current={field.value} label={label} />
+    <RecordFieldSelect edit={edit} current={field.value} label={label} triggerClass={roomy ? ROOMY_FIELD_SELECT : undefined} />
     {open && field.ref && <button type="button" aria-label={t("recordCard.open")} onClick={() => open(field.ref!, field.value)}><ArrowUpRight size={14} /></button>}
   </span>;
   switch (field.type) {
@@ -367,7 +426,7 @@ function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label
     case "ago":
       return <time dateTime={field.at} title={formatFull(field.at!, lang, tz)}>{formatRelative(field.at!, now, lang, tz)}</time>;
     case "person":
-      return <span className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={field.role}><PersonLine role={field.role} name={field.value} detail={field.detail} personRef={field.ref} /></span>;
+      return <span className={cn("flex min-w-0 items-center gap-2 leading-[18px]", roomy && "items-start leading-[22px]")} data-record-person={field.role}><PersonLine role={field.role} name={field.value} detail={field.detail} personRef={field.ref} /></span>;
     case "ref":
       return open && field.ref ? <RecordRefChip name={field.value} refTo={field.ref} onOpen={open} /> : <span dir="auto">{field.value}</span>;
     case "state": {
@@ -390,11 +449,16 @@ function FieldValue({ field, label, now, lang, tz }: { field: RecordField; label
   }
 }
 
-/** The dates and key fields as one description list. */
-function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; chipRows?: NonNullable<Card["chips"]> }) {
+type FactRow = { label: string; value: ReactNode; gap?: boolean; key: string };
+
+/** The dates and key fields as one description list. In the opened card the
+ * company and the people lead it (`lead`), each under its label like any fact,
+ * and facts that have the card's whole width lay two a row from 40rem (`pairs`). */
+function Facts({ card, now, lang, part = "all", chipRows = [], lead = [], pairs = false }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; chipRows?: NonNullable<Card["chips"]>; lead?: FactRow[]; pairs?: boolean }) {
   const edits = useContext(EditContext);
+  const roomy = useContext(RoomyContext);
   const tz = card.tz;
-  const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
+  const rows: FactRow[] = [...lead];
   const dates = card.dates ?? {};
   const time = (iso: string, mode: "relative" | "absolute") => (
     <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang, tz) : formatAbsolute(iso, now, lang, tz)}</time>
@@ -431,10 +495,24 @@ function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; n
   ]);
   Object.entries(edits ?? {}).filter(([key]) => !placed.has(key)).forEach(([key, edit], index) => {
     const label = t(`recordCard.edit.${key}` as "recordCard.edit.board");
-    rows.push({ key: `edit-${key}`, label, value: <RecordFieldSelect edit={edit} current={t("recordCard.edit.notSet")} label={label} />, gap: dateCount > 0 && index === 0 && !(card.fields ?? []).length });
+    rows.push({ key: `edit-${key}`, label, value: <RecordFieldSelect edit={edit} current={t("recordCard.edit.notSet")} label={label} triggerClass={roomy ? ROOMY_FIELD_UNSET : undefined} />, gap: dateCount > 0 && index === 0 && !(card.fields ?? []).length });
   });
   const shown = part === "all" ? rows : part === "dates" ? rows.slice(0, dateCount) : rows.slice(dateCount).map((row) => ({ ...row, gap: false }));
   if (!shown.length) return null;
+  if (roomy) {
+    // every fact under a label that reads (13px in the secondary ink), its value at the chat's size, 10px between rows
+    return (
+      // (every first line is one 22px line, so a label and its value sit on the same line whatever the value is: words, a chip, a picker)
+      <dl className={cn("grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] items-start gap-x-4 gap-y-2.5 text-[15px] leading-[22px]", pairs && "@min-[40rem]:grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]")} data-record-facts>
+        {shown.map((row) => (
+          <div key={row.key} className="contents">
+            <dt data-fit-row={`f-${row.key}`} className="max-w-[12rem] break-words text-[13px] text-popover-ink-secondary">{row.label}</dt>
+            <dd data-fit-row={`f-${row.key}`} className="min-h-[22px] min-w-0 break-words">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return (
     <>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 text-[13px] leading-[18px]" data-record-facts>
@@ -451,10 +529,11 @@ function Facts({ card, now, lang, part = "all", chipRows = [] }: { card: Card; n
 
 function LineRow({ line }: { line: NonNullable<Card["lines"]>["items"][number] }) {
   const open = useOpenRef(line.ref);
+  const roomy = useContext(RoomyContext);
   return (
     <>
-      {line.ref && open ? <RecordRefChip name={line.label} refTo={line.ref} onOpen={open} /> : <span dir="auto" className="min-w-0 flex-1 truncate" title={line.label}>{line.label}</span>}
-      {line.detail && <span dir="auto" className="shrink-0 whitespace-nowrap text-[12px] text-popover-ink-secondary">{line.detail}</span>}
+      {line.ref && open ? <RecordRefChip name={line.label} refTo={line.ref} onOpen={open} /> : <span dir="auto" className={roomy ? "min-w-0 flex-1 break-words" : "min-w-0 flex-1 truncate"} title={line.label}>{line.label}</span>}
+      {line.detail && <span dir="auto" className={cn("shrink-0 whitespace-nowrap text-[12px] text-popover-ink-secondary", roomy && "text-[13px]")}>{line.detail}</span>}
       {line.value && <span dir="auto" className={cn("shrink-0 whitespace-nowrap text-end tabular-nums", !(line.ref && open) && "ms-auto")}>{line.value}</span>}
     </>
   );
@@ -465,25 +544,27 @@ function LineRow({ line }: { line: NonNullable<Card["lines"]>["items"][number] }
  * is a unit of the fit pass, like a field. */
 function Lines({ card, above, pinned, folded }: { card: Card; above: boolean; pinned: boolean; /** the card also has an activity: a hovered list keeps one line for it */ folded: boolean }) {
   const { lines } = card;
+  const roomy = useContext(RoomyContext);
   if (!lines) return null;
-  if (lines.state === "forbidden") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.forbidden")}</p>;
-  if (lines.state === "unavailable") return <p data-fit-row="l-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.lines.unavailable")}</p>;
+  const quiet = cn("text-[12px] leading-4 text-popover-ink-secondary", roomy && "text-[13px] leading-[18px]");
+  if (lines.state === "forbidden") return <p data-fit-row="l-state" className={quiet}>{t("recordCard.lines.forbidden")}</p>;
+  if (lines.state === "unavailable") return <p data-fit-row="l-state" className={quiet}>{t("recordCard.lines.unavailable")}</p>;
   // hovered, a list shows 3 lines (1 beside an activity), the rest behind "See all"; pinned, all it has
   const items = pinned ? lines.items : lines.items.slice(0, folded ? 1 : LIST_FOLD);
   const others = Math.max(0, (lines.total ?? lines.items.length) - items.length);
   if (!items.length && !others) return null;
   return (
-    <div className={cn("flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden", above && "border-t border-popover-hairline pt-2")} data-record-lines>
-      {lines.title && <p data-fit-row="l-title" className="pb-1 text-[12px] leading-4 text-popover-ink-secondary">{lines.title}</p>}
-      <ul className="flex flex-col">
+    <div className={cn("flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden", above && "border-t border-popover-hairline pt-2", above && roomy && "pt-4")} data-record-lines>
+      {lines.title && <p data-fit-row="l-title" className={cn("pb-1 text-[12px] leading-4 text-popover-ink-secondary", roomy && "pb-2 text-[13px] leading-[18px]")}>{lines.title}</p>}
+      <ul className={cn("flex flex-col", roomy && "gap-2")}>
         {items.map((line, index) => (
-          <li key={index} data-record-line data-fit-row={`l-${index}`} className="flex min-w-0 items-baseline gap-2 leading-[18px]">
+          <li key={index} data-record-line data-fit-row={`l-${index}`} className={cn("flex min-w-0 items-baseline gap-2 leading-[18px]", roomy && "gap-3 leading-[22px]")}>
             <LineRow line={line} />
           </li>
         ))}
       </ul>
       {others > 0 && (
-        <MoreLine fitKey="l-others" className="pt-1" text={others === 1 ? t("recordCard.lines.otherOne") : t("recordCard.lines.other", { count: others })} />
+        <MoreLine fitKey="l-others" className={roomy ? "pt-2" : "pt-1"} text={others === 1 ? t("recordCard.lines.otherOne") : t("recordCard.lines.other", { count: others })} />
       )}
     </div>
   );
@@ -491,23 +572,27 @@ function Lines({ card, above, pinned, folded }: { card: Card; above: boolean; pi
 
 function Notes({ card, now, lang, description, above, pinned, stacked }: { card: Card; now: number; lang: string; description?: string; /** something sits above the activity in its pane */ above: boolean; pinned: boolean; stacked: boolean }) {
   const { notes } = card;
-  const [open, setOpen] = useState(false);
   const tab = useContext(TabContext);
-  if (notes.state === "forbidden") return <p data-fit-row="n-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.forbidden")}</p>;
-  if (notes.state === "unavailable") return <p data-fit-row="n-state" className="text-[12px] leading-4 text-popover-ink-secondary">{t("recordCard.notes.unavailable")}</p>;
+  const roomy = useContext(RoomyContext);
+  // the opened card scrolls as one and has the room: its notes are open until the person folds them
+  const [chosen, setOpen] = useState<boolean | null>(null);
+  const open = chosen ?? roomy;
+  const quiet = cn("text-[12px] leading-4 text-popover-ink-secondary", roomy && "text-[13px] leading-[18px]");
+  if (notes.state === "forbidden") return <p data-fit-row="n-state" className={quiet}>{t("recordCard.notes.forbidden")}</p>;
+  if (notes.state === "unavailable") return <p data-fit-row="n-state" className={quiet}>{t("recordCard.notes.unavailable")}</p>;
   // a note that is the description's own text is shown once
   const items = notes.items.filter((item) => !description || !sameText(item.text, description));
   const others = notes.total !== undefined ? Math.max(0, notes.total - notes.items.length) : 0;
   if (!items.length && !others) return null;
   const count = notes.total ?? items.length;
-  // a card that is not wider than tall keeps its notes behind one row
+  // a hovered card that is not wider than tall keeps its notes behind one row
   const folded = stacked && !open;
   const title = notes.title ? `${notes.title} (${count})` : t("recordCard.notes.title", { count });
   return (
     <div className="flex shrink-0 flex-col [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden" data-record-notes>
       {stacked && (pinned ? (
-        <div data-fit-row="n-title" className={cn(above && "border-t border-popover-hairline pt-1")}>
-          <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen((value) => !value)}>
+        <div data-fit-row="n-title" className={cn(above && "border-t border-popover-hairline pt-1", above && roomy && "pt-3")}>
+          <button type="button" tabIndex={tab} aria-expanded={open} className={cn(BUTTON, roomy && ROOMY_BUTTON, "-ms-2 justify-start text-popover-ink-secondary")} onClick={() => setOpen(!open)}>
             <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 transition-transform rtl:-scale-x-100", open && "rotate-90 rtl:-rotate-90")} />
             <span>{title}</span>
           </button>
@@ -522,26 +607,26 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
         <>
           <ol className="flex flex-col">
             {items.map((item, index) => (
-              <li key={index} className={cn("relative flex gap-2.5 last:pb-0", pinned ? "pb-2.5" : "pb-1.5", index === 0 && above && !stacked && "border-t border-popover-hairline pt-2")} data-record-note data-fit-row={`n-${index}`}>
+              <li key={index} className={cn("relative flex gap-2.5 last:pb-0", pinned ? "pb-2.5" : "pb-1.5", roomy && "gap-3 pb-4", index === 0 && above && !stacked && "border-t border-popover-hairline pt-2", index === 0 && above && !stacked && roomy && "pt-4")} data-record-note data-fit-row={`n-${index}`}>
                 <span aria-hidden="true" className="relative flex w-1.5 shrink-0 justify-center">
                   <span className="mt-[7px] size-1.5 rounded-full bg-popover-ink-secondary" />
                   {(index < items.length - 1 || others > 0) && <span className="absolute inset-y-[15px] start-1/2 w-px -translate-x-1/2 bg-popover-hairline" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className={cn("flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-popover-ink-secondary", pinned ? "leading-5" : "leading-4")}>
+                  <div className={cn("flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-popover-ink-secondary", pinned ? "leading-5" : "leading-4", roomy && "gap-x-2 text-[13px]")}>
                     {item.author && <span dir="auto" className="min-w-0 truncate font-medium text-popover-ink">{item.author}</span>}
                     {item.at && <time dateTime={item.at} title={formatFull(item.at, lang, card.tz)}>{formatAbsolute(item.at, now, lang, card.tz)}</time>}
                     {item.tag && <span dir="auto" className="max-w-[8rem] truncate rounded bg-popover-field px-1 text-[11px] leading-4 text-popover-ink" data-record-note-tag>{item.tag}</span>}
                     {item.internal === true && <span className="inline-flex items-center gap-1" data-record-note-scope="internal"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
                     {item.internal === false && <span className="inline-flex items-center gap-1" data-record-note-scope="external"><Globe size={11} aria-hidden="true" />{t("recordCard.notes.external")}</span>}
                   </div>
-                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-[18px]", !pinned && (items.length > 2 ? "line-clamp-1" : "line-clamp-2"))}>{item.text}</p>
+                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-[18px]", roomy && "pt-0.5 text-[15px] leading-[22px]", !pinned && (items.length > 2 ? "line-clamp-1" : "line-clamp-2"))}>{item.text}</p>
                 </div>
               </li>
             ))}
           </ol>
           {others > 0 && (
-            <MoreLine fitKey="n-others" className="ps-4 pt-1" text={others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })} />
+            <MoreLine fitKey="n-others" className={roomy ? "ps-[18px] pt-1" : "ps-4 pt-1"} text={others === 1 ? t("recordCard.notes.otherOne") : t("recordCard.notes.other", { count: others })} />
           )}
         </>
       )}
@@ -552,31 +637,34 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
 function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
   const tab = useContext(TabContext);
   const edits = useContext(EditContext);
+  const roomy = useContext(RoomyContext);
+  // a head chip that is a picker: the chip's own height and words
+  const pill = roomy ? "h-6 rounded-full px-2.5" : "h-5 rounded-full";
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
   // a number that is the title, or begins it (a company's or a project's name), is said once; a GUID never
   const hidden = isGuid(shown) || (card ? card.title.trim().toLowerCase().startsWith(shown.trim().toLowerCase()) : false);
   return (
-    <div className={cn("relative flex min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5", pinned && onClose && "pe-9")} data-record-head>
+    <div className={cn("relative flex min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5", pinned && onClose && "pe-9", roomy && "gap-x-2.5 gap-y-1.5 px-6 pt-5", roomy && onClose && "pe-14")} data-record-head>
       {onBack && (
-        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
-          <ArrowLeft size={14} aria-hidden="true" className="rtl:-scale-x-100" />
+        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6", roomy && "-ms-2 size-8")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
+          <ArrowLeft size={roomy ? 16 : 14} aria-hidden="true" className="rtl:-scale-x-100" />
         </button>
       )}
-      <RecordProductMark product={card ? { name: card.product.name, iconUrl: product?.iconUrl } : product} iconUrl={card?.product.icon?.url} />
-      <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
-      {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
-      <span className="ms-auto flex max-w-full flex-wrap items-center justify-end gap-1">
-        {edits?.status && card?.state ? <RecordFieldSelect edit={edits.status} current={card.state.label} leading={<span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} />} label={t("recordCard.related.status")} triggerClass={cn(BUTTON_BASE, "h-5 rounded-full", TONE_CLASS[card.state.tone])} /> : card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="truncate">{card.state.label}</span></Chip>}
-        {edits?.priority && card?.priority ? <RecordFieldSelect edit={edits.priority} current={card.priority.label} leading={(card.priority.level === "urgent" || card.priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={LEVEL_GLYPH[card.priority.level]} />} label={t("recordCard.edit.priority")} triggerClass={cn(BUTTON_BASE, "h-5 rounded-full", LEVEL_CLASS[card.priority.level])} /> : card?.priority && <PriorityChip priority={card.priority} />}
+      <RecordProductMark product={card ? { name: card.product.name, iconUrl: product?.iconUrl } : product} iconUrl={card?.product.icon?.url} className={roomy ? MARK_ROOMY : MARK} />
+      <span className={cn("min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary", roomy && "text-[13px] leading-6")}>{kind}</span>
+      {!hidden && <span dir="ltr" className={cn("shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]", roomy && "text-[14px] leading-6")} title={shown}>{shown}</span>}
+      <span className={cn("ms-auto flex max-w-full flex-wrap items-center justify-end gap-1", roomy && "gap-1.5")}>
+        {edits?.status && card?.state ? <RecordFieldSelect edit={edits.status} current={card.state.label} leading={<span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} />} label={t("recordCard.related.status")} triggerClass={cn(BUTTON_BASE, pill, TONE_CLASS[card.state.tone])} /> : card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="truncate">{card.state.label}</span></Chip>}
+        {edits?.priority && card?.priority ? <RecordFieldSelect edit={edits.priority} current={card.priority.label} leading={(card.priority.level === "urgent" || card.priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={LEVEL_GLYPH[card.priority.level]} />} label={t("recordCard.edit.priority")} triggerClass={cn(BUTTON_BASE, pill, LEVEL_CLASS[card.priority.level])} /> : card?.priority && <PriorityChip priority={card.priority} />}
         {chips.map((chip, index) => (
           <Chip key={index} className={cn(TONE_CLASS[chip.tone], "shrink-0")} title={chip.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[chip.tone])} /><span className="min-w-0 truncate">{chip.label}</span></Chip>
         ))}
-        {skeleton && <Bar className="h-5 w-16 rounded-full" />}
+        {skeleton && <Bar className={roomy ? "h-6 w-20 rounded-full" : "h-5 w-16 rounded-full"} />}
       </span>
       {pinned && onClose && (
-        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "absolute end-1.5 top-2")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
-          <X size={14} aria-hidden="true" />
+        <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "absolute end-1.5 top-2", roomy && "end-3 top-3.5 size-8")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
+          <X size={roomy ? 16 : 14} aria-hidden="true" />
         </button>
       )}
     </div>
@@ -597,6 +685,7 @@ const MISS: Record<RecordCardMiss["state"], { icon: typeof Lock; sentence: strin
 function CopyNumber({ text, className = BUTTON, label, first }: { text: string; className?: string; label?: boolean; first?: boolean }) {
   const [done, setDone] = useState(false);
   const tab = useContext(TabContext);
+  const roomy = useContext(RoomyContext);
   const run = () => {
     void copyText(text).then((result) => {
       if (result !== "copied") return;
@@ -605,9 +694,10 @@ function CopyNumber({ text, className = BUTTON, label, first }: { text: string; 
     });
   };
   const name = done ? t("recordCard.copied") : t("recordCard.copy");
+  const size = roomy ? 16 : 14;
   return (
     <button type="button" tabIndex={tab} className={className} aria-label={label ? undefined : name} title={name} onClick={run} data-record-copy {...(first ? { "data-hover-card-first": "" } : {})}>
-      {done ? <Check size={14} aria-hidden="true" className="text-success" /> : <Copy size={14} aria-hidden="true" />}
+      {done ? <Check size={size} aria-hidden="true" className="text-success" /> : <Copy size={size} aria-hidden="true" />}
       {label && <span>{name}</span>}
     </button>
   );
@@ -625,18 +715,74 @@ export function missSentence(miss: RecordCardMiss, product: RecordCardProduct | 
 }
 
 /** The card's outer box: it is the container the stacked layout asks (the
- * space the card has, not the window's), and carries the width. */
-function Shell({ wrap, width, frameClass, data, busy, children }: { wrap: RefObject<HTMLDivElement | null>; width: string; frameClass: string; data: Record<string, string>; busy?: boolean; children: ReactNode }) {
+ * space the card has, not the window's), and carries the width. The opened
+ * card's resize handles sit on it, outside the frame that clips. */
+function Shell({ wrap, frame, width, style, frameClass, data, busy, handles, children }: { wrap: RefObject<HTMLDivElement | null>; frame?: (node: HTMLDivElement | null) => void; width: string; style?: CSSProperties; frameClass: string; data: Record<string, string>; busy?: boolean; handles?: ReactNode; children: ReactNode }) {
   return (
-    <div ref={wrap} className={cn("@container", width)} {...data} aria-busy={busy ? "true" : undefined}>
-      <div className={frameClass}>{children}</div>
+    <div ref={wrap} className={cn("@container", width)} style={style} {...data} aria-busy={busy ? "true" : undefined}>
+      <div ref={frame} className={frameClass}>{children}</div>
+      {handles}
     </div>
   );
 }
 
-export function RecordCard({ record, label, kindName, product, read, related, edits, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
+/** Whether a card as tall as its content has reached the height it may take
+ * (its `max-height`). Only then does a pull on its bottom edge change
+ * anything, so only then does it have a bottom handle. */
+function useFilled(frame: HTMLElement | null, on: boolean): boolean {
+  const [filled, setFilled] = useState(false);
+  useLayoutEffect(() => {
+    if (!on || !frame) {
+      setFilled(false);
+      return;
+    }
+    const measure = () => {
+      const most = parseFloat(getComputedStyle(frame).maxHeight);
+      setFilled(Number.isFinite(most) && frame.getBoundingClientRect().height >= most - 1);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(frame);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [frame, on]);
+  return filled;
+}
+
+/** The opened card's handles (#5053): its two sides and, when the card takes
+ * the height it may, its bottom edge and bottom corners. The card stays
+ * centred, so a side moves the width by twice the pointer's travel and the
+ * edge follows the pointer. A double-click (or Enter) on any of them returns
+ * to the default size. The right and bottom edges are the keyboard's
+ * separators (arrow keys); the left edge and the corners are the pointer's. */
+function Handles({ wide, tall, vertical, onResizing }: { wide: DockedPanelSize; tall: DockedPanelSize; vertical: boolean; onResizing: (active: boolean) => void }) {
+  const across = (toward: 1 | -1) => ({ panel: wide, toward, rate: 2, room: () => recordCardRoom(windowView()).width });
+  const down = { panel: tall, toward: 1 as const, room: () => recordCardRoom(windowView()).height };
+  const shared = { reset: [wide, tall], title: t("recordCard.resize.hint"), onResizing };
+  const width = t("recordCard.resize.width");
+  const height = t("recordCard.resize.height");
+  return (
+    <>
+      <ResizeHandle {...shared} label={width} x={across(-1)} quiet className="-left-[3px] my-3" />
+      <ResizeHandle {...shared} label={width} x={across(1)} className="-right-[3px] my-3" />
+      {vertical && (
+        <>
+          <ResizeHandle {...shared} label={height} y={down} className="mx-3" />
+          <ResizeHandle {...shared} label={height} x={across(-1)} y={down} corner="sw" quiet />
+          <ResizeHandle {...shared} label={height} x={across(1)} y={down} corner="se" quiet />
+        </>
+      )}
+    </>
+  );
+}
+
+export function RecordCard({ record, label, kindName, product, read, related: tabs, edits, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
   const wrap = useRef<HTMLDivElement>(null);
-  const stacked = useStacked(wrap);
+  const related = pinned ? tabs : undefined;
+  const stacked = useStacked(wrap, pinned ? RECORD_CARD_OPEN_STACK_REM : RECORD_CARD_STACK_REM);
   // below this a head has no room for a second chip: its words move into the body
   const narrowHead = useStacked(wrap, 30);
   const lang = activeLocale();
@@ -654,153 +800,246 @@ export function RecordCard({ record, label, kindName, product, read, related, ed
   // a card of typed fields sizes its field pane from what the rows need (a share of the card, not a fixed ratio)
   const sized = Boolean(card?.fields?.some((field) => field.type));
   const split = !card || right || Boolean(related);
+  // the opened card is a window over the chat: its size is the person's, kept on the device, the same for every record
+  const roomy = pinned;
+  const wide = useDockedPanelWidth(RECORD_CARD_WIDTH);
+  const [heightBounds, setHeightBounds] = useState(() => recordCardHeightBounds(windowView()));
+  const tall = useDockedPanelWidth(heightBounds);
+  // the default height is a share of the window: it follows a window that changes size while the card is open, so
+  // a card nobody sized keeps that share and a double-click returns to this window's default. A kept height stays.
+  const setTall = tall.setWidth;
+  const defaultTall = useRef(heightBounds.fallback);
+  useLayoutEffect(() => {
+    if (!roomy) return;
+    const follow = () => {
+      const next = recordCardHeightBounds(windowView());
+      const before = defaultTall.current;
+      if (next.fallback === before) return;
+      defaultTall.current = next.fallback;
+      setHeightBounds(next);
+      setTall((height) => (height === before ? next.fallback : height));
+    };
+    window.addEventListener("resize", follow);
+    return () => window.removeEventListener("resize", follow);
+  }, [roomy, setTall]);
+  // a card with tabs takes the whole height (its tabs grow with it); any other is as tall as its content, up to it
+  const fills = Boolean(card && related);
+  const [frameNode, setFrameNode] = useState<HTMLDivElement | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const filled = useFilled(frameNode, roomy && !fills);
   // wider than tall, never taller than wide: stacked (a narrow space), the
   // card is no taller than it is wide
-  const frame = "flex w-full max-h-[min(20rem,var(--hover-card-room,calc(100vh-1rem)))] @max-[34rem]:max-h-[min(100cqw,var(--hover-card-room,calc(100vh-1rem)))] flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)] text-[13px] leading-5 text-popover-ink";
-  const width = split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]";
+  const surface = "flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)]";
+  // (the kept size, bounded by the window: 16px from its sides, and the room under its top that HoverCard gives it)
+  const frame = roomy
+    ? cn("flex w-full", fills ? "h-[min(var(--record-card-h),var(--hover-card-room,calc(100vh-32px)))]" : "max-h-[min(var(--record-card-h),var(--hover-card-room,calc(100vh-32px)))]", surface, "text-[15px] leading-[22px] text-popover-ink")
+    : cn("flex w-full max-h-[min(20rem,var(--hover-card-room,calc(100vh-1rem)))] @max-[34rem]:max-h-[min(100cqw,var(--hover-card-room,calc(100vh-1rem)))]", surface, "text-[13px] leading-5 text-popover-ink");
+  const width = roomy ? "relative w-[min(var(--record-card-w),calc(100vw-32px))]" : split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]";
   const data = { "data-record-card-body": "", "data-layout": split ? "split" : "compact", "data-record-state": card ? "card" : miss ? miss.state : "loading" };
   const tab = pinned ? undefined : -1;
+  const first = { "data-hover-card-first": "" };
+  const openUrl = card?.openUrl;
+  const productLabel = productName ?? product?.name;
 
-  // no card: the head, then one icon, one sentence and its one action
-  if (!card && miss) {
-    const { icon: Icon } = MISS[miss.state];
-    const first = { "data-hover-card-first": "" };
-    const action = (() => {
-      if (miss.state === "down") return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={read.refresh} {...first}>{t("recordCard.retry")}</button>;
-      if (miss.state === "not_connected" && onConnect) return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={onConnect} {...first}>{t("recordCard.connect")}</button>;
-      if (miss.state === "sign_in" && onSignIn) return <button type="button" tabIndex={tab} className={BUTTON_PRIMARY} onClick={onSignIn} {...first}>{t("recordCard.signIn")}</button>;
-      return null;
-    })();
-    return (
-      <TabContext.Provider value={tab}>
-        <Shell wrap={wrap} width={width} frameClass={frame} data={data}>
+  const content = (() => {
+    // no card: the head, then one icon, one sentence and its one action
+    if (!card && miss) {
+      const { icon: Icon } = MISS[miss.state];
+      const primary = cn(BUTTON_PRIMARY, roomy && ROOMY_BUTTON);
+      const action = (() => {
+        if (miss.state === "down") return <button type="button" tabIndex={tab} className={primary} onClick={read.refresh} {...first}>{t("recordCard.retry")}</button>;
+        if (miss.state === "not_connected" && onConnect) return <button type="button" tabIndex={tab} className={primary} onClick={onConnect} {...first}>{t("recordCard.connect")}</button>;
+        if (miss.state === "sign_in" && onSignIn) return <button type="button" tabIndex={tab} className={primary} onClick={onSignIn} {...first}>{t("recordCard.signIn")}</button>;
+        return null;
+      })();
+      return (
+        <>
           <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
-          <div role="status" className="flex shrink-0 flex-col items-center gap-1 px-6 pb-1 pt-4 text-center" title={miss.rule?.text}>
-            <Icon size={16} aria-hidden="true" className="text-popover-ink-secondary" />
-            <p className="max-w-[28rem] text-[13px] leading-5">{missSentence(miss, product)}</p>
+          <div role="status" className={cn("flex shrink-0 flex-col items-center gap-1 px-6 pb-1 pt-4 text-center", roomy && "gap-2 pb-2 pt-10")} title={miss.rule?.text}>
+            <Icon size={roomy ? 20 : 16} aria-hidden="true" className="text-popover-ink-secondary" />
+            <p className={cn("max-w-[28rem] text-[13px] leading-5", roomy && "max-w-[32rem] text-[15px] leading-[22px]")}>{missSentence(miss, product)}</p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-center gap-1 px-2 pb-2.5 pt-1">
+          <div className={cn("flex shrink-0 flex-wrap items-center justify-center gap-1 px-2 pb-2.5 pt-1", roomy && "gap-2 px-6 pb-10 pt-2")}>
             {action}
-            <CopyNumber text={copy} label first={!action} className={action ? BUTTON : BUTTON_PRIMARY} />
+            <CopyNumber text={copy} label first={!action} className={cn(action ? BUTTON : BUTTON_PRIMARY, roomy && ROOMY_BUTTON)} />
           </div>
-        </Shell>
-      </TabContext.Provider>
-    );
-  }
+        </>
+      );
+    }
 
-  // loading: the head at once, a skeleton in each pane
-  if (!card) {
-    return (
-      <TabContext.Provider value={tab}>
-        <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy>
+    // loading: the head at once, a skeleton in each pane
+    if (!card) {
+      const pane = cn("flex min-w-0 flex-col gap-2 px-3 py-2.5", roomy && "gap-4 px-6 py-5");
+      const bar = roomy ? "h-5" : "h-4";
+      return (
+        <>
           <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} skeleton />
-          <div className="shrink-0 px-3 pb-2.5 pt-1.5"><Bar className="h-5 w-3/5" /></div>
+          <div className={cn("shrink-0 px-3 pb-2.5 pt-1.5", roomy && "px-6 pb-5 pt-2.5")}><Bar className={roomy ? "h-7 w-3/5" : "h-5 w-3/5"} /></div>
           <div className="flex min-h-0 flex-1 border-t border-popover-hairline @max-[34rem]:flex-col">
-            <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 @min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline">
-              <Bar className="h-4 w-4/5" />
-              <Bar className="h-4 w-3/5" />
-              <Bar className="h-4 w-2/5" />
+            <div className={cn(pane, "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline")}>
+              <Bar className={cn(bar, "w-4/5")} />
+              <Bar className={cn(bar, "w-3/5")} />
+              <Bar className={cn(bar, "w-2/5")} />
             </div>
-            <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:border-t @max-[34rem]:border-popover-hairline">
-              <Bar className="h-4 w-full" />
-              <Bar className="h-4 w-11/12" />
-              <Bar className="h-4 w-2/3" />
+            <div className={cn(pane, "@min-[34rem]:flex-[3_1_0%] @max-[34rem]:border-t @max-[34rem]:border-popover-hairline")}>
+              <Bar className={cn(bar, "w-full")} />
+              <Bar className={cn(bar, "w-11/12")} />
+              <Bar className={cn(bar, "w-2/3")} />
             </div>
           </div>
           <span role="status" className="sr-only">{t("recordCard.loading")}</span>
-        </Shell>
-      </TabContext.Provider>
-    );
-  }
+        </>
+      );
+    }
 
-  const chips = card.chips ?? [];
-  const headChips = narrowHead ? chips.slice(0, 1) : chips;
-  const chipRows = narrowHead ? chips.slice(1) : [];
-  const people = card.people ?? [];
-  const owner = people.find((person) => person.role === "owner");
-  const others = people.filter((person) => person !== owner);
-  const showPeopleBlock = Boolean(card.company || people.length);
-  const openUrl = card.openUrl;
-  const clockText = (card.asOf ?? (read.at ? new Date(read.at).toISOString() : undefined));
-  const productLabel = productName ?? product?.name;
-  const upToDate = clockText ? t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) }) : "";
-  const first = { "data-hover-card-first": "" };
+    const chips = card.chips ?? [];
+    const headChips = narrowHead ? chips.slice(0, 1) : chips;
+    const chipRows = narrowHead ? chips.slice(1) : [];
+    const people = card.people ?? [];
+    const owner = people.find((person) => person.role === "owner");
+    const others = people.filter((person) => person !== owner);
+    const showPeopleBlock = Boolean(card.company || people.length);
+    const clockText = (card.asOf ?? (read.at ? new Date(read.at).toISOString() : undefined));
+    const upToDate = clockText ? t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) }) : "";
+    const companyOpen = openerFor({ open: onOpenRecord, can: canOpenRecord }, card.company?.ref);
+    const company = card.company && (card.company.ref && companyOpen ? (
+      <RecordRefChip name={card.company.name} refTo={card.company.ref} onOpen={companyOpen} slot="company" />
+    ) : (
+      <span dir="auto" className={roomy ? "min-w-0 flex-1 break-words" : "min-w-0 flex-1 truncate"} title={card.company.name}>{card.company.name}</span>
+    ));
+    const hasFields = Boolean(card.fields?.length || (edits && Object.keys(edits).length));
+    const icon = roomy ? 16 : 14;
 
-  const companyOpen = openerFor({ open: onOpenRecord, can: canOpenRecord }, card.company?.ref);
+    // the opened card: the company and the people are facts like the others, each under its label
+    const personLabel = (person: NonNullable<Card["people"]>[number]) => person.label || (person.role === "owner" ? t("recordCard.edit.owner") : person.role === "contact" ? t("recordCard.edit.contact") : person.role);
+    const lead: FactRow[] = !roomy ? [] : [
+      ...(card.company ? [{
+        key: "company", label: t("recordCard.company"),
+        value: <span className="flex min-w-0 items-start gap-2" data-record-company><span aria-hidden="true" className="flex h-[22px] shrink-0 items-center text-popover-ink-secondary"><Building2 size={16} /></span>{company}</span>,
+      }] : []),
+      ...[...others, ...(owner ? [owner] : [])].map((person, index) => ({
+        key: `person-${index}`, label: personLabel(person),
+        value: <span className="flex min-w-0 items-start gap-2" data-record-person={person.role}><PersonLine role={person.role} label={personLabel(person)} name={person.name} detail={person.detail} personRef={person.ref} labelled /></span>,
+      })),
+    ];
 
-  return (
-    <TabContext.Provider value={tab}>
-      <RefContext.Provider value={{ open: onOpenRecord, can: canOpenRecord }}>
-      <EditContext.Provider value={edits}>
-      <SeeAllContext.Provider value={{ url: openUrl, product: productLabel }}>
-      <Shell wrap={wrap} width={width} frameClass={cn(frame, related && "h-[20rem]")} data={data} busy={loading}>
-        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} chips={headChips} />
-        <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
-        {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
-        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className={cn("flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col", related && "max-h-[38%]")} data-record-panes="">
+    const panes = roomy ? (
+      // one scroll for the whole body (a fade at its foot while there is more). Left, every fact, whole;
+      // right, what the record says: its text, its schedule, then its tabs, which take the height left and
+      // grow with the card. Under 50rem the two stack.
+      <Pane pinned className="flex flex-1 flex-col overscroll-contain border-t border-popover-hairline" data-record-scroll="">
+        <Pane pinned still className="flex shrink-0 grow @max-[50rem]:flex-col" data-record-panes="">
+          <Pane pinned still data-record-pane="left" className={cn("flex flex-col gap-4 px-6 py-5", right ? cn(sized && !related ? "@min-[50rem]:flex-[0_1_auto] @min-[50rem]:min-w-[40%] @min-[50rem]:max-w-[55%]" : "@min-[50rem]:min-w-[22rem] @min-[50rem]:flex-[3_1_0%]", "@min-[50rem]:border-e @min-[50rem]:border-popover-hairline @max-[50rem]:border-b @max-[50rem]:border-popover-hairline") : "flex-1")}>
+            {shortText && !related && <p dir="auto" className="whitespace-pre-line break-words" data-record-description>{description}</p>}
+            <Facts card={card} now={now} lang={lang} part={stacked && right && !related ? "dates" : "all"} chipRows={chipRows} lead={lead} pairs={!right || stacked} />
+          </Pane>
+          {right && (
+            <Pane pinned still data-record-pane="right" className={cn("flex flex-col", sized && !related ? "@min-[50rem]:flex-1" : "@min-[50rem]:flex-[5_1_0%]")}>
+              {/* (the hairline over the tabs is this block's: stuck at the top of the scroll, the tab row has the scroller's own above it, never two) */}
+              <div className={cn("flex shrink-0 flex-col gap-4 px-6 py-5", related && "border-b border-popover-hairline")}>
+                {description && (related || !shortText) && <p dir="auto" className="shrink-0 whitespace-pre-line break-words" data-record-description>{description}</p>}
+                {related && <TicketSchedule entries={related.schedule} error={related.scheduleError} />}
+                {!related && hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
+                {!related && hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
+              </div>
+              {related && <RecordRelatedTabs {...related} />}
+            </Pane>
+          )}
+          {/* a card not wider than tall says who and what it says first; the key fields come last */}
+          {stacked && right && !related && hasFields ? (
+            <div className="flex shrink-0 flex-col gap-4 border-t border-popover-hairline px-6 py-5">
+              <Facts card={card} now={now} lang={lang} part="fields" />
+            </div>
+          ) : null}
+        </Pane>
+      </Pane>
+    ) : (
+      <>
+        {/* side by side each pane keeps whole rows; stacked, the body does */}
+        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
           <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? cn(sized ? "@min-[34rem]:flex-[0_1_auto] @min-[34rem]:min-w-[45%] @min-[34rem]:max-w-[60%]" : "@min-[34rem]:flex-[2_1_0%]", "@min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline") : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
             {showPeopleBlock && (
               <div className="flex flex-col gap-1">
                 {card.company && (
                   <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-company data-fit-row="p-company">
                     <Building2 size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-                    {card.company.ref && companyOpen ? (
-                      <RecordRefChip name={card.company.name} refTo={card.company.ref} onOpen={companyOpen} slot="company" />
-                    ) : (
-                      <span dir="auto" className="min-w-0 flex-1 truncate" title={card.company.name}>{card.company.name}</span>
-                    )}
+                    {company}
                   </div>
                 )}
                 {others.map((person, index) => <PersonRow key={`${person.role}-${index}`} person={person} fitKey={`p-${index}`} />)}
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
-            {(related ? description : shortText) && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
+            {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
             <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} chipRows={chipRows} />
           </Pane>
           {right && (
-            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", related && "py-1", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
-              {related && <TicketSchedule entries={related.schedule} error={related.scheduleError} />}
-              {!related && description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", pinned ? "" : hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
+            <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
+              {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
               {/* the latest activity comes before a list: a hovered card drops whole rows from the foot */}
-              {!related && hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
-              {!related && hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
+              {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
+              {hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
             </Pane>
           )}
           {/* a card not wider than tall says who and what it says first; the key fields come last (and are the first dropped) */}
-          {stacked && right && (card.fields?.length || (edits && Object.keys(edits).length)) ? (
+          {stacked && right && hasFields ? (
             <div className="flex shrink-0 flex-col gap-2 border-t border-popover-hairline px-3 py-2 [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden">
               <Facts card={card} now={now} lang={lang} part="fields" />
             </div>
           ) : null}
         </Pane>
-        {related && <RecordRelatedTabs {...related} />}
-        <div className="flex shrink-0 flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
+      </>
+    );
+
+    return (
+      <>
+        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} chips={headChips} />
+        <p dir="auto" className={cn("line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5", roomy && "line-clamp-none px-6 pb-5 pt-2 text-[20px] leading-7")} title={card.title}>{card.title}</p>
+        {panes}
+        <div className={cn("flex shrink-0 flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1", roomy && "gap-x-1 px-4 py-2.5")} data-record-actions>
           {openUrl && (
-            <button type="button" tabIndex={tab} className={cn(BUTTON_PRIMARY, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} {...first} data-record-open>
+            <button type="button" tabIndex={tab} className={cn(BUTTON_PRIMARY, roomy && ROOMY_BUTTON, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} {...first} data-record-open>
               <span className="truncate">{productLabel ? t("recordCard.openIn", { product: productLabel }) : t("recordCard.open")}</span>
-              <ArrowUpRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+              <ArrowUpRight size={icon} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
             </button>
           )}
           {onAsk && (
-            // the label stays for the wide two-pane card; narrow or left-pane-only, an icon with its tooltip
-            <button type="button" tabIndex={tab} className={cn(BUTTON, "px-1.5")} onClick={onAsk} aria-label={t("recordCard.ask")} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : first)}>
-              <MessageSquareText size={14} aria-hidden="true" className="shrink-0" />
-              <span className={split ? "@max-[34rem]:hidden" : "hidden"}>{t("recordCard.ask")}</span>
+            // the label stays for the wide card; narrow, or the hovered left-pane-only card, an icon with its tooltip
+            <button type="button" tabIndex={tab} className={cn(BUTTON, "px-1.5", roomy && ROOMY_BUTTON)} onClick={onAsk} aria-label={t("recordCard.ask")} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : first)}>
+              <MessageSquareText size={icon} aria-hidden="true" className="shrink-0" />
+              <span className={split || roomy ? "@max-[34rem]:hidden" : "hidden"}>{t("recordCard.ask")}</span>
             </button>
           )}
-          <CopyNumber text={copy} className={ICON_BUTTON} first={!openUrl && !onAsk} />
-          <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1 text-[12px] leading-4 text-popover-ink-secondary">
-            {clockText && <time dateTime={clockText} className={cn("whitespace-nowrap", split ? "@max-[34rem]:hidden" : "hidden")}>{upToDate}</time>}
-            <button type="button" tabIndex={tab} className={ICON_BUTTON} aria-label={upToDate ? `${t("recordCard.refresh")}. ${upToDate}` : t("recordCard.refresh")} title={upToDate ? `${upToDate} (${t("recordCard.refresh")})` : t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
-              <RotateCw size={14} aria-hidden="true" className={cn(loading && "animate-spin motion-reduce:animate-none")} />
+          <CopyNumber text={copy} className={cn(ICON_BUTTON, roomy && ROOMY_ICON_BUTTON)} first={!openUrl && !onAsk} />
+          <span className={cn("ms-auto flex shrink-0 items-center gap-0.5 ps-1 text-[12px] leading-4 text-popover-ink-secondary", roomy && "gap-1.5 text-[13px] leading-[18px]")}>
+            {clockText && <time dateTime={clockText} className={cn("whitespace-nowrap", split || roomy ? "@max-[34rem]:hidden" : "hidden")}>{upToDate}</time>}
+            <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, roomy && ROOMY_ICON_BUTTON)} aria-label={upToDate ? `${t("recordCard.refresh")}. ${upToDate}` : t("recordCard.refresh")} title={upToDate ? `${upToDate} (${t("recordCard.refresh")})` : t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
+              <RotateCw size={icon} aria-hidden="true" className={cn(loading && "animate-spin motion-reduce:animate-none")} />
             </button>
           </span>
         </div>
+      </>
+    );
+  })();
+
+  return (
+    <TabContext.Provider value={tab}>
+      <RoomyContext.Provider value={roomy}>
+      <RefContext.Provider value={{ open: onOpenRecord, can: canOpenRecord }}>
+      <EditContext.Provider value={card ? edits : undefined}>
+      <SeeAllContext.Provider value={{ url: openUrl, product: productLabel }}>
+      <Shell
+        wrap={wrap} frame={roomy ? setFrameNode : undefined} width={width} frameClass={frame} data={data}
+        style={roomy ? recordCardStyle({ width: wide.width, height: tall.width }) as CSSProperties : undefined}
+        busy={card ? loading : !miss}
+        handles={roomy ? <Handles wide={wide} tall={tall} vertical={fills || filled || resizing} onResizing={setResizing} /> : undefined}
+      >
+        {content}
       </Shell>
       </SeeAllContext.Provider>
       </EditContext.Provider>
       </RefContext.Provider>
+      </RoomyContext.Provider>
     </TabContext.Provider>
   );
 }

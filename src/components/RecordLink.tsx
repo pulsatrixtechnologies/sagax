@@ -1,7 +1,9 @@
 // A record of a connected product in a bot's message (#4507): the chip, and
 // the card it opens. The chip is the pill GitHub references wear
 // (ref-pill.ts) with the product's mark; the card is the existing HoverCard
-// (LinkHoverCard.tsx) asking for its pin, its warm switch and its motion.
+// (LinkHoverCard.tsx) asking for its pin, its warm switch and its motion, and
+// placed in the window (a card this size sits over the chat, not against its
+// chip: src/lib/record-card-size.ts).
 // Nothing here navigates, and the chip is a button with no address: the link's
 // own scheme is never handed to the shell, shown in a status bar, copied as a
 // link address or opened by a middle click (a thread reference is the same).
@@ -21,6 +23,7 @@ import { isGuid } from "@/lib/record-card-format";
 import { signInAgainPath } from "@/lib/sign-in-again";
 import { useSharedPersonProducts } from "@/lib/person-products";
 import { findRecordKind, peekRecordCard, prefetchRecordCard, readRecordCard, recordKindName, useRecordCard } from "@/lib/record-cards";
+import { placeRecordCard } from "@/lib/record-card-size";
 import { useStoreOptional } from "@/state/store";
 import { recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
@@ -65,6 +68,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
       warm
       motion
       trigger="click"
+      place={placeRecordCard}
       label={t("recordCard.dialogName", { kind: kindName, number: text })}
       disabled={plain}
       onIntent={() => prefetchRecordCard(record)}
@@ -129,6 +133,9 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   onSignIn?: () => void;
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  // a card opened by a click stays the opened card while it fades out (never the tooltip's layout for its 120 ms)
+  const [opened, setOpened] = useState(pinned);
+  if (pinned && !opened) setOpened(true);
   const current = trail.at(-1) ?? { ref: record, label };
   const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, current.ref);
@@ -150,7 +157,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       related={detail.related}
       edits={detail.edits}
       canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).kind)}
-      pinned={pinned}
+      pinned={opened}
       onClose={onClose}
       onAsk={onAsk ? () => onAsk(current.ref, current.label) : undefined}
       onConnect={onConnect}

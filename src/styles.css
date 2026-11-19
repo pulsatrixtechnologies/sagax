@@ -2597,6 +2597,43 @@
 .app-resize-handle:focus-visible {
   outline: none;
 }
+/* The same handle on a box that floats (the record card, #5053): its bottom
+   edge is a row-resize line across it, and a bottom corner is a 14px square
+   that moves both sizes and draws no line of its own. */
+.app-resize-handle[aria-orientation="horizontal"] {
+  top: auto;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 6px;
+  cursor: row-resize;
+}
+.app-resize-handle[aria-orientation="horizontal"]::after {
+  top: 2px;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+}
+.app-resize-handle[data-resize-corner] {
+  top: auto;
+  bottom: -3px;
+  right: -3px;
+  z-index: 11;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+.app-resize-handle[data-resize-corner="sw"] {
+  right: auto;
+  left: -3px;
+  cursor: nesw-resize;
+}
+.app-resize-handle[data-resize-corner]::after {
+  content: none;
+}
 
 /* The Perspicax mark shows the file that reads on the sidebar's ground
    (see --sidebar-mark-on-dark / --sidebar-mark-on-light). */
@@ -3188,6 +3225,9 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 .record-scroll[data-more-above] { --fade-top: 16px; }
 .record-scroll[data-more-below] { --fade-bottom: 16px; }
 .record-scroll [data-fit-row] { scroll-snap-align: start; }
+/* The opened card's one scroller (#5053): the fade at its foot only (its tab
+   row sticks at the top), and a long read never snaps to a row. */
+.record-scroll[data-record-scroll] { --fade-top: 0px; scroll-snap-type: none; }
 /* A record card (HoverCard `motion`): it fades in over 160ms with a 4px rise
    from the side of its chip and a scale from 0.98, and out over 120ms; a
    card that opens right after another closed only fades (90ms); under

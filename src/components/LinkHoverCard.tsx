@@ -148,9 +148,13 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *   after 80 ms;
  * - `motion`: the card fades in over 160 ms with a 4 px rise from the side
  *   of the anchor, and out over 120 ms; a fade only when warm or under
- *   reduced motion.
+ *   reduced motion;
+ * - `place`: the card is too large to sit against its anchor (a record card,
+ *   #5053). It sits where `place` says in the window, whatever the anchor and
+ *   the scroll, and `room` is the height it may take there
+ *   (`--hover-card-room`).
  */
-export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false, disabled = false, trigger = "hover" }: {
+export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false, disabled = false, trigger = "hover", place }: {
   card: (state: HoverCardState) => ReactNode;
   kind: string;
   children: (anchor: AnchorProps) => ReactNode;
@@ -164,6 +168,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   /** "click": the card opens only on a click, Enter or Space (pinned), never on
    * hover, focus or long press; the pointer resting still runs `onIntent` */
   trigger?: "hover" | "click";
+  place?: (card: { width: number; height: number }, view: { width: number; height: number }) => { left: number; top: number; room?: number };
 }) {
   const byClick = trigger === "click";
   const [mode, setMode] = useState<Mode>("closed");
@@ -257,6 +262,14 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     const update = () => {
       const anchor = anchorRef.current, box = cardRef.current;
       if (!anchor || !box) return;
+      if (place) {
+        const spot = place({ width: box.offsetWidth, height: box.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
+        box.style.left = `${spot.left}px`;
+        box.style.top = `${spot.top}px`;
+        if (spot.room !== undefined) box.style.setProperty("--hover-card-room", `${spot.room}px`);
+        box.style.visibility = "visible";
+        return;
+      }
       const rects = anchor.getClientRects();
       const rect = rects.length ? rects[0]! : anchor.getBoundingClientRect();
       const held = lock.current;
@@ -294,7 +307,8 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     window.addEventListener("resize", update);
     // a scrolled transcript moves the link away from the card: an unpinned
     // card goes, a pinned one follows its anchor
-    const onScroll = pinned ? update : closeNow;
+    // (a card placed in the window does not follow its anchor: a scroll, its own included, moves nothing)
+    const onScroll = pinned ? (place ? () => {} : update) : closeNow;
     window.addEventListener("scroll", onScroll, true);
     document.addEventListener("pointerdown", outside, true);
     return () => {
@@ -303,7 +317,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       window.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("pointerdown", outside, true);
     };
-  }, [open, pinned, closeNow]);
+  }, [open, pinned, closeNow, place]);
 
   // Escape anywhere closes a pinnable card and keeps it closed while the
   // pointer still rests on the anchor

@@ -55,7 +55,8 @@ describe("iPad keyboard shortcuts sheet (#4097)", () => {
     const { SHORTCUT_GROUPS } = await import("@/lib/keyboard-shortcuts");
     const hinted = new Set([...sheet.matchAll(/hinted\("([\w-]+)"/g)].map((match) => match[1]));
     const desktopHinted = SHORTCUT_GROUPS.flatMap((group) => group.items)
-      .filter((item) => item.hint !== undefined && !["settings", "zoom", "full-screen"].includes(item.id))
+      // the screen side panel (#4452) is the desktop window only; the iPad keeps BrowserLiveView
+      .filter((item) => item.hint !== undefined && !["settings", "zoom", "full-screen", "toggle-screen-panel"].includes(item.id))
       .map((item) => item.id);
     expect(desktopHinted.length).toBeGreaterThan(0);
     for (const id of desktopHinted) expect(hinted.has(id), `${id} has its hint on the iPad`).toBe(true);

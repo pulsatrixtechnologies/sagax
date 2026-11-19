@@ -12,12 +12,12 @@
 //         gives an access card to the person who spoke, no turn
 //   S3-6b F on every path a person reaches: a queued send, an edit, a bot hop
 //   S3-7  Full access on a member's bot is its owner's, confirmed once
-//   S3-7b its cards that reach past its own workspace (a shell command, a
-//         write to the shared Claude settings, a read of the config) wait for
-//         an organization admin; a file inside its workspace is the owner's
-//   S3-7c a built-in Sagax read (list_bots) of a member's bot is its owner's
-//         to answer; a server command reaches every admin's stream at once
-//         (org.approvals), lists who asked, and the admin's Allow releases it
+//   S3-7b work that reaches past its own workspace (a shell command, a write
+//         to the shared Claude settings, a read of the config) is refused in
+//         plain words with no admin card (#4449); a file inside its workspace
+//         is the owner's
+//   S3-7c a built-in Sagax read (list_bots) of a member's bot needs no admin;
+//         a server command is refused in plain words, never an admin's card
 //   S3-10 the directory is the backstop: a disabled person's session ends
 //   S3-11 the authenticated health lists the engines and whether installed
 import { spawn, type ChildProcess } from "node:child_process";
@@ -668,7 +668,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect((await api("GET", "/api/org/approvals", erin)).status).toBe(403);
   });
 
-  it("S3-7b: a member's bot's card outside its workspace needs an admin; the owner's answer is 403", async () => {
+  it("S3-7b (#4449): a member's bot's work outside its workspace is refused in plain words, never an admin card; its workspace is the owner's", async () => {
     // the organization's key is back: erin's own turn runs on it
     expect((await api("PATCH", "/api/config", alice, { anthropic: { key: ORG_KEY } })).status).toBe(200);
     const erin = await signIn(ERIN);
@@ -697,31 +697,36 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     };
     const respond = (auth: Auth, requestId: string, extra: Record<string, unknown> = {}) =>
       api("POST", `/api/threads/${wren.threadId}/respond`, auth, { requestId, behavior: "allow", ...extra });
+    // #4449: the answer that comes back without a card
+    const refusedAsk = async (tool: string, input: Record<string, unknown>) => {
+      const socket = connect(socketPath);
+      sockets.push(socket);
+      await new Promise<void>((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
+      const id = `s37b-out-${tool}-${sockets.length}`;
+      let answer: any;
+      let buffer = "";
+      socket.on("data", (chunk) => { buffer += chunk; if (buffer.includes("\n")) answer = JSON.parse(buffer.split("\n")[0]!); });
+      socket.write(JSON.stringify({ t: "ask", id, kind: "permission", tool, input }) + "\n");
+      const got = await waitFor(async () => answer ?? null);
+      return { id, answer: got };
+    };
     try {
       const data = realpathSync(join(home, ".sagax"));
-      // the shared Claude settings (a hook there runs on every bot's next turn)
-      const settings = await ask("Write", { file_path: join(data, ".claude", "settings.json"), content: "{\"hooks\":{}}" });
-      expect(settings.card.adminApproval).toBe(true);
-      expect(settings.card.allowSession).toBeUndefined();
-      const refused = await respond(erin, settings.id);
-      expect(refused.status, refused.text).toBe(403);
-      expect(refused.body.code).toBe("admin_approval_required");
-      expect(settings.answer()).toBeUndefined();
-      // the workspace keys and the engines' credentials
+      // the shared Claude settings, the workspace keys, the engines' credentials and a server command:
+      // the organization's server is never a member's bot's place, and no admin is asked
       for (const [tool, input] of [
+        ["Write", { file_path: join(data, ".claude", "settings.json"), content: "{\"hooks\":{}}" }],
         ["Read", { file_path: join(data, "config.json") }],
         ["Edit", { file_path: join(data, ".claude", ".credentials.json"), old_string: "a", new_string: "b" }],
         ["Bash", { command: "cat /proc/1/environ" }],
       ] as const) {
-        const card = await ask(tool, input);
-        expect(card.card.adminApproval, tool).toBe(true);
-        expect((await respond(erin, card.id)).body.code).toBe("admin_approval_required");
+        const out = await refusedAsk(tool, input);
+        expect(out.answer, tool).toMatchObject({ behavior: "deny" });
+        expect(out.answer.message, tool).toMatch(/no admin is asked/);
+        const got = await api("GET", `/api/threads/${wren.threadId}/messages?limit=100`, erin);
+        expect((got.body.messages as Array<{ card?: any }>).some((m) => m.card?.requestId === out.id), tool).toBe(false);
+        expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((row) => row.requestId === out.id), tool).toBe(false);
       }
-      // an organization admin approves it, once
-      expect((await respond(alice, settings.id, { always: true })).status).toBe(400);
-      const approved = await respond(alice, settings.id);
-      expect(approved.status, approved.text).toBe(200);
-      await waitFor(async () => settings.answer()?.behavior === "allow");
 
       // a file inside the bot's own workspace is the owner's to approve, once
       const inside = await ask("Write", { file_path: join(data, "task-workspaces", wren.id, wren.threadId, "notes.md"), content: "hi" });
@@ -736,7 +741,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     }
   }, 60_000);
 
-  it("S3-7c: list_bots runs for a member without an admin; a server command reaches the admins live and their answer releases it", async () => {
+  it("S3-7c (#4449): list_bots runs for a member without an admin; a server command is refused in plain words, never an admin's card", async () => {
     const erin = await signIn(ERIN);
     const bram = await createBot(erin, "Bram", "hold");
     // #4451: the admin's Primary Bot, where the organization's approvals wait as cards
@@ -764,74 +769,24 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       socket.write(JSON.stringify({ t: "ask", id, kind: "permission", tool, input }) + "\n");
       return { id, answer: () => answer };
     };
-    const ask = async (tool: string, input: Record<string, unknown>) => {
-      const { id, answer } = await send(tool, input);
-      const card = await waitFor(async () => {
-        const got = await api("GET", `/api/threads/${bram.threadId}/messages?limit=100`, erin);
-        return (got.body.messages as Array<{ card?: any }> | undefined)?.find((m) => m.card?.requestId === id)?.card ?? null;
-      });
-      return { id, card, answer };
-    };
-    const respond = (auth: Auth, requestId: string) =>
-      api("POST", `/api/threads/${bram.threadId}/respond`, auth, { requestId, behavior: "allow" });
     try {
       // a built-in read in the member's own scope: no admin, and since
       // 2026-10-16 no card either (server/sagax-internal-tools.ts)
       const list = await send("mcp__agents__list_bots", {});
       await waitFor(async () => list.answer()?.behavior === "allow");
 
-      // a command on the server waits for an admin and says who
-      const shell = await ask("Bash", { command: "cat /etc/hostname" });
-      expect(shell.card.adminApproval).toBe(true);
-      expect(shell.card.adminNames).toContain("Alice");
-      expect((await respond(erin, shell.id)).body.code).toBe("admin_approval_required");
-      // every admin's stream hears of it at once; a member's never does
-      await waitFor(async () => adminStream.text().includes(`"kind":"org.approvals"`) && adminStream.text().includes(shell.id));
+      // #4449: a command on the server is refused in plain words; no admin is asked
+      const shell = await send("Bash", { command: "cat /etc/hostname" });
+      await waitFor(async () => shell.answer() ?? null);
+      expect(shell.answer()).toMatchObject({ behavior: "deny" });
+      expect(shell.answer().message).toMatch(/no admin is asked/);
+      expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((row) => row.requestId === shell.id)).toBe(false);
+      expect(adminStream.text()).not.toContain(shell.id);
       expect(memberStream.text()).not.toContain(`"kind":"org.approvals"`);
-      const waiting = (await api("GET", "/api/org/approvals", alice)).body.approvals as Array<Record<string, unknown>>;
-      expect(waiting.find((entry) => entry.requestId === shell.id)).toMatchObject({ botName: "Bram", ownerName: "Erin", requestedBy: "Erin", tool: "Bash" });
-      expect(waiting.some((entry) => entry.requestId === list.id)).toBe(false);
-
-      // #4451: one card in the admin's Primary Bot, from Bram, for Erin
-      const adminCards = async () => {
-        const mine = ((await botsOf(alice)) as Array<{ id: string; threadId: string; tasks?: Array<{ threadId: string }> }>).find((bot) => bot.id === atlas.id)!;
-        const found: Array<{ threadId: string; view: any }> = [];
-        for (const threadId of new Set([mine.threadId, ...(mine.tasks ?? []).map((task) => task.threadId)])) {
-          const got = await api("GET", `/api/threads/${threadId}/messages?limit=200`, alice);
-          for (const view of (got.body.messages as Array<{ card?: any }> | undefined) ?? []) {
-            if (view.card?.approvalOrigin?.admin && view.card.approvalOrigin.requestId === shell.id) found.push({ threadId, view });
-          }
-        }
-        return found;
-      };
-      const [adminCard, ...extra] = await waitFor(async () => { const found = await adminCards(); return found.length ? found : null; });
-      expect(extra).toEqual([]);
-      // only admins get the card: none in any conversation of the member's bots
-      for (const mine of (await botsOf(erin)) as Array<{ threadId: string; tasks?: Array<{ threadId: string }> }>) {
-        for (const threadId of new Set([mine.threadId, ...(mine.tasks ?? []).map((task) => task.threadId)])) {
-          const got = await api("GET", `/api/threads/${threadId}/messages?limit=200`, erin);
-          expect(((got.body.messages as Array<{ card?: any }> | undefined) ?? []).filter((row) => row.card?.approvalOrigin?.admin)).toEqual([]);
-        }
-      }
-      expect(adminCard!.view).toMatchObject({ kind: "options", relayVia: "organization", relayAsk: { by: "Bram", for: "Erin" }, card: { tool: "Bash", adminApproval: true } });
-      expect(adminCard!.view.card.adminNames).toBeUndefined();
-      // a member can neither read nor answer it, even with the exact address
-      expect([403, 404]).toContain((await api("GET", `/api/threads/${adminCard!.threadId}/messages?limit=10`, erin)).status);
-      expect([403, 404]).toContain((await api("POST", `/api/threads/${adminCard!.threadId}/respond`, erin, { requestId: adminCard!.view.card.requestId, behavior: "allow" })).status);
-      expect((await api("GET", `/api/threads/${bram.threadId}/messages?limit=100`, erin)).text).not.toContain(adminCard!.view.card.requestId);
-
-      // the admin's Allow on that card releases the member's turn and settles the card for both
-      const approved = await api("POST", `/api/threads/${adminCard!.threadId}/respond`, alice, { requestId: adminCard!.view.card.requestId, behavior: "allow" });
-      expect(approved.status, approved.text).toBe(200);
-      await waitFor(async () => shell.answer()?.behavior === "allow");
-      await waitFor(async () => {
-        const got = await api("GET", `/api/threads/${bram.threadId}/messages?limit=100`, erin);
-        return Boolean((got.body.messages as Array<{ card?: any }>).find((m) => m.card?.requestId === shell.id)?.card?.answered);
-      });
-      await waitFor(async () => /"kind":"org.approvals","count":0/.test(adminStream.text()));
-      // the admin's card shows the same outcome, once
-      await waitFor(async () => { const found = await adminCards(); return found.length === 1 && found[0]!.view.card.answered ? found : null; });
-      expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((entry) => entry.requestId === shell.id)).toBe(false);
+      // no card anywhere: neither in the member's conversation nor in the admin's Primary Bot
+      expect((await api("GET", `/api/threads/${bram.threadId}/messages?limit=100`, erin)).text).not.toContain(shell.id);
+      const mine = ((await botsOf(alice)) as Array<{ id: string; threadId: string }>).find((bot) => bot.id === atlas.id)!;
+      expect((await api("GET", `/api/threads/${mine.threadId}/messages?limit=200`, alice)).text).not.toContain(shell.id);
     } finally {
       for (const socket of sockets) socket.destroy();
       adminStream.close();
@@ -928,15 +883,12 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       expect(bulk.card?.ownerRule?.destructive).toBe("bulk");
       expect((await respond(erin, bulk.id, { behavior: "deny" })).status).toBe(200);
 
-      // no mode reaches past the owner's rights: a server command still waits for an admin
+      // no mode reaches past the owner's rights: a server command is refused in plain words,
+      // never an admin's card (#4449)
       const shell = await ask("Bash", { command: "cat /etc/hostname" });
-      expect(shell.card.adminApproval).toBe(true);
-      // #855: the card carries an admin-kind rule, never one the owner could keep
-      expect(shell.card.ownerRule?.from).toBe("admin");
-      expect((await respond(erin, shell.id, { rule: "allow" })).status).toBe(403);
-      // #855: an admin may keep Always allow on the admin card (an admin rule)
-      expect((await respond(alice, shell.id, { rule: "allow" })).status).toBe(200);
-      await waitFor(async () => shell.answer()?.behavior === "allow");
+      expect(shell.card).toBeNull();
+      expect(shell.answer()).toMatchObject({ behavior: "deny" });
+      expect(shell.answer().message).toMatch(/no admin is asked/);
 
       // revoke: the rule goes, the next ticket update asks again
       const ruleId = mine[0]!.id as string;

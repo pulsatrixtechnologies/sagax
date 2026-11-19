@@ -332,6 +332,8 @@ export interface ModelSelection {
   /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
    * Cost). Absent means Balance. Cleared when a model is pinned. */
   autoOptimize?: "intelligence" | "balance" | "cost";
+  /** Composer mode (#4900): Fast, Expert, Heavy or Build, with Auto on. */
+  mode?: "fast" | "expert" | "heavy" | "build";
   fast?: { instanceId: string; model: string };
 }
 

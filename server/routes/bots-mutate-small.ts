@@ -136,7 +136,7 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
     for (const engine of engines) {
       if (limited.has(engine.instanceId) && engines.some((candidate: any) => !limited.has(candidate.instanceId))) excluded.push({ instanceId: engine.instanceId, engineLabel: engine.displayName, reason: "limit" });
     }
-    const turn = env.autoPickForTurn({ bot: previewBot, threadId: bot.threadId, speaker, role: "orchestration", text: "" });
+    const turn = env.autoPickForTurn({ bot: previewBot, threadId: bot.threadId, speaker, role: "orchestration", text: "", withModes: true });
     const chain = (turn?.pick.chain ?? []).flatMap((choice: any) => {
       const item = entry(choice);
       return item && !refused.some((skip: any) => skip.instanceId === choice.instanceId && skip.model === choice.model) ? [item] : [];
@@ -151,7 +151,7 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       return [{ ...choice, engineLabel: env.engineDisplayName(instance), modelLabel: option?.label || choice.model }];
     });
     env.json(env.res, 200, { auto: bot.modelSelection.auto === true, pick: usablePick ? env.autoModelRecord(turn.pick, Date.now()) : null,
-      chain, excluded, backups, explanation: usablePick ? env.explainPick(turn.pick) : "" });
+      chain, excluded, backups, explanation: usablePick ? env.explainPick(turn.pick) : "", ...(turn?.modes ? { modes: turn.modes } : {}) });
     return true;
   }
   return false;

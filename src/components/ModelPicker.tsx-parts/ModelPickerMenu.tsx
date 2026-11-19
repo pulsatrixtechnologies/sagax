@@ -16,6 +16,7 @@ import type { EffortLevel } from "../../../shared/wire";
 import { MENU_MAX_HEIGHT, MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
+import { MODE_MENU_WIDTH, ModeMenu, type ModeMenuProps } from "../ModeMenu";
 
 function menuViewportHeight(fallback = 800): number {
   if (typeof window === "undefined") return fallback;
@@ -75,6 +76,7 @@ export function ModelPickerMenu({
   engineMark,
   runsWith,
   contextSize,
+  modeMenu,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -122,8 +124,11 @@ export function ModelPickerMenu({
   /** #4417: "Context size" for the bot (src/components/ContextSize.tsx),
    * computed by the picker. */
   contextSize?: readonly ContextSizeChoice[];
+  /** #4900: the chat bar's mode menu (Auto, Fast, Expert, Heavy, Build) in place of
+   * the model panel; its footer opens the models window (`onManage`). */
+  modeMenu?: Omit<ModeMenuProps, "manage">;
 }) {
-  const width = MENU_WIDTH;
+  const width = modeMenu ? MODE_MENU_WIDTH : MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
@@ -164,7 +169,12 @@ export function ModelPickerMenu({
         ? menuRoomAbove(menuAt.bottom)
         : MENU_MAX_HEIGHT
     : undefined;
-  const content = (
+  const content = modeMenu ? (
+    <>
+      <ModeMenu {...modeMenu} disabled={Boolean(bot.busy)} manage={onManage ? { onManage, turnedOff } : undefined} />
+      {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
+    </>
+  ) : (
     <>
       <ModelPanel
         sections={menuSections}

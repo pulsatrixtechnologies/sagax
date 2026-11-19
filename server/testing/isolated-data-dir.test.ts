@@ -22,6 +22,7 @@ describe("assertIsolatedDataDir", () => {
   });
 
   it("refuses a folder outside the temporary folder", () => {
-    expect(() => assertIsolatedDataDir(join(homedir(), "Documents", "fixture"))).toThrow(/fresh temporary folder/);
+    // explicit folders: a build machine may keep its home under the temporary folder
+    expect(() => assertIsolatedDataDir(join(fresh, "home", "Documents", "fixture"), join(fresh, "home"), [join(fresh, "temp")])).toThrow(/fresh temporary folder/);
   });
 });

@@ -13,12 +13,13 @@
 import { AFTER_RESET_MS, isLimitResetSchedule, type EngineLimitsReport, type LimitResetSchedule } from "../../shared/limit-reset.ts";
 import type { RoutineSchedule } from "../../shared/routines.ts";
 import { LimitResetClock, type LimitClockOptions } from "./limit-resets.ts";
+import { limitResetRunOwed } from "./limit-reset-owed.ts";
 import type { PlanAccount } from "./plan-usage.ts";
 
 /** The server's own engine accounts. */
 export const SERVER_LIMIT_SCOPE = "server";
 
-type LimitRoutine = { id: string; botId?: string; schedule: RoutineSchedule; enabled?: boolean };
+type LimitRoutine = { id: string; botId?: string; schedule: RoutineSchedule; enabled?: boolean; nextRunAt?: number | null };
 
 /** What the routes read: one person's limits, each engine from the clock of whoever pays that person's turns on it. */
 export interface LimitResetView {
@@ -40,6 +41,8 @@ export function createLimitResetHost(options: LimitClockOptions & {
   routineScope?: (routine: LimitRoutine, engine: string) => string;
   /** Where a scope's clock keeps its refusals across a restart. Absent: memory only. */
   holdsFile?: (scope: string) => string | undefined;
+  /** The runs made so far, so a routine still owed the run of a passed reset is not re-timed past it (limit-reset-owed.ts). */
+  runs?: () => ReadonlyArray<{ routineId: string; scheduledFor: number }>;
 }) {
   const clocks = new Map<string, LimitResetClock>();
   let started = false;
@@ -61,8 +64,11 @@ export function createLimitResetHost(options: LimitClockOptions & {
         waitingOn(routine) && routine.schedule.at === null && scopeOf(routine, routine.schedule.engine) === key),
       onChange: () => {
         options.onChange?.();
+        let runs: ReadonlyArray<{ routineId: string; scheduledFor: number }> | undefined;
+        const now = options.now?.() ?? Date.now();
         for (const routine of options.routines()) {
           if (!waitingOn(routine) || scopeOf(routine, routine.schedule.engine) !== key) continue;
+          if (limitResetRunOwed(routine, runs ??= options.runs?.() ?? [], now)) continue;
           const reset = clock.resetAt(routine.schedule.engine);
           const at = reset === null ? null : reset + AFTER_RESET_MS;
           if (at !== routine.schedule.at) {

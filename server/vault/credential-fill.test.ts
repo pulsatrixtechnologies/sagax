@@ -61,6 +61,30 @@ describe("the probe and the write in the page", () => {
   });
 });
 
+describe("fields inside open shadow roots (upstream #5846)", () => {
+  const shadow = (window: Window, selector: string, inner: string) => {
+    const host = window.document.querySelector(selector) as unknown as { attachShadow(init: { mode: "open" }): { innerHTML: string } };
+    host.attachShadow({ mode: "open" }).innerHTML = inner;
+  };
+
+  it("finds, marks and fills a password that lives in a web component", () => {
+    const window = page("https://example.test/login", '<form method="post" action="/session"><x-input id="user"></x-input><x-input id="pass"></x-input></form>');
+    shadow(window, "#user", '<input name="email" type="email" autocomplete="username">');
+    shadow(window, "#pass", '<input name="password" type="password" autocomplete="current-password">');
+    expect(run(window, probeScript({ mode: "auto" }, "password", "s1", ORIGIN))).toMatchObject({ problem: null });
+    const inner = (window.document.querySelector("#pass") as unknown as { shadowRoot: { querySelector(s: string): { value: string; getAttribute(n: string): string | null } } }).shadowRoot.querySelector("input");
+    expect(inner.getAttribute("data-sagax-fill")).toBe("s1");
+    expect((window as unknown as { eval: (code: string) => string }).eval(writeScript("s1", "password", ORIGIN, FAKE_PASSWORD))).toBe("ok");
+    expect(inner.value).toBe(FAKE_PASSWORD);
+  });
+
+  it("reads a one-time code box named only by its shadow host", () => {
+    const window = page("https://example.test/2fa", '<form method="post"><x-code label="Verification code"></x-code></form>');
+    shadow(window, "x-code", '<input type="text" inputmode="numeric">');
+    expect(run(window, probeScript({ mode: "auto" }, "totp", "s2", ORIGIN))).toMatchObject({ problem: null });
+  });
+});
+
 describe("the probe in the page", () => {
   it("carries no secret, reports frames and wrong fields, and marks only an accepted target", () => {
     const window = page("https://example.test/login");

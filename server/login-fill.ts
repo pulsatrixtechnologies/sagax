@@ -30,12 +30,15 @@ function originGuard(origin: string, failure: string): string {
 // same rules as the single-field finder (credential-fill.ts FINDER), plus a
 // field Sagax filled already does not count as a new one.
 const PAGE_HELPERS = String.raw`
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
+const deepActive = () => { let node = document.activeElement; while (node && node.shadowRoot && node.shadowRoot.activeElement) node = node.shadowRoot.activeElement; return node; };
+const hostOf = (el) => { const root = el.getRootNode ? el.getRootNode() : null; return root && root.host ? root.host : null; };
 const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
 const usable = (el) => (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.disabled && !el.readOnly && el.type !== 'hidden';
 const textLike = (el) => el instanceof HTMLInputElement && ['text','email','tel','number','search',''].includes(el.type);
-const hint = (el) => [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label')].join(' ');
+const hint = (el) => { const host = hostOf(el); const labels = el.labels ? Array.from(el.labels).map((label) => label.textContent || '').join(' ') : ''; return [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label'), host && host.getAttribute('name'), host && host.getAttribute('id'), host && host.getAttribute('label'), host && host.getAttribute('aria-label'), host && host.getAttribute('placeholder'), host && host.getAttribute('autocomplete'), labels].join(' '); };
 const fresh = (el) => !el.hasAttribute('data-sagax-filled');
-const inputs = Array.from(document.querySelectorAll('input,textarea')).filter((el) => usable(el) && visible(el));
+const inputs = deepAll(document, 'input,textarea').filter((el) => usable(el) && visible(el));
 const isPassword = (el) => el.type === 'password';
 const isCode = (el) => el.autocomplete === 'one-time-code' || (textLike(el) && /otp|totp|2fa|mfa|one.?time|verification|security.?code|auth.?code/i.test(hint(el)));
 const isUser = (el) => textLike(el) && !isCode(el) && (el.autocomplete === 'username' || el.autocomplete === 'email' || el.type === 'email' || /user|login|email|account|identifiant|courriel/i.test(hint(el)));
@@ -56,7 +59,7 @@ const fields = {
   totp: open.some(isCode),
   username: open.some(isUser) || (open.some(isPassword) && open.filter(textLike).some((el) => !isCode(el))),
 };
-const secretLeft = Array.from(document.querySelectorAll('[data-sagax-filled]')).some((el) => el.isConnected && typeof el.value === 'string' && el.value.length > 0 && visible(el) && (isPassword(el) || isCode(el)));
+const secretLeft = deepAll(document, '[data-sagax-filled]').some((el) => el.isConnected && typeof el.value === 'string' && el.value.length > 0 && visible(el) && (isPassword(el) || isCode(el)));
 let alert = '';
 for (const el of Array.from(document.querySelectorAll('[role=alert],[aria-live=assertive],.error,.alert-danger,.error-message'))) {
   const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
@@ -101,7 +104,7 @@ export function stepFields(state: LoginPageState, sent: ReadonlySet<LoginField>)
  * secret here; the answer is a bare word. */
 export function submitScript(nonce: string, origin: string): string {
   return `(() => {'use strict';${originGuard(origin, "moved")}${PAGE_HELPERS}
-const el = document.querySelector(${JSON.stringify(`[data-sagax-fill="${nonce}"]`)});
+const el = deepAll(document, ${JSON.stringify(`[data-sagax-fill="${nonce}"]`)})[0] || null;
 if (!el || !el.isConnected || el.ownerDocument !== document) return 'moved';
 if (captcha()) return 'captcha';
 const form = el.form;
@@ -125,12 +128,12 @@ if (form) {
   return 'submitted';
 }
 const words = /^(sign ?in|log ?in|next|continue|submit|verify|connexion|se connecter|suivant|continuer|valider|v\\u00e9rifier|ok)$/i;
-let node = el.parentElement;
+let node = el.parentElement || hostOf(el);
 while (node) {
   const button = Array.from(node.querySelectorAll('button,input[type=submit],[role=button]')).find((candidate) => !candidate.disabled && visible(candidate) &&
     (candidate.type === 'submit' || words.test(((candidate.innerText || candidate.value || candidate.getAttribute('aria-label') || '') + '').trim())));
   if (button) { button.click(); return 'clicked'; }
-  node = node.parentElement;
+  node = node.parentElement || hostOf(node);
 }
 return 'no_submit';
 })()`;
@@ -140,7 +143,8 @@ return 'no_submit';
  * the page moved on or re-rendered the form. No secret. */
 export function markerScript(nonce: string, origin: string): string {
   return `(() => {'use strict';${originGuard(origin, "moved")}
-const el = document.querySelector(${JSON.stringify(`[data-sagax-fill="${nonce}"]`)});
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
+const el = deepAll(document, ${JSON.stringify(`[data-sagax-fill="${nonce}"]`)})[0] || null;
 return el && el.isConnected ? 'here' : 'gone';
 })()`;
 }
@@ -150,8 +154,9 @@ return el && el.isConnected ? 'here' : 'gone';
 export function clearScript(nonces: readonly string[], origin: string): string {
   return `(() => {'use strict';${originGuard(origin, "moved")}
 let cleared = 0;
+const deepAll = (root, selector) => { const found = Array.from(root.querySelectorAll(selector)); for (const host of Array.from(root.querySelectorAll('*'))) { if (host.shadowRoot) found.push(...deepAll(host.shadowRoot, selector)); } return found; };
 for (const nonce of ${JSON.stringify(nonces)}) {
-  const el = document.querySelector('[data-sagax-fill="' + nonce + '"]');
+  const el = deepAll(document, '[data-sagax-fill="' + nonce + '"]')[0] || null;
   if (!el || !el.isConnected || typeof el.value !== 'string') continue;
   const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, '');

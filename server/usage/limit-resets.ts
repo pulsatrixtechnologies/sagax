@@ -253,7 +253,10 @@ export class LimitResetClock {
 
   /** Reads usage again when what is known is older than `maxAgeMs`; one read at a time. */
   async ensureFresh(maxAgeMs = LIMIT_POLL_MS): Promise<void> {
-    if (this.now() - this.checkedAt < maxAgeMs) return;
+    const age = this.now() - this.checkedAt;
+    // A clock set back past the last read: nothing measured from it holds, so
+    // read now and start again from there (upstream #5958).
+    if (age >= 0 && age < maxAgeMs) return;
     await this.refresh(false);
   }
 

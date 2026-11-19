@@ -11191,7 +11191,11 @@ describe("harness HTTP API", () => {
       expect(legacyResult.instructions).not.toContain(fakeSecret);
       expect(legacyResult.name).not.toContain(fakeNameSecret);
       expect(legacyResult.instructions).toContain("redacted");
-      expect(legacyResult.instructionsTruncated).toBe(true);
+      // One routine read gives the whole instructions (upstream #5907), and
+      // says a credential was masked so the bot never saves them back.
+      expect(legacyResult.instructionsTruncated).toBe(false);
+      expect(legacyResult.instructionsRedacted).toBe(true);
+      expect(legacyResult.instructions.length).toBeGreaterThan(2_000);
       expect(legacyResult.schedule).toEqual({
         type: "interval",
         everyMinutes: 15,

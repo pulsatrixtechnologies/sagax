@@ -16763,6 +16763,10 @@ const limitReset = createLimitResetHost({
       console.warn(`limit-reset: could not retime ${routineId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
+  runs: () => {
+    try { return routines?.listRunsRaw() ?? []; }
+    catch { return []; }
+  },
   // A usage-limit hold outlives a restart: the server's own in limit-holds.json, a person's in a file of its own.
   holdsFile: (scope) => scope === SERVER_LIMIT_SCOPE
     ? join(DATA_DIR, "limit-holds.json")

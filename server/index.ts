@@ -1345,10 +1345,12 @@ import { askedForView } from "../shared/requested-views.ts";
 import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
 import { createPresenceRoutes, presenceFrameAllowed } from "./routes/presence.ts";
 import { PresenceTracker } from "./people/presence.ts";
-import { DEFAULT_APNS_BUNDLE_ID, readApnsConfig } from "./push/config.ts";
 import { createPttChannelStore, sendPttReply } from "./push/ptt.ts";
 import { setPttReplySink } from "./push/ptt-sink.ts";
 import { createPttChannelRoutes } from "./routes/ptt-channel.ts";
+import { DEFAULT_APNS_BUNDLE_ID, DEFAULT_APNS_TEAM_ID, readApnsConfig } from "./push/config.ts";
+import { createAppAttestStore } from "./attest/store.ts";
+import { createAppAttestRoutes } from "./routes/app-attest.ts";
 import { ApnsRelaySender, readApnsRelayConfig, readApnsRelayTokens } from "./push/relay.ts";
 import { createPushDeviceStore, tokensOfConnectedDevices } from "./push/devices.ts";
 import { PushHub } from "./push/hub.ts";
@@ -8880,6 +8882,8 @@ const apnsConfig = readApnsConfig();
 // No key here: iPhone pushes go through a Sagax that has one (#2697).
 const apnsRelayConfig = readApnsRelayConfig();
 const pushDevices = createPushDeviceStore(DATA_DIR);
+// App Attest keys of the phones (server/attest/, server/routes/app-attest.ts).
+const appAttestStore = createAppAttestStore(DATA_DIR);
 // Android phones through FCM HTTP v1 (server/push/fcm.ts, docs/android-push.md):
 // off, with one log line, until SAGAX_FCM_SERVICE_ACCOUNT_PATH is set.
 const fcmConfig = readFcmConfig();
@@ -30386,6 +30390,16 @@ ROUTES.push(createPttChannelRoutes({
     return Boolean(viewer && canOnBot(viewer, "bot.use", botFacts(bot)));
   },
   defaultEnvironment: () => (apnsConfig.configured ? apnsConfig.config.environment : "production")
+}));
+// App Attest: a phone attests its key and proves it on sign-in; log only.
+ROUTES.push(createAppAttestRoutes({
+  person: (auth) => actorPrincipalId(auth) || undefined,
+  store: appAttestStore,
+  appId: () => {
+    const team = (process.env.SAGAX_APNS_TEAM_ID?.trim() || DEFAULT_APNS_TEAM_ID).toUpperCase();
+    const bundle = process.env.SAGAX_APNS_BUNDLE_ID?.trim() || DEFAULT_APNS_BUNDLE_ID;
+    return `${team}.${bundle}`;
+  }
 }));
 ROUTES.push(createPushActivityRoutes({
   person: (auth) => actorPrincipalId(auth) || undefined,

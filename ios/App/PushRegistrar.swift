@@ -75,6 +75,7 @@ final class PushRegistrar {
     /// recovered token): register again on the next sync.
     func forgetRegistration(connectionID: String) {
         registered[connectionID] = nil
+        AppAttestRegistrar.shared.forget(connectionID: connectionID)
     }
 
     /// Sign-out of that server: it stops pushing to this phone. Only on an

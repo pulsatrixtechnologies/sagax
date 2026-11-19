@@ -1904,6 +1904,8 @@ final class Session: ObservableObject {
                         resumeNativeAttachmentTransfers(using: client)
                         // this server pushes to the phone while the app is closed
                         Task { await PushRegistrar.shared.sync() }
+                        // App Attest: this phone proves its key (log only)
+                        Task { await AppAttestRegistrar.shared.sync() }
                         // phone tools: what this phone offers, and any request waiting
                         PhoneToolCenter.shared.streamOpened(self)
                         // blocked people and the terms (App Store 1.2)

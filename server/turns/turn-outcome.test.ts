@@ -99,8 +99,8 @@ describe("stoppedTurnOutcome", () => {
   });
 
   it("says why a harness stop happened in one sentence, and cuts a provider's long body", () => {
-    expect(stoppedTurnOutcome({ reason: "no activity for 20 minutes — the turn was stopped", activities: [] }))
-      .toBe("No activity for 20 minutes — the turn was stopped.");
+    expect(stoppedTurnOutcome({ reason: "no activity for 20 minutes, so the turn was stopped", activities: [] }))
+      .toBe("No activity for 20 minutes, so the turn was stopped.");
     const body = stoppedTurnOutcome({ reason: `upstream HTTP 502: ${"<html>".repeat(500)}`, activities: [] });
     expect(body.length).toBeLessThanOrEqual(601);
     expect(body.startsWith("Upstream HTTP 502:")).toBe(true);

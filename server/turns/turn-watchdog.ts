@@ -86,7 +86,7 @@ export function stallNotice(turn: Partial<Pick<WatchedTurn, "runningTools" | "to
   const stuck = stuckCommand(turn, stopAt);
   return stuck
     ? `the command \`${stuck.command}\` ran for ${stuck.minutes} minutes without finishing and looks stuck, so the turn was stopped`
-    : `no activity for ${Math.round(silentMs / 60_000)} minutes — the turn was stopped`;
+    : `no activity for ${Math.round(silentMs / 60_000)} minutes, so the turn was stopped`;
 }
 
 /** What a reader may know of an open turn (TurnWatchdog.peek): a copy, so

@@ -12,7 +12,7 @@ import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubE
 import { cleanProductEventSchedule, productEventScheduleLabel, type RoutineProductEventSchedule } from "../../shared/routine-product-event.ts";
 import { newId } from "../contracts.ts";
 import { SELF_ROUTINE_CAP, UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
-import { redactSecretsInText } from "../redact.ts";
+import { redactSecretsInText, restoredInstructions } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
@@ -621,14 +621,6 @@ export type UndoRoutineRequestResult =
       ownersBefore?: boolean;
     };
 
-/** A bot reads instructions with their credentials masked, so replacing
- * instructions that hold one would save the masked copy over the real one.
- * Other fields still change (upstream #5907). */
-export function instructionsUpdateRefusal(prompt: string, instructions: string | undefined): string | null {
-  if (instructions === undefined || redactSecretsInText(prompt) === prompt) return null;
-  return "These instructions contain hidden credentials, so the bot cannot safely replace them. Ask the person to edit the instructions on the Automations page. Other fields can be changed by omitting instructions.";
-}
-
 export class RoutineRequestError extends Error {
   readonly status: number;
   /** True when no retry of this card can ever succeed — the routine moved
@@ -1037,8 +1029,15 @@ function normalizedOperation(
   if (!current) throw new RoutineRequestError("That routine does not exist", 404);
   if (validated.action === "update") {
     const changes = normalizeChanges(validated.changes, now, current.schedule);
-    const refusal = instructionsUpdateRefusal(current.prompt, changes.instructions);
-    if (refusal) throw new RoutineRequestError(refusal, 409);
+    // A bot reads the instructions with each secret behind a numbered mask
+    // (list_routines): a mask it sends back keeps the value it stood for,
+    // and the text unchanged leaves the instructions alone, even when its
+    // masks could not be placed (a plain read of the same text).
+    if (changes.instructions !== undefined) {
+      const restored = restoredInstructions(current.prompt, changes.instructions);
+      if (restored === null) delete changes.instructions;
+      else changes.instructions = restored;
+    }
     return {
       action: "update",
       routineId: id,

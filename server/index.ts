@@ -17652,7 +17652,7 @@ const turnContext = new Map<string, { tokens?: number; window?: number }>();
 const TURN_STALL_MS = Math.max(60_000, stallLimitMs(process.env.SAGAX_TURN_STALL_MS, 20 * 60_000));
 const TOOL_STALL_MS = Math.max(TURN_STALL_MS, stallLimitMs(process.env.SAGAX_TOOL_STALL_MS, 2 * 60 * 60_000));
 /** The watchdog's words for a turn it stopped after `silentMs` of silence, as its thread and requester read them. */
-const stallCause = (silentMs: number) => `no activity for ${Math.round(silentMs / 60_000)} minutes — the turn was stopped`;
+const stallCause = (silentMs: number) => `no activity for ${Math.round(silentMs / 60_000)} minutes, so the turn was stopped`;
 /** How long ask_bot waits synchronously before the ask is converted into a
  * delegation claim ticket (the peer's turn keeps running either way). */
 /** How long a limit's resend waits for the root's own resume, still

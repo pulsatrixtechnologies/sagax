@@ -1076,6 +1076,30 @@ describe("owner-scoped routine and bot reads", () => {
     expect(JSON.stringify(recorded)).not.toContain("Report the close");
   });
 
+  it("an instruction edit that keeps the masks it read saves the stored secrets, and the text unchanged saves nothing (#4971)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRead", "clients.routinesWrite");
+    const sent: Record<string, unknown>[] = [];
+    respond = (request) => {
+      if (request.method === "GET" && request.path === "/api/routines") return { status: 200, body: routineFixture() };
+      if (request.method === "PATCH" && request.path === "/api/routines/r_bob") {
+        sent.push((request.body ?? {}) as Record<string, unknown>);
+        return { status: 200, body: { routine: { id: "r_bob", name: "Morning", botId: "b1", enabled: true, prompt: "x", schedule: { type: "daily" }, owner: { id: "pr_bob" } } } };
+      }
+      return { status: 404, body: { error: "no" } };
+    };
+    const read = (await call("GET", "routines/r_bob", token("bob"))).body.routine.instructions as string;
+    expect(read).toMatch(/«redacted #1, \d+ chars»/);
+    const edited = await call("PATCH", "routines/r_bob", token("bob"), { instructions: `Start here. ${read}` });
+    expect(edited.status).toBe(200);
+    const prompt = sent[0]!.prompt as string;
+    expect(prompt).toContain(PLANTED_KEY);
+    expect(prompt).toContain(PLANTED_WEBHOOK);
+    expect(prompt).not.toContain("«redacted");
+    const same = await call("PATCH", "routines/r_bob", token("bob"), { instructions: read });
+    expect(same.status).toBe(200);
+    expect(sent).toHaveLength(1);
+  });
+
   it("answers each routine's version and refuses a write from a stale or unread copy with the current one (#4939)", async () => {
     people.get("bob")!.permissions.push("clients.routinesRead", "clients.routinesWrite");
     let updatedAt = 5;

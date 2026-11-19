@@ -69,6 +69,7 @@ import { APPROVAL_EN, type ApprovalTranslate } from "../../shared/approval-descr
 import { buildNotificationContext } from "../../shared/notification-context.ts";
 import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } from "../../shared/permissions.ts";
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
+import { redactSecretsInText as redactNumbered, restoredInstructions } from "../redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
 import { FORM_ID_PREFIX, OFFER_ID_PREFIX, REQUEST_ID_PREFIX, type WaitingItem } from "../../shared/waiting-items.ts";
@@ -477,7 +478,8 @@ function projectRoutine(row: Record<string, unknown>, runs: readonly Record<stri
     // #4939: pass it back as expected_version to update_routine
     ...(routineVersion(row) ? { version: routineVersion(row) } : {}),
     lastRun: lastRunOf(runs, str(row.id) ?? ""),
-    ...(detail ? { instructions: scrubText(typeof row.prompt === "string" ? row.prompt : "") } : {}),
+    // Numbered masks: an AI client that rewrites them keeps each secret (#4971).
+    ...(detail ? { instructions: redactNumbered(typeof row.prompt === "string" ? row.prompt : "", { numbered: true }).replace(WEBHOOK_KEY, (match) => mask(match)) } : {}),
   };
 }
 
@@ -2061,6 +2063,14 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
             return fail(409, "version_conflict", words.message, { current_version: verdict.current, conflict: verdict.reason, hint: words.hint });
           }
 
+          // A mask read in the instructions takes back its secret; the text
+          // read and sent unchanged leaves the stored instructions alone (#4971).
+          if (typeof patch.prompt === "string" && typeof owned.prompt === "string") {
+            const restored = restoredInstructions(owned.prompt, patch.prompt);
+            if (restored === null) delete patch.prompt;
+            else patch.prompt = restored;
+          }
+          if (!Object.keys(patch).length) return answer({ routine: projectRoutine(owned, rows.runs, true) });
           const reply = await deps.perform(person, {
             method: "PATCH",
             path: `/api/routines/${encodeURIComponent(params.id!)}`,

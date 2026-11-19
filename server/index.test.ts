@@ -19,10 +19,11 @@ import {
   DhkemP256HkdfSha256,
   HkdfSha256,
 } from "@hpke/core";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { hostTimeout } from "./testing/host-timeout.ts";
 import { waitForServerReady } from "./testing/server-ready.ts";
 import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
@@ -1313,6 +1314,12 @@ afterAll(async () => {
 });
 
 describe("harness HTTP API", () => {
+  // #4528: expect.poll waits 1 s by default. On a loaded build VM this
+  // block's harness server answers slower, so only its polls wait longer
+  // (the global default stays). A poll still returns as soon as it matches.
+  beforeAll(() => {
+    vi.setConfig({ expect: { poll: { timeout: hostTimeout(5_000) } } } as Parameters<typeof vi.setConfig>[0]);
+  });
   afterEach(async () => {
     // Issue #1731: this block shares one harness server and store, so a busy
     // hold that outlives its own test — a turn whose interrupt lost the race
@@ -11189,6 +11196,8 @@ describe("harness HTTP API", () => {
       expect(legacyResult.instructions).not.toContain(fakeSecret);
       expect(legacyResult.name).not.toContain(fakeNameSecret);
       expect(legacyResult.instructions).toContain("redacted");
+      // each mask numbered, so a bot rewriting them keeps every secret (#4971)
+      expect(legacyResult.instructions).toMatch(/«redacted #1, \d+ chars»/);
       // One routine read gives the whole instructions (upstream #5907), and
       // says a credential was masked so the bot never saves them back.
       expect(legacyResult.instructionsTruncated).toBe(false);

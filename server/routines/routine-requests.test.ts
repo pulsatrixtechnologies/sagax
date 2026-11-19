@@ -9,7 +9,6 @@ import {
   RoutineRequestError,
   RoutineRequestService,
   consequenceLine,
-  instructionsUpdateRefusal,
   routineRequestFingerprint,
   type RoutineProposalInput,
   type RoutineRequestMessage,
@@ -18,6 +17,7 @@ import {
   type RoutineToolDefinitionInput,
 } from "./routine-requests.ts";
 import { RoutineManager, type RoutineInput } from "./routines.ts";
+import { redactSecretsInText } from "../redact.ts";
 import type { JsonValue } from "../schema.ts";
 import { resolveWatchSource } from "./watch-tool-resolution.ts";
 import { directApply, type DirectApplyCheck } from "../direct-apply.ts";
@@ -121,25 +121,80 @@ function cardFingerprint(card: RoutineRequestOptionCard, messageId: string): str
   return routineRequestFingerprint(card.routineRequest, messageId);
 }
 
-describe("instructions holding a credential (upstream #5907)", () => {
-  it("refuses instruction replacement after redaction without changing other fields, and allows a plain rename", async () => {
+describe("instructions holding a credential", () => {
+  it("lets a bot rewrite the instructions of a routine that holds a secret", async () => {
     const { routines, service } = harness(undefined, undefined, undefined, () => "self");
     const prompt = "Review the queue.\n".repeat(180) + "Use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789.";
-    // Saved in the calendar, where instructions are kept as written (a bot's
-    // own proposal is scrubbed before it is saved).
     const input: RoutineInput = { botId: "bot-a", name: "Private instructions", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } };
     const id = routines.create(input).id;
-    const before = structuredClone(routines.listRoutines());
     const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
-    await expect(submit({ name: "Must not apply", instructions: "Only the visible text." })).rejects.toMatchObject({ status: 409 });
-    expect(routines.listRoutines()).toEqual(before);
-    await submit({ name: "Safe rename" });
-    expect(routines.listRoutines()[0]).toMatchObject({ name: "Safe rename", prompt });
+    await expect(submit({ name: "Rewritten", instructions: "Only the visible text." })).resolves.toMatchObject({ state: "applied" });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Rewritten", prompt: "Only the visible text." });
+  });
+});
+
+describe("instructions read back masked", () => {
+  const key = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789";
+  const setup = () => {
+    const { routines, service } = harness(undefined, undefined, undefined, () => "self");
+    const prompt = `Review the queue.\nUse ${key} for the API.\nThen report.`;
+    const id = routines.create({ botId: "bot-a", name: "Keyed", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } }).id;
+    const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
+    return { routines, submit, prompt };
+  };
+
+  it("keeps the secret when the masked text comes back as read", async () => {
+    const { routines, submit, prompt } = setup();
+    await submit({ name: "Keyed 2", instructions: redactSecretsInText(prompt) });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Keyed 2", prompt });
   });
 
-  it("allows replacing ordinary instructions, long ones included", () => {
-    expect(instructionsUpdateRefusal("Check the queue.\n".repeat(500), "Check the queue twice.")).toBeNull();
-    expect(instructionsUpdateRefusal("Use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789.", undefined)).toBeNull();
+  it("keeps the secret when the text around the mask changes", async () => {
+    const { routines, submit, prompt } = setup();
+    await submit({ instructions: redactSecretsInText(prompt).replace("Review the queue.", "Review the inbox.").replace("Then report.", "Then email a summary.") });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Review the inbox.\nUse ${key} for the API.\nThen email a summary.`);
+  });
+
+  // Two fake keys of the same length: only the mask number tells them apart.
+  const first = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const second = "sk-ant-api03-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const twoKeys = () => {
+    const { routines, service } = harness(undefined, undefined, undefined, () => "self");
+    const prompt = `Queue with ${first}.\nArchive with ${second}.`;
+    const id = routines.create({ botId: "bot-a", name: "Two keys", prompt, schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } }).id;
+    const submit = (changes: unknown) => service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "update", routineId: id, changes } as JsonValue) });
+    return { routines, submit, prompt, read: redactSecretsInText(prompt, { numbered: true }) };
+  };
+
+  it("one of two masks removed: the other keeps its own key", async () => {
+    const { routines, submit, read } = twoKeys();
+    await submit({ instructions: read.split("\n")[1] });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Archive with ${second}.`);
+  });
+
+  it("two masks moved: each keeps its own key", async () => {
+    const { routines, submit, read } = twoKeys();
+    const [queue, archive] = read.split("\n");
+    await submit({ instructions: `${archive}\n${queue}` });
+    expect(routines.listRoutines()[0]!.prompt).toBe(`Archive with ${second}.\nQueue with ${first}.`);
+  });
+
+  it("a plain mask of an ambiguous length stays a mask, never the other key", async () => {
+    const { routines, submit } = twoKeys();
+    await submit({ instructions: "Archive with «redacted 49 chars»." });
+    expect(routines.listRoutines()[0]!.prompt).toBe("Archive with «redacted 49 chars».");
+  });
+
+  it("a plain read sent back unchanged leaves the instructions alone", async () => {
+    const { routines, submit, prompt } = twoKeys();
+    await submit({ name: "Renamed", instructions: redactSecretsInText(prompt) });
+    expect(routines.listRoutines()[0]).toMatchObject({ name: "Renamed", prompt });
+  });
+
+  it("an invented mask number is kept as written", async () => {
+    const { routines, submit } = twoKeys();
+    await submit({ instructions: "Use «redacted #9, 49 chars»." });
+    expect(routines.listRoutines()[0]!.prompt).toBe("Use «redacted #9, 49 chars».");
   });
 });
 

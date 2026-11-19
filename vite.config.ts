@@ -74,12 +74,6 @@ export default defineConfig({
     // (server/testing/host-timeout.ts).
     testTimeout: hostTimeout(20_000),
     hookTimeout: hostTimeout(30_000),
-    // #4528: expect.poll waited 1 s by default. On a loaded build VM the
-    // harness server answers slower than that, and server/index.test.ts
-    // failed a different poll each run (a Boat request count, a bot's busy
-    // flag) on branches that do not touch them. A poll still returns as
-    // soon as it matches.
-    expect: { poll: { timeout: hostTimeout(5_000) } },
   },
   resolve: {
     alias: {

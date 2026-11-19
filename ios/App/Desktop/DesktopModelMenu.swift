@@ -356,9 +356,11 @@ struct DesktopModelMenu: View {
     private func pick(_ row: ModelMenuRow) {
         switch row.kind {
         case .auto:
-            guard selection.auto != true else { return close() }
+            // plain Auto: a composer mode (#4900) also rides the Auto flag, and Auto leaves it
+            guard selection.auto != true || selection.mode != nil else { return close() }
             var next = selection
             next.auto = true
+            next.mode = nil
             // Absent means Balance; store it so Edit shows the live choice.
             next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
@@ -376,6 +378,7 @@ struct DesktopModelMenu: View {
     private func setAutoOptimize(_ value: ModelAutoOptimize) {
         var next = selection
         next.auto = true
+        next.mode = nil
         next.autoOptimize = value
         autoEditOpen = false
         apply(next, updateBotDefault: true, keepOpen: true)

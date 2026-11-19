@@ -106,6 +106,23 @@ describe("intakeFiles", () => {
     expect(out.notice).not.toMatch(/Finder|Save it first/);
   });
 
+  // port of OpenMausBot #5800
+  it("uploads a file of any other type as a plain download", async () => {
+    const asked: Array<boolean | undefined> = [];
+    const out = await intakeFiles([file("Setup.exe", "application/x-msdownload")], {
+      allowImages: true,
+      getPath: () => "",
+      uploadImage: upload,
+      uploadFile: async (f, anyType) => {
+        asked.push(anyType);
+        return anyType ? { kind: "file", id: "f1", name: f.name, path: "/private/attachments/id.bin", size: f.size } as never : null;
+      },
+    });
+    expect(asked).toEqual([undefined, true]);
+    expect(out.attachments).toEqual([expect.objectContaining({ kind: "file", name: "Setup.exe", path: "/private/attachments/id.bin" })]);
+    expect(out.notice).toBeNull();
+  });
+
   it("reports an upload that failed without losing the files that worked", async () => {
     const out = await intakeFiles([file("ok.png", "image/png"), file("bad.png", "image/png")], {
       allowImages: true,

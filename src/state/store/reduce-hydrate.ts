@@ -1,7 +1,8 @@
 // Domain slice of the client store reduce(hydrate).
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
-import {mergeTaskStamps, reconcileSnapshotQueues, replaceBotQueues, type Message} from "./model";
+import {mergeTaskStamps, reconcileSnapshotQueues, replaceBotQueues, visibleMessages, type Message} from "./model";
+import {placeUnreadDivider} from "@/lib/unread-divider";
 import {fallbackSelection, selectionListed} from "@/lib/selection-fallback";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
@@ -50,6 +51,9 @@ export function reduceHydrate(state: AppState, action: Action, reduce: ReduceFn)
         transcriptGeneration: {},
         modelVariantSessions: {},
       };
+      // a divider still waiting for its boundary is placed when the snapshot holds it (port of OpenMausBot #4842)
+      const held = [...hydrated.bots, ...hydrated.groups].find((owner) => owner.threadId === state.unreadDivider?.threadId);
+      if (held) hydrated.unreadDivider = placeUnreadDivider(state.unreadDivider, held.threadId, visibleMessages(held), Boolean(held.hasMore));
       return reconcileSnapshotQueues(
         action.botQueuedMessages ? replaceBotQueues(hydrated, action.botQueuedMessages) : hydrated,
         [...snapshotBots, ...snapshotGroups],
@@ -78,12 +82,12 @@ export function reduceHydrate(state: AppState, action: Action, reduce: ReduceFn)
           hasMore: action.hasMore,
         };
       };
-      return {
-        ...state,
-        loadingOlder,
-        bots: state.bots.map((bot) => (bot.threadId === action.threadId ? prepend(bot) : bot)),
-        groups: state.groups.map((group) => (group.threadId === action.threadId ? prepend(group) : group)),
-      };
+      const bots = state.bots.map((bot) => (bot.threadId === action.threadId ? prepend(bot) : bot));
+      const groups = state.groups.map((group) => (group.threadId === action.threadId ? prepend(group) : group));
+      // a scrollback page can hold the boundary a short switch page ended below
+      const owner = [...bots, ...groups].find((candidate) => candidate.threadId === action.threadId);
+      const unreadDivider = placeUnreadDivider(state.unreadDivider, action.threadId, owner ? visibleMessages(owner) : [], action.hasMore);
+      return { ...state, loadingOlder, bots, groups, unreadDivider };
     }
     case "sectionDeleted":
       return {

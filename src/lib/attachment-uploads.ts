@@ -17,6 +17,8 @@ interface UploadTask {
   /** A dropped connection: the same task resumes when the network returns. */
   interrupted: boolean;
   session?: AttachmentUploadSession;
+  /** A file of a type the app does not know, sent as a plain download. */
+  anyType?: boolean;
 }
 const tasks = new Map<string, UploadTask>();
 let listeningForOnline = false;
@@ -64,6 +66,7 @@ async function run(task: UploadTask): Promise<void> {
         replaceDraftAttachment(draftId, attachment.id, task.attachment);
       },
       onSession: (session: AttachmentUploadSession) => { task.session = session; },
+      ...(task.anyType ? { anyType: true } : {}),
     };
     const completed = attachment.kind === "image"
       ? await imageAttachmentFromFile(file, attachment, options)
@@ -92,12 +95,12 @@ async function run(task: UploadTask): Promise<void> {
   }
 }
 
-export async function startAttachmentUpload(draftId: string, file: File, image: boolean): Promise<boolean> {
+export async function startAttachmentUpload(draftId: string, file: File, image: boolean, anyType = false): Promise<boolean> {
   // The draft already holds the optimistic chips of files picked together,
   // so a multi-file pick is measured in order against one message budget.
-  const attachment = image ? optimisticImageAttachment(file, currentDraftAttachments(draftId)) : optimisticFileAttachment(file);
+  const attachment = image ? optimisticImageAttachment(file, currentDraftAttachments(draftId)) : optimisticFileAttachment(file, anyType);
   if (!attachment) return false;
-  const task: UploadTask = { draftId, file, attachment, controller: new AbortController(), running: false, completed: false, interrupted: false };
+  const task: UploadTask = { draftId, file, attachment, controller: new AbortController(), running: false, completed: false, interrupted: false, ...(anyType && !image ? { anyType: true } : {}) };
   tasks.set(attachment.id, task);
   appendDraftAttachments(draftId, [attachment]);
   await run(task);

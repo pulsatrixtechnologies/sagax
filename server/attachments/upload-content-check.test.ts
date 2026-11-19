@@ -33,6 +33,13 @@ describe("upload content check", () => {
     expect(assertContentMatches("text/markdown", Buffer.from("# hi"), "enforce")).toBe("text");
   });
 
+  it("takes any other content as an inert download, but still refuses an executable (port of OpenMausBot #5800)", () => {
+    expect(assertContentMatches("application/octet-stream", Buffer.from("<b>x</b>"), "enforce")).toBe("text");
+    expect(assertContentMatches("application/octet-stream", Buffer.from([0x00, 0x01, 0x02]), "enforce")).toBe("unknown");
+    expect(() => assertContentMatches("application/octet-stream", elf, "enforce")).toThrow(/executable/);
+    expect(() => assertContentMatches("application/octet-stream", pe, "enforce")).toThrow(/executable/);
+  });
+
   it("refuses executables disguised as archives, images or text", () => {
     expect(() => assertContentMatches("application/zip", elf, "enforce")).toThrow(/executable/);
     expect(() => assertContentMatches("application/x-7z-compressed", pe, "enforce")).toThrow(/executable/);

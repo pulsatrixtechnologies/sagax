@@ -44,6 +44,23 @@ export function firstUnreadMessageId(messages: readonly Line[], lastReadMessageI
 }
 
 /** The read cursor of the conversation shown for this bot. */
+/** The New divider of an open conversation. A short page can end below the
+ * boundary: then the cursor is kept so a scrollback page can place it
+ * (port of OpenMausBot #4842). */
+export type UnreadDivider = { threadId: string; messageId: string | null; lastReadMessageId?: string };
+
+export function unreadDividerFor(threadId: string, messages: readonly Line[], lastReadMessageId: string | undefined, hasMore?: boolean): UnreadDivider | null {
+  const messageId = firstUnreadMessageId(messages, lastReadMessageId);
+  if (messageId) return { threadId, messageId };
+  return hasMore ? { threadId, messageId: null, lastReadMessageId } : null;
+}
+
+/** A divider still waiting for its boundary, placed once a page holds it. */
+export function placeUnreadDivider(divider: UnreadDivider | null, threadId: string, messages: readonly Line[], hasMore: boolean): UnreadDivider | null {
+  if (!divider || divider.threadId !== threadId || divider.messageId) return divider;
+  return unreadDividerFor(threadId, messages, divider.lastReadMessageId, hasMore);
+}
+
 export function threadReadCursor(bot: {
   threadId: string;
   tasks?: ReadonlyArray<{ threadId: string; lastReadMessageId?: string }> | null;

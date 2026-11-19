@@ -5300,12 +5300,16 @@ describe("harness HTTP API", () => {
       expect(statSync(result.path).mode & 0o777).toBe(0o600);
     }
 
-    const unsupported = await fetch(`${BASE}/api/files?name=payload.exe`, {
+    // port of OpenMausBot #5800: any other type is kept as an inert .bin download
+    const binary = await fetch(`${BASE}/api/files?name=payload.exe`, {
       method: "POST",
       headers: { "content-type": "application/x-msdownload" },
       body: Buffer.from("archive"),
     });
-    expect(unsupported.status).toBe(400);
+    expect(binary.status).toBe(201);
+    const binaryResult = await binary.json() as { path: string; name: string; mime: string };
+    expect(binaryResult).toMatchObject({ name: "payload.exe", mime: "application/octet-stream" });
+    expect(binaryResult.path).toMatch(/[\\/]attachments[\\/][0-9a-f-]+\.bin$/);
 
     const missingName = await fetch(`${BASE}/api/files`, {
       method: "POST",

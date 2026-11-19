@@ -1,7 +1,8 @@
 // Domain slice of the client store reduce(groups).
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
-import {bumpThreadUpdatedAt, bumpTranscriptGeneration, clearThreadReturnIfHome, mergeTaskStamps, optimisticUserMessage, personThreadKept, type Group, type GroupTask} from "./model";
+import {bumpThreadUpdatedAt, bumpTranscriptGeneration, clearThreadReturnIfHome, mergeTaskStamps, optimisticUserMessage, personThreadKept, visibleMessages, type Group, type GroupTask} from "./model";
+import {placeUnreadDivider} from "@/lib/unread-divider";
 import {fallbackSelection, selectionNewlyHidden} from "@/lib/selection-fallback";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
@@ -31,7 +32,8 @@ export function reduceGroups(state: AppState, action: Action, _reduce: ReduceFn)
             hasMore: action.group.messages ? Boolean(action.group.hasMore) : g.hasMore,
           } : g))
         : [{ ...(action.group as Group), messages: action.group.messages ?? [] }, ...fenced.groups];
-      return clearThreadReturnIfHome({ ...fenced, groups });
+      const held = action.group.messages && groups.find((g) => g.id === action.group.id && g.threadId === state.unreadDivider?.threadId);
+      return clearThreadReturnIfHome({ ...fenced, groups, ...(held ? { unreadDivider: placeUnreadDivider(state.unreadDivider, held.threadId, visibleMessages(held), Boolean(held.hasMore)) } : {}) });
     }
     case "groupDeleted": {
       const groups = state.groups.filter((g) => g.id !== action.groupId);

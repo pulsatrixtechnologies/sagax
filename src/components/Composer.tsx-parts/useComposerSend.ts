@@ -139,8 +139,8 @@ export function useComposerSend({
     await startAttachmentUpload(draftId, file, true);
     return null;
   }, [draftId]);
-  const uploadFile = useCallback(async (file: File): Promise<"handled" | null> =>
-    await startAttachmentUpload(draftId, file, false) ? "handled" : null, [draftId]);
+  const uploadFile = useCallback(async (file: File, anyType?: boolean): Promise<"handled" | null> =>
+    await startAttachmentUpload(draftId, file, false, anyType) ? "handled" : null, [draftId]);
   const pickFiles = async (picked: FileList | readonly File[] | null) => {
     if (!picked?.length) return;
     changeDraftAttachmentPending(draftId, true);

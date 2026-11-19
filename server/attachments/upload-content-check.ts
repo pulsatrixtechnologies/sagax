@@ -77,6 +77,9 @@ const ALLOWED: Readonly<Record<string, readonly SniffedKind[]>> = {
   "audio/webm": ["webm"], "video/webm": ["webm"],
   "audio/mp4": ["mp4"], "audio/x-m4a": ["mp4"], "video/mp4": ["mp4"], "video/quicktime": ["mp4"],
   "audio/mpeg": ["mp3"], "audio/aac": ["aac", "mp4"],
+  // port of OpenMausBot #5800: any other type, kept as an inert download; an
+  // executable is still refused above
+  "application/octet-stream": ["png", "jpeg", "gif", "webp", "pdf", "zip", "gzip", "7z", "tar", "rtf", "evtx", "ole", "ogg", "flac", "wav", "webm", "mp4", "mp3", "aac", "shebang", "text", "unknown"],
 };
 
 export class UploadContentError extends Error {

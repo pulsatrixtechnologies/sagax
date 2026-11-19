@@ -564,10 +564,26 @@ describe("shared files", () => {
     expect(() => sanitizeSharedFileName("../../secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..\\..\\secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..%2F..%2Fsecret.txt", "text/plain")).toThrow(/filename, not a path/);
-    expect(() => sanitizeSharedFileName("notes.txt", "application/x-msdownload")).toThrow(/supported document/);
+    // port of OpenMausBot #5800: any other type keeps its own short extension in the display name
+    expect(sanitizeSharedFileName("Setup Tool.EXE", "application/x-msdownload")).toBe("Setup Tool.exe");
+    expect(sanitizeSharedFileName("Makefile", "")).toBe("Makefile");
+    expect(sanitizeSharedFileName("odd.name~", "application/octet-stream")).toBe("odd.name~");
     expect(sanitizeSharedFileName("project.zip", "application/zip")).toBe("project.zip");
     expect(sanitizeSharedFileName("src.tar.gz", "application/gzip")).toBe("src.tar.gz");
     expect(sanitizeSharedFileName("src.tgz", "application/gzip")).toBe("src.tgz");
+  });
+
+  it.each([
+    ["script.py", "text/x-python", "script.py"],
+    ["Setup.exe", "application/x-msdownload", "Setup.exe"],
+    ["page.html", "text/html", "page.html"],
+    ["logo.svg", "image/svg+xml", "logo.svg"],
+    ["Makefile", "", "Makefile"],
+  ])("keeps %s (%s) as an inert download (port of OpenMausBot #5800)", async (original, mime, name) => {
+    const saved = await saveFile((async function* () { yield Buffer.from("<b>x</b>"); })(), original, mime, { uploadId: UPLOAD_A });
+    expect(saved).toMatchObject({ name, mime: "application/octet-stream", bytes: 8 });
+    expect(saved.path).toBe(join(ATTACHMENTS_DIR, `${UPLOAD_A}.bin`));
+    await expect(saveFile((async function* () { yield Buffer.from("x"); })(), "../evil.sh", mime)).rejects.toThrow(/filename, not a path/);
   });
 
   it("keeps a Windows event log as a binary attachment", async () => {

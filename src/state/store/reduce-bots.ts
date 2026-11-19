@@ -30,7 +30,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         return clearThreadReturnIfHome({
           ...base,
           ...panelFollowsSelection(base, action.id),
-          unreadDivider: openedUnreadDivider(base, room.threadId, Boolean(room.unread), room.messages, room.lastReadMessageId),
+          unreadDivider: openedUnreadDivider(base, room.threadId, Boolean(room.unread), room.messages, room.lastReadMessageId, room.hasMore),
           activeView: "chat",
           pluginsOpen: false,
           memoryManagerOpen: false,
@@ -45,7 +45,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
             ...base,
             ...panelFollowsSelection(base, action.id),
             unreadDivider: opened
-              ? openedUnreadDivider(base, opened.threadId, threadOpensUnread(opened), visibleMessages(opened), threadReadCursor(opened))
+              ? openedUnreadDivider(base, opened.threadId, threadOpensUnread(opened), visibleMessages(opened), threadReadCursor(opened), opened.hasMore)
               : base.unreadDivider,
             activeView: "chat",
             pluginsOpen: false,

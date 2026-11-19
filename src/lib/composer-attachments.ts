@@ -452,6 +452,9 @@ export interface AttachmentUploadOptions {
   /** A resumable upload can be canceled after this call settles without
    * retaining the browser File. The draft lifecycle owns this handle. */
   onSession?: (session: AttachmentUploadSession) => void;
+  /** port of OpenMausBot #5800: a file nothing else takes goes up as a
+   * plain download, kept by the server as an inert .bin. */
+  anyType?: boolean;
 }
 
 export interface AttachmentUploadSession {
@@ -642,18 +645,19 @@ export async function imageAttachmentFromFile(
 /** Copy a supported document, audio file or archive into the private attachment store. The prompt
  * then carries the same durable path for the local agent and paired phones,
  * instead of exposing an arbitrary Finder path to the companion route. */
-function fileUploadMime(file: File): string | null {
+function fileUploadMime(file: File, anyType = false): string | null {
   const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   const archive = archiveMime(file);
   return archive ?? documentMime(file) ??
     (["video/mp4", "video/webm", "video/quicktime"].includes(declared) ? declared : undefined) ??
     (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]) ??
-    ({ mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" } as Record<string, string>)[extension] ?? null;
+    ({ mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" } as Record<string, string>)[extension] ??
+    (anyType ? declared || "application/octet-stream" : null);
 }
 
-export function optimisticFileAttachment(file: File): FileAttachment | null {
-  const mime = fileUploadMime(file);
+export function optimisticFileAttachment(file: File, anyType = false): FileAttachment | null {
+  const mime = fileUploadMime(file, anyType);
   if (!mime) return null;
   const archive = archiveMime(file);
   if (archive && file.size > ARCHIVE_MAX_BYTES) {
@@ -667,8 +671,8 @@ export function optimisticFileAttachment(file: File): FileAttachment | null {
 }
 
 export async function fileAttachmentFromFile(file: File, options: AttachmentUploadOptions = {}): Promise<FileAttachment | null> {
-  if (!optimisticFileAttachment(file)) return null;
-  const mime = fileUploadMime(file)!;
+  if (!optimisticFileAttachment(file, options.anyType)) return null;
+  const mime = fileUploadMime(file, options.anyType)!;
   const saved = await uploadAttachment<{ path: string; name: string; bytes: number; archive?: ArchiveSummary }>(file, "/api/files", mime, options);
   return fileAttachment(saved.name || file.name, saved.path, saved.bytes, saved.archive);
 }
@@ -1110,14 +1114,15 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
     allowImages: boolean;
     getPath: (file: T) => string;
     uploadImage: (file: T) => Promise<Attachment | null>;
-    uploadFile?: (file: T) => Promise<FileAttachment | null | "handled">;
+    /** `anyType`: a file nothing else takes, uploaded as a plain download. */
+    uploadFile?: (file: T, anyType?: boolean) => Promise<FileAttachment | null | "handled">;
   },
 ): Promise<{ attachments: Attachment[]; notice: string | null }> {
   const files = [..._files];
   const { allowImages, getPath, uploadImage } = _opts;
-  const uploadFile = _opts.uploadFile ?? (async (file: T) => {
+  const uploadFile = _opts.uploadFile ?? (async (file: T, anyType?: boolean) => {
     if (!file.arrayBuffer) return null;
-    return fileAttachmentFromFile(file as unknown as File);
+    return fileAttachmentFromFile(file as unknown as File, { anyType });
   });
   // Promise.all starts every optimistic image preview immediately while its
   // result array still preserves the order in which files were selected.
@@ -1152,7 +1157,19 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
       };
     }
     const result = await attachmentsFromDroppedFiles([file], getPath);
-    return result;
+    if (!result.rejectedNames.length) return result;
+    // port of OpenMausBot #5800: any other type goes up as a plain download
+    try {
+      const attachment = await uploadFile(file, true);
+      if (attachment === "handled") return { attachments: [], rejectedNames: [] };
+      return attachment ? { attachments: [attachment], rejectedNames: [] } : result;
+    } catch (err) {
+      return {
+        attachments: [],
+        rejectedNames: [],
+        uploadError: `${file.name}: ${err instanceof Error ? err.message : "upload failed"}`,
+      };
+    }
   }));
   const attachments = results.flatMap((result) => result.attachments);
   const rejectedNames = results.flatMap((result) => result.rejectedNames);

@@ -34,7 +34,7 @@ import type { Routine, RoutineInput, RoutineRun, RoutineRunStatusFilter } from "
 import type { WebhookAttempt, WebhookIngressStatus, WebhookTrigger } from "@/lib/webhooks";
 import type { GraphConnectorOption } from "../../../shared/trigger-sources";
 import type { OrgImportDocument } from "../../../shared/org-import";
-import { firstUnreadMessageId } from "@/lib/unread-divider";
+import { placeUnreadDivider, unreadDividerFor, type UnreadDivider } from "@/lib/unread-divider";
 import type { ComputerStart } from "@/lib/computer-start";
 import { type NotificationTarget } from "@/lib/notify";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
@@ -812,10 +812,10 @@ export function rewindThreadUpdatedAt(state: AppState, threadId: string, message
 /** The New divider for a conversation being opened. One that opens unread
  * gets a fresh one; opening the same conversation again keeps its divider,
  * and any other conversation has none. */
-export function openedUnreadDivider(state: AppState, threadId: string, unread: boolean, messages: readonly Message[], lastReadMessageId?: string): AppState["unreadDivider"] {
-  if (!unread) return state.unreadDivider?.threadId === threadId ? state.unreadDivider : null;
-  const messageId = firstUnreadMessageId(messages, lastReadMessageId);
-  return messageId ? { threadId, messageId } : null;
+export function openedUnreadDivider(state: AppState, threadId: string, unread: boolean, messages: readonly Message[], lastReadMessageId?: string, hasMore?: boolean): AppState["unreadDivider"] {
+  return unread
+    ? unreadDividerFor(threadId, messages, lastReadMessageId, hasMore)
+    : placeUnreadDivider(state.unreadDivider?.threadId === threadId ? state.unreadDivider : null, threadId, messages, Boolean(hasMore));
 }
 
 /** The visible conversation: walk parentId links from the active leaf back
@@ -1451,7 +1451,7 @@ export interface AppState {
   /** The New divider: the first message of the open conversation that came
    * in while the person was away. Taken from its unread flag when it opens,
    * so it holds still while that conversation stays open. */
-  unreadDivider: { threadId: string; messageId: string } | null;
+  unreadDivider: UnreadDivider | null;
   connected: boolean;
   /** True after the live stream has opened at least once this session. */
   everConnected: boolean;

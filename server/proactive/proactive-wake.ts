@@ -18,8 +18,9 @@
 //
 // Guards:
 // - cost: a simple filter first (proactiveRelevance), no model for an event
-//   that cannot concern the bot; the wake runs on the model the bot's chat
-//   chip shows (#4711: never a fast model of another engine Sagax picks);
+//   that cannot concern the bot; the wake runs on the fast model of the
+//   engine the bot's chat chip shows when it has one (#1694), never a fast
+//   model of another engine (#4711, #4886);
 // - no loop: a bot never wakes on its own proactive work, and a chain of
 //   bots waking each other stops at PROACTIVE_MAX_HOPS (hops travel on every
 //   side effect of a wake);

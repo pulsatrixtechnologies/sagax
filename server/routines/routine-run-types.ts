@@ -99,6 +99,9 @@ export interface RoutineRun {
   /** How many times a limit sent this run on at once to another model (at most ROUTINE_LIMIT_TAKEOVERS of them by
    * another engine: routine-recovery.ts engineTakeovers). */
   limitTakeovers?: number;
+  /** One of limitTakeovers went on on the conversation's own model, after a limit refused only Sagax's quick model of
+   * that same engine: no other engine took it, so it is not counted against ROUTINE_LIMIT_TAKEOVERS. */
+  limitModelRetry?: true;
   /** The model this run's next start runs on: the one that took it over when a limit refused its turn
    * (server/routines/routine-recovery.ts takeOver, read by startTurn). Absent: the bot's own, or Auto's pick. */
   limitTakeover?: RoutineUsageLimit["selection"];

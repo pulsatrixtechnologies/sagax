@@ -10674,6 +10674,8 @@
   "code.subscription.refused": "Perspicax refused your {engine} subscription for this run.",
   "limitFailover.switched": "Limit reached on {from}: continuing on {to} until it resets (around {time}).",
   "limitFailover.switchedNoReset": "Limit reached on {from}, which gave no reset time: continuing on {to}; {from} is tried again around {time}.",
+  "limitFailover.detour": "Limit reached on {from}, a quick model Sagax picked for this turn: continuing on another model. Sagax skips {from} for quick turns until it resets (around {time}).",
+  "limitFailover.detourNoReset": "Limit reached on {from}, a quick model Sagax picked for this turn: continuing on another model. {from} gave no reset time: Sagax skips it for quick turns until around {time}.",
   "limitFailover.switchedStandIn": "Limit reached on {from}, which was standing in for {home}: continuing on {to}, back on {home} when it resets (around {time}).",
   "limitFailover.switchedStandInNoReset": "Limit reached on {from}, which was standing in for {home}: continuing on {to}. {home} gave no reset time: it is tried again around {time}.",
   "limitFailover.modelSwitched": "{from} had no model left for this conversation: continuing on {to}.",

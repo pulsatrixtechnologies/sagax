@@ -56,6 +56,24 @@ export function claudeHasExtraUsageRoom(row: Pick<PlanProviderRow, "driver" | "f
   return !!row.extra?.some((line) => EXTRA_ALLOWANCE.test(line.label.trim()) && line.usedPercent < 100);
 }
 
+/** 2026-11-02: until when this row's plan is spent, as its provider said:
+ * the latest reset among its windows used at 100 % (each must reset before
+ * a turn runs on it again). Null when none is spent, when a spent one gave
+ * no reset (Sagax cannot say until when), or while the row still shows extra
+ * usage or credit left: the engine answers on it (review, 2026-11-02). */
+export function spentPlanUntil(row: PlanProviderRow): number | null {
+  if (row.state !== "windows") return null;
+  if (row.extra?.some((line) => EXTRA_ALLOWANCE.test(line.label.trim()) && line.remainingPercent > 0)) return null;
+  let until: number | null = null;
+  for (const window of [row.fiveHour, row.weekly]) {
+    if (!window.available || window.usedPercent === null || window.usedPercent < 100) continue;
+    const at = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
+    if (!Number.isFinite(at)) return null;
+    until = until === null ? at : Math.max(until, at);
+  }
+  return until;
+}
+
 /** #2192: the fullest window used-percent on this plan row (0–100), or null
  * when the row has no windows. Used to rotate accounts before the limit. */
 export function planUsedPercent(row: PlanProviderRow): number | null {

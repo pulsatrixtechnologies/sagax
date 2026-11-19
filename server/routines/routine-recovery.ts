@@ -43,9 +43,10 @@ export interface RoutineFailureFacts {
 /** A run a limit refused goes on another engine at most this many times (A, then B, then C). */
 export const ROUTINE_LIMIT_TAKEOVERS = 2;
 
-/** The takeovers by another engine (or by Auto's next pick) a run had. */
-export function engineTakeovers(run: Pick<RoutineRun, "limitTakeovers">): number {
-  return run.limitTakeovers ?? 0;
+/** The takeovers by another engine (or by Auto's next pick) a run had: the one retry on its conversation's own model,
+ * after a limit refused only Sagax's quick model of that same engine, is not one, so two backup engines are left. */
+export function engineTakeovers(run: Pick<RoutineRun, "limitTakeovers" | "limitModelRetry">): number {
+  return Math.max(0, (run.limitTakeovers ?? 0) - (run.limitModelRetry ? 1 : 0));
 }
 
 export type RoutineFailureClass =
@@ -168,6 +169,7 @@ function takeOver(run: RoutineRun, limit: RoutineUsageLimit & { to: string }, no
     run.takeoverRetried = true;
   }
   run.limitTakeovers = (run.limitTakeovers ?? 0) + 1;
+  if (limit.sameEngine) run.limitModelRetry = true;
   if (limit.selection) run.limitTakeover = { ...limit.selection };
   else delete run.limitTakeover;
   // When its conversation goes back to its own model (startTurn hands it to the limit failover's takeOver).
@@ -304,10 +306,10 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       alert: first() ? { detail: engineReconnectAheadDetail(engine) } : null,
     };
   }
-  // The engine the host saw refuse, by its name: a backup standing in for the bot's own engine names when that one
-  // comes back. The bot's own engine out of credit keeps the engine's own words (the provider's detail and what to
-  // add, #1995).
-  if (verdict.cause === "credits" && limit?.home) {
+  // The engine the host saw refuse, by its name: a quick model Sagax picked is skipped for quick turns (no advice to
+  // change the bot's engine), a backup standing in for the bot's own engine names when that one comes back.
+  // The bot's own engine out of credit keeps the engine's own words (the provider's detail and what to add, #1995).
+  if (verdict.cause === "credits" && limit && (limit.detour || limit.home)) {
     const text = routineLimitCreditsText(limit, said);
     return { queued: false, error: text, alert: told() ? { detail: text } : null };
   }

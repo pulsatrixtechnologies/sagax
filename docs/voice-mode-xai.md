@@ -524,10 +524,17 @@ What keeps it short:
   API drivers are not warmed (a Codex warm would need its handshake and
   `session/new`, not done here; API drivers cannot start without a prompt,
   and no hidden prompt is sent).
-- **The bot's own reasoning effort on a call.** A call turn, and the warm
-  that starts its process (so both share one spawn contract), run at the
-  bot's own effort, exactly like a written turn (the owner, 2026-11-18), so
-  the first written turn after a call keeps the same process contract.
+- **Low reasoning effort on a call.** A call turn, and the warm that starts
+  its process (so both share one spawn contract), runs at the engine's low
+  effort: Grok `--reasoning-effort low`, Claude `--effort low`, Codex
+  `effort: low` (`server/voice/voice-call-effort.ts`). The rule: "low" where the
+  engine offers it, else its lowest level but "none" (which turns reasoning
+  off: another answer, not a faster one); a bot already set lower keeps its
+  level; a Codex bot with no effort is left alone, since Codex would keep
+  the call's level for the turns after the call. Written turns keep the
+  bot's own effort, so the first written turn after a call starts a new
+  Grok or Claude process. The model changes too: see "A call turn runs
+  fast" below.
 - **The server environment stays up.** sandboxd stops a person's
   environment after 10 minutes without use. The call's start and each
   heartbeat (about every 5 minutes) count as use of the environment the
@@ -723,14 +730,15 @@ the first words (1.9 s of turn setup over a conversation of about 183,000
 tokens, a cold engine, 3.8 s to the first token), more on a large model,
 and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
 
-- **The bot's own engine.** Every call turn, and the warm that starts its
-  process when the call is accepted, runs on the bot's own engine, model and
-  effort, exactly like a typed turn: a backup the person chose takes it when
-  that engine is signed out or refused, and Auto picks as for a typed turn.
-  Sagax never swaps in a fast model of its own pick, on any engine (the
-  owner, 2026-11-18: a call of a bot set to Grok ran on Claude, which the
-  organization's plan refused). The call's audio provider (realtime or
-  speech) stays apart from this engine.
+- **A fast model.** Every call turn, and the warm that starts its process
+  when the call is accepted, runs on a fast model: the bot's own fast model
+  when it set one, else the fast tier of its engine (Haiku on Claude Code,
+  a fast Grok on Grok), else, on Auto only, the fast tier of another engine
+  the payer can use (`pickVoiceModel`, server/models/model-auto.ts, the same
+  tiers Auto uses). A bot pinned to a model gets a fast model of its own
+  engine only, never another engine's (#4886: a Grok bot's call went to
+  Claude, whose plan refused it); a request that needed another engine's
+  connector keeps that engine. No fast model there: the bot's model.
 - **A short context, in a session of its own.** The call never resumes the
   conversation's engine session. Its first dispatch (the warm) closes an
   idle process the thread kept and starts a new session; the first spoken
@@ -750,7 +758,7 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   only, a restart loses it). A conversation that had no session before the
   call starts one from the usual rebuild.
 - **Real work is handed off.** The call instruction (`VOICE_CALL_DELEGATE_LINE`)
-  tells the bot that it answers from a short view: for
+  tells the bot that it answers on a fast model from a short view: for
   code, a long search or read, many tool steps, it says in one sentence it
   is on it and calls `start_thread` with `report_back`. That parallel task
   runs on the bot's main model, its brief carrying the conversation (its
@@ -771,8 +779,9 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   sentence, text to speech, playback and the total from the end of speech
   (`audioTurnNotice`). The server log has `[voice-turn]` per dispatch.
 
-Tests: `server/voice/voice-turn.test.ts`, `server/turns/steer-queue.test.ts` (one call's lines),
-`server/voice/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the bot's own model and effort, and the
+Tests: `server/voice/voice-turn.test.ts`, `server/models/model-auto.test.ts`
+(`pickVoiceModel`), `server/turns/steer-queue.test.ts` (one call's lines),
+`server/voice/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the fast model and
 short context in one warm session, the conversation's own session after,
 barge-in, no pile-up, a heavy request handed off).
 

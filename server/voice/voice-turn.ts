@@ -1,7 +1,7 @@
 // Fast voice turns (docs/voice-mode-xai.md, "A call turn runs fast"): on a
-// live call every turn runs on the bot's own engine, model and effort, like
-// a typed turn, in a session of its own that starts from a short view of the
-// conversation, and stays warm from one turn to the next.
+// live call every turn runs on a fast model of the bot's own engine (#4886),
+// in a session of its own that starts from a short view of the conversation,
+// and stays warm from one turn to the next.
 //
 // Why: a call turn used to resume the conversation's own engine session
 // (one measured at about 183,000 tokens) on the bot's main model. The

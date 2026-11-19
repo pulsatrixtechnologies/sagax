@@ -29,12 +29,15 @@ export interface RoutineLimitHome {
 export interface RoutineUsageLimit {
   /** "quota": a usage limit or a spent balance; "rate_limited": a 429 its driver gave up on. */
   kind: "quota" | "rate_limited";
-  /** The engine that refused, in words. */
+  /** The engine that refused, in words; with its model when the run was not on its conversation's own model. */
   from: string;
   /** When that limit resets: the engine's own time, else an estimate. */
   resetsAt: number;
   /** The engine named no reset time: `resetsAt` is Sagax's estimate. */
   estimated: boolean;
+  /** The refused model was a quick model Sagax picked for this turn (a proactive wake's fast model, #1694), not the
+   * conversation's own: the run never goes back to it, Sagax only skips it for quick turns until it resets. */
+  detour?: true;
   /** The engine that refused was standing in for the bot's own engine (an earlier takeover). */
   home?: RoutineLimitHome;
   /** Who takes this run over now ("Auto" when Auto picks again); absent when nothing can. */
@@ -50,6 +53,9 @@ export interface RoutineUsageLimit {
   returnsAt?: number;
   /** `returnsAt` is Sagax's estimate: the engine that refused named no reset. */
   returnsEstimated?: true;
+  /** `selection` is the conversation's own model on the engine that refused (only Sagax's quick model of that engine
+   * was refused): no other engine took the run over, so it is not one of ROUTINE_LIMIT_TAKEOVERS. */
+  sameEngine?: true;
 }
 
 export interface RoutineLimitWordsOptions {
@@ -112,6 +118,18 @@ function resetText(name: string, resetsAt: number, estimated: boolean, options: 
     : `${name} resets around ${limitWhen(resetsAt, options)}; runs on it work again then.`;
 }
 
+/** Sagax's quick pick a limit refused: Sagax skips it until it resets (or until its estimate, named as one). */
+function detourSkipText(limit: Pick<RoutineUsageLimit, "from" | "estimated">, when: string, fr: boolean): string {
+  if (fr) {
+    return limit.estimated
+      ? `${limit.from} n'a pas donné d'heure de réinitialisation : Sagax l'évite pour les tours rapides jusque vers le ${when}.`
+      : `Sagax évite ${limit.from} pour les tours rapides jusqu'à sa réinitialisation, vers le ${when}.`;
+  }
+  return limit.estimated
+    ? `${limit.from} gave no reset time: Sagax skips it for quick turns until around ${when}.`
+    : `Sagax skips ${limit.from} for quick turns until it resets, around ${when}.`;
+}
+
 /** The run goes back to an engine at its reset, or that engine named none and is tried again then. */
 function backOnText(name: string, resetsAt: number, estimated: boolean, options: RoutineLimitWordsOptions, fr: boolean): string {
   const when = limitWhen(resetsAt, options);
@@ -132,10 +150,11 @@ export function routineLimitSwitchedText(limit: Omit<RoutineUsageLimit, "to"> & 
       ? `${what} sur ${limit.from} : cette exécution revient sur ${limit.to}, dont la limite s'est réinitialisée.`
       : `${what} on ${limit.from}: this run goes back to ${limit.to}, whose limit has reset.`;
   }
-  // A backup standing in for the bot's own engine: the run goes back to that engine, at its own reset, never to the
-  // backup.
-  const back = limit.home ? backOnText(limit.home.name, limit.home.resetsAt, limit.home.estimated, options, fr)
-    : backOnText(limit.from, limit.resetsAt, limit.estimated, options, fr);
+  // A quick model Sagax picked: the run never goes back to it. A backup standing in for the bot's own engine: the run
+  // goes back to that engine, at its own reset, never to the backup.
+  const back = limit.detour ? detourSkipText(limit, limitWhen(limit.resetsAt, options), fr)
+    : limit.home ? backOnText(limit.home.name, limit.home.resetsAt, limit.home.estimated, options, fr)
+      : backOnText(limit.from, limit.resetsAt, limit.estimated, options, fr);
   if (fr) {
     const next = limit.to === "Auto" ? "Auto poursuit cette exécution sur un autre modèle" : `cette exécution continue sur ${limit.to}`;
     return `${what} sur ${limit.from} : ${next}. ${back}`;
@@ -158,23 +177,31 @@ export function routineLimitWaitingText(limit: Pick<RoutineUsageLimit, "from" | 
 }
 
 /** Nothing took the run over and it does not wait: when the bot's own engine comes back (its reset, or that it named
- * none). The advice to choose another engine for the bot is given only when automatic switching is off: otherwise
- * Sagax already tried every engine this person may use. */
-export function routineLimitStoppedText(limit: Pick<RoutineUsageLimit, "from" | "kind" | "resetsAt" | "estimated" | "home" | "noTaker">,
+ * none). A quick model Sagax picked is not the bot's engine: Sagax skips it until it resets, and choosing another
+ * engine for the bot would not change that. The advice to choose another engine for the bot is given only when
+ * automatic switching is off: otherwise Sagax already tried every engine this person may use. */
+export function routineLimitStoppedText(limit: Pick<RoutineUsageLimit, "from" | "kind" | "resetsAt" | "estimated" | "detour" | "home" | "noTaker">,
   options: RoutineLimitWordsOptions = {}): string {
   const fr = isFrench(options.language);
   const head = `${reachedOn(limit, fr)}. ${noTakerText(limit.noTaker, fr)}`;
+  if (limit.detour) return `${head} ${detourSkipText(limit, limitWhen(limit.resetsAt, options), fr)}`;
   const own = limit.home ?? { name: limit.from, resetsAt: limit.resetsAt, estimated: limit.estimated };
   const advice = limit.noTaker === "off" ? (fr ? " Ou choisis dès maintenant un autre moteur pour ce bot." : " Or choose another engine for this bot now.") : "";
   return `${head} ${resetText(own.name, own.resetsAt, own.estimated, options, fr)}${advice}`;
 }
 
-/** The engine that refused is out of credit and nothing took the run over. A backup standing in for the bot's own
- * engine: when the bot's own engine comes back. Otherwise the bot's own engine: add credit, or choose another engine
- * for the bot. */
-export function routineLimitCreditsText(limit: Pick<RoutineUsageLimit, "from" | "resetsAt" | "estimated" | "home" | "noTaker">,
+/** The engine that refused is out of credit and nothing took the run over. A quick model Sagax picked: Sagax skips it
+ * for quick turns (no advice to change the bot's engine). A backup standing in for the bot's own engine: when the
+ * bot's own engine comes back. Otherwise the bot's own engine: add credit, or choose another engine for the bot. */
+export function routineLimitCreditsText(limit: Pick<RoutineUsageLimit, "from" | "resetsAt" | "estimated" | "detour" | "home" | "noTaker">,
   options: RoutineLimitWordsOptions = {}): string {
   const fr = isFrench(options.language);
+  if (limit.detour) {
+    const when = limitWhen(limit.resetsAt, options);
+    return fr
+      ? `${limit.from}, un modèle rapide choisi par Sagax pour cette exécution, n'a plus de crédit : Sagax l'évite pour les tours rapides jusque vers le ${when}. ${noTakerText(limit.noTaker, true)}`
+      : `${limit.from}, a quick model Sagax picked for this run, is out of credit: Sagax skips it for quick turns until around ${when}. ${noTakerText(limit.noTaker, false)}`;
+  }
   if (limit.home) {
     const back = resetText(limit.home.name, limit.home.resetsAt, limit.home.estimated, options, fr);
     return fr

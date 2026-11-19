@@ -83,9 +83,9 @@ it("keeps one engine process for a whole call, its tools working on every turn",
     await t.send({ text: "in writing now" });
     await expect.poll(async () => (await t.replies()).length, { timeout: 15_000 }).toBe(4);
     expect(t.processes()).toBe(2);
-    // the call and the written turn both ran at the bot's own effort (none set), like a typed turn
+    // the call ran at low effort; the written turn at the bot's own (none set)
     const effort = (argv: string[]) => (argv.includes("--effort") ? argv[argv.indexOf("--effort") + 1] : undefined);
-    expect(t.launched().map((launch) => effort(launch.argv))).toEqual([undefined, undefined]);
+    expect(t.launched().map((launch) => effort(launch.argv))).toEqual(["low", undefined]);
   } finally {
     await t.server.close();
   }
@@ -184,7 +184,7 @@ async function grokFixture() {
   // The seed bot only gets a signed-in engine by itself (#2614) and this
   // fake Grok is signed out: put the bot on it.
   const seed = (await api("GET", "/api/bots")).bots[0];
-  // The bot's own effort (2026-11-18): a call turn runs at it, like a typed turn.
+  // The bot's own effort: a written turn runs at it, a call turn at the engine's low effort.
   await api("PATCH", `/api/bots/${seed.id}`, { modelSelection: { instanceId: "grok", model: "grok-4.7", effort: "high" } });
   const bot = (await api("GET", "/api/bots")).bots[0];
   expect(bot.modelSelection.instanceId).toBe("grok");
@@ -237,12 +237,12 @@ it("Grok: warms at call start, then every call turn is a bare prompt whose tools
     // the call ran in a session of its own (server/voice/voice-turn.ts): this
     // conversation had none before it, so the written turn starts one
     expect(establishing(t.rpc()).slice(7)).toEqual(["initialize", "authenticate", "session/new", "session/prompt"]);
-    // the call's process and the written turn's both ran at the bot's own effort, like a typed turn
+    // the call's process ran at low effort (server/voice/voice-call-effort.ts); the written turn's at the bot's own
     const effort = (argv: string[]) => (argv.includes("--reasoning-effort") ? argv[argv.indexOf("--reasoning-effort") + 1] : undefined);
-    expect(t.processes().map((launch) => effort(launch.argv))).toEqual(["high", "high"]);
-    // and on the bot's own engine and model: never a fast model Sagax picks
-    expect(t.log()).toMatch(/\[voice-turn\] thread \S+: new call session on grok\/grok-4\.7,/);
-    expect(t.log()).not.toMatch(/\[voice-turn\] thread \S+: .* on (?!grok\/grok-4\.7,)/);
+    expect(t.processes().map((launch) => effort(launch.argv))).toEqual(["low", "high"]);
+    // #4886: on the bot's own engine (its fast model when it lists one), never another engine's
+    expect(t.log()).toMatch(/\[voice-turn\] thread \S+: new call session on grok\//);
+    expect(t.log()).not.toMatch(/\[voice-turn\] thread \S+: .* on (?!grok\/)/);
     expect(String((await t.replies())[3].text)).toContain("mcp:list_bots:ok");
   } finally {
     await t.close();

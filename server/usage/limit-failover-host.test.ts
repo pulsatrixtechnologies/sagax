@@ -8,6 +8,7 @@ import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { LimitFailoverStore, type LimitCandidate } from "./limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText, type LimitFailoverHostDeps, type LimitRequest } from "./limit-failover-host.ts";
+import { parseClaudeUsage, spentPlanUntil } from "./plan-usage.ts";
 
 const A: ModelSelection = { instanceId: "claude", model: "opus" };
 const B: ModelSelection = { instanceId: "codex", model: "gpt" };
@@ -129,6 +130,30 @@ describe("a turn its engine's limit refused", () => {
     expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
     await w.host.idle();
     expect(w.state.resent).toEqual([{ messageId: "m1", on: B }]);
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+  });
+
+  // 2026-11-02: a fast model Sagax picked (a call's, a wake's) that a limit
+  // refused is that model's limit: the conversation's own model on the same
+  // engine is not reported nor held as limited.
+  it("holds only the fast model Sagax picked on the conversation's own engine, and the engine of one on another", async () => {
+    const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); } });
+    const fast: ModelSelection = { instanceId: "claude", model: "haiku" };
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: fast, payer: "server", at: w.clock.now, detour: true });
+    host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await host.idle();
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+    expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + 2 * 3_600_000 }]);
+    // The person's own next turn starts on the conversation's model, untouched.
+    expect(host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(w.state.selection).toEqual(A);
+
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "codex", driverKind: "codex" }, selection: B, payer: "server", at: w.clock.now, detour: true });
+    host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT });
+    await host.idle();
+    expect(w.store.blockedUntil("server", "codex")).toBe(w.clock.now + 2 * 3_600_000);
     expect(w.store.blockedUntil("server", "claude")).toBeNull();
   });
 
@@ -654,36 +679,263 @@ describe("what Sagax knows of a limit, and says of its reset", () => {
       line: { kind: "switched", from: "Claude", to: "Codex", resetsAt: w.clock.now + HOUR, estimated: true } });
   });
 
-  // 2026-11-02 (final review): a refusal that names no reset is held for Sagax's own one-hour estimate, marked as one,
-  // and tried again after it.
-  it("holds a refusal that names no reset for Sagax's estimate, so the engine is tried within the hour", async () => {
+  // 2026-11-02 (final review): a usage report is only a hint. A refusal that names no reset is held for Sagax's own
+  // one-hour estimate, marked as one, and tried again after it, even while the report shows a window spent for days.
+  // Before, it was held until that window's reset and not marked as an estimate; a top-up the next report showed
+  // cleared only the hint, never the hold, so the person's own conversation on that engine was moved for days.
+  it("holds a refusal that names no reset for Sagax's estimate, never a spent plan's reset, so a top-up is tried within the hour", async () => {
     const w = world();
-    const host = createLimitFailoverHost(w.deps);
+    let spentUntil: number | null = w.clock.now + 3 * 24 * HOUR;
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (payer, id) => payer === "server" && id === "claude" ? spentUntil : null });
     host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
     host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "You've hit your usage limit." });
     await host.idle();
     expect(w.store.holdOf("server", "claude")).toEqual({ until: w.clock.now + HOUR, estimated: true });
     expect(w.state.lines[0]!.line).toEqual({ kind: "switched", from: "Claude", to: "Codex", resetsAt: w.clock.now + HOUR, estimated: true });
+    // The person tops their plan up, and the next report shows room on Claude.
+    spentUntil = null;
     w.clock.now += HOUR + w.store.afterResetMs;
-    // The conversation goes back to Claude after Sagax's estimate, and nothing moves it off again.
+    // Their conversation goes back to Claude after Sagax's estimate, and nothing moves it off again.
     expect(host.beforeTurn("bot", "thread", undefined)).toBeNull();
     expect(w.state.selection).toEqual(A);
     expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", line: { kind: "back", engine: "Claude" } });
     expect(host.beforeTurn("bot", "thread-2", undefined)).toBeNull();
     expect(w.state.selection).toEqual(A);
-    // Auto and a backup land on Claude again.
+    // Auto, a backup and Sagax's quick pick all land on Claude again.
     const engines = [{ instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" }];
     expect([...host.autoExcluded("server", engines)]).toEqual([]);
+    expect([...host.autoExcluded("server", engines, "quick")]).toEqual([]);
   });
 
-  it("holds a run's refusal that names no reset for the same estimate", () => {
+  it("holds a run's refusal that names no reset for the same estimate, whatever window the report shows spent", () => {
     const w = world();
-    const host = createLimitFailoverHost(w.deps);
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "claude" ? w.clock.now + 3 * 24 * HOUR : null });
     host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
     expect(host.routineLimit({ threadId: "thread", cause: "You've hit your usage limit.", takeover: false })).toMatchObject({
       from: "Claude", resetsAt: w.clock.now + HOUR, estimated: true,
     });
     expect(w.store.holdOf("server", "claude")).toEqual({ until: w.clock.now + HOUR, estimated: true });
+  });
+
+  it("keeps Sagax's quick pick off an engine whose plan is spent, but never moves a person's chosen engine on that alone", () => {
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "codex" ? w.clock.now + HOUR : null });
+    const engines = [{ instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" }];
+    expect([...host.autoExcluded("server", engines, "quick")]).toEqual(["codex"]);
+    // 2026-11-02 (review): Auto and its panel read only the refusals Sagax saw: a report at 100 % can be wrong
+    // (extra usage left, an early reset), and Auto then skipped an engine that still answered.
+    expect([...host.autoExcluded("server", engines)]).toEqual([]);
+    // The person put this conversation on Codex: only a real refusal moves it.
+    w.state.selection = { ...B };
+    expect(host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(w.state.switches).toEqual([]);
+  });
+
+  it("picks a backup from the refusals Sagax saw, never from a plan the report read as spent", async () => {
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "codex" ? w.clock.now + 3 * 24 * HOUR : null });
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
+    host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await host.idle();
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: B }]);
+    // A later turn of another conversation on Claude, held now, moves to Codex as well before it is refused.
+    w.state.selection = { ...A };
+    await host.beforeTurn("bot", "thread-2", undefined);
+    expect(w.state.selection).toEqual(B);
+  });
+
+  it("holds the whole engine, not only the fast model, when that engine's plan is spent", async () => {
+    const w = world();
+    const refused: ModelSelection[] = [];
+    const host = createLimitFailoverHost({
+      ...w.deps, refuseModel: (_payer, selection) => { refused.push(selection); },
+      planLimitUntil: (_payer, id) => id === "claude" ? w.clock.now + 4 * HOUR : null,
+    });
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: { instanceId: "claude", model: "haiku" }, payer: "server", at: w.clock.now, detour: true });
+    host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await host.idle();
+    expect(refused).toEqual([]);
+    expect(w.store.blockedUntil("server", "claude")).toBe(w.clock.now + 2 * HOUR);
+  });
+});
+
+// 2026-11-02 (review): a call turn runs on a quick model Sagax picks (#1694),
+// often another engine's. A limit refusing it is that model's: the person's
+// spoken message goes again at once, the conversation stays on its own model,
+// and nothing reports the raw limit as the bot's (turnFailed is true: no
+// incident).
+describe("a person's message that ran on a quick model Sagax picked", () => {
+  const HOUR = 3_600_000;
+  const quick = (w: ReturnType<typeof world>, host: ReturnType<typeof createLimitFailoverHost>, selection: ModelSelection) =>
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: selection.instanceId, driverKind: DRIVERS[selection.instanceId]! }, selection, payer: "server", at: w.clock.now, detour: true });
+
+  it("goes again at once without moving the conversation when another engine's quick model refused", async () => {
+    const w = world();
+    const fast: ModelSelection = { instanceId: "codex", model: "gpt-mini" };
+    quick(w, w.host, fast);
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT })).toBe(true);
+    await w.host.idle();
+    expect(w.state.switches).toEqual([]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: A }]);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1",
+      line: { kind: "switched", from: "Codex (gpt-mini)", to: "Claude", resetsAt: w.clock.now + 2 * HOUR, detour: true } }]);
+    // The next quick pick skips that engine; the conversation's own engine is not held.
+    expect([...w.host.autoExcluded("server", [{ instanceId: "codex", driverKind: "codex" }, { instanceId: "claude", driverKind: "claudeAgent" }])]).toEqual(["codex"]);
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+    expect(w.store.failover("bot", "thread")).toBeUndefined();
+  });
+
+  it("holds only that model when it is the conversation's own engine, and names Sagax's estimate as one", async () => {
+    const refused: ModelSelection[] = [];
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, refuseModel: (_payer, selection) => { refused.push(selection); } });
+    const fast: ModelSelection = { instanceId: "claude", model: "haiku" };
+    quick(w, host, fast);
+    expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "You've hit your usage limit." })).toBe(true);
+    await host.idle();
+    expect(refused).toEqual([fast]);
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: A }]);
+    expect(w.state.lines[0]!.line).toEqual({ kind: "switched", from: "Claude (haiku)", to: "Claude", resetsAt: w.clock.now + HOUR, detour: true, estimated: true });
+  });
+
+  it("leaves a run's turn and a message the person stopped to their own paths", () => {
+    const w = world();
+    quick(w, w.host, { instanceId: "codex", model: "gpt-mini" });
+    w.state.request = { messageId: "m1", turnId: "turn-1", origin: { kind: "user" }, stopped: true };
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT })).toBe(false);
+    expect(w.state.resent).toEqual([]);
+  });
+
+  // 2026-11-02 (final review): a refusal bound to one model (Claude's limitScope "model": its extra-usage credits, its
+  // family's weekly window) holds nothing engine-wide, yet the quick model Sagax picked that it refused is skipped by
+  // Sagax's quick picks until it resets, as the line says. Before, nothing at all was held: the next quick pick took the
+  // same model again, and the call's message went up to MAX_RESENDS times onto it.
+  it("skips a quick model a refusal bound to it refused, without holding its engine, and sends the message again once", async () => {
+    const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); } });
+    const fast: ModelSelection = { instanceId: "claude", model: "haiku" };
+    quick(w, host, fast);
+    host.noteError("thread", "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.", undefined, "model");
+    expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
+    await host.idle();
+    expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + HOUR }]);
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: A }]);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1",
+      line: { kind: "switched", from: "Claude (haiku)", to: "Claude", resetsAt: w.clock.now + HOUR, detour: true, estimated: true } }]);
+  });
+
+  it("skips another engine's quick model the same way until the reset it named, and leaves that engine to the others", async () => {
+    const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); } });
+    w.state.selection = { ...C };
+    const fast: ModelSelection = { instanceId: "claude", model: "haiku" };
+    quick(w, host, fast);
+    host.noteError("thread", "This Claude account has reached its weekly limit for this model.", w.clock.now + 5 * HOUR, "model");
+    expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
+    await host.idle();
+    expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + 5 * HOUR }]);
+    expect([...host.autoExcluded("server", [{ instanceId: "claude", driverKind: "claudeAgent" }], "quick")]).toEqual([]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: C }]);
+    expect(w.state.lines[0]!.line).toEqual({ kind: "switched", from: "Claude (haiku)", to: "Grok", resetsAt: w.clock.now + 5 * HOUR, detour: true });
+  });
+
+  it("skips it as well when a wake ran on it, and the wake goes on on the conversation's own model", () => {
+    const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+    const w = world();
+    const host = createLimitFailoverHost({
+      ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); },
+      candidatesNow: () => ["claude", "codex", "grok"].map((id) => ({ instanceId: id, driverKind: DRIVERS[id]!, models: [id === "codex" ? "gpt" : id === "grok" ? "grok-4.5" : "opus"] })),
+    });
+    const fast: ModelSelection = { instanceId: "claude", model: "haiku" };
+    quick(w, host, fast);
+    host.noteError("thread", "This Claude account has reached its weekly limit for this model.", w.clock.now + 5 * HOUR, "model");
+    expect(host.routineLimit({ threadId: "thread", cause: undefined, stopReason: "quota", takeover: true })).toMatchObject({
+      from: "Claude (haiku)", detour: true, resetsAt: w.clock.now + 5 * HOUR, estimated: false, to: "Claude (opus)", selection: A, sameEngine: true,
+    });
+    expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + 5 * HOUR }]);
+    expect(w.store.blockedUntil("server", "claude")).toBeNull();
+  });
+
+  // 2026-11-02 (review of the final pass): a call turn runs on Sagax's quick pick on Auto too ("pinned or Auto alike",
+  // voicePickForTurn), in place of Auto's own pick, so Auto's refusal memory never sees that model. Before, a refusal bound
+  // to it held nothing at all: Auto sent the call's message again, and the next quick pick took the same model, up to six
+  // times. It is skipped as on a pinned conversation, even when it is the model Auto falls back to.
+  it("skips it on an Auto conversation too, whose own pick a call turn replaces, without holding its engine", async () => {
+    const quickModels: ModelSelection[] = [{ instanceId: "claude", model: "haiku" }, { instanceId: "codex", model: "gpt-mini" }, { ...A }];
+    for (const fast of quickModels) {
+      const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+      const w = world();
+      const host = createLimitFailoverHost({ ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); } });
+      w.state.selection = { ...A, auto: true };
+      quick(w, host, fast);
+      host.noteError("thread", "This account has reached its weekly limit for this model.", w.clock.now + 5 * HOUR, "model");
+      expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
+      await host.idle();
+      expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + 5 * HOUR }]);
+      expect(w.store.blockedUntil("server", fast.instanceId)).toBeNull();
+      // Auto takes the same message again at once; the conversation stays on Auto.
+      expect(w.state.resent).toEqual([{ messageId: "m1", on: { ...A, auto: true } }]);
+      expect(w.state.switches).toEqual([]);
+    }
+  });
+
+  it("never holds the conversation's own model for its quick picks when a refusal bound to it refused that model", async () => {
+    const refused: ModelSelection[] = [];
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, refuseModel: (_payer, selection) => { refused.push(selection); } });
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
+    host.noteError("thread", "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.", undefined, "model");
+    expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
+    await host.idle();
+    // Not a quick pick: the conversation's own turn moves to a backup and comes back at the reset, as before.
+    expect(refused).toEqual([]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: B }]);
+  });
+});
+
+describe("a plan window Sagax read as spent", () => {
+  // 2026-11-02 (review): the person's Claude report shows the weekly window at 100 % with extra usage still on. Claude
+  // answers on that extra usage: even Sagax's quick pick lands on it, and a chat backup always could.
+  it("keeps no engine off while its report shows extra usage left, from the provider's own payload", async () => {
+    const weekly = "2026-10-26T18:00:00Z";
+    const rowFor = (extra: number) => ({
+      id: "claude", name: "Claude", driver: "claude", ok: true, error: null, state: "windows" as const, access: "subscription" as const,
+      instanceId: "claude", failure: null,
+      ...parseClaudeUsage({ seven_day: { utilization: 100, resets_at: weekly }, extra_usage: { is_enabled: true, utilization: extra } }),
+    });
+    const engines = [{ instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" }];
+    for (const [extra, quick] of [[24, []], [100, ["claude"]]] as const) {
+      const w = world();
+      const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "claude" ? spentPlanUntil(rowFor(extra)) : null });
+      expect([...host.autoExcluded("server", engines, "quick")]).toEqual(quick);
+      expect([...host.autoExcluded("server", engines)]).toEqual([]);
+      // A person's message Codex refused goes on on Claude either way: a backup reads only the refusals Sagax saw.
+      w.state.selection = { ...B };
+      host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "codex", driverKind: "codex" }, selection: B, payer: "server", at: w.clock.now });
+      host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+      await host.idle();
+      expect(w.state.resent).toEqual([{ messageId: "m1", on: A }]);
+    }
+  });
+
+  it("no longer keeps Sagax's own picks off an engine once a turn on it worked", () => {
+    const spent = new Map([["server\u0000codex", Date.UTC(2026, 9, 26)]]);
+    const w = world();
+    const host = createLimitFailoverHost({
+      ...w.deps,
+      planLimitUntil: (payer, id) => spent.get(`${payer}\u0000${id}`) ?? null,
+      planWorked: (payer, id) => { spent.delete(`${payer}\u0000${id}`); },
+    });
+    const engines = [{ instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" }];
+    expect([...host.autoExcluded("server", engines, "quick")]).toEqual(["codex"]);
+    // Extra-usage credits, an upgrade or an early reset: the person's turn on Codex answers.
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "codex", driverKind: "codex" }, selection: B, payer: "server", at: w.clock.now });
+    host.turnSucceeded("thread");
+    expect([...host.autoExcluded("server", engines, "quick")]).toEqual([]);
   });
 });
 
@@ -820,15 +1072,27 @@ describe("account rotation within a provider (#2192)", () => {
 });
 
 // 2026-11-02 (review): the engines' report (/api/limit-resets) says an engine is at its limit only when the refusal
-// holds that engine: never for one model's own window.
+// holds that engine: never for one model's own window, nor for a fast model Sagax picked on the conversation's own
+// engine, which holds only that model.
 describe("whether a refusal holds its whole engine", () => {
-  it("says yes unless the refusal binds only the turn's model", () => {
+  it("says no for a fast model Sagax picked on the conversation's own engine, yes for another engine's", () => {
     const w = world();
+    w.host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: { instanceId: "claude", model: "haiku" }, payer: "server", at: w.clock.now, detour: true });
+    expect(w.host.refusalHoldsEngine("thread")).toBe(false);
+    w.host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "codex", driverKind: "codex" }, selection: B, payer: "server", at: w.clock.now, detour: true });
+    expect(w.host.refusalHoldsEngine("thread")).toBe(true);
     w.host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
     expect(w.host.refusalHoldsEngine("thread")).toBe(true);
     expect(w.host.refusalHoldsEngine("thread", "model")).toBe(false);
     // A turn Sagax never saw dispatched: the engine's own words decide, as before.
     expect(w.host.refusalHoldsEngine("unknown")).toBe(true);
+  });
+
+  it("says yes for that fast model when the engine's plan is spent", () => {
+    const w = world();
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "claude" ? w.clock.now + 3_600_000 : null });
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: { instanceId: "claude", model: "haiku" }, payer: "server", at: w.clock.now, detour: true });
+    expect(host.refusalHoldsEngine("thread")).toBe(true);
   });
 });
 

@@ -80,6 +80,7 @@ export type TurnState = {
   variant: any;
   voiceCallText: any;
   voiceCallTurn: any;
+  voiceTurnPick: any;
   warmOnly: any;
   /** #3431: the Proactive alerts section of an owner's one-to-one turn. */
   proactiveAskPrompt: any;
@@ -88,8 +89,12 @@ export type TurnState = {
   heavyNotes: string | undefined;
   heavyTracker: any;
   /** The model a routine run, webhook run or proactive wake a usage limit refused goes on with
-   * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts). */
+   * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts); its wake skips the fast pick. */
   limitTakeover: any;
+  /** Sagax runs this turn on a quick model of its own pick (a call's or a wake's, #1694), not on the
+   * conversation's: a limit that refuses it is that model's (limit failover's LimitDispatch.detour). */
+  fastDetour: boolean;
+
   activeMessages: any;
   liveBot: any;
   /** The turn's connector plan (server/connectors/turn-plan.ts), set in setup. */
@@ -261,12 +266,14 @@ export function createTurnState(init: {
     variant: undefined,
     voiceCallText: undefined,
     voiceCallTurn: undefined,
+    voiceTurnPick: undefined,
     warmOnly: undefined,
     proactiveAskPrompt: undefined,
     autoContinuing: false,
     heavyNotes: undefined,
     heavyTracker: undefined,
     limitTakeover: undefined,
+    fastDetour: false,
 
     activeMessages: undefined,
     liveBot: undefined,

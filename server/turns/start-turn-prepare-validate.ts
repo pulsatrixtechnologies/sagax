@@ -75,6 +75,7 @@ export function createPrepareValidateStartTurn(
     turnTrace,
     viewerBotOverrideStore,
     voiceCalls,
+    voicePickForTurn,
     voiceSessions,
     voiceWarmup,
     warmPayerAccountModels,
@@ -254,22 +255,53 @@ export function createPrepareValidateStartTurn(
     // Recorded on the task once the turn is admitted (below), never before.
     if (state.autoTurn) state.bot = { ...state.bot, modelSelection: state.autoTurn.pick.selection };
   }
+  // A turn said on a live call, and the warm that prepares its process, run
+  // on a fast model (server/voice/voice-turn.ts): the person waits in silence for
+  // the first word. Pinned or Auto alike. Heavy work is handed to a parallel task on
+  // the bot's main model by the call turn itself. #4886: a pinned bot's fast
+  // model is one of its own engine (pickVoiceModel), after the signed-out backup.
+  state.voiceTurnPick= null;
   /** The turn runs in the call's own session, from a short view of the
-   * conversation (server/voice/voice-turn.ts), not in the conversation's session.
-   * #4711 and the owner (2026-11-18: "the bot is set with Grok", a call on
-   * Claude refused by the organization's plan): a call turn, and the warm
-   * that prepares its process, run on the bot's own engine, model and effort,
-   * exactly like a typed turn (its signed-out backup and Auto included).
-   * Sagax never swaps in a fast model of its own pick, on any engine. The
-   * call's audio (realtime or speech) is its own provider, apart from this. */
+   * conversation (server/voice/voice-turn.ts), not in the conversation's session. */
   state.voiceCallTurn = false;
   if (voiceCalls.active(state.threadId) && !state.opts?.commsDepth && !state.opts?.coordination && !state.opts?.automationSource
     && !state.opts?.compactOnly && !state.opts?.unattended && !(state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk))) {
+    const voiceSpeaker = resolveTurnSpeaker({
+      speaker: state.opts?.speaker,
+      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
+      trigger: state.opts?.trigger,
+      automationSource: state.opts?.automationSource
+    });
     state.voiceCallTurn = true;
+    state.voiceTurnPick = voicePickForTurn(state.bot, state.autoBaseSelection, voiceSpeaker,
+      cloudGuestDriven(state.threadId) || cloudGuestDrivenHandoff(state.opts?.coordination?.id) || botmailConfined(state.threadId));
+    if (state.voiceTurnPick) {
+      state.bot = { ...state.bot, modelSelection: state.voiceTurnPick.selection };
+      state.autoTurn = null;
+    }
   } else if (!voiceCalls.active(state.threadId) && voiceSessions.has(state.threadId)) {
     // the call expired without a hang-up: its session is gone with it
     voiceSessions.end(state.threadId);
   }
+  // 2026-10-30: a proactive wake runs on the fast model when there is one,
+  // the same pick as a call turn (#1694): most wakes are a quick look.
+  // Auto keeps its own pick; a request that needed a connector keeps it.
+  // #4711/#4886: a pinned bot's fast pick stays on the engine its
+  // conversation runs on (pickVoiceModel), never another engine's.
+  // Wakes use triggerSource "proactive"; legacy rows may still be webhook+proactive.
+  const proactiveWake =
+    state.opts?.automationSource === "proactive" ||
+    (state.opts?.automationSource === "webhook" && activeRoutineRunForThread(state.threadId)?.proactive);
+  // A wake a usage limit already moved (limitTakeover, above) runs on the
+  // model that took it over, never on the fast pick that was refused.
+  let wakePick = null;
+  if (!state.voiceTurnPick && !state.autoTurn && !state.opts?.warmOnly && proactiveWake && !state.limitTakeover) {
+    wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
+    if (wakePick) state.bot = { ...state.bot, modelSelection: wakePick.selection };
+  }
+  // Sagax runs this turn on a fast model of its own pick, not on the
+  // conversation's: a limit that refuses it is that model's (limit failover).
+  state.fastDetour = Boolean(state.voiceTurnPick ?? wakePick);
   // Routines and legacy peer delivery already have their own completion
   // owners. Only ordinary chats opt into this scheduler; its child turns
   // carry an exact node id rather than inheriting a routine's lifetime.

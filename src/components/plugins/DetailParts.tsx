@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent,
 import { ChevronRight, Download, FileText, Folder, FolderOpen, Info, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { dateFieldLocale, t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { readableError } from "@/lib/plain-error";
 import { ChatMarkdown, CodeBlock } from "../ChatMarkdown";
@@ -154,6 +154,17 @@ export function OverviewColumns({ description, categories = [], reach, children,
       )}
       {reach}
     </div>
+  );
+}
+
+/** The last update an item had, in one calm line under the same "Update" label (its version history): when, from and to. No notes, no banner. */
+export function LastUpdateNote({ at, from, to }: { at: number; from?: string; to?: string }) {
+  const date = new Date(at).toLocaleDateString(dateFieldLocale(), { year: "numeric", month: "long", day: "numeric" });
+  return (
+    <section data-detail-last-update="">
+      <DetailLabel>{t("connectApps.updates.versions")}</DetailLabel>
+      <p className="text-[13px] leading-5 text-ink">{from && to ? t("connectApps.updates.lastUpdateFromTo", { date, from, to }) : t("connectApps.updates.lastUpdate", { date })}</p>
+    </section>
   );
 }
 

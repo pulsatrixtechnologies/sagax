@@ -40,6 +40,8 @@ export interface UpdateItem {
 }
 
 export interface UpdatesView {
+  /** what was updated (by itself or by the person): one line per item and version, newest first */
+  history: UpdateHistoryEntry[];
   count: number;
   checkedAt: number | null;
   checking: boolean;
@@ -143,6 +145,7 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
+import { MemoryUpdateHistory, type UpdateHistoryEntry, type UpdateHistoryStore } from "./update-history.ts";
 import { GithubAccessError } from "../github/github-access.ts";
 
 // ── connectors: a command server pinned to a package version ──────────
@@ -305,10 +308,12 @@ export interface CapabilityUpdatesOptions {
   people?: () => UpdatePerson[];
   /** Tell one person their list changed (the live frame), with the view
    * their own GET answers. */
-  notify?: (personId: string, view: UpdatesView, autoUpdated?: UpdateResult[]) => void;
+  notify?: (personId: string, view: UpdatesView) => void;
+  /** Where the updates done are written down (an item's page reads it). */
+  history?: UpdateHistoryStore;
   /** Update by itself the plugins of the person's own places when a check
-   * finds a newer version (the catalog moved): no question, one line to the
-   * person of what changed. Off when absent. */
+   * finds a newer version (the catalog moved): no question and no banner; the
+   * item's page says it in its history. Off when absent. */
   autoUpdate?: { kinds: readonly UpdateKind[] };
   log?: (line: string) => void;
 }
@@ -329,9 +334,11 @@ export class CapabilityUpdates {
   /** `person key version` already tried by the automatic update: a failure is
    * not tried again until the source has a newer version. */
   private readonly autoTried = new Set<string>();
+  private readonly history: UpdateHistoryStore;
 
   constructor(options: CapabilityUpdatesOptions) {
     this.options = options;
+    this.history = options.history ?? new MemoryUpdateHistory();
   }
 
   private now(): number {
@@ -355,6 +362,7 @@ export class CapabilityUpdates {
   private async view(person: UpdatePerson): Promise<UpdatesView> {
     const items = await this.items(person);
     return {
+      history: this.history.read(person.id),
       count: items.filter((item) => item.updateAvailable && item.canUpdate).length,
       checkedAt: this.checkedAt,
       checking: this.running.size > 0,
@@ -368,7 +376,7 @@ export class CapabilityUpdates {
 
   /** Send the live frame to each person whose list changed since they
    * were last told or last read it. */
-  private async notifyPeople(only?: UpdatePerson, autoUpdated?: ReadonlyMap<string, UpdateResult[]>): Promise<void> {
+  private async notifyPeople(only?: UpdatePerson): Promise<void> {
     if (!this.options.notify) return;
     const people = new Map<string, UpdatePerson>();
     if (only) people.set(only.id, only);
@@ -383,8 +391,7 @@ export class CapabilityUpdates {
         const before = this.told.get(person.id);
         this.told.set(person.id, now);
         // never told before (right after a start): an update to show is news
-        const updated = autoUpdated?.get(person.id);
-        if (updated?.length || (before === undefined ? view.count > 0 : before !== now)) this.options.notify(person.id, view, updated);
+        if (before === undefined ? view.count > 0 : before !== now) this.options.notify(person.id, view);
       } catch (error) {
         this.log(`[capability-updates] the live frame could not be built: ${reason(error)}`);
       }
@@ -417,8 +424,8 @@ export class CapabilityUpdates {
    * same path as the page's Update. The organization's items (the console
    * decides their version) and this installation's shared ones (they need an
    * administrator's request) are left to their own flows. */
-  private async autoUpdate(kind: UpdateKind): Promise<Map<string, UpdateResult[]>> {
-    const done = new Map<string, UpdateResult[]>();
+  private async autoUpdate(kind: UpdateKind): Promise<number> {
+    let done = 0;
     const people = new Map<string, UpdatePerson>();
     for (const person of this.options.people?.() ?? []) people.set(person.id, person);
     for (const person of this.seen.values()) people.set(person.id, person);
@@ -434,7 +441,7 @@ export class CapabilityUpdates {
         if (this.autoTried.has(tried)) continue;
         this.autoTried.add(tried);
         const result = await this.updateOne(person, item);
-        if (result.status === "updated") done.set(person.id, [...(done.get(person.id) ?? []), result]);
+        if (result.status === "updated") done += 1;
         else if (result.status === "failed") this.log(`[capability-updates] automatic update of ${item.name} failed, the old version stays: ${result.error ?? ""}`);
       }
     }
@@ -461,8 +468,8 @@ export class CapabilityUpdates {
         this.running.delete(provider.kind);
       }
       this.checkedAt = this.now();
-      const auto = this.options.autoUpdate?.kinds.includes(provider.kind) ? await this.autoUpdate(provider.kind) : new Map<string, UpdateResult[]>();
-      if (changed || auto.size) await this.notifyPeople(undefined, auto);
+      const auto = this.options.autoUpdate?.kinds.includes(provider.kind) ? await this.autoUpdate(provider.kind) : 0;
+      if (changed || auto) await this.notifyPeople();
     })();
     this.running.set(provider.kind, run);
     return run;
@@ -509,6 +516,8 @@ export class CapabilityUpdates {
       const done = await provider.update(person, item);
       const to = done?.to ?? item.availableVersion;
       const notes = shortNotes(done?.notes) ?? item.updateNotes;
+      // one line per person and item, whatever the number of bots that hold it
+      this.history.record(person.id, { kind: item.kind, name: item.name, at: this.now(), ...(item.installedVersion ? { from: item.installedVersion } : {}), ...(to ? { to } : {}) });
       return { ...base, status: "updated", ...(to ? { to } : {}), ...(notes ? { updateNotes: notes } : {}) };
     } catch (error) {
       return { ...base, status: "failed", error: `${reason(error)} The installed version still works.` };

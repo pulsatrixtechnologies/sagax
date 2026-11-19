@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale, t } from "@/lib/i18n";
 import { updateReasonKey } from "@/lib/capability-updates";
-import { AutoUpdatedNotice, UpdateNotice } from "./UpdateNotice";
+import { lastUpdateOf } from "@/lib/capability-updates";
+import { LastUpdateNote } from "./DetailParts";
+import { UpdateNotice } from "./UpdateNotice";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -59,21 +61,27 @@ describe("the notice", () => {
   });
 });
 
-describe("a plugin updated by itself (#475)", () => {
-  it("says the name, from and to, that its routines follow, and closes", async () => {
+describe("a plugin updated by itself (M-20261119-040)", () => {
+  it("raises no banner: the line lives in the plugin's own page, in one line, with no changelog", async () => {
     setLocale("en");
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
-    const onClose = vi.fn();
-    await act(async () => { root.render(createElement(AutoUpdatedNotice, { line: { name: "Dispatch Kit", from: "1.0.0", to: "1.1.0", notes: "Faster routing." }, onClose })); });
-    const notice = host.querySelector("[data-auto-updated]")!;
-    expect(notice.textContent).toContain("Dispatch Kit");
-    expect(notice.textContent).toContain("Updated by itself, 1.0.0 to 1.1.0. Its routines follow it the next time it runs.");
-    expect(notice.textContent).toContain("Faster routing.");
-    await act(async () => { notice.querySelector<HTMLButtonElement>("[data-update-dismiss]")!.click(); });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(LastUpdateNote, { at: Date.UTC(2026, 10, 18, 12), from: "0.33.6", to: "0.33.8" })); });
+    const line = host.querySelector("[data-detail-last-update]")!;
+    expect(line.textContent).toMatch(/Updated on .*2026, from 0\.33\.6 to 0\.33\.8\./);
+    expect(line.querySelector("button")).toBeNull();
+    expect(line.textContent).not.toContain("routines");
+    await act(async () => root.render(createElement(LastUpdateNote, { at: Date.UTC(2026, 10, 18, 12) })));
+    expect(host.querySelector("[data-detail-last-update]")!.textContent).toMatch(/Updated on .*2026\.$/);
     await act(async () => root.unmount());
     host.remove();
+  });
+
+  it("lastUpdateOf finds the item's line by kind and readable name", () => {
+    const data = { count: 0, checkedAt: null, checking: false, items: [], history: [{ kind: "plugin" as const, name: "Pulsatrix Flow", at: 1, from: "1", to: "2" }] };
+    expect(lastUpdateOf(data, "plugin", "pulsatrix-flow")?.to).toBe("2");
+    expect(lastUpdateOf(data, "skill", "Pulsatrix Flow")).toBeUndefined();
+    expect(lastUpdateOf(null, "plugin", "x")).toBeUndefined();
   });
 });

@@ -2,6 +2,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FileUpdateHistory, MemoryUpdateHistory } from "./update-history.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -479,20 +480,58 @@ describe("second review of #4504", () => {
 describe("automatic update of plugins (#4504, #475)", () => {
   const behind = (key: string, over: Partial<UpdateItem> = {}) => item({ key, kind: "plugin", name: key, updateAvailable: true, installedVersion: "1.0.0", availableVersion: "1.1.0", ...over });
 
-  it("updates the person's own plugins by itself when a check finds a newer one, and tells them in the frame", async () => {
+  it("updates the person's own plugins by itself when a check finds a newer one, with no banner in the frame", async () => {
     const calls: string[] = [];
-    const sent: Array<[string, string[] | undefined]> = [];
+    const sent: unknown[][] = [];
     const updates = new CapabilityUpdates({
-      providers: [fakeProvider("plugin", { pr_ada: [behind("plugin:me:me:a@m"), behind("plugin:bot:b1:a@m", { scope: "bot" }), behind("plugin:installation:installation:a@m", { scope: "installation" }), behind("plugin:organization:organization:x", { scope: "organization", canUpdate: false })] },
+      providers: [fakeProvider("plugin", { pr_ada: [behind("plugin:me:me:a@m"), behind("plugin:bot:b1:a@m", { scope: "bot" }), behind("plugin:installation:installation:a@m", { scope: "installation" }), behind("plugin:organization:organization:x", { scope: "organization", organization: "required" })] },
         async (_person, one) => { calls.push(one.key); return { to: "1.1.0" }; }, async () => true)],
       people: () => [ADA],
       autoUpdate: { kinds: ["plugin"] },
-      notify: (person, _view, auto) => sent.push([person, auto?.map((one) => one.name)]),
+      notify: (...args) => sent.push(args),
       log: () => {},
     });
     await updates.check();
     expect(calls).toEqual(["plugin:me:me:a@m", "plugin:bot:b1:a@m"]);
-    expect(sent.find(([, names]) => names?.length)).toEqual(["pr_ada", ["plugin:me:me:a@m", "plugin:bot:b1:a@m"]]);
+    // the frame says the list changed: it carries no line about what was updated
+    expect(sent.length).toBeGreaterThan(0);
+    for (const args of sent) expect(args).toHaveLength(2);
+  });
+
+  it("a plugin held by four bots is one history line for the person, not four (M-20261119-040)", async () => {
+    const bots = ["b1", "b2", "b3", "b4"].map((id) => behind(`plugin:bot:${id}:flow@m`, { name: "Pulsatrix Flow", scope: "bot", installedVersion: "0.33.6", availableVersion: "0.33.8" }));
+    const updates = new CapabilityUpdates({
+      providers: [fakeProvider("plugin", { pr_ada: bots, pr_bob: [behind("plugin:me:me:flow@m", { name: "Pulsatrix Flow", installedVersion: "0.33.6", availableVersion: "0.33.8" })] }, async () => ({ to: "0.33.8" }), async () => true)],
+      people: () => [ADA, BOB],
+      autoUpdate: { kinds: ["plugin"] },
+      now: () => 1_000,
+      log: () => {},
+    });
+    await updates.check();
+    const ada = await updates.list(ADA);
+    expect(ada.history).toEqual([{ kind: "plugin", name: "Pulsatrix Flow", at: 1_000, from: "0.33.6", to: "0.33.8" }]);
+    expect((await updates.list(BOB)).history).toHaveLength(1);
+  });
+
+  it("a later update of the same plugin adds a line, newest first, and the history stays short", () => {
+    const history = new MemoryUpdateHistory();
+    expect(history.record("p", { kind: "plugin", name: "A", at: 1, from: "1", to: "2" })).toBe(true);
+    expect(history.record("p", { kind: "plugin", name: "A", at: 2, from: "1", to: "2" })).toBe(false);
+    for (let version = 3; version < 12; version += 1) history.record("p", { kind: "plugin", name: "A", at: version, from: String(version - 1), to: String(version) });
+    const rows = history.read("p");
+    expect(rows).toHaveLength(5);
+    expect(rows[0]!.to).toBe("11");
+    expect(history.read("other")).toEqual([]);
+  });
+
+  it("the history file survives a restart and an unreadable file starts fresh", () => {
+    const dir = mkdtempSync(join(tmpdir(), "update-history-"));
+    dirs.push(dir);
+    const file = join(dir, "history.json");
+    new FileUpdateHistory(file).record("p", { kind: "plugin", name: "A", at: 5, from: "1", to: "2" });
+    expect(new FileUpdateHistory(file).read("p")).toEqual([{ kind: "plugin", name: "A", at: 5, from: "1", to: "2" }]);
+    writeFileSync(file, "not json");
+    expect(new FileUpdateHistory(file).read("p")).toEqual([]);
   });
 
   it("a failed automatic update leaves the old version and is not retried for the same version", async () => {

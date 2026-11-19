@@ -46,6 +46,7 @@ export function PluginsPanelSubpage({
   toggleBotServers,
   products,
   updateInfo,
+  lastUpdateInfo,
   productCtx,
   itemUpdate,
   orgItems,
@@ -69,6 +70,8 @@ export function PluginsPanelSubpage({
   /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
   productCtx?: ProductRowsContext;
   /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
+  /** the last update an item had, from the history the server keeps (#4504) */
+  lastUpdateInfo?: (kind: UpdateKind, name: string) => { at: number; from?: string; to?: string } | undefined;
   updateInfo?: (kind: UpdateKind, name: string, updateKey?: string, organizationId?: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
   products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
@@ -223,6 +226,7 @@ export function PluginsPanelSubpage({
         {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : !base.onUpdate && reinstall ? reinstall : {})}
         details={[...base.details, ...(engines.row ? [engines.row] : [])]}
         update={updateWaiting}
+        lastUpdate={updateWaiting ? undefined : lastUpdateInfo?.(updateKindOf(detailItem.kind), detailItem.name)}
         notice={engines.notice}
         {...head}
         displayName={identity.name}

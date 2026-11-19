@@ -87,3 +87,16 @@ describe("signed-out holds", () => {
     expect(after.activeEngineRefusal("claude", undefined, refusals.SIGNED_OUT_STRETCH_MS)).toBeUndefined();
   });
 });
+
+describe("activeEngineRefusals", () => {
+  it("lists the live refusals of one engine on every account, and drops the expired", async () => {
+    const m = await fresh();
+    const now = 1_000_000;
+    m.noteEngineRefusal({ engine: "claude", account: "a", cause: "credits", at: now });
+    m.noteEngineRefusal({ engine: "claude", account: "b", cause: "usage_limit", resetsAt: now + 60_000, at: now });
+    m.noteEngineRefusal({ engine: "claude", account: "old", cause: "credits", at: now - m.ENGINE_REFUSAL_TTL_MS - 1 });
+    m.noteEngineRefusal({ engine: "codex", account: "a", cause: "credits", at: now });
+    expect(m.activeEngineRefusals("claude", now).map((row) => row.account).sort()).toEqual(["a", "b"]);
+    expect(m.activeEngineRefusals("none", now)).toEqual([]);
+  });
+});

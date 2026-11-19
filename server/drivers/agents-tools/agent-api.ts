@@ -142,7 +142,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "list_agent_models",
-    description: "List the engines and models you may pick as this agent's default (and its current model). Call before update_agent_model. Valid instance_id and model values come from this list only.",
+    description: "List the engines and models you may pick as this agent's default (and its current model). Call before update_agent_model. Valid instance_id and model values come from this list only. Each model reports signed_in, limit_reached (resets_at), out_of_credits and kind (local or cloud): pick a healthy one.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {

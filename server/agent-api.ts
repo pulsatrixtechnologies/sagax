@@ -1,4 +1,5 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
+import type { ModelHealth } from "./agent-model-health.ts";
 import { FILES_NOTE, PRIVATE_FILES_NOTE } from "./messages/staged-file-refs.ts";
 import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
@@ -364,7 +365,7 @@ export interface AgentModelChoice {
   label: string;
   /** `enabled`: false when the person turned the model off by hand in
    * their settings (Settings > Models); it stays listed, greyed. */
-  models: Array<{ id: string; label: string; enabled?: boolean }>;
+  models: Array<{ id: string; label: string; enabled?: boolean } & Partial<ModelHealth>>;
   effort_levels?: string[];
   /** True when Auto may be chosen on this engine. */
   auto?: boolean;

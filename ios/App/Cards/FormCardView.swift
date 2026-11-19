@@ -51,9 +51,7 @@ struct FormCardView: View {
                         }
                     } else {
                         ForEach(Array(questions.indices), id: \.self) { index in
-                            FormSegment(first: false, last: false) {
-                                FormRowContent(state: state, index: index)
-                            }
+                            FormRowPiece(state: state, index: index)
                         }
                     }
                     FormSegment(first: false, last: true) {
@@ -97,7 +95,10 @@ struct FormCardView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                    ForEach(Array(questions.enumerated()).filter { _, question in
+                        // #4910: a follow-up whose answer was never picked was not asked
+                        question.when == nil || readable == nil || byQuestion[question.question] != nil
+                    }, id: \.offset) { index, question in
                         let given = byQuestion[question.question]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         let value = given == AskQuestionAnswer.leftEmpty ? "" : given
                         let label = Text(question.question)

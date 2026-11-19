@@ -196,4 +196,24 @@ final class AskQuestionTests: XCTestCase {
         XCTAssertEqual(comma.rest, "")
         XCTAssertEqual(AskQuestionAnswer.picks(in: "Enterprise", labels: ["Free"]).rest, "Enterprise")
     }
+
+    // #4910: a follow-up with `when` hides, and is never owed, until its answer is picked
+    func testConditionalFollowUpIsHiddenAndNotOwedUntilItsAnswer() throws {
+        let json = """
+        [{"question":"How long?","header":"Duration","kind":"choice","options":[{"label":"As scheduled"},{"label":"Enter it"}]},
+         {"question":"Real length","kind":"text","when":{"question":"Duration","option":"Enter it"}},
+         {"question":"Billable?","kind":"yes_no","options":[{"label":"Yes","id":"yes"},{"label":"No","id":"no"}]}]
+        """
+        let questions = try JSONDecoder().decode([AskQuestion].self, from: Data(json.utf8))
+        XCTAssertEqual(questions[1].when, AskWhen(question: "Duration", option: "Enter it"))
+        var drafts: [Int: FormDraft] = [0: FormDraft(picked: ["As scheduled"]), 2: FormDraft(picked: ["yes"])]
+        XCTAssertEqual(AskQuestionAnswer.shownRows(questions, drafts: drafts), [true, false, true])
+        XCTAssertEqual(AskQuestionAnswer.owed(questions, drafts: drafts), 0)
+        let sent = try XCTUnwrap(AskQuestionAnswer.formAnswer(questions, drafts: drafts))
+        XCTAssertFalse(sent.contains("Real length"))
+        drafts[0] = FormDraft(picked: ["Enter it"])
+        XCTAssertEqual(AskQuestionAnswer.shownRows(questions, drafts: drafts), [true, true, true])
+        XCTAssertEqual(AskQuestionAnswer.owed(questions, drafts: drafts), 1)
+        XCTAssertNil(AskQuestionAnswer.formAnswer(questions, drafts: drafts))
+    }
 }

@@ -63,6 +63,18 @@ public enum AnswerKind: String, Codable, Hashable, Sendable {
     public var isChoice: Bool { self == .choice || self == .multi || self == .yesNo }
 }
 
+/// #4910: the earlier choice row a follow-up hangs under and the answer it
+/// was written for (`when` of `shared/ask-question.ts`).
+public struct AskWhen: Codable, Hashable, Sendable {
+    public var question: String
+    public var option: String
+
+    public init(question: String, option: String) {
+        self.question = question
+        self.option = option
+    }
+}
+
 public struct AskQuestion: Codable, Hashable, Sendable {
     public var question: String
     /// The short tab label the model gave this question ("Schedule", "Model").
@@ -78,10 +90,15 @@ public struct AskQuestion: Codable, Hashable, Sendable {
     public var checked: [String]?
     /// #4490: a checklist's buttons; the one pressed is sent with the picks.
     public var actions: [String]?
+    /// #4910: a follow-up row shown only under the answer that needs it: the
+    /// text of an earlier choice row and one of its option ids (or labels).
+    /// Never picked, never sent.
+    public var when: AskWhen?
 
     public init(
         question: String, header: String? = nil, multiSelect: Bool? = nil, options: [AskQuestionOption],
-        kind: AnswerKind? = nil, optional: Bool? = nil, checked: [String]? = nil, actions: [String]? = nil
+        kind: AnswerKind? = nil, optional: Bool? = nil, checked: [String]? = nil, actions: [String]? = nil,
+        when: AskWhen? = nil
     ) {
         self.question = question
         self.header = header
@@ -91,6 +108,7 @@ public struct AskQuestion: Codable, Hashable, Sendable {
         self.optional = optional
         self.checked = checked
         self.actions = actions
+        self.when = when
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +123,7 @@ public struct AskQuestion: Codable, Hashable, Sendable {
         optional = try? container.decodeIfPresent(Bool.self, forKey: .optional)
         checked = try? container.decodeIfPresent([String].self, forKey: .checked)
         actions = try? container.decodeIfPresent([String].self, forKey: .actions)
+        when = (try? container.decodeIfPresent(AskWhen.self, forKey: .when)).flatMap { $0 }
     }
 
     /// What the tab shows. The model names most questions; a numbered
@@ -131,6 +150,47 @@ public struct AskQuestion: Codable, Hashable, Sendable {
 /// rather than an engine's own question set (`isFormCard`).
 public func isFormCard(_ questions: [AskQuestion]) -> Bool {
     questions.contains { $0.kind != nil || $0.isChecklist }
+}
+
+/// #4910: the row a follow-up hangs under (`followUpParent` of
+/// `shared/ask-question.ts`). A row with `when` hangs under the earlier
+/// choice row it names and shows only under that answer. A card written
+/// before `when` existed carries an optional text row right after a choice
+/// row: it hangs under that row, always shown. Nil: a step of its own.
+public func followUpParent(_ questions: [AskQuestion], _ index: Int) -> (parent: Int, conditional: Bool)? {
+    guard questions.indices.contains(index) else { return nil }
+    let row = questions[index]
+    if let when = row.when {
+        for at in 0..<index {
+            let candidate = questions[at]
+            if candidate.question == when.question || candidate.header == when.question, !candidate.options.isEmpty {
+                return (at, true)
+            }
+        }
+        return nil
+    }
+    let inWords = row.kind == .text || row.kind == .longText
+    if index > 0, row.isOptional, inWords {
+        let previous = questions[index - 1]
+        if let kind = previous.kind, kind.isChoice, !previous.isChecklist { return (index - 1, false) }
+    }
+    return nil
+}
+
+/// #4910: which rows are on screen given what each row has picked (option
+/// keys). A follow-up shows when its parent shows and, if conditional, the
+/// parent holds the answer it was written for (`formRowsShown`).
+public func formRowsShown(_ questions: [AskQuestion], picksOf: (Int) -> [String]) -> [Bool] {
+    var shown: [Bool] = []
+    for (index, row) in questions.enumerated() {
+        guard let link = followUpParent(questions, index) else { shown.append(true); continue }
+        if !shown[link.parent] { shown.append(false); continue }
+        guard link.conditional, let when = row.when else { shown.append(true); continue }
+        let parent = questions[link.parent]
+        let wanted = Set(parent.options.filter { parent.key($0) == when.option || $0.label == when.option }.map(parent.key))
+        shown.append(picksOf(link.parent).contains { wanted.contains($0) })
+    }
+    return shown
 }
 
 /// #4490: what one form row holds while it is being filled in: the picks of
@@ -276,10 +336,17 @@ public enum AskQuestionAnswer {
         }
     }
 
-    /// How many rows still owe an answer (an optional row never does).
+    /// #4910: which rows a form draws, from what its drafts have picked.
+    public static func shownRows(_ questions: [AskQuestion], drafts: [Int: FormDraft]) -> [Bool] {
+        formRowsShown(questions) { drafts[$0]?.picked ?? [] }
+    }
+
+    /// How many rows still owe an answer (an optional row never does, nor a
+    /// follow-up whose answer was not given).
     public static func owed(_ questions: [AskQuestion], drafts: [Int: FormDraft]) -> Int {
-        questions.enumerated().filter { index, question in
-            !question.isOptional && rowAnswer(question, drafts[index] ?? FormDraft()).isEmpty
+        let shown = shownRows(questions, drafts: drafts)
+        return questions.enumerated().filter { index, question in
+            shown[index] && !question.isOptional && rowAnswer(question, drafts[index] ?? FormDraft()).isEmpty
         }.count
     }
 
@@ -287,7 +354,9 @@ public enum AskQuestionAnswer {
     /// while a required row is still owed.
     public static func formAnswer(_ questions: [AskQuestion], drafts: [Int: FormDraft]) -> String? {
         guard owed(questions, drafts: drafts) == 0 else { return nil }
+        let shown = shownRows(questions, drafts: drafts)
         let rows = questions.enumerated().map { index, question -> [String] in
+            if !shown[index] { return [] }
             let row = rowAnswer(question, drafts[index] ?? FormDraft())
             return row.isEmpty ? [leftEmpty] : row
         }

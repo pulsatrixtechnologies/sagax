@@ -1,9 +1,12 @@
 // Server side of the misuse guardrail (docs/security/misuse-guardrails.md).
 //
 // The classifier is pure (shared/misuse-guardrails.ts). This module reads
-// the mode, counts repeated attempts, writes the admin activity log and
-// tells the harness when a person should be notified. Shadow mode records
-// the same rows and refuses nothing.
+// the mode, counts repeated attempts and writes the admin activity log,
+// which the admins read in the Perspicax console. A refusal reaches the
+// person who asked (the refusal itself) and nobody else: no notification,
+// never in another person's app (a member's bot is never announced to an
+// admin's app or phone). Shadow mode records the same rows and refuses
+// nothing.
 import { appendAdminAction } from "../activity/admin-activity.ts";
 import { DATA_DIR } from "../config.ts";
 import { readBridgeCall } from "../../shared/searched-tool-call.ts";
@@ -49,7 +52,6 @@ const MAX_ATTEMPTS = 5;
 interface Bucket { stamps: number[]; lockedUntil: number }
 const buckets = new Map<string, Bucket>();
 
-let alertListener: ((alert: { principalId?: string; botId?: string; threadId?: string; category?: MisuseCategory; message: string }) => void) | null = null;
 let dataDirForTests: string | null = null;
 let ownPathsResolver: ((who: { principalId?: string; botId?: string; threadId?: string }) => MisuseOwnPaths | undefined) | null = null;
 
@@ -57,12 +59,6 @@ export function misuseGuardrailMode(env: NodeJS.ProcessEnv = process.env): Misus
   const raw = (env.SAGAX_MISUSE_GUARDRAILS ?? "shadow").trim().toLowerCase();
   if (raw === "off" || raw === "shadow" || raw === "enforce") return raw;
   return "shadow";
-}
-
-/** The harness registers this once. A blocked attempt in enforce mode
- * reaches tenant admins; shadow mode only writes the activity log. */
-export function setMisuseAlert(listener: typeof alertListener): void {
-  alertListener = listener;
 }
 
 /** 2026-10-27 (#1098): the harness registers once how to read the
@@ -89,7 +85,6 @@ export function setMisuseDataDirForTests(dir: string | null): void {
 
 export function resetMisuseGuardrailsForTests(): void {
   buckets.clear();
-  alertListener = null;
   dataDirForTests = null;
   ownPathsResolver = null;
 }
@@ -179,19 +174,7 @@ export function misuseRefusal(text: string, context: MisuseContext, now = Date.n
   const action = attempt.locked ? "misuse.lockout" : mode === "shadow" ? "misuse.shadow" : verdict.action === "require_approval" ? "misuse.approval" : "misuse.block";
   audit(action, context, verdict, text);
   if (mode === "shadow") return null;
-  const refusal = refusalFor(verdict, attempt.locked);
-  try {
-    alertListener?.({
-      principalId: context.principalId,
-      botId: context.botId,
-      threadId: context.threadId,
-      category: verdict.category,
-      message: refusal.message,
-    });
-  } catch (error) {
-    console.warn(`[misuse] alert: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return refusal;
+  return refusalFor(verdict, attempt.locked);
 }
 
 /** A file tool in the speaker's own server environment. The path allowlist

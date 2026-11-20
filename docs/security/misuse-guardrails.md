@@ -157,11 +157,18 @@ The mode is `SAGAX_MISUSE_GUARDRAILS`: `off`, `shadow`, or `enforce`. An
 unknown value is `shadow`. The default is `shadow`, so a deploy of this
 build records attempts and refuses nothing until an operator sets `enforce`.
 
-| Mode | Person | Activity log | Admin alert |
-|---|---|---|---|
-| off | unchanged | none | none |
-| shadow | unchanged | `misuse.shadow`, or `misuse.lockout` on the fifth attempt | none |
-| enforce | 403 `misuse_blocked` or `misuse_approval_required`; 429 `misuse_locked` | `misuse.block`, `misuse.approval`, `misuse.lockout` | one `admin-action` notification, admins only |
+| Mode | Person | Activity log |
+|---|---|---|
+| off | unchanged | none |
+| shadow | unchanged | `misuse.shadow`, or `misuse.lockout` on the fifth attempt |
+| enforce | 403 `misuse_blocked` or `misuse_approval_required`; 429 `misuse_locked` | `misuse.block`, `misuse.approval`, `misuse.lockout` |
+
+No mode sends a notification. The person who asked reads the refusal; the
+admins read the row in the activity log of the Perspicax console. A
+refusal on a member's bot is never announced in an admin's app or on their
+phone: the app shows only what concerns the person signed in, and a bot's
+notification goes to its own person (#5142,
+`server/org-notification-isolation.e2e.test.ts`).
 
 Five block or approval attempts in ten minutes lock that person for fifteen
 minutes. The key is the principal id, then the thread id, then `anonymous`.
@@ -185,7 +192,7 @@ Perspicax is the exception):
 `shared/misuse-guardrails.test.ts` is the red-team suite (French, English,
 base64, split quotes, hex, octal, zero-width characters, jailbreaks, the
 triage permission, paths, the MCP gate). `server/safety/misuse-guardrails.test.ts`
-covers the flag, the lockout, the alert, and the container limits.
+covers the flag, the lockout, the activity log row, and the container limits.
 `shared/safety-review.test.ts` and `server/safety/safety-review.test.ts` cover the
 safer path, the explicit card, final denial, untrusted wrapping, and
 outbound drafts. None of these files boot the server, so CI runs them with

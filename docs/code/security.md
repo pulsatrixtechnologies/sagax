@@ -256,8 +256,9 @@ a block. Details, the flag, and the French refusals:
 
 - `SAGAX_MISUSE_GUARDRAILS` is `off`, `shadow`, or `enforce`. The default is
   `shadow`: classify and write `misuse.shadow` (category `security` on the
-  admin activity log), refuse nothing. `enforce` refuses, alerts tenant
-  admins (`admin-action`, admins only), and locks a principal after 5
+  admin activity log), refuse nothing. `enforce` refuses, writes the row
+  the admins read in the Perspicax console (no notification: a member's
+  bot is never announced in an admin's app), and locks a principal after 5
   attempts in 10 minutes (15 minutes, 429 `misuse_locked`).
 - The prompt section `misuse-policy` is first in `buildSystemPrompt`, ahead
   of the persona and the soul, and it is not a control. The server

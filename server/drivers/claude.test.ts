@@ -170,6 +170,23 @@ describe("ClaudeDriver.decodeConfig", () => {
     expect(settings.SessionStart![0]!.hooks[0]!.async).toBeUndefined();
     // a fresh or resumed session never waits on the helper
     expect(settings.SessionStart![0]!.matcher).toBe("compact");
+    // no claude.ai connector to watch: nothing more waits
+    expect(settings.PostToolUse).toHaveLength(1);
+  });
+
+  it("waits on the claude.ai connector tools only, to move a file they saved into the person's place (#5140)", () => {
+    type Entry = Array<{ matcher: string; hooks: Array<{ command: string; timeout?: number; async?: boolean }> }>;
+    const settings = claudeHookSettings("/tmp/helper.ts", { connectorFiles: true }) as Record<string, Entry>;
+    const [background, files] = settings.PostToolUse!;
+    expect(background!.hooks[0]!.async).toBe(true);
+    expect(files!.matcher).toBe("^mcp__claude_ai_.*");
+    const matches = new RegExp(files!.matcher);
+    expect(matches.test("mcp__claude_ai_Docs_Hub__download_file")).toBe(true);
+    for (const other of ["mcp__perspicax__cw_psa_action", "mcp__agents__attach_file", "Read", "mcp__claude-ai_X__y"]) expect(matches.test(other)).toBe(false);
+    // synchronous, with room to copy to the person's computer
+    expect(files!.hooks[0]!.async).toBeUndefined();
+    expect(files!.hooks[0]!.timeout).toBe(120);
+    expect(files!.hooks[0]!.command.endsWith(" connector-files")).toBe(true);
   });
 
   it("keeps the per-turn hook token where workspace backups never look", () => {

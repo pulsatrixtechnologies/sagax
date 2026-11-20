@@ -187,7 +187,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
 
     if (method === "POST" && path === "/api/internal/hook") {
       const body = await readBody();
-      return json(res, 200, deps.ingestHook(capability, body));
+      return json(res, 200, await deps.ingestHook(capability, body));
     }
     if (method === "POST" && path === "/api/internal/tool-result") {
       const body = await readBody();

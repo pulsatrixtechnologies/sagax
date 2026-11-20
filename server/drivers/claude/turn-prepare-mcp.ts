@@ -346,7 +346,9 @@ const settings: Record<string, unknown> = {
 // Project-only settings still discover the personal memory through ancestor
 // directories when the bot workspace lives below HOME. Keep project memory.
 if (isolated) settings.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
-if (hooks) settings.hooks = claudeHookSettings(HOOK_HELPER_PATH);
+// #5140: a file the account's own claude.ai connectors save goes to the
+// person's place (organization server only, hooks.connectorFiles)
+if (hooks) settings.hooks = claudeHookSettings(HOOK_HELPER_PATH, { connectorFiles: keepsClaudeAiConnectors && hooks.connectorFiles === true });
 // #2717: a design quickstart on the native Artifact tool goes to propose_page
 // kind design instead (design-redirect.ts); every other Artifact call is kept.
 if (!turn.guestConfined) settings.hooks = withDesignRedirectHook(settings.hooks, process.execPath);

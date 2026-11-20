@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { QUESTION_UNANSWERED_NOTE } from "../../shared/ask-question.ts";
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import { BUILT_IN_DATA_SYSTEM_PROMPT } from "../data/instructions.ts";
 import type { ProviderInstance, SendTurnInput } from "../contracts.ts";
@@ -763,9 +764,12 @@ describe.each<Provider>(["openai-compat", "grok", "minimax"])("%s structured too
     expect((completed as any).stopReason).not.toBe("tool_error");
     expect((completed as any).denials).toBeUndefined();
     expect(f.requests[1].messages.at(-1)).toMatchObject({ role: "tool", tool_call_id: "call_ask" });
-    expect(JSON.parse(String(f.requests[1].messages.at(-1)?.content))).toMatchObject({
+    // #5036 (M-20261119-026): no answer is never an answer. The model reads
+    // the one shared note: the question stays open, nothing is chosen for
+    // the person.
+    expect(JSON.parse(String(f.requests[1].messages.at(-1)?.content))).toEqual({
       ok: true,
-      result: expect.stringContaining("did not answer"),
+      result: QUESTION_UNANSWERED_NOTE,
     });
   }, 20_000);
 

@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { PillTabCount, PillTabs } from "./PillTabs";
+import { RecordMarkdown, type ReadRecordImage } from "./RecordMarkdown";
 import { t } from "@/lib/i18n";
 
 export interface ScheduleEntry {
@@ -55,10 +56,11 @@ const NOTE_LONG_LINES = 8;
 const NOTE_LINE_PX = 22;
 const NOTE_TOP_PX = 2;
 
-/** A note shows its whole text (#5053). A long one (more than eight lines)
- * offers "Less" to fold it to three lines, and "More" to open it again. */
-function Note({ note }: { note: TicketNote }) {
-  const body = useRef<HTMLParagraphElement>(null);
+/** A note shows its whole text (#5053), drawn by the chat's Markdown renderer
+ * with its images (M-20261119-084). A long one (more than eight lines) offers
+ * "Less" to fold it to three lines, and "More" to open it again. */
+function Note({ note, readImage }: { note: TicketNote; readImage?: ReadRecordImage }) {
+  const body = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(true);
   const [long, setLong] = useState(false);
   useLayoutEffect(() => {
@@ -75,13 +77,13 @@ function Note({ note }: { note: TicketNote }) {
     <Avatar name={name} />
     <div className="min-w-0 flex-1">
       <p className="flex flex-wrap items-baseline gap-x-2.5"><span className="font-medium">{name}</span><span className="text-[13px] text-popover-ink-secondary">{note.date}</span></p>
-      <p dir="auto" ref={body} className={`whitespace-pre-wrap break-words pt-0.5 ${expanded ? "" : "line-clamp-3"}`}>{note.body}</p>
+      <div ref={body} data-record-note-body="" className={`pt-0.5 ${expanded ? "" : "line-clamp-3"}`}><RecordMarkdown text={note.body} readImage={readImage} /></div>
       {(!expanded || long) && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)} className="pt-1 text-[13px] leading-[18px] text-popover-accent hover:underline">{t(expanded ? "recordCard.related.less" : "recordCard.related.more")}</button>}
     </div>
   </li>;
 }
 
-export function TicketNotes({ notes }: { notes: TicketNote[] }) {
+export function TicketNotes({ notes, readImage }: { notes: TicketNote[]; readImage?: ReadRecordImage }) {
   const id = useId();
   const groups: Record<Filter, TicketNote[]> = { discussion: [], internal: [], resolution: [], all: [] };
   const ordered = [...notes].sort((a, b) => {
@@ -103,7 +105,7 @@ export function TicketNotes({ notes }: { notes: TicketNote[] }) {
       label={key => t(`recordCard.related.${key}`)} after={key => <PillTabCount count={groups[key].length} />}
       className="-mx-2 gap-y-1 pb-1" />
     <div key={tab} role="tabpanel" id={`${id}-panel-${tab}`} aria-labelledby={`${id}-tab-${tab}`}>
-      {groups[tab].length ? <ul className="divide-y divide-popover-hairline">{groups[tab].map((note, index) => <Note key={`${note.timestamp || note.date}-${index}`} note={note} />)}</ul> :
+      {groups[tab].length ? <ul className="divide-y divide-popover-hairline">{groups[tab].map((note, index) => <Note key={`${note.timestamp || note.date}-${index}`} note={note} readImage={readImage} />)}</ul> :
         <p className="py-2 text-popover-ink-secondary">{t("recordCard.related.empty")}</p>}
     </div>
   </>;

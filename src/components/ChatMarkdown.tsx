@@ -12,7 +12,7 @@
 // exception: fenced blocks and inline spans pin dir="ltr" and isolate
 // themselves, so a snippet never reorders and never scrambles the RTL
 // sentence holding it.
-import { lazy, memo, Suspense, use, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, memo, Suspense, use, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { highlightFence, HIGHLIGHT_MAX_CHARS } from "./chat-code-highlight";
 export { highlightCodeLines, HIGHLIGHT_MAX_CHARS, type CodeToken } from "./chat-code-highlight";
 import Markdown, { defaultUrlTransform, type Components } from "react-markdown";
@@ -65,6 +65,7 @@ import { looksLikePermissionLink, parsePermissionLink } from "../lib/os-permissi
 import { OsPermissionChatButton } from "./settings/OsPermissions";
 import type { PreviewImage } from "./AttachmentPreview";
 import { MemeImage } from "./MemeImage";
+import { MarkdownImageContext } from "./markdown-image-context";
 import { AttachmentPreviewDialog, MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, canRevealLocalPath, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
 import { ThreadLink, ThreadRefsContext, threadLinkFromProps, type ThreadRefsValue } from "./ThreadRefs";
 import { t } from "../lib/i18n";
@@ -1244,6 +1245,8 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
   slugs.current = new Map();
   const threadId = message?.threadId;
   const messageId = message?.messageId;
+  // a surface that draws its images itself (a ticket note's, through the card's route)
+  const drawImage = useContext(MarkdownImageContext);
 
   // One components map per (message, fence state), so a
   // re-render with the same inputs keeps every custom block mounted: an
@@ -1354,6 +1357,9 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         if (!src) {
           return <span className="text-[12px] text-danger" role="alert">{t("attach.imageUnavailable")}</span>;
         }
+        const linkedTo = (props as Record<string, unknown>)["data-open-url"];
+        const drawn = drawImage?.({ src, alt, ...(typeof linkedTo === "string" ? { openUrl: linkedTo } : {}) });
+        if (drawn !== undefined) return drawn;
         // a bare GIF / picture address on its own line is the picture, drawn as
         // a GIF a person sends is (MemeImage: whole, animated, not cropped)
         const bare = (props as Record<string, unknown>)["data-bare-image"];
@@ -1569,7 +1575,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         return <hr className="border-hairline/40" />;
       },
     } as Components;
-  }, [threadId, messageId, botId, threads, currentBotId, openFence, prefix, delivered, inert, draftId]);
+  }, [threadId, messageId, botId, threads, currentBotId, openFence, prefix, delivered, inert, draftId, drawImage]);
   // KaTeX loads the first time a message actually holds math (ensureChatKatex).
   const needsMath = normalizedSourceHasMath(source);
   const [katexReady, setKatexReady] = useState(() => katexPlugin !== null);

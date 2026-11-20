@@ -10,7 +10,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
 import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
-import { createRecordCardsRoutes, recordReadOrgRule, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
+import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
 const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
@@ -90,6 +90,47 @@ describe("record card route", () => {
     const answer = await denied.request(PATH + "/detail", ADA, "POST", { field: "owner", value: "3" });
     expect(answer.status).toBe(403);
     expect(denied.calls).toEqual([]);
+  });
+
+  // M-20261119-084: a section the console refused (its documents read, `record_unknown`) came back as a bare
+  // 404, read by the app as "no detail route": every tab and field of the card went away
+  it("keeps the console's code on a refused section, so a refusal never reads as a missing route", async () => {
+    const refused = harness({ answer: () => ({ ok: false, status: 404, body: { code: "record_unknown", message: "m", details: {} } }) });
+    const answer = await refused.request(PATH + "/detail?section=attachments");
+    expect(answer.status).toBe(404);
+    expect(answer.body).toEqual({ state: "unavailable", code: "record_unknown" });
+    // an older console's route that is not there has no code: still the original card
+    const legacy = harness({ answer: () => ({ ok: false, status: 404, body: { error: "no route" } }) });
+    expect((await legacy.request(PATH + "/detail?section=counts")).body).toEqual({ state: "unavailable" });
+    // a code that is no code of the console is not passed on
+    const odd = harness({ answer: () => ({ ok: false, status: 404, body: { code: "<script>" } }) });
+    expect((await odd.request(PATH + "/detail?section=notes")).body).toEqual({ state: "unavailable" });
+  });
+
+  it("passes a note's image address to the console, and its bytes back whole", async () => {
+    const src = "https://desk.example.test/v4_6_release/api/inlineimages/acme/0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+    const h = harness({ answer: () => ({ ok: true, status: 200, body: { contentType: "image/png", base64: "iVBORw0KGgo=" } }) });
+    const answer = await h.request(`${PATH}/detail?section=image&field=${encodeURIComponent(src)}`);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ contentType: "image/png", base64: "iVBORw0KGgo=" });
+    const asked = new URL(`http://x${h.calls[0]!.path}`);
+    expect(asked.searchParams.get("section")).toBe("image");
+    expect(asked.searchParams.get("field")).toBe(src);
+    expect(h.calls[0]!.token).toBe("token-of-p-ada");
+  });
+
+  it("writes the title as text, one trimmed line of 1 to 100 characters, and every other field as an id", async () => {
+    const h = harness({ answer: () => ({ ok: true, status: 200, body: { updated: true } }) });
+    const answer = await h.request(PATH + "/detail", ADA, "POST", { field: "summary", value: "  Imprimante remplacée  " });
+    expect(answer.status).toBe(200);
+    expect(h.calls.map((call) => call.body)).toEqual([{ field: "summary", value: "Imprimante remplacée" }]);
+    for (const bad of [{ field: "summary", value: "" }, { field: "summary", value: "deux\nlignes" }, { field: "summary", value: "a".repeat(101) }, { field: "priority", value: "haute" }, { field: "summary", value: 3 }]) {
+      expect(fieldChange(bad), JSON.stringify(bad)).toBeNull();
+      expect((await h.request(PATH + "/detail", ADA, "POST", bad)).status).toBe(400);
+    }
+    expect(h.calls).toHaveLength(1);
+    expect(fieldChange({ field: "summary", value: "é".repeat(100) })).toEqual({ field: "summary", value: "é".repeat(100) });
+    expect(fieldChange({ field: "owner", value: "12" })).toEqual({ field: "owner", value: "12" });
   });
 
   it("reads as the session's own person, with their own sign-in token and language", async () => {
@@ -237,5 +278,19 @@ describe("the organization's rules on a person's read", () => {
     expect(recordReadOrgRule([rule({ products: ["nimbus_desk"] })], REF, "Nimbus Desk")).toEqual({ kind: "none" });
     expect(recordReadOrgRule([rule({ botId: "bot-1", behavior: "ask", products: ["nimbus_desk"] })], REF, "Nimbus Desk")).toEqual({ kind: "none" });
     expect(recordReadOrgRule([], REF)).toEqual({ kind: "none" });
+  });
+
+  it("a title change is held to the same Refuse rules as any field change (M-20261119-084)", async () => {
+    const refuse = rule({ id: "o1", org: true, behavior: "deny", products: ["nimbus_desk"], when: "modifier Nimbus Desk" });
+    for (const change of [{ field: "priority", value: "2" }, { field: "summary", value: "Imprimante remplacée" }]) {
+      expect(recordReadOrgRule([refuse], REF, "Nimbus Desk", undefined, change).kind, change.field).toBe("deny");
+    }
+    // a rule about reading leaves a change alone, the title as any field
+    const reading = rule({ id: "o2", org: true, behavior: "deny", products: ["nimbus_desk"], when: "lire Nimbus Desk" });
+    expect(recordReadOrgRule([reading], REF, "Nimbus Desk", undefined, { field: "summary", value: "x" }).kind).toBe("none");
+    const denied = harness({ rule: { kind: "deny", rule: { id: "o1", text: "rule" } } });
+    const answer = await denied.request(PATH + "/detail", ADA, "POST", { field: "summary", value: "Imprimante remplacée" });
+    expect(answer.status).toBe(403);
+    expect(denied.calls).toEqual([]);
   });
 });

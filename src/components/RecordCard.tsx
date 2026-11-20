@@ -15,9 +15,17 @@
 // record says: its text, then its tabs, which take the height left. Its edges
 // and bottom corners resize it with the app's one resize handle
 // (DockedPanelResize.tsx) and the size is kept on the device for every record
-// (src/lib/record-card-size.ts). A card with tabs takes the whole height; any
-// other card is as tall as its content, up to that height. Hovered, it stays
+// (src/lib/record-card-size.ts). The opened card always takes that whole
+// size, whatever the record holds and while it loads: going from a ticket to
+// its company and back never resizes the window, and a trail of the records
+// opened on the way sits above the head (M-20261119-084). Hovered, it stays
 // the tooltip above.
+//
+// What a record says (its description, its notes) is the product's Markdown:
+// the opened card draws it with the chat's renderer and the note images read
+// as the person (RecordMarkdown.tsx); a hovered card shows its words only
+// (markdownPreview). The title is changed in place when the product lets the
+// person write it, through the card's one write path.
 //
 // Every word of a card is the console's data: this file names no product and
 // no kind, branches on neither, and reads only the tones, the levels, the two
@@ -34,7 +42,7 @@
 // Copyright (c) 2026 Elia Kuratli, used under the MIT License
 // (third_party/arc-library/LICENSE).
 import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Globe, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, CircleAlert, Copy, Globe, Lock, MessageSquareText, Pencil, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
@@ -43,11 +51,14 @@ import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
 import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
 import { RECORD_CARD_WIDTH, recordCardHeightBounds, recordCardRoom, recordCardStyle, windowView } from "@/lib/record-card-size";
+import { markdownPreview } from "@/lib/markdown-preview";
+import { RECORD_TITLE_MAX, titleValue } from "@/lib/record-detail";
 import type { UseRecordCard } from "@/lib/record-cards";
 import { ResizeHandle, useDockedPanelWidth, type DockedPanelSize } from "./DockedPanelResize";
 import { RecordFieldSelect, type RecordFieldEdit } from "./RecordFieldSelect";
 import { TicketSchedule } from "./TicketRecordSections";
 import { RecordRelatedTabs, type RecordRelatedTabsProps } from "./RecordRelatedTabs";
+import { RecordMarkdown } from "./RecordMarkdown";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
 import type { RecordCard as Card, RecordCardMiss, RecordField, RecordLevel, RecordRef, RecordTone } from "../../shared/record-cards";
@@ -69,6 +80,18 @@ export interface RecordCardProduct {
   iconUrl?: string;
 }
 
+/** One record of the way the opened card came (M-20261119-084): the first is
+ * the chip's, the last the one on screen. An earlier one opens again. */
+export interface RecordCardCrumb {
+  label: string;
+  onOpen?: () => void;
+}
+
+/** The title written in place: the product lets the person write it. */
+export interface RecordTitleEdit {
+  save: (value: string) => Promise<void>;
+}
+
 export interface RecordCardProps {
   record: RecordRef;
   /** the link's own text: the head's number while the card loads */
@@ -80,6 +103,10 @@ export interface RecordCardProps {
   /** the record's related tabs and schedule: the opened card's only (a hovered card holds no control) */
   related?: RecordRelatedTabsProps;
   edits?: Readonly<Record<string, RecordFieldEdit>>;
+  /** the title, changed in place (the opened card only) */
+  titleEdit?: RecordTitleEdit;
+  /** the records opened on the way here, this one last; shown from two on */
+  trail?: readonly RecordCardCrumb[];
   pinned?: boolean;
   onClose?: () => void;
   /** put the record in the open conversation's composer (absent: no action) */
@@ -620,7 +647,9 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
                     {item.internal === true && <span className="inline-flex items-center gap-1" data-record-note-scope="internal"><Lock size={11} aria-hidden="true" />{t("recordCard.notes.internal")}</span>}
                     {item.internal === false && <span className="inline-flex items-center gap-1" data-record-note-scope="external"><Globe size={11} aria-hidden="true" />{t("recordCard.notes.external")}</span>}
                   </div>
-                  <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-[18px]", roomy && "pt-0.5 text-[15px] leading-[22px]", !pinned && (items.length > 2 ? "line-clamp-1" : "line-clamp-2"))}>{item.text}</p>
+                  {roomy
+                    ? <RecordMarkdown text={item.text} className="pt-0.5 text-[15px] leading-[22px]" />
+                    : <p dir="auto" className={cn("whitespace-pre-line break-words text-[13px] leading-[18px]", !pinned && (items.length > 2 ? "line-clamp-1" : "line-clamp-2"))}>{markdownPreview(item.text)}</p>}
                 </div>
               </li>
             ))}
@@ -634,7 +663,31 @@ function Notes({ card, now, lang, description, above, pinned, stacked }: { card:
   );
 }
 
-function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
+/** The records opened on the way (M-20261119-084): each earlier one a link
+ * back to it, the one on screen last, in words. Long names go on a second
+ * line, never cut. */
+function Trail({ trail }: { trail: readonly RecordCardCrumb[] }) {
+  const tab = useContext(TabContext);
+  return (
+    <nav aria-label={t("recordCard.trail")} className="w-full min-w-0 pb-1 text-[13px] leading-[18px] text-popover-ink-secondary" data-record-trail="">
+      <ol className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+        {trail.map((crumb, index) => {
+          const last = index === trail.length - 1;
+          return (
+            <li key={index} className="flex min-w-0 items-center gap-x-1">
+              {index > 0 && <ChevronRight size={12} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />}
+              {last || !crumb.onOpen
+                ? <span dir="auto" className={cn("min-w-0 break-words", last && "text-popover-ink")} aria-current={last ? "page" : undefined}>{crumb.label}</span>
+                : <button type="button" tabIndex={tab} dir="auto" className="min-w-0 break-words rounded text-start hover:text-popover-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" onClick={crumb.onOpen} data-record-trail-step={index}>{crumb.label}</button>}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function Head({ card, label, kindName, product, onClose, onBack, pinned, trail, skeleton = false, chips = card?.chips ?? [] }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack" | "trail"> & { card: Card | null; pinned: boolean; skeleton?: boolean; /** the chips this head has room for (the last ones give way first) */ chips?: NonNullable<Card["chips"]> }) {
   const tab = useContext(TabContext);
   const edits = useContext(EditContext);
   const roomy = useContext(RoomyContext);
@@ -646,6 +699,7 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
   const hidden = isGuid(shown) || (card ? card.title.trim().toLowerCase().startsWith(shown.trim().toLowerCase()) : false);
   return (
     <div className={cn("relative flex min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5", pinned && onClose && "pe-9", roomy && "gap-x-2.5 gap-y-1.5 px-6 pt-5", roomy && onClose && "pe-14")} data-record-head>
+      {roomy && trail && trail.length > 1 && <Trail trail={trail} />}
       {onBack && (
         <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6", roomy && "-ms-2 size-8")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
           <ArrowLeft size={roomy ? 16 : 14} aria-hidden="true" className="rtl:-scale-x-100" />
@@ -668,6 +722,101 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
         </button>
       )}
     </div>
+  );
+}
+
+/** The opened card's title, changed in place (M-20261119-084): a click (or
+ * Enter) turns it into a field; Enter or the check saves through the card's
+ * write path, Escape or the cross leaves it as it was. Nothing is written on
+ * a blur. The saved words stand until the card read again says otherwise. */
+function RecordTitle({ title, edit }: { title: string; edit: RecordTitleEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState<{ text: string; on: string }>();
+  const shown = done && done.on === title ? done.text : title;
+  const value = titleValue(draft);
+  const leave = () => {
+    setEditing(false);
+    setError("");
+  };
+  const save = async () => {
+    if (saving) return;
+    if (!value) {
+      setError(t("recordCard.title.invalid", { max: RECORD_TITLE_MAX }));
+      return;
+    }
+    if (value === shown) {
+      leave();
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await edit.save(value);
+      setDone({ text: value, on: title });
+      setEditing(false);
+    } catch {
+      setError(t("recordCard.title.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (!editing) {
+    return (
+      <div className="shrink-0 px-6 pb-5 pt-2">
+        <button
+          type="button"
+          className="group -mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 text-start text-[20px] font-semibold leading-7 hover:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          title={t("recordCard.title.edit")}
+          aria-label={`${t("recordCard.title.edit")}: ${shown}`}
+          onClick={() => { setDraft(shown); setError(""); setEditing(true); }}
+          data-record-title=""
+        >
+          <span dir="auto" className="break-words">{shown}</span>
+          <Pencil size={16} aria-hidden="true" className="ms-2 inline-block align-[-2px] text-popover-ink-secondary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 touch:opacity-100" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form className="flex shrink-0 flex-col gap-1 px-6 pb-5 pt-2" onSubmit={(event) => { event.preventDefault(); void save(); }} data-record-title-form="">
+      <div className="flex items-start gap-1">
+        <textarea
+          autoFocus
+          rows={1}
+          maxLength={RECORD_TITLE_MAX}
+          value={draft}
+          disabled={saving}
+          dir="auto"
+          aria-label={t("recordCard.title.label")}
+          aria-invalid={error ? true : undefined}
+          className="-mx-2 min-w-0 flex-1 resize-none rounded-lg bg-popover-field px-2 text-[20px] font-semibold leading-7 text-popover-ink [field-sizing:content] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60"
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={(event) => event.currentTarget.select()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              void save();
+            } else if (event.key === "Escape") {
+              // the card stays open: Escape only leaves the field
+              event.preventDefault();
+              event.stopPropagation();
+              leave();
+            }
+          }}
+          data-record-title-input=""
+        />
+        <button type="submit" className={cn(ICON_BUTTON, ROOMY_ICON_BUTTON)} disabled={saving || !value} aria-label={t("recordCard.title.save")} title={t("recordCard.title.save")} data-record-title-save="">
+          {saving ? <RotateCw size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <Check size={16} aria-hidden="true" />}
+        </button>
+        <button type="button" className={cn(ICON_BUTTON, ROOMY_ICON_BUTTON)} disabled={saving} aria-label={t("recordCard.title.cancel")} title={t("recordCard.title.cancel")} onClick={leave} data-record-title-cancel="">
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+      {error && <span role="alert" className="text-[13px] leading-[18px] text-danger">{error}</span>}
+    </form>
   );
 }
 
@@ -717,69 +866,39 @@ export function missSentence(miss: RecordCardMiss, product: RecordCardProduct | 
 /** The card's outer box: it is the container the stacked layout asks (the
  * space the card has, not the window's), and carries the width. The opened
  * card's resize handles sit on it, outside the frame that clips. */
-function Shell({ wrap, frame, width, style, frameClass, data, busy, handles, children }: { wrap: RefObject<HTMLDivElement | null>; frame?: (node: HTMLDivElement | null) => void; width: string; style?: CSSProperties; frameClass: string; data: Record<string, string>; busy?: boolean; handles?: ReactNode; children: ReactNode }) {
+function Shell({ wrap, width, style, frameClass, data, busy, handles, children }: { wrap: RefObject<HTMLDivElement | null>; width: string; style?: CSSProperties; frameClass: string; data: Record<string, string>; busy?: boolean; handles?: ReactNode; children: ReactNode }) {
   return (
     <div ref={wrap} className={cn("@container", width)} style={style} {...data} aria-busy={busy ? "true" : undefined}>
-      <div ref={frame} className={frameClass}>{children}</div>
+      <div className={frameClass}>{children}</div>
       {handles}
     </div>
   );
 }
 
-/** Whether a card as tall as its content has reached the height it may take
- * (its `max-height`). Only then does a pull on its bottom edge change
- * anything, so only then does it have a bottom handle. */
-function useFilled(frame: HTMLElement | null, on: boolean): boolean {
-  const [filled, setFilled] = useState(false);
-  useLayoutEffect(() => {
-    if (!on || !frame) {
-      setFilled(false);
-      return;
-    }
-    const measure = () => {
-      const most = parseFloat(getComputedStyle(frame).maxHeight);
-      setFilled(Number.isFinite(most) && frame.getBoundingClientRect().height >= most - 1);
-    };
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(frame);
-    window.addEventListener("resize", measure);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [frame, on]);
-  return filled;
-}
-
-/** The opened card's handles (#5053): its two sides and, when the card takes
- * the height it may, its bottom edge and bottom corners. The card stays
+/** The opened card's handles (#5053): its two sides, its bottom edge and its
+ * bottom corners (the opened card always takes its height, M-20261119-084). The card stays
  * centred, so a side moves the width by twice the pointer's travel and the
  * edge follows the pointer. A double-click (or Enter) on any of them returns
  * to the default size. The right and bottom edges are the keyboard's
  * separators (arrow keys); the left edge and the corners are the pointer's. */
-function Handles({ wide, tall, vertical, onResizing }: { wide: DockedPanelSize; tall: DockedPanelSize; vertical: boolean; onResizing: (active: boolean) => void }) {
+function Handles({ wide, tall }: { wide: DockedPanelSize; tall: DockedPanelSize }) {
   const across = (toward: 1 | -1) => ({ panel: wide, toward, rate: 2, room: () => recordCardRoom(windowView()).width });
   const down = { panel: tall, toward: 1 as const, room: () => recordCardRoom(windowView()).height };
-  const shared = { reset: [wide, tall], title: t("recordCard.resize.hint"), onResizing };
+  const shared = { reset: [wide, tall], title: t("recordCard.resize.hint") };
   const width = t("recordCard.resize.width");
   const height = t("recordCard.resize.height");
   return (
     <>
       <ResizeHandle {...shared} label={width} x={across(-1)} quiet className="-left-[3px] my-3" />
       <ResizeHandle {...shared} label={width} x={across(1)} className="-right-[3px] my-3" />
-      {vertical && (
-        <>
-          <ResizeHandle {...shared} label={height} y={down} className="mx-3" />
-          <ResizeHandle {...shared} label={height} x={across(-1)} y={down} corner="sw" quiet />
-          <ResizeHandle {...shared} label={height} x={across(1)} y={down} corner="se" quiet />
-        </>
-      )}
+      <ResizeHandle {...shared} label={height} y={down} className="mx-3" />
+      <ResizeHandle {...shared} label={height} x={across(-1)} y={down} corner="sw" quiet />
+      <ResizeHandle {...shared} label={height} x={across(1)} y={down} corner="se" quiet />
     </>
   );
 }
 
-export function RecordCard({ record, label, kindName, product, read, related: tabs, edits, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
+export function RecordCard({ record, label, kindName, product, read, related: tabs, edits, titleEdit, trail, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, canOpenRecord, onBack, now: clock }: RecordCardProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const related = pinned ? tabs : undefined;
   const stacked = useStacked(wrap, pinned ? RECORD_CARD_OPEN_STACK_REM : RECORD_CARD_STACK_REM);
@@ -822,17 +941,15 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
     window.addEventListener("resize", follow);
     return () => window.removeEventListener("resize", follow);
   }, [roomy, setTall]);
-  // a card with tabs takes the whole height (its tabs grow with it); any other is as tall as its content, up to it
-  const fills = Boolean(card && related);
-  const [frameNode, setFrameNode] = useState<HTMLDivElement | null>(null);
-  const [resizing, setResizing] = useState(false);
-  const filled = useFilled(frameNode, roomy && !fills);
+  // the opened card takes its whole kept height, whatever the record holds and while it loads: a step to
+  // another record (its company, its contact) never resizes the window (M-20261119-084)
+  const fills = roomy;
   // wider than tall, never taller than wide: stacked (a narrow space), the
   // card is no taller than it is wide
   const surface = "flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)]";
   // (the kept size, bounded by the window: 16px from its sides, and the room under its top that HoverCard gives it)
-  const frame = roomy
-    ? cn("flex w-full", fills ? "h-[min(var(--record-card-h),var(--hover-card-room,calc(100vh-32px)))]" : "max-h-[min(var(--record-card-h),var(--hover-card-room,calc(100vh-32px)))]", surface, "text-[15px] leading-[22px] text-popover-ink")
+  const frame = fills
+    ? cn("flex w-full h-[min(var(--record-card-h),var(--hover-card-room,calc(100vh-32px)))]", surface, "text-[15px] leading-[22px] text-popover-ink")
     : cn("flex w-full max-h-[min(20rem,var(--hover-card-room,calc(100vh-1rem)))] @max-[34rem]:max-h-[min(100cqw,var(--hover-card-room,calc(100vh-1rem)))]", surface, "text-[13px] leading-5 text-popover-ink");
   const width = roomy ? "relative w-[min(var(--record-card-w),calc(100vw-32px))]" : split ? "w-[min(40rem,calc(100vw-1rem))]" : "w-[min(22rem,calc(100vw-1rem))]";
   const data = { "data-record-card-body": "", "data-layout": split ? "split" : "compact", "data-record-state": card ? "card" : miss ? miss.state : "loading" };
@@ -854,7 +971,7 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
       })();
       return (
         <>
-          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
+          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} trail={trail} />
           <div role="status" className={cn("flex shrink-0 flex-col items-center gap-1 px-6 pb-1 pt-4 text-center", roomy && "gap-2 pb-2 pt-10")} title={miss.rule?.text}>
             <Icon size={roomy ? 20 : 16} aria-hidden="true" className="text-popover-ink-secondary" />
             <p className={cn("max-w-[28rem] text-[13px] leading-5", roomy && "max-w-[32rem] text-[15px] leading-[22px]")}>{missSentence(miss, product)}</p>
@@ -873,7 +990,7 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
       const bar = roomy ? "h-5" : "h-4";
       return (
         <>
-          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} skeleton />
+          <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} trail={trail} skeleton />
           <div className={cn("shrink-0 px-3 pb-2.5 pt-1.5", roomy && "px-6 pb-5 pt-2.5")}><Bar className={roomy ? "h-7 w-3/5" : "h-5 w-3/5"} /></div>
           <div className="flex min-h-0 flex-1 border-t border-popover-hairline @max-[34rem]:flex-col">
             <div className={cn(pane, "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline")}>
@@ -930,14 +1047,14 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
       <Pane pinned className="flex flex-1 flex-col overscroll-contain border-t border-popover-hairline" data-record-scroll="">
         <Pane pinned still className="flex shrink-0 grow @max-[50rem]:flex-col" data-record-panes="">
           <Pane pinned still data-record-pane="left" className={cn("flex flex-col gap-4 px-6 py-5", right ? cn(sized && !related ? "@min-[50rem]:flex-[0_1_auto] @min-[50rem]:min-w-[40%] @min-[50rem]:max-w-[55%]" : "@min-[50rem]:min-w-[22rem] @min-[50rem]:flex-[3_1_0%]", "@min-[50rem]:border-e @min-[50rem]:border-popover-hairline @max-[50rem]:border-b @max-[50rem]:border-popover-hairline") : "flex-1")}>
-            {shortText && !related && <p dir="auto" className="whitespace-pre-line break-words" data-record-description>{description}</p>}
+            {shortText && !related && <p dir="auto" className="whitespace-pre-line break-words" data-record-description>{markdownPreview(description!)}</p>}
             <Facts card={card} now={now} lang={lang} part={stacked && right && !related ? "dates" : "all"} chipRows={chipRows} lead={lead} pairs={!right || stacked} />
           </Pane>
           {right && (
             <Pane pinned still data-record-pane="right" className={cn("flex flex-col", sized && !related ? "@min-[50rem]:flex-1" : "@min-[50rem]:flex-[5_1_0%]")}>
               {/* (the hairline over the tabs is this block's: stuck at the top of the scroll, the tab row has the scroller's own above it, never two) */}
               <div className={cn("flex shrink-0 flex-col gap-4 px-6 py-5", related && "border-b border-popover-hairline")}>
-                {description && (related || !shortText) && <p dir="auto" className="shrink-0 whitespace-pre-line break-words" data-record-description>{description}</p>}
+                {description && (related || !shortText) && <div className="shrink-0" data-record-description><RecordMarkdown text={description} readImage={related?.readImage} /></div>}
                 {related && <TicketSchedule entries={related.schedule} error={related.scheduleError} />}
                 {!related && hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
                 {!related && hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
@@ -970,12 +1087,12 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
-            {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{description}</p>}
+            {shortText && <p dir="auto" className="whitespace-pre-line break-words" data-record-description data-fit-row="desc">{markdownPreview(description!)}</p>}
             <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} chipRows={chipRows} />
           </Pane>
           {right && (
             <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2", sized ? "@min-[34rem]:flex-1" : "@min-[34rem]:flex-[3_1_0%]", "@max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
-              {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{description}</p>}
+              {description && <p dir="auto" className={cn("shrink-0 whitespace-pre-line break-words", hasNotes ? (card.notes.items.length > 2 ? "line-clamp-1" : "line-clamp-2") : "line-clamp-4")} data-record-description data-fit-row="desc">{markdownPreview(description)}</p>}
               {/* the latest activity comes before a list: a hovered card drops whole rows from the foot */}
               {hasNotes && <Notes card={card} now={now} lang={lang} description={description} above={Boolean(description)} pinned={pinned} stacked={stacked} />}
               {hasLines && <Lines card={card} above={Boolean(description || hasNotes)} pinned={pinned} folded={hasNotes} />}
@@ -993,14 +1110,16 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
 
     return (
       <>
-        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} chips={headChips} />
-        <p dir="auto" className={cn("line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5", roomy && "line-clamp-none px-6 pb-5 pt-2 text-[20px] leading-7")} title={card.title}>{card.title}</p>
+        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} trail={trail} chips={headChips} />
+        {roomy && titleEdit
+          ? <RecordTitle key={`${record.product}/${record.kind}/${record.id}`} title={card.title} edit={titleEdit} />
+          : <p dir="auto" className={cn("line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5", roomy && "line-clamp-none px-6 pb-5 pt-2 text-[20px] leading-7")} title={card.title}>{card.title}</p>}
         {panes}
         <div className={cn("flex shrink-0 flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1", roomy && "gap-x-1 px-4 py-2.5")} data-record-actions>
           {openUrl && (
+            // plain words (M-20261119-084): the product's long name is no part of the action
             <button type="button" tabIndex={tab} className={cn(BUTTON_PRIMARY, roomy && ROOMY_BUTTON, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} {...first} data-record-open>
-              <span className="truncate">{productLabel ? t("recordCard.openIn", { product: productLabel }) : t("recordCard.open")}</span>
-              <ArrowUpRight size={icon} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+              <span className="truncate">{t("recordCard.openWeb")}</span>
             </button>
           )}
           {onAsk && (
@@ -1029,10 +1148,10 @@ export function RecordCard({ record, label, kindName, product, read, related: ta
       <EditContext.Provider value={card ? edits : undefined}>
       <SeeAllContext.Provider value={{ url: openUrl, product: productLabel }}>
       <Shell
-        wrap={wrap} frame={roomy ? setFrameNode : undefined} width={width} frameClass={frame} data={data}
+        wrap={wrap} width={width} frameClass={frame} data={data}
         style={roomy ? recordCardStyle({ width: wide.width, height: tall.width }) as CSSProperties : undefined}
         busy={card ? loading : !miss}
-        handles={roomy ? <Handles wide={wide} tall={tall} vertical={fills || filled || resizing} onResizing={setResizing} /> : undefined}
+        handles={roomy ? <Handles wide={wide} tall={tall} /> : undefined}
       >
         {content}
       </Shell>

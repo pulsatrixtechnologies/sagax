@@ -54,6 +54,21 @@ export interface RecordKindInfo {
 /** The most kinds one product lists. */
 export const RECORD_KINDS_MAX = 24;
 
+/** The one record field written as text: a ticket's title (M-20261119-084). */
+export const RECORD_TITLE_FIELD = "summary";
+/** The longest title the product keeps. */
+export const RECORD_TITLE_MAX = 100;
+
+/** A title as the product keeps it: one line of 1 to RECORD_TITLE_MAX
+ * characters, trimmed; null when it is not one. The route and the card read
+ * it here, one rule for both. */
+export function recordTitleValue(value: string): string | null {
+  const trimmed = value.trim();
+  const chars = [...trimmed];
+  const control = chars.some((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127; });
+  return !chars.length || chars.length > RECORD_TITLE_MAX || control ? null : trimmed;
+}
+
 export function validRecordName(value: unknown): value is string {
   return typeof value === "string" && NAME.test(value);
 }

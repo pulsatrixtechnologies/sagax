@@ -187,11 +187,15 @@ export interface SoulVerdict {
 
 const ITEM_PROMPT_MAX = 2_400;
 
+/** How the classification prompt starts: the test fixtures tell this
+ * background one-shot from a turn by it (server/testing/background-steps.ts). */
+export const SOUL_SORT_MARKER = "You sort the text a person just added to the soul (SOUL.md) of an AI assistant";
+
 /** The classification prompt for the added units. The units are data. */
 export function soulSortPrompt(items: Array<{ text: string; context: string[] }>, botName: string): string {
   const shown = (text: string) => text.length > ITEM_PROMPT_MAX ? `${text.slice(0, ITEM_PROMPT_MAX - 400)}\n[...]\n${text.slice(-300)}` : text;
   return [
-    `You sort the text a person just added to the soul (SOUL.md) of an AI assistant named ${JSON.stringify(botName || "the bot")}.`,
+    `${SOUL_SORT_MARKER} named ${JSON.stringify(botName || "the bot")}.`,
     "The soul holds only who the assistant is: its identity, its persona, its role or mission in a sentence or two, the values it embodies, and its voice (tone, wording, length, language, how it opens, formats or signs its own replies). Everything else belongs in another file.",
     "",
     "Give each numbered item exactly one kind:",

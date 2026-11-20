@@ -9,6 +9,13 @@
 // `GET`/`PUT /api/me/models`), the one the desktop reads and writes; the
 // Simple or Advanced choice is a synced preference (`sagax.interfaceMode.v1`).
 // A pick runs this thread and becomes the bot's model (#261).
+//
+// #5091 (the desktop's #5088, owner 2026-11-19, M-20261119-077,
+// D-20261119-083): in the chat the root is the mode menu: Auto (Optimize
+// under it), Fast, Expert, Heavy, Manual. Manual is every model: the starred
+// favorites first, then each provider and each account its models run on;
+// the star still adds or removes a favorite. The bot editor's own menu keeps
+// the short list.
 import SwiftUI
 import CompanionCore
 
@@ -98,8 +105,8 @@ struct ModelMenuSheet: View {
     /// The open thread follows the bot's model (nil: an older server).
     private var follows: Bool? { profile.tasks?.first { $0.threadId == bot.threadId }?.followsBotModel }
 
-    private var sections: [ModelMenuSection] {
-        let labels = ModelMenuLabels(
+    private var menuLabels: ModelMenuLabels {
+        ModelMenuLabels(
             auto: String(localized: "Auto"),
             autoHint: String(localized: "best model per task"),
             useBotModel: { String(localized: "Use \($0)'s model") },
@@ -110,6 +117,10 @@ struct ModelMenuSheet: View {
             specialAccessHint: { String(localized: "Only \($0) offers this model") },
             accountNumbered: { String(localized: "Account \($0)") }
         )
+    }
+
+    private var sections: [ModelMenuSection] {
+        let labels = menuLabels
         return ModelMenu.sections(
             instances: instances, selection: selection, botModel: profile.modelSelection, botName: profile.name,
             follows: follows, organization: organization, allowedEngines: config?.allowedEngines, disabledModels: config?.disabledModels,
@@ -169,6 +180,69 @@ struct ModelMenuSheet: View {
 
     @ViewBuilder
     private var root: some View {
+        if choose == nil { modes } else { shortList }
+    }
+
+    /// #5091: Auto, Fast, Expert, Heavy, Manual.
+    @ViewBuilder
+    private var modes: some View {
+        let mode = ComposerModes.mode(of: selection)
+        Section(header: Text("Mode")) {
+            ForEach(ComposerMode.allCases, id: \.self) { candidate in
+                modeRow(candidate, on: mode == candidate)
+                if candidate == .auto, mode == .auto { optimizeRow }
+            }
+            Button { page = .all } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "slider.horizontal.3").frame(width: 20).foregroundStyle(mode == nil ? Theme.textPrimary : Theme.textSecondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Manual").foregroundStyle(Theme.textPrimary)
+                        Text(mode == nil ? currentModelName : String(localized: "Choose a model yourself")).font(.footnote).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                    }
+                    Spacer()
+                    if mode == nil { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(mode == nil ? .isSelected : [])
+            .accessibilityIdentifier("model-mode.manual")
+        }
+    }
+
+    /// The pinned model's name, on the Manual row.
+    private var currentModelName: String {
+        sections.flatMap(\.rows).first { $0.kind == .model && $0.current }?.label ?? selection.model
+    }
+
+    private func modeRow(_ mode: ComposerMode, on: Bool) -> some View {
+        let words: (name: LocalizedStringKey, blurb: LocalizedStringKey, icon: String) = switch mode {
+        case .auto: ("Auto", "Picks from the request", "sparkles")
+        case .fast: ("Fast", "Quick responses", "bolt")
+        case .expert: ("Expert", "Thinks hard", "brain")
+        case .heavy: ("Heavy", "Team of Experts", "square.3.layers.3d")
+        }
+        return Button { pickMode(mode) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: words.icon).frame(width: 20).foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(words.name).foregroundStyle(Theme.textPrimary)
+                    Text(words.blurb).font(.footnote).foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                if on { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityIdentifier("model-mode.\(mode.rawValue)")
+    }
+
+    /// The bot editor's menu: Auto, the bot's model, the favorites, All models.
+    @ViewBuilder
+    private var shortList: some View {
         let menu = ModelMenu.root(sections, favorites: favorites.keys)
         Section {
             ForEach(menu.top) { top in
@@ -205,42 +279,146 @@ struct ModelMenuSheet: View {
     }
 
     /// "All models": a segment per provider, then that provider's models, each with a star.
+    /// #5091: in the chat it is Manual's list (`manualModels`).
     @ViewBuilder
     private var allModels: some View {
+        if choose == nil {
+            manualModels
+        } else {
+            engineModels
+        }
+    }
+
+    /// The bot editor's "All models": a segment per engine, then its models.
+    @ViewBuilder
+    private var engineModels: some View {
         let all = ModelMenu.root(sections, favorites: favorites.keys).providers
         let shown = all.first { $0.id == segment } ?? all.first { $0.current } ?? all.first
         Section { backButton(to: .root) }
         if let shown {
-            Section {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(all) { provider in
-                            let on = provider.id == shown.id
-                            Button { segment = provider.id } label: {
-                                Text(verbatim: provider.section.label ?? provider.id)
-                                    .font(.subheadline.weight(on ? .semibold : .regular))
-                                    .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
-                                    .padding(.horizontal, 12)
-                                    .frame(height: 32)
-                                    .background(on ? Theme.inset : .clear, in: Capsule())
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(on ? .isSelected : [])
-                            .accessibilityIdentifier("model-provider.\(provider.id)")
-                        }
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-            }
+            Section { segments(all.map { ($0.id, $0.section.label ?? $0.id) }, shown: shown.id) }
             Section(header: Text(verbatim: shown.section.label ?? "")) {
                 ForEach(shown.section.rows) { row(row: $0, id: "model-row.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
             }
         }
     }
 
+    /// #5091, D-20261119-083 (the desktop's Manual, #5088): the bot's model
+    /// and the starred favorites first, then a segment per provider and,
+    /// under it, each account with its state ("Signed out"), its models
+    /// starred or not.
+    private var manual: ComposerModes.ManualList {
+        ComposerModes.manual(
+            sections, favorites: favorites.keys, instances: instances, allowedEngines: config?.allowedEngines, organization: organization,
+            selectedId: selection.instanceId, labels: menuLabels, engineLabel: { DesktopEngineRail.label($0) }
+        )
+    }
+
+    @ViewBuilder
+    private var manualModels: some View {
+        let list = manual
+        let shown = list.providers.first { $0.id == segment } ?? list.providers.first(where: \.current) ?? list.providers.first
+        Section { backButton(to: .root) }
+        if !list.top.isEmpty {
+            Section { ForEach(list.top) { row(row: $0, id: "model-row.\($0.key)") } }
+        }
+        if !list.favorites.isEmpty {
+            Section(header: Text("Favorites")) {
+                ForEach(list.favorites) { row(row: $0, id: "model-row.favorite.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
+            }
+        }
+        if let shown {
+            Section { segments(list.providers.map { ($0.id, $0.label) }, shown: shown.id) }
+            manualAccounts(shown)
+        }
+    }
+
+    /// One provider's accounts: a heading per account (its state beside it),
+    /// then its models; a signed-out account keeps its heading and state.
+    @ViewBuilder
+    private func manualAccounts(_ provider: ComposerModes.ManualProvider) -> some View {
+        ForEach(provider.accounts) { account in
+            Section(header: accountHeading(account, provider: provider)) {
+                ForEach(account.rows) { row(row: $0, id: "model-row.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
+            }
+        }
+    }
+
+    private func accountHeading(_ account: ComposerModes.ManualAccount, provider: ComposerModes.ManualProvider) -> some View {
+        HStack(spacing: 4) {
+            Text(verbatim: account.label ?? provider.label).lineLimit(1)
+            if let state = account.state {
+                Text(verbatim: "·")
+                Group {
+                    switch state {
+                    case .signedOut: Text("Signed out")
+                    case .notResponding: Text("Not responding")
+                    }
+                }
+                .foregroundStyle(Theme.accent)
+                .accessibilityIdentifier("model-account-state.\(account.instanceId)")
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("model-account.\(account.instanceId)")
+    }
+
+    /// The provider (or engine) segments, the shown one filled.
+    private func segments(_ items: [(id: String, label: String)], shown: String) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(items, id: \.id) { item in
+                    let on = item.id == shown
+                    Button { segment = item.id } label: {
+                        Text(verbatim: item.label)
+                            .font(.subheadline.weight(on ? .semibold : .regular))
+                            .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .background(on ? Theme.inset : .clear, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                    .accessibilityIdentifier("model-provider.\(item.id)")
+                }
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+    }
+
     @ViewBuilder
     private var searchResults: some View {
+        if choose == nil {
+            manualResults
+        } else {
+            engineResults
+        }
+    }
+
+    /// #5091: a search in the chat finds Manual's rows, under their provider and account.
+    @ViewBuilder
+    private var manualResults: some View {
+        let found = ComposerModes.filter(manual, query: query)
+        if found.top.isEmpty && found.favorites.isEmpty && found.providers.isEmpty {
+            Text("No models match").foregroundStyle(Theme.textSecondary)
+        }
+        if !found.favorites.isEmpty {
+            Section(header: Text("Favorites")) {
+                ForEach(found.favorites) { row(row: $0, id: "model-row.favorite.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
+            }
+        }
+        ForEach(found.providers) { provider in
+            ForEach(provider.accounts) { account in
+                Section(header: Text(verbatim: [provider.label, account.label].compactMap { $0 }.joined(separator: " · "))) {
+                    ForEach(account.rows) { row(row: $0, id: "model-row.\($0.instanceId ?? "").\($0.modelId ?? "")", star: true) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var engineResults: some View {
         let found = ModelMenu.filter(sections.filter { $0.label != nil }, query: query)
         if found.isEmpty {
             Text("No models match").foregroundStyle(Theme.textSecondary)
@@ -345,9 +523,11 @@ struct ModelMenuSheet: View {
     private func pick(_ row: ModelMenuRow) {
         switch row.kind {
         case .auto:
-            guard selection.auto != true || choose != nil else { return finish() }
+            // plain Auto: a composer mode also rides the Auto flag (#5091)
+            guard selection.auto != true || selection.mode != nil || choose != nil else { return finish() }
             var next = selection
             next.auto = true
+            next.mode = nil
             // Absent means Balance; store it so Optimize for shows the live choice.
             next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
@@ -361,9 +541,17 @@ struct ModelMenuSheet: View {
         }
     }
 
+    /// #5091: a composer mode; like a model pick it becomes the bot's choice.
+    private func pickMode(_ mode: ComposerMode) {
+        guard ComposerModes.mode(of: selection) != mode || choose != nil else { return finish() }
+        apply(ComposerModes.selection(selection, for: mode), updateBotDefault: true)
+    }
+
     private func setAutoOptimize(_ value: ModelAutoOptimize) {
         var next = selection
         next.auto = true
+        // Optimize belongs to plain Auto: choosing it leaves a mode
+        next.mode = nil
         next.autoOptimize = value
         apply(next, updateBotDefault: true, keepOpen: true)
     }

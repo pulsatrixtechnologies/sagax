@@ -1,6 +1,7 @@
 // DEBUG only: every character, skin and a few colours at the reference's
 // frame sizes (24, 42, 85 pt), for comparing the phone's renders with the
-// desktop's. Launch with `-mascotGallery owl|shape|shape-set|shape-skins|trombi|shiba|frog|crab|group`; the same
+// desktop's. Launch with `-mascotGallery owl|shape|shape-set|shape-skins|trombi|shiba|frog|crab|group` (or
+// `heavy`, a Heavy run's row: HeavyTeamGallery.swift); the same
 // `ios/parity/mascot-gallery.render.ts`, with the same layout.
 import SwiftUI
 #if DEBUG
@@ -450,7 +451,10 @@ struct MascotGalleryGate<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        if let page = MascotGalleryView.requestedPage {
+        if MascotGalleryView.requestedPage == "heavy" || MascotGalleryView.requestedPage == "heavy-thoughts" {
+            // #5091: in the skin's own background, light or dark
+            HeavyTeamGallery(thoughts: MascotGalleryView.requestedPage == "heavy-thoughts")
+        } else if let page = MascotGalleryView.requestedPage {
             MascotGalleryView(page: page)
         } else {
             content()

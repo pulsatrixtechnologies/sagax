@@ -392,6 +392,9 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     /// 2026-11-05: a role fact drawn as a banner row (a lapsed role, a
     /// refused write or a read refused with no fallback).
     public var roleNotice: RoleNotice? = nil
+    /// #5091: a Heavy run (shared/heavy-team.ts), patched while it runs;
+    /// the chat draws its orbit and its Thoughts.
+    public var team: HeavyTeamLine? = nil
 
     public init(name: String, ok: Bool? = nil, spoken: String? = nil, setup: Bool? = nil, claudeUpdate: Bool? = nil, output: String? = nil, summary: String? = nil, widget: CwWidget? = nil) {
         self.name = name
@@ -408,6 +411,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, handoffId, product, productId, autoApproval, finishUntil, step, limitFailover
         case limitResetsAt, place
         case role, roleNotice
+        case team
     }
 
     public init(from decoder: Decoder) throws {
@@ -432,6 +436,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         hasPlace = box.contains(.place) && (try? box.decodeNil(forKey: .place)) == false
         role = try? box.decodeIfPresent(ToolRole.self, forKey: .role)
         roleNotice = try? box.decodeIfPresent(RoleNotice.self, forKey: .roleNotice)
+        team = try? box.decodeIfPresent(HeavyTeamLine.self, forKey: .team)
         do {
             widget = try box.decodeIfPresent(CwWidget.self, forKey: .widget)
         } catch {
@@ -460,6 +465,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(limitResetsAt, forKey: .limitResetsAt)
         try box.encodeIfPresent(role, forKey: .role)
         try box.encodeIfPresent(roleNotice, forKey: .roleNotice)
+        try box.encodeIfPresent(team, forKey: .team)
         // presence only: the app never reads the place itself
         if hasPlace { try box.encode([String: String](), forKey: .place) }
     }
@@ -950,6 +956,10 @@ public struct ModelSelection: Codable, Hashable, Sendable {
     /// #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
     /// Cost). Absent means Balance. Cleared when a model is pinned.
     public var autoOptimize: ModelAutoOptimize? = nil
+    /// #4900, #5091: the composer mode with Auto on (`fast`, `expert` or
+    /// `heavy`, ComposerModes); absent is plain Auto. Kept as text so a
+    /// selection this device sends back never loses it.
+    public var mode: String? = nil
 
     public init(
         instanceId: String,
@@ -957,7 +967,8 @@ public struct ModelSelection: Codable, Hashable, Sendable {
         effort: String? = nil,
         variant: String? = nil,
         auto: Bool? = nil,
-        autoOptimize: ModelAutoOptimize? = nil
+        autoOptimize: ModelAutoOptimize? = nil,
+        mode: String? = nil
     ) {
         self.instanceId = instanceId
         self.model = model
@@ -965,6 +976,7 @@ public struct ModelSelection: Codable, Hashable, Sendable {
         self.variant = variant
         self.auto = auto
         self.autoOptimize = autoOptimize
+        self.mode = mode
     }
 }
 

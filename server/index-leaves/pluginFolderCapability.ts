@@ -1,10 +1,13 @@
 // @ts-nocheck
 /** pluginFolderCapability (#1388). Pure move from server/index.ts. */
+import { installedPluginDir } from "../plugins/product-skills.ts";
 export type Host = Record<string, any>;
 
 export function createPluginFolderCapability(getHost: () => Host): any {
-function pluginFolderCapability(bot: { id: string }, person: string, folder: { name: string; dir: string; scope: PluginScope }): { key: string; name: string } | undefined {
+function pluginFolderCapability(bot: { id: string }, person: string, selected: { name: string; dir: string; scope: PluginScope; installed?: string }): { key: string; name: string } | undefined {
   const host = getHost();
+  // a copy without the skills of products the bot is not served (D-20261119-087) names its install by `installed`
+  const folder = { ...selected, dir: installedPluginDir(selected) };
 
   if (folder.scope === "organization" && host.orgFlowPlugins.dirsFor(person, []).includes(folder.dir)) return { key: "flow:organization:pulsatrix-flow", name: "Pulsatrix Flow" };
   if (folder.scope === "organization") {

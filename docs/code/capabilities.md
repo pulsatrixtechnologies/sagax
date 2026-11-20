@@ -417,6 +417,43 @@ plus runtime observation.
   under this bot's switches.
 - A solo server, another person's bot or a list that cannot be read: no row.
 
+## Plugin skills follow the products the bot is served (D-20261119-087, #5105)
+
+- The marketplace's one plugin holds skills ranged by product. A product
+  skill names its product and the api_list ids it needs in its SKILL.md
+  frontmatter (`metadata.product`, `metadata.apis`, ids separated by spaces;
+  `readSkillMetadata`, `shared/skill-md.ts`). A skill without
+  `metadata.product` is the platform's and always stays.
+- A bot is served every API id its last api_list lists and every family
+  (`group`) with a listed member, less the products turned off for it
+  (`botProductsOff`, #4359). A product skill stays when every API it names is
+  served; one that names none, when its product id is
+  (`server/plugins/product-skills.ts`).
+- One place: `scopedPluginFolders` (`server/index-leaves/scopedPluginFolders.ts`).
+  A folder holding a skill the bot is not served is given as a copy without
+  that `skills/<name>/` folder (`pluginFolderCopy`,
+  `server/plugins/plugin-folder-copy.ts`, the same copy the Claude role and
+  environment rewrites use), under `<data>/engine-policies/plugin-skills/`.
+  So Claude's `--plugin-dir`, the skills index, `skills_list` and
+  `workspace_read` of the other engines, the native skill links of file
+  engines and the copy in the person's environment all read the same skills.
+  The copy's `installed` names the installed folder wherever an install is
+  matched by its folder (`installedPluginDir`: `pluginFolderCapability`,
+  `scopedPluginMcp`, the bot's Plugins list).
+- What is served is the api_list `PerspicaxMcp` already reads per bot for the
+  product names (`servedApis`), no call of its own. The turn prepare
+  (`apiListForTurn`, `perspicaxTurnPrepare.ts`) waits for it, at most 4 s,
+  when none was read for the bot yet or when the turn's tools/list differs
+  from the one of the last read (a product given or taken away); otherwise
+  it is read beside the turn every 30 minutes as before. A switch of the bot
+  applies at the next selection.
+- Unknown (a solo server, no read yet, or a read that did not answer): the
+  folders stay as installed. No card, no setting, no init.
+- Tests: `server/index-leaves/scopedPluginFolders.test.ts` (every engine,
+  the platform skill, a product taken away and given back),
+  `server/plugins/product-skills.test.ts`, `server/perspicax/perspicax-mcp.test.ts`
+  (`apiListForTurn`).
+
 ## Capabilities: one resolved list per bot (lot 1a, 2026-10-30)
 
 One server function says, for ONE bot and ITS engine, everything the bot

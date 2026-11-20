@@ -118,6 +118,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A person and a bot's owner manage their own plugins, skills and connections without an admin permission (2026-10-30).
 - A bot reaches every connector of the person from its own turn; another engine is never a relay to a connector (#3356).
 - An outward connector card offers Always allow like every card (#3294).
+- A bot receives only the plugin skills of the products its Perspicax connection serves it; one place, `scopedPluginFolders`, never a filter per engine (2026-11-20, #5105).
 
 ## Voice
 

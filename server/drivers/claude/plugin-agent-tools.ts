@@ -13,12 +13,12 @@
 // for subagents), and a line in the role tells it where the work goes. A
 // role whose list the turn offers whole, and every turn that keeps all the
 // built-ins, load the plugin folder as installed.
-import { createHash } from "node:crypto";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 
+import { pluginFolderCopy } from "../../plugins/plugin-folder-copy.ts";
 import { pluginTextFiles, sandboxPluginPaths, withEnvironmentPluginPaths, type PluginEnvironmentPaths } from "../../sandbox/sandbox-plugins.ts";
 
 /** Where a turn's plugin copies live under the server's data folder. */
@@ -65,8 +65,6 @@ function narrowsBuiltins(builtins: ClaudeTurnBuiltins): boolean {
   return builtins.offered !== null || builtins.denied.length > 0;
 }
 
-const STALE_COPY_MS = 24 * 60 * 60 * 1000;
-
 const FRONTMATTER = /^(---\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/;
 
 export function roleNote(missing: readonly string[]): string {
@@ -94,23 +92,6 @@ export function rewriteAgentForTurn(text: string, builtins: ClaudeTurnBuiltins):
   return `${match[1]}${kept.join("\n")}${match[3]}\n${roleNote(missing)}\n\n${body.replace(/^\r?\n/, "")}`;
 }
 
-/** Size and change time of every file of the plugin: a copy is rebuilt when
- * the installed folder changes (an update, configuration values). */
-function fingerprint(dir: string): string {
-  const hash = createHash("sha256");
-  const walk = (path: string) => {
-    for (const name of readdirSync(path).sort()) {
-      const child = join(path, name);
-      let stat;
-      try { stat = lstatSync(child); } catch { continue; }
-      hash.update(`${relative(dir, child)}\0${stat.size}\0${stat.mtimeMs}\0`);
-      if (stat.isDirectory()) walk(child);
-    }
-  };
-  walk(dir);
-  return hash.digest("hex").slice(0, 16);
-}
-
 /** One plugin folder for this turn: the installed one, or a copy under
  * `root` whose roles start (see the top of this file) and, when the turn's
  * commands run in the person's environment (`environment`: the plugin's
@@ -135,35 +116,7 @@ export function pluginDirForTurn(installed: string, builtins: ClaudeTurnBuiltins
   }
   if (!rewrites.size) return installed;
   const signature = JSON.stringify([resolve(dir), builtins.offered === null ? null : [...builtins.offered].map(canonical).sort(), [...builtins.denied].map(canonical).sort(), environment ?? null]);
-  const slot = join(root, createHash("sha256").update(signature).digest("hex").slice(0, 16));
-  const stamp = fingerprint(dir);
-  const target = join(slot, stamp, basename(dir));
-  if (existsSync(target)) return target;
-  mkdirSync(slot, { recursive: true, mode: 0o700 });
-  const building = join(slot, `${stamp}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    cpSync(dir, join(building, basename(dir)), { recursive: true, dereference: false });
-    for (const [path, text] of rewrites) writeFileSync(join(building, basename(dir), path), text);
-    try {
-      renameSync(building, join(slot, stamp));
-    } catch {
-      // another turn built the same copy first
-      rmSync(building, { recursive: true, force: true });
-    }
-  } catch {
-    rmSync(building, { recursive: true, force: true });
-    return installed;
-  }
-  if (!existsSync(target)) return installed;
-  // Older copies of this plugin for the same tools, once no live session
-  // can still read a skill from them.
-  for (const name of readdirSync(slot)) {
-    if (name === stamp) continue;
-    try {
-      if (Date.now() - lstatSync(join(slot, name)).mtimeMs > STALE_COPY_MS) rmSync(join(slot, name), { recursive: true, force: true });
-    } catch { /* already gone */ }
-  }
-  return target;
+  return pluginFolderCopy(installed, root, signature, { rewrites });
 }
 
 /** Every plugin folder of a turn (`--plugin-dir`), for its built-ins and,

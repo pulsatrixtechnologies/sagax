@@ -37,7 +37,11 @@ async function perspicaxTurnPrepare(input: {
   // Handshake beside setup: open/verify the MCP session now, so the engine's
   // later tools/list hits the same-session cache. Roles are never auto-picked.
   if (plan.mounted.length) await host.perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
-  if (plan.mounted.length) void host.perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id }).catch(host.reportBackgroundError);
+  // D-20261119-087 (#5105): api_list also decides the plugin skills this
+  // turn receives (scopedPluginFolders): the turn waits for it only when
+  // none was read for this bot yet or a product was given or taken away
+  // since; otherwise it is read beside the turn.
+  if (plan.mounted.length) await host.perspicaxMcp?.apiListForTurn({ threadId: input.threadId, generation: input.generation, botId: live.id }).catch(host.reportBackgroundError);
   return { live, speakerPrincipalId, routine, plan };
 
 }

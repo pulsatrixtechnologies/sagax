@@ -159,6 +159,26 @@ describe("a file the engine's own claude.ai connector returns reaches the person
     expect(text).toContain("attach_file");
   });
 
+  it("a picture the connector returns stays for the model, and its saved copy leaves the server for the person's place", async () => {
+    // what the organization server held: pictures of the engine's own claude.ai connector
+    const session = "8d7e6f5a-4b3c-4d2e-9f1a-0b2c3d4e5f6a";
+    const { results, transcript } = engineSession("alice", session);
+    for (const name of readdirSync(results)) rmSync(join(results, name));
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+    const saved = join(results, "mcp-claude_ai_Docs_Hub-blob-1763600000005-pp11qq.png");
+    writeFileSync(saved, png);
+    const picture = { type: "image", source: { type: "base64", media_type: "image/png", data: png.toString("base64") } };
+    const event = { ...downloaded(session, transcript, saved), tool_name: "mcp__claude_ai_Docs_Hub__render_chart", tool_response: [picture, { type: "text", text: `[Image source: ${saved}]` }] };
+    const answer = await hook(event, await harness(ALICE_TURN));
+
+    expect(readdirSync(results)).toEqual([]);
+    const [path, onComputer] = [...computers.get("alice")!].find(([name]) => name.endsWith(".png"))!;
+    expect(onComputer.equals(png)).toBe(true);
+    const output = (JSON.parse(answer).hookSpecificOutput as { updatedMCPToolOutput: unknown[] }).updatedMCPToolOutput;
+    expect(output[0]).toEqual(picture);
+    expect(JSON.stringify(output[1])).toContain(JSON.stringify(path).slice(1, -1));
+  });
+
   it("another person's turn puts that person's file in their own place only", async () => {
     const session = "6b5c4d3e-2f1a-4b0c-9d8e-7f6a5b4c3d2e";
     const { results, blob, transcript } = engineSession("bob", session);

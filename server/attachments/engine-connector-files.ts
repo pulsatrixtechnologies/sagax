@@ -28,6 +28,7 @@ import { lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 
 import { sensitiveReadPath } from "../safety/sensitive-path.ts";
+import { attachmentMime } from "./attachments.ts";
 import { connectorFileName, placeOneFile, type PersonPlace } from "./connector-files.ts";
 
 /** Claude Code's name for a binary MCP result it saved:
@@ -140,14 +141,16 @@ function withTexts(output: unknown, rewrite: (text: string) => string): unknown 
   return output;
 }
 
-/** What the engine's own line says about the file: its type and its URI. */
+/** What the engine's own line says about the file: its type and its URI.
+ * A picture's line (`[Image source: <path>]`) names no type: the extension
+ * the engine gave the file does. */
 function described(text: string, path: string): { mime: string; uri: string } {
   const at = text.indexOf(path);
   const before = at < 0 ? text : text.slice(0, at);
   const resource = [...before.matchAll(/\[Resource from [^\]\n]*? at ([^\]\s]+)\]/g)].at(-1);
   const binary = [...before.matchAll(/Binary content \(([^,()\n]+),/g)].at(-1);
   const mime = binary?.[1]?.trim();
-  return { mime: mime && mime !== "unknown type" ? mime : "application/octet-stream", uri: resource?.[1] ?? "" };
+  return { mime: mime && mime !== "unknown type" ? mime : attachmentMime(path), uri: resource?.[1] ?? "" };
 }
 
 /** The file system the engine's files are read from and removed in. */

@@ -27,6 +27,7 @@ struct WatchChat: View {
     @State private var unsent: Draft?
     @State private var showTextInput = false
     @State private var fallbackSuggestions: [String] = []
+    @StateObject private var talk = WatchTalkModel()
 
     private var threadId: String { SingleStream.home(of: bot) ?? bot.mainThreadId ?? bot.threadId }
     private var palette: SkinPalette {
@@ -58,15 +59,16 @@ struct WatchChat: View {
                         Text(verbatim: unsent.text).foregroundStyle(.secondary)
                         Button("Retry sending") { Task { await send(unsent) } }
                     }
-                    HStack(spacing: 6) {
-                        Button("Reply") { compose(suggestions: [
-                            String(localized: "Thanks!"), String(localized: "Continue"), String(localized: "Tell me more")
-                        ]) }
-                        Button { compose(suggestions: nil) } label: {
-                            Image(systemName: "mic.fill")
+                    VStack(spacing: 4) {
+                        HStack(spacing: 6) {
+                            Button("Reply") { compose(suggestions: [
+                                String(localized: "Thanks!"), String(localized: "Continue"), String(localized: "Tell me more")
+                            ]) }
+                            WatchTalkButton(talk: talk, dictate: { compose(suggestions: nil) }, release: {
+                                talk.release(bot: bot, threadId: threadId, client: session.client) { await refresh() }
+                            })
                         }
-                        .accessibilityLabel("Talk to my bot")
-                        .frame(width: 44)
+                        WatchTalkStatus(talk: talk)
                     }
                     .disabled(sending)
                     .id("composer")
@@ -87,6 +89,8 @@ struct WatchChat: View {
         }
         .navigationTitle(bot.name)
         .tint(watchColor(palette.accentText))
+        .task(id: session.identity) { await talk.check(bot: bot, client: session.client) }
+        .onDisappear { talk.cancel(); talk.stopSpeaking() }
         .task(id: phase == .active ? threadId : nil) {
             guard phase == .active else { return }
             repeat {
@@ -204,6 +208,105 @@ struct WatchChat: View {
             guard session.identity == identity else { return }
             unsent = draft
             await session.recover(after: error, using: client)
+        }
+    }
+}
+
+/// The chat's mic (#5129): a tap is the system's dictation, as before; held
+/// past VoiceNoteHold's threshold it records, and letting go sends the words
+/// to the bot, whose answer is read aloud. Without speech to text for this
+/// person and bot (WatchTalk.offersHold) it is the dictation button only.
+private struct WatchTalkButton: View {
+    @ObservedObject var talk: WatchTalkModel
+    let dictate: () -> Void
+    let release: () -> Void
+    @State private var pressedAt: Date?
+    @State private var hold: Task<Void, Never>?
+    /// True while a finger is on the mic; false again when it lifts or when
+    /// the system takes the touch (a scroll), so a recording never sticks.
+    @GestureState private var touching = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(listening ? Color.white : Color.primary)
+            .frame(maxWidth: talk.available ? .infinity : 44, minHeight: 44)
+            .background(Capsule().fill(listening ? Color.red : Color.gray.opacity(0.28)))
+            .contentShape(Capsule())
+            .gesture(DragGesture(minimumDistance: 0).updating($touching) { _, state, _ in state = true })
+            .onChange(of: touching) { _, now in now ? pressed() : released() }
+            .accessibilityElement()
+            .accessibilityLabel(talk.available ? Text("Hold to talk to my bot") : Text("Talk to my bot"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { dictate() }
+    }
+
+    private var listening: Bool { talk.phase == .listening }
+
+    private var symbol: String {
+        switch talk.phase {
+        case .listening: "waveform"
+        case .speaking: "stop.fill"
+        default: "mic.fill"
+        }
+    }
+
+    private func pressed() {
+        guard pressedAt == nil else { return }
+        pressedAt = Date()
+        guard talk.available, !talk.waitsForTap else { return }
+        hold = Task { @MainActor in
+            do { try await Task.sleep(for: .seconds(VoiceNoteHold.holdThreshold)) } catch { return }
+            talk.press()
+        }
+    }
+
+    private func released() {
+        guard pressedAt != nil else { return }
+        let held = pressedAt.map { Date().timeIntervalSince($0) } ?? 0
+        pressedAt = nil
+        hold?.cancel()
+        hold = nil
+        if talk.waitsForTap, held < VoiceNoteHold.holdThreshold { release(); return }
+        if talk.phase == .speaking { talk.stopSpeaking(); return }
+        switch VoiceNoteHold.outcome(heldFor: held, translationX: 0, recording: talk.phase == .listening) {
+        case .tap:
+            guard talk.phase == .idle else { return }
+            dictate()
+        case .send:
+            // the first microphone prompt took the touch: a tap sends it later
+            guard !talk.waitsForTap else { return }
+            release()
+        case .cancel:
+            talk.cancel()
+        }
+    }
+}
+
+/// One line under the mic: where the spoken turn is, or why it stopped.
+private struct WatchTalkStatus: View {
+    @ObservedObject var talk: WatchTalkModel
+
+    var body: some View {
+        if let line {
+            line
+                .font(.caption2)
+                .foregroundStyle(talk.phase == .idle ? Color.orange : Color.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var line: Text? {
+        switch talk.phase {
+        case .listening:
+            if talk.waitsForTap { return Text("Tap the mic to send") }
+            return Text("Listening… let go to send") + Text(verbatim: " " + VoiceNoteRecording.clock(talk.recorder.seconds))
+        case .hearing: return Text("Transcribing…")
+        case .sending: return Text("Sending…")
+        case .waiting: return Text("Waiting for the answer…")
+        case .speaking: return Text("Reading the answer. Tap to stop.")
+        case .idle: return talk.problem.map { Text($0) }
         }
     }
 }

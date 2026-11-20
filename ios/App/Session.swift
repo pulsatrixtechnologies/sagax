@@ -3798,16 +3798,7 @@ final class Session: ObservableObject {
     func transcribeVoiceNote(pcm: Data, sampleRate: Int, botId: String, threadId: String?) async -> String? {
         guard let client else { return nil }
         guard let status = await voiceModeStatus(botId: botId), status.available else { return nil }
-        var parts: [String] = []
-        for clip in VoiceNoteRecording.transcriptionClips(pcm: pcm, sampleRate: sampleRate) {
-            guard !Task.isCancelled else { return "" }
-            guard let heard = try? await client.voiceModeTranscribe(botId: botId, wav: clip, language: "auto", threadId: threadId) else {
-                return ""
-            }
-            let trimmed = heard.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { parts.append(trimmed) }
-        }
-        return parts.joined(separator: " ")
+        return (try? await client.transcribeRecording(pcm: pcm, sampleRate: sampleRate, botId: botId, threadId: threadId)) ?? ""
     }
 
     /// Switch the workspace's voice engine. The fresh status comes back so
@@ -4926,3 +4917,6 @@ extension MausState {
         }
     }
 }
+
+/// The phone's voices for a reply read aloud (MessageSpeaker).
+extension Session: ReadAloudVoices {}

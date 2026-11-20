@@ -600,6 +600,21 @@ extension CompanionClient {
         try await voiceModeTranscription(botId: botId, wav: wav, language: language, threadId: threadId).text
     }
 
+    /// A whole recording's words (a voice note on the phone, a held mic on
+    /// the watch): 16-bit mono PCM cut into the route's WAV clips
+    /// (VoiceNoteRecording.transcriptionClips), each heard in turn, joined.
+    /// Throws when any clip could not be heard, or on cancellation.
+    public func transcribeRecording(pcm: Data, sampleRate: Int, botId: String, threadId: String?, language: String = "auto") async throws -> String {
+        var parts: [String] = []
+        for clip in VoiceNoteRecording.transcriptionClips(pcm: pcm, sampleRate: sampleRate) {
+            try Task.checkCancellation()
+            let heard = try await voiceModeTranscribe(botId: botId, wav: clip, language: language, threadId: threadId)
+            let trimmed = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { parts.append(trimmed) }
+        }
+        return parts.joined(separator: " ")
+    }
+
     /// The computer's own voice provider (`POST /api/tts/speak`): audio bytes.
     public func speak(text: String, voiceId: String?) async throws -> Data {
         var body: [String: Any] = ["text": String(text.prefix(500))]

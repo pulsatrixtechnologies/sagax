@@ -13,9 +13,22 @@
 // always does something and never switches voices in silence. The live
 // call (ios/App/Call) keeps its own streaming voice stack; a read-aloud is
 // one clip at a time, so it plays here.
+//
+// The watch reads its push-to-talk answers with this same reader (#5129):
+// the voices come from `ReadAloudVoices`, the phone's Session or the
+// watch's own client, never from a second voice stack.
 import AVFoundation
 import CompanionCore
 import SwiftUI
+
+/// Where the reader gets its voices: voice mode's xAI voice for a bot, else
+/// the computer's provider (its utterances, then each one's audio).
+@MainActor
+protocol ReadAloudVoices: AnyObject {
+    func readAloudVoice(botId: String?) async -> MessageSpeaker.VoiceModeVoice?
+    func prepareSpeech(text: String, voiceId: String?) async -> SpeechPreparation?
+    func speechAudio(text: String, voiceId: String?) async throws -> Data
+}
 
 @MainActor
 final class MessageSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
@@ -53,9 +66,11 @@ final class MessageSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDeleg
     /// Speak `text` for `id`, stopping whatever was speaking. The menu
     /// decides between this and `stop()` from what it showed, so a tap on
     /// Stop never restarts a reply that finished a moment before.
-    func speak(_ text: String, messageId id: String, voiceId: String?, botId: String? = nil, session: Session) {
+    func speak(_ text: String, messageId id: String, voiceId: String?, botId: String? = nil, session: any ReadAloudVoices) {
         stop()
+        #if os(iOS)
         guard VoiceNoteCenter.shared.beginPlaybackSession() else { return }
+        #endif
         let audio = AVAudioSession.sharedInstance()
         try? audio.setCategory(.playback, mode: .spokenAudio)
         try? audio.setActive(true)
@@ -83,10 +98,14 @@ final class MessageSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDeleg
         guard status != .idle || messageId != nil else { return }
         status = .idle
         messageId = nil
+        #if os(iOS)
         VoiceNoteCenter.shared.endPlaybackSession()
+        #else
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 
-    private func read(_ text: String, voiceId: String?, botId: String?, session: Session) async {
+    private func read(_ text: String, voiceId: String?, botId: String?, session: any ReadAloudVoices) async {
         // voice mode's xAI voice: the person's own key, their Perspicax key
         // or the organization's, as on the call
         if let voice = await session.readAloudVoice(botId: botId) {
@@ -145,7 +164,7 @@ final class MessageSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDeleg
 
     /// True when every utterance played; false hands what is left to the
     /// phone's voice (nothing, when it was cancelled).
-    private func playComputerVoice(_ parts: [String], voiceId: String?, session: Session) async -> Bool {
+    private func playComputerVoice(_ parts: [String], voiceId: String?, session: any ReadAloudVoices) async -> Bool {
         var current: Data
         do { current = try await session.speechAudio(text: parts[0], voiceId: voiceId) } catch { return false }
         for index in parts.indices {

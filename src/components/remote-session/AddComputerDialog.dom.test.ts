@@ -153,4 +153,39 @@ describe("AddComputerDialog", () => {
     expect(document.body.textContent).toContain("MBP-JULIE");
     expect(calls.bots).toEqual([[fresh.hostId, ["b-helper"]]]);
   });
+
+  // Each list read is one short Perspicax MCP session (remote_support_hosts):
+  // the wait asks every 5 s while the window is visible, never while it is
+  // hidden, and once at once when it shows again.
+  it("asks for the list only while the window is visible, and at once when it shows again", async () => {
+    let visibility: DocumentVisibilityState = "visible";
+    const show = async (next: DocumentVisibilityState) => {
+      visibility = next;
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    };
+    const wait = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); }); };
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    vi.useFakeTimers();
+    try {
+      const onIssued = vi.fn();
+      await render({ hosts: [], onIssued });
+      await click('[data-add-computer-os="linux"]');
+      await click("[data-add-computer-next]");
+      await click("[data-add-computer-generate]");
+      expect(document.querySelector('[data-add-computer-state="waiting"]')).not.toBeNull();
+      expect(onIssued).toHaveBeenCalledTimes(1);
+      await wait(5_000);
+      expect(onIssued).toHaveBeenCalledTimes(2);
+      await show("hidden");
+      await wait(60_000);
+      expect(onIssued).toHaveBeenCalledTimes(2);
+      await show("visible");
+      expect(onIssued).toHaveBeenCalledTimes(3);
+      await wait(5_000);
+      expect(onIssued).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+      delete (document as { visibilityState?: unknown }).visibilityState;
+    }
+  });
 });

@@ -27,7 +27,7 @@ import { dockArtifactWindow, type ArtifactWindowData } from "./artifact-windows"
 const TOOL = "flex size-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40";
 
 /** One artifact's window body: its widget, its state, Refresh now, Full screen
- * and Close window. Mounted means visible, so it holds a watch lease. */
+ * and Close window. It holds a watch lease while the window is visible. */
 export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
   const { artifact, error } = useArtifact(data.botId, data.artifactId);
   useArtifactWatch(data.artifactId);

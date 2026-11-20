@@ -62,6 +62,15 @@ describe("skin bootstrap under Auto", () => {
     expect(stamp({ "omb-skin": "midnight", "omb-skin-depth": "half", "omb-skin-texture": "stripes" }, false)).toEqual({ skin: "midnight" });
   });
 
+  // M-20261119-073: a custom tint is stamped as its kind (custom-colours.ts
+  // lays its colours), and the new textures are known before the first paint.
+  it("stamps a custom tint as its kind, and the new textures", () => {
+    expect(stamp({ "omb-skin": "midnight", "omb-skin-tint": "custom-duo:#f472b6,#22d3ee,90", "omb-skin-texture": "frost" }, false)).toEqual({ skin: "midnight", skinTint: "custom-duo", skinTexture: "frost" });
+    expect(stamp({ "omb-skin": "daylight", "omb-skin-tint": "custom:#0ea5e9", "omb-skin-depth": "full", "omb-skin-texture": "paper" }, false)).toEqual({ skin: "daylight", skinTint: "custom", skinDepth: "full", skinTexture: "paper" });
+    // never under Hibou 98, which has no custom row
+    expect(stamp({ "omb-skin": "retro98", "omb-skin-tint": "custom:#0ea5e9" }, false)).toEqual({ skin: "retro98" });
+  });
+
   it("wears a retired look-alike as its base and colour", () => {
     expect(stamp({ "omb-skin": "dusk" }, false)).toEqual({ skin: "midnight", skinTint: "pink" });
     expect(stamp({ "omb-skin": "dusk", "omb-skin-mode": "auto" }, false)).toEqual({ skin: "daylight", skinTint: "pink" });

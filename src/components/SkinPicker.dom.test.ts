@@ -89,10 +89,11 @@ describe("SkinPicker", () => {
     open("midnight");
     const row = (group: string) =>
       [...host.querySelectorAll(`[data-settings-row="skinVariant-${group}"] [data-skin-variant]`)].map((el) => el.getAttribute("data-skin-variant"));
-    expect(row("color")).toEqual(["basic", "red", "pink", "blue", "green", "yellow"]);
-    expect(row("duo")).toEqual(["aurore", "ocean", "neon", "foret"]);
+    // each row ends with its custom swatch (M-20261119-073)
+    expect(row("color")).toEqual(["basic", "red", "pink", "blue", "green", "yellow", "custom"]);
+    expect(row("duo")).toEqual(["aurore", "ocean", "neon", "foret", "custom-duo"]);
     // dark mode: no light mood (Candy), the owner 2026-10-22
-    expect(row("ambiance")).toEqual(["cyberpunk", "sunset", "nordic"]);
+    expect(row("ambiance")).toEqual(["cyberpunk", "sunset", "nordic", "custom-mood"]);
     expect(swatch("candy")).toBeNull();
     const dot = swatch("yellow")!.querySelector("[data-skin]")!;
     expect([dot.getAttribute("data-skin"), dot.getAttribute("data-skin-tint")]).toEqual(["midnight", "yellow"]);
@@ -103,8 +104,35 @@ describe("SkinPicker", () => {
     open("daylight");
     const row = (group: string) =>
       [...host.querySelectorAll(`[data-settings-row="skinVariant-${group}"] [data-skin-variant]`)].map((el) => el.getAttribute("data-skin-variant"));
-    expect(row("ambiance")).toEqual(["sunset", "nordic", "candy"]);
+    expect(row("ambiance")).toEqual(["sunset", "nordic", "candy", "custom-mood"]);
     expect(swatch("candy")!.querySelector("[data-skin]")!.getAttribute("data-skin")).toBe("daylight");
+  });
+
+  // M-20261119-073: the custom duo-tone at the end of its row is worn with its
+  // first colours, opens its editor, and a new colour is worn and kept at once;
+  // the mode keeps the colours and the row remembers them.
+  it("wears a custom duo-tone, edits its colours in place and keeps them across a mode and a swatch", async () => {
+    open("midnight");
+    await act(async () => { swatch("custom-duo")!.click(); await flush(); });
+    expect(worn()).toEqual(["midnight", "custom-duo"]);
+    expect(localStorage.getItem(SKIN_TINT_KEY)).toBe("custom-duo:#f472b6,#22d3ee,135");
+    const editor = document.querySelector<HTMLElement>('[data-custom-editor="custom-duo"]')!;
+    expect(editor).not.toBeNull();
+    expect(document.querySelectorAll('[data-custom-preview] [data-skin][data-skin-tint="custom-duo"]').length).toBe(2);
+    const hex = editor.querySelector<HTMLInputElement>('[data-custom-hex="from"]')!;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(hex, "#123456");
+      hex.dispatchEvent(new Event("input", { bubbles: true }));
+      await flush();
+    });
+    expect(localStorage.getItem(SKIN_TINT_KEY)).toBe("custom-duo:#123456,#22d3ee,135");
+    expect(JSON.parse(localStorage.getItem("omb-skin-custom")!)).toEqual({ "custom-duo": "custom-duo:#123456,#22d3ee,135" });
+    // a swatch, then the custom row again: the colours come back
+    await act(async () => { swatch("ocean")!.click(); await flush(); });
+    expect(worn()).toEqual(["midnight", "ocean"]);
+    await act(async () => { swatch("custom-duo")!.click(); await flush(); });
+    expect(localStorage.getItem(SKIN_TINT_KEY)).toBe("custom-duo:#123456,#22d3ee,135");
   });
 
   it("picks a colour: the skin stays, the tint changes and is remembered", async () => {

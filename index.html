@@ -19,10 +19,10 @@
         // A skin no variant lists any more: its base skin and colour (LEGACY_SKINS).
         var LEGACY = {"graphite":["midnight","blue"],"linen":["daylight","blue"],"dusk":["midnight","pink"],"meadow":["daylight","green"],"lagoon":["atelier","blue"]};
         // The tints (colours, Windows editions) each base skin can wear.
-        var TINTS = {"pulsatrix-light":["red","pink","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"pulsatrix":["red","pink","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"daylight":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"midnight":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"atelier":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"foundry":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"retro98":["xp","vista","win7","win8","win81","win10","win11"]};
+        var TINTS = {"pulsatrix-light":["red","pink","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","sunset","nordic","candy","custom-mood"],"pulsatrix":["red","pink","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","cyberpunk","sunset","nordic","custom-mood"],"daylight":["red","pink","blue","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","sunset","nordic","candy","custom-mood"],"midnight":["red","pink","blue","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","cyberpunk","sunset","nordic","custom-mood"],"atelier":["red","pink","blue","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","sunset","nordic","candy","custom-mood"],"foundry":["red","pink","blue","green","yellow","custom","aurore","ocean","neon","foret","custom-duo","cyberpunk","sunset","nordic","custom-mood"],"retro98":["xp","vista","win7","win8","win81","win10","win11"]};
         var d = "pulsatrix";
         // The textures a ground can wear (src/lib/skin-families.ts SKIN_TEXTURES, "none" aside).
-        var TEXTURES = ["grain","grid","dots","lines"];
+        var TEXTURES = ["grain","fine","paper","grid","mesh","dots","lines","frost"];
         var s, m, t, p, x;
         try {
           s = localStorage.getItem("omb-skin");
@@ -45,7 +45,9 @@
         }
         document.documentElement.dataset.skin = s;
         var r = document.documentElement.dataset;
-        if (t && TINTS[s] && TINTS[s].indexOf(t) >= 0) r.skinTint = t;
+        // A custom tint (custom-duo:#a,#b,135) is stamped as its kind; its colours come with its sheet.
+        var q = t ? String(t).split(":")[0] : t;
+        if (q && TINTS[s] && TINTS[s].indexOf(q) >= 0) r.skinTint = q;
         if (p === "full") r.skinDepth = p;
         if (TEXTURES.indexOf(x) >= 0) r.skinTexture = x;
       })();

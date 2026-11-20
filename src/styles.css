@@ -5443,3 +5443,10 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 }
 :root[data-reduced-motion="true"] :is(.heavy-orbit-ring, .heavy-orbit-upright, .heavy-orbit-speaking, .heavy-orbit-link) { animation: none; }
 :root[data-reduced-motion="true"] .heavy-orbit-seat { transition: none; }
+
+/* A custom swatch of Settings > Appearance (SkinPicker.tsx, M-20261119-073):
+   the person's own colours inside a ring of every hue, which says « your own
+   colours » the way a colour wheel does. Decorative, never text. */
+.custom-swatch-ring {
+  background: conic-gradient(from 0deg, #f43f5e, #f59e0b, #84cc16, #10b981, #06b6d4, #6366f1, #d946ef, #f43f5e);
+}

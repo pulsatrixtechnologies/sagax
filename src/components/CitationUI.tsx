@@ -305,7 +305,7 @@ export function CitationBadge({
           <div className="mt-3 flex justify-end gap-2">
             {onNavigate && <button type="button" onClick={() => { void onNavigate().then((found) => { setUnavailable(!found); if (found) setOpen(false); }); }} className="rounded-lg border border-hairline/40 px-3 py-1.5 text-[12px] hover:bg-raised">{t("citation.goToSource")}</button>}
             {onChange && <button type="button" onClick={() => { setOpen(false); setEditing(true); }} className="rounded-lg border border-hairline/40 px-3 py-1.5 text-[12px] hover:bg-raised">{t("citation.editComment")}</button>}
-            <button type="button" onClick={() => { setOpen(false); restoreTriggerFocus(); }} className="rounded-lg bg-accent px-3 py-1.5 text-[12px] text-white">{t("common.close")}</button>
+            <button type="button" onClick={() => { setOpen(false); restoreTriggerFocus(); }} className="rounded-lg bg-accent px-3 py-1.5 text-[12px] text-accent-ink">{t("common.close")}</button>
           </div>
         </div>,
         document.body,

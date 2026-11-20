@@ -168,7 +168,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
             {saveError && <p role="alert" className="mb-3 text-[12px] text-warning">{saveError}</p>}
             <TeamSettingsRows rows={results} />
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={onClose} className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white">{t("teamSettings.done")}</button>
+              <button type="button" onClick={onClose} className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink">{t("teamSettings.done")}</button>
             </div>
           </>
         ) : (
@@ -248,7 +248,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
               {running && <span role="status" className="mr-auto text-[12px] text-ink-secondary">{t("teamSettings.progress", { done: progress, count: plan.length })}</span>}
               <button type="button" disabled={running} onClick={close} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
               <button type="button" disabled={running || !(applying || teamSave)} onClick={apply}
-                className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40">
+                className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40">
                 {applying === 0 && teamSave ? t("teamSettings.saveForTeam") : t(applying === 1 ? "teamSettings.applyOne" : "teamSettings.applyMany", { count: applying })}
               </button>
             </div>

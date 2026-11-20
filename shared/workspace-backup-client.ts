@@ -11,6 +11,7 @@ export const WORKSPACE_BACKUP_CLIENT_KEYS = [
   "omb-skin-depth",
   "omb-skin-texture",
   "omb-skin-variants",
+  "omb-skin-custom",
   "omb-show-threads",
   "omb-show-run-card",
   "omb-show-unready-providers",

@@ -1,6 +1,7 @@
 /* Skin texture variants (src/lib/skin-families.ts, SKIN_TEXTURES).
 
-   `data-skin-texture` on the document root (grain, grid, dots, lines; absent
+   `data-skin-texture` on the document root (grain, fine, paper, grid, mesh,
+   dots, lines, frost; absent
    or "none" = no texture) lays a very light pattern over the GROUND of the
    window, never over what sits on it:
 
@@ -17,8 +18,9 @@
 
    Bubbles, fields, menus, popovers and dialogs keep their own opaque
    backgrounds and are never targeted. The pattern is drawn with gradients
-   only (no image, no filter, nothing animated), in the palette's ink mixed
-   at a few percent, so one rule fits every base, tint, light and dark.
+   in the palette's ink mixed at a few percent, or (fine grain, paper, frost)
+   an inline SVG noise of a few hundred bytes in a mid grey, nothing
+   animated, so one rule fits every base, tint, light and dark.
    Hibou 98 (`retro98`) is excluded by every rule: it keeps its flat teal
    desktop and grey windows. */
 
@@ -110,31 +112,116 @@
   --tx-rep: repeat;
 }
 
+/* M-20261119-073 (the owner: « add more quality texture »): fine grain,
+   paper, mesh and frosted glass. Fine grain and paper are an SVG noise of a
+   few hundred bytes the browser draws, in a mid grey at a few percent: it
+   darkens a light ground and lightens a dark one alike, so one image fits
+   every skin, the navy rail included. Mesh and frosted glass add gradients
+   in the surface's ink, like the others. */
+:root:not([data-skin="retro98"])[data-skin-texture] {
+  --tx-noise-fine: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23n)'/%3E%3C/svg%3E");
+  --tx-noise-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.03' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Fine grain: a true noise, finer than the speckles of Grain. */
+:root:not([data-skin="retro98"])[data-skin-texture="fine"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-img: var(--tx-noise-fine);
+  --tx-size: 160px 160px;
+  --tx-rep: repeat;
+}
+
+/* Paper: a soft mottle under the fine grain. */
+:root:not([data-skin="retro98"])[data-skin-texture="paper"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-img: var(--tx-noise-paper), var(--tx-noise-fine);
+  --tx-size: 240px 240px, 160px 160px;
+  --tx-rep: repeat, repeat;
+}
+
+/* Mesh: two hairlines crossing every 7 px. */
+:root:not([data-skin="retro98"])[data-skin-texture="mesh"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 5%, transparent);
+  --tx-img:
+    repeating-linear-gradient(45deg, var(--tx-c) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, var(--tx-c) 0 1px, transparent 1px 7px);
+  --tx-size: auto, auto;
+  --tx-rep: repeat, repeat;
+}
+
+/* Frosted glass: a soft sheen across the window over a fine frost. */
+:root:not([data-skin="retro98"])[data-skin-texture="frost"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 5%, transparent);
+  --tx-img:
+    linear-gradient(165deg, var(--tx-c), transparent 38%, transparent 62%, color-mix(in oklch, var(--tx-ink) 3%, transparent)),
+    var(--tx-noise-fine);
+  --tx-size: 100% 100%, 120px 120px;
+  --tx-rep: no-repeat, repeat;
+}
+
 /* Painting. The chat/group shell keeps Pulsatrix's top-of-window glow
-   (`.app-glow`, styles.css) as the bottom layer under the pattern. */
+   (`.app-glow`, styles.css) as the bottom layer under the pattern. A glow is
+   up to three gradients (a duo-tone or a mood lays two): each takes its own
+   `auto` and `no-repeat`, or a texture of fewer layers lent it its tile and
+   the glow repeated as a checkerboard (M-20261119-073). A size or repeat past
+   the last layer is ignored. */
 :root:not([data-skin="retro98"]):is(
   [data-skin-texture="grain"],
+  [data-skin-texture="fine"],
+  [data-skin-texture="paper"],
   [data-skin-texture="grid"],
+  [data-skin-texture="mesh"],
   [data-skin-texture="dots"],
-  [data-skin-texture="lines"]
+  [data-skin-texture="lines"],
+  [data-skin-texture="frost"]
 ) :is(main.app-glow, section.app-glow) {
   background-image: var(--tx-img), var(--app-glow, none);
-  background-size: var(--tx-size), auto;
-  background-repeat: var(--tx-rep), no-repeat;
+  background-size: var(--tx-size), auto, auto, auto;
+  background-repeat: var(--tx-rep), no-repeat, no-repeat, no-repeat;
   background-position: 0 0;
   background-attachment: scroll;
 }
 :root:not([data-skin="retro98"]):is(
   [data-skin-texture="grain"],
+  [data-skin-texture="fine"],
+  [data-skin-texture="paper"],
   [data-skin-texture="grid"],
+  [data-skin-texture="mesh"],
   [data-skin-texture="dots"],
-  [data-skin-texture="lines"]
+  [data-skin-texture="lines"],
+  [data-skin-texture="frost"]
 ) :is(.app-content-frame > main.bg-app:not(.app-glow), aside[data-sidebar]),
 :root[data-skin="pulsatrix-light"]:is(
   [data-skin-texture="grain"],
+  [data-skin-texture="fine"],
+  [data-skin-texture="paper"],
   [data-skin-texture="grid"],
+  [data-skin-texture="mesh"],
   [data-skin-texture="dots"],
-  [data-skin-texture="lines"]
+  [data-skin-texture="lines"],
+  [data-skin-texture="frost"]
 ) .app-glow > .content-card-body {
   /* Pulsatrix Light's card only: in every other skin `.content-card-body`
      is transparent and the main behind it already carries the pattern. */

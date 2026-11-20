@@ -133,7 +133,7 @@ export async function syncDesktopAppearance(): Promise<void> {
   } catch {
     return;
   }
-  const [{ applySkin, applySkinDepth, applySkinTexture, prefersDarkScheme, resolveStoredSkin, SKIN_IDS }, { isSkinTexture, isSkinTint, writeSkinAuto }, { applyFont, FONT_IDS }, retro, hd] = await Promise.all([
+  const [{ applySkin, applySkinDepth, applySkinTexture, prefersDarkScheme, resolveStoredSkin, SKIN_IDS }, { isSkinTexture, isStoredTint, writeSkinAuto }, { applyFont, FONT_IDS }, retro, hd] = await Promise.all([
     import("./skins"),
     import("./skin-families"),
     import("./fonts"),
@@ -157,7 +157,7 @@ export async function syncDesktopAppearance(): Promise<void> {
       writeSkinAuto(auto, storage);
       const skin = SKIN_IDS.find((id) => id === next["omb-skin"]);
       // a phone that does not send a tint chose a plain skin: the family's own look
-      if (skin && !retroOn) applySkin(resolveStoredSkin(skin, auto, prefersDarkScheme()), isSkinTint(next["omb-skin-tint"]) ? next["omb-skin-tint"] : null);
+      if (skin && !retroOn) applySkin(resolveStoredSkin(skin, auto, prefersDarkScheme()), isStoredTint(next["omb-skin-tint"]) ? next["omb-skin-tint"] : null);
       applySkinDepth(next["omb-skin-depth"] === "full" ? "full" : "accent");
       const texture = next["omb-skin-texture"];
       applySkinTexture(isSkinTexture(texture) ? texture : "none");

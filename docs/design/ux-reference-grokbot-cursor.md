@@ -1652,7 +1652,14 @@ ne jamais coder une couleur, un rayon ou une ombre en dur dans un composant.
 - Gris par défaut. Une seule couleur d'accent par écran pour l'action principale.
 - La couleur du bot sert à ce qui est à lui : bouton voix, interrupteurs de son panneau,
   pastille de nouveaux messages.
-- Bleu système pour les interrupteurs des réglages et les liens d'action dans une carte.
+- Bleu système pour les liens d'action dans une carte et pour l'interrupteur allumé de
+  l'habillage de base. Sous une couleur, un duo-ton, une ambiance ou une couleur sur
+  mesure choisie par la personne, l'interrupteur allumé prend cet accent, à la
+  luminosité qui porte le pouce blanc à 3:1 (M-20261119-073, `switchColors` avec
+  `follow`, `src/styles/skin-switch.css`).
+- Un texte posé sur un accent plein ou un dégradé prend `text-accent-ink`, calculé
+  pour 4,5:1 sur chaque arrêt, jamais un blanc fixe (M-20261119-073,
+  `src/lib/accent-ink.guard.test.ts`).
 - Rouge seulement pour le destructif et l'échec. Vert pour en ligne et réussi. Orange
   pour en attente et pour l'étoile du bot principal (toujours orange, dans tout
   habillage).
@@ -2834,6 +2841,35 @@ backups, and `omb-skin-mode` in `/api/me/appearance`.
   the skin with `ui eval --js "localStorage.setItem('omb-skin','<id>');
   location.reload()"`, open the surface, and screenshot or measure its
   computed colours with `ui eval`.
+
+##### Custom colours and textures (M-20261119-073)
+
+Each row of swatches (Colour, Duo-tone, Mood) ends with a custom swatch: the
+person's colours inside a ring of every hue (`.custom-swatch-ring`). A click
+wears them and opens `CustomColourEditor.tsx` under the swatch
+(`AnchoredPopover`): one colour; two colours and the gradient's angle; the
+mood's ground and two accents, each the system's colour well beside its hex
+code, and the light and dark miniatures of the family. Every change is worn at
+once. The choice is the tint itself, `omb-skin-tint` =
+`custom:#rrggbb` | `custom-duo:#a,#b,<0-359>` | `custom-mood:<ground>,<a>,<b>`
+(`src/lib/custom-tint.ts`, the same form as the Perspicax account), stamped on
+the root as its kind; `omb-skin-custom` remembers each row's last colours and
+travels with the person. `src/lib/custom-colours.ts` writes one adopted sheet
+for every skin of the colour families with the tokens a variant block sets:
+the fill and the accent text toned like a bot colour (`holdContrast`,
+`toneForSurface`), `accentInk` on the fill with every gradient stop fitted to
+4.5:1 under it, the person's bubble from `bubbleColors`, the switch following
+the accent, and for a mood (or a colour at full intensity) a palette of its
+hue with its inks at 4.5:1. The grounds it fits on are
+`src/lib/skin-grounds.ts`, written by `pnpm gen:switch`. Tests:
+`src/lib/custom-colours.test.ts` (every skin, black to white),
+`src/components/SkinPicker.dom.test.ts`. Gallery:
+`src/gallery/skin-families.html?view=settings&sample=1`.
+
+Textures: none, grain, fine grain, paper, grid, mesh, dots, lines, frosted
+glass (`src/styles/skin-texture.css`). Fine grain, paper and frost are an inline
+SVG noise of a few hundred bytes in a mid grey; each glow layer under a
+texture keeps its own size, so a glow never tiles.
 
 #### Bot content has a default theme (2026-10-28)
 

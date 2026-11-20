@@ -58,6 +58,11 @@ let threadOwners: Record<string, { owner: string; confidential: boolean }> = {};
 const turn = (mode: "on" | "off", provider?: Parameters<typeof configureContentEncryption>[0]["provider"]) =>
   configureContentEncryption({ mode, autoMigrate: false, resolveBotOwner: (botId) => botOwners[botId] ?? WORKSPACE_OWNER, resolveOwner: (threadId) => threadOwners[threadId] ?? { owner: WORKSPACE_OWNER, confidential: false }, ...(provider ? { provider } : {}) });
 const migrateAll = async () => {
+  // A pass the previous test's auto-migration started can still run (a busy
+  // machine): runAtRestMigration hands back the pass in flight, whose empty
+  // result ended this loop before any pass of this test ran, and a file was
+  // left plain (seen in the merge gate under load, #5099). Join it first.
+  await runAtRestMigration({ sliceMs: Infinity });
   for (let i = 0; i < 20; i++) {
     const pass = await runAtRestMigration({ sliceMs: Infinity });
     for (let j = 0; j < 100 && !runContentMigration(Infinity).done; j++);

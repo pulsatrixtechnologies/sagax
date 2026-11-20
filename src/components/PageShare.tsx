@@ -225,7 +225,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
             return (
               <label key={row.access} className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 ${off ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-hover"}`}>
                 <input type="radio" name={`page-access-${page.id}`} value={row.access} checked={checked} disabled={off} onChange={() => choose(row.access)} className="sr-only" />
-                <span className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${checked ? "bg-accent text-white" : "bg-raised text-ink-secondary"}`}><Icon size={13} /></span>
+                <span className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${checked ? "bg-accent text-accent-ink" : "bg-raised text-ink-secondary"}`}><Icon size={13} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px]">{organization || row.access !== "private" ? t(row.label) : t("pages.access.private")}</span>
                   <span className="block text-[11.5px] text-ink-tertiary">{off ? t("pages.linkOff") : organization || row.access !== "private" ? t(row.hint) : t("pages.access.privateHint")}</span>
@@ -239,7 +239,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
           <div role="alert" className="mt-2 flex flex-col gap-2 rounded-lg bg-warning/10 p-2 text-[12px]">
             <span className="text-warning">{t("pages.confirmLinkChange")}</span>
             <span className="flex gap-2">
-              <button type="button" className="rounded-lg bg-accent px-2.5 py-1 font-medium text-white" onClick={() => choose("link")}>{t("pages.publishConfirm")}</button>
+              <button type="button" className="rounded-lg bg-accent px-2.5 py-1 font-medium text-accent-ink" onClick={() => choose("link")}>{t("pages.publishConfirm")}</button>
               <button type="button" className="rounded-lg px-2.5 py-1 text-ink-secondary hover:bg-hover" onClick={() => setPendingLink(false)}>{t("pages.cancel")}</button>
             </span>
           </div>

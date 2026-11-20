@@ -4,7 +4,7 @@
 // dialogs, the late-90s skin layer) lives behind dynamic imports, so a device
 // that never finds the egg never downloads or runs any of it.
 import { applySkin, prefersDarkScheme, readSkin, readSkinTint, resolveStoredSkin, type SkinId } from "./skins";
-import { isSkinTint, readRememberedVariants, readSkinAuto, SKIN_WINDOWS_TINTS, type SkinTintId } from "./skin-families";
+import { isStoredTint, readRememberedVariants, readSkinAuto, SKIN_WINDOWS_TINTS, type SkinTintId } from "./skin-families";
 
 /** Up up down down left right left right b a. */
 export const KONAMI_SEQUENCE = [
@@ -119,9 +119,9 @@ export function retroEnabled(): boolean {
 
 export interface RetroSkinSwap {
   current: () => SkinId;
-  /** The colour or edition worn over the current skin, or null. */
-  currentTint?: () => SkinTintId | null;
-  apply: (id: SkinId, tint?: SkinTintId | null) => void;
+  /** The colour or edition worn over the current skin (a custom tint with its colours), or null. */
+  currentTint?: () => string | null;
+  apply: (id: SkinId, tint?: string | null) => void;
 }
 
 /** The Windows edition last picked under Hibou 98, or null for the classic look. */
@@ -167,7 +167,7 @@ export function setRetroEnabled(
     write(PREVIOUS_TINT_KEY, null, storage);
     if (skin.current() === RETRO_SKIN) {
       const back = previous && previous !== RETRO_SKIN ? previous : readDefaultSkin();
-      skin.apply(back, isSkinTint(previousTint) ? previousTint : null);
+      skin.apply(back, isStoredTint(previousTint) ? previousTint : null);
     }
   }
   enabled = on;

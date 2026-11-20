@@ -171,13 +171,19 @@ function fitTrack(base: Rgb, ink: Rgb, grounds: Rgb[], pick: "closest" | "lighte
  * @param surfaces every opaque surface a switch sits on (`#rrggbb`)
  * @param scheme   light or dark: off is the palest grey on a light skin and
  *                 the deepest one on a dark skin that still clears 3:1
+ * @param follow   the accent is the person's choice (a colour, duo-tone or
+ *                 mood, a custom one included): the on track takes it, at a
+ *                 lightness that carries the thumb and clears every surface
+ *                 (M-20261119-073, the owner: « The toggle should follow the
+ *                 accent »). Without it, a skin's own look keeps the one
+ *                 reference blue (2026-11-07).
  */
-export function switchColors({ accent, ink, surfaces, scheme }: { accent: string; ink: string; surfaces: string[]; scheme: Scheme }): SwitchColors {
+export function switchColors({ accent, ink, surfaces, scheme, follow = false }: { accent: string; ink: string; surfaces: string[]; scheme: Scheme; follow?: boolean }): SwitchColors {
   const grounds = surfaces.map(parseHex).filter((c): c is Rgb => c !== null);
   const inkRgb = parseHex(ink) ?? (scheme === "dark" ? WHITE : BLACK);
-  void accent; // the accent no longer drives the switch: one on colour, SWITCH_ON_BLUE
-  // one value on every skin, light and dark: no lightness search
-  const on = { track: parseHex(SWITCH_ON_BLUE) as Rgb, edge: null };
+  const accentRgb = parseHex(accent);
+  // the skin's own look: one value on every skin, light and dark, no lightness search
+  const on = follow && accentRgb ? fitTrack(accentRgb, inkRgb, grounds, "closest") : { track: parseHex(SWITCH_ON_BLUE) as Rgb, edge: null };
   // a neutral: the ink's own tint, kept faint
   const off = fitTrack(inkRgb, inkRgb, grounds, scheme === "light" ? "lightest" : "darkest", 0.12);
   // dark skins: Grok's dark track, the thumb's position says off

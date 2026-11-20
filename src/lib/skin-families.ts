@@ -24,6 +24,11 @@
 // Plum, Meadow, Lagoon) stay worn by older builds; this one maps them to the
 // closest base and colour (LEGACY_SKINS), so nobody loses their choice.
 import type { SkinId } from "./skin-ids";
+import { CUSTOM_KINDS, customKindOf, parseCustomTint, type CustomKind } from "./custom-tint";
+
+// M-20261119-073: each row of swatches (Colour, Duo-tone, Mood) ends with a
+// custom one whose tint carries the person's own colours (custom-tint.ts);
+// the textures gain fine grain, paper, mesh and frosted glass.
 
 export type SkinScheme = "light" | "dark";
 /** What the person picked: one scheme, or Auto (follow the system). */
@@ -54,7 +59,7 @@ export const SKIN_DEPTHS = ["accent", "full"] as const;
 export type SkinDepth = (typeof SKIN_DEPTHS)[number];
 
 /** A light texture over the ground (`data-skin-texture`, `omb-skin-texture`), any variant, any family but Hibou 98. */
-export const SKIN_TEXTURES = ["none", "grain", "grid", "dots", "lines"] as const;
+export const SKIN_TEXTURES = ["none", "grain", "fine", "paper", "grid", "mesh", "dots", "lines", "frost"] as const;
 export type SkinTexture = (typeof SKIN_TEXTURES)[number];
 
 export function isSkinDepth(value: unknown): value is SkinDepth {
@@ -66,11 +71,21 @@ export function isSkinTexture(value: unknown): value is SkinTexture {
 }
 export type SkinTintId = (typeof SKIN_TINT_IDS)[number];
 
-export const SKIN_VARIANT_IDS = ["basic", "classic", ...SKIN_TINT_IDS] as const;
+export const SKIN_VARIANT_IDS = ["basic", "classic", ...SKIN_TINT_IDS, ...CUSTOM_KINDS] as const;
 export type SkinVariantId = (typeof SKIN_VARIANT_IDS)[number];
 
 export function isSkinTint(value: unknown): value is SkinTintId {
   return typeof value === "string" && (SKIN_TINT_IDS as readonly string[]).includes(value);
+}
+
+/** A tint as it may be stored: a swatch's id, or a custom tint with its colours (custom-tint.ts). */
+export function isStoredTint(value: unknown): value is string {
+  return isSkinTint(value) || parseCustomTint(value) !== null;
+}
+
+/** A custom variant: the person picks its colours. */
+export function isCustomVariant(variant: SkinVariant | null | undefined): boolean {
+  return Boolean(variant?.tint && (CUSTOM_KINDS as readonly string[]).includes(variant.tint));
 }
 
 export type SkinVariant = {
@@ -79,8 +94,9 @@ export type SkinVariant = {
   light?: SkinId;
   /** The skin worn in a dark mode, when the variant has one. */
   dark?: SkinId;
-  /** Laid over the skin as `data-skin-tint`; absent on the family's own look. */
-  tint?: SkinTintId;
+  /** Laid over the skin as `data-skin-tint`; absent on the family's own look. A
+   * custom variant's is its kind: its colours are the person's (custom-tint.ts). */
+  tint?: SkinTintId | CustomKind;
   /** The picker row it sits in. */
   group: SkinVariantGroup;
 };
@@ -91,15 +107,18 @@ export type SkinVariant = {
  * Candy a daylight one, so each has the one scheme.
  */
 function colorVariants(light: SkinId, dark: SkinId, skip: readonly SkinTintId[] = []): SkinVariant[] {
-  const both = (tint: SkinTintId, group: SkinVariantGroup): SkinVariant => ({ id: tint, light, dark, tint, group });
+  const both = (tint: SkinTintId | CustomKind, group: SkinVariantGroup): SkinVariant => ({ id: tint, light, dark, tint, group });
   return [
     { id: "basic", light, dark, group: "color" },
     ...SKIN_COLOR_TINTS.filter((tint) => !skip.includes(tint)).map((tint) => both(tint, "color")),
+    both("custom", "color"),
     ...SKIN_DUO_TINTS.map((tint) => both(tint, "duo")),
+    both("custom-duo", "duo"),
     { id: "cyberpunk", dark, tint: "cyberpunk", group: "ambiance" },
     both("sunset", "ambiance"),
     both("nordic", "ambiance"),
     { id: "candy", light, tint: "candy", group: "ambiance" },
+    both("custom-mood", "ambiance"),
   ];
 }
 
@@ -146,7 +165,7 @@ export const LEGACY_SKINS: Partial<Record<SkinId, { skin: SkinId; tint: SkinTint
 };
 
 /** A worn skin and its tint, with a legacy skin mapped and a tint its family has no variant for dropped. */
-export function normalizeWorn(skin: SkinId, tint: SkinTintId | null | undefined): { skin: SkinId; tint: SkinTintId | null } {
+export function normalizeWorn(skin: SkinId, tint: string | null | undefined): { skin: SkinId; tint: string | null } {
   const legacy = LEGACY_SKINS[skin];
   if (legacy) return { ...legacy };
   if (!tint) return { skin, tint: null };
@@ -155,8 +174,9 @@ export function normalizeWorn(skin: SkinId, tint: SkinTintId | null | undefined)
 
 export type SkinPlace = { family: SkinFamily; variant: SkinVariant; scheme: SkinScheme };
 
-function placeKey(skin: SkinId, tint: SkinTintId | null | undefined): string {
-  return `${skin}|${tint ?? ""}`;
+// A custom tint sits where its kind does: the colours are the person's.
+function placeKey(skin: SkinId, tint: string | null | undefined): string {
+  return `${skin}|${tint ? (customKindOf(tint) ?? tint) : ""}`;
 }
 
 const PLACES: ReadonlyMap<string, SkinPlace> = (() => {
@@ -174,7 +194,7 @@ const PLACES: ReadonlyMap<string, SkinPlace> = (() => {
  * Where a worn skin and tint sit: the family, the variant and the scheme. A
  * legacy skin sits at its mapped colour; a tint the family lacks is ignored.
  */
-export function placeOfSkin(skin: SkinId, tint?: SkinTintId | null): SkinPlace {
+export function placeOfSkin(skin: SkinId, tint?: string | null): SkinPlace {
   const worn = normalizeWorn(skin, tint);
   const place = PLACES.get(placeKey(worn.skin, worn.tint));
   // Every SKIN_IDS entry is a base or a legacy skin (skin-families.test.ts); a missing one is a programming error.
@@ -363,9 +383,9 @@ export function autoPairs(): Record<string, [SkinId, SkinId]> {
   return out;
 }
 
-/** The tints each base skin can wear: the first-paint script drops any other stored tint. */
-export function tintsBySkin(): Record<string, SkinTintId[]> {
-  const out: Record<string, SkinTintId[]> = {};
+/** The tints each base skin can wear (a custom one by its kind): the first-paint script drops any other stored tint. */
+export function tintsBySkin(): Record<string, (SkinTintId | CustomKind)[]> {
+  const out: Record<string, (SkinTintId | CustomKind)[]> = {};
   for (const family of SKIN_FAMILIES) {
     for (const variant of family.variants) {
       if (!variant.tint) continue;

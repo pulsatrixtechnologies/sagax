@@ -145,7 +145,7 @@ function saveFile(name: string, text: string, type = "text/html") {
 }
 
 const BUTTON = "inline-flex items-center gap-1.5 rounded-lg border border-hairline/60 px-2.5 py-1 text-[12.5px] text-ink hover:bg-raised disabled:opacity-40";
-const PRIMARY = "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40";
+const PRIMARY = "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-accent-ink disabled:opacity-40";
 const ROUND = "flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline/50 bg-raised text-ink shadow-sm hover:bg-raised-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full border border-hairline/50 bg-raised px-3.5 text-[13px] font-medium text-ink shadow-sm hover:bg-raised-hover disabled:opacity-40";
 
@@ -815,7 +815,7 @@ function AnnotationPanel({ annotations, setAnnotations, sent, busy, message, onS
         {annotations.map((item) => (
           <li key={item.n} data-page-annotation={item.n} className="space-y-1 rounded-lg bg-raised/45 p-2">
             <div className="flex items-start gap-2">
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold text-white">{item.n}</span>
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold text-accent-ink">{item.n}</span>
               <span className="min-w-0 flex-1 truncate text-ink-secondary" title={item.anchor.path}>
                 &lt;{item.anchor.tag}&gt; {item.anchor.text}
               </span>

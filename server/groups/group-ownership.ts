@@ -50,14 +50,28 @@ export function ownsGroup(group: Pick<OwnedGroup, "createdBy" | "humanIds">, act
   return actorIds(actor).includes(owner);
 }
 
-/** #5152: the rooms one person made that name nobody, them included. On an
- * organization server the operator at this computer made such rooms before
- * withCreatorListed listed them; now that they are filtered for themselves
- * (channelFilterViewer), nobody would see those rooms. */
-export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: readonly string[]; peopleDm?: boolean; archivedAt?: number }>(groups: readonly G[], creatorId: string): G[] {
-  const creator = norm(creatorId);
-  if (!creator) return [];
-  return groups.filter((group) => !group.peopleDm && !group.archivedAt && !(group.humanIds ?? []).length && typeof group.createdBy === "string" && norm(group.createdBy) === creator);
+/** #5152: the rooms that are one person's yet do not list them. On an
+ * organization server the operator at this computer is filtered for
+ * themselves (channelFilterViewer) and sees a room only when it lists them;
+ * before, they saw every room, so some of theirs never did: one they made
+ * here (`createdBy`, withCreatorListed listed a signed-in member only), or
+ * one from before the organization with no person behind it whose bots are
+ * all theirs. A conversation between two people and an archived room are
+ * never touched. */
+export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: readonly string[]; memberIds?: readonly string[]; peopleDm?: boolean; archivedAt?: number }>(
+  groups: readonly G[],
+  personId: string,
+  botOwner: (botId: string) => string | null | undefined,
+): G[] {
+  const person = norm(personId);
+  if (!person) return [];
+  return groups.filter((group) => {
+    if (group.peopleDm || group.archivedAt) return false;
+    if ((group.humanIds ?? []).some((entry) => norm(entry) === person)) return false;
+    const owner = groupOwnerId(group);
+    if (owner !== null) return owner === person;
+    return (group.memberIds ?? []).every((botId) => norm(botOwner(botId) ?? "") === person);
+  });
 }
 
 /** The fields only the owner may change. */

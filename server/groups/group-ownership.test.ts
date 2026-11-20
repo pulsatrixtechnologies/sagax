@@ -71,22 +71,30 @@ describe("group ownership", () => {
   });
 });
 
-// #5152: the operator's own rooms that name nobody, them included
+// #5152: the operator's own rooms that do not list them
 describe("unlistedOwnRooms", () => {
+  const owners: Record<string, string> = { "bot-local": "pr_local", "bot-ada": "pr_ada" };
+  const botOwner = (botId: string) => owners[botId];
   const rooms = [
-    { id: "made-here", createdBy: "PR_LOCAL", humanIds: [] as string[] },
-    { id: "no-people-field", createdBy: "pr_local" },
-    { id: "names-someone", createdBy: "pr_local", humanIds: ["pr_ada"] },
-    { id: "names-a-team", createdBy: "pr_local", humanIds: ["team:T1"] },
-    { id: "someone-else", createdBy: "pr_ada", humanIds: [] as string[] },
-    { id: "no-maker", humanIds: [] as string[] },
+    { id: "made-here", createdBy: "PR_LOCAL", humanIds: [] as string[], memberIds: ["bot-local"] },
+    { id: "made-here-with-ada", createdBy: "pr_local", humanIds: ["pr_ada"], memberIds: ["bot-local"] },
+    { id: "made-here-for-a-team", createdBy: "pr_local", humanIds: ["team:T1"], memberIds: [] as string[] },
+    { id: "before-the-org", memberIds: ["bot-local"] },
+    { id: "before-the-org-empty", humanIds: [] as string[], memberIds: [] as string[] },
+    { id: "already-listed", createdBy: "pr_local", humanIds: ["pr_local", "pr_ada"], memberIds: ["bot-local"] },
+    { id: "ada-made-it", createdBy: "pr_ada", humanIds: [] as string[], memberIds: ["bot-local"] },
+    { id: "lists-ada-first", humanIds: ["pr_ada"], memberIds: ["bot-local"] },
+    { id: "nobody-with-ada-bot", memberIds: ["bot-local", "bot-ada"] },
+    { id: "nobody-unknown-bot", memberIds: ["bot-gone"] },
     { id: "a-dm", createdBy: "pr_local", humanIds: [] as string[], peopleDm: true },
     { id: "archived", createdBy: "pr_local", humanIds: [] as string[], archivedAt: 1 },
   ];
-  it("finds the rooms the person made that list nobody", () => {
-    expect(unlistedOwnRooms(rooms, "pr_local").map((room) => room.id)).toEqual(["made-here", "no-people-field"]);
+  it("finds the person's rooms that do not list them, and no one else's", () => {
+    expect(unlistedOwnRooms(rooms, "pr_local", botOwner).map((room) => room.id)).toEqual([
+      "made-here", "made-here-with-ada", "made-here-for-a-team", "before-the-org", "before-the-org-empty",
+    ]);
   });
   it("finds nothing for nobody", () => {
-    expect(unlistedOwnRooms(rooms, " ")).toEqual([]);
+    expect(unlistedOwnRooms(rooms, " ", botOwner)).toEqual([]);
   });
 });

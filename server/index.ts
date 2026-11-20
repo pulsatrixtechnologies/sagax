@@ -11962,12 +11962,16 @@ principals.onDisabledChanged((person, disabled) => orgAudit({
 }));
 principals.localOperator(cfg.profile?.email);
 // #5152: on an organization server the operator at this computer sees their
-// own rooms only (channelFilterViewer). A room they made here before named
-// nobody (withCreatorListed listed a signed-in creator only): it names them
-// now, as one they make today does.
+// own rooms only (channelFilterViewer). Their rooms that do not list them
+// (unlistedOwnRooms: made here before withCreatorListed listed them, or from
+// before the organization) list them now, as one they make today does.
 if (IDENTITY.kind === "perspicax") {
   const operator = localPrincipalId();
-  for (const group of unlistedOwnRooms(store.groups, operator)) store.patchGroup(group.id, { humanIds: [operator] });
+  const botOwner = (botId: string) => {
+    const bot = store.bot(botId);
+    return bot ? effectiveBotOwner(bot) : undefined;
+  };
+  for (const group of unlistedOwnRooms(store.groups, operator, botOwner)) store.patchGroup(group.id, { humanIds: [operator, ...(group.humanIds ?? [])] });
 }
 // 2026-10-26 (one approval level): the owner's permission mode was a
 // second setting beside the approval level. A mode someone chose is carried

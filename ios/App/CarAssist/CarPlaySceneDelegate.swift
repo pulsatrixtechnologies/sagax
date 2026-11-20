@@ -16,10 +16,19 @@
 // Choosing a bot calls it: the conversation is the voice, as the category
 // requires. An approval during the call is asked aloud or waits for the
 // phone (DrivingSafety); nothing on this screen asks to pick up the iPhone.
+//
+// Every template operation reads the car's own stack first and passes a
+// completion block (CarScreen): CarPlay raises an NSGenericException, and the
+// app quits, for an operation it refuses without one (a pop with only the
+// root on screen, a present over a presented template), and the car's Back
+// control closes the voice screen without asking the app.
 import CarPlay
 import Combine
 import CompanionCore
+import os
 import UIKit
+
+private let log = Logger(subsystem: "ca.pulsatrix.sagax", category: "carplay")
 
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
@@ -31,6 +40,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var announced: Set<String> = []
     private var announcedLoaded = false
     private var voice: CPVoiceControlTemplate?
+    /// the call (its bot or channel id) the voice screen was shown for
+    private var voiceFor: String?
     private var shownState: CarVoiceState?
     private var faces: [String: UIImage] = [:]
     /// bots whose face was already tried (drawn or not), never redrawn
@@ -57,7 +68,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         answerList = answer
         let tabs = CPTabBarTemplate(templates: [bots, recent, answer])
         self.tabs = tabs
-        interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
+        interfaceController.setRootTemplate(tabs, animated: false, completion: Self.done("set the root"))
         reload(session.state)
 
         // a notification tapped on the phone while in the car opens the tab
@@ -88,7 +99,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             .store(in: &subscriptions)
     }
 
-    func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnect interfaceController: CPInterfaceController) {
+    /// `didDisconnectInterfaceController`, not `didDisconnect`: CarPlay never
+    /// called the shorter name, so a car left behind its subscriptions and a
+    /// voice screen the next car's stack does not hold.
+    func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         CarRoute.carPlayConnected = false
         subscriptions.removeAll()
         interface = nil
@@ -99,8 +113,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         announced = []
         announcedLoaded = false
         CarSpeaker.shared.stop()
-        voice = nil
-        shownState = nil
+        forgetVoice()
         faces = [:]
         facesTried = []
     }
@@ -193,12 +206,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     self?.answer(ask, allow: false)
                 },
                 CPTextButton(title: String(localized: "Talk by voice"), textStyle: .normal) { [weak self] _ in
-                    self?.interface?.popToRootTemplate(animated: true, completion: nil)
+                    self?.popToRoot()
                     Task { await CarCalls.call(contactId: ask.botId) }
                 },
             ]
         )
-        interface.pushTemplate(info, animated: true, completion: nil)
+        if !CarScreen.canPush(carStack()) { popToRoot() }
+        interface.pushTemplate(info, animated: true, completion: Self.done("push an ask"))
         if CallController.shared.target == nil {
             CarSpeaker.shared.say(String(localized: "\(ask.botName) asks: \(ask.title). \(spoken)"))
         }
@@ -208,7 +222,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// phone's own button sends it, a security key class still waits for the phone.
     private func answer(_ ask: CarApproval, allow: Bool) {
         CarSpeaker.shared.stop()
-        interface?.popToRootTemplate(animated: true, completion: nil)
+        popToRoot()
         Task { @MainActor in
             let session = SessionHub.session
             guard let chat = session.state.chat(forThread: ask.threadId),
@@ -235,27 +249,76 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func call(_ contact: CarContact) {
+        let call = CallController.shared
+        if call.target?.id == contact.id {
+            // the bot on the call: its voice screen again, when the car's
+            // Back closed it
+            if !carStack().voiceShown { forgetVoice() }
+            follow(target: call.target, state: call.state)
+            return
+        }
         Task { await CarCalls.call(contactId: contact.id) }
+    }
+
+    // MARK: - The car's stack
+
+    /// What the car's stack holds now: CarPlay's own, read each time.
+    private func carStack() -> CarScreen.Stack {
+        guard let interface else { return CarScreen.Stack(depth: 1) }
+        let templates = interface.templates
+        let shown = voice.map { voice in templates.contains { $0 === voice } } ?? false
+        return CarScreen.Stack(depth: templates.count, voiceShown: shown, presented: interface.presentedTemplate != nil)
+    }
+
+    /// Back to the list, when something is above it (CarPlay refuses a pop
+    /// with only the root on screen).
+    private func popToRoot() {
+        guard let interface, CarScreen.canPopToRoot(carStack()) else { return }
+        interface.popToRootTemplate(animated: true, completion: Self.done("pop to the root"))
+    }
+
+    private func forgetVoice() {
+        voice = nil
+        voiceFor = nil
+        shownState = nil
+    }
+
+    /// The completion every template operation passes: a refusal is logged,
+    /// never raised.
+    private nonisolated static func done(_ operation: String) -> @Sendable (Bool, (any Error)?) -> Void {
+        { success, error in
+            guard !success else { return }
+            log.error("CarPlay refused to \(operation, privacy: .public): \(error?.localizedDescription ?? "no reason", privacy: .public)")
+        }
     }
 
     // MARK: - The call
 
     private func follow(target: Chat?, state: CallState) {
         guard let interface else { return }
-        guard target != nil, let carState = CarVoiceState(state) else {
-            if voice != nil {
-                voice = nil
-                shownState = nil
-                interface.popToRootTemplate(animated: true, completion: nil)
-            }
+        let carState = target == nil ? nil : CarVoiceState(state)
+        let held = voice != nil && voiceFor == target?.id
+        switch CarScreen.callStep(calling: carState != nil, held: held, stack: carStack()) {
+        case .none:
             return
-        }
-        if voice == nil {
+        case .forget:
+            forgetVoice()
+            return
+        case .close:
+            forgetVoice()
+            interface.popToRootTemplate(animated: true, completion: Self.done("close the voice screen"))
+            return
+        case let .show(popToRootFirst):
+            if popToRootFirst { popToRoot() }
             let template = CPVoiceControlTemplate(voiceControlStates: CarVoiceState.allCases.map(voiceState))
             voice = template
-            interface.pushTemplate(template, animated: true, completion: nil)
+            shownState = nil
+            interface.pushTemplate(template, animated: true, completion: Self.done("push the voice screen"))
+        case .update:
+            break
         }
-        if shownState != carState {
+        voiceFor = target?.id
+        if let carState, shownState != carState {
             shownState = carState
             voice?.activateVoiceControlState(withIdentifier: carState.rawValue)
         }
@@ -296,10 +359,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func alert(_ title: String) {
         guard let interface else { return }
         let alert = CPAlertTemplate(titleVariants: [title], actions: [
-            CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak interface] _ in
-                interface?.dismissTemplate(animated: true, completion: nil)
+            CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak self] _ in
+                self?.dismissAlert()
             },
         ])
-        interface.presentTemplate(alert, animated: true, completion: nil)
+        switch CarScreen.alertStep(carStack()) {
+        case .present:
+            interface.presentTemplate(alert, animated: true, completion: Self.done("present an alert"))
+        case .replace:
+            interface.dismissTemplate(animated: false) { [weak interface] _, _ in
+                interface?.presentTemplate(alert, animated: true, completion: Self.done("present an alert"))
+            }
+        }
+    }
+
+    private func dismissAlert() {
+        guard let interface, carStack().presented else { return }
+        interface.dismissTemplate(animated: true, completion: Self.done("dismiss an alert"))
     }
 }

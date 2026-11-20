@@ -60,6 +60,19 @@ Depth two, Apple allows three. The audio session is the call's only (no
 recording outside the voice screen). An approval is answered by voice or
 waits; a call that cannot start shows its title, never "pick up the phone".
 
+The car's stack (`CarScreen`, #5131). CarPlay raises an `NSGenericException`
+(the app quits) for a template operation it refuses without a completion
+block: a pop with only the root on screen ("No templates were available to
+be popped."), a present over a presented template, a dismiss with nothing
+presented. Past three templates, root included, it ends a voice-based
+conversation or driving task app. So every operation passes a completion
+that logs a refusal, and each step reads the car's own stack
+(`CPInterfaceController.templates`, `presentedTemplate`), never what the app
+remembers pushing: the car's Back control closes the voice screen without
+asking the app. The call then goes on with the list on screen; opening the
+bot on the call shows its voice screen again, and the end of the call pops
+nothing.
+
 The entitlements and the CarPlay scene (`UIApplicationSceneManifest`) are in
 `ios/project.yml`, so every build carries them: automatic signing needs the
 App ID to have both CarPlay entitlements assigned by Apple (it has, checked
@@ -89,6 +102,8 @@ The root is a tab bar:
 
 - `swift test --filter CarAssistTests`: names, replies, handles, the car's
   list, the driving rules, the voice screen states.
+- `swift test --filter CarScreenTests`: the car's stack against CarPlay's
+  refusals (the Back control, the depth, a second alert).
 - CarPlay screen: CarPlay Simulator (Xcode 27 Device Hub, an iPhone on USB)
   or a car, with a normal build and its CarPlay profile.
   The iOS Simulator's CarPlay window needs Simulator's I/O menu: there is no

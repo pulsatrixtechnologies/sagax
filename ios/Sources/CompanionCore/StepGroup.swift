@@ -77,7 +77,8 @@ public struct StepGroupWords: Hashable, Sendable {
 public enum StepGroup {
     /// A tool step inside a run (the rest is narration).
     public static func isStep(_ message: Message) -> Bool {
-        message.kind == .activity && message.tool != nil && message.tool?.roleNotice == nil
+        // #5091: a Heavy run's row is its own, never a tool step
+        message.kind == .activity && message.tool != nil && message.tool?.roleNotice == nil && message.tool?.team == nil
     }
 
     /// The steps in order, consecutive identical steps (same words, same

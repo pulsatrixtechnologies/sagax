@@ -692,6 +692,9 @@ private struct ActivityKindRow: View {
             CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
                 Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
             }
+        } else if let team = message.tool?.team {
+            // #5091: a Heavy run, its orbit and its Thoughts (HeavyTeamRowView.swift)
+            HeavyTeamRowView(line: team, chat: chat)
         } else if let line = message.tool?.finishUntil {
             // #1329: relaunch x/N, met, bound (FinishUntilEditor.swift)
             FinishUntilRow(line: line)

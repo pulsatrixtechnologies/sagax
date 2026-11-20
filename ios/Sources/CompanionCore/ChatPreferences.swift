@@ -274,6 +274,8 @@ func previewText(of message: Message) -> String {
 public func isStatusNotice(_ message: Message) -> Bool {
     guard message.kind == .activity, let tool = message.tool else { return false }
     if tool.limitFailover != nil { return true }
+    // #5091: a Heavy run's row (the desktop's statusActivity "team"): drawn on its own
+    if tool.team != nil { return true }
     return tool.name.hasPrefix("notice:") || tool.name.hasPrefix("recovery:")
 }
 

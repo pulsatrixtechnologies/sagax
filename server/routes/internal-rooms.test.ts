@@ -289,6 +289,34 @@ describe("POST /run-with-engine: who may run a part on another engine", () => {
     expect(sent[0]).toMatchObject({ status: 200, body: { status: "reply", engineLabel: "Grok" } });
   });
 
+  // #4878: a routine's verification step ran as a part on an engine inside
+  // its usage window; the failover carried it to the next engine of the
+  // chain in the part's thread, and the answer still named the refused one.
+  it("a part the usage-limit failover carried to the next engine names the engine that ran it, and the one that refused (#4878)", async () => {
+    const CLAUDE = { instanceId: "claude-1", driverKind: "claudeAgent", displayName: "Claude", models: { default: "opus", options: [{ id: "opus" }] } };
+    const askBotAndWait = vi.fn<InternalRoomsDeps["askBotAndWait"]>(async () => ({ status: "reply", text: "3 agreements verified" }));
+    const deps = baseDeps({ relayEnginesFor: () => [CLAUDE, GROK], askBotAndWait });
+    deps.store.projectBotForTask = (_botId, threadId) => ({ modelSelection: threadId === "t-new" ? { instanceId: "grok-1", model: "grok-4.7" } : BOT.modelSelection });
+    const route = createInternalRoomsRoutes(deps);
+    const { sent, run } = call(route, { path: "/api/internal/run-with-engine", body: { engine: "claude", message: "verify the reconciliation plan", depth: 0 }, capability: capability(0) });
+    await run();
+    expect(askBotAndWait).toHaveBeenCalledOnce();
+    expect(sent[0]).toMatchObject({ status: 200, body: { status: "reply", engineLabel: "Grok", model: "grok-4.7", refusedBy: { engineLabel: "Claude", model: "opus" } } });
+    const text = (sent[0]!.body as { text: string }).text;
+    expect(text).toBe("Claude (opus) was at its usage limit, so the part went on to the next engine. Grok (grok-4.7) finished. Its result:\n3 agreements verified");
+  });
+
+  it("a part that ran on the engine asked for names that engine only (#4878)", async () => {
+    const askBotAndWait = vi.fn<InternalRoomsDeps["askBotAndWait"]>(async () => ({ status: "reply", text: "mail read" }));
+    const deps = baseDeps({ relayEnginesFor: () => [GROK], askBotAndWait });
+    deps.store.projectBotForTask = (_botId, threadId) => ({ modelSelection: threadId === "t-new" ? { instanceId: "grok-1", model: "grok-4.7" } : BOT.modelSelection });
+    const route = createInternalRoomsRoutes(deps);
+    const { sent, run } = call(route, { path: "/api/internal/run-with-engine", body: { engine: "grok", message: "read the mail", depth: 0 }, capability: capability(0) });
+    await run();
+    expect(sent[0]!.body).not.toHaveProperty("refusedBy");
+    expect((sent[0]!.body as { text: string }).text).toBe("Grok (grok-4.7) finished. Its result:\nmail read");
+  });
+
   it("a part never hands a part on again: the part of a direct turn, and the part of a teammate's turn", async () => {
     for (const [depth, isRelayPart] of [[1, () => true], [2, () => false]] as const) {
       const askBotAndWait = vi.fn(async () => ({ status: "reply", text: "x" }));

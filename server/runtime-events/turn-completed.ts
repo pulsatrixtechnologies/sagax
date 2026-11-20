@@ -183,6 +183,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       const limitTaken = !event.ok && !stopped && !lazyClaimAlreadyReported && !computerParked && Boolean(bot) &&
         host.limitFailover.turnFailed({ threadId: event.threadId, turnId: completedTurnId, cause: failureCause, stopReason: event.stopReason,
           routineRun: routineForFailover, engine: event.providerInstanceId ?? bot?.modelSelection.instanceId });
+      // #4878: a caller waiting on this thread (a run_with_engine part, a
+      // headless task) keeps waiting: the same work goes on here on the next
+      // engine of the chain, never read as this turn's failure.
+      if (limitTaken) host.limitTakeovers?.note(event.threadId, completedTurnId);
       // reasoning_only / empty model on a chat turn: one automatic resend of
       // the same user message before an incident (server/empty-response-retry.ts).
       const emptyDetail = failureCause ?? event.stopReason;

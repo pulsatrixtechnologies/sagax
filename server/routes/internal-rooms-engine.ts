@@ -142,11 +142,26 @@ export async function handleRunWithEngine(call: InternalRoomsCall): Promise<type
     return json(res, 200, { timeout: true, taskId, engineLabel: choice.engineLabel, threadId: task.threadId });
   }
   const status = (outcome.status === "timeout" ? "reply" : outcome.status) as "reply" | "failed" | "error";
+  // #4878: the engine asked for was at its usage limit and the failover
+  // carried the part to the next engine of the chain in its thread: the
+  // answer names the engine that ran it, and the one that refused.
+  const ran = status === "error" ? undefined : store.projectBotForTask(from.id, task.threadId)?.modelSelection;
+  const ranEngine = ran?.instanceId && (ran.instanceId !== choice.instanceId || ran.model !== choice.model)
+    ? engines.find((engine) => engine.instanceId === ran.instanceId && (engine.account ?? null) === (ran.account ?? null))
+      ?? engines.find((engine) => engine.instanceId === ran.instanceId)
+    : undefined;
+  const carried = ranEngine && ran ? ran : null;
+  const ranLabel = ranEngine ? ranEngine.displayName : choice.engineLabel;
+  const ranModel = carried ? carried.model : choice.model;
   return json(res, 200, {
     status,
-    engineLabel: choice.engineLabel,
-    model: choice.model,
+    engineLabel: ranLabel,
+    model: ranModel,
     threadId: task.threadId,
-    text: relayResultText({ engineLabel: choice.engineLabel, model: choice.model, status, text: outcome.text ?? "" }),
+    ...(carried ? { refusedBy: { engineLabel: choice.engineLabel, model: choice.model } } : {}),
+    text: relayResultText({
+      engineLabel: ranLabel, model: ranModel, status, text: outcome.text ?? "",
+      ...(carried ? { refusedBy: { engineLabel: choice.engineLabel, model: choice.model } } : {}),
+    }),
   });
 }

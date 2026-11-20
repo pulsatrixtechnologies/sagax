@@ -138,9 +138,17 @@ export function relayOpening(input: { engineLabel: string; sourceTitle?: string;
   return `[Part of your own work you handed to yourself on ${input.engineLabel}${from}, for the same person, with their own accounts and connectors on this engine. The request below is your own words, not the person's. Do it here and end with the result itself (the data, the text, what was done), complete and plain: it goes back to your other turn as is.]\n\n${input.message}`;
 }
 
-/** The tool's answer once the sub-turn ended. */
-export function relayResultText(input: { engineLabel: string; model: string; status: "reply" | "failed" | "error"; text: string }): string {
-  const head = `${input.engineLabel} (${input.model})`;
+/** The tool's answer once the sub-turn ended. `refusedBy`: the engine asked
+ * for, which refused the part for its usage limit before the failover
+ * carried it to `engineLabel` (#4878). */
+export function relayResultText(input: {
+  engineLabel: string; model: string; status: "reply" | "failed" | "error"; text: string;
+  refusedBy?: { engineLabel: string; model: string };
+}): string {
+  const carried = input.refusedBy
+    ? `${input.refusedBy.engineLabel} (${input.refusedBy.model}) was at its usage limit, so the part went on to the next engine. `
+    : "";
+  const head = `${carried}${input.engineLabel} (${input.model})`;
   if (input.status === "reply") return `${head} finished. Its result:\n${input.text}`;
   if (input.status === "failed") return `${head} started and failed: ${input.text}\nTell the person plainly; do not claim the work was done.`;
   return `${head} could not start: ${input.text}\nTell the person plainly; do not claim the work was done.`;

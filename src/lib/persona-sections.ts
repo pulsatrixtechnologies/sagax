@@ -84,14 +84,16 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * same section bodies as before) only for a setting too long for a card.
  * Stats shows the usage in place.
  *
- * - General: Settings (two switches in place, then Model, Before it
- *   acts), the Channels card and the Access card in place, More (Rules,
- *   When it acts alone, Voice, Advanced settings, Versions). Personality
- *   has no row: Knowledge > Folder and memory > SOUL.md opens its page.
+ * - General: Settings (two switches in place, then Model, Appearance,
+ *   Before it acts), the Channels card and the Access card in place, More
+ *   (Rules, When it acts alone, Voice, Advanced settings, Versions).
+ *   Personality has no row: Knowledge > the Bot folder > SOUL.md opens its
+ *   page.
  *   Shared with has no row either: the Share button of the top bar holds
  *   the people and groups and Who can see it.
- * - Appearance is not a tab: the mascot editor is a modal that the header's
- *   mascot opens (owner 2026-11-19). A link to the Appearance section opens it.
+ * - Appearance is not a tab: the mascot editor is a modal that its row in
+ *   Settings and the header's mascot open (owner 2026-11-19, then
+ *   M-20261119-081). A link to the Appearance section opens it.
  * - Knowledge (#3400, then M-20261119-081): To review (the learnings that
  *   wait, decided in place), then the Bot folder in place (Use memory, the
  *   path, SOUL.md, MEMORY.md, RULES.md, docs/, inbox/, memory/, rules/,

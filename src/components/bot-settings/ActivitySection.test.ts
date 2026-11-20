@@ -53,7 +53,7 @@ describe("Coding list", () => {
   });
 
   it("says when there is nothing, when it loads and when it failed", () => {
-    expect(list([])).toContain("No coding jobs in the last 7 days.");
+    expect(list([])).toContain("No tasks in the last 7 days.");
     expect(list(null)).toContain("Loading activity");
     expect(list(null, true)).toContain("Couldn&#x27;t load this bot&#x27;s activity.");
   });

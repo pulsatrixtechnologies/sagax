@@ -707,7 +707,7 @@
   "botPanel.code.pr.updated": "Mise à jour",
   "botPanel.code.pullRequests": "Pull requests",
   "botPanel.code.pushed": "Poussée",
-  "botPanel.coding.empty": "Aucun travail de code dans les 7 derniers jours.",
+  "botPanel.coding.empty": "Aucune tâche dans les 7 derniers jours.",
   "botPanel.coding.error": "Impossible de charger l'activité de ce bot.",
   "botPanel.coding.handedBy": "de {name}",
   "botPanel.coding.ignore": "Ignorer",

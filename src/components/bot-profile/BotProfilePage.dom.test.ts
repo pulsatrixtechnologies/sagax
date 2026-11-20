@@ -892,6 +892,10 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     const folder = panel.querySelector<HTMLElement>("[data-files-folder]")!;
     expect(folder, "the Bot folder in place").not.toBeNull();
     expect(review.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the Bot folder's grey label sits where To review's does, 12px in (#4420), not 4px
+    const labelRow = (section: HTMLElement) => section.querySelector("h3")!.parentElement!;
+    expect(labelRow(review).classList.contains("px-3"), "To review's label row").toBe(true);
+    expect(labelRow(folder).classList.contains("px-3"), "the Bot folder's label row").toBe(true);
     expect(panel.querySelector("[data-skills-section]"), "no Skills card").toBeNull();
     expect(panel.querySelector("[data-write-command]"), "no Write a command card").toBeNull();
     expect(panel.querySelector('[data-settings-group="bot-profile-group-work"]'), "no Its work").toBeNull();

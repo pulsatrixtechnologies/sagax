@@ -934,7 +934,7 @@
   "botPanel.code.pr.updated": "Updated",
   "botPanel.code.pullRequests": "Pull requests",
   "botPanel.code.pushed": "Pushed",
-  "botPanel.coding.empty": "No coding jobs in the last 7 days.",
+  "botPanel.coding.empty": "No tasks in the last 7 days.",
   "botPanel.coding.error": "Couldn't load this bot's activity.",
   "botPanel.coding.handedBy": "from {name}",
   "botPanel.coding.ignore": "Ignore",

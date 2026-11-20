@@ -303,7 +303,7 @@ export function SkillsSection({ bot, focus }: {
   // the rows' actions and the pages they open (the open skill, the review before Turn on): shared with the bot page's folder
   const { rowActions, overlays } = useSkillRows(bot, managed, { plain });
 
-  // After the modal around it has taken the focus (useModalDialog), so its
+  // After the modal around it (BotPageModal) has taken the focus, so its
   // Escape still returns it to the button that opened it.
   useEffect(() => {
     if (focus !== "command") return;

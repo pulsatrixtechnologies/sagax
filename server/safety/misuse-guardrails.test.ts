@@ -13,7 +13,6 @@ import {
   misuseScopeFor,
   misuseToolFrameText,
   resetMisuseGuardrailsForTests,
-  setMisuseAlert,
   setMisuseDataDirForTests,
   setMisuseOwnPaths,
 } from "./misuse-guardrails.ts";
@@ -65,25 +64,24 @@ describe("mode", () => {
   it("records a shadow row and does not refuse", async () => {
     process.env.SAGAX_MISUSE_GUARDRAILS = "shadow";
     const dir = tempDir();
-    const alerts: string[] = [];
-    setMisuseAlert((alert) => alerts.push(alert.message));
     expect(misuseRefusal("sudo -i", context, 1_000)).toBeNull();
     const written = await rows(dir);
     expect(written.map((row) => row.action)).toEqual(["misuse.shadow"]);
     expect(written[0]?.category).toBe("security");
     expect(written[0]?.after?.category).toBe("privilege_escalation");
-    expect(alerts).toEqual([]);
   });
 
-  it("refuses in enforce mode and alerts the tenant admin", () => {
+  // #5142: the admins read a refusal in the console's activity log;
+  // it is never a notification in their app (server/org-notification-isolation.e2e.test.ts)
+  it("refuses in enforce mode and records the row the admins read in the console", async () => {
     process.env.SAGAX_MISUSE_GUARDRAILS = "enforce";
-    tempDir();
-    const alerts: string[] = [];
-    setMisuseAlert((alert) => alerts.push(alert.message));
+    const dir = tempDir();
     const refusal = misuseRefusal("sudo -i", context, 1_000);
     expect(refusal).toMatchObject({ status: 403, code: "misuse_blocked" });
     expect(refusal?.message).toContain("droits d'administrateur");
-    expect(alerts).toEqual([refusal?.message]);
+    const written = await rows(dir);
+    expect(written.map((row) => row.action)).toEqual(["misuse.block"]);
+    expect(written[0]?.category).toBe("security");
   });
 
   it("does nothing when the flag is off", async () => {

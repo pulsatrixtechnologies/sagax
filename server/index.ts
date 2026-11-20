@@ -57,7 +57,7 @@ import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from
 import { createAgentCardGuard } from "./tools/agent-tool-card-guard.ts";
 import { guardDecision, toolGuardMode } from "./tools/tool-guard.ts";
 import { auditSampleFromEnv, deniedResourcesFromEnv, mcpAuditRow, mcpIdentityEnv, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "./mcp/mcp-permissions.ts";
-import { misusePathRefusal, misuseRefusal, misuseToolFrameText, setMisuseAlert, setMisuseOwnPaths } from "./safety/misuse-guardrails.ts";
+import { misusePathRefusal, misuseRefusal, misuseToolFrameText, setMisuseOwnPaths } from "./safety/misuse-guardrails.ts";
 import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, setSafetyConfirm, setSafetyFullAccess } from "./safety/safety-review.ts";
 import { flushOwnedFiles, flushOwnedFilesSync, writeFileAtomic } from "./atomic.ts";
@@ -5646,7 +5646,6 @@ bindLeafHost({
   get setConfidentialThreadResolver() { return setConfidentialThreadResolver; },
   get setDesktopInjectModels() { return setDesktopInjectModels; },
   get setInstallationCapabilityBridge() { return setInstallationCapabilityBridge; },
-  get setMisuseAlert() { return setMisuseAlert; },
   get setMisuseOwnPaths() { return setMisuseOwnPaths; },
   get setOpenCodeProviderKeyPolicy() { return setOpenCodeProviderKeyPolicy; },
   get setPageContextSource() { return setPageContextSource; },
@@ -20486,20 +20485,10 @@ const customRulesModel = createCustomRulesModelReviewer({
   }
 });
 
-setMisuseAlert((alert) => {
-  const bot = alert.botId ? store.bot(alert.botId) : undefined;
-  broadcast({
-    kind: "notify",
-    notification: {
-      kind: "admin-action",
-      botId: alert.botId ?? "",
-      botName: bot?.name ?? "Sagax",
-      threadId: alert.threadId ?? bot?.threadId ?? "",
-      title: "Demande refusée",
-      body: alert.message
-    }
-  }, { adminOnly: true });
-});
+// A misuse refusal (server/safety/misuse-guardrails.ts) reaches the person
+// who asked and the admin activity log the admins read in the Perspicax
+// console, never a notification: a member's bot is never announced in an
+// admin's app or on their phone (#5142).
 
 // 2026-10-27 (#1098): the person's own folders on the server, for the misuse
 // classifier and the safety review: their own bot's workspace and task

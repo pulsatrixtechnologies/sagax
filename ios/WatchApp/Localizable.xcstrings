@@ -129,6 +129,22 @@
         }
       }
     },
+    "Card to answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Card to answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carte à répondre"
+          }
+        }
+      }
+    },
     "Closed": {
       "localizations": {
         "en": {
@@ -449,6 +465,22 @@
         }
       }
     },
+    "Standing by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standing by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente"
+          }
+        }
+      }
+    },
     "Start the conversation.": {
       "localizations": {
         "en": {
@@ -605,6 +637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En attente d’un administrateur"
+          }
+        }
+      }
+    },
+    "Working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actif"
           }
         }
       }

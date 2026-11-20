@@ -343,6 +343,60 @@ describe("the evaluator", () => {
     }))(routine, command("sleep 99"))).rejects.toThrow(/ran past/);
   });
 
+  // #4802: past 16 KiB Perspicax answers a list as a handle with `items: []`
+  // and the real count beside it. The watch recorded "0 items" and never woke.
+  describe("#4802: a list answered as a result handle", () => {
+    const handle = "res_0123456789abcdef";
+    const envelope = { handle, items: [], count: 3, total: 3, summary: { kind: "array", count: 3 } };
+    const watch = tool({ source: { type: "tool", tool: "perspicax__cw_psa_query", args: { resource: "tickets" } }, track: { items: "items", key: "id", fields: ["status.name"] } });
+    const tickets = (status: string) => [{ k: 1, f0: "New" }, { k: 2, f0: status }, { k: 3, f0: "New" }];
+
+    it("reads the tracked fields from the handle through the same server's api_result_query, never as an empty list", async () => {
+      const calls: { name: string; args: Record<string, unknown> }[] = [];
+      let status = "New";
+      const clock = { at: 1_000_000 };
+      const evaluate = createRoutineWatchEvaluator(deps({ kind: "refuse", reason: "no computer" }, clock, {
+        callTool: async (_, name, args) => {
+          calls.push({ name, args });
+          return name === "perspicax__api_result_query"
+            ? { isError: false, value: JSON.stringify({ result: tickets(status), handle: null, summary: null, truncated: false }) }
+            : { isError: false, value: envelope };
+        },
+      }));
+      expect(await evaluate(routine, watch)).toMatchObject({ wake: false, reason: expect.stringMatching(/First check: recorded 3 items/) });
+      expect(calls[1]).toEqual({ name: "perspicax__api_result_query", args: { handle, expression: "\"items\"[*].{\"k\": \"id\", \"f0\": \"status\".\"name\"}", limit: 500 } });
+      clock.at += 10 * 60_000;
+      status = "Closed";
+      const woke = await evaluate(routine, watch);
+      expect(woke.wake).toBe(true);
+      expect(woke.wake && woke.note).toMatch(/Changed \(1\):\n- \{"status\.name":"Closed"\}/);
+      expect(await previewWatch(deps({ kind: "refuse", reason: "no computer" }, clock, {
+        callTool: async (_, name) => name === "perspicax__api_result_query"
+          ? { isError: false, value: { result: tickets("New"), handle: null, summary: null, truncated: false } }
+          : { isError: false, value: envelope },
+      }), routine, watch)).toMatchObject({ ok: true, items: 3 });
+    });
+
+    it("fails the check with the reason and what to change when the list cannot be read from the handle", async () => {
+      const failing = (query: Awaited<ReturnType<RoutineWatchDeps["callTool"]>>) => createRoutineWatchEvaluator(deps({ kind: "refuse", reason: "no computer" }, { at: 0 }, {
+        callTool: async (_, name) => name.endsWith("api_result_query") ? query : { isError: false, value: envelope },
+      }))(routine, watch);
+      await expect(failing({ isError: false, value: { result: null, handle: "res_fedcba9876543210", summary: { count: 3 }, truncated: false } }))
+        .rejects.toThrow(/result handle \(res_0123456789abcdef\) instead of the list at items, and the tracked list is still above 16 KiB\. Track only the key/);
+      await expect(failing({ isError: true, value: "handle_unknown" })).rejects.toThrow(/reading the handle failed: handle_unknown\. Track only/);
+      await expect(failing({ error: "This tool is turned off for this workspace" })).rejects.toThrow(/reading the handle failed: This tool is turned off/);
+    });
+
+    it("leaves an inline answer and a handle beside a filled list alone", async () => {
+      const calls: string[] = [];
+      const evaluate = createRoutineWatchEvaluator(deps({ kind: "refuse", reason: "no computer" }, { at: 0 }, {
+        callTool: async (_, name) => { calls.push(name); return { isError: false, value: { handle, items: [{ id: 1, status: { name: "New" } }] } }; },
+      }));
+      expect(await evaluate(routine, watch)).toMatchObject({ reason: expect.stringMatching(/recorded 1 item/) });
+      expect(calls).toEqual(["perspicax__cw_psa_query"]);
+    });
+  });
+
   it("Check now reads without keeping any state", async () => {
     const d = deps({ kind: "host", cwd: dir });
     const preview = await previewWatch(d, routine, command("echo hi", { condition: { test: "contains", text: "hi" } }));

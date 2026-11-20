@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { assertContentMatches, checkUploadedFile, clamdScanFile, sniff, sniffModeFromEnv } from "./upload-content-check.ts";
+import { GENERIC_FILE_MIME, assertContentMatches, checkUploadedFile, clamdScanFile, sniff, sniffModeFromEnv } from "./upload-content-check.ts";
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0]);
@@ -38,6 +38,19 @@ describe("upload content check", () => {
     expect(assertContentMatches("application/octet-stream", Buffer.from([0x00, 0x01, 0x02]), "enforce")).toBe("unknown");
     expect(() => assertContentMatches("application/octet-stream", elf, "enforce")).toThrow(/executable/);
     expect(() => assertContentMatches("application/octet-stream", pe, "enforce")).toThrow(/executable/);
+  });
+
+  it("refuses an executable kept as an inert download in every mode, never only logged (#4963)", () => {
+    // #4954 dropped the type list that refused binaries outright: the content
+    // check is now the only thing between an executable and the chat, so the
+    // default "warn" and the test runner's "off" refuse it too.
+    for (const mode of ["warn", "off"] as const) {
+      expect(() => assertContentMatches(GENERIC_FILE_MIME, pe, mode)).toThrow(/executable content \(pe\)/);
+      expect(() => assertContentMatches(GENERIC_FILE_MIME, elf, mode)).toThrow(/executable content \(elf\)/);
+      expect(assertContentMatches(GENERIC_FILE_MIME, Buffer.from("plain words"), mode)).toBe("text");
+    }
+    // a known type keeps its modes: a mismatch is only logged under "warn"
+    expect(assertContentMatches("application/zip", Buffer.from("plain words"), "warn")).toBe("text");
   });
 
   it("refuses executables disguised as archives, images or text", () => {

@@ -53,6 +53,10 @@ export function sniff(head: Buffer): SniffedKind {
 
 const EXECUTABLE: ReadonlySet<SniffedKind> = new Set(["elf", "pe", "macho", "wasm"]);
 
+/** Port of OpenMausBot #5800: every type the app does not know is kept as an
+ * inert `.bin` download under this type (attachments.ts `storedFileType`). */
+export const GENERIC_FILE_MIME = "application/octet-stream";
+
 /** Kinds each declared mime may really be. */
 const ALLOWED: Readonly<Record<string, readonly SniffedKind[]>> = {
   "image/png": ["png"], "image/jpeg": ["jpeg"], "image/gif": ["gif"], "image/webp": ["webp"],
@@ -78,8 +82,8 @@ const ALLOWED: Readonly<Record<string, readonly SniffedKind[]>> = {
   "audio/mp4": ["mp4"], "audio/x-m4a": ["mp4"], "video/mp4": ["mp4"], "video/quicktime": ["mp4"],
   "audio/mpeg": ["mp3"], "audio/aac": ["aac", "mp4"],
   // port of OpenMausBot #5800: any other type, kept as an inert download; an
-  // executable is still refused above
-  "application/octet-stream": ["png", "jpeg", "gif", "webp", "pdf", "zip", "gzip", "7z", "tar", "rtf", "evtx", "ole", "ogg", "flac", "wav", "webm", "mp4", "mp3", "aac", "shebang", "text", "unknown"],
+  // executable is still refused above, in every mode (#4963)
+  [GENERIC_FILE_MIME]: ["png", "jpeg", "gif", "webp", "pdf", "zip", "gzip", "7z", "tar", "rtf", "evtx", "ole", "ogg", "flac", "wav", "webm", "mp4", "mp3", "aac", "shebang", "text", "unknown"],
 };
 
 export class UploadContentError extends Error {
@@ -89,6 +93,8 @@ export class UploadContentError extends Error {
     this.status = status;
   }
 }
+
+const executableRefusal = (kind: SniffedKind) => new UploadContentError(`executable content (${kind}) is not accepted`, 415);
 
 export type SniffMode = "off" | "warn" | "enforce";
 
@@ -105,6 +111,11 @@ export function sniffModeFromEnv(env: NodeJS.ProcessEnv = process.env): SniffMod
 /** Throws when the bytes are an executable or do not match the declared mime. */
 export function assertContentMatches(mime: string, head: Buffer, mode: SniffMode = sniffModeFromEnv()): SniffedKind {
   const kind = sniff(head);
+  // #4963: the generic download replaced the type list that refused binaries
+  // outright (#4954), so this check is the only guard left there: an
+  // executable is refused in every mode, never only logged ("warn", the
+  // default) nor skipped ("off").
+  if (mime === GENERIC_FILE_MIME && EXECUTABLE.has(kind)) throw executableRefusal(kind);
   if (mode === "off") return kind;
   if (mode === "warn") {
     try { return assertContentMatches(mime, head, "enforce"); } catch (error) {
@@ -112,7 +123,7 @@ export function assertContentMatches(mime: string, head: Buffer, mode: SniffMode
       return kind;
     }
   }
-  if (EXECUTABLE.has(kind)) throw new UploadContentError(`executable content (${kind}) is not accepted`, 415);
+  if (EXECUTABLE.has(kind)) throw executableRefusal(kind);
   const allowed = ALLOWED[mime];
   // Unknown declared mimes are rejected earlier by the allow-list; be strict here too.
   if (!allowed || !allowed.includes(kind)) {

@@ -22,7 +22,7 @@ import { basename, dirname, join, extname, resolve, sep } from "node:path";
 import { DATA_DIR } from "../config.ts";
 import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "../encryption/content-at-rest.ts";
 import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
-import { UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
+import { GENERIC_FILE_MIME, UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
 import { isSharedHost } from "../host-kind.ts";
 import { privateMediaIdentity } from "../media/media-proxy.ts";
 
@@ -469,9 +469,9 @@ async function withUploadLock<T>(uploadId: string | undefined, operation: () => 
  * type, can be answered with a handful of direct stats instead of a scan
  * over every file in the directory. */
 /** Port of OpenMausBot #5800: every other type a person attaches is kept as
- * an inert `.bin` download, served as octet-stream with nosniff and never
- * rendered. The content check still refuses executables. */
-export const GENERIC_FILE_MIME = "application/octet-stream";
+ * an inert `.bin` download (GENERIC_FILE_MIME), served as octet-stream with
+ * nosniff and never rendered. The content check refuses executables there in
+ * every mode (#4963). */
 const GENERIC_FILE_EXTENSION = ".bin";
 
 /** The type and extension an attached file is stored under: its own when

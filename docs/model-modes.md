@@ -128,6 +128,18 @@ called from `startTurn` before the leader's prompt is built.
 - **The row.** One activity row of the conversation (`shared/heavy-team.ts`)
   keeps the whole run: the experts, their personas and seats, every round,
   who speaks, each verdict, the outcome and the disagreements.
+- **The animation** (#5090, `src/components/HeavyOrbit.tsx`, drawn by
+  `HeavyTeamRow.tsx`): while the team works the experts' avatars turn around
+  the bot's; the one speaking pulses; during a critique round lines link every
+  two experts still in it; on agreement they merge into the bot while it
+  writes. Transform and opacity only, at rest under reduced motion. Beside it:
+  "Experts thinking · round 2 of 5 · 6s" and a live line per expert ("Expert
+  1 · Skeptic"). After: "Thought for 8s · agreed in round 2" (or "no agreement
+  after 5 rounds, the leader decided"), which opens the Thoughts panel (#4924):
+  the leader's steps, the disputed points, each expert's persona, seat and
+  one message per round. Auto's choice of Heavy reads in one line above.
+  Tests: `src/components/HeavyTeamRow.dom.test.ts`; captures:
+  `scripts/capture/heavy-team.mjs`.
 
 Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
 the leader stops at 5 rounds at most; agreement stops early; the plan, the

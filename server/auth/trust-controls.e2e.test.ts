@@ -196,14 +196,20 @@ it("saves a bot's entry at once, replacing the older one, and still refuses rest
   expect((await api("POST", "/api/team-memory?section=", { kind: "term", name: "Human", detail: "added by the person" })).status).toBe(201);
 });
 
-it("preserves accounts referenced by a fallback chain before delete or credential-directory change", async () => {
+it("keeps an account's credential directory while a fallback chain names it, and its removal takes it out of the chain", async () => {
   const account = await api("POST", "/api/instances/claude-accounts", { displayName: "Fallback fixture account" });
   expect(account.status, JSON.stringify(account.body)).toBe(201);
   const instanceId = account.body.instanceId;
   const b = await bot("Referenced fallback");
   expect((await api("PATCH", `/api/bots/${b.id}`, { fallback: [{ instanceId, model: "claude-sonnet-5" }] })).status).toBe(200);
-  expect((await api("DELETE", `/api/instances/${instanceId}`)).status).toBe(409);
+  const before = (await api("GET", "/api/bots")).body.bots.find((entry: any) => entry.id === b.id);
+  expect(before.fallback).toEqual([{ instanceId, model: "claude-sonnet-5" }]);
+  // the folder of credentials never changes under a bot that may fall back on it
   expect((await api("PATCH", `/api/instances/${instanceId}`, { configDir: join(fixture.info.dataDir, "synthetic-account-directory") })).status).toBe(409);
-  await api("PATCH", `/api/bots/${b.id}`, { fallback: [] });
+  // #4918 (2026-11-18): Remove moves the account's bots instead of refusing;
+  // the chain loses the removed account, it never points at it afterwards
   expect((await api("DELETE", `/api/instances/${instanceId}`)).status).toBe(200);
+  const after = (await api("GET", "/api/bots")).body.bots.find((entry: any) => entry.id === b.id);
+  expect(after.fallback ?? []).not.toContainEqual(expect.objectContaining({ instanceId }));
+  expect(after.modelSelection).toEqual(before.modelSelection);
 });

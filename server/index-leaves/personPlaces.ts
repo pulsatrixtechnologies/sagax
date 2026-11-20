@@ -19,6 +19,7 @@ import { basename, posix, win32 } from "node:path";
 import { SANDBOX_ATTACHMENTS_DIR } from "../attachments/attachment-staging.ts";
 import type { PersonPlace } from "../attachments/connector-files.ts";
 import { pullDesktopFile } from "../desktop/desktop-bridge-tools.ts";
+import { sensitiveReadPath } from "../safety/sensitive-path.ts";
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 export type Host = Record<string, any>;
 
@@ -41,6 +42,11 @@ const ENVIRONMENT_GROUP = 8;
 const DESKTOP_CHUNK = 512 * 1024;
 /** One read of the server environment: its base64 stays under the exec's 1 MiB output. */
 const ENVIRONMENT_READ = 512 * 1024;
+
+/** attach_file refuses what the person's places already treat as sensitive
+ * (server/safety/sensitive-path.ts sensitiveReadPath): a hidden folder or
+ * file, or a credential file name. */
+const SENSITIVE_REFUSAL = "files in hidden folders or credential files can't be attached";
 
 function statusError(status: number, message: string): Error & { status: number } {
   return Object.assign(new Error(message), { status });
@@ -142,8 +148,11 @@ export function createPersonPlaces(getHost: () => Host): any {
     if (found.exitCode === 4) throw statusError(403, "only files under /workspace in the server environment can be attached");
     if (found.exitCode !== 0) throw new Error(found.stderr.trim() || "the file could not be read");
     const [sizeLine, real] = found.stdout.split("\n");
+    if (!real) throw new Error("the file could not be read");
+    // a link with an ordinary name that leads to a dotfile or a credential file
+    if (sensitiveReadPath(real)) throw statusError(403, SENSITIVE_REFUSAL);
     const size = Number(sizeLine);
-    const name = posix.basename(real ?? path);
+    const name = posix.basename(real);
     if (!Number.isSafeInteger(size) || size < 0) throw new Error("the file could not be read");
     if (size > maxBytes(name)) throw statusError(413, `file exceeds ${maxBytes(name)} bytes`);
     const parts: Buffer[] = [];
@@ -192,6 +201,7 @@ export function createPersonPlaces(getHost: () => Host): any {
     const turn = workplaceOf(capability);
     const requested = path.trim().replace(/^file:\/\//i, "");
     if (!turn || !requested) return null;
+    if (sensitiveReadPath(requested)) throw statusError(403, SENSITIVE_REFUSAL);
     const desktop = turn.roots.find((root) => root.server === host.DESKTOP_BRIDGE_MCP_NAME);
     const environment = turn.roots.some((root) => root.server === USER_SANDBOX_MCP_NAME);
     // Only /workspace is read in the server environment (and a relative

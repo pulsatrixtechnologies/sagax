@@ -51,9 +51,12 @@ function fakeEnvironment() {
   const byPerson = new Map<string, Map<string, Buffer>>();
   const of = (person: string) => byPerson.get(person) ?? byPerson.set(person, new Map()).get(person)!;
   const execs: Array<{ person: string; script: string }> = [];
+  /** Symbolic links: a path and the real path realpath answers for it. */
+  const links = new Map<string, string>();
   return {
     of,
     execs,
+    links,
     exec: async (person: string, input: { argv: string[]; env: Record<string, string>; maxOutputBytes?: number }) => {
       const files = of(person);
       const script = input.argv[2]!;
@@ -71,7 +74,7 @@ function fakeEnvironment() {
         const file = files.get(env.SAGAX_PATH!);
         if (!file) return { ...ok(""), exitCode: 3 };
         if (!env.SAGAX_PATH!.startsWith("/workspace/")) return { ...ok(""), exitCode: 4 };
-        return ok(`${file.length}\n${env.SAGAX_PATH}`);
+        return ok(`${file.length}\n${links.get(env.SAGAX_PATH!) ?? env.SAGAX_PATH}`);
       }
       if (script.includes("tail -c")) {
         const file = files.get(env.SAGAX_PATH!)!;
@@ -164,6 +167,29 @@ describe("the person's places of a turn", () => {
     const read = await places.readFromPersonPlace(ALICE, path, () => 10_000_000);
     expect(read.bytes.equals(bytes)).toBe(true);
     expect(environment.execs.filter((exec) => exec.script.includes("tail -c"))).toHaveLength(2);
+  });
+
+  it("refuses a hidden folder or a credential file of the computer or the environment, before any read", async () => {
+    const desktop = fakeDesktop();
+    const environment = fakeEnvironment();
+    const { places } = host([DESKTOP, "sagax-environment"], { desktop, environment });
+    desktop.files.set("C:\\Users\\wren\\.aws\\token.json", Buffer.from("{}"));
+    environment.of("alice").set("/workspace/.docker/config.json", Buffer.from("{}"));
+    // a link with an ordinary name whose real place is a dotfile
+    environment.of("alice").set("/workspace/notes.json", Buffer.from("{}"));
+    environment.links.set("/workspace/notes.json", "/workspace/.config/gcloud/application_default_credentials.json");
+
+    for (const path of ["C:\\Users\\wren\\.aws\\token.json", "/workspace/.docker/config.json", "/workspace/notes.json"]) {
+      await expect(places.readFromPersonPlace(ALICE, path, () => 10_000_000)).rejects.toMatchObject({ status: 403 });
+    }
+    expect(desktop.calls).not.toContain("read_file");
+    expect(environment.execs.some((exec) => exec.script.includes("tail -c"))).toBe(false);
+
+    // the attachments folders stay readable
+    const onComputer = await places.placesForTurn(ALICE)[0].save("0a1b2c3d-download.xlsx", big(10));
+    expect((await places.readFromPersonPlace(ALICE, onComputer, () => 10_000_000)).bytes.equals(big(10))).toBe(true);
+    const inEnvironment = await places.placesForTurn(ALICE)[1].save("0a1b2c3d-download.xlsx", big(20));
+    expect((await places.readFromPersonPlace(ALICE, inEnvironment, () => 10_000_000)).bytes.equals(big(20))).toBe(true);
   });
 
   it("never reads another person's place", async () => {

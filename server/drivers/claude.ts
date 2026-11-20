@@ -611,19 +611,16 @@ export function hookTokenFile(threadId: string, botId?: string): string {
   return join(DATA_DIR, "hook-tokens", `${digest}.token`);
 }
 
-/** The tools of the account's claude.ai connectors (`mcp__claude_ai_<Name>__<tool>`),
- * as a Claude Code hook matcher (a pattern, not a list of names). */
-export const CLAUDE_AI_TOOLS_MATCHER = "^mcp__claude_ai_.*";
-
 /** The `hooks` block for the private --settings file: one command for each
  * event the harness observes. Claude Code runs it with the event JSON on
  * stdin and applies any hookSpecificOutput it prints. The command string is
  * a shell line, so both paths are quoted (this repo's own path has a space).
- * `connectorFiles` (#5140, a turn that keeps the account's claude.ai
- * connectors on an organization server): one more PostToolUse entry for
- * their tools only, synchronous, that moves a file the engine saved into
- * the person's place before the model reads the result. */
-export function claudeHookSettings(helperPath: string, options: { connectorFiles?: boolean } = {}): Record<string, unknown> {
+ * `connectorFilesMatcher` (#5140, an organization turn whose engine loads
+ * connectors of its own): one more PostToolUse entry for those tools only
+ * (CLAUDE_AI_TOOLS_MATCHER, engineConnectorToolsMatcher), synchronous, that
+ * moves a file the engine saved into the person's place before the model
+ * reads the result. */
+export function claudeHookSettings(helperPath: string, options: { connectorFilesMatcher?: string } = {}): Record<string, unknown> {
   // JSON quoting is not shell quoting: $(), backticks and $names still
   // expand inside double quotes on POSIX. Windows paths come through env
   // variables so their backslashes are not JSON-escaped into the command.
@@ -645,12 +642,12 @@ export function claudeHookSettings(helperPath: string, options: { connectorFiles
   // - SessionStart only matters after a compaction (it re-sends digests):
   //   matched on `compact`, so a fresh or resumed session never waits on it.
   const background = [{ matcher: "", hooks: [{ ...hook, async: true }] }];
-  // #5140: Claude Code writes a claude.ai connector's binary result into its
-  // own folder on this server before any hook runs; this entry waits for
+  // #5140: Claude Code writes a binary result of a connector it holds itself
+  // into its own folder on this server before any hook runs; this entry waits for
   // Sagax to copy it into the person's place (a copy to their computer can
   // take a while) and hands the engine the result naming it there.
-  const connectorFiles = options.connectorFiles === true
-    ? [{ matcher: CLAUDE_AI_TOOLS_MATCHER, hooks: [{ type: "command", command: `${command} connector-files`, timeout: 120 }] }]
+  const connectorFiles = options.connectorFilesMatcher
+    ? [{ matcher: options.connectorFilesMatcher, hooks: [{ type: "command", command: `${command} connector-files`, timeout: 120 }] }]
     : [];
   return {
     PostToolUse: [...background, ...connectorFiles],

@@ -14,14 +14,18 @@
 //      harness's `hookSpecificOutput`, if any, for Claude Code to apply.
 //
 // `omb-hook connector-files` (#5140) is the one synchronous PostToolUse
-// entry for the engine's own claude.ai connectors: Sagax copies a file the
-// engine saved into the person's place and hands back the result naming
-// it there, so it waits up to SAGAX_CONNECTOR_FILES_BUDGET_MS (115 s, under
-// that entry's 120 s timeout) and forwards only a result that names a blob.
+// entry for the engine's own connectors: Sagax copies a file the engine
+// saved into the person's place and hands back the result naming it there,
+// so it waits up to SAGAX_CONNECTOR_FILES_BUDGET_MS (115 s, under that
+// entry's 120 s timeout). It forwards only a result that names such a file,
+// and of it only those strings (connector-files-slim.ts): a picture's
+// base64 never travels, whatever its size, and the helper puts Sagax's
+// strings back into the engine's own result.
 //
 // stdout is the hook channel — never console.log anything else here.
 import { readFileSync } from "node:fs";
 import { reportBackgroundError } from "../background-error.ts";
+import { mergeToolResponse, namesEngineFile, slimToolResponse } from "./connector-files-slim.ts";
 
 const CONTEXT_EVENTS = new Set(["SessionStart", "UserPromptSubmit"]);
 /** #5140: the connector-files entry (claudeHookSettings). */
@@ -29,7 +33,8 @@ const CONNECTOR_FILES = process.argv[2] === "connector-files";
 const ceiling = CONNECTOR_FILES ? 115_000 : 4_000;
 const requestedBudget = Number(process.env[CONNECTOR_FILES ? "SAGAX_CONNECTOR_FILES_BUDGET_MS" : "SAGAX_HOOK_TIMEOUT_MS"]);
 const budgetMs = Number.isFinite(requestedBudget) && requestedBudget > 0 ? Math.min(requestedBudget, ceiling) : ceiling;
-const MAX_INPUT_BYTES = 1024 * 1024;
+// a connector-files result may carry a picture's base64 (it never leaves this process)
+const MAX_INPUT_BYTES = CONNECTOR_FILES ? 128 * 1024 * 1024 : 1024 * 1024;
 const url = process.env.SAGAX_HOOK_URL ?? "";
 const tokenFile = process.env.SAGAX_HOOK_TOKEN_FILE ?? "";
 
@@ -60,7 +65,7 @@ function readStdin(): Promise<string> {
 async function main(): Promise<void> {
   const raw = await readStdin();
   // a result without a file the engine saved has nothing to move
-  if (CONNECTOR_FILES && !raw.includes("-blob-")) return done();
+  if (CONNECTOR_FILES && !namesEngineFile(raw)) return done();
   let payload: Record<string, unknown>;
   try {
     const parsed = JSON.parse(raw);
@@ -84,14 +89,15 @@ async function main(): Promise<void> {
     const response = await fetch(`${url}/api/internal/hook`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(CONNECTOR_FILES ? { event, payload, mode: "connector-files" } : { event, payload }),
+      body: JSON.stringify(CONNECTOR_FILES ? { event, payload: connectorFilesPayload(payload), mode: "connector-files" } : { event, payload }),
       redirect: "error",
       signal: controller.signal,
     });
     if (!response.ok) return done();
     const body = (await response.json().catch(() => null)) as { hookSpecificOutput?: unknown; context?: unknown } | null;
     if (body && typeof body === "object" && body.hookSpecificOutput && typeof body.hookSpecificOutput === "object") {
-      return done(JSON.stringify({ hookSpecificOutput: body.hookSpecificOutput }));
+      const answer = CONNECTOR_FILES ? connectorFilesAnswer(body.hookSpecificOutput as Record<string, unknown>, payload.tool_response) : body.hookSpecificOutput;
+      return done(JSON.stringify({ hookSpecificOutput: answer }));
     }
     // On SessionStart (and UserPromptSubmit) Claude Code reads plain-text
     // stdout as context the model sees; on every other event stdout is
@@ -105,6 +111,22 @@ async function main(): Promise<void> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** #5140: what Sagax needs to move the files a result names: the hook's own
+ * fields and the result's strings that name such a file. */
+function connectorFilesPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const { hook_event_name, session_id, transcript_path, tool_name, tool_use_id } = payload;
+  return { hook_event_name, session_id, transcript_path, tool_name, tool_use_id, tool_response: slimToolResponse(payload.tool_response) };
+}
+
+/** #5140: Sagax's rewritten strings put back into the engine's own result. */
+function connectorFilesAnswer(output: Record<string, unknown>, original: unknown): Record<string, unknown> {
+  const merged = { ...output };
+  for (const field of ["updatedMCPToolOutput", "updatedToolOutput"]) {
+    if (field in merged) merged[field] = mergeToolResponse(original, merged[field]);
+  }
+  return merged;
 }
 
 void main().catch(reportBackgroundError);

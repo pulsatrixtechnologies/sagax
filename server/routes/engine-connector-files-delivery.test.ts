@@ -92,6 +92,8 @@ async function harness(capability: InternalCapabilityView): Promise<{ url: strin
     req.on("data", (chunk: string) => { raw += chunk; });
     req.on("end", () => {
       if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401); res.end(); return; }
+      // the real route's body limit (server/harness/http.ts readBody)
+      if (Buffer.byteLength(raw) > 1_000_000) { res.writeHead(413); res.end(); return; }
       void route({
         res,
         path: req.url ?? "",
@@ -159,12 +161,13 @@ describe("a file the engine's own claude.ai connector returns reaches the person
     expect(text).toContain("attach_file");
   });
 
-  it("a picture the connector returns stays for the model, and its saved copy leaves the server for the person's place", async () => {
+  it("a picture the connector returns (over 1 MiB) stays for the model, and its saved copy leaves the server for the person's place", async () => {
     // what the organization server held: pictures of the engine's own claude.ai connector
     const session = "8d7e6f5a-4b3c-4d2e-9f1a-0b2c3d4e5f6a";
     const { results, transcript } = engineSession("alice", session);
     for (const name of readdirSync(results)) rmSync(join(results, name));
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+    // over the route's 1 MB body once in base64: the picture never travels to Sagax
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]), Buffer.alloc(1_200_000, 7)]);
     const saved = join(results, "mcp-claude_ai_Docs_Hub-blob-1763600000005-pp11qq.png");
     writeFileSync(saved, png);
     const picture = { type: "image", source: { type: "base64", media_type: "image/png", data: png.toString("base64") } };

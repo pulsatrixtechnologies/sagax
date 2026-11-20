@@ -7,30 +7,44 @@ import { lifecycleEvent } from "../hooks/lifecycle-hooks.ts";
 import { createHash } from "node:crypto";
 import { boundedContextText, MAX_SUMMARY_BYTES } from "../context/context-rebuild.ts";
 import { placeEngineFiles, sessionBlobFolder } from "../attachments/engine-connector-files.ts";
-import { claudeAiConnectorCall } from "../../shared/connector-call.ts";
 export type Host = Record<string, any>;
 
 type HookAnswer = { ok: boolean; ignored?: string; context?: string; hookSpecificOutput?: unknown };
 
+/** A tool of an MCP server (`mcp__<server>__<tool>`): the hook entry matches
+ * only the servers the engine holds itself (claudeHookSettings). */
+const MCP_TOOL = /^mcp__[A-Za-z0-9_-]+?__./;
+/** Claude Code's own tool that reads an MCP resource (a blob it saves too). */
+const READ_RESOURCE_TOOL = /^ReadMcpResource(?:Tool)?$/;
+/** How long the copies of one result may take before the hook answers. */
+const CONNECTOR_FILES_WITHIN_MS = 100_000;
+
 export function createIngestEngineHook(getHost: () => Host): any {
 /** #5140 (M-20261120-008): the synchronous connector-files entry
- * (claudeHookSettings). Claude Code already wrote a file one of the
- * account's claude.ai connectors returned into its session folder on this
- * server; it goes into the person's place for this turn
- * (personPlaces.placesForTurn: theirs only), leaves the engine's folder,
- * and the engine reads the result naming the person's path. The folder is
- * the one the hook's own fields name (transcript_path, session_id), never
- * a path the tool's output alone points at. */
+ * (claudeHookSettings). Claude Code already wrote a file a connector it
+ * holds itself returned (a claude.ai connector, a server of the person's own
+ * Claude config) into its session folder on this server; it goes into the
+ * person's place for this turn (personPlaces.placesForTurn: theirs only),
+ * leaves the engine's folder, and the engine reads the result naming the
+ * person's path. The folder is the one the hook's own fields name
+ * (transcript_path, session_id), never a path the tool's output alone
+ * points at. The helper sends only the result's strings that name such a
+ * file (connector-files-slim.ts) and puts the answer back itself. */
 async function engineConnectorFiles(capability: InternalCapability, name: string, payload: Record<string, unknown>): Promise<HookAnswer> {
   const host = getHost();
-  if (name !== "PostToolUse" || !claudeAiConnectorCall(payload.tool_name)) return { ok: true, ignored: "not a connector of the engine" };
+  const tool = typeof payload.tool_name === "string" ? payload.tool_name : "";
+  const mcp = MCP_TOOL.test(tool);
+  if (name !== "PostToolUse" || (!mcp && !READ_RESOURCE_TOOL.test(tool))) return { ok: true, ignored: "not a connector of the engine" };
   if (host.IDENTITY.kind !== "perspicax") return { ok: true, ignored: "solo server: the engine runs on the person's own computer" };
   if (!host.liveTurnByThread.get(capability.threadId)) return { ok: true, ignored: "no turn is running" };
   const folder = sessionBlobFolder(payload.transcript_path, payload.session_id);
   if (!folder || !Object.hasOwn(payload, "tool_response")) return { ok: true, ignored: "hook without a session or a result" };
-  const { output, moved } = await placeEngineFiles(payload.tool_response, folder, () => host.personPlaces.placesForTurn(capability));
+  // the engine waits 120 s for this hook; its helper gives up at 115 s
+  const { output, moved } = await placeEngineFiles(payload.tool_response, folder, () => host.personPlaces.placesForTurn(capability), undefined, CONNECTOR_FILES_WITHIN_MS);
   if (!moved) return { ok: true };
-  return { ok: true, hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: output } };
+  // an MCP tool's result is rewritten with the field every Claude Code
+  // release reads; Claude Code's own ReadMcpResource tool takes the newer one
+  return { ok: true, hookSpecificOutput: { hookEventName: "PostToolUse", ...(mcp ? { updatedMCPToolOutput: output } : { updatedToolOutput: output }) } };
 }
 
 function ingestEngineHook(capability: InternalCapability, body: unknown): HookAnswer | Promise<HookAnswer> {

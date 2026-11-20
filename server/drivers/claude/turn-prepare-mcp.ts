@@ -25,6 +25,7 @@ import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
 import { claudeToolSearchSetting, folderSettingsEnv } from "./claude-tool-search.ts";
 import { withDesignRedirectHook } from "./design-redirect.ts";
+import { CLAUDE_AI_TOOLS_MATCHER, engineConnectorToolsMatcher } from "./connector-files-matcher.ts";
 import { applyClaudeContextSize } from "./config.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
@@ -307,7 +308,12 @@ const env = environment(turnModel, turn.access);
 applyClaudeContextSize(env, turn.contextWindow);
 // No claude.ai connector unless the turn asked for them: the docs say
 // --strict-mcp-config alone does not exclude them, so say it twice.
-if (isolated && !mcpFromUserConfig && !keepsClaudeAiConnectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = "false";
+// #5140: the one reading of whether the engine loads connectors of its own
+// (its configuration's servers, the account's claude.ai connectors), for
+// this switch and for the connector-files hook below.
+const engineConfigServers = !isolated || mcpFromUserConfig;
+const engineOwnConnectors = engineConfigServers || keepsClaudeAiConnectors;
+if (!engineOwnConnectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = "false";
 const authSettings = isolated && !injected.injected
   ? readClaudeAuthSettings(env, input.environment) : {};
 // Harness hooks (item 0.2): one helper command for the events the
@@ -346,9 +352,14 @@ const settings: Record<string, unknown> = {
 // Project-only settings still discover the personal memory through ancestor
 // directories when the bot workspace lives below HOME. Keep project memory.
 if (isolated) settings.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
-// #5140: a file the account's own claude.ai connectors save goes to the
-// person's place (organization server only, hooks.connectorFiles)
-if (hooks) settings.hooks = claudeHookSettings(HOOK_HELPER_PATH, { connectorFiles: keepsClaudeAiConnectors && hooks.connectorFiles === true });
+// #5140: a file a connector the engine holds itself saves goes to the
+// person's place (organization server only, hooks.connectorFiles): the
+// claude.ai connectors, or every server but Sagax's own mounts when the
+// engine also loads its configuration's servers
+const connectorFilesMatcher = hooks?.connectorFiles === true && engineOwnConnectors
+  ? (engineConfigServers ? engineConnectorToolsMatcher(Object.keys(mcpServers)) : CLAUDE_AI_TOOLS_MATCHER)
+  : undefined;
+if (hooks) settings.hooks = claudeHookSettings(HOOK_HELPER_PATH, connectorFilesMatcher ? { connectorFilesMatcher } : {});
 // #2717: a design quickstart on the native Artifact tool goes to propose_page
 // kind design instead (design-redirect.ts); every other Artifact call is kept.
 if (!turn.guestConfined) settings.hooks = withDesignRedirectHook(settings.hooks, process.execPath);

@@ -162,7 +162,30 @@ describe("omb-hook helper: connector files (#5140)", () => {
     await run(JSON.stringify(plain), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
     expect(seen).toEqual([]);
     await run(JSON.stringify(blobResult), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
-    expect(seen).toEqual([{ event: "PostToolUse", payload: blobResult, mode: "connector-files" }]);
+    // only the hook's own fields and the strings that name a saved file
+    expect(seen).toEqual([{ event: "PostToolUse", mode: "connector-files", payload: { hook_event_name: "PostToolUse", tool_name: blobResult.tool_name, tool_use_id: "tu-9", tool_response: [{ type: null, text: blobResult.tool_response[0]!.text }] } }]);
+  }, 15_000);
+
+  it("never sends a picture's data, whatever its size, and puts Sagax's strings back into the engine's own result", async () => {
+    const picture = { type: "image", source: { type: "base64", media_type: "image/png", data: "A".repeat(3 * 1024 * 1024) } };
+    const saved = "/cfg/projects/p/s/tool-results/mcp-claude_ai_Docs-blob-2-b.png";
+    const event = { ...blobResult, tool_input: { big: "x".repeat(2048) }, tool_response: [picture, { type: "text", text: `[Image source: ${saved}]` }] };
+    const sizes: number[] = [];
+    const url = await listen((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        sizes.push(Buffer.byteLength(body));
+        const sent = JSON.parse(body) as { payload: { tool_response: unknown[] } };
+        expect(sent.payload.tool_response[0]).toEqual({ type: null, source: { type: null, media_type: null, data: null } });
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true, hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: [sent.payload.tool_response[0], { type: null, text: "[Image source: C:\\Sagax\\attachments\\ab-download.png]" }] } }));
+      });
+    });
+    const result = await run(JSON.stringify(event), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
+    expect(sizes).toHaveLength(1);
+    expect(sizes[0]).toBeLessThan(2048);
+    expect(JSON.parse(result.stdout)).toEqual({ hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: [picture, { type: "text", text: "[Image source: C:\\Sagax\\attachments\\ab-download.png]" }] } });
   }, 15_000);
 
   it("waits past the 4 s budget of the other hooks for the copy to the person's place", async () => {

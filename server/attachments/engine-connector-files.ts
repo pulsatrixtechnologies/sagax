@@ -11,9 +11,10 @@
 //
 //   <config>/projects/<folder key>/<session>/tool-results/mcp-<server>-blob-<time>-<random>.<ext>
 //
-// (an image too, beside the picture the model sees). The tool result then
-// reads `[Resource from <server> at <uri>] Binary content (<type>, <size>)
-// saved to <that path>`. Sagax never gets the bytes; it sees that result
+// (an image too, beside the picture the model sees; a resource the model
+// reads with ReadMcpResource as `mcp-resource-<time>-<n>-<random>.<ext>`).
+// The tool result then reads `[Resource from <server> at <uri>] Binary
+// content (<type>, <size>) saved to <that path>`. Sagax never gets the bytes; it sees that result
 // before the model only through a synchronous PostToolUse hook (whose
 // `updatedMCPToolOutput` the engine applies), and, for the hub, in the
 // host's own reading of the call. Both hand it here.
@@ -24,16 +25,18 @@
 // place by the one placement of #5138 (placeOneFile, copyToPersonPlace),
 // removed from the engine's folder whatever happened, and the result names
 // the person's path instead. Nothing else in the result changes.
-import { lstatSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, unlinkSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 
 import { sensitiveReadPath } from "../safety/sensitive-path.ts";
 import { attachmentMime } from "./attachments.ts";
 import { connectorFileName, placeOneFile, type PersonPlace } from "./connector-files.ts";
 
-/** Claude Code's name for a binary MCP result it saved:
- * `mcp-<server>-blob-<time>-<random>.<ext>` (an older CLI: `-blob-<n>.bin`). */
-const BLOB_NAME = "mcp-[A-Za-z0-9_.-]+?-blob-[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9]{1,12})?";
+/** Claude Code's names for a binary MCP result it saved: a tool's
+ * `mcp-<server>-blob-<time>-<random>.<ext>` (an older CLI: `-blob-<n>.bin`)
+ * and a read resource's `mcp-resource-<time>-<n>-<random>.<ext>`. */
+const BLOB_NAME = "mcp-(?:[A-Za-z0-9_.-]+?-blob-[A-Za-z0-9_-]+|resource-[0-9]+-[0-9]+-[A-Za-z0-9]+)(?:\\.[A-Za-z0-9]{1,12})?";
+
 /** A Claude Code session id, the folder of one session's tool results. */
 const SESSION = "[0-9A-Za-z][0-9A-Za-z-]{7,79}";
 /** The biggest file read back: Claude Code itself keeps no more on disk
@@ -91,7 +94,9 @@ export function engineBlobPaths(text: string, folder: EngineBlobFolder): string[
  * of that folder with one name), so it is removed unread. A regular file
  * directly in the session's tool-results folder, no link on the way below
  * the engine's folder and no second name (a hard link to a credential
- * file); nothing attach_file would refuse (sensitiveReadPath, #5138). */
+ * file); nothing attach_file would refuse (sensitiveReadPath, #5138). The
+ * read itself opens the same file again without following a link
+ * (`readEngineFile`). */
 export function engineFileRefusal(path: string, folder: EngineBlobFolder): { why: string; remove: boolean } | null {
   const outside = { why: "it is not a file of the engine's own folder", remove: false };
   let stat;
@@ -120,25 +125,45 @@ export function engineFileRefusal(path: string, folder: EngineBlobFolder): { why
   return null;
 }
 
-type Block = { type?: unknown; text?: unknown } & Record<string, unknown>;
-
-/** The text parts of a tool result as an engine hands it on: a string, an
- * array of content blocks, or an object with `content`. */
-function texts(output: unknown): string[] {
-  if (typeof output === "string") return [output];
-  const blocks = Array.isArray(output) ? output : output && typeof output === "object" && Array.isArray((output as { content?: unknown }).content) ? (output as { content: unknown[] }).content : [];
-  return blocks.flatMap((block) => (block && typeof block === "object" && (block as Block).type === "text" && typeof (block as Block).text === "string" ? [(block as Block).text as string] : []));
+/** The bytes of a file the refusal check passed, through one descriptor
+ * opened without following a link: still a regular file with one name and
+ * the same identity, so nothing swapped in between is read. */
+export function readEngineFile(path: string): Buffer {
+  const before = lstatSync(path);
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const stat: Stats = fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.ino !== before.ino || stat.dev !== before.dev || stat.size > MAX_BYTES) throw new Error("the file changed before it was read");
+    const bytes = Buffer.alloc(stat.size);
+    let read = 0;
+    while (read < stat.size) {
+      const got = readSync(fd, bytes, read, stat.size - read, read);
+      if (got === 0) break;
+      read += got;
+    }
+    if (read !== stat.size) throw new Error("the file changed while it was read");
+    return bytes;
+  } finally {
+    closeSync(fd);
+  }
 }
 
-/** The same output with each text part rewritten. */
-function withTexts(output: unknown, rewrite: (text: string) => string): unknown {
+/** Every string of a tool result as the engine hands it on (a string, an
+ * array of content blocks, `{ content }`, a read resource's `{ contents:
+ * [{ text, blobSavedTo }] }`), in order. A picture's data is a string too:
+ * it never names a path. */
+function strings(output: unknown, depth = 0): string[] {
+  if (typeof output === "string") return [output];
+  if (!output || typeof output !== "object" || depth > 8) return [];
+  return (Array.isArray(output) ? output : Object.values(output)).flatMap((value) => strings(value, depth + 1));
+}
+
+/** The same output with each string rewritten. */
+function withStrings(output: unknown, rewrite: (text: string) => string, depth = 0): unknown {
   if (typeof output === "string") return rewrite(output);
-  const map = (blocks: unknown[]) => blocks.map((block) => (block && typeof block === "object" && (block as Block).type === "text" && typeof (block as Block).text === "string"
-    ? { ...(block as Block), text: rewrite((block as Block).text as string) }
-    : block));
-  if (Array.isArray(output)) return map(output);
-  if (output && typeof output === "object" && Array.isArray((output as { content?: unknown }).content)) return { ...(output as object), content: map((output as { content: unknown[] }).content) };
-  return output;
+  if (!output || typeof output !== "object" || depth > 8) return output;
+  if (Array.isArray(output)) return output.map((value) => withStrings(value, rewrite, depth + 1));
+  return Object.fromEntries(Object.entries(output).map(([key, value]) => [key, withStrings(value, rewrite, depth + 1)]));
 }
 
 /** What the engine's own line says about the file: its type and its URI.
@@ -162,7 +187,7 @@ export interface EngineFiles {
 
 const DISK: EngineFiles = {
   refusal: engineFileRefusal,
-  read: (path) => readFileSync(path),
+  read: readEngineFile,
   remove: (path) => { try { unlinkSync(path); } catch { /* already gone */ } },
 };
 
@@ -171,22 +196,42 @@ function unreadLine(why: string): string {
   return `The file this tool returned was not kept: ${why}. Nothing was saved on the Sagax server.`;
 }
 
+/** The placement of one file, or the line saying it did not end in time:
+ * a hook's engine waits for its answer only so long (the copy may still
+ * reach the person's place). */
+async function placedWithin(name: string, file: { bytes: Buffer; mime: string }, places: readonly PersonPlace[], deadline: number | undefined): Promise<{ path?: string; line: string }> {
+  const placing = placeOneFile(name, file, places);
+  if (deadline === undefined) return placing;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<{ line: string }>((resolve) => {
+    timer = setTimeout(() => resolve({ line: unreadLine("the copy to the person's place did not finish in time (it may still arrive there)") }), Math.max(0, deadline - Date.now()));
+  });
+  try {
+    return await Promise.race([placing, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * The output with every file of the engine's own blob folder it names
  * written into the person's place (the turn's `places`, most preferred
  * first) and removed from the engine's folder. Each path is replaced by the
- * person's path (or says it was not kept) and the #5138 line follows it.
- * An output that names none is returned as it is (`moved` 0).
+ * person's path (or says it was not kept), and the #5138 line follows the
+ * first sentence that names it. An output that names none is returned as it
+ * is (`moved` 0). `withinMs`: how long the caller can wait for the copies.
  */
 export async function placeEngineFiles(
   output: unknown,
   folder: EngineBlobFolder,
   turnPlaces: readonly PersonPlace[] | (() => readonly PersonPlace[]),
   files: EngineFiles = DISK,
+  withinMs?: number,
 ): Promise<{ output: unknown; moved: number }> {
-  const all = texts(output);
+  const all = strings(output);
   const paths = [...new Set(all.flatMap((text) => engineBlobPaths(text, folder)))];
   if (!paths.length) return { output, moved: 0 };
+  const deadline = withinMs === undefined ? undefined : Date.now() + withinMs;
   const places = typeof turnPlaces === "function" ? turnPlaces() : turnPlaces;
   const placed = new Map<string, { path?: string; line: string }>();
   for (const path of paths) {
@@ -199,7 +244,8 @@ export async function placeEngineFiles(
       }
       continue;
     }
-    const text = all.find((part) => part.includes(path)) ?? "";
+    // the sentence that names it (not a bare `blobSavedTo` path)
+    const text = all.find((part) => part.includes(path) && part.trim() !== path) ?? "";
     const { mime, uri } = described(text, path);
     try {
       const bytes = files.read(path);
@@ -208,7 +254,7 @@ export async function placeEngineFiles(
       const kept = extname(path).toLowerCase();
       const given = extname(uri.replace(/[?#].*$/, "")) || !kept || kept === ".bin" ? null : `download${kept}`;
       const name = connectorFileName({ index: 0, bytes, mime, uri }, given);
-      placed.set(path, await placeOneFile(name, { bytes, mime }, places));
+      placed.set(path, await placedWithin(name, { bytes, mime }, places, deadline));
     } catch (error) {
       placed.set(path, { line: unreadLine(`it could not be read (${error instanceof Error ? error.message : String(error)})`) });
     } finally {
@@ -217,13 +263,18 @@ export async function placeEngineFiles(
     }
   }
   if (!placed.size) return { output, moved: 0 };
-  const rewritten = withTexts(output, (text) => {
+  const explained = new Set<string>();
+  const rewritten = withStrings(output, (text) => {
     let out = text;
     const lines: string[] = [];
     for (const [path, result] of placed) {
       if (!out.includes(path)) continue;
+      const bare = out.trim() === path;
       out = out.split(path).join(result.path ?? "(not kept)");
-      lines.push(result.line);
+      if (!bare && !explained.has(path)) {
+        explained.add(path);
+        lines.push(result.line);
+      }
     }
     return lines.length ? `${out}\n${lines.join("\n")}` : out;
   });

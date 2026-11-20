@@ -1,6 +1,7 @@
 // The member API's gate, permissions, waits and readings, with fake deps
 // (server/org/org-member-routes.ts). The real server path is
 // org-member-api.e2e.test.ts.
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,10 +9,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
 import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
+import { isAgentConversation } from "../../shared/agent-conversation.ts";
+import { transpileTs } from "../testing/transpile.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { routeRefusal } from "../agent-api.ts";
 import { VersionReads } from "../write-versions.ts";
-import { createOrgMemberRoutes, describeMemberApproval, queuedSendWillStart, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
+import { createOrgMemberRoutes, describeMemberApproval, livePaths, ownChatStatus, queuedSendWillStart, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
 const ORIGIN = "https://sagax.example";
@@ -271,6 +274,69 @@ describe("bots: one run state over every path (#4879)", () => {
     deps.threadStatus = () => "idle";
     const got = await call("GET", "bots", token("bob"));
     expect(got.body.bots).toEqual([expect.objectContaining({ id: "b1", status: "idle", liveVia: [] })]);
+  });
+
+  // The member list and get_agent read one rule (`livePaths`) over
+  // index.ts's own reads of a thread: run them as the server does (the
+  // source-execution pattern of threads/viewer-bot-activity.test.ts).
+  function serverReads(openCards: Set<string>) {
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const extract = (signature: string) => {
+      const start = source.indexOf(`\n${signature}`);
+      const end = source.indexOf("\n}\n", start);
+      expect(start).toBeGreaterThan(0);
+      expect(end).toBeGreaterThan(start);
+      return source.slice(start + 1, end + 2);
+    };
+    const code = transpileTs(["function memberThreadStatus(", "function agentConversationClientName(", "function agentConversationsOf(", "function botLiveVia("]
+      .map(extract).join("\n"));
+    type Task = { threadId: string; ownerPrincipalId: string; activity: string; openedBy?: { kind: string; botId: string; name: string } };
+    const tasks: Task[] = [
+      { threadId: "t1", ownerPrincipalId: "pr_bob", activity: "idle" },
+      { threadId: "c-cursor", ownerPrincipalId: "pr_bob", activity: "idle", openedBy: { kind: "agent", botId: "agent:Cursor", name: "Cursor" } },
+    ];
+    const bot = { id: "b1", tasks };
+    const store = {
+      bot: (botId: string) => (botId === bot.id ? bot : undefined),
+      tasks: (botId: string) => (botId === bot.id ? tasks : []),
+      botByThread: (threadId: string) => (tasks.some((task) => task.threadId === threadId) ? bot : undefined),
+      taskByThread: (botId: string, threadId: string) => (botId === bot.id ? tasks.find((task) => task.threadId === threadId) : undefined),
+    };
+    const reads = new Function(
+      "store", "threadBusy", "openQuestionCard", "isAgentConversation", "viewerBotActivity", "livePaths", "ownChatStatus",
+      `${code}\nreturn { memberThreadStatus, agentConversationClientName, agentConversationsOf, botLiveVia };`,
+    )(
+      store, () => false, (threadId: string) => openCards.has(threadId), isAgentConversation,
+      // the app's own view: an AI client's conversation draws no dot (#291)
+      () => ({ busy: false, activity: "idle" }), livePaths, ownChatStatus,
+    ) as {
+      memberThreadStatus(threadId: string): ThreadStatus | null;
+      agentConversationClientName(threadId: string): string | null;
+      agentConversationsOf(target: typeof bot, principalId: string): string[];
+      botLiveVia(target: typeof bot, principalId: string): string[];
+    };
+    deps.threadStatus = reads.memberThreadStatus;
+    deps.agentConversationClient = reads.agentConversationClientName;
+    deps.agentConversationsOf = (botId, principalId) => (botId === bot.id ? reads.agentConversationsOf(bot, principalId) : []);
+    return { bot, getAgentLiveVia: (principalId: string) => reads.botLiveVia(bot, principalId) };
+  }
+
+  it("a question card that outlived its turn in an AI client's conversation: the member list and get_agent both name that client waiting", async () => {
+    const openCards = new Set(["c-cursor"]);
+    const server = serverReads(openCards);
+    respond = (request) => request.path === "/api/bots"
+      ? { status: 200, body: { bots: [{ id: "b1", name: "Orion", busy: false, activity: "idle", threadId: "t1" }] } }
+      : { status: 200, body: { entries: [] } };
+    const listed = await call("GET", "bots", token("bob"));
+    expect(listed.body.bots).toEqual([expect.objectContaining({ id: "b1", status: "waiting", liveVia: ["Cursor"] })]);
+    expect(server.getAgentLiveVia("pr_bob")).toEqual(["Cursor"]);
+    // never another person's conversation
+    expect(server.getAgentLiveVia("pr_ann")).toEqual([]);
+    // the card answered: both read the bot idle, with no live path
+    openCards.clear();
+    const after = await call("GET", "bots", token("bob"));
+    expect(after.body.bots).toEqual([expect.objectContaining({ id: "b1", status: "idle", liveVia: [] })]);
+    expect(server.getAgentLiveVia("pr_bob")).toEqual([]);
   });
 });
 

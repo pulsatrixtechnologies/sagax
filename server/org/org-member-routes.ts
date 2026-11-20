@@ -1114,38 +1114,55 @@ export function summarizeTurn(raw: unknown, anchor: string | null, threadUrl: st
   };
 }
 
-function botStatus(bot: Record<string, unknown> | undefined, archived: boolean): "idle" | "working" | "waiting" | "archived" {
-  if (archived) return "archived";
-  if (!bot) return "idle";
-  if (bot.activity === "waiting-on-you") return "waiting";
-  return bot.busy === true ? "working" : "idle";
+/** The person's own conversations with a bot as the app shows them (the
+ * `busy` and `activity` of `GET /api/bots`, the viewer's own activity):
+ * waiting on a card wins over working. */
+export function ownChatStatus(view: { busy?: unknown; activity?: unknown } | undefined): ThreadStatus {
+  if (view?.activity === "waiting-on-you") return "waiting";
+  return view?.busy === true ? "working" : "idle";
 }
 
 /** The name of the person's own conversations in a bot's live paths. */
 export const OWN_CHAT_PATH = "Sagax chat";
 
-/** #4879: a bot's run state over every path the person reaches it by: their
- * own conversations in Sagax (`bot`, as the app shows them) and each AI
- * client's conversation with it (send_prompt through Perspicax, whatever the
- * client). The app's own view leaves an AI client's conversation out of its
- * dots (#291), so two clients read the same bot as idle and working at
- * once; here both read one state, and `liveVia` names the paths where a turn
- * works or waits now. Waiting wins over working. */
-function liveBotState(deps: OrgMemberRouteDeps, botId: string, bot: Record<string, unknown> | undefined, person: MemberPerson, archived: boolean): {
-  status: ReturnType<typeof botStatus>; liveVia: string[];
-} {
-  const own = botStatus(bot, archived);
-  if (own === "archived" || !bot) return { status: own, liveVia: [] };
-  let status = own;
+/** #4879: the one rule for a bot's run state over every path a person
+ * reaches it by, read by the member list (`GET bots` `status` and `liveVia`)
+ * and by get_agent (`live_via`) alike. `own` is the person's own
+ * conversations in Sagax (`ownChatStatus`); `conversations` are each AI
+ * client's conversation with the bot (send_prompt through Perspicax,
+ * whatever the client), read by `status` (the member API's `threadStatus`:
+ * a question card that outlived its turn still waits) and named by
+ * `clientOf`. The app's own view leaves an AI client's conversation out of
+ * its dots (#291); here every client reads one state, and `liveVia` names
+ * the paths where a turn works or waits now, the person's own chat first.
+ * Waiting wins over working. */
+export function livePaths(
+  own: ThreadStatus,
+  conversations: readonly string[],
+  status: (threadId: string) => ThreadStatus | null,
+  clientOf: (threadId: string) => string | null,
+): { status: ThreadStatus; liveVia: string[] } {
+  let state = own;
   const liveVia = own === "idle" ? [] : [OWN_CHAT_PATH];
-  for (const threadId of deps.agentConversationsOf?.(botId, person.principalId) ?? []) {
-    const state = deps.threadStatus(threadId);
-    if (state !== "working" && state !== "waiting") continue;
-    if (state === "waiting" || status === "idle") status = state;
-    const client = deps.agentConversationClient?.(threadId)?.trim() || AGENT_CALLER_FALLBACK;
+  for (const threadId of conversations) {
+    const turn = status(threadId);
+    if (turn !== "working" && turn !== "waiting") continue;
+    if (turn === "waiting" || state === "idle") state = turn;
+    const client = clientOf(threadId)?.trim() || AGENT_CALLER_FALLBACK;
     if (!liveVia.includes(client)) liveVia.push(client);
   }
-  return { status, liveVia };
+  return { status: state, liveVia };
+}
+
+/** A listed bot's run state for the member list: archived, else `livePaths`
+ * over the person's own chat and their AI client conversations. */
+function liveBotState(deps: OrgMemberRouteDeps, botId: string, bot: Record<string, unknown> | undefined, person: MemberPerson, archived: boolean): {
+  status: ThreadStatus | "archived"; liveVia: string[];
+} {
+  if (archived) return { status: "archived", liveVia: [] };
+  if (!bot) return { status: "idle", liveVia: [] };
+  return livePaths(ownChatStatus(bot), deps.agentConversationsOf?.(botId, person.principalId) ?? [],
+    (threadId) => deps.threadStatus(threadId), (threadId) => deps.agentConversationClient?.(threadId) ?? null);
 }
 
 /** The routes, in one table. */

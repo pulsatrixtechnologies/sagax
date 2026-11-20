@@ -321,9 +321,11 @@ reply text is never a substitute for a card.
   (the app's own dots leave them out, #291), and `get_agent` and that list
   name the paths where a turn works or waits now: `live_via` / `liveVia`,
   "Sagax chat" for the person's own conversations, then each AI client by
-  its `client_name`. Memory is the bot's one MEMORY.md and handles are bound
-  to the person, never the client (#1896): a fix made through one path is
-  there for the other.
+  its `client_name`. Both read one rule (`livePaths`,
+  server/org/org-member-routes.ts) over the same thread state: a question
+  card that outlived its turn still waits. Memory is the bot's one
+  MEMORY.md and handles are bound to the person, never the client (#1896):
+  a fix made through one path is there for the other.
 - **Isolation**: a bot reaches only its peers. That means the same team and
   scope, the per-pair allow-list, and never a hidden bot. A person reaches
   what `GET /api/bots` shows them, and nothing else exists for them (404

@@ -80,7 +80,7 @@ import { staleSessionReason } from "./auth/stale-session.ts";
 import { isSmallTalk, SMALL_TALK_TURN_NOTE } from "./small-talk.ts";
 import { recallTopicPage, streamCandidate, type SegmentDigest } from "./streams/single-stream.ts";
 import { conversationThreadId, isStreamSegment } from "../shared/single-stream.ts";
-import { AGENT_CALLER_FALLBACK, agentConversationNotifies, isAgentConversation } from "../shared/agent-conversation.ts";
+import { agentConversationNotifies, isAgentConversation } from "../shared/agent-conversation.ts";
 import { alwaysDenyOffered } from "../shared/approval-rule-card.ts";
 import { isOpaqueId, quotedIdOr } from "../shared/human-id.ts";
 import { createRecallTopicInternalRoutes } from "./routes/recall-topic-internal.ts";
@@ -1394,7 +1394,7 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { createOrgMemberRoutes, MEMBER_NEW_THREAD_SEND_TTL_MS, ORG_MEMBER_ASSERTION_ACTORS, OWN_CHAT_PATH, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
+import { createOrgMemberRoutes, livePaths, MEMBER_NEW_THREAD_SEND_TTL_MS, ORG_MEMBER_ASSERTION_ACTORS, ownChatStatus, queuedSendWillStart, type MemberPerson, type ThreadStatus } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
@@ -35418,22 +35418,29 @@ function agentConversationsOf(target: BotRecord, principalId: string): string[] 
   const person = principalId.trim().toLowerCase();
   return store.tasks(target.id).filter((task) => isAgentConversation(task) && task.ownerPrincipalId === person && task.confidential !== true).map((task) => task.threadId);
 }
-/** #4879: the paths a person reaches a bot by where a turn works or waits
- * now: their own conversations in Sagax (as the app shows them), then each
- * AI client's conversation with it, by the client's name. Every client
- * reads the same answer (get_agent `live_via`, the member list's `liveVia`). */
+/** The live state of a thread for the member API and every path to a bot:
+ * busy, waiting on a card, or idle; null when gone. */
+function memberThreadStatus(threadId: string): ThreadStatus | null {
+  const bot = store.botByThread(threadId);
+  if (!bot) return null;
+  if (store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") return "waiting";
+  if (threadBusy(bot.id, threadId)) return "working";
+  // 2026-11-03: a question card that outlived its turn (a routine run's
+  // ask_choice) still waits on the person: list_pending_approvals lists it.
+  return openQuestionCard(threadId) ? "waiting" : "idle";
+}
+/** #4879: the AI client that holds an outside agent's conversation (its
+ * `openedBy` name), or null. */
+function agentConversationClientName(threadId: string): string | null {
+  const bot = store.botByThread(threadId);
+  const task = bot ? store.taskByThread(bot.id, threadId) : undefined;
+  return task && isAgentConversation(task) ? task.openedBy?.name ?? null : null;
+}
+/** #4879: get_agent's `live_via`, the paths a person reaches a bot by where
+ * a turn works or waits now, by the member list's own rule (`livePaths`). */
 function botLiveVia(bot: BotRecord, principalId: string): string[] {
   const person = principalId.trim().toLowerCase();
-  const via: string[] = [];
-  const own = viewerBotActivity(bot, person);
-  if (own.busy || own.activity === "waiting-on-you") via.push(OWN_CHAT_PATH);
-  for (const threadId of agentConversationsOf(bot, person)) {
-    const task = store.taskByThread(bot.id, threadId);
-    if (!task || !(threadBusy(bot.id, threadId) || task.activity === "waiting-on-you")) continue;
-    const client = task.openedBy?.name?.trim() || AGENT_CALLER_FALLBACK;
-    if (!via.includes(client)) via.push(client);
-  }
-  return via;
+  return livePaths(ownChatStatus(viewerBotActivity(bot, person)), agentConversationsOf(bot, person), memberThreadStatus, agentConversationClientName).liveVia;
 }
 /** The same for a bot caller: the conversation of the person its work is for. */
 function agentUnifiedThreadForBot(caller: AgentCaller, target: BotRecord): string | undefined {
@@ -35501,15 +35508,7 @@ const orgMember = createOrgMemberRoutes({
   },
   permissions: (principalId) => principalPermissions(principalId),
   perform: performAsMember,
-  threadStatus: (threadId) => {
-    const bot = store.botByThread(threadId);
-    if (!bot) return null;
-    if (store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") return "waiting";
-    if (threadBusy(bot.id, threadId)) return "working";
-    // 2026-11-03: a question card that outlived its turn (a routine run's
-    // ask_choice) still waits on the person: list_pending_approvals lists it.
-    return openQuestionCard(threadId) ? "waiting" : "idle";
-  },
+  threadStatus: memberThreadStatus,
   openProposal: (threadId) => {
     const messages = store.messagesFor(threadId);
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -35554,11 +35553,7 @@ const orgMember = createOrgMemberRoutes({
     return bot ? agentConversationsOf(bot, principalId) : [];
   },
   // #4879: the AI client of an outside agent's conversation, for the paths a bot is live on
-  agentConversationClient: (threadId) => {
-    const bot = store.botByThread(threadId);
-    const task = bot ? store.taskByThread(bot.id, threadId) : undefined;
-    return task && isAgentConversation(task) ? task.openedBy?.name ?? null : null;
-  },
+  agentConversationClient: agentConversationClientName,
   markAiClientLine,
   // lot S1: the person's surface bot and their hidden conversations
   ensureSurfaceBot: (person, input) => ensureSurfaceBot(person, input.name),

@@ -159,3 +159,24 @@ describe("listening sessions (#4100)", () => {
     expect(parseListeningBatch({ lines: [], speakers: [{ key: "me" }] })).toEqual({ error: "each speaker has a key and a label" });
   });
 });
+
+// #5130: a session's purpose (the watch's in-person meeting) and how it
+// ended are kept with it, across a restart.
+describe("a meeting's purpose (#5130)", () => {
+  it("keeps the purpose, says it in the view, and a meeting start makes a live session a meeting", () => {
+    const h = harness();
+    const talk = h.sessions.start({ botId: "bot-a", threadId: "t-ada", principalId: "pr_ada" })!;
+    expect(listeningView(talk).purpose).toBe("conversation");
+    expect(h.sessions.start({ botId: "bot-a", threadId: "t-ada", principalId: "pr_ada", purpose: "meeting" })!.id).toBe(talk.id);
+    expect(listeningView(h.sessions.get(talk.id, "pr_ada")!).purpose).toBe("meeting");
+    // a conversation start never turns a meeting back
+    h.sessions.start({ botId: "bot-a", threadId: "t-ada", principalId: "pr_ada", purpose: "conversation" });
+    expect(h.sessions.get(talk.id, "pr_ada")!.purpose).toBe("meeting");
+
+    h.tick(LISTENING_IDLE_END_MS + 1);
+    h.sessions.sweep();
+    const reopened = harness({ dir: h.dir });
+    const record = reopened.sessions.get(talk.id, "pr_ada")!;
+    expect(record).toMatchObject({ purpose: "meeting", state: "ended", endCause: "idle" });
+  });
+});

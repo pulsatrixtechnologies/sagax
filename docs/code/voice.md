@@ -449,3 +449,43 @@ credits included). The watch has no speech recognizer of its own (no Speech
 framework on watchOS). Tests: `ios/Tests/CompanionCoreTests/WatchTalkTests.swift`.
 Debug captures: `-watch-demo chat -watch-demo-talk <step>`.
 
+## Apple Watch: an in-person meeting (2026-11-20, #5130)
+
+D-20261120-005. From a bot's chat on the watch, Meeting opens
+`WatchMeetingView`; Listen to the meeting starts the watch's microphone
+(`WatchMeetingRecorder`: one `AVAudioEngine` input, 16 kHz mono, cut every
+30 s into a WAV on disk, no gap between chunks). The app's `audio` background
+mode keeps it recording with the wrist down once started in front; watchOS
+shows its own microphone indicator, and the app's red pill
+(`WatchMeetingPill`) leads the bot list and the meeting screen while it
+listens.
+
+`WatchMeeting` carries the chunks in order through `MeetingQueue`
+(`ios/Sources/CompanionCore/MeetingListening.swift`, kept on disk): open a
+listening session of purpose `meeting` (`POST /api/bots/:id/listening`), hear
+each chunk with `/voice/transcribe` (`transcribeRecording`), send it as one
+line (`seq` = the chunk's order, speaker `room`), delete its audio; an empty
+batch every 60 s while nothing else goes; a failure waits 2 s to 2 min and
+tries again; a relaunch picks the queue up. The stop goes once every chunk the
+recorder cut is sent; after a relaunch, once what is on disk is sent
+(`MeetingQueue.relaunched`: a chunk the app lost is not waited for). One path:
+the watch's URLSession, which watchOS routes through the paired iPhone when it
+is near. Meeting shows where holding to talk does (`WatchTalk.offersHold`: a
+speech to text engine of the person, xAI or OpenAI).
+
+Server: a session's `purpose` (`shared/listening.ts`) is kept on its record;
+at the person's stop a meeting gets `inPersonMeetingPrompt`
+(`server/listening/listening-turn.ts`): the online notetaker's
+`MEETING_NOTES_STEPS` and `MEETING_NOTES_RULES`
+(`server/meetings/meeting-summary.ts`, the notetaker's prompt is word for
+word unchanged), then `MEETING_MEMORY_STEP` (memory_log for the summary,
+memory_update for decisions and follow ups). A meeting the server ended for
+silence (the watch offline over `LISTENING_IDLE_END_MS`) still gets its notes
+at the person's late stop, once; a conversation does not.
+
+Tests: `server/listening/listening-turn.test.ts`,
+`server/listening/listening-sessions.test.ts`,
+`server/routes/listening.e2e.test.ts`, `server/meetings/meeting-summary.test.ts`,
+`ios/Tests/CompanionCoreTests/MeetingListeningTests.swift`. Debug captures:
+`-watch-demo meeting|meeting-list|meeting-chat|meeting-start`.
+

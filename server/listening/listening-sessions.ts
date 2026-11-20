@@ -27,6 +27,7 @@ import {
   type ListeningCard,
   type ListeningFrame,
   type ListeningLine,
+  type ListeningPurpose,
   type ListeningSessionView,
   type ListeningSources,
   type ListeningSpeaker,
@@ -46,6 +47,10 @@ export interface ListeningRecord {
   speakers: ListeningSpeaker[];
   lines: ListeningLine[];
   messageId?: string;
+  /** #5130: "meeting" for an in-person meeting; absent for a conversation. */
+  purpose?: "meeting";
+  /** How it ended (absent on records written before #5130). */
+  endCause?: ListeningEndCause;
 }
 
 /** Why a session ended: the person's stop, or the server's idle end. The
@@ -108,6 +113,7 @@ export function listeningView(record: ListeningRecord): ListeningSessionView {
     botId: record.botId,
     threadId: record.threadId,
     sources: { ...record.sources },
+    purpose: record.purpose ?? "conversation",
     lastSeq: record.lines.reduce((highest, line) => Math.max(highest, line.seq), 0),
     ...(record.messageId ? { messageId: record.messageId } : {}),
   };
@@ -136,6 +142,8 @@ function parseRecord(raw: unknown): ListeningRecord | null {
     speakers: Array.isArray(r.speakers) ? r.speakers.filter((s): s is ListeningSpeaker => Boolean(s) && typeof s.key === "string" && typeof s.label === "string") : [],
     lines: Array.isArray(r.lines) ? r.lines.filter((l): l is ListeningLine => Boolean(l) && typeof l.seq === "number" && typeof l.at === "number" && typeof l.speaker === "string" && typeof l.text === "string") : [],
     ...(typeof r.messageId === "string" ? { messageId: r.messageId } : {}),
+    ...(r.purpose === "meeting" ? { purpose: "meeting" as const } : {}),
+    ...(r.endCause === "stop" || r.endCause === "idle" ? { endCause: r.endCause } : {}),
   };
 }
 
@@ -196,13 +204,18 @@ export class ListeningSessions {
 
   /** Starts a session in the person's conversation with the bot and writes
    * its row. A session already live there for this person is answered
-   * again. Null when the conversation is gone. */
-  start(input: { botId: string; threadId: string; principalId: string; sources?: Partial<ListeningSources> }): ListeningRecord | null {
+   * again (a meeting start makes it a meeting: #5130). Null when the
+   * conversation is gone. */
+  start(input: { botId: string; threadId: string; principalId: string; sources?: Partial<ListeningSources>; purpose?: ListeningPurpose }): ListeningRecord | null {
     if (!THREAD_DIR.test(input.threadId)) return null;
     const principalId = input.principalId.trim();
     const already = this.liveFor(input.threadId);
     if (already && norm(already.principalId) === norm(principalId) && already.botId === input.botId) {
       this.heard.set(already.id, this.now());
+      if (input.purpose === "meeting" && already.purpose !== "meeting") {
+        already.purpose = "meeting";
+        this.write(already);
+      }
       return already;
     }
     const record: ListeningRecord = {
@@ -215,6 +228,7 @@ export class ListeningSessions {
       sources: { microphone: input.sources?.microphone !== false, computer: input.sources?.computer === true },
       speakers: [],
       lines: [],
+      ...(input.purpose === "meeting" ? { purpose: "meeting" as const } : {}),
     };
     const card = listeningCard(record);
     const row = this.deps.appendRow(record.threadId, { role: "bot", kind: "text", text: listeningRowText(card), listening: card });
@@ -287,11 +301,24 @@ export class ListeningSessions {
     return after === undefined ? record.lines.slice() : record.lines.filter((line) => line.seq > after);
   }
 
-  /** The person's stop. Ending twice answers the ended session. */
+  /** The person's stop. Ending twice answers the ended session.
+   * #5130 (D-20261120-005): a meeting the server ended for silence (the
+   * watch lost its connection for longer than LISTENING_IDLE_END_MS) is
+   * still the person's meeting: their stop, when the device comes back with
+   * its last lines, gives the notes' turn, once. */
   stop(id: string, principalId: string): ListeningRecord | null {
     const record = this.get(id, principalId);
     if (!record) return null;
     if (record.state === "listening") this.end(record, "stop");
+    else if (record.purpose === "meeting" && record.endCause === "idle") {
+      record.endCause = "stop";
+      // the meeting lasted until its last line, not until the server gave up on it
+      const last = record.lines.reduce((latest, line) => Math.max(latest, line.at), 0);
+      if (record.endedAt === undefined || last > record.endedAt) record.endedAt = last;
+      this.write(record);
+      this.announce(record);
+      this.ended(record, "stop");
+    }
     return record;
   }
 
@@ -316,10 +343,15 @@ export class ListeningSessions {
   private end(record: ListeningRecord, cause: ListeningEndCause): void {
     record.state = "ended";
     record.endedAt = this.now();
+    record.endCause = cause;
     this.live.delete(record.id);
     this.heard.delete(record.id);
     this.write(record);
     this.announce(record);
+    this.ended(record, cause);
+  }
+
+  private ended(record: ListeningRecord, cause: ListeningEndCause): void {
     try {
       this.deps.onEnded?.(record, cause);
     } catch (error) {

@@ -12,6 +12,10 @@ function askBotAndWait(targetBotId: string, message: string, depth: number, from
   return new Promise((resolve) => {
     let text = "";
     let done = false;
+    // #4878: the failed turn the usage-limit failover took over, while the
+    // next engine of the chain has not started it yet in this thread.
+    let carried: AskBotOutcome | null = null;
+    let carryTimer: ReturnType<typeof setTimeout> | undefined;
     const awaited = { threadId };
     host.awaitedAsks.add(awaited);
     const finish = (out: AskBotOutcome) => {
@@ -19,6 +23,7 @@ function askBotAndWait(targetBotId: string, message: string, depth: number, from
       done = true;
       host.awaitedAsks.delete(awaited);
       clearTimeout(timer);
+      clearTimeout(carryTimer);
       unsub();
       resolve(out);
     };
@@ -28,11 +33,29 @@ function askBotAndWait(targetBotId: string, message: string, depth: number, from
       // newer ask_bot waiter with the old partial reply.
       if (host.shouldIgnoreProviderEvent(e)) return;
       if (e.threadId !== threadId) return;
-      if (e.type === "item.completed" && e.itemType === "assistant_text") {
+      if (e.type === "turn.started" && carried) {
+        // the next engine took the work on: its turn's words are the result
+        carried = null;
+        clearTimeout(carryTimer);
+        text = "";
+      } else if (e.type === "item.completed" && e.itemType === "assistant_text") {
         text += (text ? "\n" : "") + e.text;
       } else if (e.type === "turn.completed") {
         if (e.ok) finish({ status: "reply", text: text || "(the bot finished without a text reply)" });
-        else finish({ status: "failed", text: host.stoppedTurnText(threadId, e.turnId, undefined, e.stopReason) });
+        else {
+          const failed: AskBotOutcome = { status: "failed", text: host.stoppedTurnText(threadId, e.turnId, undefined, e.stopReason) };
+          // #4878: the usage-limit failover took this turn over (the main
+          // subscriber ran turnFailed first): the same work goes on here on
+          // the next engine of the chain. Wait for it; with no engine left
+          // to start it within the grace, the refusal is the outcome.
+          if (!carried && host.limitTakeovers?.take(threadId, e.turnId)) {
+            carried = failed;
+            text = "";
+            carryTimer = setTimeout(() => { if (carried) finish(carried); }, host.LIMIT_TAKEOVER_GRACE_MS ?? 30_000);
+            return;
+          }
+          finish(failed);
+        }
       }
     });
     // Timing out does NOT stop the peer's turn — the caller decides whether

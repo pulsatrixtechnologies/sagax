@@ -1642,6 +1642,7 @@ import { createOrgAdminBots } from "./index-leaves/orgAdminBots.ts";
 import { createHoldDirectMachineTurn } from "./index-leaves/holdDirectMachineTurn.ts";
 import { createComputerCallGate } from "./index-leaves/computerCallGate.ts";
 import { createAskBotAndWait } from "./index-leaves/askBotAndWait.ts";
+import { createLimitTakeovers, LIMIT_TAKEOVER_GRACE_MS } from "./usage/limit-takeovers.ts";
 import { createWaitForChatRoomMember } from "./index-leaves/waitForChatRoomMember.ts";
 import { createStopCompanyInstances } from "./index-leaves/stopCompanyInstances.ts";
 import { createSpeakerTurnSelection } from "./index-leaves/speakerTurnSelection.ts";
@@ -6308,6 +6309,8 @@ bindLeafHost({
   get computerControl() { return computerControl; },
   get controlIntegration() { return controlIntegration; },
   get awaitedAsks() { return awaitedAsks; },
+  get limitTakeovers() { return limitTakeovers; },
+  get LIMIT_TAKEOVER_GRACE_MS() { return LIMIT_TAKEOVER_GRACE_MS; },
   get askBotAndWait() { return askBotAndWait; },
   get syncHeadlessTeam() { return syncHeadlessTeam; },
   get HEADLESS_TASK_WAIT_MS() { return HEADLESS_TASK_WAIT_MS; },
@@ -11476,6 +11479,10 @@ const computerControl = new ComputerControl((key, snapshot) => {
 /** The ask_bot calls waiting on a turn, each by the thread it runs in: that
  * turn's result is its asker's (reportsToRequester). */
 const awaitedAsks = new Set<{ threadId: string }>();
+/** #4878: failed turns the usage-limit failover took over (another engine
+ * goes on in the same thread, or it waits for the reset), for a caller
+ * waiting on that thread (askBotAndWait). */
+const limitTakeovers = createLimitTakeovers();
 
 
 /** `sagax task give` (server/cli/headless-cli.ts): this server takes the tasks
@@ -19369,6 +19376,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get latestPersonText() { return latestPersonText; },
   get limitBackupRefusedInThread() { return limitBackupRefusedInThread; },
   get limitFailover() { return limitFailover; },
+  get limitTakeovers() { return limitTakeovers; },
   get limitKindOf() { return limitKindOf; },
   get liveTurnByThread() { return liveTurnByThread; },
   get localVmIdleFor() { return localVmIdleFor; },

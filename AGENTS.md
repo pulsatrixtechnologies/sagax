@@ -102,6 +102,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Engines and models
 
 - A usage limit is transparent: the turn continues on a backup at once, no card, and the next engine is told the steps already taken (2026-10-19, 2026-10-29).
+- A caller waiting on a thread (a run_with_engine part such as a routine's verification step) waits for the turn the usage-limit failover carried to the next engine, and is told which engine ran it and which refused; it ends with the refusal only when no engine took the work on (2026-11-19, #4878).
 - A model refusal holds that model only, never the whole engine, unless its plan is spent (2026-11-02).
 - Auto never picks outside the providers the admin left on, a model turned off or a model the provider refused; a refusal climbs toward a stronger model, and a pin always wins (2026-10-29, 2026-10-30).
 - Never put a per-turn value in a pooled process's contract or session inputs: it relaunches the engine on every turn.

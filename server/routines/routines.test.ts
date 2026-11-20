@@ -28,6 +28,8 @@ import {
   troubleToolKey,
   nativeToolMisroute,
   routineNativeToolPrompt,
+  routineFinalMessagePrompt,
+  ROUTINE_FINAL_MESSAGE_LOST,
   RoutineScheduleError,
   RoutineInputError,
   type RoutineAdmission,
@@ -5398,10 +5400,85 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "b", "fetch", false, "timeout");
     tool(h, "thread-1", "c", "fetch", true);
     done(h, "thread-1");
+    // #4877: the run goes on once in its own thread for its final message
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runOf(h).status).toBe("running");
+    expect(h.started).toHaveLength(2);
+    expect(h.started[1]).toMatchObject({ threadId: "thread-1", prompt: routineFinalMessagePrompt(2) });
+    // ...and that turn ends without one too: the run failed, saying so and naming each failed step
+    done(h, "thread-1");
     const run = runOf(h);
+    expect(run.status).toBe("failed");
     expect(run.output).toBeUndefined();
-    expect(run.problems).toContain("crm_login failed: 401 Unauthorized");
-    expect(run.problems).toContain("2 tool steps failed and the run ended without a final message");
+    expect(run.error).toContain(ROUTINE_FINAL_MESSAGE_LOST.slice(0, 60));
+    expect(run.error).toContain("crm_login failed: 401 Unauthorized");
+    expect(run.error).not.toContain("tool steps failed and the run ended without a final message");
+    expect(h.started).toHaveLength(2);
+  });
+
+  // #4877: a step that failed for a lasting reason is surfaced from the
+  // first time, with what to do, even when the bot wrote a final message
+  it("a missing tool counts from one failure and says what to do (#4877)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Je vérifie le seuil de la banque d'heures.");
+    tool(h, "thread-1", "a", "Flow", false, "tool not found: Flow");
+    say(h, "thread-1", "Seuil vérifié.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.problems).toContain("Flow failed: tool not found: Flow. Next: Reconnect the connector or plugin that provides it");
+    expect(isRoutineProblemRun(run)).toBe(true);
+    expect(h.started).toHaveLength(1);
+  });
+
+  it("a run a service refused for a permission fails naming it, never waits for the engine's sign-in (#4877)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", type: "runtime.error", message: "HTTP 403: You do not have permission (Inquire) on service tickets" });
+    send(h, { threadId: "thread-1", type: "turn.completed", ok: false, stopReason: "error" });
+    const run = runOf(h);
+    expect(run.status).toBe("failed");
+    expect(run.attention).toBeUndefined();
+    expect(run.error).toContain("(Inquire)");
+    expect(run.error).toContain("Next: Give the \"Inquire\" permission to the account the routine runs as");
+  });
+
+  it("a run whose tools ended with nothing said goes on once for its final message, in its own thread (#4877)", async () => {
+    // the mail cleanup run that lost a step and ended with no final message, silently green
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mail_search", true);
+    send(h, { threadId: "thread-1", itemId: "b", type: "item.started", itemType: "tool", title: "mail_move" });
+    done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runOf(h).status).toBe("running");
+    expect(h.started).toHaveLength(2);
+    expect(h.started[1]).toMatchObject({ threadId: "thread-1", prompt: routineFinalMessagePrompt(0) });
+    expect(h.started[1]!.prompt).toContain("never pick a choice they did not make");
+    tool(h, "thread-1", "c", "mail_move", true);
+    say(h, "thread-1", "12 courriels classés.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.output).toBe("12 courriels classés.");
+    expect(run.problems).toBeUndefined();
+    expect(h.started).toHaveLength(2);
+  });
+
+  it("a run whose turn raised a card is not continued for a final message (#4877)", async () => {
+    const h = harness(start);
+    h.options.cardRaisedSince = () => true;
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "ask_choice", true);
+    done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.started).toHaveLength(1);
+    expect(runOf(h).status).toBe("completed");
   });
 
   it("a tool started before the final message whose failure lands after it leaves the run green", async () => {
@@ -5720,6 +5797,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     h.manager.runNow(routine.id); await h.manager.tick();
     tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, "Tool not found: perspicax_profile__cw_psa__query");
     tool(h, "thread-1", "b", "perspicax_profile__cw_psa_query", false, "upstream_error: 400");
+    say(h, "thread-1", "Read what could be read.");
     done(h, "thread-1");
     // 2026-11-03: the tool in words, as its card names it; no `__` id
     expect(runOf(h).problems).toContain("Query failed 2 times");
@@ -5736,6 +5814,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "b", "mcp__outlook__get_message", false, graph);
     tool(h, "thread-1", "c", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
     tool(h, "thread-1", "d", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    say(h, "thread-1", "The message could not be read.");
     done(h, "thread-1");
     const problems = runOf(h).problems ?? "";
     expect(problems).toContain(`Get message failed 2 times and never succeeded after: ${graph}`);
@@ -5753,6 +5832,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     const saved = "Use the saved result id (r- and a UUID) and a non-negative integer offset from its notice.";
     tool(h, "thread-1", "c", "tool_result_read", false, saved);
     tool(h, "thread-1", "d", "tool_result_read", false, saved);
+    say(h, "thread-1", "The saved results could not be read.");
     done(h, "thread-1");
     const problems = runOf(h).problems ?? "";
     expect(problems).toContain(hint);
@@ -5766,6 +5846,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     const long = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
     tool(h, "thread-1", "a", "mcp__files__list", false, long);
     tool(h, "thread-1", "b", "mcp__files__list", false, long);
+    say(h, "thread-1", "The files could not be listed.");
     done(h, "thread-1");
     const problems = runOf(h).problems ?? "";
     expect(problems.length).toBeLessThanOrEqual(1_000);
@@ -5779,6 +5860,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     h.manager.runNow(routine.id); await h.manager.tick();
     const refused = "Managed MCP gateway tool call failed: Cursor connector needs re-authentication in Cursor: X won't turn on API access";
     tool(h, "thread-1", "a", "cursor__user-X-search_5fposts_5fall", false, refused);
+    say(h, "thread-1", "X refused the search.");
     done(h, "thread-1");
     const problems = runOf(h).problems ?? "";
     expect(problems).toContain("needs a new sign-in");

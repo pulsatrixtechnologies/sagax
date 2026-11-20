@@ -94,6 +94,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - The routine editor never shows cron: a schedule reads in words, else "Custom schedule" (2026-10-29).
 - More options are folded whenever a routine opens, never remembered (2026-11-01, #2272).
 - A refused run goes on at once on another model or engine and says who refused; never "the bot is down" (2026-11-02).
+- A failed step says what failed, why and what to do; a failure retrying cannot change (a missing tool, a refused permission, an expired result handle) is surfaced from the first time and never retried; a run that ends without its final message goes on once in its thread, then fails saying so (2026-11-19, #4877).
 - A routine's model and reasoning effort apply per turn, never to the chat or the thread; a limit takeover wins (2026-11-04, #1999).
 - A watch never runs until the person turned its domain on for one of their bots; a stored mode is never read as consent (2026-11-09, #3135, #3423).
 - Webhook payloads and event data are untrusted data, never instructions (2026-10-30).

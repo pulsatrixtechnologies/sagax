@@ -21,6 +21,7 @@ import {
 } from "./routine-limit-words.ts";
 import type { RoutineRun } from "./routine-run-types.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
+import { namesMissingPermission } from "./routine-step-failure.ts";
 
 export type RoutineOwnerCause = "signed_out" | "credits" | "usage_limit" | "setup";
 
@@ -117,6 +118,13 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
     const resetsAt = facts.limitResetsAt ?? limitResetFromText(failure, Date.now());
     return { kind: "owner", cause: "usage_limit", ...(resetsAt ? { resetsAt } : {}) };
   }
+  // #4877: a bare 403 whose words name a permission the account lacks
+  // ("You do not have permission (Inquire)", a security role) is a service
+  // refusing the call, not the engine signed out: no new sign-in of the
+  // engine fixes it, so the run stops and says which permission, instead of
+  // waiting for a reconnect that never comes. A scope refusal the classifier
+  // reads as `permission` keeps its reconnect invitation (#4720).
+  if (reason === "auth" && facts.stopReason !== "auth_required" && namesMissingPermission(failure)) return { kind: "final" };
   if (isEngineReconnectCondition(failure) || facts.stopReason === "auth_required" || needsReconnect(reason)) return { kind: "owner", cause: "signed_out" };
   if (reason === "quota") return { kind: "owner", cause: "credits" };
   if (facts.setup || facts.stopReason === "update_required" || facts.stopReason === "setup_required") return { kind: "owner", cause: "setup" };

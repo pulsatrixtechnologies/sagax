@@ -11,6 +11,9 @@
 - Notify admins once a month when the month crosses the warning percentage and
   once when it reaches the cap (`notify` frames of kind `spend`, withheld from
   client sessions), remembered across restarts in `<data>/usage/alerts.json`.
+  The notice is the workspace's news: it names no bot and opens no
+  conversation (#5147), so a member's bot whose turn crossed the line never
+  shows in an admin's app or on their phone.
 - Count a turn the moment it settles, not when the ledger's append lands or a
   cache expires, however long the turn ran: a booked turn counts from memory
   until its row lands, and never twice once it has.

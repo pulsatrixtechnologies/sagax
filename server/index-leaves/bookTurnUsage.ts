@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createBookTurnUsage(getHost: () => Host): any {
-function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported = true, notificationThreadId = row.threadId) {
+function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported = true) {
   const host = getHost();
   const { DATA_DIR, appendUsage, buildSpendNotification, noteSpend, orgUsageFacts, spendAlertText, spendState, takeSpendAlert } = host;
   // Missing helper usage is unpriced, not an estimated zero-dollar call.
@@ -25,13 +25,13 @@ function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported 
   try { host.noteAccountDemand?.(booked); } catch (error) { host.reportBackgroundError?.(error); }
   // #2609: the turn's OpenTelemetry span and its per-model chat spans.
   try { host.agentSpans?.settleTurn(booked); } catch (error) { host.reportBackgroundError?.(error); }
+  // #5147: a spend notice reaches the admins, who act on the limit, and names
+  // no bot: the turn that crossed the line may be a member's (buildSpendNotification)
   const state = spendState(host.cfg, DATA_DIR);
   const alert = takeSpendAlert(DATA_DIR, state);
-  if (alert && state) {
-    host.broadcast({ kind: "notify", notification: buildSpendNotification({ id: row.botId, name: row.botName }, notificationThreadId, spendAlertText(alert, state)) }, { adminOnly: true });
-  }
+  if (alert && state) host.broadcast({ kind: "notify", notification: buildSpendNotification(spendAlertText(alert, state)) }, { adminOnly: true });
   const personal = host.personalCapNotice(DATA_DIR);
-  if (personal) host.broadcast({ kind: "notify", notification: buildSpendNotification({ id: row.botId, name: row.botName }, notificationThreadId, personal) }, { adminOnly: true });
+  if (personal) host.broadcast({ kind: "notify", notification: buildSpendNotification(personal) }, { adminOnly: true });
 
 }
   return bookTurnUsage;

@@ -163,10 +163,14 @@ with `endReason` one of the codes under **End reasons**. A phone's
 `POST /api/live/session` is bound to the device id the companion forwards; a
 start from a phone that was unpaired is refused with `401`.
 `LiveSettings = { configured, voice, readTypedReplies, idleMinutes }` (also in
-`GET /api/config` as `live`). SSE: `{ kind: "live.call", botId, threadId, call: LiveCallState | null }`
+`GET /api/config` as `live`). SSE: `{ kind: "live.call", botId, threadId, call: LiveCallState | null, audience }`
 (frames are keyed by `kind`; the top-level `botId`/`threadId` let the member
 filter hide calls on bots a member cannot see), passed through the companion's
 scrubber unchanged. A client that connects mid-call reads `GET /api/live/call`.
+`audience` (#5147) lists the call's people, the person on the call and the
+person whose bot it is: the frame reaches their streams only, never every
+admin's; `GET /api/live/call` answers anyone else with no call, and a start
+refused because a call runs carries `activeCall` for them only.
 
 Config (`config.live`): `key` (secret, desktop credential store, unchanged),
 `voice`, `readTypedReplies` (boolean, default true), `idleMinutes` (1–60,

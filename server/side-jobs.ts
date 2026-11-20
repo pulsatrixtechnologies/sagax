@@ -95,8 +95,6 @@ export type SideJobInstance = Pick<ProviderInstance, "instanceId" | "driverKind"
 export interface SideJobBot {
   id: string;
   name: string;
-  /** The bot's main conversation, where a spend alert a call raises is shown. */
-  threadId: string;
   modelSelection: { instanceId: string };
   /** The bot's own switch (WireBot.helperModel): only absent or true lets
    * the helper model write for it. */
@@ -123,7 +121,7 @@ export interface SideJobsDeps {
   /** Throws once the workspace is at its monthly spend limit. */
   assertWithinBudget: () => void;
   /** Write one call to the usage ledger (bookTurnUsage in server/index.ts). */
-  book: (row: Omit<UsageRow, "at" | "costSource">, tokensReported: boolean, notificationThreadId: string) => void;
+  book: (row: Omit<UsageRow, "at" | "costSource">, tokensReported: boolean) => void;
   log?: (line: string) => void;
   /** #3519: the bot's own engine signs in as the bot's turn does (its
    * owner's account on an organization server). Absent: the call as is. */
@@ -181,7 +179,7 @@ export function createSideJobs(deps: SideJobsDeps): SideJobs {
           ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
           costUsd: usage.costUsd ?? null,
           trigger,
-        }, usage.input !== undefined && usage.output !== undefined, bot.threadId),
+        }, usage.input !== undefined && usage.output !== undefined),
       });
     };
 

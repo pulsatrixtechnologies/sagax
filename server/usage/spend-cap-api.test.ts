@@ -75,8 +75,8 @@ describe("spend cap and prices through real turns", () => {
       expect(await tidy()).toMatchObject({ expired: 1, contradictionsChecked: false });
       await notices.until((frame) => frame.kind === "notify" && frame.notification?.kind === "spend", 5_000);
       const notice = notices.frames.find((frame) => frame.kind === "notify" && frame.notification?.kind === "spend");
-      // Notification navigation needs a real chat, not the ledger-only ID.
-      expect(notice.notification).toMatchObject({ botId: bot.id, threadId: bot.threadId });
+      // #5147: the workspace's news names no bot and opens no conversation
+      expect(notice.notification).toMatchObject({ botId: "", botName: "", threadId: "" });
     } finally {
       notices.close();
     }
@@ -169,9 +169,10 @@ describe("spend cap and prices through real turns", () => {
       }
       // $0.01 of $0.015 crosses the 50% warning; $0.02 reaches the cap
       await adminStream.until((frame) => frame.kind === "notify" && frame.notification?.title === "Monthly spend limit reached", 20_000);
+      // #5147: neither names the bot whose turn crossed the line
       expect(spendNotices(adminStream.frames).map((frame) => frame.notification)).toEqual([
-        expect.objectContaining({ kind: "spend", botId, title: "Spend is at 67% of the monthly limit", body: expect.stringContaining("$0.01 of $0.015 spent this month") }),
-        expect.objectContaining({ kind: "spend", botId, title: "Monthly spend limit reached" }),
+        expect.objectContaining({ kind: "spend", botId: "", botName: "", threadId: "", title: "Spend is at 67% of the monthly limit", body: expect.stringContaining("$0.01 of $0.015 spent this month") }),
+        expect.objectContaining({ kind: "spend", botId: "", botName: "", threadId: "", title: "Monthly spend limit reached" }),
       ]);
       expect(memberStream.frames.some((frame) => frame.kind === "notify" && frame.notification?.kind === "done")).toBe(true);
       expect(spendNotices(memberStream.frames)).toEqual([]);

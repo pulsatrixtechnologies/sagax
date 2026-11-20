@@ -4,6 +4,7 @@ import type { RemoteSessionAdminRow } from "../../../shared/remote-session-admin
 import type { RemoteSessionLogEntry } from "../../../shared/remote-session-admin";
 import type { AdminRowFilters } from "../../../shared/remote-session-admin";
 import type { UnattendedHostRow } from "../../../shared/remote-unattended-host";
+import { usePageVisible } from "@/lib/page-visible";
 import { api } from "@/state/store";
 
 export interface RemoteSessionsAdminState {
@@ -82,12 +83,18 @@ export interface UnattendedHostsState {
   reload: () => void;
 }
 
-/** The hosts Perspicax enrolled, polled slowly while the page is mounted. */
+/** The hosts Perspicax enrolled, polled slowly while the page is mounted and
+ * visible. Each read is one short Perspicax MCP session (remote_support_hosts
+ * through the person's seat), so a hidden window or tab reads nothing, a
+ * reload asked meanwhile included, and the page reads once at once when it
+ * shows again. */
 export function useUnattendedHosts(): UnattendedHostsState {
   const [state, setState] = useState<Omit<UnattendedHostsState, "reload">>({ hosts: [], available: false, loading: true });
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((value) => value + 1), []);
+  const visible = usePageVisible();
   useEffect(() => {
+    if (!visible) return;
     let stop = false;
     const load = () => {
       api<{ hosts?: UnattendedHostRow[]; available?: boolean }>("/api/admin/remote-sessions/hosts")
@@ -104,7 +111,7 @@ export function useUnattendedHosts(): UnattendedHostsState {
     load();
     const timer = setInterval(load, 15_000);
     return () => { stop = true; clearInterval(timer); };
-  }, [tick]);
+  }, [tick, visible]);
   return { ...state, reload };
 }
 

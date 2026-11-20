@@ -54,7 +54,7 @@ export function OpenAtLoginOffer() {
       <p className="text-[13px] leading-5 text-ink-secondary">{t("openAtLogin.body")}</p>
       <div className="flex justify-end gap-2">
         <button type="button" className="rounded-full px-3 py-1.5 text-[13px] text-ink-secondary hover:bg-hover" onClick={() => choose("off")}>{t("openAtLogin.notNow")}</button>
-        <button type="button" className="rounded-full bg-accent px-3 py-1.5 text-[13px] text-white" onClick={() => choose("on")}>{t("openAtLogin.accept")}</button>
+        <button type="button" className="rounded-full bg-accent px-3 py-1.5 text-[13px] text-accent-ink" onClick={() => choose("on")}>{t("openAtLogin.accept")}</button>
       </div>
     </div>
   );

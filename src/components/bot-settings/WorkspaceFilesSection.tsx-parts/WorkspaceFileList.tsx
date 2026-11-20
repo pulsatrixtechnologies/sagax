@@ -100,7 +100,7 @@ export function WorkspaceFileList({ files, plain, quietCls, botId, extras }: {
                   data-file-select={entry.path}
                   className={cn(
                     plain ? "flex size-4 shrink-0 items-center justify-center rounded bg-control text-ink" : "flex size-4 shrink-0 items-center justify-center rounded border border-hairline text-ink",
-                    checked && (plain ? "bg-accent text-white" : "border-accent bg-accent text-white"),
+                    checked && (plain ? "bg-accent text-accent-ink" : "border-accent bg-accent text-accent-ink"),
                   )}
                   onClick={(event) => toggleSelect(entry.path, event.metaKey || event.ctrlKey || event.shiftKey || true)}
                 >

@@ -189,7 +189,7 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
             left: rect.x - RING_PAD, top: rect.y - RING_PAD, width: rect.w + 2 * RING_PAD, height: rect.h + 2 * RING_PAD,
             borderStyle: "solid", borderWidth: RING_STROKE, borderRadius: RING_RADIUS, borderTopLeftRadius: 0,
           }}>
-          <span data-page-selection-tag="" className="absolute left-[-1.5px] whitespace-nowrap rounded-t-[6px] bg-accent px-2 text-[11px] font-medium leading-[18px] text-white"
+          <span data-page-selection-tag="" className="absolute left-[-1.5px] whitespace-nowrap rounded-t-[6px] bg-accent px-2 text-[11px] font-medium leading-[18px] text-accent-ink"
             style={{ bottom: `calc(100% + ${RING_STROKE}px)` }}>
             {t("pages.selection.tag")}
           </span>

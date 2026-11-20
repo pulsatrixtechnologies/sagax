@@ -238,7 +238,7 @@ export function PageFilters({ name, menuRef, activeCount, labelled = false, chil
         className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", labelled && "w-auto gap-1.5 px-3 @max-[40rem]/routines:w-9 @max-[40rem]/routines:gap-0 @max-[40rem]/routines:px-0", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
         <SlidersHorizontal size={15} aria-hidden="true" />
         <span className={labelled ? "@max-[40rem]/routines:sr-only" : "@max-[60rem]/page-header:sr-only"}>{t("routineCalendar.filters")}</span>
-        {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">{activeCount}</span>}
+        {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-accent-ink">{activeCount}</span>}
       </summary>
       <div role="group" aria-label={t("routineCalendar.filters")} className={cn(PAGE_POPOVER, "w-[280px] gap-3 p-3")}>
         {children}

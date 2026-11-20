@@ -12,6 +12,8 @@
 // FONT_IDS (the server does not load renderer modules);
 // shared/desktop-appearance.test.ts keeps them equal.
 
+import { parseCustomTint } from "../src/lib/custom-tint.ts";
+
 export const DESKTOP_APPEARANCE_PATH = "/api/me/appearance";
 
 export const APPEARANCE_SKIN_IDS = [
@@ -28,7 +30,7 @@ export const APPEARANCE_TINT_IDS = [
 ] as const;
 
 // src/lib/skin-families.ts SKIN_TEXTURES, "none" aside (absent = none).
-export const APPEARANCE_TEXTURE_IDS = ["grain", "grid", "dots", "lines"] as const;
+export const APPEARANCE_TEXTURE_IDS = ["grain", "fine", "paper", "grid", "mesh", "dots", "lines", "frost"] as const;
 
 export const APPEARANCE_FONT_IDS = ["skin", "system", "inter", "poppins", "serif"] as const;
 
@@ -36,7 +38,9 @@ export const APPEARANCE_FONT_IDS = ["skin", "system", "inter", "poppins", "serif
 // variant's light and dark skins (src/lib/skin-families.ts). `omb-skin`
 // always holds the skin worn now, so an older phone reads it unchanged.
 // `omb-skin-tint`: the colour or Windows edition laid over it, absent for the
-// family's own look; a phone that does not know it shows the base skin.
+// family's own look, or a custom colour, duo-tone or mood with its colours
+// (src/lib/custom-tint.ts, M-20261119-073); a phone that does not know it
+// shows the base skin.
 // `omb-skin-depth` ("full": the colour reaches every surface) and
 // `omb-skin-texture` (a texture over the ground) follow the same way.
 // `sagax.hdMascots.v1` ("on" | "off", absent is on; src/lib/hd-mascots-preference.ts):
@@ -57,7 +61,7 @@ function validValue(key: DesktopAppearanceKey, value: unknown): value is string 
   if (key === "omb-skin") return SKINS.has(value);
   if (key === "omb-font") return FONTS.has(value);
   if (key === "omb-skin-mode") return value === "auto";
-  if (key === "omb-skin-tint") return TINTS.has(value);
+  if (key === "omb-skin-tint") return TINTS.has(value) || parseCustomTint(value) !== null;
   if (key === "omb-skin-depth") return value === "full";
   if (key === "omb-skin-texture") return TEXTURES.has(value);
   if (key === "sagax.hdMascots.v1") return value === "on" || value === "off";

@@ -95,490 +95,490 @@
 }
 
 [data-skin="pulsatrix"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="blue"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="blue"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="blue"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="red"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="pink"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="blue"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="green"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="yellow"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="aurore"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="ocean"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #9d7df9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #9d7df9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #9d7df9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #7c3aed;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #7c3aed;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="neon"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #7c3aed;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #818181;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #7e7e7e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="foret"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #898989;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="cyberpunk"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #ff38d3;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="cyberpunk"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #ff38d3;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="cyberpunk"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #ff38d3;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #e17503;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #e17503;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #e17503;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #c2410c;
   --color-switch-off: #977b80;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #c2410c;
   --color-switch-off: #977b80;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="sunset"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #c2410c;
   --color-switch-off: #977b80;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #059ae2;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #059ae2;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #059ae2;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1f5f8b;
   --color-switch-off: #748592;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1f5f8b;
   --color-switch-off: #748592;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="nordic"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1f5f8b;
   --color-switch-off: #748592;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="candy"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #957d99;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="candy"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #957d99;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="candy"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #957d99;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
@@ -634,196 +634,196 @@
 }
 
 [data-skin="pulsatrix"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="blue"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="midnight"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f75f5f;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #f258a9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="blue"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #4193f9;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1ea750;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="foundry"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b18e04;
   --color-switch-off: #3a3a3a;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #94778d;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #8c7996;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #6a8787;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="pulsatrix-light"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #828275;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #927774;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #937582;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="blue"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #747f92;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #68856f;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="daylight"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #857d68;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="red"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #b91c1c;
   --color-switch-off: #968179;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="pink"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #be185d;
   --color-switch-off: #9a7e81;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="blue"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #1d4ed8;
   --color-switch-off: #88829d;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="green"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #15803d;
   --color-switch-off: #7a8c6e;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;
 }
 
 [data-skin="atelier"][data-skin-tint="yellow"][data-skin-depth="full"] {
-  --color-switch-on: #1362c7;
+  --color-switch-on: #a16207;
   --color-switch-off: #8f8571;
   --color-switch-on-edge: transparent;
   --color-switch-off-edge: transparent;

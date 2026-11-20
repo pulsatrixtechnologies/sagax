@@ -34,6 +34,16 @@ import {
   type SkinVariantGroup,
 } from "./skin-families";
 import en from "../locales/en.json";
+import { CUSTOM_KINDS } from "./custom-tint";
+
+// M-20261119-073: the custom colours (their tokens are derived at run time
+// from the person's colours, src/lib/custom-colours.ts) and the textures the
+// phone does not draw yet (an SVG noise, two crossing diagonals, a sheen) stay
+// on the desktop; the phone reads such a tint or texture as unknown and wears
+// the family's own look, as with any value it does not know.
+const PHONE_TEXTURES = SKIN_TEXTURES.filter((texture) => !["fine", "paper", "mesh", "frost"].includes(texture));
+const onPhone = (variant: { tint?: string }) => !variant.tint || !(CUSTOM_KINDS as readonly string[]).includes(variant.tint);
+const PHONE_FAMILIES = SKIN_FAMILIES.map((family) => ({ ...family, variants: family.variants.filter(onPhone) }));
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SWIFT = join(ROOT, "ios/Sources/CompanionCore/SkinVariantsData.swift");
@@ -104,7 +114,7 @@ const fullSelector = (skin: string, tint: string) => `${tintSelector(skin, tint)
 function looks(): Array<{ key: string; skin: string; tint: string; full: boolean }> {
   const out: Array<{ key: string; skin: string; tint: string; full: boolean }> = [];
   const seen = new Set<string>();
-  for (const family of SKIN_FAMILIES) {
+  for (const family of PHONE_FAMILIES) {
     for (const variant of family.variants) {
       if (!variant.tint) continue;
       for (const skin of [variant.light, variant.dark]) {
@@ -153,7 +163,7 @@ function splitTop(text: string): string[] {
 function textures(): Record<string, Layer[]> {
   const source = readFileSync(join(ROOT, "src/styles/skin-texture.css"), "utf8");
   const out: Record<string, Layer[]> = {};
-  for (const texture of SKIN_TEXTURES) {
+  for (const texture of PHONE_TEXTURES) {
     if (texture === "none") continue;
     const block = new RegExp(`\\[data-skin-texture="${texture}"\\][^{]*\\{([^}]*)\\}`).exec(source)?.[1];
     if (!block) throw new Error(`skin-texture.css has no ${texture} block`);
@@ -216,7 +226,7 @@ function swift(): string {
     "",
     "/// A light texture over the ground (`omb-skin-texture`).",
     "public enum SkinTexture: String, CaseIterable, Sendable {",
-    ...SKIN_TEXTURES.map((texture) => `    case ${texture}`),
+    ...PHONE_TEXTURES.map((texture) => `    case ${texture}`),
     "}",
     "",
     "/// One layer of a texture, in points (CSS px): a dot, a vertical or horizontal hairline, or a",
@@ -241,7 +251,7 @@ function swift(): string {
     "    /// SKIN_FAMILIES (src/lib/skin-families.ts).",
     "    static let families: [Family] = [",
   ];
-  for (const family of SKIN_FAMILIES) {
+  for (const family of PHONE_FAMILIES) {
     lines.push(`        Family(id: ${q(family.id)}, name: ${q(family.name)}, tagline: ${q(label(`settings.skin.family.${family.id}.tagline`))}, secret: ${family.secret ? "true" : "false"}, variants: [`);
     for (const variant of family.variants) {
       lines.push(`            Variant(id: ${q(variant.id)}, light: ${opt(variant.light)}, dark: ${opt(variant.dark)}, tint: ${variant.tint ? `.${variant.tint}` : "nil"}, group: .${variant.group}),`);
@@ -254,14 +264,14 @@ function swift(): string {
   lines.push("    ]", "");
 
   const names = (prefix: string, ids: readonly string[]) => ids.map((id) => `        ${q(id)}: ${q(label(`${prefix}.${id}`))},`);
-  const variantIds = [...new Set(SKIN_FAMILIES.flatMap((family) => family.variants.map((variant) => variant.id)))];
+  const variantIds = [...new Set(PHONE_FAMILIES.flatMap((family) => family.variants.map((variant) => variant.id)))];
   lines.push("    /// The picker's English labels (settings.skin.*); the app localizes them.");
   lines.push("    static let variantNames: [String: String] = [", ...names("settings.skin.variant", variantIds), "    ]");
   lines.push("    static let groupNames: [String: String] = [", ...names("settings.skin.group", GROUPS), "    ]");
   lines.push(`    static let depthLabel = ${q(label("settings.skin.depthLabel"))}`);
   lines.push("    static let depthNames: [String: String] = [", ...names("settings.skin.depth", SKIN_DEPTHS), "    ]");
   lines.push(`    static let textureLabel = ${q(label("settings.skin.textureLabel"))}`);
-  lines.push("    static let textureNames: [String: String] = [", ...names("settings.skin.texture", SKIN_TEXTURES), "    ]", "");
+  lines.push("    static let textureNames: [String: String] = [", ...names("settings.skin.texture", PHONE_TEXTURES), "    ]", "");
 
   lines.push("    /// Each base skin's swatch (--skin-swatch).");
   lines.push("    static let baseSwatches: [String: String] = [");
@@ -328,7 +338,7 @@ describe("the phone's copy of the skin variants", () => {
   it("covers every tint over every base skin its family offers", () => {
     const keys = looks().map((look) => look.key);
     // every colour variant has a Full block over each of its skins
-    for (const family of SKIN_FAMILIES) {
+    for (const family of PHONE_FAMILIES) {
       for (const variant of family.variants) {
         if (variant.group !== "color" || !variant.tint) continue;
         for (const skin of [variant.light, variant.dark]) if (skin) expect(keys).toContain(`${skin}+${variant.tint}+full`);
@@ -340,7 +350,7 @@ describe("the phone's copy of the skin variants", () => {
 
   it("reads every texture's layers", () => {
     const read = textures();
-    expect(Object.keys(read).sort()).toEqual(SKIN_TEXTURES.filter((t) => t !== "none").slice().sort());
+    expect(Object.keys(read).sort()).toEqual(PHONE_TEXTURES.filter((t) => t !== "none").slice().sort());
     for (const layers of Object.values(read)) {
       expect(layers.length).toBeGreaterThan(0);
       for (const layer of layers) {

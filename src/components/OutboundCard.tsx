@@ -329,7 +329,7 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
         {status === "pending" && (
           <div className="flex flex-wrap gap-2 pt-1">
             <button type="button" data-outbound-yes disabled={busy !== null || (card.kind === "call" && !confirmed)} onClick={() => void answer("yes")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-accent-ink disabled:opacity-40">
               {busy === "yes" && <Loader2 size={13} className="animate-spin" />}
               {card.kind === "call" ? t("outbound.call.allow") : t("outbound.purchase.allow")}
             </button>
@@ -553,7 +553,7 @@ function ConversationCallCard({ card, live, status, error, onError, transcriptOp
                 </button>
               )}
               <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-accent-ink disabled:opacity-40">
                 {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}
                 {t("outbound.call.endCall")}
               </button>

@@ -211,7 +211,7 @@ export function Setup({ playing, onCue, onEnded, label }: SceneProps) {
             <span
               className={cn(
                 "flex size-6 shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 ease-out",
-                !sent && typed > 0 ? "bg-accent text-white" : "bg-raised text-ink-secondary",
+                !sent && typed > 0 ? "bg-accent text-accent-ink" : "bg-raised text-ink-secondary",
                 pressed && "scale-90",
               )}
             >

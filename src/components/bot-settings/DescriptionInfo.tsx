@@ -112,7 +112,7 @@ export function DescriptionInfo({
               />
               <div className="mt-2 flex justify-end gap-1.5">
                 <button type="button" onClick={() => { setEditing(false); setDraft(value); }} className="rounded-md px-2 py-1 text-[12px] text-ink-secondary hover:bg-hover hover:text-ink">{t("common.cancel")}</button>
-                <button type="button" onClick={save} className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white hover:opacity-90">{t("common.save")}</button>
+                <button type="button" onClick={save} className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-ink hover:opacity-90">{t("common.save")}</button>
               </div>
             </>
           ) : (

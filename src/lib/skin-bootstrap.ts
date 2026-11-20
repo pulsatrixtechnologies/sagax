@@ -28,7 +28,8 @@ export function scriptSafeJson(value: unknown): string {
 }
 
 /** Inline script for index.html: sets document.documentElement.dataset.skin,
- * and dataset.skinTint when the stored tint is one the skin's family has.
+ * and dataset.skinTint when the stored tint is one the skin's family has (a
+ * custom tint, `custom-duo:...`, by its kind: custom-colours.ts lays its colours).
  * A legacy skin (skin-families.ts LEGACY_SKINS) is worn as its base and colour.
  * Under Auto (`omb-skin-mode` "auto", skin-families.ts) a skin with a light
  * and a dark sibling is swapped for the one the system's scheme asks for. */
@@ -43,5 +44,5 @@ export function skinBootstrapInlineScript(): string {
   const depthKey = scriptSafeJson(SKIN_DEPTH_KEY);
   const textureKey = scriptSafeJson(SKIN_TEXTURE_KEY);
   const textures = scriptSafeJson(SKIN_TEXTURES.filter((texture) => texture !== "none"));
-  return `(function(){var SKINS=${ids},PAIRS=${pairs},LEGACY=${legacy},TINTS=${tints},X=${textures},d=${fallback},s,m,t,p,x;try{s=localStorage.getItem("omb-skin");m=localStorage.getItem(${modeKey});t=localStorage.getItem(${tintKey});p=localStorage.getItem(${depthKey});x=localStorage.getItem(${textureKey})}catch(e){}if(LEGACY[s]){t=LEGACY[s][1];s=LEGACY[s][0]}s=SKINS.indexOf(s)>=0?s:d;if(m==="auto"&&PAIRS[s]){var k=false;try{k=matchMedia("(prefers-color-scheme: dark)").matches}catch(e){}s=PAIRS[s][k?1:0]}document.documentElement.dataset.skin=s;var r=document.documentElement.dataset;if(t&&TINTS[s]&&TINTS[s].indexOf(t)>=0)r.skinTint=t;if(p==="full")r.skinDepth=p;if(X.indexOf(x)>=0)r.skinTexture=x})();`;
+  return `(function(){var SKINS=${ids},PAIRS=${pairs},LEGACY=${legacy},TINTS=${tints},X=${textures},d=${fallback},s,m,t,p,x;try{s=localStorage.getItem("omb-skin");m=localStorage.getItem(${modeKey});t=localStorage.getItem(${tintKey});p=localStorage.getItem(${depthKey});x=localStorage.getItem(${textureKey})}catch(e){}if(LEGACY[s]){t=LEGACY[s][1];s=LEGACY[s][0]}s=SKINS.indexOf(s)>=0?s:d;if(m==="auto"&&PAIRS[s]){var k=false;try{k=matchMedia("(prefers-color-scheme: dark)").matches}catch(e){}s=PAIRS[s][k?1:0]}document.documentElement.dataset.skin=s;var r=document.documentElement.dataset,q=t?String(t).split(":")[0]:t;if(q&&TINTS[s]&&TINTS[s].indexOf(q)>=0)r.skinTint=q;if(p==="full")r.skinDepth=p;if(X.indexOf(x)>=0)r.skinTexture=x})();`;
 }

@@ -76,7 +76,7 @@ export function groupRoomIdentity({
         {busy && (
           showPlace ? (
             <span
-              className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full border border-app bg-accent text-white"
+              className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full border border-app bg-accent text-accent-ink"
               role="img"
               aria-label={t("place.chipAria", { place: t(placeLabelKey(effective)) })}
             >

@@ -61,14 +61,15 @@ describe("skin families", () => {
 
   it("gives Pulsatrix, Studio and Atelier their own look, each colour, the duo-tones and the moods (Owner, 2026-10-19)", () => {
     const ids = (family: string, group: string) => findFamily(family)!.variants.filter((v) => v.group === group).map((v) => v.id);
-    const richer = { duo: ["aurore", "ocean", "neon", "foret"], ambiance: ["cyberpunk", "sunset", "nordic", "candy"] };
+    // each row ends with its custom swatch, the person's own colours (M-20261119-073)
+    const richer = { duo: ["aurore", "ocean", "neon", "foret", "custom-duo"], ambiance: ["cyberpunk", "sunset", "nordic", "candy", "custom-mood"] };
     for (const family of ["studio", "atelier"]) {
-      expect(ids(family, "color")).toEqual(["basic", "red", "pink", "blue", "green", "yellow"]);
+      expect(ids(family, "color")).toEqual(["basic", "red", "pink", "blue", "green", "yellow", "custom"]);
       expect(ids(family, "duo")).toEqual(richer.duo);
       expect(ids(family, "ambiance")).toEqual(richer.ambiance);
     }
     // Pulsatrix's own colour is already blue
-    expect(ids("pulsatrix", "color")).toEqual(["basic", "red", "pink", "green", "yellow"]);
+    expect(ids("pulsatrix", "color")).toEqual(["basic", "red", "pink", "green", "yellow", "custom"]);
     for (const family of ["pulsatrix", "studio", "atelier"]) {
       for (const variant of findFamily(family)!.variants) {
         expect(variant.tint ?? null).toBe(variant.id === "basic" ? null : variant.id);
@@ -81,7 +82,8 @@ describe("skin families", () => {
 
   it("validates the intensity and the texture choices", () => {
     expect(SKIN_DEPTHS).toEqual(["accent", "full"]);
-    expect(SKIN_TEXTURES).toEqual(["none", "grain", "grid", "dots", "lines"]);
+    // fine grain, paper, mesh and frosted glass joined them (M-20261119-073)
+    expect(SKIN_TEXTURES).toEqual(["none", "grain", "fine", "paper", "grid", "mesh", "dots", "lines", "frost"]);
     expect(isSkinDepth("full")).toBe(true);
     expect(isSkinDepth("half")).toBe(false);
     expect(isSkinTexture("dots")).toBe(true);

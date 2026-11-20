@@ -21,6 +21,8 @@ export const USER_PREFERENCE_KEYS = [
   "omb-skin-depth",
   "omb-skin-texture",
   "omb-skin-variants",
+  // the last colours of each custom row (src/lib/custom-colours.ts, M-20261119-073)
+  "omb-skin-custom",
   // the open bot's colour as the accent (src/lib/bot-accent.ts)
   "sagax.botAccent.v1",
   // 1:1 assistant bubbles wear the open bot's colour (ios BotBubble.swift). "1" is on; absent is off.

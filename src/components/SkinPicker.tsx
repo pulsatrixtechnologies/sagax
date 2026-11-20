@@ -10,12 +10,22 @@
 // `[data-skin]` rather than `:root[data-skin]` — any element can open a skin
 // context for its own subtree, so the miniature styles itself and can never
 // drift from what picking it actually does.
-import { useEffect, useState } from "react";
+//
+// M-20261119-073: each row of swatches (Colour, Duo-tone, Mood) ends with a
+// custom swatch, the person's own colours in a ring of every hue; a click
+// wears them and opens their editor (CustomColourEditor.tsx) under it.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { applySkinDepth, applySkinTexture, chooseSkin, prefersDarkScheme, readSkin, readSkinDepth, readSkinTexture, readSkinTint, SKIN_IDS, type SkinId } from "@/lib/skins";
+import { customKindOf, parseCustomTint, type CustomKind, type CustomTint } from "@/lib/custom-tint";
+import { customTintFor, readRememberedCustom, rememberCustom } from "@/lib/custom-colours";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, enclosingWindowBounds, POPOVER_LAYER, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { CustomColourEditor } from "./CustomColourEditor";
 import {
   canFollowSystem,
   carryMode,
+  isCustomVariant,
   isSkinTint,
   defaultVariant,
   placeOfSkin,
@@ -33,7 +43,6 @@ import {
   type SkinDepth,
   type SkinModeChoice,
   type SkinTexture,
-  type SkinTintId,
   type SkinVariant,
   type SkinVariantGroup,
 } from "@/lib/skin-families";
@@ -48,7 +57,7 @@ import { CompactRow, PillSelect } from "./SettingsPrimitives";
  * accent on purpose — a skin is mostly judged by where its colour lands, and a
  * single dot was too small to judge.
  */
-function Miniature({ skin, tint, depth, selected }: { skin: SkinId; tint?: SkinTintId; depth?: SkinDepth; selected: boolean }) {
+function Miniature({ skin, tint, depth, selected }: { skin: SkinId; tint?: string; depth?: SkinDepth; selected: boolean }) {
   return (
     <div
       data-skin={skin}
@@ -105,19 +114,24 @@ const MODES: readonly SkinModeChoice[] = ["light", "dark", "auto"];
 const GROUPS: readonly SkinVariantGroup[] = ["color", "duo", "ambiance", "edition"];
 
 /** The skin and tint the document wears now (main.tsx stamped them before the first paint). */
-function wornSkin(): { skin: SkinId; tint: SkinTintId | null } {
+function wornSkin(): { skin: SkinId; tint: string | null } {
   // main.tsx writes these attributes from applySkin() before the first paint;
   // anything else (absent, edited by hand) falls back to the stored choice.
   const root = document.documentElement;
   const stamped = SKIN_IDS.find((id) => id === root.dataset.skin);
   if (!stamped) return { skin: readSkin(), tint: readSkinTint() };
   const tint = root.dataset.skinTint;
+  // a custom tint is stamped as its kind: its colours are the stored ones
+  if (tint?.startsWith("custom")) {
+    const stored = readSkinTint();
+    return { skin: stamped, tint: customKindOf(stored) === tint ? stored : null };
+  }
   return { skin: stamped, tint: isSkinTint(tint) ? tint : null };
 }
 
 /** The worn skin, its tint and the mode, re-read when anything changes the
  * skin (the picker, Auto following the system, Hibou 98, the phone). */
-function useSkinState(): { skin: SkinId; tint: SkinTintId | null; auto: boolean } {
+function useSkinState(): { skin: SkinId; tint: string | null; auto: boolean } {
   const [state, setState] = useState(() => ({ ...wornSkin(), auto: readSkinAuto() }));
   useEffect(() => {
     const root = document.documentElement;
@@ -126,6 +140,85 @@ function useSkinState(): { skin: SkinId; tint: SkinTintId | null; auto: boolean 
     return () => observer.disconnect();
   }, []);
   return state;
+}
+
+/** What a custom swatch shows: the colour, the gradient at its angle, or the
+ * mood's ground under its two accents (the person's own colours). */
+function customBackground(c: CustomTint): string {
+  if (c.kind === "custom") return c.color;
+  if (c.kind === "custom-duo") return `linear-gradient(${c.angle}deg, ${c.from}, ${c.to})`;
+  return `linear-gradient(135deg, ${c.ground} 0 50%, ${c.from} 50%, ${c.to})`;
+}
+
+/** The custom swatch of a row and its editor, anchored under it. */
+function CustomSwatch({ variant, selected, worn, onWear, preview }: {
+  variant: SkinVariant;
+  selected: boolean;
+  /** The tint worn now (a custom one carries its colours). */
+  worn: string | null;
+  onWear: (colours: string) => void;
+  preview: (tint: string) => ReactNode;
+}) {
+  const kind = variant.tint as CustomKind;
+  const tint = customTintFor(kind, worn, readRememberedCustom());
+  const parsed = parseCustomTint(tint) as CustomTint;
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = anchor.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popover);
+  usePopoverDismiss(open, dismissRoot, () => setOpen(false));
+  const name = variantName(variant);
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        aria-pressed={selected}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={name}
+        title={t("settings.skin.custom.pick")}
+        data-skin-variant={variant.id}
+        onClick={() => {
+          if (!selected) onWear(tint);
+          setOpen((value) => !value);
+        }}
+        className={cn(
+          "size-[22px] cursor-pointer rounded-full bg-transparent transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none",
+          selected ? "ring-2 ring-accent-border ring-offset-2 ring-offset-elevated" : "ring-1 ring-hairline hover:ring-ink-secondary/60",
+        )}
+      >
+        <span aria-hidden="true" className="custom-swatch-ring block size-full rounded-full p-[2px]">
+          <span className="block size-full rounded-full" style={{ background: customBackground(parsed) }} />
+        </span>
+      </button>
+      {open && (
+        <AnchoredPopover
+          anchorRef={anchor}
+          popoverRef={popover}
+          side="bottom"
+          align="end"
+          gap={8}
+          bounds={enclosingWindowBounds}
+          role="dialog"
+          aria-label={name}
+          data-custom-popover={kind}
+          className={cn(POPOVER_LAYER, "flex w-[min(340px,calc(100vw-24px))] flex-col gap-2 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-3 text-ink shadow-xl outline-none")}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setOpen(false);
+            anchor.current?.focus();
+          }}
+        >
+          <div className="text-[13px] font-medium leading-[18px] text-ink">{name}</div>
+          <CustomColourEditor tint={tint} onChange={(next) => onWear(next)} preview={preview(tint)} />
+        </AnchoredPopover>
+      )}
+    </>
+  );
 }
 
 export function SkinPicker({ modeFirst = false, customizeOpen, showFamilies = true }: {
@@ -152,9 +245,12 @@ export function SkinPicker({ modeFirst = false, customizeOpen, showFamilies = tr
   const hasDepth = place.variant.group === "color" && Boolean(place.variant.tint);
   const showCustomize = customizeOpen !== false;
 
-  const wear = (family: SkinFamily, variant: SkinVariant, next: SkinModeChoice) => {
+  const wear = (family: SkinFamily, variant: SkinVariant, next: SkinModeChoice, colours?: string) => {
     rememberVariant(family.id, variant.id);
-    chooseSkin(resolveSkin(variant, next, prefersDarkScheme()), next === "auto", variant.tint ?? null);
+    // a custom variant wears its colours: the ones given, else the ones worn or last chosen in that row
+    const tint = isCustomVariant(variant) ? (colours ?? customTintFor(variant.tint as CustomKind, activeTint, readRememberedCustom())) : (variant.tint ?? null);
+    if (tint && customKindOf(tint)) rememberCustom(tint);
+    chooseSkin(resolveSkin(variant, next, prefersDarkScheme()), next === "auto", tint);
     // the mode key changes without a skin change when Auto lands on the worn skin
     rerender((n) => n + 1);
   };
@@ -231,6 +327,27 @@ export function SkinPicker({ modeFirst = false, customizeOpen, showFamilies = tr
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               {variants.map((variant) => {
                 const selected = variant.id === place.variant.id;
+                if (isCustomVariant(variant)) {
+                  return (
+                    <CustomSwatch
+                      key={variant.id}
+                      variant={variant}
+                      selected={selected}
+                      worn={activeTint}
+                      onWear={(colours) => wear(place.family, variant, carryMode(variant, mode, place.scheme), colours)}
+                      preview={(tint) => (
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["light", "dark"] as const).map((scheme) => (
+                            <div key={scheme} className="flex flex-col gap-1" data-custom-preview={scheme}>
+                              <span className="text-[12px] leading-4 text-ink-secondary">{t(`settings.skin.mode.${scheme}`)}</span>
+                              <Miniature skin={variantSkin(variant, scheme)} tint={customKindOf(tint) ?? undefined} depth={variant.group === "color" ? depth : undefined} selected={false} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    />
+                  );
+                }
                 // the swatch shows the skin of the scheme worn now; only the worn variant can lack it
                 const swatchScheme = schemesOf(variant).includes(place.scheme) ? place.scheme : schemesOf(variant)[0];
                 return (

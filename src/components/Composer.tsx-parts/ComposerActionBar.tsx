@@ -168,7 +168,7 @@ export function ComposerActionBar({
       data-r98-send=""
       aria-label={sendLabelFor()}
       title={sendTitleFor()}
-      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-white hover:brightness-110"
+      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink hover:brightness-110"
     >
       {busy && !canSteer ? <Clock size={15} /> : <ArrowUp size={17} />}
       <span className="r98-send-label">{t("chat.send")}</span>

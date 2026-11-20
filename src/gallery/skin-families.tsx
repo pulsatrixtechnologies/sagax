@@ -4,11 +4,13 @@
  * document's skin (&skin=<id>, &auto=1 for Auto, &unlocked=1 for Hibou 98).
  * ?view=board: every family, every variant, each scheme it has: a sidebar,
  * a conversation and a settings card, drawn in that skin's own context.
- * &lang=<code> (fr by default). */
+ * &lang=<code> (fr by default). &sample=1 adds, under the picker, what the
+ * accent colours (M-20261119-073): a switch that is on, a label on the
+ * accent, a count, a link in the accent. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { SkinPicker } from "../components/SkinPicker";
-import { CompactRow, PillSelect, SettingsGroup } from "../components/SettingsPrimitives";
+import { CompactRow, PillSelect, SettingsGroup, Switch } from "../components/SettingsPrimitives";
 import { SKIN_FAMILIES, schemesOf, variantSkin, writeSkinAuto, type SkinScheme } from "../lib/skin-families";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -29,6 +31,14 @@ function SettingsView() {
         <SettingsGroup title={t("settings.skin.title")} groupId="skin">
           <SkinPicker />
         </SettingsGroup>
+        {params.get("sample") === "1" && (
+          <div data-gallery-sample="" className="flex items-center gap-4 rounded-2xl bg-card px-4 py-3">
+            <Switch checked aria-label="On" />
+            <button type="button" className="rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-accent-ink">{t("common.save")}</button>
+            <span className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-accent-ink">3</span>
+            <span className="text-[13px] text-accent-text underline">{t("settings.skin.title")}</span>
+          </div>
+        )}
       </div>
     </main>
   );

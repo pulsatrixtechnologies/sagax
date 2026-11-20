@@ -14,6 +14,16 @@ describe("desktop appearance keys", () => {
     for (const key of DESKTOP_APPEARANCE_KEYS) expect(USER_PREFERENCE_KEYS).toContain(key);
   });
 
+  // M-20261119-073: a custom colour, duo-tone or mood travels with its colours; a malformed one does not.
+  it("keeps a custom tint in its written form", () => {
+    expect(cleanDesktopAppearance({ "omb-skin": "midnight", "omb-skin-tint": "custom-duo:#f472b6,#22d3ee,90", "omb-skin-texture": "paper" })).toEqual({
+      "omb-skin": "midnight",
+      "omb-skin-tint": "custom-duo:#f472b6,#22d3ee,90",
+      "omb-skin-texture": "paper",
+    });
+    expect(cleanDesktopAppearance({ "omb-skin": "midnight", "omb-skin-tint": "custom-duo:#f472b6" })).toEqual({ "omb-skin": "midnight" });
+  });
+
   it("keeps valid values of the four keys only", () => {
     expect(cleanDesktopAppearance({
       "omb-skin": "lagoon", "omb-font": "serif", "omb.retro98.on": "1", "omb.retro98.unlocked": "1",

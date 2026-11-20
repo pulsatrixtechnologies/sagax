@@ -4,7 +4,8 @@
 // that keeps the two halves from drifting apart, and it means adding a skin is
 // one CSS block plus one line in SKINS.
 
-import { autoPairs, isSkinDepth, isSkinTexture, isSkinTint, LEGACY_SKINS, normalizeWorn, readSkinAuto, writeSkinAuto, type SkinDepth, type SkinTexture, type SkinTintId } from "./skin-families";
+import { autoPairs, isSkinDepth, isSkinTexture, isStoredTint, LEGACY_SKINS, normalizeWorn, readSkinAuto, writeSkinAuto, type SkinDepth, type SkinTexture } from "./skin-families";
+import { customKindOf } from "./custom-tint";
 import { SKIN_IDS, type SkinId } from "./skin-ids";
 
 export { SKIN_IDS, type SkinId };
@@ -89,15 +90,15 @@ export function resolveStoredSkin(stored: string | null | undefined, auto: boole
   return pair ? pair[prefersDark ? 1 : 0] : skin;
 }
 
-/** The stored tint, or null; a legacy skin still stored brings its mapped colour. */
-export function readSkinTint(): SkinTintId | null {
+/** The stored tint (a swatch's id, or a custom tint with its colours), or null; a legacy skin still stored brings its mapped colour. */
+export function readSkinTint(): string | null {
   try {
     const store = getStore();
     const stored = store?.getItem(KEY);
     const legacy = isSkinId(stored) ? LEGACY_SKINS[stored] : undefined;
     if (legacy) return legacy.tint;
     const tint = store?.getItem(SKIN_TINT_KEY);
-    return isSkinTint(tint) ? tint : null;
+    return isStoredTint(tint) ? tint : null;
   } catch {
     return null;
   }
@@ -156,7 +157,7 @@ export function readSkin(): SkinId {
  * Wear a skin chosen in the picker: the skin itself, and whether it follows
  * the system (Auto). A skin with no light and dark pair cannot follow it.
  */
-export function chooseSkin(id: SkinId, auto: boolean, tint: SkinTintId | null = null): void {
+export function chooseSkin(id: SkinId, auto: boolean, tint: string | null = null): void {
   writeSkinAuto(auto && Boolean(autoPairs()[id]), getStore());
   applySkin(id, tint);
 }
@@ -186,7 +187,7 @@ export function installSkinAutoFollow(): () => void {
  * paint (main.tsx) and again on every change from the picker — a stamped
  * attribute rather than a class so it can never collide with Tailwind.
  */
-export function applySkin(requested: SkinId, requestedTint?: SkinTintId | null): void {
+export function applySkin(requested: SkinId, requestedTint?: string | null): void {
   // `undefined` keeps the tint worn now when the skin's family has it (Auto
   // swapping light and dark, a gallery page re-applying the stored skin);
   // null clears it. A legacy skin is worn as its mapped base and colour.
@@ -201,9 +202,13 @@ export function applySkin(requested: SkinId, requestedTint?: SkinTintId | null):
     // every edition, not only the worn one: the picker's swatches read their colours
     void import("../styles/retro-editions.css").catch(() => undefined);
   }
+  // A custom tint (M-20261119-073): its whole look comes from the person's
+  // colours, in a sheet of its own (custom-colours.ts), stamped as its kind.
+  const kind = customKindOf(tint);
+  if (kind) void import("./custom-colours").then((m) => m.installCustomSheet(tint as string)).catch(() => undefined);
   const root = document.documentElement;
   root.dataset.skin = id;
-  if (tint) root.dataset.skinTint = tint;
+  if (tint) root.dataset.skinTint = kind ?? tint;
   else delete root.dataset.skinTint;
   try {
     getStore()?.setItem(KEY, id);

@@ -1119,7 +1119,7 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
 // Its runs stay out of the person's chat; problems that last three runs in a
 // row are told once, as one card whose count stays true in place, and that
 // same card says when it works again. Every run stays in the routine's list.
-it("a five-minute routine: ten runs leave one summary card in the chat, told at the third problem run and turned to works again in place", () => withFixture(async (f) => {
+it("a five-minute routine: ten runs leave one card in the chat, the investigation's after the third problem run, retired in place once it works again", () => withFixture(async (f) => {
   const owner = (await f.cli("new-bot", "--name", "Watcher")).bot;
   const { routine } = await f.api("/api/routines", {
     name: "Work watch", prompt: "Make sure the work goes on as instructed.", botId: owner.id, enabled: false,
@@ -1135,8 +1135,15 @@ it("a five-minute routine: ten runs leave one summary card in the chat, told at 
   ];
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
   const main = bots.find((bot) => bot.id === owner.id).threadId as string;
-  const cards = async () => (await f.messages(main)).filter((message) => message.kind === "routine.run");
-  const seen: any[][] = [];
+  const runCards = async () => (await f.messages(main)).filter((message) => message.kind === "routine.run");
+  // #4876 (#4873): after the third problem run in a row the routine's own bot
+  // investigates in a hidden task; what the person gets is one card keyed to
+  // the routine. Here the engine neither repairs nor asks, so the card is the
+  // fallback one: Retry the investigation, and Open the routine since this
+  // fixture switches the schedule off between runs (Pause the routine when on).
+  const problemCards = async () => (await f.messages(main))
+    .filter((message) => message.kind === "options" && message.card?.askKey === `routine-problem:${routine.id}`);
+  const seen: { runs: number; problems: any[] }[] = [];
   for (const [index, reply] of said.entries()) {
     f.plan[owner.id] = { reply };
     f.save();
@@ -1146,27 +1153,30 @@ it("a five-minute routine: ten runs leave one summary card in the chat, told at 
       { timeout: 60_000, interval: 250 }).toBe(index + 1);
     await f.api(`/api/routines/${routine.id}`, { enabled: false }, "PATCH");
     await settledBots(f, [owner.id]);
-    seen.push((await cards()).map((card) => card.routineRun));
+    // the third problem run in a row: the investigation runs and ends with its card
+    if (index === 4) await expect.poll(async () => (await problemCards()).length, { timeout: 90_000, interval: 250 }).toBe(1);
+    // the first good run: that same card is retired in place
+    if (index === 6) await expect.poll(async () => (await problemCards())[0]?.card?.options, { timeout: 60_000, interval: 250 }).toEqual([]);
+    seen.push({ runs: (await runCards()).length, problems: await problemCards() });
   }
   const runs = (await routineRuns(f, routine.id)).sort((a, b) => a.createdAt - b.createdAt);
   expect(runs).toHaveLength(10);
   expect(runs.every((run) => !run.startedBy && run.status === "completed")).toBe(true);
-  const thirdProblem = runs[4];
+  // an automatic run is never announced on its own: the investigation owns the streak
+  expect(seen.map((step) => step.runs)).toEqual(Array(10).fill(0));
   // nothing before the third run with problems in a row
-  expect(seen.slice(0, 4).map((rows) => rows.length)).toEqual([0, 0, 0, 0]);
-  // told once, at the third: the summary, how many runs, since when
-  expect(seen[4]).toHaveLength(1);
-  expect(seen[4]![0]).toMatchObject({ runId: thirdProblem.id, status: "completed", repeat: { count: 3, firstRunId: runs[2].id, streak: true } });
-  expect(seen[4]![0].brief).toContain("rerun it or drop the branches");
-  // the fourth: the same card counts, in place
-  expect(seen[5]).toHaveLength(1);
-  expect(seen[5]![0]).toMatchObject({ runId: thirdProblem.id, repeat: { count: 4 } });
-  // the first ok: that same card says it works again
-  expect(seen[6]).toHaveLength(1);
-  expect(seen[6]![0]).toMatchObject({ runId: thirdProblem.id, status: "completed", recovered: { afterRuns: 4 } });
-  expect(seen[6]![0].repeat).toBeUndefined();
+  expect(seen.slice(0, 4).map((step) => step.problems.length)).toEqual([0, 0, 0, 0]);
+  // told once, after the third: which routine, the recorded cause, what the person can do
+  const told = seen[4]!.problems[0]!;
+  expect(told.card).toMatchObject({ title: expect.stringContaining("Work watch"), options: ["Retry the investigation", "Open the routine"] });
+  expect(told.card.subtitle).toContain("the queue still holds the same two branches");
+  // the fourth: still that one card, nothing more
+  expect(seen[5]!.problems.map((message) => message.id)).toEqual([told.id]);
+  // the first ok: that same card says there is nothing left to do
+  expect(seen[6]!.problems.map((message) => message.id)).toEqual([told.id]);
+  expect(seen[6]!.problems[0]!.card).toMatchObject({ options: [], answerNote: expect.stringMatching(/the routine worked since this card was raised/) });
   // and nothing else, a later single problem included
-  expect(seen[9]).toEqual(seen[6]);
+  expect(seen[9]!.problems).toEqual(seen[6]!.problems);
   // every run stays in the routine's list with its report
   expect(runs[1].output).toBe("Two finished worktrees removed.");
   expect(runs.filter((run) => run.problems)).toHaveLength(5);

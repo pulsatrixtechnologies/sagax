@@ -24,8 +24,9 @@ import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule } from "./routine-report.ts";
 import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak, routineRunsSeveralTimesADay } from "../../shared/routine-repeat.ts";
 import { problemReason } from "../org/org-problem-log.ts";
-import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
+import { clipReadable, failureDetail, ROUTINE_STATUS_MARKER } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
+import { routineFailureText, routineStepFailure, routineStepProblem } from "./routine-step-failure.ts";
 import {
   evaluateRoutinePrecheck,
   isCodePrecheck,
@@ -352,6 +353,26 @@ export function routineNativeToolPrompt(tools: readonly string[]): string {
   return `use_tool refused ${names} because ${one ? "it is one of your own native tools" : "they are your own native tools"}, not an MCP integration tool. This turn continues the same routine run: call ${names} directly by ${one ? "its" : "their"} own name, never through use_tool, then finish the routine and report as usual. Do not redo steps that already succeeded.`;
 }
 
+/** #4877: the turn that continues a run whose turn ended without its final
+ * message (tool steps after its last words, or tools and no words at all).
+ * It finishes the run, or ends it saying what failed, why and what to do;
+ * a failure that trying again cannot change is said, never retried. */
+export function routineFinalMessagePrompt(failedSteps: number): string {
+  const said = failedSteps > 0
+    ? `This routine run ended without its final message: ${failedSteps} tool ${failedSteps === 1 ? "step" : "steps"} failed after your last words.`
+    : "This routine run ended without its final message: your last tool steps ended with nothing said after them.";
+  return [
+    `[Sagax note, not from the person] ${said} This turn continues the same run, in the same role.`,
+    "Read the latest tool results first and do not redo steps that already succeeded. Finish the work the routine needs, then write your final message as the report contract says.",
+    `A failure that trying again cannot change (a tool you do not have, a permission the account was refused, a saved result handle that expired) is not retried as is: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <what failed, why, what to do> (or partial when the rest was done).`,
+    "Never answer a question or an approval for the person, and never pick a choice they did not make.",
+  ].join(" ");
+}
+
+/** #4877: a run whose turn ended without its final message twice (the
+ * second time after being asked for it): what failed, why, what to do. */
+export const ROUTINE_FINAL_MESSAGE_LOST = "The run ended without its final message, even after one more turn asked for it, so nothing it did was reported. Open the run's log to see its last steps, then use Run now; if it ends the same way again, the routine's instructions or its tools need a fix.";
+
 /** Tries of the continuation's start while the run's turn is still settling. */
 const NATIVE_TOOL_CONTINUE_TRIES = 10;
 const NATIVE_TOOL_CONTINUE_RETRY_MS = 1_000;
@@ -380,6 +401,9 @@ interface RunTrouble {
   /** #3009: tool steps that failed after the bot's last words: those words
    * were a progress line, not the run's final message. */
   failedAfterText?: number;
+  /** #4877: tool steps ended after the bot's last words (or with no words
+   * at all), failed or not: nothing was said after them. */
+  toolsAfterText?: boolean;
   /** Tool steps started and not yet ended, by item id. */
   open?: Set<string>;
   /** Tool steps already running when the bot last spoke: their failure
@@ -4746,6 +4770,7 @@ export class RoutineManager {
         trouble.open?.delete(event.itemId);
         trouble.openAtText?.delete(event.itemId);
       }
+      if (!startedBeforeText) trouble.toolsAfterText = true;
       if (!trouble.flowBlocked) {
         const blocked = flowRunBlockedReason(output);
         if (blocked) trouble.flowBlocked = blocked;
@@ -4807,6 +4832,7 @@ export class RoutineManager {
       const trouble = this.runTrouble.get(run.id);
       if (trouble && run.output) {
         delete trouble.failedAfterText;
+        delete trouble.toolsAfterText;
         trouble.openAtText = new Set(trouble.open);
       }
     } else if (event.type === "runtime.error") {
@@ -5078,8 +5104,43 @@ export class RoutineManager {
     run.nativeToolContinued = true;
     // The continuation's words are the run's final message.
     delete trouble.failedAfterText;
-    const threadId = run.threadId;
-    const prompt = routineNativeToolPrompt(tools);
+    delete trouble.toolsAfterText;
+    this.continueInThread(run, routineNativeToolPrompt(tools));
+    return true;
+  }
+
+  /** #4877: a run whose turn ended without its final message (tool steps
+   * that failed after its last words, or tool steps and no words at all)
+   * goes on once in its own thread, under the same role, to finish or to
+   * say what failed, why and what to do. A second ending without a final
+   * message fails the run (settleCompleted). Not after the loop guard, a
+   * Flow refusal or a run that declared its failure: those already say why. */
+  private continueWithoutFinalMessage(run: RoutineRun): boolean {
+    // one more turn per run: a run the native-tool continuation already took on is not continued again
+    if (run.target === "room-goal" || run.finalMessageContinued || run.nativeToolContinued || !run.threadId) return false;
+    const trouble = this.runTrouble.get(run.id);
+    if (!trouble || trouble.loopStop || trouble.flowBlocked) return false;
+    if (routineReportOutcome(run.output).declared?.status === "failed") return false;
+    const failedAfter = trouble.failedAfterText ?? 0;
+    if (failedAfter === 0 && !trouble.toolsAfterText) return false;
+    // a card the run raised is its word to the person (ask_choice, wait false)
+    if (run.startedAt !== undefined && this.options.cardRaisedSince?.(run.threadId, this.claimWindowStart(run as RoutineRun & { startedAt: number }))) return false;
+    run.finalMessageContinued = true;
+    // The continuation's words are the run's final message (the ended turn's
+    // last words were a progress line); a step it left open is not waited for.
+    delete trouble.failedAfterText;
+    delete trouble.toolsAfterText;
+    trouble.open?.clear();
+    run.output = undefined;
+    this.finalWords.delete(run.id);
+    this.continueInThread(run, routineFinalMessagePrompt(failedAfter));
+    return true;
+  }
+
+  /** One more turn of a running run in its own thread (its role, its
+   * engine, its trigger), started once the turn that ended has settled. */
+  private continueInThread(run: RoutineRun, prompt: string): void {
+    const threadId = run.threadId!;
     const attempt = (left: number) => {
       const current = this.runs.find((candidate) => candidate.id === run.id);
       if (!current || current.status !== "running" || current.threadId !== threadId) return;
@@ -5097,17 +5158,21 @@ export class RoutineManager {
     };
     // After the event that ended the turn is folded everywhere.
     setTimeout(() => attempt(NATIVE_TOOL_CONTINUE_TRIES), 0).unref?.();
-    return true;
   }
 
   private settleCompleted(run: RoutineRun): boolean {
     if (this.continueNativeToolMisroute(run)) return false;
+    if (this.continueWithoutFinalMessage(run)) return false;
     // #3009: the loop guard cut the run, or tool steps failed after the
     // bot's last words (a progress line) with nothing said after them: there
     // is no final message, and run.output never shows a mid-run line.
     const cut = this.runTrouble.get(run.id);
-    const noFinalMessage = Boolean(cut?.loopStop || (cut?.failedAfterText ?? 0) > 0);
-   
+    // #4877: the turn that went on for its final message (continueWithoutFinalMessage)
+    // ended without one too: the run lost its final message and fails, saying so.
+    const lostFinalMessage = Boolean(run.finalMessageContinued && !cut?.loopStop
+      && ((cut?.failedAfterText ?? 0) > 0 || !run.output?.trim()));
+    const noFinalMessage = Boolean(cut?.loopStop || (cut?.failedAfterText ?? 0) > 0 || lostFinalMessage);
+
     if (noFinalMessage) run.output = undefined;
     // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for
     // real and holds the run; the person's answer starts its next turn.
@@ -5222,10 +5287,13 @@ export class RoutineManager {
         continue;
       }
       // #4839: a run with notes lists every step that did not work
+      // (#4877: a lasting one with why and what to do)
       if (withNotes) {
-        notes.push(failure.count < 2
+        const known = routineStepFailure(failure.output, title);
+        const line = failure.count < 2
           ? `${humanizeToolIds(title)} failed${failure.output ? `: ${failure.output}` : ""}`
-          : `${humanizeToolIds(title)} failed ${failure.count} times${failure.output ? `: ${failure.output}` : ""}`);
+          : `${humanizeToolIds(title)} failed ${failure.count} times${failure.output ? `: ${failure.output}` : ""}`;
+        notes.push(known ? `${line.replace(/[.\s]+$/, "")}. Next: ${known.next}` : line);
         continue;
       }
       // Kept failing: one miss the bot moved past (a search with no match)
@@ -5233,16 +5301,18 @@ export class RoutineManager {
       // each command its own title. A single real failure is the bot's to
       // declare (RUN_STATUS, the report contract).
       // #3009: with no final message, nobody reported it: every failure counts.
-      if (failure.count < 2 && !noFinalMessage) continue;
+      // #4877: a lasting failure (a tool the bot does not have, a refused
+      // permission, an expired result) counts from the first time: trying
+      // again could not have fixed it, so it is surfaced, never left silent.
+      if (failure.count < 2 && !noFinalMessage && !routineStepFailure(failure.output, title)) continue;
       // #3990: a bot that ended with the nothing-to-report line found the
       // item gone (a mail already moved out of the inbox, read twice with a
       // 404): that is the run's outcome, never a problem. A refusal (403) or
       // any other failure stays one, whatever the bot says (#4030).
       if (outcome.nothingToDo && !noFinalMessage && routineItemGone(failure.output)) continue;
-      // the tool in words, as its card names it (shared/tool-display-name.ts)
-      problems.push(failure.count < 2
-        ? `${humanizeToolIds(title)} failed${failure.output ? `: ${failure.output}` : ""}`
-        : `${humanizeToolIds(title)} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
+      // the tool in words, as its card names it (shared/tool-display-name.ts);
+      // #4877: what failed, why and what to do, in one shape
+      problems.push(routineStepProblem(humanizeToolIds(title), failure.output, failure.count));
     }
     if (noFinalMessage && (trouble?.failedSteps ?? 0) > 0) {
       const steps = trouble!.failedSteps!;
@@ -5256,6 +5326,13 @@ export class RoutineManager {
     // #3990: a run its bot ended with NOTHING_TO_REPORT said it is done,
     // with nothing for the person: its last words announce nothing undone
     if (!outcome.quiet && routineEndsOnAnnouncement(run.output)) problems.push(routineAnnouncementProblem(run.output!));
+    if (lostFinalMessage) {
+      const steps = problems.filter((line) => !/\btool steps? failed and the run ended without a final message\b/.test(line));
+      delete run.quiet;
+      this.failRun(run, readableRoutineProblems(redactSecretsInText([ROUTINE_FINAL_MESSAGE_LOST, ...steps].join("\n"))));
+      queueMicrotask(() => this.tickInBackground());
+      return true;
+    }
     run.status = "completed";
     run.finishedAt = this.now();
     run.error = undefined;
@@ -5370,7 +5447,7 @@ export class RoutineManager {
         const detail = recovery.alert && (recovery.alert.detail === recovery.error ? `${routineName}: ${recovery.error}`
           : `${routineName}: "${recovery.error}" ${recovery.alert.detail}`);
         this.blockRun(run, recovery.error, detail ? { detail } : null);
-      } else this.failRun(run, recovery.error, recovery.alert);
+      } else this.failRun(run, routineFailureText(recovery.error), recovery.alert);
     }
     queueMicrotask(() => this.tickInBackground());
   }

@@ -314,6 +314,16 @@ reply text is never a substitute for a card.
   watch, banner, sound) except an approval or a question, which follows
   Reach me as usual. The turn still runs as the person, with their rights
   and sign-ins; the handle and `thread_id` point at that conversation.
+- **One run state on every path** (#4879): a person reaches a bot from the
+  app and from each AI client (a coding client through the Perspicax bridge,
+  another assistant), and every path reads the same state. The member list
+  (`GET bots`) counts the person's AI client conversations in `status`
+  (the app's own dots leave them out, #291), and `get_agent` and that list
+  name the paths where a turn works or waits now: `live_via` / `liveVia`,
+  "Sagax chat" for the person's own conversations, then each AI client by
+  its `client_name`. Memory is the bot's one MEMORY.md and handles are bound
+  to the person, never the client (#1896): a fix made through one path is
+  there for the other.
 - **Isolation**: a bot reaches only its peers. That means the same team and
   scope, the per-pair allow-list, and never a hidden bot. A person reaches
   what `GET /api/bots` shows them, and nothing else exists for them (404

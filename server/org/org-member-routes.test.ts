@@ -230,6 +230,50 @@ describe("bots", () => {
   });
 });
 
+// #4879: one client read a bot as idle while another client's turn ran in
+// its own conversation with the bot (hidden from the app's dots, #291).
+describe("bots: one run state over every path (#4879)", () => {
+  const threadStatus = deps.threadStatus;
+  afterEach(() => {
+    deps.threadStatus = threadStatus;
+    deps.agentConversationsOf = undefined;
+    deps.agentConversationClient = undefined;
+  });
+
+  it("counts the person's AI client conversations and names the paths live now", async () => {
+    respond = (request) => request.path === "/api/bots"
+      ? { status: 200, body: { bots: [
+        { id: "b1", name: "Orion", busy: false, activity: "idle", threadId: "t1" },
+        { id: "b2", name: "Beacon", busy: false, activity: "waiting-on-you", threadId: "t2" },
+        { id: "b3", name: "Atlas", busy: false, activity: "idle", threadId: "t3" },
+      ] } }
+      : { status: 200, body: { entries: [] } };
+    const conversations: Record<string, string[]> = { b1: ["c-cursor", "c-grok"], b2: ["c-cursor-2"], b3: ["c-grok-3"] };
+    const states: Record<string, ThreadStatus> = { "c-cursor": "working", "c-grok": "idle", "c-cursor-2": "working", "c-grok-3": "waiting" };
+    const clients: Record<string, string> = { "c-cursor": "Cursor", "c-grok": "Grok", "c-cursor-2": "Cursor", "c-grok-3": "Grok" };
+    deps.agentConversationsOf = (botId, principalId) => (principalId === "pr_bob" ? conversations[botId] ?? [] : []);
+    deps.threadStatus = (threadId) => states[threadId] ?? "idle";
+    deps.agentConversationClient = (threadId) => clients[threadId] ?? null;
+    const got = await call("GET", "bots", token("bob"));
+    expect(got.status).toBe(200);
+    expect(got.body.bots).toEqual([
+      expect.objectContaining({ id: "b3", status: "waiting", liveVia: ["Grok"] }),
+      expect.objectContaining({ id: "b2", status: "waiting", liveVia: ["Sagax chat", "Cursor"] }),
+      expect.objectContaining({ id: "b1", status: "working", liveVia: ["Cursor"] }),
+    ]);
+  });
+
+  it("an idle bot has no live path", async () => {
+    respond = (request) => request.path === "/api/bots"
+      ? { status: 200, body: { bots: [{ id: "b1", name: "Orion", busy: false, activity: "idle", threadId: "t1" }] } }
+      : { status: 200, body: { entries: [] } };
+    deps.agentConversationsOf = () => ["c-cursor"];
+    deps.threadStatus = () => "idle";
+    const got = await call("GET", "bots", token("bob"));
+    expect(got.body.bots).toEqual([expect.objectContaining({ id: "b1", status: "idle", liveVia: [] })]);
+  });
+});
+
 describe("sending", () => {
   const page = (...messages: Array<Record<string, unknown>>) => ({ status: 200, body: { messages } });
 

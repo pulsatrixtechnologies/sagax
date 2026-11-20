@@ -80,7 +80,7 @@ import { staleSessionReason } from "./auth/stale-session.ts";
 import { isSmallTalk, SMALL_TALK_TURN_NOTE } from "./small-talk.ts";
 import { recallTopicPage, streamCandidate, type SegmentDigest } from "./streams/single-stream.ts";
 import { conversationThreadId, isStreamSegment } from "../shared/single-stream.ts";
-import { agentConversationNotifies, isAgentConversation } from "../shared/agent-conversation.ts";
+import { AGENT_CALLER_FALLBACK, agentConversationNotifies, isAgentConversation } from "../shared/agent-conversation.ts";
 import { alwaysDenyOffered } from "../shared/approval-rule-card.ts";
 import { isOpaqueId, quotedIdOr } from "../shared/human-id.ts";
 import { createRecallTopicInternalRoutes } from "./routes/recall-topic-internal.ts";
@@ -1394,7 +1394,7 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { createOrgMemberRoutes, MEMBER_NEW_THREAD_SEND_TTL_MS, ORG_MEMBER_ASSERTION_ACTORS, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
+import { createOrgMemberRoutes, MEMBER_NEW_THREAD_SEND_TTL_MS, ORG_MEMBER_ASSERTION_ACTORS, OWN_CHAT_PATH, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
@@ -34828,7 +34828,9 @@ const agentApi = createAgentApi({
       // page persona, and its speech with the caller's own voice preference
       persona: botPersona(bot),
       ...(caller.kind === "person" ? {
-        speech: botSpeech(voiceModeDeps.preference?.({ principalId: caller.id.trim().toLowerCase() }), bot.id, bot.voiceLanguage, { voiceSpeed: bot.voiceSpeed, persona: bot.soul })
+        speech: botSpeech(voiceModeDeps.preference?.({ principalId: caller.id.trim().toLowerCase() }), bot.id, bot.voiceLanguage, { voiceSpeed: bot.voiceSpeed, persona: bot.soul }),
+        // #4879: which of the person's paths to this bot is live now
+        live_via: botLiveVia(bot, caller.id),
       } : {}),
     };
   },
@@ -35416,6 +35418,23 @@ function agentConversationsOf(target: BotRecord, principalId: string): string[] 
   const person = principalId.trim().toLowerCase();
   return store.tasks(target.id).filter((task) => isAgentConversation(task) && task.ownerPrincipalId === person && task.confidential !== true).map((task) => task.threadId);
 }
+/** #4879: the paths a person reaches a bot by where a turn works or waits
+ * now: their own conversations in Sagax (as the app shows them), then each
+ * AI client's conversation with it, by the client's name. Every client
+ * reads the same answer (get_agent `live_via`, the member list's `liveVia`). */
+function botLiveVia(bot: BotRecord, principalId: string): string[] {
+  const person = principalId.trim().toLowerCase();
+  const via: string[] = [];
+  const own = viewerBotActivity(bot, person);
+  if (own.busy || own.activity === "waiting-on-you") via.push(OWN_CHAT_PATH);
+  for (const threadId of agentConversationsOf(bot, person)) {
+    const task = store.taskByThread(bot.id, threadId);
+    if (!task || !(threadBusy(bot.id, threadId) || task.activity === "waiting-on-you")) continue;
+    const client = task.openedBy?.name?.trim() || AGENT_CALLER_FALLBACK;
+    if (!via.includes(client)) via.push(client);
+  }
+  return via;
+}
 /** The same for a bot caller: the conversation of the person its work is for. */
 function agentUnifiedThreadForBot(caller: AgentCaller, target: BotRecord): string | undefined {
   const from = agentApiCallerBot(caller);
@@ -35533,6 +35552,12 @@ const orgMember = createOrgMemberRoutes({
   agentConversationsOf: (botId, principalId) => {
     const bot = store.bot(botId);
     return bot ? agentConversationsOf(bot, principalId) : [];
+  },
+  // #4879: the AI client of an outside agent's conversation, for the paths a bot is live on
+  agentConversationClient: (threadId) => {
+    const bot = store.botByThread(threadId);
+    const task = bot ? store.taskByThread(bot.id, threadId) : undefined;
+    return task && isAgentConversation(task) ? task.openedBy?.name ?? null : null;
   },
   markAiClientLine,
   // lot S1: the person's surface bot and their hidden conversations

@@ -357,6 +357,10 @@ export interface AgentProfile {
   } | null;
   /** The agent's sheet, when the server can name one. */
   profile_url: string | null;
+  /** #4879, a person caller: the paths they reach this agent by where a
+   * turn works or waits now ("Sagax chat", then each AI client by name).
+   * Every client reads the same run state; empty when the agent is idle. */
+  live_via?: string[];
   /** Default model/engine (#1944); always when the agent is reachable. */
   model?: AgentModelSummary | null;
   /** #4236: the agent's name, role and short description, as the console's
@@ -1504,6 +1508,7 @@ function createAgentApiHandlers(env: {
         agent: {
           ...wireSummary(agent), title: profile.title, ...(model ? { model } : {}),
           ...(profile.persona ? { persona: profile.persona } : {}), ...(profile.speech ? { speech: profile.speech } : {}),
+          ...(profile.live_via ? { live_via: profile.live_via } : {}),
         },
         owner: profile.owner,
         profile: profile.profile,

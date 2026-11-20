@@ -83,7 +83,12 @@ export interface LiveCallDeps {
    * undefined for the owner on this computer, whose lines carry no sender. */
   personKey?(auth: RequestAuth): string | undefined;
   activity(botId: string, threadId: string): LiveActivity;
-  broadcast(frame: { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }): void;
+  /** #5147: the people a call's state reaches, as principal ids: the person
+   * on the call and the person whose bot it is. Nobody else hears of it: not
+   * its frames, not GET /api/live/call, not the busy refusal's details. */
+  audience(input: { auth: RequestAuth; botId: string }): readonly string[];
+  /** `audience`: the call's people (above); the stream drops the frame for anyone else. */
+  broadcast(frame: { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null; audience: readonly string[] }): void;
   settings(): { key: string; voice: string; readTypedReplies: boolean; idleMinutes: number };
   createSession(input: { key: string; sdp: string; botId: string; threadId: string; voice: string }): Promise<{ sessionId: string; sdp: string }>;
   openSocket(url: string, key: string): LiveSocket;
@@ -99,10 +104,21 @@ export interface LiveCallDeps {
 
 export class LiveCallBusyError extends Error {
   readonly call: LiveCallState;
-  constructor(call: LiveCallState) {
+  /** #5147: the running call's people; only they are told which call it is (liveCallHeardBy). */
+  readonly audience: readonly string[];
+  constructor(call: LiveCallState, audience: readonly string[] = []) {
     super("A Live call is already running.");
     this.call = call;
+    this.audience = audience;
   }
+}
+
+/** #5147: whether `person` (a principal id) is one of a call's people, the
+ * person on the call or the person whose bot it is. A call's state reaches
+ * them and nobody else: an admin is not told of another person's call. */
+export function liveCallHeardBy(audience: unknown, person: string | undefined): boolean {
+  const key = person?.trim().toLowerCase();
+  return Boolean(key) && Array.isArray(audience) && audience.some((id) => typeof id === "string" && id.trim().toLowerCase() === key);
 }
 
 /** The person who started the call signed out, or their session was
@@ -131,6 +147,8 @@ interface Call {
   device: string | null;
   /** the sender id the caller's own typed lines carry (undefined: the owner) */
   personKey: string | undefined;
+  /** #5147: the people its state reaches (LiveCallDeps.audience), lowercase */
+  audience: readonly string[];
   botName: string;
   key: string;
   sessionId: string;
@@ -199,13 +217,18 @@ export class LiveCallController {
     this.deps = deps;
   }
 
-  current(): LiveCallState | null {
-    return this.call && this.call.state.status !== "ended" ? { ...this.call.state } : null;
+  /** The running call. With `person`, only when it is one of the call's
+   * people (#5147): anyone else reads no call. */
+  current(person?: string): LiveCallState | null {
+    const call = this.call;
+    if (!call || call.state.status === "ended") return null;
+    if (person !== undefined && !liveCallHeardBy(call.audience, person)) return null;
+    return { ...call.state };
   }
 
   /** `device`: the paired phone the companion vouched for, when the request came through it. */
   async start(input: { auth: RequestAuth; device?: string; botId: string; botName: string; threadId: string; client: LiveClient; sdp: string }): Promise<{ call: LiveCallState; sdp: string }> {
-    if (this.call && this.call.state.status !== "ended") throw new LiveCallBusyError({ ...this.call.state });
+    if (this.call && this.call.state.status !== "ended") throw new LiveCallBusyError({ ...this.call.state }, this.call.audience);
     if (input.device && this.revokedDevices.has(input.device)) throw new LiveCallSignedOutError();
     const settings = this.deps.settings();
     const key = settings.key.trim();
@@ -292,6 +315,7 @@ export class LiveCallController {
       auth: input.auth,
       device: input.device ?? null,
       personKey: this.deps.personKey?.(input.auth),
+      audience: [...new Set(this.deps.audience({ auth: input.auth, botId: input.botId }).map((id) => id.trim().toLowerCase()).filter(Boolean))],
       botName: input.botName,
       key,
       sessionId: "",
@@ -927,7 +951,7 @@ export class LiveCallController {
 
   private emit(call: Call): void {
     try {
-      this.deps.broadcast({ kind: "live.call", botId: call.state.botId, threadId: call.state.threadId, call: { ...call.state } });
+      this.deps.broadcast({ kind: "live.call", botId: call.state.botId, threadId: call.state.threadId, call: { ...call.state }, audience: call.audience });
     } catch {
       this.recordError(call, "broadcast");
     }

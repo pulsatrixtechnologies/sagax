@@ -17,7 +17,7 @@ import { closeMessageDb } from "./messages/message-db.ts";
 import { createSideJobs, helperSelection, type SideJobBot, type SideJobInstance, type SideJobsDeps } from "./side-jobs.ts";
 import { ensureWorkspace, workspaceDir, WORKSPACES_DIR } from "./workspace/workspace.ts";
 
-type Booked = { row: Parameters<SideJobsDeps["book"]>[0]; tokensReported: boolean; notificationThreadId: string };
+type Booked = { row: Parameters<SideJobsDeps["book"]>[0]; tokensReported: boolean };
 type Call = { prompt: string; options?: TextGenerationOptions };
 
 /** An engine with a one-off text call (Claude, an API model), reporting
@@ -61,7 +61,7 @@ function backgroundEngine(instanceId: string, driverKind: string) {
   return { instance, calls };
 }
 
-const bot = (id: string, instanceId: string): SideJobBot => ({ id, name: `Bot ${id}`, threadId: `main-${id}`, modelSelection: { instanceId } });
+const bot = (id: string, instanceId: string): SideJobBot => ({ id, name: `Bot ${id}`, modelSelection: { instanceId } });
 
 function setup(options: { helper?: { instanceId: string; model?: string } | null; modelAllowed?: SideJobsDeps["modelAllowed"]; signIn?: SideJobsDeps["signIn"] } = {}) {
   const claude = textEngine("claude", "claudeAgent");
@@ -94,7 +94,7 @@ function setup(options: { helper?: { instanceId: string; model?: string } | null
     assertWithinBudget: () => {
       if (state.overBudget) throw new Error("this workspace has reached its monthly spend limit");
     },
-    book: (row, tokensReported, notificationThreadId) => state.booked.push({ row, tokensReported, notificationThreadId }),
+    book: (row, tokensReported) => state.booked.push({ row, tokensReported }),
     log: (line) => state.logs.push(line),
   });
   return { jobs, state, claude, openrouter, acp, codex };
@@ -278,8 +278,6 @@ describe("what a helper call is booked as", () => {
       expect.stringMatching(/^skill-review-[0-9a-f-]{36}$/),
     ]);
     expect(new Set(state.booked.map((entry) => entry.row.threadId)).size).toBe(3);
-    // a spend alert lands in the bot's main conversation, as for its own background calls
-    expect(state.booked.map((entry) => entry.notificationThreadId)).toEqual(["main-pi", "main-codex", "main-muse"]);
     expect(state.booked.every((entry) => entry.tokensReported)).toBe(true);
   });
 

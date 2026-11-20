@@ -11,6 +11,7 @@ import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
 import { notifyHeldFor } from "../notify.ts";
 import { dataFrameAllowed } from "../data/scope.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
+import { liveCallHeardBy } from "../voice/live-call-controller.ts";
 export type Host = Record<string, any>;
 
 export function createSseFrameFor(getHost: () => Host): any {
@@ -63,6 +64,9 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   if ((payload?.kind === "nudge" || payload?.kind === "nudge.sent") && !host.nudgeFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
   // a person's voice frames and listening sessions (#4100) reach that person's own streams only
   if (payload && !voiceOpenerFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
+  // #5147: a Live call's state reaches the person on the call and the person
+  // whose bot it is, before the admin short-circuit: never another admin
+  if (payload?.kind === "live.call" && !liveCallHeardBy(payload.audience, client.approvalUserId)) return null;
   if (payload?.kind === "presence.changed" && !host.presenceFrameAllowed(payload, client)) return null;
   if (payload?.kind === "cloud.agent" && typeof payload.botId === "string") {
     const bot = host.store.bot(payload.botId);

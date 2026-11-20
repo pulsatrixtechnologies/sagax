@@ -7,10 +7,15 @@
 //         nothing about the member's bot (no notify frame on the admin's
 //         stream, no notify line the phones would follow). The admins read
 //         the refusal in the console's activity log, not in the app.
+//   NI-2  another person's Live call (#5147): its state reaches the person on
+//         the call, whose bot it is, and nobody else. Another admin's stream
+//         carries no `live.call` frame, their GET /api/live/call reads no
+//         call, and their own start is refused without the other call's
+//         details; a member's stream carries nothing either.
 //
 // A silence is only worth something beside the noise: the admin's own bot,
-// created after the refusal, reaches the admin's stream, so the stream was
-// live when the refusal would have been announced.
+// created after the refusal (or the call), reaches the admin's stream, so
+// the stream was live when the frame would have been sent.
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -21,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
+import { startFakeOpenAiLive, type FakeOpenAiLive } from "./testing/fake-openai-live.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -29,12 +35,16 @@ const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key";
 const ADMIN: FakeOidcUser = { sub: "01J9PTADMIN000000000000AD", email: "admin@example.test", name: "Ada", preferred_username: "ada", role: "admin" };
 const MEMBER: FakeOidcUser = { sub: "01J9PTMEMBER00000000000MB", email: "member@example.test", name: "Max", preferred_username: "max", role: "employee" };
+const OTHER_ADMIN: FakeOidcUser = { sub: "01J9PTADMIN000000000000BE", email: "bea@example.test", name: "Bea", preferred_username: "bea", role: "admin" };
+const LIVE_KEY = "sk-fake-live-e2e";
+const SDP = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
 
 let BASE = "";
 let child: ChildProcess;
 let home: string;
 let log = "";
 let idp: FakeOidcProvider;
+let live: FakeOpenAiLive;
 
 type Auth = { cookie?: string };
 const api = async (method: string, path: string, auth?: Auth, body?: unknown): Promise<{ status: number; body: any; text: string }> => {
@@ -102,7 +112,8 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
   beforeAll(async () => {
     chmodSync(FAKE_CLAUDE, 0o755);
     idp = await startFakeOidcProvider({ user: ADMIN });
-    idp.directoryPeople = [ADMIN, MEMBER].map((user) => idp.personOf(user));
+    idp.directoryPeople = [ADMIN, MEMBER, OTHER_ADMIN].map((user) => idp.personOf(user));
+    live = await startFakeOpenAiLive();
     const port = await freePortBlock([0, 1]);
     BASE = `http://127.0.0.1:${port}`;
     home = mkdtempSync(join(tmpdir(), "omb-org-notify-isolation-"));
@@ -129,6 +140,10 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
         SAGAX_ANTHROPIC_API_KEY: ORG_KEY,
         SAGAX_ORG_NAME: "Acme",
         SAGAX_MISUSE_GUARDRAILS: "enforce",
+        // NI-2: Live calls on, against the fake GPT-Live
+        SAGAX_LIVE_CALLS: "1",
+        SAGAX_OPENAI_LIVE_URL: live.url,
+        SAGAX_OPENAI_API_KEY: LIVE_KEY,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -145,6 +160,7 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     child?.kill("SIGTERM");
     if (child) await waitForExit(child);
     await idp?.close();
+    await live?.stop();
     if (home) removeTempDir(home);
   });
 
@@ -172,5 +188,49 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     // the phones follow the same frames (one [notify] line per frame on its way out)
     expect(log).not.toMatch(new RegExp(`\\[notify\\][^\\n]*bot=${memberBot}`));
     adminStream.close();
+  }, 60_000);
+
+  it("NI-2: another person's Live call reaches that person only", async () => {
+    const bea = await signIn(OTHER_ADMIN);
+    const member = await signIn(MEMBER);
+    const created = await api("POST", "/api/bots", bea, { name: "Line helper" });
+    expect(created.status, created.text).toBe(201);
+    const beaBot = created.body.bot.id as string;
+    const adminStream = await openStream(admin);
+    const beaStream = await openStream(bea);
+    const memberStream = await openStream(member);
+
+    // Bea calls her own bot: her stream follows the call
+    const started = await api("POST", "/api/live/session", bea, { botId: beaBot, sdp: SDP, client: "desktop" });
+    expect(started.status, started.text).toBe(201);
+    const callId = started.body.call.callId as string;
+    await waitFor(async () => frames(beaStream).some((frame) => frame.kind === "live.call" && frame.call?.callId === callId));
+    expect((await api("GET", "/api/live/call", bea)).body.call).toMatchObject({ callId, botId: beaBot });
+
+    // ordering barrier: the admin's own bot reaches the admin's stream
+    const own = await api("POST", "/api/bots", admin, { name: "Desk helper two" });
+    expect(own.status, own.text).toBe(201);
+    const adminBot = own.body.bot.id as string;
+    await waitFor(async () => frames(adminStream).some((frame) => frame.kind === "bot" && frame.bot?.id === adminBot));
+    await sleep(300);
+
+    // another admin hears nothing of it: no frame, no running call, a bare refusal
+    expect(frames(adminStream).filter((frame) => frame.kind === "live.call")).toEqual([]);
+    expect(frames(memberStream).filter((frame) => frame.kind === "live.call")).toEqual([]);
+    expect((await api("GET", "/api/live/call", admin)).body).toEqual({ call: null });
+    const refused = await api("POST", "/api/live/session", admin, { botId: adminBot, sdp: SDP, client: "desktop" });
+    expect(refused.status, refused.text).toBe(409);
+    expect(refused.body.activeCall).toBeUndefined();
+    expect(refused.text).not.toContain(beaBot);
+
+    // Bea hangs up: the end reaches her stream, and still nobody else's
+    expect((await api("POST", "/api/live/call/end", bea, { callId })).status).toBe(200);
+    await waitFor(async () => frames(beaStream).some((frame) => frame.kind === "live.call" && frame.call?.callId === callId && frame.call?.status === "ended"));
+    await sleep(300);
+    expect(frames(adminStream).filter((frame) => frame.kind === "live.call")).toEqual([]);
+    expect(frames(memberStream).filter((frame) => frame.kind === "live.call")).toEqual([]);
+    adminStream.close();
+    beaStream.close();
+    memberStream.close();
   }, 60_000);
 });

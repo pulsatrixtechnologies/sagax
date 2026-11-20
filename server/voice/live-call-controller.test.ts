@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LiveCallState } from "../../shared/wire.ts";
 import {
   ATTACH_TIMEOUT_MS, CLOSE_TIMEOUT_MS, CONSENT_SETTLE_MS, DELEGATION_SETTLE_MS, IDLE_CHECK_MS, PROGRESS_INTERVAL_MS,
-  LiveCallBusyError, LiveCallController, LiveCallSignedOutError, type LiveActivity, type LiveCallDeps, type LiveSocket,
+  LiveCallBusyError, LiveCallController, LiveCallSignedOutError, liveCallHeardBy, type LiveActivity, type LiveCallDeps, type LiveSocket,
 } from "./live-call-controller.ts";
 import { LIVE_COPY } from "../../shared/live-approval.ts";
 import { LiveSessionError } from "./live-call.ts";
@@ -47,6 +47,7 @@ function setup(overrides: Partial<LiveCallDeps> = {}) {
     respond: vi.fn(async () => ({ ok: true as const })),
     queued: vi.fn((_botId: string, _threadId: string, queueId: string) => queue.has(queueId)),
     activity: () => activity,
+    audience: () => ["P-Owner"],
     broadcast: (frame) => frames.push(frame.call),
     settings: () => settings,
     createSession: vi.fn(async () => ({ sessionId: "sess_1", sdp: "answer-sdp" })),
@@ -85,6 +86,34 @@ describe("LiveCallController lifecycle", () => {
     t.socket().open();
     expect(t.controller.current()?.status).toBe("live");
     expect(t.frames.map((f) => f?.status)).toEqual(["connecting", "live"]);
+  });
+
+  it("keeps a call's state to its people: the person on the call and the bot's owner (#5147)", async () => {
+    const sent: Array<{ audience: readonly string[] }> = [];
+    const audience = vi.fn(() => [" P-Caller ", "p-owner", "p-caller", ""]);
+    const t = setup({ audience, broadcast: (frame) => { sent.push(frame); } });
+    await t.start();
+    expect(audience).toHaveBeenCalledWith({ auth: owner, botId: "bot1" });
+    // every frame names them, once each, as principal ids compare
+    expect(sent.length).toBeGreaterThan(0);
+    for (const frame of sent) expect(frame.audience).toEqual(["p-caller", "p-owner"]);
+    expect(t.controller.current("P-OWNER")?.status).toBe("live");
+    expect(t.controller.current("p-caller")?.status).toBe("live");
+    // anyone else reads no call, and is refused without being told whose
+    expect(t.controller.current("p-other")).toBeNull();
+    expect(t.controller.current("")).toBeNull();
+    const busy = await t.controller.start({ auth: owner, ...BOT, client: "ios", sdp: "b" }).catch((error: unknown) => error);
+    expect(busy).toBeInstanceOf(LiveCallBusyError);
+    expect((busy as LiveCallBusyError).audience).toEqual(["p-caller", "p-owner"]);
+  });
+
+  it("hears a person only when the audience names them", () => {
+    expect(liveCallHeardBy(["p-ann"], "P-Ann ")).toBe(true);
+    expect(liveCallHeardBy(["p-ann"], "p-ben")).toBe(false);
+    expect(liveCallHeardBy(["p-ann"], undefined)).toBe(false);
+    expect(liveCallHeardBy(["p-ann"], "")).toBe(false);
+    expect(liveCallHeardBy(undefined, "p-ann")).toBe(false);
+    expect(liveCallHeardBy([], "p-ann")).toBe(false);
   });
 
   it("refuses a second call while one is active, before creating a session", async () => {

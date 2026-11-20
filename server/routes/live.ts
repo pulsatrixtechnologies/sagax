@@ -7,11 +7,15 @@
 // phone; a phone can never send it (companion/src/routes.ts COMPANION_NOTICES).
 // A start without a key is refused with 409 `needsKey`, for every client:
 // the phones' starts come through here too. No plan is ever asked for.
+// #5147: a call's state answers its people only (the person on the call and
+// the person whose bot it is): another person reads no running call, and a
+// start refused because a call runs does not name that call.
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import type { LiveSettings } from "../../shared/wire.ts";
 import { LiveSessionError, MAX_SDP_BYTES } from "../voice/live-call.ts";
-import { LiveCallBusyError, type LiveCallController } from "../voice/live-call-controller.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { LiveCallBusyError, liveCallHeardBy, type LiveCallController } from "../voice/live-call-controller.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
 
 export interface LiveRouteDeps {
@@ -21,6 +25,8 @@ export interface LiveRouteDeps {
   /** The bot and chat a call goes to; no threadId means the bot's current chat. Null when either is unknown. */
   resolveTarget(botId: string, threadId: string | undefined): { botId: string; botName: string; threadId: string } | null;
   settings(): LiveSettings;
+  /** #5147: the person behind a request, as a call's audience names them (a principal id). */
+  person(auth: RequestAuth): string;
   saveSettings(patch: { voice?: string; readTypedReplies?: boolean; idleMinutes?: number }): Promise<LiveSettings>;
 }
 
@@ -82,7 +88,8 @@ export function createLiveRoutes(deps: LiveRouteDeps): RouteHandler {
         const { call, sdp } = await deps.calls.start({ auth, ...(device ? { device } : {}), ...target, client: parsed.data.client, sdp: parsed.data.sdp });
         return json(res, 201, { call, transport: { type: "webrtc", sdp } });
       } catch (error) {
-        if (error instanceof LiveCallBusyError) return json(res, 409, { error: error.message, activeCall: error.call });
+        // #5147: the running call is named to its own people only
+        if (error instanceof LiveCallBusyError) return json(res, 409, { error: error.message, ...(liveCallHeardBy(error.audience, deps.person(auth)) ? { activeCall: error.call } : {}) });
         if (error instanceof LiveSessionError) {
           // The one 409 a session refuses with is a missing key.
           return json(res, error.status, error.status === 409 ? { error: error.message, needsKey: true } : { error: error.message });
@@ -98,7 +105,7 @@ export function createLiveRoutes(deps: LiveRouteDeps): RouteHandler {
       return call ? json(res, 200, { call }) : json(res, 404, { error: "That call is not running." });
     }
 
-    if (method === "GET" && path === "/api/live/call") return json(res, 200, { call: deps.calls.current() });
+    if (method === "GET" && path === "/api/live/call") return json(res, 200, { call: deps.calls.current(deps.person(auth)) });
 
     // The companion unpaired a phone: end the call that phone holds, if any.
     if (method === "POST" && path === "/api/live/device-revoked") {

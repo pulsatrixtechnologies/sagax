@@ -62,6 +62,8 @@ function deps(overrides: Partial<LiveRouteDeps> = {}): LiveRouteDeps & { saved: 
     },
     resolveTarget: (botId, threadId) => (botId === "bot1" && (threadId ?? "t1") === "t1" ? { botId, botName: "Ada", threadId: threadId ?? "t1" } : null),
     settings: () => ({ enabled: true, configured: true, voice: "marin", readTypedReplies: true, idleMinutes: 5 }),
+    // the loopback caller of serve() above
+    person: () => "p-local",
     saveSettings: vi.fn(async (patch: SettingsPatch): Promise<LiveSettings> => {
       saved.push(patch);
       return { enabled: true, configured: true, voice: "marin", readTypedReplies: true, idleMinutes: 5, ...patch };
@@ -131,10 +133,21 @@ describe("live routes", () => {
     const noKey = deps({ calls: { ...deps().calls, start: vi.fn(async () => { throw new LiveSessionError("Add an OpenAI API key to use Live calls.", 409); }) } });
     expect(await request(noKey, "POST", "/api/live/session", { botId: "bot1", sdp: "v=0", client: "ios" })).toMatchObject({ status: 409, body: { needsKey: true } });
     const active = { callId: "c0", botId: "bot2", threadId: "t2", client: "android", voice: "marin", startedAt: 1, status: "live" } as const;
-    const busy = deps({ calls: { ...deps().calls, start: vi.fn(async () => { throw new LiveCallBusyError(active); }) } });
+    const busy = deps({ calls: { ...deps().calls, start: vi.fn(async () => { throw new LiveCallBusyError(active, ["p-local"]); }) } });
     const refused = await request(busy, "POST", "/api/live/session", { botId: "bot1", sdp: "v=0", client: "ios" });
     expect(refused).toMatchObject({ status: 409, body: { activeCall: active } });
     expect(refused.body).not.toHaveProperty("needsKey");
+  });
+  it("names a running call only to its own people (#5147)", async () => {
+    const active = { callId: "c0", botId: "bot2", threadId: "t2", client: "android", voice: "marin", startedAt: 1, status: "live" } as const;
+    // another person's call: refused, and nothing says which call or which bot
+    const busy = deps({ calls: { ...deps().calls, start: vi.fn(async () => { throw new LiveCallBusyError(active, ["p-other"]); }) } });
+    expect(await request(busy, "POST", "/api/live/session", { botId: "bot1", sdp: "v=0", client: "ios" }))
+      .toEqual({ status: 409, body: { error: "A Live call is already running." } });
+    // the running call is asked for as the caller: the controller answers its own people only
+    const current = vi.fn((person?: string) => (person === "p-other" ? { ...active } : null));
+    expect(await request(deps({ calls: { ...deps().calls, current } }), "GET", "/api/live/call")).toEqual({ status: 200, body: { call: null } });
+    expect(current).toHaveBeenCalledWith("p-local");
   });
   it("passes OpenAI's refusals through with their status and message", async () => {
     const refusal = deps({ calls: { ...deps().calls, start: vi.fn(async () => { throw new LiveSessionError("OpenAI rejected the API key. Check the key for Live calls.", 502); }) } });

@@ -18466,7 +18466,7 @@ function botTextEngine(botId: string, purpose: string): { generateText: (prompt:
         ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
         costUsd: usage.costUsd ?? null,
         trigger: { kind: "bot", botId: bot.id },
-      }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
+      }, usage.input !== undefined && usage.output !== undefined) });
     },
   };
 }
@@ -35860,7 +35860,13 @@ const liveCalls = new LiveCallController({
     if (!task?.busy) return "idle";
     return task.activity === "waiting-on-you" ? "waiting" : "working";
   },
-  broadcast: (frame) => broadcast(frame, { adminOnly: true }),
+  // #5147: a call's state reaches the person on the call and the person whose
+  // bot it is (sseFrameFor drops the frame for anyone else), never every admin
+  audience: ({ auth, botId }) => {
+    const bot = store.bot(botId);
+    return [approvalCallerUserId(auth), bot ? effectiveBotOwner(bot) : ""];
+  },
+  broadcast: (frame) => broadcast(frame),
   settings: () => ({ key: liveCallKey(cfg), ...liveSettingsFor(cfg) }),
   createSession: ({ key, sdp, botId, threadId, voice }) => {
     // Defense in depth: no OpenAI session while Live calls are off (the routes already 404).
@@ -35914,6 +35920,8 @@ ROUTES.push(createLiveRoutes({
     return { botId: bot.id, botName: bot.name, threadId: target };
   },
   settings: () => liveSettingsFor(cfg),
+  // #5147: matched against a call's audience, as a stream's approvalUserId is
+  person: (auth) => approvalCallerUserId(auth),
   // Non-secret settings only, written the way PUT /api/config writes a
   // section: saveConfig merges into `live`, so the key stays where it is.
   saveSettings: async (patch) => {

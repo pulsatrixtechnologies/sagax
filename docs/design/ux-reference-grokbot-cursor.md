@@ -1983,6 +1983,18 @@ Rules that hold at every width:
 - Composer: one capsule on the column's edges; the model chip shows while
   the capsule is at least 560px wide (35rem) and folds into the + menu's
   Model row below that.
+- Mode menu (owner, 2026-11-19, #5088, back after #4936): the chip reads the
+  mode's name ("Expert ⌄") and opens the model panel's short view as the modes:
+  Auto (its Optimize under it while on), Fast, Expert, Heavy, Manual, the panel's
+  36px rows with a glyph in a 16px slot and the check in the right icon slot. A
+  hovered or keyboard focused row opens a small tooltip beside the menu, level
+  with the row: what the mode does, then the model behind it in secondary ink
+  ("Quick responses · Grok 4.7"); a click's own focus stays quiet. Manual names
+  the pinned model at its right and opens every model: favorites first, then each
+  provider and each account with its state, one list with a search past eight
+  rows. See `docs/model-modes.md`. Tests: `src/components/ModeMenu.dom.test.ts`,
+  `src/components/ModelPanel.modes.test.ts`; captures:
+  `scripts/capture/mode-menu.mjs`.
 - Message bar (#4152, measured 2026-11-13 in the owner's configuration;
   neither flag changes these values): one line is 44px tall with a 0.5px
   hairline; the field's type is the reference's body step, 14px on a 20px

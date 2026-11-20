@@ -55,6 +55,14 @@ export interface ModelMenuRow {
   pinAccount?: true;
 }
 
+/** #5088: one account of a provider in the Manual list (the composer's mode
+ * menu): its name and, when it cannot run a turn, its state ("Signed out"). */
+export interface ModelMenuAccount {
+  instanceId: string;
+  label: string;
+  state?: string;
+}
+
 export interface ModelMenuSection {
   key: string;
   /** The heading (a provider, Favorites); none for the top rows. */
@@ -62,6 +70,10 @@ export interface ModelMenuSection {
   /** A muted note beside the heading (the provider's state). */
   note?: string;
   rows: ModelMenuRow[];
+  /** #5088: the provider's accounts, the one in use first, every one the
+   * person has (a signed-out one included), while the provider has two or
+   * more or one of them cannot run. The Manual list groups the rows by them. */
+  accounts?: ModelMenuAccount[];
 }
 
 /** Lower case, accents dropped: "élevé" matches "eleve". */
@@ -81,6 +93,66 @@ export function filterModelSections(sections: readonly ModelMenuSection[], query
       return words.every((word) => haystack.includes(word));
     });
     return rows.length > 0 ? [{ ...section, rows }] : [];
+  });
+}
+
+/** #5088: one account's models in the Manual list, under its provider. */
+export interface ManualGroup {
+  /** Absent while the provider has a single account that runs. */
+  account?: ModelMenuAccount;
+  rows: ModelMenuRow[];
+}
+
+export interface ManualProvider {
+  section: ModelMenuSection;
+  groups: ManualGroup[];
+}
+
+/** #5088 (owner, M-20261119-077, D-20261119-083): the Manual list is every
+ * model grouped by provider, then by the account it runs on, with each
+ * account's state. A model several accounts offer is listed under each; the
+ * row of an account the menu does not lead with forces that account
+ * (`pinAccount`, as the Account line does). An account with no model it can
+ * run now (signed out) keeps its heading and its state. A search keeps the
+ * rows that match, the provider's and the account's names included, and
+ * drops what is left empty. */
+export function manualProviders(providers: readonly ModelMenuSection[], query = ""): ManualProvider[] {
+  const words = foldSearch(query).split(/\s+/).filter(Boolean);
+  const matches = (section: ModelMenuSection, account: ModelMenuAccount | undefined, row: ModelMenuRow) => words.length === 0
+    || filterModelSections([{ key: section.key, label: [section.label, account?.label].filter(Boolean).join(" "), rows: [row] }], query).length > 0;
+  return providers.flatMap((section): ManualProvider[] => {
+    const accounts = section.accounts;
+    let groups: ManualGroup[];
+    if (!accounts?.length) {
+      groups = [{ rows: section.rows }];
+    } else {
+      const placed = new Set<string>();
+      // the heading names the account: the row does not say it again, nor
+      // "Special access" (a model only one account offers is listed under it alone)
+      const underHeading = (row: ModelMenuRow): ModelMenuRow => {
+        const { account: _account, accountRows: _accountRows, badge: _badge, ...rest } = row;
+        return rest;
+      };
+      groups = accounts.map((account) => ({
+        account,
+        rows: section.rows.flatMap((row) => {
+          if (row.instanceId === account.instanceId) {
+            placed.add(row.key);
+            return [underHeading(row)];
+          }
+          const other = row.alternatives?.find((candidate) => candidate.instanceId === account.instanceId);
+          if (!other) return [];
+          placed.add(row.key);
+          return [{ ...underHeading(other), pinAccount: true as const }];
+        }),
+      }));
+      // a row on an engine no account names keeps its place, after the accounts
+      const rest = section.rows.filter((row) => !placed.has(row.key));
+      if (rest.length) groups.push({ rows: rest });
+    }
+    const kept = groups.map((group) => ({ ...group, rows: group.rows.filter((row) => matches(section, group.account, row)) }))
+      .filter((group) => group.rows.length > 0 || (words.length === 0 && group.account?.state !== undefined));
+    return kept.length ? [{ section, groups: kept }] : [];
   });
 }
 

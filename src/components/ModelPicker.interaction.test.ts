@@ -158,7 +158,7 @@ function bot(instanceId: string, model: string): Bot {
 }
 
 type RenderOptions = { contained?: boolean; threadId?: string; label?: string; inComposer?: boolean; windowOnly?: boolean; onWindowClose?: () => void;
-  headless?: boolean; menuControl?: { current: ComposerModelMenuControl | null } };
+  headless?: boolean; menuControl?: { current: ComposerModelMenuControl | null }; modes?: boolean };
 
 /** Render the picker once; the picker's own state survives, children start fresh. */
 function render(forBot: Bot, options?: RenderOptions) {
@@ -176,6 +176,8 @@ function render(forBot: Bot, options?: RenderOptions) {
       onWindowClose: options?.onWindowClose,
       headless: options?.headless,
       menuControl: options?.menuControl,
+      // #4900: these tests read the model panel; the mode menu has its own (ModelPicker.modes.test.ts)
+      modes: options?.modes ?? false,
     });
     fixture.own = fixture.index;
     return tree;
@@ -956,5 +958,82 @@ describe("the fast model's switches", () => {
     expect(row(opened, "ds::ready")).toBeDefined();
     expect(row(opened, "ds::off-by-me")).toBeUndefined();
     expect(row(opened, "ds::off-by-org")).toBeUndefined();
+  });
+});
+
+describe("the composer's mode menu (#4900, #5088)", () => {
+  const composerModes = { inComposer: true, modes: true };
+  // the mode rows are the model panel's short view (ModelPanel `modes`); Manual is its list
+  const modeMenu = async (rendered: ReturnType<typeof render>) => {
+    const panel = lists(rendered)[0] as unknown as ReactElement<import("./ModelPanel").ModelPanelProps> | undefined;
+    return panel?.props.modes ? { props: panel.props.modes, panel: panel.props } : undefined;
+  };
+  const onAuto = (mode?: "fast" | "expert" | "heavy") => ({
+    ...bot("claude", "claude-opus-5-5"),
+    modelSelection: { instanceId: "claude", model: "claude-opus-5-5", auto: true as const, ...(mode ? { mode } : {}) },
+  });
+
+  it("opens the modes in the model panel; Manual is its list, and nothing of the menu is dropped", async () => {
+    fixture.instances = [signedIn(), codex];
+    const opened = open(onAuto(), composerModes);
+    expect(lists(opened)).toHaveLength(1);
+    expect(opened.html).toContain("data-model-menu");
+    const menu = (await modeMenu(opened))!;
+    expect(menu.props.current).toBe("auto");
+    // the stars, the reasoning, the footer and its count of models off stay on the same panel
+    expect(menu.panel.favorites).toBeDefined();
+    expect(menu.panel.manage?.onManage).toBeTypeOf("function");
+    expect(menu.panel.sections.some((section) => section.rows.some((candidate) => candidate.modelId === "claude-opus-5-5"))).toBe(true);
+  });
+
+  it("the chip names the mode, never a model", () => {
+    fixture.instances = [signedIn(), codex];
+    expect(render(onAuto("expert"), composerModes).html).toMatch(/<span class="truncate">Expert<\/span>/);
+    expect(render(onAuto(), composerModes).html).toMatch(/<span class="truncate">Auto<\/span>/);
+    // a pinned model keeps its own name
+    expect(render(bot("claude", "claude-opus-5-5"), composerModes).html).toMatch(/<span class="truncate">[^<]*Opus 5\.5[^<]*<\/span>/);
+  });
+
+  it("a pick writes the mode for the bot and every thread, like a model pick", async () => {
+    fixture.instances = [signedIn(), codex];
+    const menu = (await modeMenu(open(onAuto(), composerModes)))!;
+    menu.props.onPick("heavy");
+    expect(fixture.dispatch).toHaveBeenLastCalledWith({
+      type: "setModel", botId: "atlas", threadId: "thread-atlas", updateBotDefault: true,
+      selection: { instanceId: "claude", model: "claude-opus-5-5", auto: true, mode: "heavy" },
+    });
+  });
+
+  it("picking Auto from a mode clears the mode and picking the mode in use does nothing", async () => {
+    fixture.instances = [signedIn(), codex];
+    const menu = (await modeMenu(open(onAuto("fast"), composerModes)))!;
+    menu.props.onPick("fast");
+    expect(fixture.dispatch).not.toHaveBeenCalled();
+    menu.props.onPick("auto");
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({
+      selection: { instanceId: "claude", model: "claude-opus-5-5", auto: true, autoOptimize: "balance" },
+    }));
+  });
+
+  it("a pinned model is Manual, the checked row, which names it", async () => {
+    fixture.instances = [signedIn(), codex];
+    const menu = (await modeMenu(open(bot("claude", "claude-opus-5-5"), composerModes)))!;
+    expect(menu.props.current).toBeNull();
+    expect(menu.props.manualLabel).toMatch(/Opus 5\.5/);
+  });
+
+  it("hands the menu what each mode runs for this person, from the server's preview", async () => {
+    fixture.instances = [signedIn(), codex];
+    const resolution = { mode: "expert" as const, pick: { instanceId: "claude", model: "claude-opus-5-5", engineLabel: "Claude", modelLabel: "Claude Opus 5.5" } };
+    fixture.autoStatus = { auto: true, pick: null, chain: [], excluded: [], backups: [], modes: { auto: { mode: "auto", pick: null }, fast: { mode: "fast", pick: null }, expert: resolution, heavy: { mode: "heavy", pick: null } } };
+    const menu = (await modeMenu(open(onAuto("expert"), composerModes)))!;
+    expect(menu.props.resolutions?.expert.pick?.modelLabel).toBe("Claude Opus 5.5");
+  });
+
+  it("keeps the model list wherever the menu is not the chat bar's", () => {
+    fixture.instances = [signedIn(), codex];
+    expect(lists(open(onAuto(), { inComposer: true, modes: false }))).toHaveLength(1);
+    fixture.values = [];
+    expect(lists(open(onAuto(), { contained: true }))).toHaveLength(1);
   });
 });

@@ -3,6 +3,7 @@
 // next turn is src/lib/auto-model-preview.ts.
 import { t } from "@/lib/i18n";
 import type { AutoModelRecord, AutoPayerVia, AutoTaskClass } from "../../shared/auto-model";
+import { modeChipLabel, modeName, type ForcedModelMode } from "@/lib/model-mode";
 
 /** The class of a worker's task, as the person reads it. */
 export function autoTaskClassLabel(taskClass: AutoTaskClass | undefined): string {
@@ -20,8 +21,13 @@ function payerPhrase(via: AutoPayerVia | undefined): string {
 }
 
 /** "Auto · Claude Opus 5.5": the chip's label. */
-export function autoChipLabel(record: Pick<AutoModelRecord, "modelLabel"> | null | undefined): string {
-  return record ? t("model.auto.chip", { model: record.modelLabel }) : t("model.auto.label");
+export function autoChipLabel(record: Pick<AutoModelRecord, "modelLabel" | "mode"> | null | undefined, selection?: { mode?: ForcedModelMode }): string {
+  // #4900: "Expert · Claude Opus 5.5" when the person chose a mode, "Expert" until
+  // a pick of that mode exists (a pick from before the choice is not its model)
+  const mode = selection ? selection.mode : record?.mode;
+  if (mode) return modeChipLabel(mode, record?.mode === mode ? record.modelLabel : undefined);
+  if (!record || (selection && record.mode)) return t("model.auto.label");
+  return t("model.auto.chip", { model: record.modelLabel });
 }
 
 /** "Auto: worker Codex · GPT-5.5 Codex (coding)". */
@@ -33,6 +39,7 @@ export function autoWorkerLine(record: AutoModelRecord): string {
 export function autoReasonSentence(record: AutoModelRecord): string {
   if (record.role === "worker") return autoWorkerLine(record);
   const params = { model: record.modelLabel, engine: record.engineLabel, payer: payerPhrase(record.via), from: record.fromEngineLabel ?? "" };
+  if (record.reason === "mode" && record.mode) return t("model.mode.why", { mode: modeName(record.mode), model: record.modelLabel, engine: record.engineLabel });
   // The person's own turn, when its words moved it off the strongest tier
   // (2026-10-29): say what in the message decided it.
   if (record.reason !== "base" && record.reason !== "fast") {

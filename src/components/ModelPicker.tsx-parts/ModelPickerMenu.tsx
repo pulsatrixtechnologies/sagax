@@ -3,7 +3,7 @@ import { type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
-import { ModelPanel } from "../ModelPanel";
+import { ModelPanel, type ModelPanelProps } from "../ModelPanel";
 import { cn } from "@/lib/cn";
 import { COMPOSER_POPOVER_RISE_CLASS, MENU_BOX } from "../menu-look";
 import { t } from "@/lib/i18n";
@@ -74,6 +74,7 @@ export function ModelPickerMenu({
   engineMark,
   runsWith,
   contextSize,
+  modeMenu,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -119,6 +120,9 @@ export function ModelPickerMenu({
   /** #4417: "Context size" for the bot (src/components/ContextSize.tsx),
    * computed by the picker. */
   contextSize?: readonly ContextSizeChoice[];
+  /** #4900, #5088: the chat bar's mode menu (Auto, Fast, Expert, Heavy, Manual),
+   * the model panel's short view; Manual is its list of every model. */
+  modeMenu?: ModelPanelProps["modes"];
 }) {
   const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
@@ -185,6 +189,7 @@ export function ModelPickerMenu({
         manage={{ onManage, turnedOff, openActiveModels, openProviders }}
         custom={customModel}
         showSettings={advanced}
+        modes={modeMenu}
       />
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
     </>

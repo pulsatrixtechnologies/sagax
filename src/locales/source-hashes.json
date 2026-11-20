@@ -19281,7 +19281,22 @@
       "teamWork.done.mergedAll.one": "c9944533cb6095d86025b77d85cc36d38a97f1c0a2147c8abc209dc09350a926",
       "teamWork.done.mergedAll.other": "b38a0feba85a42805b3809e09a31bbb9184aa1c1fff3cc07ceff86381b7984b6",
       "teamWork.done.mixed.one": "56b621f58639f41d9c858eebc2a0341eb88b154ee3b0ebccc829cbf46ede6354",
-      "teamWork.done.mixed.other": "abc30c6262f8a10308873962915a4e8126473477cd05c93610927a9f82f409c6"
+      "teamWork.done.mixed.other": "abc30c6262f8a10308873962915a4e8126473477cd05c93610927a9f82f409c6",
+      "model.mode.menu": "5e23ec6a300dc60a79641769017e16e9bf042cbd8fd0a54586a048ab9da972ff",
+      "model.mode.auto.name": "0286249762f7c94349cdc0ba3bb2255baf9a80036e2193ead1d77696f888582f",
+      "model.mode.fast.name": "6c582b62e0e5aa05647388bd045f2e3e5e7f51f479d00d9df592634c8088a22b",
+      "model.mode.expert.name": "8b317b0c50ee0926c73cc837c5892d7229648ff9e55d2c5608ce081dde377ee6",
+      "model.mode.heavy.name": "caaba84670559b5bd406e01cb8f8c69eb1306b258197ceed0dd88ba7988dfeb4",
+      "model.mode.manual.name": "b0b9fe24ffa9629125bdc59b122f80d605ab604eb1b74485c2f2ecfde26576ae",
+      "model.mode.auto.blurb": "3372c80cd157da8a950be09f3f5c000216d52e4c0bc46b3c617876837f8f3880",
+      "model.mode.fast.blurb": "65bf9a67dd08fd4ebd5d9eb6a451637b532fc85184646470cc588ef258830781",
+      "model.mode.expert.blurb": "dbf54d3a5350f1274561f113a22e43a0388e9c516eb46c1649d09d9fdf18fda9",
+      "model.mode.heavy.blurb": "ce6bd2b4886951b7e227cfdd898708f42ed89f41e1e8dafcc81a32e5e388bbe9",
+      "model.mode.manual.blurb": "e6d7557f5ab6fee93bd07af96623fa855743110d18e59b4e17680cf765503a86",
+      "model.mode.tip": "f063aa41ad1426bd6fac0ebb510f1563f6c7a32dd7701491c7ef564a7d638388",
+      "model.mode.chip": "bb3708b1bd5e607c408acf54f46fc5da867f1a53afd63e38c490d83704f7902c",
+      "model.mode.why": "da360cff48ae629dea43847c1e8d0d81ad277ecfcf52a73d1e43537e9ff05695",
+      "model.account.signedOut": "80c6e7caffee367d7a8b9e6db3620dada71015d6f27f1fd07d1a4310075c1548"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

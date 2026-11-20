@@ -53,6 +53,44 @@ export function readSkillFrontmatter(raw: string): { fields: Record<string, stri
   return { fields, body: match[2] ?? "" };
 }
 
+/** The `metadata` map of a SKILL.md's frontmatter (a free map in the Agent
+ * Skills format): each indented single-line `key: value` under `metadata:`,
+ * keys lowercased; a key left empty takes the `- item` lines below it, joined
+ * with spaces. Empty without one. Like readSkillFrontmatter, not a YAML engine. */
+export function readSkillMetadata(raw: string): Record<string, string> {
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+  const block = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+  if (block === undefined) return {};
+  const unquote = (value: string) => value.trim().replace(/^["']|["']$/g, "").trim();
+  const out: Record<string, string> = {};
+  let inside = false;
+  let indent = -1;
+  let listKey: string | undefined;
+  for (const line of block.split(/\r?\n/)) {
+    if (!inside) {
+      inside = /^metadata:\s*$/i.test(line);
+      continue;
+    }
+    const text = line.trim();
+    if (!text || text.startsWith("#")) continue;
+    const depth = line.length - line.trimStart().length;
+    if (depth === 0) break;
+    const item = text.match(/^-\s+(.*)$/);
+    if (item) {
+      if (listKey) out[listKey] = [out[listKey], unquote(item[1]!)].filter(Boolean).join(" ");
+      continue;
+    }
+    const kv = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+    if (!kv) continue;
+    if (indent < 0) indent = depth;
+    if (depth !== indent) continue;
+    const key = kv[1]!.toLowerCase();
+    out[key] = unquote(kv[2]!);
+    listKey = out[key] ? undefined : key;
+  }
+  return out;
+}
+
 /** Minimal frontmatter reader for the two required keys plus the two we
  * display. Deliberately not a YAML engine: values are single-line strings in
  * every skill the spec's own examples show, and a parser that cannot

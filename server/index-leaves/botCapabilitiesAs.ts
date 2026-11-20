@@ -8,6 +8,7 @@ import { skillsLibraryEnabled, customMcpServers } from "../config.ts";
 import { parseStoredMcpServer, reservedMcpServerName, isRemoteMcpServer } from "../mcp/mcp-registry.ts";
 import { guarded as orgFlowGuarded } from "../org/org-flow-plugins.ts";
 import { skillDiscoveryAvailable } from "../skills/skill-discovery.ts";
+import { installedPluginDir } from "../plugins/product-skills.ts";
 import { readSkillLibraryIndex } from "../skills/skill-library.ts";
 import { listBotSkillsWithOrigin, listSkills } from "../skills/skills.ts";
 import { supportsWorkspaceFiles } from "../workspace/workspace.ts";
@@ -90,7 +91,7 @@ async function botCapabilitiesAs(
         ...(offered.get(plugin.key) ? { updateAvailable: true } : {})
       };
     }),
-    botPluginDirs: host.scopedPluginFolders(bot, principal ?? owner).filter((plugin) => plugin.scope === "bot").map((plugin) => plugin.dir),
+    botPluginDirs: host.scopedPluginFolders(bot, principal ?? owner).filter((plugin) => plugin.scope === "bot").map((plugin) => installedPluginDir(plugin)),
     personalSkills: library && (principal || !organization) ? host.personalSkillInputs(bot, principal) : [],
     personalPlugins: (principal || !organization ? host.personalPlugins.listPlugins(principal ?? host.localPrincipalId()) : []).map((plugin) => {
       const folder = host.personalPlugins.installedFolder(principal ?? host.localPrincipalId(), plugin);

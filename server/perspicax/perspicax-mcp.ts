@@ -23,8 +23,8 @@
 import { wholeToolList } from "../mcp/whole-tool-list.ts";
 import { resolutionProposal, closeNamesSentence, closeServedNames, readToolPages, resolveServedTool } from "../mcp/mcp-tool-resolve.ts";
 import { classifyProactiveActionKind } from "../proactive/proactive.ts";
-import { servedSpelling, unknownToolText, withCloseNames, twilioToolsOf, apiNamesOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
-import { randomUUID } from "node:crypto";
+import { servedSpelling, unknownToolText, withCloseNames, twilioToolsOf, apiNamesOf, apiIdsOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
+import { createHash, randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
 import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
@@ -583,6 +583,9 @@ const API_NAMES_TTL_MS = 30 * 60_000;
 const API_NAMES_MAX = 500;
 /** #4359: the most family names one bot keeps mapped to their products. */
 const API_PRODUCTS_MAX = 2000;
+/** D-20261119-087 (#5105): the longest a turn waits for the api_list read
+ * that decides its product skills, then it goes on with what is known. */
+const API_LIST_TURN_WAIT_MS = 4_000;
 
 function isObject(value: unknown): value is Json {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -672,8 +675,11 @@ export class PerspicaxMcp {
   private nativeCalls = 0;
   /** 2026-10-27, by bot: the product names Perspicax declares for its
    * APIs (api_list), so a step row names the product as the server does,
-   * and the connectors whose reads it marks as reviewed. */
-  private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string>; groups: Map<string, string[]>; products: Map<string, string[]> }>();
+   * and the connectors whose reads it marks as reviewed. D-20261119-087:
+   * every API id listed (`ids`), the products whose skills the bot sees, and
+   * the turn's catalog when it was read (`catalog`), to read it again at the
+   * next turn once a product was given or taken away. */
+  private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string>; groups: Map<string, string[]>; products: Map<string, string[]>; ids: Set<string>; catalog?: string }>();
   private readonly apiNamesPending = new Map<string, Promise<void>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
@@ -2461,11 +2467,11 @@ export class PerspicaxMcp {
   }
 
   /** Read the product names Perspicax declares for this bot's APIs
-   * (api_list), at most once per API_NAMES_TTL_MS per bot. Never throws;
-   * the turn never waits on it. */
-  async refreshApiNames(input: { threadId: string; generation: string; botId: string }): Promise<void> {
+   * (api_list), at most once per API_NAMES_TTL_MS per bot (`force`: now,
+   * unless a read is already on its way). Never throws. */
+  async refreshApiNames(input: { threadId: string; generation: string; botId: string }, options?: { force?: boolean }): Promise<void> {
     const cached = this.apiNames.get(input.botId);
-    if (cached && Date.now() - cached.at < API_NAMES_TTL_MS) return;
+    if (!options?.force && cached && Date.now() - cached.at < API_NAMES_TTL_MS) return;
     const pending = this.apiNamesPending.get(input.botId);
     if (pending) return pending;
     const read = this.readApiNames(input);
@@ -2473,12 +2479,45 @@ export class PerspicaxMcp {
     return read;
   }
 
+  /** D-20261119-087 (#5105): the turn's read of api_list, which decides the
+   * product skills the bot receives (server/plugins/product-skills.ts). The
+   * turn waits for it (at most API_LIST_TURN_WAIT_MS) when nothing was read
+   * for this bot yet, or when the turn's catalog changed since the last read
+   * (a product given or taken away); otherwise it is read beside the turn
+   * once older than API_NAMES_TTL_MS, as before. Never a call of its own:
+   * the same read as the product names. Never throws. */
+  async apiListForTurn(input: { threadId: string; generation: string; botId: string }): Promise<void> {
+    const cached = this.apiNames.get(input.botId);
+    const catalog = this.catalogStamp(input);
+    const changed = Boolean(cached?.catalog && catalog && cached.catalog !== catalog);
+    const read = this.refreshApiNames(input, changed ? { force: true } : undefined).catch(() => undefined);
+    if (cached && !changed) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([read, new Promise<void>((resolve) => { timer = setTimeout(resolve, API_LIST_TURN_WAIT_MS); timer.unref?.(); })]);
+    if (timer) clearTimeout(timer);
+  }
+
+  /** The tools this turn's connection serves, as one stamp (undefined
+   * before its tools/list): a product given or taken away changes them. */
+  private catalogStamp(input: { threadId: string; generation: string; botId: string }): string | undefined {
+    const served = this.turnEntry(input.threadId, input.generation, input.botId)?.servedTools;
+    return served?.size ? createHash("sha256").update([...served].sort().join("\n")).digest("hex").slice(0, 16) : undefined;
+  }
+
+  /** D-20261119-087 (#5105): every API id api_list listed for this bot and
+   * its families, or undefined while api_list has not answered for it. */
+  servedApis(botId: string): { ids: ReadonlySet<string>; groups: ReadonlyMap<string, readonly string[]> } | undefined {
+    const cached = this.apiNames.get(botId);
+    return cached ? { ids: cached.ids, groups: cached.groups } : undefined;
+  }
+
   private async readApiNames(input: { threadId: string; generation: string; botId: string }): Promise<void> {
     try {
+      const catalog = this.catalogStamp(input);
       const answer = await this.callTool({ ...input, name: "api_list", args: {}, mapping: true });
       if (!answer.ok || answer.isError) return;
       this.apiNames.delete(input.botId);
-      this.apiNames.set(input.botId, { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value), groups: apiGroupsOf(answer.value), products: new Map() });
+      this.apiNames.set(input.botId, { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value), groups: apiGroupsOf(answer.value), products: new Map(), ids: apiIdsOf(answer.value), ...(catalog ? { catalog } : {}) });
       while (this.apiNames.size > API_NAMES_MAX) this.apiNames.delete(this.apiNames.keys().next().value!);
     } catch {
       // a name is a nicety: the row reads a generic name without it

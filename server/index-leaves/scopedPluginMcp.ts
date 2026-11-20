@@ -2,6 +2,7 @@
 /** scopedPluginMcp (#1388). Pure move from server/index.ts. */
 import { ORG_CAPABILITY_KEY_PREFIX } from "../org/org-capabilities.ts";
 import { builtinPluginMcp, builtinRuntimeMissing as runtimeMissing } from "../capabilities/builtin-plugin-mounts.ts";
+import { installedPluginDir } from "../plugins/product-skills.ts";
 export type Host = Record<string, any>;
 
 export function createScopedPluginMcp(getHost: () => Host): any {
@@ -28,8 +29,10 @@ function scopedPluginMcp(bot: { id: string; ownerUserId?: unknown }, principal: 
   // says so. An organization runs it in the person's sandbox.
   const builtin = builtinPluginMcp(bot, host.IDENTITY.kind === "perspicax" ? {} : { runtimeMissing });
   return [...declared, ...candidates.flatMap<ScopedPluginMcp>((server) => {
-    const folder = selected.find((plugin) => plugin.scope === server.scope && plugin.name === server.plugin);
-    if (!folder) return [];
+    const chosen = selected.find((plugin) => plugin.scope === server.scope && plugin.name === server.plugin);
+    if (!chosen) return [];
+    // its installed folder, never the copy without the skills of products the bot is not served (D-20261119-087)
+    const folder = { ...chosen, dir: installedPluginDir(chosen) };
     if (server.scope === "organization") return server.dir === folder.dir ? [{ ...server, dir: folder.dir }] : [];
     // Two marketplaces may use the same plugin name. Only the install
     // whose exact current folder was selected owns its declared servers.

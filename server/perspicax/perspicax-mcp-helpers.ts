@@ -71,6 +71,15 @@ export function apiNamesOf(value: unknown): Map<string, string> {
   return names;
 }
 
+/** D-20261119-087 (#5105): every API id an api_list answer lists, lower
+ * case, named or not: the products this bot is served. */
+export function apiIdsOf(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  const apis = isObject(value) && Array.isArray(value.apis) ? value.apis : [];
+  for (const api of apis) if (isObject(api) && typeof api.id === "string" && api.id.trim()) ids.add(api.id.trim().toLowerCase());
+  return ids;
+}
+
 /** #4359: the families an api_list answer declares (an API's `group`): each
  * group id with its API ids, as Perspicax lists them. */
 export function apiGroupsOf(value: unknown): Map<string, string[]> {

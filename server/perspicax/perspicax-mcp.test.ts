@@ -1711,6 +1711,53 @@ describe("PerspicaxMcp reviewedReads", () => {
   });
 });
 
+describe("PerspicaxMcp apiListForTurn (D-20261119-087, #5105)", () => {
+  // Perspicax as the person's products make it: tools/list names the tools
+  // of the served products, api_list lists them.
+  function served(apis: string[]) {
+    const state = { apis, apiListCalls: 0 };
+    const mcp = ({ body }: { body: any }) => {
+      if (body?.id === undefined) return new Response(null, { status: 202 });
+      const tools = ["api_list", ...state.apis.map((id) => `${id}_query`)].map((name) => ({ name, inputSchema: { type: "object" } }));
+      if (body.method === "tools/call" && body.params?.name === "api_list") state.apiListCalls += 1;
+      const result = body.method === "tools/list" ? { tools }
+        : body.method === "tools/call" ? { content: [{ type: "text", text: JSON.stringify({ apis: state.apis.map((id) => ({ id, group: id.startsWith("acme_psa") ? "acme_psa" : undefined })) }) }] }
+        : {};
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } });
+    };
+    return { state, mcp };
+  }
+  async function aTurn(h: ReturnType<typeof harness>, generation: string) {
+    await h.mcp.prepareTurn({ threadId: "t1", generation, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.ensureTurnSessions("t1", generation);
+    await h.mcp.apiListForTurn({ threadId: "t1", generation, botId: "x" });
+    const ids = [...(h.mcp.servedApis("x")?.ids ?? [])].sort();
+    await h.mcp.endGeneration("t1", generation);
+    return ids;
+  }
+
+  it("waits for the first api_list of a bot, then reads it beside the turns while nothing changes", async () => {
+    const perspicax = served(["acme_psa_service", "acme_psa_time"]);
+    const h = harness({ mcp: perspicax.mcp });
+    expect(h.mcp.servedApis("x")).toBeUndefined();
+    expect(await aTurn(h, "g1")).toEqual(["acme_psa_service", "acme_psa_time"]);
+    expect(h.mcp.servedApis("x")?.groups.get("acme_psa")).toEqual(["acme_psa_service", "acme_psa_time"]);
+    expect(await aTurn(h, "g2")).toEqual(["acme_psa_service", "acme_psa_time"]);
+    expect(perspicax.state.apiListCalls).toBe(1);
+  });
+
+  it("reads api_list again at the next turn when a product was taken away or given", async () => {
+    const perspicax = served(["acme_psa_service", "acme_psa_time", "nimbus_backup"]);
+    const h = harness({ mcp: perspicax.mcp });
+    expect(await aTurn(h, "g1")).toEqual(["acme_psa_service", "acme_psa_time", "nimbus_backup"]);
+    perspicax.state.apis = ["nimbus_backup"];
+    expect(await aTurn(h, "g2")).toEqual(["nimbus_backup"]);
+    perspicax.state.apis = ["acme_psa_service", "nimbus_backup"];
+    expect(await aTurn(h, "g3")).toEqual(["acme_psa_service", "nimbus_backup"]);
+    expect(perspicax.state.apiListCalls).toBe(3);
+  });
+});
+
 describe("withFailureWords (2026-11-05)", () => {
   it("gives an empty isError result words from structuredContent, else a sentence", () => {
     const structured = withFailureWords({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [], structuredContent: { status: "blocked", reason: "run_not_yours", detail: "this run is not held by your account" } } }, "flow_run") as any;

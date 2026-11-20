@@ -423,7 +423,8 @@ const memory = {
   logs: [memoryFile("logs/2026-11-04.md", 920, 2 * DAY), memoryFile("logs/2026-11-05.md", 1210, 1 * DAY)],
 };
 
-const workspaceEntry = (path: string, bytes: number, extra: Record<string, unknown> = {}) => ({ path, kind: "file", bytes, load: "always", editable: true, markdown: true, forgotten: false, ...extra });
+const workspaceEntry = (path: string, bytes: number, extra: Record<string, unknown> = {}) => ({ path, kind: "file", bytes, load: "always", editable: true, markdown: true, forgotten: false, createdAt: NOW - 20 * DAY, modifiedAt: NOW - 2 * DAY, ...extra });
+const workspaceDir = (path: string) => ({ path, kind: "dir", bytes: 0, load: "never", editable: false, markdown: false, forgotten: false });
 
 /** #2698: the Proactivity group of the Analytics tab. */
 function proactiveMetrics(days: number) {
@@ -494,7 +495,19 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     workspacePath: "/workspace/bots/scout", now: NOW, forgottenAfterDays: 30,
     budgets: { rules: { maxLines: 200, maxBytes: 20000 }, memory: { maxLines: 200, maxBytes: 20000 }, soul: { maxBytes: 8000 } }, rulesTemplate: "",
     soul: { ...workspaceEntry("SOUL.md", SOUL.length), virtual: "soul" },
-    entries: [workspaceEntry("MEMORY.md", MEMORY.length), workspaceEntry("RULES.md", RULES.length), workspaceEntry("topics/vendors.md", 1840, { load: "on demand" }), workspaceEntry("topics/market-notes.md", 3120, { load: "on demand" })], truncated: false,
+    // the folder as a real bot has it: the standing files, then docs/, inbox/, memory/, rules/ and skills/ (one folder per skill)
+    entries: [
+      workspaceEntry("MEMORY.md", MEMORY.length, { load: "every-turn" }), workspaceEntry("RULES.md", RULES.length, { load: "every-turn" }),
+      workspaceDir("docs"), workspaceEntry("docs/onboarding.md", 2210, { load: "on-demand" }),
+      workspaceDir("inbox"), workspaceEntry("inbox/quote-2026-11.pdf", 48_200, { load: "never", editable: false, markdown: false }),
+      workspaceDir("memory"), workspaceEntry("memory/vendors.md", 1840, { load: "on-demand" }), workspaceEntry("memory/market-notes.md", 3120, { load: "on-demand" }),
+      workspaceDir("rules"), workspaceEntry("rules/sources.md", 44, { load: "every-turn" }),
+      workspaceDir("skills"),
+      ...(skillList() as Array<{ name: string; origin?: string }>).filter((skill) => skill.origin !== "library" && skill.origin !== "me").flatMap((skill) => [
+        workspaceDir(`skills/${skill.name}`),
+        workspaceEntry(`skills/${skill.name}/SKILL.md`, 900, { load: "on-demand", editable: false }),
+      ]),
+    ], truncated: false,
   });
   if (path === `${bots}/capabilities` && ACCOUNTS) return json({ botId: BOT_ID, engine: { kind: "claude", label: "Claude" }, items: accessItems(ACCOUNTS) });
   if (path === `${bots}/capabilities`) return json({ botId: BOT_ID, engine: { kind: "claude", label: "Claude" }, items: [

@@ -186,8 +186,10 @@ async function column(view: View): Promise<HTMLElement> {
     return node;
   }
   const node = await home(botProfileTabOfPage(view.page));
-  // Personality has no row (owner 2026-11-19): Folder and memory's SOUL.md opens it through this link
+  // Personality has no row (owner 2026-11-19): the Bot folder's SOUL.md opens it through this link;
+  // Routines has none either (M-20261119-081): a link (the bot panel, Outcomes) opens it
   if (view.page === "personality") await act(async () => { dispatch({ type: "personaEditorSection", section: "soul" } as never); });
+  else if (view.page === "routines") await act(async () => { dispatch({ type: "personaEditorSection", section: "routines" } as never); });
   else await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${view.page}"]`), `row ${view.page}`);
   await settle();
   expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe(view.page);
@@ -266,11 +268,12 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
       }
     }
     // General: the rows that open a page (the channels and the accounts are
-    // cards in place, #3398; Shared with is under More), Knowledge its work.
+    // cards in place, #3398; Shared with is under More); Knowledge has no row
+    // (M-20261119-081: no Its work, the folder is in place).
     expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
       ["model", "beforeActing", "rules", "actsAlone", "voice", "advanced", "versions"],
     );
-    expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "folder"]);
+    expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]"))).toEqual([]);
   });
 
   it("no bordered card, framed field or underlined link inside the column of any view", async () => {
@@ -294,8 +297,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
       ...BOT_PROFILE_SUBPAGES.map((page): [View, readonly string[]] => [{ page }, BOT_PROFILE_SUBPAGE_SECTIONS[page]]),
       // the cards in place; Slack is not offered by this stand-in server
       [{ tab: "general" }, BOT_PROFILE_CARD_SECTIONS.accounts],
-      // #3400: To review and Skills in place on Knowledge
-      [{ tab: "knowledge" }, BOT_PROFILE_CARD_SECTIONS.skills],
+      // M-20261119-081: To review and the Bot folder in place on Knowledge (the skills in the folder's modal, below)
+      [{ tab: "knowledge" }, BOT_PROFILE_CARD_SECTIONS.folder.filter((id) => id !== "skills")],
       [{ tab: "stats" }, ["usage"]],
     ];
     for (const [view, ids] of views) {
@@ -308,6 +311,14 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         seen.add(id);
       }
     }
+    // the Skills card: the modal a link to it opens over Knowledge (the folder's "..." > Skills opens the same)
+    await home("knowledge");
+    await act(async () => { dispatch({ type: "personaEditorSection", section: "skills" } as never); });
+    await settle();
+    const skills = document.querySelector<HTMLElement>('[data-bot-page-modal="skills"] [data-bot-profile-section="skills"]');
+    expect(skills, "section skills in its modal").not.toBeNull();
+    expect(skills!.getAttribute("aria-label")?.trim()).toBeTruthy();
+    seen.add("skills");
     expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
   });
 
@@ -320,7 +331,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     }
     const named = labels.map((label) => label.slice(label.indexOf("=") + 1));
     expect(named).toContain(t("botSettings.nav.rules"));
-    expect(named).toContain(t("botSettings.nav.skills"));
+    // M-20261119-081: the skills are in the Bot folder's modal; the folder is named in place
+    expect(named).toContain(t("botSettings.nav.files"));
     expect(named).toContain(t("botSettings.nav.history"));
     expect(labels.filter((label) => label.endsWith("="))).toEqual([]);
     expect(named).not.toContain("Skills");
@@ -491,6 +503,41 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
   });
 
+  // M-20261119-081: General > Settings has an Appearance row again (after Model), opening the same modal as the mascot
+  it("regression M-20261119-081: General > Settings has an Appearance row after Model that opens the mascot editor's modal", async () => {
+    await mount("en");
+    const panel = await home("general");
+    const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
+    const rows = Array.from(settings.querySelectorAll<HTMLElement>("[data-bot-profile-row]")).map((row) => row.getAttribute("data-bot-profile-row"));
+    expect(rows).toEqual(["page-model", "appearance", "page-beforeActing"]);
+    const row = settings.querySelector<HTMLElement>('[data-bot-profile-row="appearance"]')!;
+    expect(row.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(row.textContent).toContain(t("botProfile.tab.appearance"));
+    expect(row.textContent).toContain(t("botProfile.v6.page.appearance.desc"));
+    expect(row.querySelector("[data-bot-profile-value]")?.textContent, "what it wears").toBeTruthy();
+    row.focus();
+    await click(row, "the Appearance row");
+    await until(() => document.querySelector("[data-appearance-reset]"));
+    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"]');
+    expect(modal, "the mascot editor's modal").not.toBeNull();
+    expect(modal!.querySelector("[data-appearance-pane]")).not.toBeNull();
+    await act(async () => { modal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await settle();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "closed").toBeNull();
+    expect(document.activeElement, "focus back on the row").toBe(row);
+  });
+
+  // M-20261119-082: the bot panel's gear opens the page on General, nothing over it
+  it("regression M-20261119-082: a link to the overview (the bot panel's gear) opens the page with no modal over it", async () => {
+    await mount("en");
+    await act(async () => { dispatch({ type: "openPersonaEditor", botId: fixture.bot.id, section: "overview" } as never); });
+    await settle();
+    const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
+    expect(page.getAttribute("data-bot-profile-tab-current")).toBe("general");
+    expect(openModals(), "no modal").toEqual([]);
+    expect(page.hasAttribute("data-bot-profile-modal-open")).toBe(false);
+  });
+
   it("a link to Appearance opens the modal; a link to Shared with opens the Share popover; Personality still opens from its link", async () => {
     await mount("en");
     await home("general");
@@ -571,7 +618,8 @@ describe("bot profile page: General cards in place (#3398)", () => {
     }
   });
 
-  it("a search for routines shows Knowledge with its Routines row marked, Enter opens it, and a short or generic query does not jump to General", async () => {
+  // M-20261119-081: Routines has no row any more; a search still lands on Knowledge and Enter still opens it
+  it("a search for routines shows Knowledge (no Routines row to mark), Enter opens it, and a short or generic query does not jump to General", async () => {
     await mount("en");
     const search = async (value: string) => {
       if (!host.querySelector("[data-persona-search]")) await click(host.querySelector<HTMLElement>("[data-bot-profile-search-toggle]"), "search");
@@ -589,7 +637,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(page.getAttribute("data-bot-profile-tab-current")).toBe("knowledge");
     // #4470: typing marks the row and keeps the field; Enter opens the modal
     expect(page.getAttribute("data-bot-profile-subpage-current")).toBeNull();
-    expect(page.querySelector('[data-bot-profile-subpage-open="routines"]')!.hasAttribute("data-settings-search-hit")).toBe(true);
+    expect(page.querySelector('[data-bot-profile-subpage-open="routines"]'), "no Routines row").toBeNull();
     expect(document.activeElement).toBe(host.querySelector("[data-persona-search]"));
     await act(async () => { host.querySelector("[data-persona-search]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
     await settle();
@@ -828,7 +876,10 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(menu.textContent).toContain("Connexion du coffre");
   });
 
-  it("#3400: Knowledge shows To review first (one row per proposal, or one row when none waits), the Skills card in place, then Its work", async () => {
+  // M-20261119-081 (before it #3400): Knowledge is To review then the Bot
+  // folder in place; the Skills, Write a command and Its work sections are
+  // gone, and the folder's "..." opens the Skills card in a modal.
+  it("regression M-20261119-081: Knowledge shows To review, then the Bot folder in place; no Skills card, no Write a command, no Its work", async () => {
     await mount("en");
     skillsAnswer = {
       skills: [{ name: "weekly-report", description: "Writes the weekly status report.", enabled: true, source: "taught", warnings: [] }],
@@ -838,22 +889,48 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     let panel = await home("knowledge");
     const review = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-review"]')!;
     expect(review, "To review card").not.toBeNull();
-    const skills = panel.querySelector<HTMLElement>("[data-skills-section]")!;
-    expect(skills, "Skills card in place").not.toBeNull();
-    const work = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-work"]')!;
-    expect(review.compareDocumentPosition(skills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(skills.compareDocumentPosition(work) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const folder = panel.querySelector<HTMLElement>("[data-files-folder]")!;
+    expect(folder, "the Bot folder in place").not.toBeNull();
+    expect(review.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the Bot folder's grey label sits where To review's does, 12px in (#4420), not 4px
+    const labelRow = (section: HTMLElement) => section.querySelector("h3")!.parentElement!;
+    expect(labelRow(review).classList.contains("px-3"), "To review's label row").toBe(true);
+    expect(labelRow(folder).classList.contains("px-3"), "the Bot folder's label row").toBe(true);
+    expect(panel.querySelector("[data-skills-section]"), "no Skills card").toBeNull();
+    expect(panel.querySelector("[data-write-command]"), "no Write a command card").toBeNull();
+    expect(panel.querySelector('[data-settings-group="bot-profile-group-work"]'), "no Its work").toBeNull();
+    expect(panel.querySelector('[data-bot-profile-subpage-open="routines"]'), "no Routines row").toBeNull();
     expect(review.querySelectorAll('[data-bot-profile-row^="review-st"]')).toHaveLength(1);
     expect(review.textContent).toContain("pricing-check");
-    expect(review.querySelector("[data-bot-profile-review-allow]")).not.toBeNull();
-    expect(review.querySelector("[data-bot-profile-review-deny]")).not.toBeNull();
-    expect(panel.querySelector('[data-bot-profile-subpage-open="skills"]')).toBeNull();
+
+    // the folder's "..." > Skills: the Skills card in a modal over the page, Escape returns to the menu's button
+    await click(folder.querySelector<HTMLElement>("[data-files-options]"), "the folder's menu");
+    await click(document.querySelector<HTMLElement>('[data-files-menu-item="skills"]'), "Skills");
+    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="skills"]')!;
+    expect(modal, "the Skills modal").not.toBeNull();
+    expect(modal.querySelector("[data-skills-section]"), "the Skills card in it").not.toBeNull();
+    expect(modal.querySelector('[data-skill-row="weekly-report"]')).not.toBeNull();
+    expect(modal.querySelector("[data-write-command]"), "Write a command in it").not.toBeNull();
+    await act(async () => { modal.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await settle();
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
+    expect(document.querySelector('[data-bot-page-modal="skills"]'), "closed").toBeNull();
+    expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
+    expect(document.activeElement?.hasAttribute("data-files-options"), "focus back on the folder's menu").toBe(true);
+
+    // > Write a command: the same modal, its field focused
+    await click(host.querySelector<HTMLElement>("[data-files-folder] [data-files-options]"), "the folder's menu");
+    await click(document.querySelector<HTMLElement>('[data-files-menu-item="command"]'), "Write a command");
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
+    const command = document.querySelector<HTMLElement>('[data-bot-page-modal="skills"] [data-write-command] input');
+    expect(command, "the command field").not.toBeNull();
+    expect(document.activeElement).toBe(command);
+    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="skills"] > [data-dialog-close]'), "close");
 
     skillsAnswer = { skills: [], staged: [], library: [], assignedSkills: [] };
     await home("general");
     panel = await home("knowledge");
     expect(panel.querySelector("[data-bot-profile-review-empty]")?.textContent).toContain("You're all caught up");
-    expect(panel.querySelector("[data-skills-empty] [data-bot-profile-add]")).not.toBeNull();
   });
 });
 
@@ -893,21 +970,16 @@ describe("bot profile page: Analytics tab (#3401)", () => {
     expect((latest as unknown as { personaEditor: unknown }).personaEditor).not.toBeNull();
   });
 
-  it("regression #4470: Folder and memory's Memory row opens the Memory page in a modal stacked over Folder and memory's; Escape closes the top one only", async () => {
+  it("regression #4470, M-20261119-081: the Bot folder's menu > Open the Memory page opens it in a modal over the page; Escape closes it", async () => {
     await mount("en");
     const node = await home("knowledge");
-    await click(node.querySelector<HTMLElement>('[data-bot-profile-subpage-open="folder"]'), "row folder");
-    const folder = document.querySelector<HTMLElement>('[data-bot-page-modal="page-folder"]')!;
-    const row = folder.querySelector<HTMLElement>("[data-bot-profile-memory]")!;
-    expect(row.getAttribute("aria-haspopup")).toBe("dialog");
-    row.focus();
-    await click(row, "Memory row");
+    await click(node.querySelector<HTMLElement>("[data-files-folder] [data-files-options]"), "the folder's menu");
+    await click(document.querySelector<HTMLElement>('[data-files-menu-item="memory"]'), "Open the Memory page");
     const store = latest as unknown as { activeView: string; memoryManagerOpen: boolean; personaEditor: unknown };
     expect(store.personaEditor, "the bot page stays").not.toBeNull();
     expect(store.activeView, "the main column stays the bot page").not.toBe("memory");
     expect(store.memoryManagerOpen).toBeFalsy();
-    // stacked: Folder and memory's modal, then Memory's over it, last in the body
-    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal"))).toEqual(["page-folder", "memory"]);
+    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal"))).toEqual(["memory"]);
     const memoryModal = document.querySelector<HTMLElement>('[data-bot-page-modal="memory"]')!;
     expect(memoryModal.getAttribute("aria-label")).toBe(t("memoryManager.title"));
     // the Memory page is a lazy screen: wait for its chunk
@@ -920,13 +992,14 @@ describe("bot profile page: Analytics tab (#3401)", () => {
     expect(memoryClose).not.toBeNull();
     await act(async () => { memoryModal.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     await settle();
-    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal")), "Folder and memory's modal stays").toEqual(["page-folder"]);
-    expect(document.activeElement?.hasAttribute("data-bot-profile-memory"), "focus back on the Memory row").toBe(true);
+    expect(openModals(), "closed").toEqual([]);
+    expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
     // and Memory's own X closes its modal the same way
-    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="page-folder"] [data-bot-profile-memory]'), "Memory row");
+    await click(host.querySelector<HTMLElement>("[data-files-folder] [data-files-options]"), "the folder's menu");
+    await click(document.querySelector<HTMLElement>('[data-files-menu-item="memory"]'), "Open the Memory page");
     await until(() => document.querySelector(`[data-bot-page-modal="memory"] [aria-label="${t("memoryManager.close")}"]`));
     await click(document.querySelector<HTMLElement>(`[data-bot-page-modal="memory"] [aria-label="${t("memoryManager.close")}"]`), "Memory's X");
-    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal"))).toEqual(["page-folder"]);
+    expect(openModals()).toEqual([]);
   });
 
   it("draws the analytics block before the cost breakdown", async () => {

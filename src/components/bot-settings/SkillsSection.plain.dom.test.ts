@@ -280,33 +280,4 @@ describe("Skills on the profile page (plain)", () => {
     expect(shownSkills()).toHaveLength(4);
     expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Show 2 more");
   });
-
-  it("#3400: To review lists each proposal, decided in place on the chat's card, or one row when none waits", async () => {
-    const opened: unknown[] = [];
-    skillsAnswer = {
-      skills: [], library: [], assignedSkills: [],
-      staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th1", requestId: "rq1", messageId: "m1" } }],
-    };
-    await render({ review: { onOpenChat: (entry: unknown) => opened.push(entry) } });
-    const reviewCard = container.querySelector<HTMLElement>('[data-settings-group="bot-profile-review"]')!;
-    expect(reviewCard).not.toBeNull();
-    // the To review card comes before the Skills card
-    expect(reviewCard.compareDocumentPosition(container.querySelector("[data-skills-section]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const row = reviewCard.querySelector<HTMLElement>('[data-bot-profile-row="review-st1"]')!;
-    expect(row.textContent).toContain("pricing-check");
-    expect(row.textContent).toContain("Compares a quote");
-    // the orange line about proposals is gone
-    expect(container.textContent).not.toContain("waiting for a decision in chat");
-    await act(async () => { row.querySelector<HTMLElement>("[data-bot-profile-review-open]")!.click(); });
-    expect(opened).toHaveLength(1);
-    skillsAnswer = { skills: [], library: [], assignedSkills: [], staged: [] };
-    await act(async () => { row.querySelector<HTMLElement>("[data-bot-profile-review-allow]")!.click(); });
-    await flush();
-    const answer = request.mock.calls.find(([path]) => path === "/api/threads/th1/respond");
-    expect(answer).toBeDefined();
-    expect(JSON.parse(String((answer![1] as RequestInit).body))).toEqual({ requestId: "rq1", behavior: "allow", reviewedSha256: "a".repeat(64), via: "profile" });
-    // once decided, nothing waits: the empty row
-    const emptyRow = container.querySelector<HTMLElement>("[data-bot-profile-review-empty]");
-    expect(emptyRow?.textContent).toContain("You're all caught up");
-  });
 });

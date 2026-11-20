@@ -318,13 +318,14 @@ export function teamWorkFace(work: TeamWork, now: number): string {
   return parts.join("\n");
 }
 
-/** "Done today · 6 merged", "Done today · 6 done, 2 merged", "Done today · 6". */
+/** The Done today row, said as a sentence (M-20261119-083, the owner: not
+ * "Done today · 1"): "1 done today", "6 merged today", "6 done today, 2 merged". */
 export function teamDoneLabel(items: readonly Pick<TeamWorkItem, "merged">[]): string {
+  const count = items.length;
   const merged = items.filter((item) => item.merged).length;
-  const title = t("teamWork.done.title");
-  if (merged === 0) return `${title} · ${items.length}`;
-  if (merged === items.length) return `${title} · ${t("teamWork.done.merged", { count: merged })}`;
-  return `${title} · ${t("teamWork.done.mixed", { count: items.length, merged })}`;
+  if (merged === 0) return count === 1 ? t("teamWork.done.one") : t("teamWork.done.other", { count });
+  if (merged === count) return count === 1 ? t("teamWork.done.mergedAll.one") : t("teamWork.done.mergedAll.other", { count });
+  return merged === 1 ? t("teamWork.done.mixed.one", { count }) : t("teamWork.done.mixed.other", { count, merged });
 }
 
 /** Where a step sits in its piece of work, for the coding chat's meta line. */

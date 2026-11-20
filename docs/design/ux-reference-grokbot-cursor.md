@@ -370,15 +370,21 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   bannière ; JC 2026-11-19 : l'image du bot, plus la hauteur d'une ligne de texte ; la
   référence mesurait 64 px) est nue, sans anneau, sur cette page seulement. La mascotte, le nom, ces lignes, le
   texte des onglets et les étiquettes grises des cartes partagent un même bord gauche,
-  12 px dans la colonne. Partager (bouton rond à icône, même disque que Fermer ; infobulle et nom accessible « Partager ») puis le bouton rond Fermer ensemble en
+  12 px dans la colonne. Pour la mascotte, c'est le bord de son dessin qui s'aligne sur la
+  première lettre du nom, pas celui de son cadre : chaque personnage laisse de l'air à
+  gauche dans son carré (une forme ronde environ 26 px, la chouette environ 28 px au
+  repos), mesuré sur ce qui est dessiné au premier rendu (M-20261119-081,
+  `src/components/floating-bots/drawn-inset.ts`). Partager (bouton rond à icône, même disque que Fermer ; infobulle et nom accessible « Partager ») puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des
   groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
   passe dessous.
 - Onglets en pilules : Général, Objectifs, Connaissances, Analytique (Simple
   masque Analytique). Apparence n'est plus un onglet (owner 2026-11-19, remplace #4420) :
-  c'est une modale que la mascotte de l'en-tête ouvre (infobulle et aria-label
-  « Apparence », curseur main), avec tout le contenu de l'ancien onglet. Personnalité
-  n'a plus de rangée (Connaissances > Dossier et mémoire > SOUL.md ouvre sa page),
+  c'est une modale que la rangée Apparence de Réglages (M-20261119-081) et la mascotte
+  de l'en-tête ouvrent (infobulle et aria-label « Apparence », curseur main), avec tout
+  le contenu de l'ancien onglet. Rien d'autre ne l'ouvre : la roue dentée du panneau du
+  bot ouvre la page sur Général, sans modale par-dessus (M-20261119-082). Personnalité
+  n'a plus de rangée (Connaissances > Dossier du bot > SOUL.md ouvre sa page),
   Partagé avec non plus (la bulle Partager de la barre tient les personnes, les niveaux
   et Qui peut le voir), et l'Accès n'a plus de rangée de moteur (Réglages > Modèle).
   La loupe à droite cherche dans tous les réglages.
@@ -396,11 +402,10 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   `DialogCloseButton`, `useModalDialog`). Une fenêtre ouverte depuis une fenêtre
   s'empile par-dessus avec son propre voile ; Échap ferme celle du dessus et le focus
   revient au bouton qui l'a ouverte ; une liste ouverte dedans garde son Échap.
-  - Dans les modales : chaque rangée (Modèle, Avant d'agir, Règles, Quand il agit seul, Voix, Réglages avancés, Versions, Routines,
-    Dossier et mémoire), le Gérer ou Connecter de chaque canal, Ajouter > Connexion du coffre (son formulaire), et la
-    rangée Mémoire de Dossier et mémoire (la page Mémoire, à la taille de la fenêtre
-    des Réglages, empilée sur la modale de Dossier et mémoire ; son propre X la
-    ferme).
+  - Dans les modales : chaque rangée (Modèle, Apparence, Avant d'agir, Règles, Quand il agit seul, Voix, Réglages avancés,
+    Versions), Routines (par un lien), le Gérer ou Connecter de chaque canal, Ajouter > Connexion du coffre (son
+    formulaire), et, depuis le « … » du Dossier du bot, Compétences (la carte des compétences) et Ouvrir la page
+    Mémoire (à la taille de la fenêtre des Réglages ; son propre X la ferme).
   - Ce qui était une fenêtre reste une fenêtre, ouverte par-dessus la page qui reste
     là : Connecter des apps (Ajouter > Applications ou Serveurs MCP, Connecter d'une
     rangée d'Accès, Messages sur ce Mac) ouvre la fenêtre que la barre latérale
@@ -421,7 +426,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   24 px entre les groupes.
   - Réglages : d'abord les interrupteurs, sur place (« Les collaborateurs peuvent créer
     des routines », « M'avertir quand ce bot termine ou a besoin de moi ») ; puis les
-    rangées Personnalité, Modèle, Avant d'agir.
+    rangées Modèle, Apparence (ce que le bot porte à droite, la modale de la mascotte),
+    Avant d'agir.
   - Canaux : une rangée par canal (logo ou icône, nom, une ligne grise d'état, Connecter
     ou Gérer à droite) ; Gérer ouvre les réglages du canal dans une modale (#4470). Un canal que le
     serveur n'offre pas n'est pas dessiné, et une carte sans canal n'est pas dessinée.
@@ -434,7 +440,7 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     à droite de l'étiquette. Une longue liste montre ses trois premières rangées (le
     moteur d'abord), puis une ligne grise centrée « Afficher N de plus » qui déplie le
     reste sur place et devient « Afficher moins » ; trois rangées ou moins : aucune
-    ligne. Même ligne que Routines et Codage (`SHOW_MORE_ROW`, `src/lib/grouped-card.ts`),
+    ligne. Même ligne que Routines et Tâche (`SHOW_MORE_ROW`, `src/lib/grouped-card.ts`),
     dessinée par le pli partagé `ShowMoreFold` (`src/components/ShowMoreFold.tsx`).
     Chaque app, serveur ou connexion du coffre une seule fois, son contrôle dans sa
     rangée ; une personne que le serveur refuserait voit l'état sans interrupteur.
@@ -442,7 +448,11 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     Serveurs MCP et « Connexion du coffre » (formulaire dans une modale, #4470 ; rangée
     avec Retirer ; plus dans Partagé avec, décision de JC du 2026-11-10, #3399).
   - Plus : Partagé avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions.
-- Connaissances (#3400) : deux cartes sur place, puis Son travail.
+- Connaissances (M-20261119-081, avant lui #3400) : À réviser, puis le Dossier du bot sur
+  place (Utiliser la mémoire, le chemin, SOUL.md, MEMORY.md, RULES.md, docs/, inbox/,
+  memory/, rules/, skills/, Nouveau, Téléverser et « … »). Plus de sections Compétences,
+  Écrire une commande ni Son travail ; aucune fonction perdue, chacune dans un menu « … »
+  du dossier ou de son entrée, sans nouvelle section :
   - À réviser : une rangée par apprentissage qui attend (son nom, une ligne grise de ce
     qu'il change), Activer (ou Mettre à jour) et Refuser à droite, et l'icône Ouvrir
     dans le chat. La décision se prend ici ou sur la carte du chat : c'est la même
@@ -450,21 +460,20 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     ligne discrète dans le chat (rien d'invisible). Le chat rappelle de lui-même ce qui
     attend : une ligne discrète pour tout, au plus une fois par jour (décision de JC du
     2026-11-10). Rien n'attend : une rangée « Tu es à jour » et une ligne grise.
-  - Compétences : un seul « + Ajouter » à droite de l'étiquette, son menu décrit
-    (Depuis la bibliothèque, Téléverser un fichier, Écrire une commande, Importer
-    depuis un lien quand la bibliothèque est éteinte) ; « Apprendre à l'usage » une
-    rangée à interrupteur de la carte ; chaque compétence une rangée avec son
-    interrupteur et son menu. Sans compétence, une rangée vide porte « + Ajouter ».
-    Plus de quatre compétences : les quatre premières, puis le même pli que Accès
-    (« Afficher N de plus », « Afficher moins », #4104). Une compétence qui attend la
-    personne (bloquée avec « Relire les changements », un avertissement à lire) ou
-    qui vient d'être ajoutée n'est jamais cachée : elle passe en tête.
-    « Déjà assignées » seulement quand la bibliothèque a des compétences et que toutes
-    le sont. Les compétences de l'organisation et Écrire une commande suivent, chacune
-    sous son étiquette grise. Plus de sous-page Compétences.
-  - Son travail : Routines et Dossier et mémoire ouvrent leur page. Sur la page
-    Routines, l'étiquette grise « Routines » porte ses actions à droite, au-dessus
-    d'une seule carte de rangées.
+  - « … » du dossier : Compétences (la carte des compétences dans une modale : chaque
+    compétence, les partagées aussi, son interrupteur et son menu, « + Ajouter » depuis
+    la bibliothèque, un fichier, un lien ; les compétences de l'organisation ; Écrire une
+    commande ; « Afficher N de plus »), Apprendre à l'usage (case cochée), Écrire une
+    commande (la même modale, son champ prêt), Ouvrir la page Mémoire, puis Entretien et
+    changements de la mémoire.
+  - skills/<nom>/ : l'état de la compétence sous son nom (« À réviser » en orange,
+    « Désactivée », ce qu'elle fait, avec qui elle est partagée) et ses actions en tête
+    de son « … » (Ouvrir, Relire les changements, Modifier, Activer ou désactiver,
+    Partager avec mes bots, Arrêter le partage, Retirer), la même liste que les rangées
+    de la carte des compétences. skills/ dit sous son nom combien attendent une révision
+    et porte Compétences dans son « … ».
+  - Routines n'a plus de rangée ; un lien vers les routines ouvre toujours sa modale
+    sur Connaissances.
 - Analytique (#3401) : d'abord le bloc de la référence, puis nos groupes.
   - La plage de dates à gauche et 7, 30 ou 90 jours à droite (7 par défaut) ; ce choix
     mène tout le bloc et nos groupes. Les cartes Messages et Heures économisées
@@ -476,9 +485,9 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     carte (sa période reste la sienne) ; total à 28 px, les autres chiffres à 20 px.
   - L'argent suit la langue et la devise (« 9,59 $ » en français).
 - Une rangée n'ouvre une sous-page que pour un réglage trop long pour une carte
-  (Personnalité, Modèle, Avant d'agir, Partagé avec, Règles, Quand il agit seul, Voix,
-  Réglages avancés, Versions ; dans Connaissances : Routines, Dossier et mémoire). Elle
-  garde à droite sa valeur courte et un chevron.
+  (Modèle, Avant d'agir, Règles, Quand il agit seul, Voix, Réglages avancés, Versions ;
+  Apparence ouvre la modale de la mascotte). Elle garde à droite sa valeur courte et un
+  chevron.
 - Une sous-page : le lien de retour nommé d'après l'onglet où il revient (« ‹ Général »),
   en haut à gauche de la barre, qui reçoit le focus à l'ouverture ; le titre dans le style des titres de page des
   Réglages (20 px, semi-gras) ; une ligne d'intro ; puis ses cartes. Échap revient à la

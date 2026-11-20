@@ -36,11 +36,13 @@ describe("V6 bot page map", () => {
     }
   });
 
-  // the owner 2026-11-19: Personality has no row (Knowledge's SOUL.md opens its page)
-  it("lists each sub-page in exactly one group of one tab, Personality (reached from Folder and memory) aside", () => {
+  // the owner 2026-11-19: Personality has no row (Knowledge's SOUL.md opens its page);
+  // M-20261119-081: Routines has no row either (a link to it still opens its page)
+  it("lists each sub-page in exactly one group of one tab, Personality and Routines aside", () => {
     const listed = count(BOT_PROFILE_TABS.flatMap((tab) => BOT_PROFILE_TAB_GROUPS[tab].flatMap((group) => group.pages)));
-    for (const page of BOT_PROFILE_SUBPAGES) expect(listed.get(page) ?? 0, page).toBe(page === "personality" ? 0 : 1);
-    expect([...listed.keys()].sort()).toEqual(BOT_PROFILE_SUBPAGES.filter((page) => page !== "personality").sort());
+    const rowless = ["personality", "routines"];
+    for (const page of BOT_PROFILE_SUBPAGES) expect(listed.get(page) ?? 0, page).toBe(rowless.includes(page) ? 0 : 1);
+    expect([...listed.keys()].sort()).toEqual(BOT_PROFILE_SUBPAGES.filter((page) => !rowless.includes(page)).sort());
   });
 
   // #3398: General is section cards with their controls in place, as the
@@ -70,14 +72,19 @@ describe("V6 bot page map", () => {
     expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "more")!.pages).toEqual(["rules", "actsAlone", "voice", "advanced", "versions"]);
   });
 
-  // #3400: Knowledge is To review and Skills in place, then Its work
-  // (Routines, Folder and memory); the Skills sub-page is gone.
-  it("draws To review and Skills in place on Knowledge, then Routines and the folder", () => {
+  // M-20261119-081 (before it #3400): Knowledge is To review and the Bot
+  // folder in place; no Skills card, no Write a command, no Its work (no
+  // Routines row, no Folder and memory sub-page).
+  it("regression: Knowledge is the folder card only, the skills and the files both on it", () => {
     expect(BOT_PROFILE_SUBPAGES).not.toContain("skills");
-    expect(BOT_PROFILE_TAB_GROUPS.knowledge.map((group) => group.card ?? group.id)).toEqual(["skills", "work"]);
-    expect(BOT_PROFILE_TAB_GROUPS.knowledge.find((group) => group.id === "work")!.pages).toEqual(["routines", "folder"]);
-    expect(botProfileSubPageOf("skills")).toBeNull();
-    expect(botProfileTabOf("skills")).toBe("knowledge");
+    expect((BOT_PROFILE_SUBPAGES as readonly string[]).includes("folder")).toBe(false);
+    expect(BOT_PROFILE_TAB_GROUPS.knowledge.map((group) => group.card ?? group.id)).toEqual(["folder"]);
+    expect(BOT_PROFILE_TAB_GROUPS.knowledge.flatMap((group) => group.pages)).toEqual([]);
+    for (const id of ["skills", "files"] as const) {
+      expect(botProfileSubPageOf(id), id).toBeNull();
+      expect(botProfileCardOf(id), id).toBe("folder");
+      expect(botProfileTabOf(id), id).toBe("knowledge");
+    }
   });
 
   // 0.8.66 put the approval card in "Before acting" too: 16 pieces, none twice

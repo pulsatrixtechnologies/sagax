@@ -147,6 +147,8 @@ describe("Bot folder on the profile page (plain)", () => {
     await flush();
     expect(q("[data-folder-options]")).toBeNull();
     await click("[data-files-options]");
+    await act(async () => { document.querySelector<HTMLElement>('[data-files-menu-item="options"]')!.click(); });
+    await flush();
     const options = q("[data-folder-options]")!;
     expect(options).not.toBeNull();
     // under the folder's card, not inside it

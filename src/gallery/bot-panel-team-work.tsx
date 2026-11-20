@@ -45,6 +45,14 @@ class SilentEventSource {
   close() {}
 }
 (window as unknown as { EventSource: unknown }).EventSource = SilentEventSource;
+// The store's /api calls answer 404 here: the dev server's HTML fallback read
+// as an empty 200 hydrated the webhooks with no list and broke the page.
+const realFetch = window.fetch.bind(window);
+window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
+  if (url.pathname.startsWith("/api/")) return new Response(JSON.stringify({ error: "not in this gallery" }), { status: 404, headers: { "content-type": "application/json" } });
+  return realFetch(input, init);
+}) as typeof fetch;
 
 const NOW = Date.now();
 const M = 60_000;

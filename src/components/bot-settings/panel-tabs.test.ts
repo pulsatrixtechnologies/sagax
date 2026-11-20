@@ -11,8 +11,8 @@ describe("bot panel tabs", () => {
 
   it("are labelled in English and French, with no Routines or More tab", () => {
     const labels = (catalog: Record<string, string>) => PANEL_TABS.map((id) => catalog[`botPanel.tab.${id}`]);
-    expect(labels(en)).toEqual(["Activity", "Library", "Coding"]);
-    expect(labels(fr)).toEqual(["Activité", "Bibliothèque", "Code"]);
+    expect(labels(en)).toEqual(["Activity", "Library", "Task"]);
+    expect(labels(fr)).toEqual(["Activité", "Bibliothèque", "Tâche"]);
     for (const catalog of [en, fr]) {
       expect(catalog).not.toHaveProperty("botPanel.tab.routines");
       expect(catalog).not.toHaveProperty("botPanel.tab.more");

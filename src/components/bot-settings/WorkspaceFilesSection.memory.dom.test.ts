@@ -193,7 +193,13 @@ describe("Bot folder: the memory's one interface", () => {
     render({ active: true });
     await flush();
     expect(q("[data-folder-options]")).toBeNull();
+    // the folder's "..." is a menu (M-20261119-081): Upkeep and changes is a checkbox item of it
     await click("[data-files-options]");
+    const item = document.querySelector<HTMLElement>('[data-files-menu-item="options"]')!;
+    expect(item.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(item.getAttribute("aria-checked")).toBe("false");
+    await act(async () => { item.click(); });
+    await flush();
     expect(q("[data-folder-options]")).not.toBeNull();
     expect(container.textContent).toContain("Tidy memory automatically");
     expect(fixture.fetchMemoryJournal).toHaveBeenCalledWith("pepper");

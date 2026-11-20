@@ -39,11 +39,13 @@ export function PaneSection({
 } & Record<`data-${string}`, string | undefined>) {
   const label = typeof title === "string" ? title : "";
   const repeated = useRepeatsModalTitle(title);
-  const card = useSettingsSurface() === "plain" ? PLAIN_PANE_CARD : PANE_CARD;
+  const plainSurface = useSettingsSurface() === "plain";
+  const card = plainSurface ? PLAIN_PANE_CARD : PANE_CARD;
   return (
     <section {...rest} data-pane-section="" className={cn("flex min-w-0 flex-col gap-2", className)}>
       {((title && !repeated) || help || action) && (
-        <div className="flex min-h-6 items-center gap-1.5 px-1">
+        // on the bot page (the plain surface) the grey label sits 12px in, as its cards' labels (#4420): the Bot folder under To review
+        <div className={cn("flex min-h-6 items-center gap-1.5", plainSurface ? "px-3" : "px-1")}>
           {title && <h3 className={cn("flex min-w-0 items-center gap-1.5 text-[13px] font-normal leading-[18px] text-ink-secondary", repeated && "sr-only")}>{title}</h3>}
           {/* with no visible title, the help rides with the action on the right */}
           {help && <span className={cn("flex", repeated && "ml-auto")}><HelpTip label={t("settings.moreAbout", { title: label })}>{help}</HelpTip></span>}

@@ -17,7 +17,7 @@ const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-ful
 export const skillNeedsPerson = (skill: ManagedSkill) => skill.warnings.length > 0;
 
 /** The bots a shared skill is shared with, or null for a private one. */
-function sharedLabel(a: SkillRowActions, skill: ManagedSkill): string | null {
+export function sharedLabel(a: SkillRowActions, skill: ManagedSkill): string | null {
   if (!a.libraryOn || (skill.origin !== "me" && skill.origin !== "library")) return null;
   const bots = (skill.assignedBots ?? []).map((entry) => entry.name);
   return bots.length > 0 ? t("botPanel.skills.sharedWith", { bots: bots.join(", ") }) : t("botPanel.skills.detailShared");
@@ -53,9 +53,10 @@ function SharedGlyph({ label }: { label: string }) {
   );
 }
 
-/** The grey line of a skill row: a short orange state when it needs the
- * person, "Off" when it is off, then its description cut to one line. */
-function skillStateLine(skill: ManagedSkill) {
+/** The grey line of a skill row (and of its folder on the bot page): a
+ * short orange state when it needs the person, "Off" when it is off, then
+ * its description cut to one line. */
+export function skillStateLine(skill: ManagedSkill) {
   const needs = skillNeedsPerson(skill);
   const off = !skill.enabled && skill.origin !== "native";
   const parts: ReactNode[] = [];

@@ -10,17 +10,22 @@
 //
 // - General: section cards with their controls in place (#3398). Settings
 //   (the switches "Collaborators can create routines" and "Notify me", then
-//   the rows Model, Before it acts), the Channels card, the Bot
+//   the rows Model, Appearance, Before it acts), the Channels card, the Bot
 //   accounts card, More (Rules, When it acts alone, Voice, Advanced
-//   settings, Versions). Personality is reached from Knowledge > Folder and
-//   memory (SOUL.md); Shared with and Who can see it are in the Share
+//   settings, Versions). Personality is reached from Knowledge > the Bot
+//   folder (SOUL.md); Shared with and Who can see it are in the Share
 //   popover of the top bar (owner 2026-11-19).
-// - Appearance is not a tab: the header's mascot opens the whole mascot
-//   editor (character, shape, colour, style, moves, Play a move, Randomize)
-//   in a modal.
-// - Knowledge (#3400): To review (the learnings that wait, approved or
-//   declined in place) and Skills in place, then Its work (Routines, Folder
-//   and memory).
+// - Appearance is not a tab: its row in General > Settings (M-20261119-081)
+//   and the header's mascot open the whole mascot editor (character, shape,
+//   colour, style, moves, Play a move, Randomize) in a modal. Nothing else
+//   opens it: the bot panel's gear opens the page on General
+//   (M-20261119-082).
+// - Knowledge (#3400, then M-20261119-081): To review (the learnings that
+//   wait, approved or declined in place), then the Bot folder in place
+//   (BotProfilePage.tsx-parts/BotFolderCard). The Skills, Write a command and
+//   Its work sections are gone; their functions are in the "..." menus of
+//   the folder and of its entries (Skills in a modal, Learn from use, Write
+//   a command, the Memory page, each skill's actions); Routines has no row.
 // - Stats: the bot's usage over 7, 30 or 90 days.
 // - Outcomes (#4098), the second tab: each result the person wants kept
 //   true, read from the bot's routines; a row opens in place and points to
@@ -31,7 +36,7 @@
 // row opens its sub-page (its title and one line of intro in the modal's
 // header, then the cards), a channel's Manage its settings, the Access
 // card's Add > Shared vault login its form,
-// Folder and memory's Memory row the Memory page stacked over that modal;
+// the folder's "..." > Skills the Skills card, > Memory page the Memory page;
 // Connect apps and Analytics' All bots open their own windows over the page
 // (a window stays a window). Escape closes the top modal and the focus goes
 // back to its button. Each change applies in place, at once, as
@@ -50,7 +55,7 @@
 // lack of a permission.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Brain, ChevronRight, Repeat } from "lucide-react";
+import { Bell, Repeat } from "lucide-react";
 
 import { openNotificationTarget, openRoutineRun, useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { shallowEqual, useStoreSelector } from "@/state/store-selector";
@@ -63,6 +68,7 @@ import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import {
   BOT_PROFILE_CARD_GROUP,
+  BOT_PROFILE_CARD_SECTIONS,
   BOT_PROFILE_SUBPAGE_SECTIONS,
   BOT_PROFILE_TAB_GROUPS,
   BOT_PROFILE_TABS,
@@ -75,6 +81,7 @@ import {
   botProfileSubPageOf,
   botProfileTabFor,
   botProfileTabOf,
+  botProfileTabCards,
   botProfileTabOfPage,
   botProfileTabPages,
   personaCategoryForSection,
@@ -88,7 +95,6 @@ import { DescribedRow, SettingsSurfaceProvider, Switch } from "../SettingsPrimit
 import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
-import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
 import { SkillsSection } from "../bot-settings/SkillsSection";
 import type { ReviewEntry } from "./BotProfilePage.tsx-parts/ReviewCard";
 import { PermissionsSection, type PermissionsPart } from "../bot-settings/PermissionsSection";
@@ -97,12 +103,13 @@ import { teamVaultOffered } from "../bot-settings/TeamBotVaultSection";
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
 import { AccountsCard, Block, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
+import { BotFolderCard } from "./BotProfilePage.tsx-parts/BotFolderCard";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
-import { GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
+import { AppearanceRow, GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { BotPageModal } from "./BotPageModal";
-import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
+import { appearanceRowValue, useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 import { OutcomesCard, useOutcomes } from "./BotProfilePage.tsx-parts/Outcomes";
@@ -165,9 +172,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const resolvePage = (id: BotProfileSubPage | null): BotProfileSubPage | null => (id && subPageShown(id) ? id : null);
 
   // A tab with nothing to show this viewer (Stats in Simple mode) is not
-  // listed; a link to it lands on General.
+  // listed; a link to it lands on General. A tab holds rows and cards
+  // (Knowledge only cards since M-20261119-081).
   const tabShown = (id: BotProfileTab) =>
-    id === "outcomes" ? true : id === "stats" ? shown("usage") : botProfileTabPages(id).some(subPageShown);
+    id === "outcomes" ? true
+      : id === "stats" ? shown("usage")
+        : botProfileTabPages(id).some(subPageShown) || botProfileTabCards(id).some((card) => BOT_PROFILE_CARD_SECTIONS[card].some(shown));
   const resolveTab = (next: BotProfileTab): BotProfileTab => (tabShown(next) ? next : "general");
   const tabOf = (id: PersonaCategory): BotProfileTab => resolveTab(botProfileTabOf(resolve(id)) ?? "general");
   const pageOf = (id: PersonaCategory): BotProfileSubPage | null => resolvePage(botProfileSubPageOf(resolve(id)));
@@ -185,26 +195,41 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // The Appearance modal (the mascot editor), opened by the header's mascot
   // (the owner 2026-11-19: no longer a tab).
   const [appearanceOpen, setAppearanceOpen] = useState(false);
-  // The Memory page (Knowledge > Folder and memory > Memory): a modal
-  // stacked over Folder and memory's (#4470).
-  const [memoryOpen, setMemoryOpen] = useState(false);
+  // A modal the Bot folder's "..." menus open (M-20261119-081): the Skills
+  // card ("command": with its Write a command field focused), the Memory page.
+  const [knowledgeModal, setKnowledgeModal] = useState<"skills" | "command" | "memory" | null>(null);
+  // The menu's button that opened it, which takes the focus back on close
+  // (the menu item itself is gone by then).
+  const knowledgeOpener = useRef<HTMLElement | null>(null);
+  const openKnowledgeModal = (next: "skills" | "command" | "memory") => {
+    knowledgeOpener.current = rootRef.current?.querySelector<HTMLElement>('[aria-haspopup="menu"][aria-expanded="true"]') ?? null;
+    setKnowledgeModal(next);
+  };
+  // Closing the Skills card reads the folder's skills again (a change made there shows on skills/).
+  const [skillsRead, setSkillsRead] = useState(0);
+  const closeKnowledgeModal = () => {
+    if (knowledgeModal !== "memory") setSkillsRead((count) => count + 1);
+    setKnowledgeModal(null);
+    const opener = knowledgeOpener.current;
+    knowledgeOpener.current = null;
+    if (opener) requestAnimationFrame(() => { if (opener.isConnected) opener.focus({ preventScroll: true }); });
+  };
 
   // A row opens its sub-page's modal over the tab it belongs to; closing it
   // returns to the row (the modal gives the focus back to its button).
   const openPage = (next: BotProfileSubPage) => {
-    setMemoryOpen(false);
+    setKnowledgeModal(null);
     setAppearanceOpen(false);
     setTab(botProfileTabOfPage(next));
     setPage(next);
   };
   const closePage = () => {
     const from = page;
-    setMemoryOpen(false);
     setPage(null);
     if (from) scrollTo.current = `[data-bot-profile-row="page-${from}"]`;
   };
   const openTab = (next: BotProfileTab) => {
-    setMemoryOpen(false);
+    setKnowledgeModal(null);
     setAppearanceOpen(false);
     setTab(next);
     setPage(null);
@@ -222,7 +247,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const placeOf = (target: BotSettingsSection): { category: PersonaCategory | null; selector: string | null } => {
     const category = personaCategoryForSection(target);
     if (!category) return { category, selector: null };
-    if (category === "overview") return { category, selector: "[data-bot-profile-title]" };
+    // the identity is the page's top: the banner, so the gear or Edit bot shows the whole header (M-20261119-082), never the title tucked under the bar
+    if (category === "overview") return { category, selector: "[data-bot-profile-banner]" };
     const id = resolve(category);
     return { category: id, selector: cardSelector(id) ?? `[data-bot-profile-section="${id}"]` };
   };
@@ -236,7 +262,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // false) until Enter opens its modal (#4470).
   const pageListed = (id: BotProfileSubPage) => BOT_PROFILE_TABS.some((each) => botProfileTabPages(each).includes(id));
   const openCategory = (category: PersonaCategory, query?: string, open = true) => {
-    setMemoryOpen(false);
+    setKnowledgeModal(null);
     setSearchRow(null);
     // Three sections are not rows of a tab: Appearance is the header
     // mascot's modal; Shared with and Who can see it are in the top bar's
@@ -261,7 +287,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const hit = query ? resolvePage(personaSubPageForQuery(resolve(category), query)) : null;
     const next = hit ?? pageOf(category);
     setTab(hit ? botProfileTabOfPage(hit) : tabOf(category));
-    // a page with no row (Personality: reached from Folder and memory's SOUL.md) is not marked while typing
+    // a page with no row (Personality: the Bot folder's SOUL.md; Routines: a link) is not marked while typing
     if (next && !open && !pageListed(next)) {
       setPage(null);
       return;
@@ -273,9 +299,11 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       return;
     }
     setPage(next);
-    // A section held by a card in place opens the General tab at its card.
+    // A section held by a card in place opens its tab at its card.
     if (!next) scrollTo.current = cardSelector(resolve(category)) ?? scrollTo.current;
     if (category === "slack") setChannel("slack");
+    // the skills are the Skills card, a modal of the Bot folder (M-20261119-081): a link or Enter opens it
+    if (category === "skills" && open && shown("skills")) setKnowledgeModal("skills");
   };
   const reveal = (target: BotSettingsSection) => {
     // Routines have their own sub-page (#2624), not a persona category.
@@ -300,6 +328,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       if (category === "appearance" && shown("appearance")) setAppearanceOpen(true);
       else if ((category === "sharing" || category === "visibility") && shareShown) setShareOpen(true);
       else if (category && category !== "overview") scrollTo.current = selector;
+      if (category === "skills" && shown("skills")) setKnowledgeModal("skills");
       return;
     }
     reveal(section);
@@ -335,9 +364,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const hookSection: BotSettingsSection = page
     ? page === "versions" ? "history"
       : page === "routines" ? "routines"
-        : page === "folder" ? "skills"
-            : page === "personality" ? "overview"
-              : "model"
+          : page === "personality" ? "overview"
+            : "model"
     : tab === "stats" ? "usage" : tab === "knowledge" ? "skills" : "overview";
   const { renderSectionBody, dialogs, derived } = useBotSectionContent(bot, {
     section: hookSection,
@@ -379,6 +407,29 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     // What the server says the bot does, reaches and won't do, the prompt
     // preview and the recent changes.
     if (id === "summary") return renderSectionBody("overview");
+    if (id === "files") {
+      // Knowledge (M-20261119-081): To review, then the Bot folder in place,
+      // where the memory is managed too: "Use memory" heads it for a viewer
+      // who may change it. A folder this viewer may not change says why, its
+      // "..." menu still there (the skills, the Memory page).
+      const memoryEditable = memoryAllowed && lockOf("memory") === null;
+      return (
+        <BotFolderCard
+          bot={bot}
+          active={tab === "knowledge"}
+          lock={lockOf("files")}
+          memoryEditable={memoryEditable}
+          memory={memoryEditable ? { enabled: bot.memoryEnabled !== false, busy: Boolean(bot.busy), onToggle: (enabled) => derived.patch({ memoryEnabled: enabled }) } : undefined}
+          skillsShown={shown("skills")}
+          refreshKey={skillsRead}
+          onOpenSection={goTo}
+          onOpenChat={openLearningInChat}
+          onOpenSkills={() => openKnowledgeModal("skills")}
+          onWriteCommand={() => openKnowledgeModal("command")}
+          onOpenMemory={() => openKnowledgeModal("memory")}
+        />
+      );
+    }
     const lock = lockOf(id);
     if (lock) {
       // A locked section is still a card (its label, the reason as a row),
@@ -396,23 +447,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       );
     }
     if (id === "rules") return <RulesSection bot={bot} active={page === "rules"} />;
-    // Knowledge (#3400): To review heads the Skills card; "Open in chat"
-    // closes the profile and shows the bot's chat at the learning's card.
-    if (id === "skills") return <SkillsSection bot={bot} review={{ onOpenChat: openLearningInChat }} />;
-    if (id === "files") {
-      // The Bot folder is also where the memory is managed: "Use memory"
-      // heads it for a viewer who may change it.
-      const memoryEditable = memoryAllowed && lockOf("memory") === null;
-      return (
-        <WorkspaceFilesSection
-          bot={bot}
-          active={page === "folder"}
-          memoryEditable={memoryEditable}
-          memory={memoryEditable ? { enabled: bot.memoryEnabled !== false, busy: Boolean(bot.busy), onToggle: (enabled) => derived.patch({ memoryEnabled: enabled }) } : undefined}
-          onOpenSection={goTo}
-        />
-      );
-    }
+    // The Skills card, in the modal the folder's "..." > Skills opens; > Write a command opens it at its field.
+    if (id === "skills") return <SkillsSection bot={bot} {...(knowledgeModal === "command" ? { focus: "command" as const } : {})} />;
     return renderSectionBody(id);
   };
 
@@ -455,26 +491,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return block("history");
       case "routines":
         return <div data-bot-profile-section="routines" aria-label={t(SUBPAGE_META.routines.title)} className="flex min-w-0 flex-col gap-6">{renderSectionBody("routines")}</div>;
-      case "folder":
-        return (
-          <>
-            {block("files")}
-            {/* The Memory page (every bot's memory): a row that opens it as a modal over this one (#4470). */}
-            <ProfileCard title={sectionLabel("memory")} groupId="botMemoryPage">
-              <button
-                type="button"
-                data-bot-profile-memory=""
-                aria-haspopup="dialog"
-                onClick={() => setMemoryOpen(true)}
-                className="flex min-h-[44px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-hover"
-              >
-                <Brain strokeWidth={1.5} aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
-                <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-ink">{t("botProfile.memoryPage")}</span>
-                <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
-              </button>
-            </ProfileCard>
-          </>
-        );
     }
   };
 
@@ -506,7 +522,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // One group of the General or Knowledge tab: a card in place, or rows
   // that each open their sub-page (a group with nothing left is not drawn).
   const tabGroup = (group: (typeof BOT_PROFILE_TAB_GROUPS)[BotProfileTab][number]): ReactNode => {
-    if (group.card === "skills") return block("skills");
+    if (group.card === "folder") return block("files");
     if (group.card === "channels") return <ChannelsCard key={group.id} bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
     if (group.card === "accounts") {
       return (
@@ -519,12 +535,19 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       );
     }
     const switches = group.id === "settings" ? [collaboratorsSwitch, notifySwitch].filter(Boolean) : [];
-    const rows = group.pages.filter(subPageShown);
+    const rows: ReactNode[] = group.pages.filter(subPageShown).map((id) => (
+      <SubPageRow key={id} page={id} value={rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />
+    ));
+    // M-20261119-081: Appearance is a row of Settings again, after Model (as #4188 had it), opening the mascot editor's modal
+    if (group.id === "settings" && shown("appearance")) {
+      const at = group.pages.filter(subPageShown).indexOf("model") + 1;
+      rows.splice(at, 0, <AppearanceRow key="appearance" value={appearanceRowValue(bot)} onOpen={() => openCategory("appearance")} />);
+    }
     if (switches.length === 0 && rows.length === 0) return null;
     return (
       <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
         {switches}
-        {rows.map((id) => <SubPageRow key={id} page={id} value={rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />)}
+        {rows}
       </ProfileCard>
     );
   };
@@ -680,13 +703,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       data-persona-modal=""
       data-bot-profile-tab-current={tab}
       data-bot-profile-subpage-current={page ?? undefined}
-      data-bot-profile-modal-open={page || memoryOpen || appearanceOpen || channel ? "" : undefined}
+      data-bot-profile-modal-open={page || knowledgeModal || appearanceOpen || channel ? "" : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
         // Connect apps' window takes its own Escape.
         if (connectAppsOpen) return;
         // A modal of the page is open: its own Escape closes it (BotPageModal).
-        if (page || memoryOpen || appearanceOpen || channel) return;
+        if (page || knowledgeModal || appearanceOpen || channel) return;
         // A popover of the page is open (Share, Add, a pill list): this
         // Escape is its own, so it closes that popover only (its dismiss
         // hook on the window) and the page stays (#3398).
@@ -748,7 +771,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           </div>
         </div>
       </div>
-      {/* The modals over the page (#4470): a sub-page, and Memory stacked over Folder and memory's. */}
+      {/* The modals over the page (#4470): a sub-page; the Skills card and the Memory page, from the Bot folder's "..." menus. */}
       {page && (
         <SubPageModal key={page} page={page} onClose={closePage}>
           {subPageBody(page)}
@@ -763,10 +786,15 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           </MascotHeroSlotContext.Provider>
         </BotPageModal>
       )}
-      {page === "folder" && memoryOpen && (
-        <BotPageModal id="memory" title={t("memoryManager.title")} size="large" bare onClose={() => setMemoryOpen(false)}>
+      {(knowledgeModal === "skills" || knowledgeModal === "command") && shown("skills") && (
+        <BotPageModal id="skills" title={t("botSettings.nav.skills")} size="large" onClose={closeKnowledgeModal}>
+          {block("skills")}
+        </BotPageModal>
+      )}
+      {knowledgeModal === "memory" && (
+        <BotPageModal id="memory" title={t("memoryManager.title")} size="large" bare onClose={closeKnowledgeModal}>
           {/* drawn as a page of this modal: no window strip; its own close closes the modal */}
-          <PageHostProvider value={{ onClose: () => setMemoryOpen(false) }}>
+          <PageHostProvider value={{ onClose: closeKnowledgeModal }}>
             <MemoryManagerPanel />
           </PageHostProvider>
         </BotPageModal>

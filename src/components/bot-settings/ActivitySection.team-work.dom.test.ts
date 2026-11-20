@@ -99,7 +99,7 @@ describe("the Coding section of an orchestrator", () => {
     expect(load.mock.calls[0]![0]).toBe("orc");
     const section = host.querySelector<HTMLElement>('[data-bot-settings-section="coding"][data-team-work]')!;
     expect(section).not.toBeNull();
-    expect(section.querySelector("[data-activity-history='coding']")?.textContent).toBe("Coding");
+    expect(section.querySelector("[data-activity-history='coding']")?.textContent).toBe("Task");
     expect(section.querySelector("[data-team-count]")?.textContent).toBe("1 working now");
     // #3575: no team grid
     expect(section.querySelector("[data-team-row]")).toBeNull();
@@ -119,7 +119,7 @@ describe("the Coding section of an orchestrator", () => {
     expect([...section.querySelectorAll('[data-team-step-of="work:release"] [data-agent-title]')].map((step) => step.textContent)).toEqual(["Build", "Test", "Review"]);
     expect(section.querySelector('[data-team-step="h1"]')?.getAttribute("data-coding-state")).toBe("finished");
     const done = section.querySelector<HTMLElement>("[data-team-done-today]")!;
-    expect(done.textContent).toContain("Done today · 1 merged");
+    expect(done.textContent).toContain("1 merged today");
     act(() => done.querySelector<HTMLButtonElement>("[data-coding-open]")!.click());
     expect(section.querySelector('[data-team-work-item="step:m1"]')?.getAttribute("data-coding-state")).toBe("merged");
     // the bot's own coding rows stay, under the work rows

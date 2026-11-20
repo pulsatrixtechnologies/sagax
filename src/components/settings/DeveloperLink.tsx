@@ -4,7 +4,7 @@
 // renders a settings link everywhere else.
 //
 // #2658: with a bot, the link opens Developer > Per bot on that bot (the bot
-// page's Advanced sub-page and Folder and memory keep this line).
+// page's Advanced sub-page and its Bot folder keep this line).
 import { requestDeveloperBot } from "@/lib/developer-bot-request";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";

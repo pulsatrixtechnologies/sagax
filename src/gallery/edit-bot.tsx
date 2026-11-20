@@ -3,6 +3,8 @@
  * stand-in /api. Fictional bot, neutral names. Not shipped in the app.
  * ?view=editor&section=<page> (the profile page in the main panel, beside
  * the real sidebar) | ?view=panel&tab=<details|library|computer>
+ * | ?view=both (the sidebar, the main panel and the bot panel side by side: the
+ * panel's gear opens the profile page in the main panel)
  * &org=1 (an organization server with the person's server environment)
  * &skin=<id>&lang=<code>&color=<mascot colour> (the banner's wash, #2173)
  * scripts/capture/edit-bot.mjs shoots every page and tab, light and dark. */
@@ -88,7 +90,7 @@ createRoot(document.getElementById("root")!).render(
     <StoreProvider>
       <div className="flex h-screen bg-app text-ink" data-gallery-edit-bot="">
         <Open />
-        {view === "editor" ? <Shell /> : <Panel />}
+        {view === "editor" ? <Shell /> : view === "both" ? <><Shell /><Panel /></> : <Panel />}
       </div>
     </StoreProvider>
   </StrictMode>,

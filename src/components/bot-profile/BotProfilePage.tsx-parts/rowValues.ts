@@ -15,6 +15,10 @@ import { fetchRules, type RuleSetWire } from "@/lib/rule-sets";
 import { relativeTime } from "@/lib/memory";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import type { BotProfileSubPage, BotProfileTab } from "@/lib/persona-sections";
+import { completeMascotLook } from "../../../../shared/mascot-look";
+import { botAvatarProfile } from "../../../../shared/bot-avatar";
+import { resolveBotAvatarOutcome } from "../../Avatar";
+import { CHARACTER_LABEL, SHAPE_LABEL } from "../../floating-bots/mascot-look-labels";
 import { approvalModeFor } from "../../../../shared/approval-mode";
 import { proactiveModeFor } from "../../../../shared/proactive-mode";
 import { modelLabel } from "../../ModelPicker.tsx-parts/helpers";
@@ -30,6 +34,18 @@ export function ruleCount(sets: readonly Pick<RuleSetWire, "enabled" | "text">[]
   return sets
     .filter((set) => set.enabled)
     .reduce((sum, set) => sum + set.text.split("\n").filter((line) => line.trim() !== "" && !line.trim().startsWith("#")).length, 0);
+}
+
+/** The Appearance row's value (M-20261119-081, as #4188 had it): what the
+ * bot wears, by the rule every avatar renders with (resolveBotAvatarOutcome):
+ * its picture only when it has one and a picture crop, else its mascot (a
+ * shape by its own name). */
+export function appearanceRowValue(bot: Pick<Bot, "avatarCrop" | "avatarUrl" | "mascotLook">): string {
+  const profile = botAvatarProfile(bot);
+  const outcome = resolveBotAvatarOutcome({ avatarCrop: profile.avatarCrop, hasUrl: Boolean(profile.avatarUrl), imageFailed: false });
+  if (outcome === "flatImage") return t("botProfile.v6.value.picture");
+  const look = completeMascotLook(bot.mascotLook);
+  return t(look.character === "shape" ? SHAPE_LABEL[look.shape] : CHARACTER_LABEL[look.character]);
 }
 
 function useLoaded<T>(key: string | null, load: () => Promise<T>): T | null {
@@ -80,8 +96,6 @@ export function useBotRowValues(bot: Bot, { tab, listing }: { tab: BotProfileTab
         return typeof lastVersion === "number" ? relativeTime(lastVersion) : null;
       case "routines":
         return counted(routines.filter((routine) => routine.enabled !== false).length, "botProfile.v6.value.routines.one", "botProfile.v6.value.routines.other");
-      case "folder":
-        return t(bot.memoryEnabled === false ? "botProfile.v6.value.memoryOff" : "botProfile.v6.value.memoryOn");
     }
   };
 }

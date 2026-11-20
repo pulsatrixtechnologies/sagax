@@ -1,6 +1,6 @@
-// The bot panel's Coding section (JC, 2026-11-06): one CodingSessionRow per
-// coding task or launched agent, in the panel card under a grey "Coding"
-// label. State mark, title, grey subtitle (state and "#N" pull request
+// The bot panel's Task section (JC, 2026-11-06; "Coding" until
+// M-20261119-083): one CodingSessionRow per coding task or launched agent,
+// in the panel card under a grey "Task" label. State mark, title, grey subtitle (state and "#N" pull request
 // link), chevron (2026-11-07). Past five
 // rows, "↓ N more" shows the rest. A click opens the session in the chat
 // column (the coding chat), never a side panel. An orchestrator's work rows

@@ -51,7 +51,15 @@ const page = (name: string, a: string, b: string) => () =>
     createElement("div", { "data-settings-row": `${name}-b` }, b));
 vi.mock("../bot-settings/OverviewSection", () => ({ OverviewSection: page("overview", "Summary of the bot", "Prompt preview") }));
 vi.mock("../bot-settings/SoulSection", () => ({ SoulSection: page("soul", "Standing instructions", "Tone") }));
-vi.mock("../bot-settings/SkillsSection", () => ({ SkillsSection: page("skills", "Skill list", "Teach a skill") }));
+vi.mock("../bot-settings/SkillsSection", () => ({
+  SkillsSection: page("skills", "Skill list", "Teach a skill"),
+  // the Bot folder on Knowledge reads the skills (M-20261119-081)
+  useManagedSkills: () => ({
+    skills: [], staged: [], loading: false, working: "", setWorking: () => {}, error: "", setError: () => {}, reviewing: null, setReviewing: () => {},
+    refresh: async () => {}, toggle: async () => {}, enableReviewed: async () => {}, share: async () => {}, unshare: async () => {},
+    deciding: "", decideError: "", decideStaged: async () => {}, assignmentBusy: { current: false }, putAssignments: async () => {},
+  }),
+}));
 vi.mock("../bot-settings/MemorySection", () => ({ MemorySection: page("memory", "Memory", "Topics") }));
 vi.mock("../bot-settings/RulesSection", () => ({ RulesSection: page("rules", "Rules", "Never") }));
 vi.mock("../bot-settings/WorkspaceFilesSection", () => ({ WorkspaceFilesSection: page("files", "Files", "Upload") }));

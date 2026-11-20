@@ -467,8 +467,11 @@ each chunk with `/voice/transcribe` (`transcribeRecording`), send it as one
 line (`seq` = the chunk's order, speaker `room`), delete its audio; an empty
 batch every 60 s while nothing else goes; a failure waits 2 s to 2 min and
 tries again; a relaunch picks the queue up. The stop goes once every chunk the
-recorder cut is sent. One path: the watch's URLSession, which watchOS routes
-through the paired iPhone when it is near.
+recorder cut is sent; after a relaunch, once what is on disk is sent
+(`MeetingQueue.relaunched`: a chunk the app lost is not waited for). One path:
+the watch's URLSession, which watchOS routes through the paired iPhone when it
+is near. Meeting shows where holding to talk does (`WatchTalk.offersHold`: a
+speech to text engine of the person, xAI or OpenAI).
 
 Server: a session's `purpose` (`shared/listening.ts`) is kept on its record;
 at the person's stop a meeting gets `inPersonMeetingPrompt`

@@ -194,6 +194,16 @@ public struct MeetingQueue: Codable, Equatable, Sendable {
 
     public mutating func heartbeat(at now: Double) { lastSentAt = now }
 
+    /// The app was stopped and launched again: its recorder is gone, so the
+    /// meeting is stopped, and what is on disk is all there is. A chunk the
+    /// recorder had not handed over yet went with the app, so the stop no
+    /// longer waits for it (it would wait forever, and no other meeting
+    /// could start).
+    public mutating func relaunched() {
+        stopped = true
+        expectedChunks = nil
+    }
+
     /// The server no longer knows the session (it was removed): a new one
     /// carries what is left.
     public mutating func lostSession() { sessionId = nil }

@@ -93,7 +93,7 @@ final class WatchMeeting: ObservableObject {
         self.session = session
         guard queue == nil, let saved = Self.load() else { return }
         var resumed = saved
-        resumed.stopped = true
+        resumed.relaunched()
         queue = resumed
         save()
         run()

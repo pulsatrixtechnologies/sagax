@@ -50,6 +50,24 @@ final class MeetingListeningTests: XCTestCase {
         guard case .transcribe = queue.next(now: 2) else { return XCTFail("the late chunk first") }
     }
 
+    /// The app stopped between the tap on Stop and the last chunk: after the
+    /// relaunch the stop waits for nothing more, so the meeting ends and the
+    /// next one can start.
+    func testARelaunchSendsTheStopWithWhatIsOnDisk() throws {
+        var queue = MeetingQueue(botId: "pixel", threadId: "main", startedAt: 0)
+        queue.started(sessionId: "ls_1", at: 0)
+        queue.add(file: "0.wav", at: 0)
+        queue.heard(seq: 0, text: "We ship on Friday.")
+        queue.posted(seq: 0, at: 1)
+        queue.stopped = true
+        queue.expectedChunks = 2
+        XCTAssertEqual(queue.next(now: 2), .wait)
+        var restored = try JSONDecoder().decode(MeetingQueue.self, from: JSONEncoder().encode(queue))
+        restored.relaunched()
+        XCTAssertNil(restored.expectedChunks)
+        XCTAssertEqual(restored.next(now: 3), .stop)
+    }
+
     func testAQuietRecordingSaysItIsStillThereBeforeTheServerGivesUp() {
         var queue = MeetingQueue(botId: "pixel", threadId: "main", startedAt: 0)
         queue.started(sessionId: "ls_1", at: 0)

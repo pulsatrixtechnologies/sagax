@@ -333,6 +333,10 @@ export const GUARD_TESTS = [
   // #4186: scans every tracked file of server, src, shared, scripts and
   // electron for machine-bound paths, so it runs on every lot.
   "scripts/stability/portable-paths.test.ts",
+  // #5114: scans every tracked file for a bot name cleared from the
+  // repository (hashed, never in clear). Run only by the full suite, it went
+  // red on main with #2995 and stayed there unseen; about 5 s.
+  "scripts/testing/cleared-bot-names.guard.test.ts",
   ...SOURCE_TEXT_TESTS,
 ];
 

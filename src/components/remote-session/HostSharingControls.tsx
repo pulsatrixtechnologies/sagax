@@ -50,7 +50,7 @@ export function useHostBotChoices(): HostBotChoice[] {
   );
 }
 
-/** "All bots", or the allowed bots by name ("Ember, Katarina"). A bot that
+/** "All bots", or the allowed bots by name ("Atlas, Scout"). A bot that
  * no longer exists counts by number so nothing on the row is invented. */
 export function hostBotsLabel(scope: readonly string[] | null | undefined, bots: readonly HostBotChoice[]): string {
   if (!scope || scope.length === 0) return t("remoteSessionsAdmin.hosts.bots.all");

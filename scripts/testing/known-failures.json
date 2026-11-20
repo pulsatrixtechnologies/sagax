@@ -1193,18 +1193,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "scripts/testing/cleared-bot-names.guard.test.ts",
-      "test": "a bot name cleared from the repository never comes back, in any tracked file",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/bots/bot-visibility.e2e.test.ts",
       "test": "per-bot visibility on a shared workspace > keeps bots with different audiences from reaching each other",
       "platforms": [

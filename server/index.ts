@@ -493,7 +493,7 @@ import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchFingerprints, readSwitchSummary, writeSwitchFingerprint, writeSwitchSummary } from "./perspicax/role-events.ts";
+import { createRoleEvents, missingRoleMessage, readSwitchFingerprint, readSwitchFingerprints, readSwitchSummary, writeSwitchFingerprint, writeSwitchSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
@@ -5153,7 +5153,6 @@ bindLeafHost({
   get mcpDisabledTools() { return mcpDisabledTools; },
   get mcpIdentityEnv() { return mcpIdentityEnv; },
   get mcpServerNameError() { return mcpServerNameError; },
-  get meWriteSummary() { return meWriteSummary; },
   get measureContextBuckets() { return measureContextBuckets; },
   get mediaProxyPolicyFromEnv() { return mediaProxyPolicyFromEnv; },
   get meetingNotetakerEnabled() { return meetingNotetakerEnabled; },
@@ -32785,11 +32784,6 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
       fingerprint: (write ? writeSwitchFingerprint : readSwitchFingerprint)(from.slug, to.slug, permission.path),
     }),
     knownReadRefusal: (input) => roleJournal.refusedRead(input),
-    askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({
-      threadId, botId, tool: "perspicax-role",
-      summary: meWriteSummary(languageOfPerson(principalId), { person: (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "", role: role.name || role.slug, tool, permission }),
-      fingerprint: `role-me-write:${role.slug}:${tool}`,
-    }),
     // Routine runs and teammate turns: the same write twice at once is one.
     writeOnceScope: ({ threadId }) => activeRoutineRunForThread(threadId) || internalTurnThreads.has(threadId) ? "unattended" : null,
     // a live call keeps its Perspicax tools mounted from turn to turn

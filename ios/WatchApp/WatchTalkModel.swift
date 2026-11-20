@@ -15,8 +15,9 @@ final class WatchTalkModel: ObservableObject {
     enum Phase: Equatable { case idle, listening, hearing, sending, waiting, speaking }
 
     @Published private(set) var phase = Phase.idle
-    /// Holding to talk is offered: xAI hears and speaks for this person and
-    /// this bot. Otherwise the mic is the system's dictation only.
+    /// Holding to talk is offered: a speech to text engine of the person
+    /// (xAI or OpenAI) hears them for this bot (WatchTalk.offersHold).
+    /// Otherwise the mic is the system's dictation only.
     @Published private(set) var available = false
     /// Why the last try did not reach the bot, in a line under the mic.
     @Published private(set) var problem: LocalizedStringKey?

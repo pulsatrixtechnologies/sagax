@@ -441,7 +441,11 @@ threshold it records, and letting go sends (`WatchTalkModel`):
   watch, which reads the person's `omb.voiceMode.v1` preference from the
   server).
 
-Holding to talk shows only when `/voice/status` says xAI serves the person
-for that bot. Tests: `ios/Tests/CompanionCoreTests/WatchTalkTests.swift`.
+Holding to talk shows as soon as one speech to text engine hears the person
+for that bot, xAI or OpenAI (`WatchTalk.offersHold`: `available` of
+`/voice/status`, the phone's voice notes' verdict), never xAI alone;
+`/voice/transcribe` falls over to the next engine when one fails (empty
+credits included). The watch has no speech recognizer of its own (no Speech
+framework on watchOS). Tests: `ios/Tests/CompanionCoreTests/WatchTalkTests.swift`.
 Debug captures: `-watch-demo chat -watch-demo-talk <step>`.
 

@@ -19,6 +19,20 @@ public enum WatchTalk {
     /// How often the watch looks for the answer while it waits.
     public static let answerPoll: TimeInterval = 1.5
 
+    /// Holding to talk is offered as soon as one speech to text engine of the
+    /// server hears this person for this bot (`/voice/transcribe`: xAI or
+    /// OpenAI, the next one taking over when one fails, empty credits
+    /// included), never xAI alone: `available` of `/voice/status`
+    /// (server/voice/voice-mode.ts), the verdict the phone's voice notes
+    /// read (Session.transcribeVoiceNote). The watch has no speech
+    /// recognizer of its own (no Speech framework on watchOS); the answer is
+    /// read by any voice the person has (MessageSpeaker: their provider, the
+    /// computer's voice, else the watch's own). `provider` and `realtime`
+    /// say nothing here: the first is always "xai", the second is the call's.
+    public static func offersHold(_ status: VoiceModeStatus?) -> Bool {
+        status?.available == true
+    }
+
     public static func callId() -> String { callPrefix + UUID().uuidString.lowercased() }
     public static func utteranceId() -> String { "utt-" + UUID().uuidString.lowercased() }
 

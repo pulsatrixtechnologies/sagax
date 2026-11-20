@@ -214,8 +214,8 @@ struct WatchChat: View {
 
 /// The chat's mic (#5129): a tap is the system's dictation, as before; held
 /// past VoiceNoteHold's threshold it records, and letting go sends the words
-/// to the bot, whose answer is read aloud. Without a voice for this bot it
-/// is the dictation button only.
+/// to the bot, whose answer is read aloud. Without speech to text for this
+/// person and bot (WatchTalk.offersHold) it is the dictation button only.
 private struct WatchTalkButton: View {
     @ObservedObject var talk: WatchTalkModel
     let dictate: () -> Void

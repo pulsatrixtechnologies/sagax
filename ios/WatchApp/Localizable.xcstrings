@@ -44,7 +44,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Autorisez le micro dans Réglages pour enregistrer une note vocale."
+            "value": "Autorise le micro dans Réglages pour enregistrer une note vocale."
           }
         }
       }
@@ -732,7 +732,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trop court : maintenez un peu plus longtemps pour enregistrer une note vocale."
+            "value": "Trop court : maintiens un peu plus longtemps pour enregistrer une note vocale."
           }
         }
       }

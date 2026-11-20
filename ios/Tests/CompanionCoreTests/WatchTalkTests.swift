@@ -40,6 +40,22 @@ final class WatchTalkTests: XCTestCase {
         XCTAssertFalse(WatchTalk.turnRuns(nil, threadId: "main"))
     }
 
+    /// D-20261120-004: holding to talk shows as soon as one speech to text
+    /// engine hears the person, OpenAI included, never xAI alone. The bodies
+    /// are what server/voice/voice-mode.ts answers: `provider` stays the
+    /// legacy "xai", and only an xAI key brings `realtime`.
+    func testHoldingToTalkIsOfferedByAnySpeechToTextEngineNotOnlyXAI() throws {
+        let openAIOnly = #"{"provider":"xai","available":true,"via":"speaker-key","providers":{"tts":["openai"],"stt":["openai"]},"tts":"openai","stt":"openai"}"#
+        XCTAssertTrue(WatchTalk.offersHold(try status(openAIOnly)))
+        // xAI's credits are empty: the key is still listed, OpenAI takes over on the server
+        let xaiThenOpenAI = #"{"provider":"xai","available":true,"via":"speaker-key","realtime":true,"providers":{"tts":["xai","openai"],"stt":["xai","openai"]},"tts":"xai","stt":"xai"}"#
+        XCTAssertTrue(WatchTalk.offersHold(try status(xaiThenOpenAI)))
+        // a voice without ears (ElevenLabs, the computer's voice): nothing hears the watch
+        let voiceOnly = #"{"provider":"xai","available":false,"refusal":{"cause":"no_credentials"},"providers":{"tts":["elevenlabs","system"],"stt":[]}}"#
+        XCTAssertFalse(WatchTalk.offersHold(try status(voiceOnly)))
+        XCTAssertFalse(WatchTalk.offersHold(nil))
+    }
+
     func testVoiceSettingsComeFromThePersonsPreference() {
         var chosen = VoiceModeSettings.default
         chosen.voice = "ara"
@@ -83,6 +99,10 @@ final class WatchTalkTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func status(_ json: String) throws -> VoiceModeStatus {
+        try JSONDecoder().decode(VoiceModeStatus.self, from: Data(json.utf8))
+    }
 
     private func task(_ id: String) -> BotTask { BotTask(threadId: id, title: id, createdAt: 1) }
 

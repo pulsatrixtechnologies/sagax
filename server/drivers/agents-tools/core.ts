@@ -244,7 +244,7 @@ export const DEF_SELECT_COMPUTER = {
 export const DEF_ATTACH_FILE = {
     name: "attach_file",
     description:
-      "Attach a finished file to the chat so the user can preview and download it: an image, video, audio clip, PDF, spreadsheet, slide deck or other document you made. Pass its path: a path inside your computer's /home/cua/workspace (for example /home/cua/workspace/report.pdf), a file in your working folder, or a file on the person's own computer or in their server environment (for example the path a tool said it saved a downloaded file to). Never paste a VM path as a link: chat cannot open it. Supported: images (png, jpg, gif, webp), video (mp4, webm, mov), audio (mp3, m4a, aac, wav, ogg, opus, flac), pdf, Word/Excel/PowerPoint and OpenDocument files, and csv, tsv, txt, md, json, rtf. Up to 25 MB (images 10 MB). Finish writing the file first, then call this directly: it errors if the file is missing.",
+      "Attach a finished file to the chat so the user can preview and download it: an image, video, audio clip, PDF, spreadsheet, slide deck or other document you made. Pass its path: a path inside your computer's /home/cua/workspace (for example /home/cua/workspace/report.pdf), a file in your working folder, or a path on the person's computer or server environment. Never paste a VM path as a link: chat cannot open it. Supported: images (png, jpg, gif, webp), video (mp4, webm, mov), audio (mp3, m4a, aac, wav, ogg, opus, flac), pdf, Word/Excel/PowerPoint and OpenDocument files, and csv, tsv, txt, md, json, rtf. Up to 25 MB (images 10 MB). Finish writing the file first, then call this directly: it errors if the file is missing.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

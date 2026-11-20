@@ -64,6 +64,8 @@ import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 import { currentProvider } from "@/lib/model-menu-steps";
+import { modeOfSelection } from "@/lib/model-mode";
+import type { ModelPanelProps } from "./ModelPanel";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -145,6 +147,7 @@ export function ModelPicker({
   fallbackAnchor,
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
+  modes = true,
 }: {
   /** Omitted with `choose`. */
   bot?: Bot;
@@ -175,6 +178,9 @@ export function ModelPicker({
   /** Headless: what the menu opens above when no row asked (the mascot). */
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
+  /** #4900, #5088: in the composer the menu is the mode menu (Auto, Fast, Expert,
+   * Heavy, Manual). `false` keeps the model panel's own short view there. */
+  modes?: boolean;
 }) {
   const dispatch = useStoreDispatch();
   const { refreshInstances, refreshModels: refreshInstanceModels } = useStoreCommands();
@@ -317,7 +323,7 @@ export function ModelPicker({
     dispatch({ type: "setModel", botId: bot.id, threadId: threadId ?? bot.threadId, updateBotDefault: true, selection: profile.modelSelection });
   };
 
-  const { pick, setEffort, chooseAuto, setAutoOptimize } = makeModelPickerActions({
+  const { pick, setEffort, chooseAuto, chooseMode, setAutoOptimize } = makeModelPickerActions({
     getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll,
   });
 
@@ -362,7 +368,17 @@ export function ModelPicker({
   const providerLabel = currentProvider(menuSections)?.section.label;
   // M-20261119-015: and the account it runs on, while the provider has several
   const accountLabel = autoOn ? undefined : currentProvider(menuSections)?.section.rows.find((row) => row.current)?.account;
-  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel });
+  // #4900, #5088: the chat bar's menu is the mode menu (Auto, Fast, Expert, Heavy,
+  // Manual); Manual is the model panel's list of every model. The chip names
+  // the mode, or the pinned model under Manual.
+  const modeUi = modes && inComposer && !choose && !viewerLocal && !windowOnly;
+  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel, modes: modeUi });
+  const modeMenu: ModelPanelProps["modes"] = modeUi ? {
+    current: modeOfSelection(selection),
+    manualLabel: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
+    resolutions: autoStatus?.modes,
+    onPick: chooseMode,
+  } : undefined;
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
@@ -475,6 +491,7 @@ export function ModelPicker({
       runsWith={choose || viewerLocal ? undefined : runsWith}
       contextSize={choose || viewerLocal ? undefined : contextSize}
       customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
+      modeMenu={modeMenu}
     />
   );
 }
@@ -520,6 +537,7 @@ function ModelPickerShell({
   runsWith,
   contextSize,
   customModel,
+  modeMenu,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
@@ -562,6 +580,8 @@ function ModelPickerShell({
   runsWith?: readonly RunsWithChoice[];
   contextSize?: readonly ContextSizeChoice[];
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
+  /** #4900, #5088: the chat bar's mode menu, the model panel's short view. */
+  modeMenu?: ModelPanelProps["modes"];
 }) {
   return (
     <div ref={rootRef} className={cn(contained || listChip ? "w-full min-w-0" : "relative", className)}>
@@ -657,6 +677,7 @@ function ModelPickerShell({
         runsWith,
         contextSize,
         customModel,
+        modeMenu,
       }))}
     </div>
   );

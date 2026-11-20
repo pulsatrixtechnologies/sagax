@@ -44,4 +44,10 @@ export interface ModelSelection {
    * (#5002): the account strategy leaves it there; only a usage limit moves
    * it. Only true is stored; picking a model by its row clears it. */
   accountPinned?: true;
+  /** Composer mode (#4900): with Auto on, the person asked for Fast, Expert,
+   * or Heavy instead of letting Auto read the request. The model each
+   * mode runs is picked per turn from what the person can use
+   * (server/models/model-mode.ts). Absent means plain Auto. Kept only with
+   * Auto; picking a model in the engine list clears it. */
+  mode?: "fast" | "expert" | "heavy";
 }

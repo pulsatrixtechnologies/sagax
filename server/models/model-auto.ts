@@ -14,6 +14,7 @@ import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../../shared/auto-model.ts";
 import { autoOptimizeOf } from "../../shared/model-auto-optimize.ts";
 import { providerOfModel } from "../../shared/model-provider.ts";
+import type { ForcedModelMode, ModeModel } from "../../shared/model-mode.ts";
 
 export type { AutoPayerVia, AutoReason } from "../../shared/auto-model.ts";
 export type TaskClass = AutoTaskClass;
@@ -154,6 +155,10 @@ export interface AutoEngine {
   driverKind: string;
   displayName: string;
   models: { default: string; options: ReadonlyArray<{ id: string; label: string; contextWindow?: number; custom?: boolean }> };
+  /** #4900: the rows the catalogue never ranks (a local model, a model
+   * server's row, a custom id), the person's own to use. Auto never picks
+   * them; a composer mode falls back on them when nothing ranked is usable. */
+  unranked?: ReadonlyArray<{ id: string; label: string; contextWindow?: number }>;
   effortLevels?: readonly EffortLevel[];
   via?: AutoPayerVia;
   /** The bot's fast model (ModelSelection.fast) when this engine lists it,
@@ -189,6 +194,11 @@ export interface AutoPick {
   /** #5014: the account of the model's provider the person's account
    * strategy took (server/index.ts autoAccountFor), when several offer it. */
   account?: { instanceId: string; pick: AccountPick; moved: boolean };
+  /** #4900: the composer mode that made the pick (reason "mode"). */
+  mode?: ForcedModelMode;
+  /** #4900: Heavy only, the agents that work in parallel before this model
+   * (the Leader) answers (server/models/model-mode.ts composeHeavyTeam). */
+  team?: ModeModel[];
 }
 
 export interface AutoRequest {
@@ -401,7 +411,7 @@ const VARIANT = /(-thinking|-preview|-pro$|-beta|-alpha|unverified|-latest$|-\d{
 /** "-pro" marks a variant on most families (an extra-effort twin of a plain
  * model), but Google's Pro IS the line's strongest model ("gemini-2.5-pro",
  * with "-flash" the plain one next to it): taking it for a variant dropped it
- * whenever Flash was listed, and left Google with no top model at all. */
+ * whenever Flash was listed, and left Google with no top model at all (#4900). */
 const VARIANT_OF_GOOGLE = /(-thinking|-preview|-beta|-alpha|unverified|-latest$|-\d{8}$|-non-reasoning)/;
 const isVariant = (engine: AutoEngine, id: string): boolean =>
   (familyOfModel(engine.driverKind, id) === "google" ? VARIANT_OF_GOOGLE : VARIANT).test(bareModelId(id));
@@ -420,7 +430,7 @@ function compareVersionsDesc(a: string, b: string): number {
   return 0;
 }
 
-interface Candidate {
+export interface Candidate {
   id: string;
   label: string;
   facts: CatalogFacts;
@@ -454,7 +464,7 @@ function candidatesOf(engine: AutoEngine, catalog: CatalogLookup, skip: readonly
 }
 
 /** Newest first: release date, then the version in the id, then plain over a variant. */
-function newestFirst(a: Candidate, b: Candidate): number {
+export function newestFirst(a: Candidate, b: Candidate): number {
   if (a.variant !== b.variant) return a.variant ? 1 : -1;
   const dateA = a.facts.releaseDate ?? "";
   const dateB = b.facts.releaseDate ?? "";
@@ -463,6 +473,11 @@ function newestFirst(a: Candidate, b: Candidate): number {
 }
 
 const priceOf = (candidate: Candidate) => (candidate.facts.costInput ?? 0) + (candidate.facts.costOutput ?? 0);
+
+/** #4900: what the catalogue says a model costs (input plus output, per
+ * million tokens), the one cross-provider measure of how large a model is. */
+export const candidatePrice = priceOf;
+
 
 /** The model of one tier on one engine, or null when the engine has none. */
 export function modelForTier(engine: AutoEngine, tier: Tier, catalog: CatalogLookup, skip: readonly AutoChainEntry[] = []): Candidate | null {
@@ -619,7 +634,7 @@ export const FAST_CLASSES: readonly TaskClass[] = ["quick", "automation", "gener
 /** The bot's fast model for this work, or null when it has none, the engine
  * does not offer it for this turn or a refusal took it out. The chain goes
  * on to what Auto would have picked, so a refusal climbs to the larger model. */
-function pickFast(request: AutoRequest, role: AutoPick["role"], tier: Tier, taskClass?: TaskClass): AutoPick | null {
+export function pickFast(request: AutoRequest, role: AutoPick["role"], tier: Tier, taskClass?: TaskClass): AutoPick | null {
   const wanted = request.base.fast;
   if (!wanted) return null;
   const engine = request.engines.find((candidate) => candidate.instanceId === wanted.instanceId);
@@ -813,6 +828,11 @@ export function explainPick(pick: AutoPick): string {
     const cls = pick.taskClass ? CLASS_LABEL[pick.taskClass] : "general";
     return `Auto: worker ${pick.engineLabel} · ${pick.modelLabel} (${cls}), the ${pick.tier} tier ${payer}${pick.reason === "tier-fallback" ? ", no closer tier was available" : ""}.`;
   }
+  // #4900: the person chose a composer mode
+  if (pick.reason === "mode" && pick.mode) {
+    const rule = { fast: "the quickest good model", expert: "the strongest model", heavy: "the strongest model, which leads the team" }[pick.mode];
+    return `${pick.mode[0]!.toUpperCase()}${pick.mode.slice(1)}: ${pick.modelLabel} on ${pick.engineLabel}, ${rule} ${payer}.`;
+  }
   // The person's own turn, when the words moved it off the strongest tier
   // (2026-10-29): say what in the message decided it.
   if (pick.reason !== "fast" && pick.reason !== "base" && pick.tier === "fast" && pick.taskClass === "quick") {
@@ -851,6 +871,7 @@ export function autoModelRecord(pick: AutoPick, at: number): AutoModelRecord {
     reason: pick.reason,
     ...(pick.via ? { via: pick.via } : {}),
     ...(pick.fromEngineLabel ? { fromEngineLabel: pick.fromEngineLabel } : {}),
+    ...(pick.mode ? { mode: pick.mode } : {}),
     at,
   };
 }

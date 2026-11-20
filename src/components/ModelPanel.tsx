@@ -8,6 +8,14 @@
 // field past a few rows. Below, "Reasoning" (the levels the model really
 // takes) and a quiet footer (Runs with, Manage models). Favorites follow the
 // person, not the bot (src/lib/model-favorites.ts, GET/PUT /api/me/models).
+//
+// #5088 (owner, 2026-11-19, M-20261119-077, D-20261119-083): in the
+// composer the short view is the mode menu instead (ModeMenu.tsx): Auto (its
+// Optimize under it), Fast, Expert, Heavy, Manual. Manual opens every model,
+// the starred favorites first, then each provider and each of its accounts
+// with its state (src/lib/model-menu.ts manualProviders); the star still adds
+// or removes a favorite. Reasoning, Account, Runs with and Manage models (with
+// how many are off) stay as they are.
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
@@ -17,7 +25,8 @@ import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { AUTO_OPTIMIZE_VALUES, type AutoOptimize } from "../../shared/model-auto-optimize";
 import type { EffortLevel } from "../../shared/wire";
-import { filterModelSections, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
+import { filterModelSections, manualProviders, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
+import { ModeMenu, type ModeMenuProps } from "./ModeMenu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
 import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
 import { foldItems, foldMoreLabel } from "./ShowMoreFold";
@@ -59,6 +68,10 @@ export interface ModelPanelProps {
   showSettings: boolean;
   /** Which list opens: the short one (Auto, the person's favorites, "All models") or every provider's models. */
   view?: "short" | "all";
+  /** #5088: the composer's mode menu (Auto, Fast, Expert, Heavy, Manual) as
+   * the short view; "all" is then the Manual list. `manualLabel` names the
+   * pinned model while it runs. */
+  modes?: Pick<ModeMenuProps, "current" | "resolutions" | "onPick"> & { manualLabel?: string };
 }
 
 /** The provider the "All models" list opens on: the one that holds the current
@@ -83,6 +96,8 @@ const SEGMENT_ON = "flex-1 bg-popover font-medium text-popover-ink shadow-[0_1px
 const SEGMENT_OFF = "text-popover-ink-secondary hover:text-popover-ink";
 // M-20261119-051: a heading starts where the rows' names start (6px of list, 8px of row)
 const HEADING = "shrink-0 px-3.5 pb-1 pt-2 text-[12px] leading-4 text-popover-ink-secondary";
+// #5088: a provider's or the favorites' heading inside the Manual list (the list's own 6px already in)
+const GROUP_HEADING = "px-2 pb-0.5 pt-2 text-[12px] leading-4 text-popover-ink-secondary";
 
 /** The right column of every row (M-20261119-051, "nothing lines up"): the
  * row's text at the right ends on one edge, then a fixed icon zone of two
@@ -112,7 +127,7 @@ function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orient
 }
 
 export function ModelPanel(props: ModelPanelProps) {
-  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings, view: openOn = "short" } = props;
+  const { sections, onPick, disabled = false, favorites, mark, autoOn, optimize, effort, variantRow, fast, contextSize, runsWith, manage, custom, showSettings, view: openOn = "short", modes } = props;
   const providers = panelProviders(sections);
   const top = sections.filter((section) => !section.label).flatMap((section) => section.rows);
   const autoRow = top.find((row) => row.kind === "auto");
@@ -136,10 +151,15 @@ export function ModelPanel(props: ModelPanelProps) {
   }));
 
   const section = providers.find((candidate) => candidate.key === view);
-  const viewRows: ModelMenuRow[] = all ? section?.rows ?? [] : [];
+  // #5088: Manual lists every provider at once, grouped by account
+  const manual = Boolean(modes) && all;
+  const viewRows: ModelMenuRow[] = !all ? [] : manual ? [...favoriteRows, ...providers.flatMap((candidate) => candidate.rows)] : section?.rows ?? [];
   const searchable = all && viewRows.length > PANEL_SEARCH_FROM;
   const typed = searchable ? query.trim() : "";
-  const shownRows = typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
+  const manualGroups = manual ? manualProviders(providers, typed) : [];
+  const manualFavorites = manual ? filterModelSections([{ key: "favorites", label: "", rows: favoriteRows }], typed).flatMap((candidate) => candidate.rows) : [];
+  const shownRows = manual ? [...manualFavorites, ...manualGroups.flatMap((group) => group.groups.flatMap((one) => one.rows))]
+    : typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
   const lead = typed ? [] : leadRows;
   // the first rows, then "Show N more"; the model in use is never folded away, a search lists every match
   const fold = typed ? { head: shownRows, rest: [] as ModelMenuRow[] } : foldItems(shownRows, MODELS_SHOWN, (candidate) => candidate.current);
@@ -179,7 +199,7 @@ export function ModelPanel(props: ModelPanelProps) {
   const rovingRows = all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
   const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
   const rovingFirst = rovingRows[0];
-  const modelRow = (row: ModelMenuRow) => {
+  const modelRow = (row: ModelMenuRow, group?: string) => {
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
     const check = row.current ? <Check size={14} aria-hidden="true" className="text-popover-accent" /> : null;
@@ -203,7 +223,7 @@ export function ModelPanel(props: ModelPanelProps) {
       </span>
     );
     return (
-      <div key={`${all ? view : "short"}:${row.key}`} className={cn("group flex", row.account ? "min-h-11 py-0.5" : "h-9", "items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover")}>
+      <div key={`${group ?? (all ? view : "short")}:${row.key}`} className={cn("group flex", row.account ? "min-h-11 py-0.5" : "h-9", "items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover")}>
         <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
           disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? ([row.title ?? (description ? `${row.label} · ${description}` : undefined), row.account].filter(Boolean).join(" · ") || undefined)}
           tabIndex={row.current || (!rovingHasCurrent && row === rovingFirst) ? 0 : -1}
@@ -238,11 +258,25 @@ export function ModelPanel(props: ModelPanelProps) {
     );
   };
 
+  // M-20261119-051: Auto's one setting on one 32px line under it, the
+  // shared small segmented control at the right, no empty band
+  const optimizeRow = (choice: NonNullable<ModelPanelProps["optimize"]>) => (
+    <div data-model-auto-optimize-row className="flex h-8 items-center justify-between gap-3 pl-2 pr-2">
+      <span className="min-w-0 truncate text-[12px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</span>
+      <SegmentedChoice data-model-auto-optimize="" label={t("model.auto.optimizeTitle")} disabled={disabled}
+        value={choice.value} onPick={choice.onPick}
+        options={AUTO_OPTIMIZE_VALUES.map((value) => ({
+          value, label: t(`model.auto.optimize.${value}`), data: { "data-model-auto-optimize-option": value },
+        }))} />
+    </div>
+  );
   const effortLevels = effort?.levels ?? [];
   // the model's own default level reads as the checked one while none is chosen
   const effortValue = effort ? (effort.value && effortLevels.includes(effort.value) ? effort.value : effort.modelDefault) : undefined;
   const effortChoices: Array<EffortLevel | undefined> = effort && !effort.modelDefault ? [undefined, ...effortLevels] : [...effortLevels];
-  const hasReasoning = showSettings && (Boolean(variantRow) || effortLevels.length > 0);
+  // #5088: Fast, Expert and Heavy set their own reasoning level each turn
+  const modeSetsEffort = Boolean(modes && modes.current !== null && modes.current !== "auto");
+  const hasReasoning = showSettings && !modeSetsEffort && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
   // M-20261119-015: the model in use is offered by several of the person's
@@ -252,7 +286,7 @@ export function ModelPanel(props: ModelPanelProps) {
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
-      {all && (
+      {all && !manual && (
         <div className="mx-1.5 mb-1 mt-0.5 flex shrink-0 flex-wrap gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
           <div role="radiogroup" aria-label={t("model.providers")} data-model-panel-segments
             onKeyDown={(event) => arrowRadios(event, "[data-model-panel-segment]", "horizontal")}
@@ -280,10 +314,10 @@ export function ModelPanel(props: ModelPanelProps) {
         <button type="button" data-model-panel-back id={modelsId} title={t("model.favorites")} onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(false)}
           className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
           <ChevronLeft size={13} aria-hidden="true" />
-          <span>{t("model.auto.rail")}</span>
+          <span>{modes ? t("model.mode.manual.name") : t("model.auto.rail")}</span>
         </button>
       ) : (
-        <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>
+        <div className={HEADING} id={modelsId}>{modes ? t("model.mode.menu") : t("model.settings.model")}</div>
       )}
       {searchable && (
         <label className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 border-b border-popover-hairline px-2 py-1.5">
@@ -308,7 +342,7 @@ export function ModelPanel(props: ModelPanelProps) {
             className="w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none" />
         </label>
       )}
-      <div className="flex max-h-[min(264px,36dvh)] min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1" data-model-panel-scroll>
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1", manual ? "max-h-[min(400px,52dvh)]" : "max-h-[min(264px,36dvh)]")} data-model-panel-scroll>
       <div ref={listRef} role="radiogroup" aria-labelledby={modelsId} data-model-panel-list
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" && searchable && document.activeElement === listRef.current?.querySelector("[data-model-panel-row]")) {
@@ -320,23 +354,16 @@ export function ModelPanel(props: ModelPanelProps) {
           arrowRadios(event, "[data-model-panel-row]", "vertical");
         }}
         className="shrink-0">
-        {!all ? (
+        {!all && modes ? (
+          <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
+            manual={{ label: modes.manualLabel, onOpen: () => showAll(true) }}
+            autoSetting={optimize ? optimizeRow(optimize) : undefined} />
+        ) : !all ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
-            {autoOn && optimize && (
-              // M-20261119-051: Auto's one setting on one 32px line under it, the
-              // shared small segmented control at the right, no empty band
-              <div data-model-auto-optimize-row className="flex h-8 items-center justify-between gap-3 pl-2 pr-2">
-                <span className="min-w-0 truncate text-[12px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</span>
-                <SegmentedChoice data-model-auto-optimize="" label={t("model.auto.optimizeTitle")} disabled={disabled}
-                  value={optimize.value} onPick={optimize.onPick}
-                  options={AUTO_OPTIMIZE_VALUES.map((value) => ({
-                    value, label: t(`model.auto.optimize.${value}`), data: { "data-model-auto-optimize-option": value },
-                  }))} />
-              </div>
-            )}
-            {lead.map(modelRow)}
-            {shortModels.map(modelRow)}
+            {autoOn && optimize && optimizeRow(optimize)}
+            {lead.map((row) => modelRow(row))}
+            {shortModels.map((row) => modelRow(row))}
             {providers.length > 0 && (
               <button type="button" data-model-panel-all onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(true)}
                 className="flex h-9 w-full items-center gap-1 rounded-lg pl-2 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
@@ -346,10 +373,55 @@ export function ModelPanel(props: ModelPanelProps) {
               </button>
             )}
           </>
+        ) : manual ? (
+          <>
+            {lead.map((row) => modelRow(row))}
+            {manualFavorites.length > 0 && (
+              <div data-model-manual-group="favorites">
+                <div className={GROUP_HEADING}>{t("model.favorites")}</div>
+                {manualFavorites.map((row) => modelRow(row, "favorites"))}
+              </div>
+            )}
+            {manualGroups.map(({ section: provider, groups }) => {
+              // every model shows: the list scrolls and searches past eight rows
+              return (
+                <div key={provider.key} data-model-manual-provider={provider.key}>
+                  <div className={cn(GROUP_HEADING, "flex items-center gap-1.5")}>
+                    <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{mark(provider.key)}</span>
+                    <span className="truncate text-popover-ink">{provider.label}</span>
+                    {provider.note && <span className="truncate">· {provider.note}</span>}
+                  </div>
+                  {groups.map((group, index) => {
+                    const listed = group.rows;
+                    // a signed-out account keeps its heading and its state, with no model under it
+                    if (!listed.length && !group.account?.state) return null;
+                    return (
+                      <div key={group.account?.instanceId ?? `rest-${index}`} data-model-manual-account={group.account?.instanceId ?? ""}>
+                        {group.account && (
+                          <div data-model-account-heading className="flex h-6 min-w-0 items-center gap-1 px-2 text-[11.5px] text-popover-ink-secondary">
+                            <span className="truncate">{group.account.label}</span>
+                            {group.account.state && <span data-model-account-state className="shrink-0 text-popover-accent">· {group.account.state}</span>}
+                          </div>
+                        )}
+                        {listed.map((row) => modelRow(row, `${provider.key}:${group.account?.instanceId ?? index}`))}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {shownRows.length === 0 && !(typed && custom) && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
+            {typed && custom && (
+              <button type="button" data-model-panel-custom onMouseDown={(event) => event.preventDefault()} onClick={() => custom.onPick(typed)}
+                className="flex min-h-9 w-full items-center rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
+                {custom.label(typed)}
+              </button>
+            )}
+          </>
         ) : (
           <>
-            {lead.map(modelRow)}
-            {listedRows.map(modelRow)}
+            {lead.map((row) => modelRow(row))}
+            {listedRows.map((row) => modelRow(row))}
             {shownRows.length === 0 && !(typed && custom) && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
             {typed && custom && (
               <button type="button" data-model-panel-custom onMouseDown={(event) => event.preventDefault()} onClick={() => custom.onPick(typed)}
@@ -360,7 +432,7 @@ export function ModelPanel(props: ModelPanelProps) {
           </>
         )}
       </div>
-      {all && fold.rest.length > 0 && (
+      {all && !manual && fold.rest.length > 0 && (
         <button type="button" data-model-panel-fold={expanded ? "less" : "more"} aria-expanded={expanded}
           onMouseDown={(event) => event.preventDefault()} onClick={() => setExpanded((open) => !open)} className={cn(SHOW_MORE_ROW, "text-popover-ink-secondary hover:text-popover-ink")}>
           {expanded ? t("fold.showLess") : foldMoreLabel(fold.rest.length)}

@@ -336,6 +336,8 @@ export interface ModelSelection {
   fast?: { instanceId: string; model: string };
   /** #5014: forced on the Account line; the account strategy leaves it. */
   accountPinned?: true;
+  /** #4900, #5088: the composer mode (shared/model-selection.ts), kept only with Auto. */
+  mode?: "fast" | "expert" | "heavy";
 }
 
 /** One of a bot's separate contexts: its own thread, transcript and

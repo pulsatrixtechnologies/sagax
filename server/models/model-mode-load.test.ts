@@ -1,6 +1,6 @@
-// The composer mode picker (Fast, Expert, Heavy, Build) lives in the Perspicax
-// console, not in Sagax. A saved `mode` is dropped on load; a thread pinned to
-// the model an Auto bot falls back on does not follow the bot into Auto.
+// Composer modes (#5088): Fast, Expert and Heavy are kept on load; Build left
+// the modes and a saved one is dropped; a thread pinned to the model an Auto
+// bot falls back on does not follow the bot into Auto.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -26,7 +26,7 @@ describe("stored data that carries a mode", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
   });
 
-  it("loads cleanly and drops the field from the bot and its threads", () => {
+  it("keeps Heavy on the bot and drops Build from a thread", () => {
     const store = new Store(base);
     const bot = store.createBot({ name: "Wren" }, { seedMessages: false });
     const other = store.createTask(bot.id, "Other", false)!;
@@ -35,14 +35,13 @@ describe("stored data that carries a mode", () => {
     const saved = JSON.parse(JSON.stringify(store.bots));
     saved[0].modelSelection.mode = "heavy";
     const task = saved[0].tasks.find((t: { threadId: string }) => t.threadId === other.threadId);
-    task.modelSelection.mode = "expert";
+    task.modelSelection.mode = "build";
     mkdirSync(dirname(BOTS_FILE()), { recursive: true });
     writeFileSync(BOTS_FILE(), JSON.stringify(saved));
 
     const reloaded = new Store(base);
     const loaded = reloaded.bot(bot.id)!;
-    expect(loaded.modelSelection).toMatchObject({ auto: true });
-    expect("mode" in loaded.modelSelection).toBe(false);
+    expect(loaded.modelSelection).toMatchObject({ auto: true, mode: "heavy" });
     const loadedTask = reloaded.taskByThread(bot.id, other.threadId)!;
     expect(loadedTask.modelSelection).toMatchObject({ model: "gpt-6-astra", auto: true });
     expect("mode" in loadedTask.modelSelection!).toBe(false);

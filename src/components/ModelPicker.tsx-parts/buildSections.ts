@@ -4,6 +4,7 @@ import { isDesktopModelId, localModelRows, localRowUnavailable } from "@/lib/loc
 import { modelOn } from "../../../shared/offered-models";
 import { needsCli, needsSignIn } from "../EngineSetup";
 import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
+import type { ModelMenuAccount } from "@/lib/model-menu";
 import { equivalentOfferedModel } from "../../../shared/payable-model";
 import { t } from "@/lib/i18n";
 import { orgEngineState } from "@/lib/model-payers";
@@ -322,6 +323,21 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       ? { ...row, badge: { label: t("model.specialAccess"), title: t("model.specialAccessHint", { account: row.account ?? "" }) } }
       : row) : named;
   };
+  // #5088: the Manual list groups a provider's rows by the account (an
+  // engine's sign-in or key) each runs on, with the state of the ones that
+  // cannot run: every account of the person, a signed-out one included.
+  const accountListOf = (pool: Pool): ModelMenuAccount[] | undefined => {
+    const own = engines.filter((instance) => pool.instances.includes(instance)
+      || (pool.ref.kind === "vendor" && providerOfInstance(instance)?.id === pool.ref.id));
+    const ordered = [...own.filter((instance) => instance.instanceId === selection.instanceId), ...own.filter((instance) => instance.instanceId !== selection.instanceId)];
+    const accounts = ordered.map((instance, index): ModelMenuAccount => {
+      const state = needsSignIn(instance) ? t("model.account.signedOut") : !engineRuns(instance, health) ? t("model.notResponding") : undefined;
+      const label = accountWords({ displayName: instance.displayName, email: instance.snapshot.account?.email }, pool.ref.label)
+        ?? (instance.access === "api" ? t("model.simple.apiKey") : ordered.length > 1 ? t("providers.account.numbered", { number: index + 1 }) : instance.displayName);
+      return { instanceId: instance.instanceId, label, ...(state ? { state } : {}) };
+    });
+    return accounts.length > 1 || accounts.some((account) => account.state) ? accounts : undefined;
+  };
   const providerSections: ModelMenuSection[] = [...pools.values()]
     .sort((a, b) => rank(a.ref.id) - rank(b.ref.id))
     .map((pool) => ({
@@ -329,6 +345,10 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       label: pool.ref.label,
       // every engine behind it waits for a sign-in
       note: pool.instances.every((instance) => needsSignIn(instance)) ? t("model.signInRequired") : undefined,
+      ...(() => {
+        const accounts = accountListOf(pool);
+        return accounts ? { accounts } : {};
+      })(),
       rows: [...pool.models.entries()].map(([modelId, pooled]) => {
         const candidates = withAccounts(pool, modelId, pooled);
         const shownRow = lead(candidates);

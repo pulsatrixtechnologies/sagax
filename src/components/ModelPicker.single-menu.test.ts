@@ -57,6 +57,6 @@ describe("single model menu", () => {
       .filter(({ text }) => /<ModelPickerMenu\b|<ModelSearchList\b|<ModelPanel\b/.test(text))
       .map(({ path }) => path)
       .sort();
-    expect(builders).toEqual(["components/ModelPicker.tsx-parts/ModelPickerMenu.tsx", "gallery/composer-edge.tsx", "gallery/model-menu-preview.tsx", "gallery/model-menu.tsx"]);
+    expect(builders).toEqual(["components/ModelPicker.tsx-parts/ModelPickerMenu.tsx", "gallery/composer-edge.tsx", "gallery/mode-menu.tsx", "gallery/model-menu-preview.tsx", "gallery/model-menu.tsx"]);
   });
 });

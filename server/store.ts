@@ -12,6 +12,7 @@ import { commitBotChange, keptRevocation, saveBotsFor, touchesPermissions } from
 import { discardNativeLog } from "./drivers/native.ts";
 import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { narrowToolScope, parseToolScope, toolScopeWidens, type ToolScope } from "../shared/tool-scope.ts";
+import { isForcedModelMode } from "../shared/model-mode.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
 import { isSectionId, migrateSectionLinks, sameTeamLink } from "./rooms/section-link.ts";
 import type { TeamComputers } from "./computer/team-computers.ts";
@@ -1122,11 +1123,13 @@ export class Store {
         b.projects = b.projects.map(({ id, name, emoji }) => ({ id, name, ...(isProjectEmoji(emoji) ? { emoji } : {}) }));
         boot.botsMigrated = true;
       }
-      // A composer "mode" (Fast, Expert, Heavy, Build) was saved for a few
-      // days in 0.8.158 and is gone: the field is dropped, the bot or thread
-      // keeps its model and Auto.
+      // #5088: Build left the composer modes; a stored one, or any value that
+      // is no mode, is dropped: the bot or thread keeps its model and Auto.
       for (const selection of [b.modelSelection, ...(b.tasks ?? []).map((task) => task.modelSelection)]) {
-        if (selection && "mode" in selection) { delete (selection as { mode?: unknown }).mode; boot.botsMigrated = true; }
+        if (selection && "mode" in selection && !isForcedModelMode((selection as { mode?: unknown }).mode)) {
+          delete (selection as { mode?: unknown }).mode;
+          boot.botsMigrated = true;
+        }
       }
       if (!b.tasks?.length) {
         b.tasks = [{

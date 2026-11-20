@@ -307,15 +307,60 @@ person's drive nor post it in the chat.
   `forwardTurn`) keeps the bytes: they already arrive in that environment.
   The header that says so carries a secret of the process
   (`server/perspicax/sandbox-bridge-forward.ts`).
-- Not covered yet: a connector the engine reaches itself (a claude.ai
-  connector) is not relayed by Sagax, so its blobs still land in the
-  engine's folder.
+- A connector the engine reaches itself: see the next section (#5140).
 
 Tests: `server/routes/connector-files-delivery.test.ts` (the person's case
 through the real routes: the spreadsheet lands on the person's computer, the
 engine sees no blob, `attach_file` posts it, another person's turn reads
 nothing), `server/attachments/connector-files.test.ts`,
 `server/index-leaves/personPlaces.test.ts`.
+
+## A file from the engine's own connector lands in the person's place too (2026-11-20, #5140)
+
+Same decision. A connector the engine reaches by itself is not relayed by
+Sagax: Claude Code's claude.ai connectors (`mcp__claude_ai_<Name>__<tool>`),
+in a bot's own turn and in the connector hub's Claude host
+(`call_connector`, `server/connectors/hosts/claude-host.ts`, which the bots
+on Codex, Grok and pi use to reach them). Claude Code decodes a binary MCP
+result in its own MCP client and writes it into its session folder on the
+server before any hook and before the model
+(`<config>/projects/<folder key>/<session>/tool-results/
+mcp-<server>-blob-<time>-<random>.<ext>`, an image too beside the picture
+the model sees); the result reads `Binary content (<type>, <size>) saved to
+<path>`. The other engines write no such file (measured on Codex 0.169.0 and
+Grok 1.0.89: a blob goes to the model as JSON text; pi's MCP extension
+drops it).
+
+- `server/attachments/engine-connector-files.ts` `placeEngineFiles`: each
+  path of the engine's own blob folder a result names is read (a regular
+  file of that folder, no link and no second name, nothing
+  `sensitiveReadPath` refuses), written into the person's place by the one
+  placement of #5138 (`placeOneFile`, `copyToPersonPlace`), removed from the
+  engine's folder whatever happened, and the result names the person's
+  path with the #5138 line. A path the output names elsewhere is never
+  read, moved or removed.
+- A bot's own turn: `claudeHookSettings` adds one synchronous PostToolUse
+  entry matched on the claude.ai connector tools only (`^mcp__claude_ai_.*`,
+  `omb-hook connector-files`, 120 s timeout, forwarded only when the result
+  names a blob) when the turn keeps the account's connectors on an
+  organization server (`hooks.connectorFiles`, `hooksIntegration`).
+  `ingestEngineHook` places the files of the session the hook's own
+  `transcript_path` and `session_id` name, and answers
+  `updatedMCPToolOutput`, which the engine hands the model in place of its
+  own result.
+- `call_connector`: the Claude host returns the folder its one-call process
+  wrote in (`engineFolder`, the sign-in's `projects/<key of its working
+  folder>`), and the route places the files the result names
+  (`connectorFilePlaces`, an organization server).
+- A solo server is the person's own computer: the engine's folder is
+  already theirs, nothing is moved.
+
+Tests: `server/routes/engine-connector-files-delivery.test.ts` (the real
+hook helper and route: the file lands on the person's computer, none is left
+under the engine's folder, the engine reads the person's path; another
+person's turn gets its own place only; the same file through
+`call_connector`), `server/attachments/engine-connector-files.test.ts`,
+`server/hooks/omb-hook.test.ts`, `server/drivers/claude.test.ts`.
 
 ## Server environments (organization mode)
 

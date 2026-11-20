@@ -152,16 +152,42 @@ const WHERE: Record<PersonPlace["kind"], string> = {
   environment: "in the person's server environment",
 };
 
+/** The bytes of one file and their type, as the line names them. */
+type FileFacts = { bytes: Buffer; mime: string };
+
 /** The line the engine reads in place of the bytes. */
-function placedLine(place: PersonPlace["kind"], path: string, name: string, blob: ConnectorBlob): string {
-  return `The file this tool returned (${blob.bytes.length} bytes, ${blob.mime}) was saved ${WHERE[place]}: ${path} ` +
+function placedLine(place: PersonPlace["kind"], path: string, name: string, file: FileFacts): string {
+  return `The file this tool returned (${file.bytes.length} bytes, ${file.mime}) was saved ${WHERE[place]}: ${path} ` +
     `(not on the Sagax server). To give it to the person, call attach_file with this exact path to post it in the chat, ` +
     `or copy it with your tools there (for example to a folder of theirs). File name: ${name}.`;
 }
 
-function droppedLine(blob: ConnectorBlob, why: string): string {
-  return `The file this tool returned (${blob.bytes.length} bytes, ${blob.mime}) was not kept: ${why} ` +
+function droppedLine(file: FileFacts, why: string): string {
+  return `The file this tool returned (${file.bytes.length} bytes, ${file.mime}) was not kept: ${why} ` +
     "Nothing was saved on the Sagax server. Tell the person, and call the tool again once their computer is connected or their server environment is available.";
+}
+
+/** One file a connector returned, written into the first of the turn's
+ * places that takes it (`places`, most preferred first): the line the engine
+ * reads in its place and, when one took it, its path there. No place takes
+ * it: the line says why and nothing is kept. The one placement of #5138,
+ * for a blob Sagax relays (placeConnectorFiles) and for a file the engine's
+ * own connector wrote (engine-connector-files.ts, #5140). */
+export async function placeOneFile(name: string, file: FileFacts, places: readonly PersonPlace[]): Promise<{ line: string; path?: string }> {
+  const failures: string[] = [];
+  for (const place of places) {
+    try {
+      const path = await place.save(name, file.bytes);
+      return { line: placedLine(place.kind, path, name, file), path };
+    } catch (error) {
+      failures.push(`${WHERE[place.kind]}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return {
+    line: droppedLine(file, places.length
+      ? `it could not be written ${failures.join("; ")}.`
+      : "the person has no computer connected and no server environment in this turn."),
+  };
 }
 
 /**
@@ -180,23 +206,7 @@ export async function placeConnectorFiles(body: unknown, turnPlaces: readonly Pe
   const content = [...result.content];
   for (const blob of blobs) {
     const name = connectorFileName(blob, blobs.length === 1 ? given : null);
-    let line: string | null = null;
-    const failures: string[] = [];
-    for (const place of places) {
-      try {
-        const path = await place.save(name, blob.bytes);
-        line = placedLine(place.kind, path, name, blob);
-        break;
-      } catch (error) {
-        failures.push(`${WHERE[place.kind]}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    content[blob.index] = {
-      type: "text",
-      text: line ?? droppedLine(blob, places.length
-        ? `it could not be written ${failures.join("; ")}.`
-        : "the person has no computer connected and no server environment in this turn."),
-    };
+    content[blob.index] = { type: "text", text: (await placeOneFile(name, blob, places)).line };
   }
   return { ...(body as Json), result: { ...result, content } };
 }

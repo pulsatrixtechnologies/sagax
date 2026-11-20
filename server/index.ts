@@ -24764,7 +24764,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return true;
     },
     // #3357: the host's model round, on the calling thread
-    ran: connectorCallRan
+    ran: connectorCallRan,
+    // #5140: a file the host's own Claude saved on this server lands in the
+    // person's place (an organization server; solo is their own computer)
+    ...(IDENTITY.kind === "perspicax" ? { connectorFilePlaces: (capability: InternalCapabilityView) => personPlaces.placesForTurn(capability) } : {})
   }),
   // open_connector_setup (server/routes/connector-setup.ts)
   createConnectorSetupInternalRoutes({

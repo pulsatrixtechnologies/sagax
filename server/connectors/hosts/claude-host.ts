@@ -22,7 +22,7 @@
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { randomBytes } from "node:crypto";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runPinnedClaudeCall, type PinnedClaudeChild, type PinnedClaudeSpawn } from "../../claude-artifacts/pinned-call.ts";
@@ -34,6 +34,7 @@ import { claudeAiCallIsApproved, claudeAiCallResult, claudeAiPinnedPrompt, claud
 import type { ConnectorAccount, ConnectorEntry } from "../types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult, ConnectorHostUsage } from "./types.ts";
 import { connectorCallDeadline } from "./call-deadline.ts";
+import { projectBlobFolder } from "../../attachments/engine-connector-files.ts";
 
 /** The person's own Claude CLI on one sign-in: its command and environment
  * (CLAUDE_CONFIG_DIR in that sign-in's folder). */
@@ -241,7 +242,10 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
       if (read.ran && allowed) {
         const result = read.result;
         if (result.isError && connectorReauthFailure(toolId, result.text)) return { ...signIn(name), text: `${signIn(name).text}\n${result.text}` };
-        return usage ? { ...result, usage } : result;
+        // #5140: a binary result is in this sign-in's own folder on the
+        // server (the call's working folder is `staging`); the route moves it
+        const engineFolder = projectBlobFolder(launch.env.CLAUDE_CONFIG_DIR?.trim() || join(launch.env.HOME || homedir(), ".claude"), staging);
+        return { ...result, engineFolder, ...(usage ? { usage } : {}) };
       }
       if (refused) {
         return {

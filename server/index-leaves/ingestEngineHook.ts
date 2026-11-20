@@ -6,16 +6,41 @@ import { digestPromptLine } from "../digest.ts";
 import { lifecycleEvent } from "../hooks/lifecycle-hooks.ts";
 import { createHash } from "node:crypto";
 import { boundedContextText, MAX_SUMMARY_BYTES } from "../context/context-rebuild.ts";
+import { placeEngineFiles, sessionBlobFolder } from "../attachments/engine-connector-files.ts";
+import { claudeAiConnectorCall } from "../../shared/connector-call.ts";
 export type Host = Record<string, any>;
 
+type HookAnswer = { ok: boolean; ignored?: string; context?: string; hookSpecificOutput?: unknown };
+
 export function createIngestEngineHook(getHost: () => Host): any {
-function ingestEngineHook(capability: InternalCapability, body: unknown): { ok: boolean; ignored?: string; context?: string; hookSpecificOutput?: unknown } {
+/** #5140 (M-20261120-008): the synchronous connector-files entry
+ * (claudeHookSettings). Claude Code already wrote a file one of the
+ * account's claude.ai connectors returned into its session folder on this
+ * server; it goes into the person's place for this turn
+ * (personPlaces.placesForTurn: theirs only), leaves the engine's folder,
+ * and the engine reads the result naming the person's path. The folder is
+ * the one the hook's own fields name (transcript_path, session_id), never
+ * a path the tool's output alone points at. */
+async function engineConnectorFiles(capability: InternalCapability, name: string, payload: Record<string, unknown>): Promise<HookAnswer> {
+  const host = getHost();
+  if (name !== "PostToolUse" || !claudeAiConnectorCall(payload.tool_name)) return { ok: true, ignored: "not a connector of the engine" };
+  if (host.IDENTITY.kind !== "perspicax") return { ok: true, ignored: "solo server: the engine runs on the person's own computer" };
+  if (!host.liveTurnByThread.get(capability.threadId)) return { ok: true, ignored: "no turn is running" };
+  const folder = sessionBlobFolder(payload.transcript_path, payload.session_id);
+  if (!folder || !Object.hasOwn(payload, "tool_response")) return { ok: true, ignored: "hook without a session or a result" };
+  const { output, moved } = await placeEngineFiles(payload.tool_response, folder, () => host.personPlaces.placesForTurn(capability));
+  if (!moved) return { ok: true };
+  return { ok: true, hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: output } };
+}
+
+function ingestEngineHook(capability: InternalCapability, body: unknown): HookAnswer | Promise<HookAnswer> {
   const host = getHost();
 
-  const event = body && typeof body === "object" ? (body as { event?: unknown; payload?: unknown }) : {};
+  const event = body && typeof body === "object" ? (body as { event?: unknown; payload?: unknown; mode?: unknown }) : {};
   const name = typeof event.event === "string" ? event.event : "";
   const payload = event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
   const threadId = capability.threadId;
+  if (event.mode === "connector-files") return engineConnectorFiles(capability, name, payload);
   if (lifecycleEvent(name)) {
     // #1374: a plugin's tool hook sees the tool a use_tool runs, and its arguments
     const bridged = typeof payload.tool_name === "string" ? host.unwrapAgentsBridge(payload.tool_name, payload.tool_input) : null;

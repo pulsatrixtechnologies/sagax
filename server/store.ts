@@ -146,6 +146,11 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * It only ever narrows (narrowToolScope). Written only by narrowTaskTools,
    * never by a patch; clients never see it. */
   toolScope?: ToolScope;
+  /** #5089: a Heavy expert's hidden conversation. It only reads: its tools
+   * are narrowed (`toolScope`), its turns withhold every host tool and the
+   * server refuses each permission request it opens. Written only by
+   * confineHeavyExpert, never by a patch; clients never see it. */
+  heavyExpert?: true;
   /** Summaries Sagax wrote when it folded this thread on its own, newest
    * last (server/context/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
@@ -212,7 +217,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
 /** TaskRecord fields no client may see. Everything else must be on WireTask:
  * the exactness assertion below fails to compile when either side drifts,
  * so a new server field forces a decision — wire-visible or private here. */
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker" | "stagedFiles" | "toolScope";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker" | "stagedFiles" | "toolScope" | "heavyExpert";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
 export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
@@ -232,7 +237,7 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
     engineSessions: _engineSessions, carriedThreads: _carriedThreads, forgetSessionsAtNextTurn: _forgetSessionsAtNextTurn, speaker: _speaker,
-    stagedFiles: _stagedFiles, toolScope: _toolScope, ...stored } = task;
+    stagedFiles: _stagedFiles, toolScope: _toolScope, heavyExpert: _heavyExpert, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
     // only the fact, never when (shared/background-threads.ts)
     ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
@@ -3539,6 +3544,32 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!task || !paths.length) return;
     task.stagedFiles = [...new Set([...(task.stagedFiles ?? []), ...paths])];
     saveBotsFor("the files sent to this conversation", () => this.saveBotsSoon());
+  }
+
+  /** #5089: make one conversation a Heavy expert's, before its first turn:
+   * its tools narrowed to `scope` (as narrowTaskTools) and the mark that its
+   * turns withhold every host tool and have each permission request refused.
+   * Saved at once: a restart never finds it wider. False when there is no
+   * such conversation or it could not be saved. */
+  confineHeavyExpert(botId: string, threadId: string, scope: ToolScope): boolean {
+    const bot = this.bot(botId);
+    const task = this.taskByThread(botId, threadId);
+    if (!bot || !task) return false;
+    const next = task.toolScope === undefined ? structuredClone(scope) : narrowToolScope(task.toolScope, scope) ?? { allow: [] };
+    try {
+      this.commitBotChange(bot, "a Heavy expert's conversation", () => {
+        task.toolScope = next;
+        task.heavyExpert = true;
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  /** #5089: whether this conversation is a Heavy expert's (read-only). */
+  isHeavyExpert(botId: string, threadId: string): boolean {
+    return this.taskByThread(botId, threadId)?.heavyExpert === true;
   }
 
   /** Narrow one conversation's tools (the member API's `toolScope`): what it

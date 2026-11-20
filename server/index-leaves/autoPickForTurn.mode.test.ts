@@ -48,13 +48,28 @@ describe("a mode in the turn's pick", () => {
   it("runs the mode's rule over the engines the person can use", () => {
     expect(turn("expert")?.pick).toMatchObject({ reason: "mode", mode: "expert", selection: { instanceId: "claude", model: "claude-opus-5-5", effort: "high" } });
     expect(turn("fast")?.pick).toMatchObject({ mode: "fast", selection: { instanceId: "grok", model: "grok-4-fast", effort: "low" } });
-    expect(turn("heavy")?.pick.team?.map((agent: { modelLabel: string }) => agent.modelLabel)).toEqual(["Claude Opus 5.5", "Grok 4.7"]);
+    // Heavy's seats: each account's strongest model first (#5089)
+    expect(turn("heavy")?.pick.team?.slice(0, 2).map((agent: { modelLabel: string }) => agent.modelLabel)).toEqual(["Claude Opus 5.5", "Grok 4.7"]);
   });
 
   it("a plain Auto bot still reads the request, as before", () => {
     const pick = turn(undefined)?.pick;
     expect(pick?.mode).toBeUndefined();
     expect(pick?.reason).not.toBe("mode");
+  });
+
+  it("plain Auto takes Heavy on its own for a risky or big request, and says why (D-20261119-086)", () => {
+    const ask = (text: string) => pickFor({ bot: bot(undefined), threadId: "t1", speaker, role: "orchestration", text })?.pick;
+    expect(ask("Delete the old mailboxes and migrate the rest to the new tenant.")).toMatchObject({ mode: "heavy", autoHeavy: "risky" });
+    expect(ask("Supprime les vieux comptes en production.")).toMatchObject({ mode: "heavy", autoHeavy: "risky" });
+    const steps = Array.from({ length: 7 }, (_, i) => `- step ${i + 1}: check the item`).join("\n");
+    expect(ask(`Plan this:\n${steps}`)).toMatchObject({ mode: "heavy", autoHeavy: "big" });
+    // an ordinary request stays Auto's
+    expect(ask("What time is it in Paris?")?.autoHeavy).toBeUndefined();
+    // a chosen mode is never overridden
+    expect(pickFor({ bot: bot("fast"), threadId: "t1", speaker, role: "orchestration", text: "Delete the production database." })?.pick).toMatchObject({ mode: "fast" });
+    // work a bot hands out is never escalated
+    expect(pickFor({ bot: bot(undefined), threadId: "t1", speaker, role: "worker", text: "Delete the production database." })?.pick.autoHeavy).toBeUndefined();
   });
 
   it("work a bot hands out is Auto's, whatever the mode", () => {

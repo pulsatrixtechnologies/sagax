@@ -85,3 +85,57 @@ kept with its heading. The Heavy row (`HeavyTeamRowView.swift`, the state
 desktop's (#5090); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the
 simulator (`HeavyTeamGallery.swift`).
+
+## Heavy: a team of read-only experts (#5089)
+
+Owner's request M-20261119-077, answers D-20261119-084 and D-20261119-085:
+Heavy works the Grok way. One engine, in the Sagax server, for every client
+(`server/index-leaves/runHeavyTeam.ts`, the pure half `server/heavy-team.ts`),
+called from `startTurn` before the leader's prompt is built.
+
+- **The team.** The bot is the leader (the turn itself, on Expert's pick). A
+  short hidden ask lets it choose how many experts the task needs, 2 to 5, and
+  a persona for each (a skeptic, security, cost, the user's advocate, or what
+  the task calls for). A reply that does not read gives three default personas.
+- **Seats.** `heavySeats` (server/models/model-mode.ts) lists the person's own
+  accounts, each one's strongest model, then each one's second strongest;
+  `assignSeats` gives the experts different accounts first, then different
+  models of the same provider. An account at its usage limit is already out
+  (#5031); only this person's accounts are offered.
+- **Read-only, held by the server.** Each expert is a hidden thread of the same
+  bot, confined before its first turn (`store.confineHeavyExpert`): the
+  conversation's tool scope of #4993 keeps only reviewed reads of Sagax's own
+  tools and of Perspicax (`expertToolScope`), its turns withhold every host
+  tool (no shell, no file write, no fetch: each driver's tested organization
+  mode) at the Ask level, and the server refuses each permission request it
+  opens, with no card (`createHeavyExpertFence`). Never a prompt hint alone.
+- **Rounds.** Round 1: every expert proposes, in parallel. Then cross
+  critiques: each one reads the others' latest words, critiques, revises and
+  ends with `VERDICT: AGREE` or `VERDICT: DISAGREE: <points>`. The leader stops
+  at the first round where every expert still answering agrees, and after
+  `HEAVY_MAX_ROUNDS` (5) at most; without agreement it decides and shows the
+  points still in dispute beside its plan.
+- **Execution.** The leader's prompt carries the team's notes; the bot carries
+  the plan out ONCE, in the same turn, with its usual writes and approval
+  cards. Nothing is done twice.
+- **Auto** (D-20261119-086) takes Heavy on its own for a big or risky request
+  (`heavyWorthy`: a long or many-part request, or one about deleting,
+  migrating, production, security, money or contracts); the team's row says
+  so in one line. The bot's own choice stays Auto.
+- **Cost.** No banner. What the experts and the plan spent is carried onto the
+  leader's turn (`heavyUsage`), so Heavy's cost reads in that turn's usage;
+  the month's ledger holds each expert's own turns.
+- **The row.** One activity row of the conversation (`shared/heavy-team.ts`)
+  keeps the whole run: the experts, their personas and seats, every round,
+  who speaks, each verdict, the outcome and the disagreements.
+
+Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
+the leader stops at 5 rounds at most; agreement stops early; the plan, the
+seats, the verdicts, the notes, the usage), `server/heavy-team.e2e.test.ts`
+(the real server and the fake Claude CLI: read-only expert launches, 5 rounds,
+one row, the leader's reply), `server/models/model-mode.test.ts` (seats),
+`server/index-leaves/autoPickForTurn.mode.test.ts` (Auto takes Heavy).
+
+Perspicax: the console's own mode menu (#4936, Perspicax #2206) stays where it
+is; it should call this engine (one implementation) rather than its own team
+(`crates/px-chat/src/turn/heavy.rs`).

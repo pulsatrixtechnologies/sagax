@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** autoPickForTurn (#1388). Pure move from server/index.ts. */
 import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
-import { pickModeModel, resolveModes } from "../models/model-mode.ts";
+import { heavyWorthy, pickModeModel, resolveModes } from "../models/model-mode.ts";
 import { isForcedModelMode, type ModeResolution, type ModelMode } from "../../shared/model-mode.ts";
 import { statSync } from "node:fs";
 export type Host = Record<string, any>;
@@ -89,6 +89,13 @@ function autoPickForTurn(input: {
   if (isForcedModelMode(bot.modelSelection.mode)) {
     const picked = pickModeModel(request, bot.modelSelection.mode);
     if (picked) return { payer, pick: onAccount(picked), ...modes };
+  }
+  // D-20261119-086: plain Auto takes Heavy on a big or risky request (the
+  // team's row says so in one line); the bot's choice stays Auto
+  const why = input.role === "orchestration" ? heavyWorthy(input.text) : null;
+  if (why) {
+    const heavy = pickModeModel(request, "heavy");
+    if (heavy?.team?.length) return { payer, pick: onAccount({ ...heavy, autoHeavy: why }), ...modes };
   }
   const quick = host.parsedQuickTask(input.text);
   return { payer, pick: onAccount(pickOrchestrationModel(request, quick)), ...modes };

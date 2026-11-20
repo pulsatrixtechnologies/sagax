@@ -93,6 +93,11 @@ describe("archives attached in solo mode", () => {
       req.write(Buffer.alloc(16));
     });
     expect(status).toBe(413);
-    expect((await upload("tool.exe", "application/x-msdownload", Buffer.from("MZ"))).status).toBe(400);
+    // #4954 keeps a type the app does not know as an inert download; an
+    // executable among them is refused by its bytes (415), whatever the
+    // content check's mode (#4963)
+    const binary = await upload("tool.exe", "application/x-msdownload", Buffer.from("MZ"));
+    expect(binary.status).toBe(415);
+    expect(binary.body.error).toMatch(/executable content \(pe\) is not accepted/);
   });
 });

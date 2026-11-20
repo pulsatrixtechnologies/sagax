@@ -373,6 +373,30 @@ describe("clearing and stale rows (#4421)", () => {
     expect(host.querySelector("[data-team-clear-finished]")).toBeNull();
   });
 
+  // #5112: in French "Tâche", the counter and "Effacer les terminés" did not
+  // fit at the panel's default width and the counter was cut ("1 silencie…").
+  // The counter never truncates: it takes the rest of the row beside the
+  // title and Clear finished goes under it when both do not fit.
+  it("the header's counter is never cut: it takes the rest of the row and Clear finished wraps under it, in English and French", async () => {
+    for (const locale of ["en", "fr"] as const) {
+      act(() => setLocale(locale));
+      await act(async () => { root.render(createElement(Clearing, { load: async () => ({ ...read() }), clearWork: vi.fn() })); });
+      await act(async () => { await Promise.resolve(); });
+      const count = host.querySelector("[data-team-count]")!;
+      const meta = host.querySelector("[data-team-head-meta]")!;
+      const clear = host.querySelector("[data-team-clear-finished]")!;
+      expect(count.textContent).toBe(locale === "fr" ? "1 au travail" : "1 working now");
+      expect(clear.textContent).toBe(locale === "fr" ? "Effacer les terminés" : "Clear finished");
+      expect(count.classList.contains("truncate"), locale).toBe(false);
+      expect(count.classList.contains("text-ellipsis"), locale).toBe(false);
+      expect(count.parentElement).toBe(meta);
+      expect([...meta.classList]).toEqual(expect.arrayContaining(["flex", "flex-1", "flex-wrap", "justify-end", "min-w-0"]));
+      expect([...clear.classList]).toEqual(expect.arrayContaining(["shrink-0", "whitespace-nowrap"]));
+      // the title row keeps the title on the counter's first line when the action wraps
+      expect(host.querySelector("[data-team-head]")!.classList.contains("items-start")).toBe(true);
+    }
+  });
+
   it("a row nothing touched for long says stale since when, not next step not handed out yet, in English and French", async () => {
     const later = 200_000 + 13 * 60 * 60_000;
     vi.setSystemTime(later);

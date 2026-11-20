@@ -28,9 +28,15 @@ import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
-/** A tool of a server that is not the person's: since #4449 the card a
- * member's bot still raises for an admin (a server command is refused). */
+/** A tool of a server that is provably not the person's: since #4449 the
+ * card a member's bot still raises for an admin (a server command is
+ * refused). #4985 (M-20261119-006): an admin's card needs positive evidence,
+ * and an unknown server is none; `ledger` is on the organization server's
+ * own MCP list (LEDGER_SERVER, config.json) and never mounted for the
+ * person, which is that evidence (engine-access.ts `orgSharedMcpServer`). */
 const FOREIGN_TOOL = "mcp__ledger__post_entry";
+/** The organization server's own MCP list entry behind FOREIGN_TOOL. */
+const LEDGER_SERVER = { ledger: { command: process.execPath, args: ["-e", "process.stdin.resume()"] } };
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
 const TEAM_T = "01J9S7TEAMT0000000000000TT";
@@ -159,6 +165,7 @@ posixOnly("Perspicax organization, slice 7: the console admin API", () => {
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
+      mcpServers: LEDGER_SERVER,
       instances: {
         // fcce56775 (#1812): these fixtures use the organization API key.
         claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },

@@ -21,12 +21,8 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RecordCardLanguage, RecordCardsClient } from "../perspicax/record-cards.ts";
 import { factsForCall } from "../rules/custom-rules-review.ts";
 import { evaluateCustomRules, type CustomRule } from "../../shared/custom-rules.ts";
-import { validRecordRef, type RecordRef } from "../../shared/record-cards.ts";
+import { RECORD_TITLE_FIELD, recordTitleValue, validRecordRef, type RecordRef } from "../../shared/record-cards.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-
-/** The one field written as text: the ticket's title (M-20261119-084). */
-export const RECORD_TITLE_FIELD = "summary";
-const RECORD_TITLE_MAX = 100;
 
 /** A field change the route accepts: a field name, and either a title (one
  * line of 1 to 100 characters, trimmed) or the id of a choice. */
@@ -34,10 +30,8 @@ export function fieldChange(body: unknown): { field: string; value: string } | n
   const raw = body as { field?: unknown; value?: unknown } | null | undefined;
   if (typeof raw?.field !== "string" || !/^[a-z]{1,32}$/.test(raw.field) || typeof raw.value !== "string") return null;
   if (raw.field === RECORD_TITLE_FIELD) {
-    const value = raw.value.trim();
-    const chars = [...value];
-    const control = chars.some((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127; });
-    return chars.length && chars.length <= RECORD_TITLE_MAX && !control ? { field: raw.field, value } : null;
+    const value = recordTitleValue(raw.value);
+    return value === null ? null : { field: raw.field, value };
   }
   return /^[1-9][0-9]*$/.test(raw.value) ? { field: raw.field, value: raw.value } : null;
 }

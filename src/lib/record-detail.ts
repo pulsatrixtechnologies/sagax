@@ -16,15 +16,14 @@ import { downloadBlob } from "@/lib/diagram-view";
 import { recordCardLanguage } from "@/lib/record-cards";
 import { RELATED_TABS, type RelatedPage, type RelatedTab } from "@/components/RecordRelatedTabs";
 import type { RecordChoice } from "@/components/RecordFieldSelect";
+import { RECORD_TITLE_FIELD } from "../../shared/record-cards";
 import type { RecordRef } from "../../shared/record-cards";
 
 /** The fields a person may change on a ticket by a choice. */
 export const RECORD_EDIT_FIELDS = ["status", "priority", "board", "type", "subtype", "item", "owner", "team", "agreement", "contact"] as const;
 export type RecordEditField = (typeof RECORD_EDIT_FIELDS)[number];
-/** The field a person writes as text: the title (M-20261119-084). */
-export const RECORD_TITLE_FIELD = "summary";
-/** The longest title the product keeps. */
-export const RECORD_TITLE_MAX = 100;
+/** The field a person writes as text, the title, and its one rule (M-20261119-084): shared with the route. */
+export { RECORD_TITLE_FIELD, RECORD_TITLE_MAX, recordTitleValue as titleValue } from "../../shared/record-cards";
 
 /** Raised when the server has no detail route: the original card is shown. */
 export class RecordDetailMissing extends Error {}
@@ -162,14 +161,6 @@ export async function readNoteImage(ref: RecordRef, src: string): Promise<Blob> 
   const type = text(body.contentType);
   if (!/^image\/(png|jpeg|gif|webp)$/.test(type)) throw new Error("not an image");
   return new Blob([Uint8Array.from(atob(body.base64), char => char.charCodeAt(0))], { type });
-}
-
-/** A title as the product keeps it: one line of 1 to 100 characters, trimmed; null when it is not one. */
-export function titleValue(value: string): string | null {
-  const trimmed = value.trim();
-  const chars = [...trimmed];
-  const control = chars.some((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127; });
-  return !chars.length || chars.length > RECORD_TITLE_MAX || control ? null : trimmed;
 }
 
 export async function writeField(ref: RecordRef, field: RecordEditField | typeof RECORD_TITLE_FIELD, value: string): Promise<void> {

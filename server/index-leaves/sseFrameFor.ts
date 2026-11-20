@@ -126,9 +126,10 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
     const projected = host.orgXaiMediaView(host.configForPerson(host.configForAccess(payload as ReturnType<typeof host.configStatus>, client.admin), identity), identity);
     return encodeSseDataFrame(host.STREAM_ID, seq, { ...projected, seq });
   }
-  // #2045: a team list is one person's own, admins included. The first
-  // admin's stream has no viewerId (the operator sees every channel), so
-  // name the person by their sign-in, before the admin short-circuit.
+  // #2045: a team list is one person's own, admins included. On a
+  // one-person server the operator's stream has no viewerId (the operator
+  // sees every channel), so name the person by their sign-in, before the
+  // admin short-circuit.
   const teamViewer = client.viewerId || client.approvalUserId;
   if (payload?.kind === "sections" && clientFrame !== null && host.IDENTITY.kind === "perspicax" && teamViewer && Array.isArray(payload.sections)) {
     const sections = host.orgVisibleSections(payload.sections.filter((name): name is string => typeof name === "string"), teamViewer);

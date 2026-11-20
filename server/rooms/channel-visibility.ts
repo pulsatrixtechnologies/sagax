@@ -53,9 +53,24 @@ export function seesChannel(group: { humanIds?: string[] }, viewerId: string | u
 }
 
 /** Signed-in viewers, including admin, have live frames filtered. Loopback
- * and a session with no user id do not. */
+ * and a session with no user id do not; on an organization server no live
+ * stream is without one (liveStreamViewerId). */
 export function liveFramesNeedChannelFilter(viewerId: string | undefined): boolean {
   return Boolean(viewerId);
+}
+
+/** #5152: who a live stream is filtered for. A signed-in viewer is their
+ * principal (`viewerId`, from channelFilterViewerId). One stream has none:
+ * the operator at this computer (loopback, or an admin session that is the
+ * local operator). On a one-person server that operator hears every frame,
+ * on the computer and on the phone. On an organization server the operator
+ * is one person among others: their stream is filtered for them (`person`,
+ * the stream's own principal) like anyone else's, so a member's bot never
+ * reaches it. */
+export function liveStreamViewerId(input: { viewerId: string | undefined; organization: boolean; person: string | undefined }): string | undefined {
+  if (input.viewerId) return input.viewerId;
+  if (!input.organization) return undefined;
+  return input.person?.trim() || undefined;
 }
 
 /** After memberSeesFrame allows the frame, admins still get the admin

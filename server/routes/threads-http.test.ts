@@ -291,3 +291,58 @@ describe("createThreadsHttpRoutes", () => {
     expect(result.sent?.status === 200 || result.sent === undefined).toBe(true);
   });
 });
+
+// #5152: the local operator's stream. On an organization server the operator
+// is one person among others: their stream is filtered for them (their own
+// bots), whether they come through loopback or through an admin session that
+// is the local operator. On a one-person server it is not filtered at all.
+describe("the local operator's live stream (#5152)", () => {
+  const loopbackOwner: RequestAuth = { kind: "loopback", scopes: ["admin", "client"] };
+  const operatorSession: RequestAuth = {
+    kind: "session",
+    via: "bearer",
+    scopes: ["admin", "client"],
+    session: { id: "s-op", label: "phone", scopes: ["admin", "client"], createdAt: 0, expiresAt: 0, lastUsedAt: 0, principalId: "pr_local" } as never,
+  };
+  const memberSession: RequestAuth = {
+    kind: "session",
+    via: "cookie",
+    scopes: ["client"],
+    session: { id: "s-mb", label: "web", scopes: ["client"], createdAt: 0, expiresAt: 0, lastUsedAt: 0, principalId: "pr_member" } as never,
+  };
+  // channelFilterViewerId: the local operator (loopback, or their own admin session) has none
+  const filterViewer = (auth: RequestAuth) => auth.kind === "session" && auth.session.principalId !== "pr_local" ? auth.session.principalId : undefined;
+  const streamOf = async (identityKind: "solo" | "perspicax", auth: RequestAuth) => {
+    const deps = baseDeps({
+      identityKind,
+      viewerId: filterViewer,
+      channelViewerId: (a) => (a.kind === "session" ? a.session.principalId : undefined),
+      localPrincipalId: () => "pr_local",
+    });
+    const res = { headersSent: false, writableEnded: false, destroyed: false, writeHead: () => res, write: () => true, end: () => res, on: () => res, setHeader: () => res, once: () => res };
+    await call(deps, { path: "/api/events", auth, res: res as never });
+    const [client] = [...deps.sseClients];
+    for (const open of deps.sseClients) open.close();
+    return client as { viewerId?: string; admin: boolean };
+  };
+
+  it("an organization server filters the operator's stream for the operator, through loopback", async () => {
+    const client = await streamOf("perspicax", loopbackOwner);
+    expect(client.admin).toBe(true);
+    expect(client.viewerId).toBe("pr_local");
+  });
+
+  it("an organization server filters the operator's own admin session for the operator", async () => {
+    expect((await streamOf("perspicax", operatorSession)).viewerId).toBe("pr_local");
+  });
+
+  it("a member's stream stays filtered for the member", async () => {
+    expect((await streamOf("perspicax", memberSession)).viewerId).toBe("pr_member");
+    expect((await streamOf("solo", memberSession)).viewerId).toBe("pr_member");
+  });
+
+  it("a one-person server leaves the operator's stream unfiltered: every frame, computer and phone", async () => {
+    expect((await streamOf("solo", loopbackOwner)).viewerId).toBeUndefined();
+    expect((await streamOf("solo", operatorSession)).viewerId).toBeUndefined();
+  });
+});

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/state/store";
 import { ARTIFACTS_EVENT, type ArtifactsEventDetail } from "@/lib/artifact-events";
+import { usePageVisible } from "@/lib/page-visible";
 import { sortArtifacts, type Artifact, type ArtifactSummary } from "../../shared/artifacts";
 
 const base = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/artifacts`;
@@ -138,7 +139,9 @@ export function useArtifact(botId: string, id: string): { artifact: Artifact | n
 // ---------------------------------------------------------------------------
 // Watch leases: an artifact refreshes while it is open somewhere (its dialog
 // or its window) or a favorite (server/artifacts/artifact-refresh.ts). Every mounted
-// frame registers here; one request every 45 seconds renews them all.
+// frame registers here; one request every 45 seconds renews them all. A hidden
+// window holds no lease (a Perspicax source is one short MCP session per run):
+// the lease lapses while it is hidden and is taken again at once when it shows.
 
 export const WATCH_RENEW_MS = 45_000;
 const watched = new Map<string, number>();
@@ -150,10 +153,11 @@ function sendWatch(): void {
   void api("/api/artifacts/watch", { method: "POST", body: JSON.stringify({ ids }) }).catch(() => {});
 }
 
-/** Holds a lease on `id` while the calling component is mounted. */
+/** Holds a lease on `id` while the calling component is mounted and the page is visible. */
 export function useArtifactWatch(id: string | null): void {
+  const visible = usePageVisible();
   useEffect(() => {
-    if (!id) return;
+    if (!id || !visible) return;
     const first = !watched.has(id);
     watched.set(id, (watched.get(id) ?? 0) + 1);
     if (first) sendWatch();
@@ -167,7 +171,7 @@ export function useArtifactWatch(id: string | null): void {
         watchTimer = null;
       }
     };
-  }, [id]);
+  }, [id, visible]);
 }
 
 /** Ids with a lease from this window (tests). */

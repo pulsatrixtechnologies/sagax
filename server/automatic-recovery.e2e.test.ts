@@ -290,8 +290,8 @@ it.each([
   { name: "disabled", enabled: false },
   { name: "prompt already accepted", method: "session/prompt" },
   { name: "partial output", method: "session/prompt", afterOutput: true },
-  { name: "authentication failure", error: { code: -32603, message: "Authentication required: invalid API key" } },
-])("does not automatically replay when $name", async ({ name: _name, ...options }) => {
+  { name: "authentication failure", error: { code: -32603, message: "Authentication required: invalid API key" }, signedOut: true },
+])("does not automatically replay when $name", async ({ name: _name, signedOut, ...options }) => {
   await withRecoveryFixture(options, async ({ api, control, calls, backupPrompts }) => {
     const { bot } = await control("new-bot", "--name", "No replay");
     const threadId = bot.activeTaskId;
@@ -303,13 +303,20 @@ it.each([
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status)
       .toBe(options.afterOutput ? "settled" : "failed");
     expect(backupPrompts()).toHaveLength(0);
-    expect(calls().filter((call) => call.method.endsWith(".error"))).toHaveLength(1);
+    // A refused sign-in is not automatic recovery's to replay. It is the
+    // signed-out carry-on's (#4888, working since #4907): the refused message
+    // goes once to the person's own next backup, the bot's fallback (the
+    // second startup fixture, which refuses the same way), never a third time.
+    const errors = calls().filter((call) => call.method.endsWith(".error"));
+    expect(errors).toHaveLength(signedOut ? 2 : 1);
+    expect(new Set(errors.map((call) => call.pid)).size).toBe(errors.length);
     const state = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id);
     expect(state.tasks.find((task: any) => task.threadId === threadId)).toMatchObject({ modelSelection: primary, busy: false });
     const { messages } = await control("messages", "--bot", bot.id, "--task", threadId, "--limit", "20");
     expect(messages.filter((message: any) => message.role === "user" && message.text === "DO_NOT_REPLAY_THIS_9S")).toHaveLength(1);
     expect(messages.some((message: any) => message.tool?.ok === false)).toBe(true);
     expect(messages.some((message: any) => message.tool?.name?.startsWith("recovery:"))).toBe(false);
+    expect(messages.filter((message: any) => /signed out, so Second startup fixture took over this turn/.test(message.tool?.name ?? ""))).toHaveLength(signedOut ? 1 : 0);
   });
 }, 90_000);
 

@@ -28,8 +28,12 @@ struct WatchChat: View {
     @State private var showTextInput = false
     @State private var fallbackSuggestions: [String] = []
     @StateObject private var talk = WatchTalkModel()
+    @ObservedObject private var meeting = WatchMeeting.shared
 
-    private var threadId: String { SingleStream.home(of: bot) ?? bot.mainThreadId ?? bot.threadId }
+    private var threadId: String { Self.home(of: bot) }
+
+    /// The bot's conversation on the watch, as on the phone's single stream.
+    static func home(of bot: Bot) -> String { SingleStream.home(of: bot) ?? bot.mainThreadId ?? bot.threadId }
     private var palette: SkinPalette {
         SkinID.black.palette.withBotAccent(MausColors.hex(for: bot.color).flatMap(SkinColor.init(css:)))
     }
@@ -69,6 +73,24 @@ struct WatchChat: View {
                             })
                         }
                         WatchTalkStatus(talk: talk)
+                        // #5130: listen to an in-person meeting; it needs the
+                        // same speech to text as holding to talk
+                        if talk.available || meeting.isLive(botId: bot.id) {
+                            if meeting.isLive(botId: bot.id) {
+                                NavigationLink {
+                                    WatchMeetingView(bot: bot, threadId: threadId, session: session)
+                                } label: {
+                                    WatchMeetingPill(compact: true)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink {
+                                    WatchMeetingView(bot: bot, threadId: threadId, session: session)
+                                } label: {
+                                    Label("Meeting", systemImage: "record.circle")
+                                }
+                            }
+                        }
                     }
                     .disabled(sending)
                     .id("composer")

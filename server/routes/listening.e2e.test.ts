@@ -78,4 +78,16 @@ describe.skipIf(process.platform === "win32")("listening sessions on an organiza
     expect(settled[0]!.listening!.state).toBe("ended");
     expect((await api("GET", `/api/listening/${session.sessionId}`, ADA)).body.lines.map((line: { text: string }) => line.text)).toEqual(["Hello", "We ship Friday.", "Bye."]);
   }, 60_000);
+
+  // #5130: the watch starts an in-person meeting; a purpose it does not know is refused.
+  it("starts a meeting when asked, and says the purpose of every session", async () => {
+    const created = await api("POST", "/api/bots", ADA, { name: "Notes" });
+    const bot = created.body.bot as { id: string };
+    expect((await api("POST", `/api/bots/${bot.id}/listening`, ADA, { purpose: "lecture" })).status).toBe(400);
+    const started = await api("POST", `/api/bots/${bot.id}/listening`, ADA, { purpose: "meeting" });
+    expect(started.status, JSON.stringify(started.body)).toBe(200);
+    expect(started.body.session).toMatchObject({ state: "listening", purpose: "meeting" });
+    const stopped = await api("POST", `/api/listening/${started.body.session.sessionId}/stop`, ADA, {});
+    expect(stopped.body.session).toMatchObject({ state: "ended", purpose: "meeting" });
+  }, 60_000);
 });

@@ -127,6 +127,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A call is a realtime voice session: never text to speech on a call, and never the dictation plus speech fallback (2026-11-02).
 - Never show a message's content on the car's screen (2026-10-30).
 - Apple Watch push-to-talk reuses the app's recorder, speech to text and read-aloud in the bot's voice; never a second voice stack on the watch (2026-11-20, #5129).
+- An in-person meeting on the watch shows a red pill while it listens, and ends in the online notetaker's notes kept in the bot's memory; only the audio source differs (2026-11-20, #5130).
 
 ## People, groups and peers
 

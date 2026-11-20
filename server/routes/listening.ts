@@ -1,8 +1,9 @@
 // Listening to a conversation (#4100), the person's own sessions:
 //
-//   POST /api/bots/:id/listening       { threadId?, sources?: { microphone?, computer? } }
+//   POST /api/bots/:id/listening       { threadId?, sources?: { microphone?, computer? }, purpose?: "conversation" | "meeting" }
 //        { session }   starts listening in the person's conversation with the bot
-//                      (the one already live there is answered again)
+//                      (the one already live there is answered again); a
+//                      meeting (#5130, the watch) ends in the meeting notes
 //   POST /api/listening/:id/lines      { lines: [{ seq, at?, speaker, text }], speakers?: [{ key, label }] }
 //        { session }   final lines, idempotent by seq; an empty batch is a heartbeat
 //   POST /api/listening/:id/stop       { lines?, speakers? }
@@ -18,7 +19,7 @@
 //
 //   GET  /api/internal/listening/:id?after=<seq>&limit=<n>
 //        { text, nextAfter? }   a page of a session of the conversation the turn runs in
-import { LISTENING_SESSION_ID, type ListeningSources } from "../../shared/listening.ts";
+import { LISTENING_SESSION_ID, type ListeningPurpose, type ListeningSources } from "../../shared/listening.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { listeningView, parseListeningBatch, type ListeningSessions } from "../listening/listening-sessions.ts";
 import { listeningReadPage } from "../listening/listening-turn.ts";
@@ -47,11 +48,13 @@ export function createListeningRoutes(deps: ListeningRouteDeps): RouteHandler {
       if (method !== "POST") return json(res, 405, { error: "method not allowed" });
       const person = deps.person(auth);
       if (!person) return json(res, 403, { error: "sign in as a person first", code: "sign_in" });
-      const body = await readBody(req, 4096).catch(() => null) as { threadId?: unknown; sources?: unknown } | null;
+      const body = await readBody(req, 4096).catch(() => null) as { threadId?: unknown; sources?: unknown; purpose?: unknown } | null;
       const threadId = body?.threadId;
       if (threadId !== undefined && (typeof threadId !== "string" || !THREAD_ID.test(threadId))) return json(res, 400, { error: "threadId must be a task id" });
       const sources = body?.sources;
       if (sources !== undefined && (!sources || typeof sources !== "object")) return json(res, 400, { error: "sources must be an object" });
+      const purpose = body?.purpose;
+      if (purpose !== undefined && purpose !== "conversation" && purpose !== "meeting") return json(res, 400, { error: "purpose must be conversation or meeting" });
       const target = deps.conversation(auth, start[1]!, threadId);
       if ("status" in target) return json(res, target.status, { error: target.error });
       const picked = sources as Partial<Record<keyof ListeningSources, unknown>> | undefined;
@@ -60,6 +63,7 @@ export function createListeningRoutes(deps: ListeningRouteDeps): RouteHandler {
         threadId: target.threadId,
         principalId: person,
         sources: { microphone: picked?.microphone !== false, computer: picked?.computer === true },
+        purpose: purpose as ListeningPurpose | undefined,
       });
       if (!session) return json(res, 404, { error: "no such conversation" });
       return json(res, 200, { session: listeningView(session) });

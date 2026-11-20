@@ -33,6 +33,22 @@
         }
       }
     },
+    "Allow the microphone for Sagax in Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the microphone for Sagax in Settings."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisez le micro pour Sagax dans Réglages."
+          }
+        }
+      }
+    },
     "Allow the microphone in Settings to record a voice note.": {
       "localizations": {
         "en": {
@@ -125,6 +141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toujours permettre pour ce fichier"
+          }
+        }
+      }
+    },
+    "Another meeting is still being sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another meeting is still being sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une autre réunion est encore en envoi."
           }
         }
       }
@@ -369,6 +401,38 @@
         }
       }
     },
+    "Listen to the meeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen to the meeting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écouter la réunion"
+          }
+        }
+      }
+    },
+    "Listening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écoute"
+          }
+        }
+      }
+    },
     "Listening… let go to send": {
       "localizations": {
         "en": {
@@ -381,6 +445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je t’écoute… relâche pour envoyer"
+          }
+        }
+      }
+    },
+    "Meeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réunion"
           }
         }
       }
@@ -433,6 +513,22 @@
         }
       }
     },
+    "Offline: the parts wait on the watch.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline: the parts wait on the watch."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hors ligne : les morceaux attendent sur la montre."
+          }
+        }
+      }
+    },
     "Open": {
       "localizations": {
         "en": {
@@ -461,6 +557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvre Sagax sur ton iPhone jumelé."
+          }
+        }
+      }
+    },
+    "Parts to send: %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parts to send: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Morceaux à envoyer : %lld"
           }
         }
       }
@@ -545,6 +657,22 @@
         }
       }
     },
+    "Room": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Room"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salle"
+          }
+        }
+      }
+    },
     "Sagax": {
       "localizations": {
         "en": {
@@ -577,6 +705,22 @@
         }
       }
     },
+    "Sending the last parts…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending the last parts…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi des derniers morceaux…"
+          }
+        }
+      }
+    },
     "Sending…": {
       "localizations": {
         "en": {
@@ -589,6 +733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Envoi…"
+          }
+        }
+      }
+    },
+    "Sent. %@ writes the notes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent. %@ writes the notes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyé. %@ écrit les notes."
           }
         }
       }
@@ -621,6 +781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commence la conversation."
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter"
           }
         }
       }
@@ -685,6 +861,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merci!"
+          }
+        }
+      }
+    },
+    "The watch listens to the meeting around you until you stop. The red pill shows the people in the room that it listens.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The watch listens to the meeting around you until you stop. The red pill shows the people in the room that it listens."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La montre écoute la réunion autour de toi jusqu’à ce que tu arrêtes. La pastille rouge montre aux personnes présentes qu’elle écoute."
+          }
+        }
+      }
+    },
+    "Then %@ writes the summary, the decisions and the follow-ups, and keeps them in its memory.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Then %@ writes the summary, the decisions and the follow-ups, and keeps them in its memory."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ensuite, %@ écrit le résumé, les décisions et les suivis, et les garde dans sa mémoire."
           }
         }
       }

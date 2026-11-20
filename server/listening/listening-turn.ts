@@ -10,7 +10,7 @@
 //   adds it; no client field.
 // - Later: listening_read reads a session of this conversation, by page.
 import { wrapUntrusted } from "../../shared/safety-review.ts";
-import { transcriptText } from "../meetings/meeting-summary.ts";
+import { MEETING_NOTES_RULES, MEETING_NOTES_STEPS, meetingMinutes, transcriptText } from "../meetings/meeting-summary.ts";
 import type { ListeningEndCause, ListeningRecord, ListeningSessions } from "./listening-sessions.ts";
 
 /** The transcript a message sent while listening carries, at most. */
@@ -51,6 +51,28 @@ export function listeningStopPrompt(record: ListeningRecord): string {
   ].join("\n");
 }
 
+/** #5130 (D-20261120-005): what the bot does with an in-person meeting the
+ * person listened to (the watch's meeting mode). The online notetaker's
+ * notes (MEETING_NOTES_STEPS and MEETING_NOTES_RULES, the same words), then
+ * kept in the bot's memory; only where the audio came from differs. */
+export const MEETING_MEMORY_STEP =
+  "4. Then keep them in your memory, as part of the notes: one memory_log line with the meeting's summary, and memory_update for each decision and each follow up (who does what, by when) that should hold in later sessions.";
+
+export function inPersonMeetingPrompt(record: ListeningRecord): string {
+  // the device may have heard the first words before the server had the session
+  const startedAt = record.lines.reduce((earliest, line) => Math.min(earliest, line.at || earliest), record.startedAt);
+  const minutes = meetingMinutes(startedAt, record.endedAt ?? record.startedAt);
+  return [
+    `You listened to an in-person meeting around the person, through the microphone of their own device, for about ${minutes} minute(s).`,
+    ...MEETING_NOTES_STEPS,
+    MEETING_MEMORY_STEP,
+    ...MEETING_NOTES_RULES,
+    `The person can read the transcript again later, and so can you, with listening_read (session ${record.id}).`,
+    "",
+    wrapUntrusted("meeting transcript", transcriptText(labelled(record), startedAt)),
+  ].join("\n");
+}
+
 /** The transcript so far, newest kept: whole lines from the end up to
  * `limit` characters, behind the untrusted fence. */
 export function listeningSoFarNote(record: ListeningRecord, limit = LISTENING_SO_FAR_LIMIT): string {
@@ -87,7 +109,8 @@ export interface ListeningTurnDeps {
 export function listeningEndedTurn(deps: ListeningTurnDeps): (record: ListeningRecord, cause: ListeningEndCause) => void {
   return (record, cause) => {
     if (cause !== "stop" || record.lines.length === 0) return;
-    deps.startTurn({ botId: record.botId, threadId: record.threadId, prompt: listeningStopPrompt(record), principalId: record.principalId });
+    const prompt = record.purpose === "meeting" ? inPersonMeetingPrompt(record) : listeningStopPrompt(record);
+    deps.startTurn({ botId: record.botId, threadId: record.threadId, prompt, principalId: record.principalId });
   };
 }
 

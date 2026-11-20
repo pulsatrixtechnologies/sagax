@@ -8,6 +8,12 @@
 
 export type ListeningState = "listening" | "ended";
 
+/** Why the person listens: a conversation around them (the chat's
+ * listening, #4100), or an in-person meeting (#5130, the watch's meeting
+ * mode): at the stop the bot writes the meeting notes the online notetaker
+ * writes and keeps them in its memory. */
+export type ListeningPurpose = "conversation" | "meeting";
+
 /** Which channels the device hears: the microphone (the person), and on the
  * desktop the computer's sound (the others). */
 export interface ListeningSources {
@@ -54,6 +60,8 @@ export interface ListeningSessionView extends ListeningCard {
   botId: string;
   threadId: string;
   sources: ListeningSources;
+  /** absent from servers before #5130: a conversation */
+  purpose?: ListeningPurpose;
   /** the highest seq kept: a device that joins the live session numbers its
    * lines after it (empty lines are skipped, so it can be above lineCount) */
   lastSeq: number;

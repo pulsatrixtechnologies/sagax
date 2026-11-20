@@ -54,11 +54,13 @@ private enum WatchDemo {
 private enum WatchDestination: Hashable {
     case chat(String)
     case waiting
+    case meeting(String)
 }
 
 private struct WatchHome: View {
     @ObservedObject var session: WatchSession
     @ObservedObject private var notifications = WatchNotificationHandler.shared
+    @ObservedObject private var meeting = WatchMeeting.shared
     @Environment(\.scenePhase) private var phase
     @State private var path: [WatchDestination] = []
     @State private var rows: [WatchBotRow] = []
@@ -70,6 +72,13 @@ private struct WatchHome: View {
             ScrollViewReader { scroller in
                 List {
                     if session.client != nil {
+                        // #5130: while the watch listens to a meeting, the red pill leads the list
+                        if meeting.recording, let botId = meeting.queue?.botId {
+                            NavigationLink(value: WatchDestination.meeting(botId)) {
+                                WatchMeetingPill(compact: true, botName: rows.first(where: { $0.id == botId })?.bot.name)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
                         NavigationLink(value: WatchDestination.waiting) {
                             Label("To answer", systemImage: "tray")
                         }
@@ -103,6 +112,10 @@ private struct WatchHome: View {
                     if let bot = rows.first(where: { $0.id == id })?.bot {
                         WatchChat(bot: bot, session: session)
                     }
+                case .meeting(let id):
+                    if let bot = rows.first(where: { $0.id == id })?.bot {
+                        WatchMeetingView(bot: bot, threadId: meeting.queue?.threadId ?? WatchChat.home(of: bot), session: session)
+                    }
                 }
             }
         }
@@ -110,11 +123,22 @@ private struct WatchHome: View {
             guard phase == .active else { return }
             session.refresh()
             await loadBots()
+            // a meeting left on the watch (relaunch, lost connection) carries on
+            meeting.resume(session: session)
             #if DEBUG
             if path.isEmpty {
                 if WatchDemo.screen == "chat", let pixel = rows.first(where: { $0.id == "demo-pixel" }) {
                     path = [.chat(pixel.id)]
-                } else if WatchDemo.screen == "inbox" { path = [.waiting] }
+                } else if WatchDemo.screen == "inbox" {
+                    path = [.waiting]
+                } else if WatchDemo.screen == "meeting-start" {
+                    path = [.meeting("demo-pixel")]
+                } else if WatchDemo.screen?.hasPrefix("meeting") == true, rows.contains(where: { $0.id == "demo-pixel" }) {
+                    // meeting, meeting-list, meeting-chat: one drawn as it runs
+                    meeting.demo(botId: "demo-pixel")
+                    if WatchDemo.screen == "meeting" { path = [.meeting("demo-pixel")] }
+                    if WatchDemo.screen == "meeting-chat" { path = [.chat("demo-pixel")] }
+                }
             }
             #endif
             while !Task.isCancelled {

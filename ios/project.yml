@@ -629,9 +629,14 @@ targets:
         WKApplication: true
         WKCompanionAppBundleIdentifier: ca.pulsatrix.sagax
         WKRunsIndependentlyOfCompanionApp: false
-        # Push-to-talk (#5129); its French is in WatchResources/InfoPlist.xcstrings.
+        # Push-to-talk (#5129) and the in-person meeting (#5130); the French is
+        # in WatchResources/InfoPlist.xcstrings.
         NSMicrophoneUsageDescription: >-
-          Sagax listens while you hold the mic to talk to a bot.
+          Sagax listens while you hold the mic to talk to a bot, or while it
+          listens to a meeting you start.
+        # #5130: a meeting started in front keeps recording with the wrist down
+        # (watchOS shows its microphone indicator meanwhile).
+        UIBackgroundModes: [audio]
         CFBundleURLTypes:
           - CFBundleURLSchemes: [sagax]
         NSAppTransportSecurity: &watchTransportSecurity

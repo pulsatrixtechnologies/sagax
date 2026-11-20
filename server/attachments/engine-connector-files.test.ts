@@ -114,7 +114,10 @@ describe("placeEngineFiles", () => {
 
     expect((output as unknown[])[0]).toEqual(picture);
     expect(readdirSync(results)).toEqual([]);
-    expect([...place.files.keys()][0]).toMatch(/\.png$/);
+    const onComputer = [...place.files.keys()][0]!;
+    expect(onComputer).toMatch(/\.png$/);
+    expect((output as Array<{ text?: string }>)[1]!.text).toContain(`[Image source: ${onComputer}]`);
+    expect((output as Array<{ text?: string }>)[1]!.text).toContain("image/png");
   });
 
   it("drops the file when the person has no place in this turn: nothing stays on the server", async () => {

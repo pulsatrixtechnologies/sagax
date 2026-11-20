@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { zipArchive } from "../testing/archive-fixtures.mjs";
 import { connectorBlobs, connectorFileName, placeConnectorFiles, sniffExtension, type PersonPlace } from "./connector-files.ts";
+import { sensitiveReadPath } from "../safety/sensitive-path.ts";
 
 /** A small spreadsheet as Office writes it: a zip naming xl/ parts. */
 const SHEET = zipArchive([
@@ -110,5 +111,17 @@ describe("connector file names", () => {
     const [blob] = connectorBlobs(downloadAnswer(SHEET));
     expect(connectorFileName(blob!, "../../etc/passwd.xlsx")).toMatch(/^[0-9a-f]{8}-passwd\.xlsx$/);
     expect(connectorFileName(blob!, ".hidden")).not.toMatch(/-\./);
+  });
+
+  it("decodes a percent-encoded name, so attach_file can read the file back", () => {
+    const [blob] = connectorBlobs(downloadAnswer(SHEET));
+    const fromUri = connectorFileName({ ...blob!, uri: "https://files.example.test/reports/Quarterly%20report.xlsx?x=1" }, null);
+    const given = connectorFileName(blob!, "Quarterly%20report.xlsx");
+    for (const name of [fromUri, given]) {
+      expect(name).toMatch(/^[0-9a-f]{8}-Quarterly report\.xlsx$/);
+      expect(sensitiveReadPath(`/workspace/attachments/${name}`)).toBe(false);
+    }
+    // a malformed escape keeps the name as written
+    expect(connectorFileName(blob!, "bad%E0%A4%A.xlsx")).toMatch(/^[0-9a-f]{8}-bad%E0%A4%A\.xlsx$/);
   });
 });

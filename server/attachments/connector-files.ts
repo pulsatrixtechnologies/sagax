@@ -126,14 +126,23 @@ function namedInAnswer(body: unknown): string | null {
   return null;
 }
 
+/** A name as a person reads it (`Quarterly%20report.pdf` is `Quarterly
+ * report.pdf`): attach_file refuses a percent-encoded name
+ * (server/safety/sensitive-path.ts), so one is never written. A malformed
+ * escape keeps the name as given. */
+function percentDecoded(name: string): string {
+  if (!/%[0-9a-f]{2}/i.test(name)) return name;
+  try { return decodeURIComponent(name); } catch { return name; }
+}
+
 /** The name the file is written under: the vendor's own when it gave one,
  * else "download" and the kind of file it is; a short hash keeps two files
  * of one name apart. Safe as one path component everywhere. */
 export function connectorFileName(blob: ConnectorBlob, given: string | null): string {
   const hash = createHash("sha256").update(blob.bytes).digest("hex").slice(0, 8);
   const sniffed = sniffExtension(blob.bytes, blob.mime);
-  const fromUri = blob.uri.split(/[\\/?#]/).filter(Boolean).at(-1) ?? "";
-  const base = given ?? (extname(fromUri) ? fromUri : "download");
+  const fromUri = percentDecoded(blob.uri.replace(/[?#].*$/, "").split(/[\\/]/).filter(Boolean).at(-1) ?? "");
+  const base = given == null ? (extname(fromUri) ? fromUri : "download") : percentDecoded(given);
   const extension = extname(base) || sniffed;
   return `${hash}-${displayName(base, `file${extension.toLowerCase()}`)}`;
 }

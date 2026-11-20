@@ -10,7 +10,7 @@
 // queued texts separated by a blank line, in ONE turn) and what it was not (the
 // webhook untrusted-data paragraph an attended turn must never get).
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -36,6 +36,7 @@ import {
   type SteerStore,
 } from "./steer-queue.ts";
 import type { BotRecord, Message } from "../store.ts";
+import { removeTempDir, stopGracefully } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -980,15 +981,17 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
   }, 30_000);
 
   afterAll(async () => {
-    child?.kill("SIGTERM");
-    await new Promise<void>((resolve) => {
-      if (!child || child.exitCode !== null) return resolve();
-      child.on("close", () => resolve());
-      setTimeout(() => (child.kill("SIGKILL"), resolve()), 5_000).unref?.();
-    });
+    // #5082: the home goes only once the server is gone. The old wait
+    // resolved at the SIGKILL, before the process (and the engines it
+    // spawned) let go of the home, and a raw rmSync then failed the whole
+    // file on a loaded Linux runner (EACCES or ENOTEMPTY) after every test
+    // had passed. stopGracefully gives the server longer than its own
+    // shutdown bounds and waits for the exit even past a SIGKILL;
+    // removeTempDir retries while the engines it spawned let go.
+    await stopGracefully(child);
     writeFileSync(evidencePath, JSON.stringify({ url: BASE, fixtureHome: home, requests: evidence, stderr }, null, 2));
     console.info(JSON.stringify({ evidencePath }));
-    rmSync(home, { recursive: true, force: true });
+    if (home) await removeTempDir(home);
   });
 
   it("drains exactly once after completion precedes the dispatch acknowledgment", async () => {

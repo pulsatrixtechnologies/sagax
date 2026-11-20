@@ -1,0 +1,24 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "comment": "Push-to-talk: watchOS microphone permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax listens while you hold the mic to talk to a bot."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax écoute pendant que vous maintenez le micro pour parler à un bot."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

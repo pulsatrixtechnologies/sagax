@@ -33,6 +33,22 @@
         }
       }
     },
+    "Allow the microphone in Settings to record a voice note.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the microphone in Settings to record a voice note."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisez le micro dans Réglages pour enregistrer une note vocale."
+          }
+        }
+      }
+    },
     "Always allow": {
       "localizations": {
         "en": {
@@ -209,6 +225,38 @@
         }
       }
     },
+    "Couldn't record the voice note.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't record the voice note."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’enregistrer la note vocale."
+          }
+        }
+      }
+    },
+    "Couldn't start the microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't start the microphone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de démarrer le micro."
+          }
+        }
+      }
+    },
     "Couldn’t load this conversation.": {
       "localizations": {
         "en": {
@@ -273,6 +321,22 @@
         }
       }
     },
+    "Hold to talk to my bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold to talk to my bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintiens pour parler à mon bot"
+          }
+        }
+      }
+    },
     "Hours": {
       "localizations": {
         "en": {
@@ -285,6 +349,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Heures"
+          }
+        }
+      }
+    },
+    "I didn’t catch that. Hold the mic and speak again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I didn’t catch that. Hold the mic and speak again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je n’ai rien entendu. Maintiens le micro et parle de nouveau."
+          }
+        }
+      }
+    },
+    "Listening… let go to send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening… let go to send"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je t’écoute… relâche pour envoyer"
           }
         }
       }
@@ -365,6 +461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvre Sagax sur ton iPhone jumelé."
+          }
+        }
+      }
+    },
+    "Reading the answer. Tap to stop.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the answer. Tap to stop."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture de la réponse. Touche pour arrêter."
           }
         }
       }
@@ -465,6 +577,22 @@
         }
       }
     },
+    "Sending…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi…"
+          }
+        }
+      }
+    },
     "Standing by": {
       "localizations": {
         "en": {
@@ -509,6 +637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parler à mon bot"
+          }
+        }
+      }
+    },
+    "Tap the mic to send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the mic to send"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche le micro pour envoyer"
           }
         }
       }
@@ -577,6 +721,38 @@
         }
       }
     },
+    "Too short: hold a little longer to record a voice note.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too short: hold a little longer to record a voice note."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop court : maintenez un peu plus longtemps pour enregistrer une note vocale."
+          }
+        }
+      }
+    },
+    "Transcribing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription…"
+          }
+        }
+      }
+    },
     "Type your answer": {
       "localizations": {
         "en": {
@@ -641,6 +817,22 @@
         }
       }
     },
+    "Waiting for the answer…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the answer…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J’attends la réponse…"
+          }
+        }
+      }
+    },
     "Working": {
       "localizations": {
         "en": {
@@ -669,6 +861,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ta réponse n’a pas été envoyée. Ouvre Sagax pour répondre."
+          }
+        }
+      }
+    },
+    "Your words did not go through. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your words did not go through. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes mots ne sont pas passés. Réessaie."
           }
         }
       }

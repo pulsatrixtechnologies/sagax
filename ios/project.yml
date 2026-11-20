@@ -596,6 +596,11 @@ targets:
       - path: App/Mascots/FrogMascotView.swift
       - path: App/Mascots/CrabMascotView.swift
       - path: App/Mascots/HdMascotView.swift
+      # Push-to-talk (#5129): the phone's own recorder, microphone prompt and
+      # read-aloud, never a second voice stack on the watch.
+      - path: App/MicrophonePermission.swift
+      - path: App/Composer/VoiceNoteRecorder.swift
+      - path: App/Features/Chat/MessageSpeaker.swift
     dependencies:
       - package: CompanionCore
         product: CompanionCore
@@ -624,6 +629,9 @@ targets:
         WKApplication: true
         WKCompanionAppBundleIdentifier: ca.pulsatrix.sagax
         WKRunsIndependentlyOfCompanionApp: false
+        # Push-to-talk (#5129); its French is in WatchResources/InfoPlist.xcstrings.
+        NSMicrophoneUsageDescription: >-
+          Sagax listens while you hold the mic to talk to a bot.
         CFBundleURLTypes:
           - CFBundleURLSchemes: [sagax]
         NSAppTransportSecurity: &watchTransportSecurity

@@ -105,27 +105,6 @@ extension EmptyStateView where Actions == EmptyView {
     }
 }
 
-enum MicrophonePermission {
-    /// Never asked yet: the next request shows the system prompt.
-    static var undetermined: Bool {
-        if #available(iOS 17.0, *) {
-            return AVAudioApplication.shared.recordPermission == .undetermined
-        }
-        return AVAudioSession.sharedInstance().recordPermission == .undetermined
-    }
-
-    /// `AVAudioApplication.requestRecordPermission()` arrived in iOS 17; the
-    /// session-based call it replaced still works below that.
-    static func request() async -> Bool {
-        if #available(iOS 17.0, *) {
-            return await AVAudioApplication.requestRecordPermission()
-        }
-        return await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
-        }
-    }
-}
-
 /// Motion that honours Reduce Motion (Settings > Accessibility > Motion).
 enum Motion {
     /// `animation`, or none under Reduce Motion: the change still happens,

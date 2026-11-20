@@ -420,3 +420,28 @@ a message's content on the car's screen. Tests:
 The main app's localized `ios/App/{Base,en,fr,pt-BR}.lproj/AppIntentVocabulary.plist`
 files supply example phrases for both supported Siri intents. Keep each
 locale aligned with `App/Localizable.xcstrings`; Base is the English fallback.
+
+## Apple Watch push-to-talk (2026-11-20, #5129)
+
+D-20261120-004. In a bot's chat on the watch (`ios/WatchApp/WatchChat.swift`),
+a tap on the mic is the system's dictation; held past `VoiceNoteHold`'s
+threshold it records, and letting go sends (`WatchTalkModel`):
+
+- the recording is the phone's `VoiceNoteRecorder` (16 kHz mono WAV), shared
+  with the watch target with `MicrophonePermission`;
+- its words come from `/voice/transcribe` through
+  `CompanionClient.transcribeRecording`, the same clip loop the phone's voice
+  notes use (`Session.transcribeVoiceNote`);
+- the words go as a call turn (`voiceCall`, call id `watch-...`, never
+  `ptt-`, which the server answers as a phone PTT push), so the bot answers
+  in its spoken register;
+- the answer is complete by `Walkie.settledReply` and `WatchTalk.turnRuns`;
+  it lands in the chat and is read by `MessageSpeaker` in the bot's voice,
+  fed by `ReadAloudVoices` (`Session` on the phone, `WatchVoices` on the
+  watch, which reads the person's `omb.voiceMode.v1` preference from the
+  server).
+
+Holding to talk shows only when `/voice/status` says xAI serves the person
+for that bot. Tests: `ios/Tests/CompanionCoreTests/WatchTalkTests.swift`.
+Debug captures: `-watch-demo chat -watch-demo-talk <step>`.
+

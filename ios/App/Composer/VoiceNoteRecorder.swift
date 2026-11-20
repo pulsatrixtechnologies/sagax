@@ -3,9 +3,16 @@
 // with metering for the live waveform, five minutes at most. The rules (file
 // name, bars, WAV, clips, hold or tap) are VoiceNoteRecording in
 // CompanionCore; this is the part that needs a microphone.
+//
+// The watch's push-to-talk records with this same recorder (#5129); the
+// phone's audio session bookkeeping (VoiceNoteCenter), its haptics and the
+// composer's strip stay on the phone.
 import AVFoundation
 import CompanionCore
 import SwiftUI
+#if os(watchOS)
+import WatchKit
+#endif
 
 @MainActor
 final class VoiceNoteRecorder: ObservableObject {
@@ -66,7 +73,9 @@ final class VoiceNoteRecorder: ObservableObject {
             error = "Allow the microphone in Settings to record a voice note."
             return
         }
+        #if os(iOS)
         VoiceNoteCenter.shared.beginInputOwnership(.voiceNote)
+        #endif
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .default)
@@ -93,7 +102,11 @@ final class VoiceNoteRecorder: ObservableObject {
             bars = VoiceNoteRecording.waveformBars([])
             phase = .recording
             startTicker()
+            #if os(iOS)
             Haptics.impact(.medium)
+            #else
+            WKInterfaceDevice.current().play(.start)
+            #endif
         } catch {
             teardown()
             phase = .idle
@@ -141,7 +154,11 @@ final class VoiceNoteRecorder: ObservableObject {
         teardown()
         if let url { try? FileManager.default.removeItem(at: url) }
         phase = .idle
+        #if os(iOS)
         Haptics.selection()
+        #else
+        WKInterfaceDevice.current().play(.retry)
+        #endif
     }
 
     func markSending(_ sending: Bool) {
@@ -154,7 +171,9 @@ final class VoiceNoteRecorder: ObservableObject {
         fileURL = nil
         cancelArmed = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #if os(iOS)
         VoiceNoteCenter.shared.endInputOwnership(.voiceNote)
+        #endif
     }
 
     // the timer and the waveform repaint every 80 ms, as on the desktop
@@ -183,6 +202,7 @@ final class VoiceNoteRecorder: ObservableObject {
     }
 }
 
+#if os(iOS)
 /// The strip that takes the field's place while a voice note records: a red
 /// dot, the timer and the waveform, then Cancel and Send (from the + menu) or
 /// "Slide left to cancel" (while the mic is held).
@@ -272,3 +292,4 @@ struct VoiceNoteRecordingStrip: View {
         .accessibilityHidden(true)
     }
 }
+#endif

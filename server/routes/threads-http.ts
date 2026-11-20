@@ -39,7 +39,6 @@ import {
   type ThreadFileRef,
 } from "../threads/thread-files.ts";
 import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../media/thumbnail.ts";
-import { liveStreamViewerId } from "../rooms/channel-visibility.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 import {
   normalizeReactions,
@@ -549,11 +548,7 @@ async function handleThreadEventsSse(deps: ThreadsHttpRouteDeps, ctx: RouteConte
     client.approvalUserId = localPrincipalId();
   }
   if (!(auth.kind === "loopback" && auth.trust === "service")) client.identity = () => viewerIdentity(auth);
-  // #5152: on an organization server the local operator's stream (loopback,
-  // or their own admin session) is filtered for them like any person's: their
-  // own bots, never a member's. On a one-person server it hears every frame.
-  const streamViewer = liveStreamViewerId({ viewerId, organization: deps.identityKind === "perspicax", person: client.approvalUserId });
-  if (streamViewer) client.viewerId = streamViewer;
+  if (viewerId) client.viewerId = viewerId;
   if (presenceOf.ok) client.presence = true;
   res.writeHead(200, {
     "content-type": "text/event-stream",

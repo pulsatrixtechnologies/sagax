@@ -57,7 +57,7 @@ function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly
     // A signed-in admin has a viewerId and goes through memberFrame so hidden
     // channels stay hidden. On a one-person server the operator (loopback, no
     // viewerId) still gets the raw frame; on an organization server every
-    // stream has one, the operator's included (#5152, liveStreamViewerId).
+    // stream has one, the operator's included (#5152, channelFilterViewer).
     const out = host.sseFrameFor(client, seq, payload, frame, clientFrame);
     if (out === null) continue;
     // Screen frames are replaceable and durable events are not: see

@@ -318,7 +318,10 @@ posixOnly("an organization member's identity and bots", () => {
     const zaraId = (await api("GET", "/api/config", { as: "zara" })).body.viewer.principalId;
     expect((await api("POST", `/api/bots/${ops.body.bot.id}/direct-grants`, { body: { userId: zaraId } })).status).toBe(200);
     expect((await api("PUT", `/api/bots/${ops.body.bot.id}/workspace/file`, { as: "zara", body: { path: "RULES.md", text: "# Hijacked\n" } })).status).toBe(403);
-    expect((await api("GET", `/api/bots/${zaraBot}/workspace/file?path=RULES.md`)).body.text).toContain("Never quote a price.");
+    // her own rules kept her words (read as her: on an organization server the
+    // operator at this computer sees their own bots only, #5152)
+    expect((await api("GET", `/api/bots/${zaraBot}/workspace/file?path=RULES.md`, { as: "zara" })).body.text).toContain("Never quote a price.");
+    expect([403, 404]).toContain((await api("GET", `/api/bots/${zaraBot}/workspace/file?path=RULES.md`)).status);
   });
 
   it("lets a member edit and delete only her own bots", async () => {

@@ -50,6 +50,16 @@ export function ownsGroup(group: Pick<OwnedGroup, "createdBy" | "humanIds">, act
   return actorIds(actor).includes(owner);
 }
 
+/** #5152: the rooms one person made that name nobody, them included. On an
+ * organization server the operator at this computer made such rooms before
+ * withCreatorListed listed them; now that they are filtered for themselves
+ * (channelFilterViewer), nobody would see those rooms. */
+export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: readonly string[]; peopleDm?: boolean; archivedAt?: number }>(groups: readonly G[], creatorId: string): G[] {
+  const creator = norm(creatorId);
+  if (!creator) return [];
+  return groups.filter((group) => !group.peopleDm && !group.archivedAt && !(group.humanIds ?? []).length && typeof group.createdBy === "string" && norm(group.createdBy) === creator);
+}
+
 /** The fields only the owner may change. */
 export const OWNER_ONLY_GROUP_FIELDS = ["name", "bulletin", "cwd", "defaultResponder", "memberIds", "humanIds", "mentionAll"] as const;
 

@@ -4,7 +4,7 @@ import {
   canSeeDirectBot,
   channelViewerId,
   liveFramesNeedChannelFilter,
-  liveStreamViewerId,
+  channelFilterViewer,
   sseFrameProjection,
   searchHitVisible,
   seesBotForViewer,
@@ -34,16 +34,22 @@ describe("channel visibility", () => {
     expect(liveFramesNeedChannelFilter("ada@example.test")).toBe(true);
     expect(liveFramesNeedChannelFilter(undefined)).toBe(false);
   });
-  it("names the operator's stream by the operator on an organization server only (#5152)", () => {
-    // one person's server: the operator hears every frame
-    expect(liveStreamViewerId({ viewerId: undefined, organization: false, person: "pr_local" })).toBeUndefined();
-    // an organization server: the operator is one person among others
-    expect(liveStreamViewerId({ viewerId: undefined, organization: true, person: "pr_local" })).toBe("pr_local");
-    // a signed-in viewer stays who they are
-    expect(liveStreamViewerId({ viewerId: "pr_ada", organization: true, person: "pr_ada" })).toBe("pr_ada");
-    expect(liveStreamViewerId({ viewerId: "pr_ada", organization: false, person: "pr_ada" })).toBe("pr_ada");
-    // no person behind the stream: nothing to name
-    expect(liveStreamViewerId({ viewerId: undefined, organization: true, person: " " })).toBeUndefined();
+  it("filters the operator for themselves on an organization server only (#5152)", () => {
+    const local = "pr_local";
+    const viewer = (input: { viewerId?: string; organization: boolean; admin?: boolean; operatorAtComputer?: boolean }) =>
+      channelFilterViewer({ viewerId: input.viewerId, organization: input.organization, admin: input.admin ?? false, localPrincipalId: local, operatorAtComputer: input.operatorAtComputer ?? false });
+    // a personal server: the operator at this computer and their own phone see everything
+    expect(viewer({ organization: false, admin: true, operatorAtComputer: true })).toBeUndefined();
+    expect(viewer({ viewerId: local, organization: false, admin: true })).toBeUndefined();
+    expect(viewer({ viewerId: "anon:s1", organization: false })).toBeUndefined();
+    expect(viewer({ viewerId: "pr_ada", organization: false, admin: true })).toBe("pr_ada");
+    // an organization server: one person among others, the operator included
+    expect(viewer({ organization: true, admin: true, operatorAtComputer: true })).toBe(local);
+    expect(viewer({ viewerId: local, organization: true, admin: true })).toBe(local);
+    expect(viewer({ viewerId: "pr_ada", organization: true, admin: true })).toBe("pr_ada");
+    expect(viewer({ viewerId: "anon:s1", organization: true })).toBe("anon:s1");
+    // a local service is nobody
+    expect(viewer({ organization: true, admin: false, operatorAtComputer: false })).toBeUndefined();
   });
   it("keeps the admin projection after a channel filter allows the frame", () => {
     expect(sseFrameProjection({ admin: true })).toBe("admin");

@@ -53,24 +53,38 @@ export function seesChannel(group: { humanIds?: string[] }, viewerId: string | u
 }
 
 /** Signed-in viewers, including admin, have live frames filtered. Loopback
- * and a session with no user id do not; on an organization server no live
- * stream is without one (liveStreamViewerId). */
+ * and a session with no user id do not; on an organization server every
+ * person has one (channelFilterViewer). */
 export function liveFramesNeedChannelFilter(viewerId: string | undefined): boolean {
   return Boolean(viewerId);
 }
 
-/** #5152: who a live stream is filtered for. A signed-in viewer is their
- * principal (`viewerId`, from channelFilterViewerId). One stream has none:
- * the operator at this computer (loopback, or an admin session that is the
- * local operator). On a one-person server that operator hears every frame,
- * on the computer and on the phone. On an organization server the operator
- * is one person among others: their stream is filtered for them (`person`,
- * the stream's own principal) like anyone else's, so a member's bot never
- * reaches it. */
-export function liveStreamViewerId(input: { viewerId: string | undefined; organization: boolean; person: string | undefined }): string | undefined {
-  if (input.viewerId) return input.viewerId;
-  if (!input.organization) return undefined;
-  return input.person?.trim() || undefined;
+/** Whose channels and bots a request may see: requests, live frames and
+ * search all read this (channelFilterViewerId in server/index.ts). None
+ * means unfiltered: everything.
+ *
+ * A personal server: the operator at this computer (loopback) and their own
+ * phone (an admin session that is the local operator) are unfiltered, and so
+ * is a session without a principal (a chat-only device keeps seeing the
+ * operator's bots; its scope still gates it).
+ *
+ * #5152, an organization server: every person is filtered for themselves,
+ * the operator at this computer and their own phone included (their own bots
+ * and rooms, never a member's); a session without a principal keeps its
+ * anonymous id and sees no one's. Only a local service has none. */
+export function channelFilterViewer(input: {
+  /** channelViewerId: a session's principal, or `anon:<session id>`. */
+  viewerId: string | undefined;
+  organization: boolean;
+  admin: boolean;
+  localPrincipalId: string;
+  /** A loopback request with owner trust: the operator at this computer. */
+  operatorAtComputer: boolean;
+}): string | undefined {
+  const { viewerId } = input;
+  if (input.organization) return viewerId || (input.operatorAtComputer ? input.localPrincipalId : undefined);
+  if (!viewerId || viewerId.startsWith("anon:")) return undefined;
+  return input.admin && viewerId === input.localPrincipalId ? undefined : viewerId;
 }
 
 /** After memberSeesFrame allows the frame, admins still get the admin

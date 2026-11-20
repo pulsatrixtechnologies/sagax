@@ -6,9 +6,13 @@ export function createWithCreatorListed(getHost: () => Host): any {
 function withCreatorListed(auth: RequestAuth, body: unknown) {
   const host = getHost();
 
-  if (host.IDENTITY.kind !== "perspicax" || auth.kind !== "session") return body;
+  if (host.IDENTITY.kind !== "perspicax") return body;
+  // #5152: the operator at this computer is filtered for themselves like any
+  // person (channelFilterViewer), so the rooms they make here list them too
+  const operatorAtComputer = auth.kind === "loopback" && auth.trust !== "service";
+  if (auth.kind !== "session" && !operatorAtComputer) return body;
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
-  const principalId = auth.session.principalId?.trim();
+  const principalId = auth.kind === "session" ? auth.session.principalId?.trim() : host.localPrincipalId();
   if (Object.prototype.hasOwnProperty.call(body, "humanIds")) {
     // A member naming coworkers stays in the room they create.
     const named = (body as { humanIds?: unknown }).humanIds;

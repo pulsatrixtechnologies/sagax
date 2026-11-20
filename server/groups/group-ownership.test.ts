@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupOwnerId, groupPatchOwnerRefusal, isSelfLeave, mayDeleteGroup, ownsGroup } from "./group-ownership.ts";
+import { groupOwnerId, groupPatchOwnerRefusal, isSelfLeave, mayDeleteGroup, ownsGroup, unlistedOwnRooms } from "./group-ownership.ts";
 
 const owner = { id: "pr_owner", email: "owner@example.test", orgAdmin: false };
 const member = { id: "pr_member", email: "member@example.test", orgAdmin: false };
@@ -68,5 +68,25 @@ describe("group ownership", () => {
     expect(groupPatchOwnerRefusal(withMine, { memberIds: ["bot_m", "bot_a"] }, member, botOwner)).toMatch(/owner/);
     expect(groupPatchOwnerRefusal(withMine, { memberIds: [] }, owner, botOwner)).toBeNull();
     expect(groupPatchOwnerRefusal(withMine, { memberIds: ["bot_a"], name: "Mine" }, member, botOwner)).toMatch(/owner/);
+  });
+});
+
+// #5152: the operator's own rooms that name nobody, them included
+describe("unlistedOwnRooms", () => {
+  const rooms = [
+    { id: "made-here", createdBy: "PR_LOCAL", humanIds: [] as string[] },
+    { id: "no-people-field", createdBy: "pr_local" },
+    { id: "names-someone", createdBy: "pr_local", humanIds: ["pr_ada"] },
+    { id: "names-a-team", createdBy: "pr_local", humanIds: ["team:T1"] },
+    { id: "someone-else", createdBy: "pr_ada", humanIds: [] as string[] },
+    { id: "no-maker", humanIds: [] as string[] },
+    { id: "a-dm", createdBy: "pr_local", humanIds: [] as string[], peopleDm: true },
+    { id: "archived", createdBy: "pr_local", humanIds: [] as string[], archivedAt: 1 },
+  ];
+  it("finds the rooms the person made that list nobody", () => {
+    expect(unlistedOwnRooms(rooms, "pr_local").map((room) => room.id)).toEqual(["made-here", "no-people-field"]);
+  });
+  it("finds nothing for nobody", () => {
+    expect(unlistedOwnRooms(rooms, " ")).toEqual([]);
   });
 });

@@ -15,8 +15,8 @@
 //   NI-3  the local operator (#5152): a member's bot answers the member, who
 //         hears its notification. The stream of the operator at this computer
 //         (loopback) and of a phone they paired from it with admin access
-//         (their own admin session) carries the operator's own bots only:
-//         nothing of the member's bot.
+//         (their own admin session) carries the operator's own bots and rooms
+//         only: nothing of the member's bot. Their lists say the same.
 //
 // A silence is only worth something beside the noise: the admin's own bot,
 // created after the refusal (or the call), reaches the admin's stream, so
@@ -270,11 +270,16 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     expect(sent.status, sent.text).toBeLessThan(300);
     await waitFor(async () => aboutMemberBot(memberStream).length > 0, 40_000);
 
-    // ordering barrier: the operator's own bot reaches both of the operator's streams
+    // ordering barrier: the operator's own bot, and a room they make at this
+    // computer, reach both of the operator's streams
     const own = await api("POST", "/api/bots", undefined, { name: "Console helper" });
     expect(own.status, own.text).toBe(201);
     const operatorBot = own.body.bot.id as string;
-    const seesOwn = (stream: { text: () => string }) => frames(stream).some((frame) => frame.kind === "bot" && frame.bot?.id === operatorBot);
+    const room = await api("POST", "/api/groups", undefined, { name: "Console room", memberIds: [operatorBot] });
+    expect(room.status, room.text).toBe(201);
+    const operatorRoom = room.body.group.id as string;
+    const seesOwn = (stream: { text: () => string }) => frames(stream).some((frame) => frame.kind === "bot" && frame.bot?.id === operatorBot)
+      && frames(stream).some((frame) => frame.kind === "group" && frame.group?.id === operatorRoom);
     await waitFor(async () => seesOwn(operatorStream) && seesOwn(phoneStream));
     await sleep(300);
 
@@ -283,6 +288,14 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     // nor any other frame of the member's bot
     expect(operatorStream.text()).not.toContain(memberBot);
     expect(phoneStream.text()).not.toContain(memberBot);
+    // the operator's lists say what their streams say
+    for (const who of [undefined, operatorPhone]) {
+      const bots = (await api("GET", "/api/bots", who)).body.bots.map((bot: any) => bot.id);
+      expect(bots).toContain(operatorBot);
+      expect(bots).not.toContain(memberBot);
+      expect((await api("GET", "/api/groups", who)).body.groups.map((group: any) => group.id)).toContain(operatorRoom);
+    }
+    expect((await api("GET", "/api/bots", member)).body.bots.map((bot: any) => bot.id)).toContain(memberBot);
     operatorStream.close();
     phoneStream.close();
     memberStream.close();

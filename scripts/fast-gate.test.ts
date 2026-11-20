@@ -419,6 +419,15 @@ describe("fast-gate.sh", () => {
     expect(GUARD_TESTS).toEqual(expect.arrayContaining(["server/turns/start-turn-prepare-admit.test.ts", "server/agent-api.e2e.test.ts"]));
   });
 
+  // #5114: a cleared bot name came back in a doc comment and the guard that
+  // scans every tracked file for it stayed red on main unseen, since only the
+  // full suite ran it; every lot runs it now.
+  it("lists the cleared bot names guard among the tests every lot runs", async () => {
+    const { GUARD_TESTS } = await import("./verify/release/guard-tests.mjs");
+    expect(GUARD_TESTS).toContain("scripts/testing/cleared-bot-names.guard.test.ts");
+    expect(existsSync(resolve(__dirname, "..", "scripts/testing/cleared-bot-names.guard.test.ts"))).toBe(true);
+  });
+
   // #4131: the UI guards that scan the whole of src (motion tokens, touch
   // actions, window drag, settings placement and the like) went red on main
   // unseen after three UI lots; every lot runs them now, from the one list.

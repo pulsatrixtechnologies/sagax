@@ -120,6 +120,12 @@ export function engineFileRefusal(path: string, folder: EngineBlobFolder): { why
   const parts = below.split(sep);
   if (parts.length !== 3 || parts[1] !== "tool-results" || (folder.session !== null && parts[0] !== folder.session)) return outside;
   if (!new RegExp(`^${BLOB_NAME}$`).test(parts[2]!)) return outside;
+  // Defense only: a name Claude Code writes never matches here (it starts
+  // with `mcp-`, its extension comes from the CLI's fixed list, anything
+  // else is `.bin`). It stays as the #5138 guard so a name something else
+  // put in that folder (the test forges a `.pem`) is never handed on;
+  // attach_file still applies the same guard on the person's side
+  // (personPlaces readFromPersonPlace).
   if (sensitiveReadPath(below)) return { why: "it is a hidden or credential file, which is never handed on", remove: true };
   if (stat.size > MAX_BYTES) return { why: `it is larger than ${MAX_BYTES} bytes`, remove: true };
   return null;

@@ -85,6 +85,7 @@ import { SEND_ID_PATTERN } from "../messages/send-idempotency.ts";
 import { sensitiveEnvironmentPath } from "../safety/sensitive-path.ts";
 import { answerBotFiles, type BotAttachment, type BotFileRoot, type FilesView } from "./org-admin-files.ts";
 import { isEffortLevel, type ModelSelection } from "../../shared/model-selection.ts";
+import { AGENT_CALLER_FALLBACK } from "../../shared/agent-conversation.ts";
 
 export const ORG_MEMBER_PREFIX = "/api/org/member/";
 /** The `act.sub` values the member API accepts: never `perspicax-mail` nor
@@ -208,6 +209,9 @@ export interface OrgMemberRouteDeps {
   agentConversation?(botId: string, person: MemberPerson, fresh: boolean): string | null;
   /** The outside agents' conversations of this person with this bot. */
   agentConversationsOf?(botId: string, principalId: string): string[];
+  /** #4879: the AI client that holds an outside agent's conversation (its
+   * `openedBy` name), or null. */
+  agentConversationClient?(threadId: string): string | null;
   /** #291: stamp a line an AI client sent, so the chat folds it with the
    * bot's answer instead of showing it as the person typing. */
   markAiClientLine?(threadId: string, messageId: string): void;
@@ -1110,11 +1114,55 @@ export function summarizeTurn(raw: unknown, anchor: string | null, threadUrl: st
   };
 }
 
-function botStatus(bot: Record<string, unknown> | undefined, archived: boolean): "idle" | "working" | "waiting" | "archived" {
-  if (archived) return "archived";
-  if (!bot) return "idle";
-  if (bot.activity === "waiting-on-you") return "waiting";
-  return bot.busy === true ? "working" : "idle";
+/** The person's own conversations with a bot as the app shows them (the
+ * `busy` and `activity` of `GET /api/bots`, the viewer's own activity):
+ * waiting on a card wins over working. */
+export function ownChatStatus(view: { busy?: unknown; activity?: unknown } | undefined): ThreadStatus {
+  if (view?.activity === "waiting-on-you") return "waiting";
+  return view?.busy === true ? "working" : "idle";
+}
+
+/** The name of the person's own conversations in a bot's live paths. */
+export const OWN_CHAT_PATH = "Sagax chat";
+
+/** #4879: the one rule for a bot's run state over every path a person
+ * reaches it by, read by the member list (`GET bots` `status` and `liveVia`)
+ * and by get_agent (`live_via`) alike. `own` is the person's own
+ * conversations in Sagax (`ownChatStatus`); `conversations` are each AI
+ * client's conversation with the bot (send_prompt through Perspicax,
+ * whatever the client), read by `status` (the member API's `threadStatus`:
+ * a question card that outlived its turn still waits) and named by
+ * `clientOf`. The app's own view leaves an AI client's conversation out of
+ * its dots (#291); here every client reads one state, and `liveVia` names
+ * the paths where a turn works or waits now, the person's own chat first.
+ * Waiting wins over working. */
+export function livePaths(
+  own: ThreadStatus,
+  conversations: readonly string[],
+  status: (threadId: string) => ThreadStatus | null,
+  clientOf: (threadId: string) => string | null,
+): { status: ThreadStatus; liveVia: string[] } {
+  let state = own;
+  const liveVia = own === "idle" ? [] : [OWN_CHAT_PATH];
+  for (const threadId of conversations) {
+    const turn = status(threadId);
+    if (turn !== "working" && turn !== "waiting") continue;
+    if (turn === "waiting" || state === "idle") state = turn;
+    const client = clientOf(threadId)?.trim() || AGENT_CALLER_FALLBACK;
+    if (!liveVia.includes(client)) liveVia.push(client);
+  }
+  return { status: state, liveVia };
+}
+
+/** A listed bot's run state for the member list: archived, else `livePaths`
+ * over the person's own chat and their AI client conversations. */
+function liveBotState(deps: OrgMemberRouteDeps, botId: string, bot: Record<string, unknown> | undefined, person: MemberPerson, archived: boolean): {
+  status: ThreadStatus | "archived"; liveVia: string[];
+} {
+  if (archived) return { status: "archived", liveVia: [] };
+  if (!bot) return { status: "idle", liveVia: [] };
+  return livePaths(ownChatStatus(bot), deps.agentConversationsOf?.(botId, person.principalId) ?? [],
+    (threadId) => deps.threadStatus(threadId), (threadId) => deps.agentConversationClient?.(threadId) ?? null);
 }
 
 /** The routes, in one table. */
@@ -1768,7 +1816,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
             description: str(entry.description) ?? "",
             source: str(entry.source) ?? "shared",
             owner: { principalId: ownerId, sub: ownerId === person.principalId ? person.sub : null, name: str(owner?.name) ?? "" },
-            status: botStatus(bot, entry.archived === true),
+            ...liveBotState(deps, id, bot, person, entry.archived === true),
             canMessage: Boolean(bot) && entry.archived !== true,
             threadId: str(bot?.threadId),
           };
@@ -1778,7 +1826,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         for (const [id, bot] of usable) {
           if (seen.has(id)) continue;
           bots.push({ id, name: str(bot.name) ?? "", title: str(bot.title) ?? "", description: str(bot.description) ?? "", source: "shared",
-            owner: { principalId: "", sub: null, name: "" }, status: botStatus(bot, false), canMessage: true, threadId: str(bot.threadId) });
+            owner: { principalId: "", sub: null, name: "" }, ...liveBotState(deps, id, bot, person, false), canMessage: true, threadId: str(bot.threadId) });
         }
         bots.sort((a, b) => a.name.toLocaleLowerCase().localeCompare(b.name.toLocaleLowerCase()) || a.id.localeCompare(b.id));
         return answer({ bots });

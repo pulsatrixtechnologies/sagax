@@ -717,6 +717,19 @@ describe("get_agent / delete_agent", () => {
     expect(JSON.stringify(w.audits)).not.toContain("careful clerk");
   });
 
+  // #4879: two clients of one person read different run states of the same bot
+  it("get_agent names the paths of the person where the agent works or waits now, as every client reads them", async () => {
+    const w = world();
+    const profile = w.deps.profile;
+    w.deps.profile = async (caller, agentId) => {
+      const read = await profile(caller, agentId);
+      return "status" in read && typeof read.status === "number" ? read : { ...read, live_via: ["Sagax chat", "Cursor"] };
+    };
+    const r = await createAgentApi(w.deps).call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
+    expect(r.status).toBe(200);
+    expect(r.body.agent).toMatchObject({ id: "bot-a", live_via: ["Sagax chat", "Cursor"] });
+  });
+
   it("#4236: get_agent on an agent shared with the caller answers its persona and speech; an unreachable one stays unknown_agent", async () => {
     const w = world({ reachable: (caller, agent) => agent.id !== "bot-c" || caller.id === "pr_owner" });
     const shared = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });

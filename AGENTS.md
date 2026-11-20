@@ -132,6 +132,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A bot reaches every visible bot of the same person, whatever the sidebar section, and never a bot of another person (2026-11-09).
 - One tool messages another person: `message_user` (permission `people:message`, the person's own card and level, no extra guard); `message_person` is the duplicate to retire (2026-11-06, #2118, #3292).
 - A person leaves a group on their own, owner included, without an admin; a group never becomes empty (2026-11-06, #2119).
+- Every path a person reaches a bot by (the app, each AI client) reads one run state, and get_agent and the member list name the paths live now; never a status that leaves out another client's conversation (2026-11-19, #4879).
 - A conversation with a person is one conversation on screen, like a bot's (2026-11-05).
 - Never name a peer from a record read before an await (2026-11-02).
 - Rooms with several people and direct messages between people keep Report and Block; a report's author comes from the stored message, never the body (2026-10-26).

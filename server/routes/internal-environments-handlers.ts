@@ -27,6 +27,7 @@ import type { PersonalMcpServer } from "../people/person-connections.ts";
 import { readPersonalCopy } from "../personal-copy.ts";
 import { SANDBOX_CONTROL_REFUSAL } from "../sandbox/sandbox-control.ts";
 import { StdioRelayError, type StdioRelayPart } from "../sandbox/sandbox-stdio-mcp.ts";
+import { placeConnectorFiles, type PersonPlace } from "../attachments/connector-files.ts";
 import { noteTurnServedPart, turnServedMount } from "../turns/turn-trace.ts";
 import { sharedComputerOperation } from "../computer/shared-computers.ts";
 import { SMALL_TALK_CLOUD_REFUSAL } from "../small-talk.ts";
@@ -264,6 +265,9 @@ export interface InternalEnvironmentsDeps {
     /** #4394: awaited before the server's process starts (its plugin's copy) */
     before?: () => Promise<void>;
   }): Promise<unknown>;
+  /** #5138: the person's own places of this turn, most preferred first,
+   * where a file one of their MCP servers returns is written. */
+  connectorFilePlaces?(capability: InternalCapabilityView): readonly PersonPlace[];
 
   desktopConnected(person: string): boolean;
   handleDesktopBridgeMcp: typeof handleDesktopBridgeMcp;
@@ -800,7 +804,10 @@ async function handlePersonalMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
       ...(before ? { before } : {}),
     });
     deps.requireActive(capability);
-    return json(res, 200, { message: answer });
+    // #5138 (M-20261120-008): a file the server returned goes to the
+    // person's own place, never to the engine on the Sagax server
+    const places = deps.connectorFilePlaces;
+    return json(res, 200, { message: places ? await placeConnectorFiles(answer, () => places(capability)) : answer });
   } catch (error) {
     if (error instanceof StdioRelayError || error instanceof UserSandboxUnavailable) {
       return json(res, 200, answerError(error.message));

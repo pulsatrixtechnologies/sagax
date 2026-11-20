@@ -1,6 +1,6 @@
 // attach-file and vm-exec for internal session routes (#1383).
 import { ATTACHMENTS_DIR, deleteAttachment } from "../attachments/attachments.ts";
-import { attachForTurn, saveBotAttachment } from "../bots/bot-attachment.ts";
+import { attachForTurn, botAttachmentMaxBytes, saveBotAttachment, saveBotAttachmentBytes } from "../bots/bot-attachment.ts";
 import { VM_WORKSPACE_GUEST } from "../computer/container-computer.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
 import type { InternalSessionsBot, InternalSessionsDeps } from "./internal-sessions-types.ts";
@@ -28,21 +28,33 @@ export async function handleInternalSessionsFiles(
       // The cap is an anti-loop limit for automated turns; the person's
       // own request attaches what they asked for.
       const outcome = await attachForTurn(capability, deps.personDirectTurn(from, threadId) ? Number.POSITIVE_INFINITY : MAX_ATTACHED_FILES_PER_TURN, {
-        save: () => {
-          // The agents capability carries no VM; the thread's claimed desktop does.
-          return saveBotAttachment({
-            path: requestedPath,
-            name: requestedName,
-            // The attachment store is not a source: only the bot's own files are.
-            roots: deps.messageFileRoots(from.id, threadId).filter((root) => root !== ATTACHMENTS_DIR),
-            ...(vm ? { guest: { root: VM_WORKSPACE_GUEST, host: vm.workspaceDir } } : {}),
-            // A file this turn saved where the person asked, outside those
-            // folders: one copy, so it opens from chat on any device. The
-            // data dir holds every bot's memory and the app's own state.
-            ...(capability.deliversSavedFiles && capability.turnStartedAt !== undefined
-              ? { savedThisTurn: { since: capability.turnStartedAt, refuse: [deps.dataDir()] } }
-              : {}),
-          });
+        save: async () => {
+          try {
+            // The agents capability carries no VM; the thread's claimed desktop does.
+            return await saveBotAttachment({
+              path: requestedPath,
+              name: requestedName,
+              // The attachment store is not a source: only the bot's own files are.
+              roots: deps.messageFileRoots(from.id, threadId).filter((root) => root !== ATTACHMENTS_DIR),
+              ...(vm ? { guest: { root: VM_WORKSPACE_GUEST, host: vm.workspaceDir } } : {}),
+              // A file this turn saved where the person asked, outside those
+              // folders: one copy, so it opens from chat on any device. The
+              // data dir holds every bot's memory and the app's own state.
+              ...(capability.deliversSavedFiles && capability.turnStartedAt !== undefined
+                ? { savedThisTurn: { since: capability.turnStartedAt, refuse: [deps.dataDir()] } }
+                : {}),
+            });
+          } catch (error) {
+            // #5138 (M-20261120-008): not a file here: the person's own
+            // place (their computer, their server environment), where a
+            // file a connector returned was saved
+            const status = (error as { status?: unknown }).status;
+            const code = (error as { code?: unknown }).code;
+            if (!deps.personPlaceFile || !(status === 404 || code === "outside_workspace")) throw error;
+            const placed = await deps.personPlaceFile(capability, requestedPath, botAttachmentMaxBytes);
+            if (!placed) throw error;
+            return saveBotAttachmentBytes({ fileName: placed.name, bytes: placed.bytes, ...(requestedName ? { name: requestedName } : {}) });
+          }
         },
         // The copy is awaited: the turn may have been stopped, replaced or
         // deleted, or the bot removed from the room, before it finished.
@@ -74,7 +86,7 @@ export async function handleInternalSessionsFiles(
     } catch (error) {
       const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status: number }).status : 500;
       const message = status === 404
-        ? `No file was found at ${requestedPath}. Save it under /home/cua/workspace (or your working folder) and pass its exact path.`
+        ? `No file was found at ${requestedPath}. Pass the exact path of a file in your working folder, under /home/cua/workspace, or in the person's computer or server environment.`
         : error instanceof Error ? error.message : "could not attach that file";
       return json(res, status, { error: message });
     }

@@ -323,6 +323,28 @@ describe("createInternalEnvironmentsRoutes", () => {
     expect(asked).toEqual([{ threadId: "t-1", ownerId: "pr_a" }]);
   });
 
+  it("personal-mcp: a file the person's own server returns lands in their place, not in the engine's answer (#5138)", async () => {
+    const pdf = Buffer.from("%PDF-1.7\nOsprey\n");
+    const saved: Array<{ name: string; bytes: Buffer }> = [];
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      isPerspicax: () => true,
+      personalMcpServer: () => ({ kind: "stdio", command: "node", args: ["server.js"], enabled: true, runsIn: "environment", addedAt: 0 }) as never,
+      stdioRelay: async () => ({ jsonrpc: "2.0", id: 3, result: { content: [{ type: "resource", resource: { uri: "file:///report", mimeType: "application/pdf", blob: pdf.toString("base64") } }] } }),
+      connectorFilePlaces: () => [{ kind: "environment", save: async (name, bytes) => { saved.push({ name, bytes }); return `/workspace/attachments/${name}`; } }],
+    }));
+    const { sent } = await call(route, {
+      path: "/api/internal/personal-mcp",
+      body: { message: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "export_report", arguments: {} } } },
+      capability: { botId: BOT.id, threadId: "t-1", generation: "g1", sandboxPrincipalId: "pr_a", personalMcpServer: "reports" },
+    });
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.bytes.equals(pdf)).toBe(true);
+    expect(saved[0]!.name).toMatch(/\.pdf$/);
+    const message = (sent[0]!.body as { message: { result: { content: Array<{ type: string; text?: string }> } } }).message;
+    expect(JSON.stringify(message)).not.toContain(pdf.toString("base64"));
+    expect(message.result.content[0]!.text).toContain(`/workspace/attachments/${saved[0]!.name}`);
+  });
+
   it("personal-mcp 404 when not perspicax", async () => {
     const route = createInternalEnvironmentsRoutes(baseDeps());
     const { sent } = await call(route, { path: "/api/internal/personal-mcp", body: {} });

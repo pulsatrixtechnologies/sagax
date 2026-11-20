@@ -1629,6 +1629,8 @@ import { createReadyLocalVmForTurn } from "./index-leaves/readyLocalVmForTurn.ts
 import { createSelectableComputers } from "./index-leaves/selectableComputers.ts";
 import { createIngestEngineHook } from "./index-leaves/ingestEngineHook.ts";
 import { createStagePendingAttachments } from "./index-leaves/stagePendingAttachments.ts";
+import { createPersonPlaces } from "./index-leaves/personPlaces.ts";
+import { sandboxBridgeForwardHeaders } from "./perspicax/sandbox-bridge-forward.ts";
 import { createRequestEmailDraftSend } from "./index-leaves/requestEmailDraftSend.ts";
 import { createCreateChannel } from "./index-leaves/createChannel.ts";
 import { createResolveAndSendEmailDraft } from "./index-leaves/resolveAndSendEmailDraft.ts";
@@ -6299,6 +6301,7 @@ bindLeafHost({
   get mountUserSandbox() { return mountUserSandbox; },
   get _parseArchiveOutcomeImpl() { return _parseArchiveOutcomeImpl; },
   get stagePendingAttachments() { return stagePendingAttachments; },
+  get personPlaces() { return personPlaces; },
   get phoneIntegration() { return phoneIntegration; },
   get messagesIntegration() { return messagesIntegration; },
   get soloMacAppEnabled() { return soloMacAppEnabled; },
@@ -7750,6 +7753,8 @@ const attachmentReferences = createAttachmentReferences(getLeafHost);
 const turnNetworkProxy = createTurnNetworkProxy(getLeafHost);
 const mountUserSandbox = createMountUserSandbox(getLeafHost);
 const stagePendingAttachments = createStagePendingAttachments(getLeafHost);
+/** #5138: the person's own places of a turn, and the one copy into them. */
+const personPlaces = createPersonPlaces(getLeafHost);
 const phoneIntegration = createPhoneIntegration(getLeafHost);
 const messagesIntegration = createMessagesIntegration(getLeafHost);
 const recordPerspicaxWork = createRecordPerspicaxWork(getLeafHost);
@@ -25138,6 +25143,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     scopedPluginMcp: (bot, person) => scopedPluginMcp(bot, person) as never,
     stdioRelay: (input) => stdioRelay.relay(input as never),
+    // #5138: a file the person's own MCP server returns lands in their place
+    connectorFilePlaces: (capability) => personPlaces.placesForTurn(capability),
     desktopConnected: (person) => desktopBridges.connected(person),
     handleDesktopBridgeMcp,
     desktopBridgesRequest: (person, operation, active, onProgress, context) => desktopBridges.request(person, operation, active, onProgress, undefined, context),
@@ -25213,6 +25220,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     attachmentVm: (capability) => attachmentVmForTurn(capability as InternalCapability) as unknown as Promise<import("./routes/internal-sessions.ts").InternalSessionsVm | undefined>,
     personDirectTurn: (bot, threadId) => personDirectTurn(bot as unknown as BotRecord, threadId),
     messageFileRoots: (botId, threadId) => messageFileRootsForThread(botId, threadId),
+    // #5138: attach_file also reads a file of the person's own place
+    personPlaceFile: (capability, path, maxBytes) => personPlaces.readFromPersonPlace(capability, path, maxBytes),
     dataDir: () => DATA_DIR,
     isActive: (capability) => internalCapabilityIsActive(capability as InternalCapability),
     requireActive: (capability) => {
@@ -25607,7 +25616,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     safetyReviewer,
     safetyToolHold,
     perspicaxMounted: (capability) => Boolean(perspicaxMcp?.hasMounted(capability.threadId, capability.generation, capability.botId)),
-    perspicaxRelay: (input) => perspicaxMcp!.relay(input)
+    perspicaxRelay: (input) => perspicaxMcp!.relay(input),
+    // #5138: a file a connector returns lands in the person's own place
+    connectorFilePlaces: (capability) => personPlaces.placesForTurn(capability)
   }),
   // message_user (#2118): a bot writes to one person in the group of its
   // owner, that person and the bot, created when missing.
@@ -37202,6 +37213,8 @@ PRE_AUTH_ROUTES.push(createSandboxBridgeRoutes({
       // only what the internal route reads, never the caller's other headers
       headers: {
         host: `127.0.0.1:${PORT}`, authorization: `Bearer ${capabilityToken}`, "content-type": "application/json", "content-length": String(raw.length),
+        // #5138: its answer goes back into the person's own environment
+        ...sandboxBridgeForwardHeaders(),
         ...(typeof req.headers["mcp-protocol-version"] === "string" ? { "mcp-protocol-version": req.headers["mcp-protocol-version"] } : {}),
       },
       method: "POST",

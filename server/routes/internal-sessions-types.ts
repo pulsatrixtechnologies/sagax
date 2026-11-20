@@ -64,6 +64,10 @@ export interface InternalSessionsDeps {
   attachmentVm(capability: InternalCapabilityView): Promise<InternalSessionsVm | undefined>;
   personDirectTurn(bot: InternalSessionsBot, threadId: string): boolean;
   messageFileRoots(botId: string, threadId: string): string[];
+  /** #5138: a file of the person's own place in this turn (their computer
+   * or their server environment), read there for attach_file; null when no
+   * place of theirs has it. Throws a 413 above `maxBytes` of its name. */
+  personPlaceFile?(capability: InternalCapabilityView, path: string, maxBytes: (name: string) => number): Promise<{ name: string; bytes: Buffer } | null>;
   dataDir(): string;
   isActive(capability: InternalCapabilityView & { localVmTarget?: InternalSessionsVm }): boolean;
   requireActive(capability: InternalCapabilityView): void;

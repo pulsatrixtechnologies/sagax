@@ -13,14 +13,14 @@
 // Memory. Images and PDFs open in the read-only previewer; other binaries
 // show type icon, size and download.
 import {
-  Brain, File as FileIcon, FilePlus, Folder, FolderInput, FolderOpen, MoreHorizontal, Trash2, Upload,
+  Brain, File as FileIcon, FilePlus, Folder, FolderInput, FolderOpen, History, Trash2, Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { WorkspaceListing } from "@/lib/workspace-files";
+import type { WorkspaceEntry, WorkspaceListing } from "@/lib/workspace-files";
 import type { Bot, BotSettingsSection } from "@/state/store";
 import { HelpTip, PLAIN_CARD, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimitives";
 import { MenuItem } from "./FilesSection";
@@ -32,10 +32,12 @@ import { ProfileRow } from "./ProfileRow";
 import { buttonCls, iconButtonCls, type Creating } from "./WorkspaceFilesSection.tsx-parts/helpers";
 import { WorkspaceFileList } from "./WorkspaceFilesSection.tsx-parts/WorkspaceFileList";
 import { WorkspaceOverlays } from "./WorkspaceFilesSection.tsx-parts/WorkspaceOverlays";
+import { FolderMenu, type WorkspaceEntryExtras, type WorkspaceMenuItem } from "./WorkspaceFilesSection.tsx-parts/menus";
 import { useWorkspaceFiles } from "./WorkspaceFilesSection.tsx-parts/useWorkspaceFiles";
 import { MENU_SURFACE, MENU_FIT_ROW } from "@/components/menu-look";
 
 export { LoadBadge, entryDetails } from "./WorkspaceFilesSection.tsx-parts/helpers";
+export type { WorkspaceEntryExtras, WorkspaceMenuItem } from "./WorkspaceFilesSection.tsx-parts/menus";
 
 export function WorkspaceFilesSection({
   bot,
@@ -45,6 +47,8 @@ export function WorkspaceFilesSection({
   initialExpanded,
   memoryEditable = false,
   memory,
+  folderMenu = [],
+  entryExtras,
 }: {
   bot: Bot;
   active: boolean;
@@ -53,6 +57,13 @@ export function WorkspaceFilesSection({
   onOpenSection: (target: BotSettingsSection) => void;
   initial?: WorkspaceListing;
   initialExpanded?: Iterable<string>;
+  /** The caller's items of the folder's "..." menu, before Upkeep and
+   * changes (the bot page: Skills, Learn from use, Write a command, the
+   * Memory page; M-20261119-081). */
+  folderMenu?: readonly WorkspaceMenuItem[];
+  /** The caller's items, grey line and mark for one entry (the bot page: a
+   * skill's folder carries the skill's actions and its state). */
+  entryExtras?: (entry: WorkspaceEntry) => WorkspaceEntryExtras | null;
 }) {
   const files = useWorkspaceFiles({ bot, active, onOpenSection, initial, initialExpanded, memoryEditable });
   const {
@@ -60,6 +71,16 @@ export function WorkspaceFilesSection({
   } = files;
 
   const plain = useSettingsSurface() === "plain";
+
+  // The folder's "..." menu: the caller's items, then the memory's Upkeep
+  // and its change log (two cards under the folder while it is checked).
+  const menu: WorkspaceMenuItem[] = [
+    ...folderMenu,
+    ...(memoryEditable ? [{
+      id: "options", icon: <History size={14} />, label: t("persona.files.upkeepAndChanges"), checked: showOptions, divider: true,
+      run: () => setShowOptions((shown) => !shown),
+    }] : []),
+  ];
 
   const toolbar = (
     <>
@@ -74,18 +95,8 @@ export function WorkspaceFilesSection({
         <Upload size={14} aria-hidden="true" />
         {t("persona.files.upload")}
       </button>
-      {memoryEditable && (
-        <button
-          type="button"
-          className={cn(iconButtonCls, plain ? "rounded-full p-1.5" : "ml-auto p-1.5")}
-          aria-label={t("persona.files.options")}
-          title={t("persona.files.options")}
-          aria-expanded={showOptions}
-          onClick={() => setShowOptions((shown) => !shown)}
-          data-files-options=""
-        >
-          <MoreHorizontal size={16} aria-hidden="true" />
-        </button>
+      {menu.length > 0 && (
+        <FolderMenu items={menu} buttonClass={cn(iconButtonCls, plain ? "rounded-full p-1.5" : "p-1.5")} className={plain ? undefined : "ml-auto"} />
       )}
       <input ref={uploadRef} type="file" multiple hidden onChange={onUpload} data-files-upload-input="" />
     </>
@@ -167,7 +178,7 @@ export function WorkspaceFilesSection({
     </>
   );
 
-  const list = <WorkspaceFileList files={files} plain={plain} quietCls={quietCls} botId={bot.id} />;
+  const list = <WorkspaceFileList files={files} plain={plain} quietCls={quietCls} botId={bot.id} extras={entryExtras} />;
 
   const overlays = <WorkspaceOverlays files={files} />;
 

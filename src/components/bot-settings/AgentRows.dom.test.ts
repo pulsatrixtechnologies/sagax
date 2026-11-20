@@ -44,7 +44,7 @@ describe("Coding section", () => {
     } as never)));
     const section = host.querySelector('[data-bot-settings-section="coding"]');
     expect(section).not.toBeNull();
-    expect(section!.textContent).toContain("Coding");
+    expect(section!.textContent).toContain("Task");
     expect(section!.querySelectorAll("[data-agent-row]")).toHaveLength(1);
   });
 });

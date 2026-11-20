@@ -139,14 +139,20 @@ describe("team work words", () => {
     expect(teamLineText(teamWorkLine(work.live[0]!, () => undefined, NOW))).toBe("Un bot de l'équipe · 1/3 · il y a 1 min");
   });
 
-  it("done today: merged, mixed, none merged", () => {
+  // M-20261119-083: a sentence, never "Done today · 1"
+  it("done today: merged, mixed, none merged, said as a sentence", () => {
     setLocale("en");
-    expect(teamDoneLabel([{ merged: true }, { merged: true }])).toBe("Done today · 2 merged");
-    expect(teamDoneLabel([{ merged: true }, { merged: false }])).toBe("Done today · 2 done, 1 merged");
-    expect(teamDoneLabel([{ merged: false }])).toBe("Done today · 1");
+    expect(teamDoneLabel([{ merged: true }, { merged: true }])).toBe("2 merged today");
+    expect(teamDoneLabel([{ merged: true }])).toBe("1 merged today");
+    expect(teamDoneLabel([{ merged: true }, { merged: false }])).toBe("2 done today, 1 merged");
+    expect(teamDoneLabel([{ merged: true }, { merged: true }, { merged: false }])).toBe("3 done today, 2 merged");
+    expect(teamDoneLabel([{ merged: false }])).toBe("1 done today");
+    expect(teamDoneLabel([{ merged: false }, { merged: false }])).toBe("2 done today");
     setLocale("fr");
-    expect(teamDoneLabel([{ merged: true }, { merged: true }])).toBe("Fini aujourd'hui · 2 fusionnés");
-    expect(teamDoneLabel([{ merged: true }, { merged: false }])).toBe("Fini aujourd'hui · 2 finis, 1 fusionnés");
+    expect(teamDoneLabel([{ merged: true }, { merged: true }])).toBe("2 fusionnés aujourd'hui");
+    expect(teamDoneLabel([{ merged: true }, { merged: false }])).toBe("2 finis aujourd'hui, dont 1 fusionné");
+    expect(teamDoneLabel([{ merged: false }])).toBe("1 fini aujourd'hui");
+    for (const label of [teamDoneLabel([{ merged: false }]), teamDoneLabel([{ merged: true }, { merged: false }])]) expect(label).not.toContain("·");
   });
 
   it("a finished piece of work and its steps say how they ended", () => {

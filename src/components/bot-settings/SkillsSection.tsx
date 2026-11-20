@@ -16,21 +16,20 @@ import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
 import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
 import { viewerBotsReadOnly } from "@/lib/viewer";
-import { DescribedRow, PILL, PLAIN_CARD, PLAIN_FIELD, PRIMARY_PILL, Switch, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
+import { DescribedRow, PILL, PLAIN_CARD, PLAIN_FIELD, Switch, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { OrgSkillsCard } from "./OrgSkillsCard";
 import { SkillUpload } from "./SkillUpload";
 import { WriteCommandCard } from "./WriteCommandCard";
-import { PanelPage } from "./PanelPage";
-import type { ManagedSkill, SkillRowActions } from "./SkillsSection.tsx-parts/types";
-import { removeSkill } from "./SkillsSection.tsx-parts/removeSkill";
-import { renderPlainSkillRow, SkillDetailActions, SkillDetails } from "./SkillsSection.tsx-parts/plainParts";
+import type { ManagedSkill } from "./SkillsSection.tsx-parts/types";
+import { renderPlainSkillRow } from "./SkillsSection.tsx-parts/plainParts";
 import { AddMenu, type AddMenuItem } from "../bot-profile/BotProfilePage.tsx-parts/AddMenu";
-import { ReviewCard, type ReviewEntry } from "../bot-profile/BotProfilePage.tsx-parts/ReviewCard";
 import { renderClassicSkillRow, renderClassicTop } from "./SkillsSection.tsx-parts/classicParts";
-import { SkillEditorPage, type SkillEditorTarget } from "./SkillEditorPage";
+import { useSkillRows } from "./SkillsSection.tsx-parts/useSkillRows";
 import { ShowMoreFold } from "../ShowMoreFold";
+
+export { SkillReviewDialog } from "./SkillsSection.tsx-parts/reviewDialog";
 
 /** The profile's Skills card: rows shown before "Show N more" (#4104). */
 export const SKILLS_SHOWN = 4;
@@ -274,71 +273,12 @@ export function useManagedSkills(bot: Bot) {
   };
 }
 
-/** The review step before a skill is switched on: full SKILL.md as a pushed
- * page in the bot panel. Escape goes back. */
-export function SkillReviewDialog({
-  skill,
-  text,
-  error,
-  working,
-  onCancel,
-  onEnable,
-  onPanelClose,
-}: {
-  skill: ManagedSkill;
-  text: string;
-  error: string;
-  working: boolean;
-  onCancel: () => void;
-  onEnable: () => void;
-  onPanelClose?: () => void;
-}) {
-  return (
-    <PanelPage
-      name={t("botPanel.skills.reviewTitle", { name: skill.name })}
-      onBack={() => { if (!working) onCancel(); }}
-      onClose={onPanelClose ?? (() => { if (!working) onCancel(); })}
-      data-skill-review-page=""
-      bodyClassName="flex flex-col px-4 py-4"
-      footer={
-        <>
-          <span className="flex-1" />
-          <button type="button" disabled={working} onClick={onCancel} className={PILL}>
-            {t("common.cancel")}
-          </button>
-          <button type="button" disabled={working} onClick={onEnable} className={PRIMARY_PILL}>
-            {t("botPanel.skills.enableReviewed")}
-          </button>
-        </>
-      }
-    >
-      <div className="break-all text-[12px] text-ink-secondary">
-        {t("botPanel.skills.source", { source: skill.source })}
-      </div>
-      {skill.warnings.length > 0 && (
-        <div className="mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning">
-          {skill.warnings.join(" · ")}
-        </div>
-      )}
-      <pre
-        tabIndex={0}
-        aria-label={t("botPanel.skills.fullText", { name: skill.name })}
-        className="mt-3 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink"
-      >
-        {text}
-      </pre>
-      {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
-    </PanelPage>
-  );
-}
-
-export function SkillsSection({ bot, review }: {
+export function SkillsSection({ bot, focus }: {
   bot: Bot;
-  /** #3400: the bot's profile draws the "To review" card above the Skills
-   * card (the Knowledge tab); "Open in chat" shows the card in the chat. */
-  review?: { onOpenChat: (entry: ReviewEntry) => void };
+  /** "command": the Write a command field takes the focus once drawn (the bot
+   * page's folder "..." > Write a command opens the Skills card there, M-20261119-081) */
+  focus?: "command";
 }) {
-  const confirm = useConfirm();
   const { request: api } = useBotEditor();
   const { state, dispatch } = useStore();
   const featureEnabled = skillAuthoringEnabled(state.config);
@@ -347,24 +287,33 @@ export function SkillsSection({ bot, review }: {
   // stays. Team or section manage is not on the viewer, so those writes stay
   // visible and the server still refuses a person who lacks them.
   const skillWrites = !viewerBotsReadOnly(state.config);
+  const managed = useManagedSkills(bot);
   const {
-    skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
-    share, unshare, deciding, decideError, decideStaged, assignedSkills,
-    libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
-  } = useManagedSkills(bot);
+    skills, staged, loading, working, error, setError, refresh, assignedSkills,
+    libraryPool, addFromLibrary, setAddFromLibrary, addToBot,
+  } = managed;
   const pickFiles = useRef<(() => void) | null>(null);
   const tailRef = useRef<HTMLDivElement>(null);
   // "+ Add" > From the library or Import from a link unfolds its rows in the card
   const [adding, setAdding] = useState<"library" | "import" | null>(null);
-  const [editing, setEditing] = useState<SkillEditorTarget | null>(null);
   const [source, setSource] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const plain = useSettingsSurface() === "plain";
-  const closePanel = () => {
-    dispatch({ type: "toggleSettings", open: false });
-    dispatch({ type: "toggleComputer", open: false });
-  };
+  // the rows' actions and the pages they open (the open skill, the review before Turn on): shared with the bot page's folder
+  const { rowActions, overlays } = useSkillRows(bot, managed, { plain });
+
+  // After the modal around it has taken the focus (useModalDialog), so its
+  // Escape still returns it to the button that opened it.
+  useEffect(() => {
+    if (focus !== "command") return;
+    const frame = requestAnimationFrame(() => {
+      const field = tailRef.current?.querySelector<HTMLElement>("[data-write-command] input");
+      field?.scrollIntoView?.({ block: "center" });
+      field?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focus]);
 
   // #4104: the skills that appear after the first load (added from the
   // library, uploaded, written, imported) stay above the fold.
@@ -372,7 +321,6 @@ export function SkillsSection({ bot, review }: {
   const [addedSkills, setAddedSkills] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
-    setEditing(null);
     seenSkills.current = null;
     setAddedSkills(new Set());
   }, [bot.id]);
@@ -420,29 +368,6 @@ export function SkillsSection({ bot, review }: {
     )
   ) : null;
 
-  const remove = async (skill: ManagedSkill) => {
-    const removed = await removeSkill(
-      { botId: bot.id, confirm, api, assignmentBusy, setWorking, setError, putAssignments, unshare, refresh },
-      skill,
-    );
-    if (removed) setEditing((current) => (current?.name === skill.name ? null : current));
-  };
-
-  const openSkill = (skill: ManagedSkill, startEditing = false) => {
-    setEditing({ name: skill.name, origin: skill.origin, startEditing });
-  };
-  const reviewSkill = (skill: ManagedSkill) => {
-    setEditing({ name: skill.name, origin: skill.origin, startReview: true });
-  };
-  // The opened skill follows the list: a share or a stop sharing moves it
-  // (its origin, so the page reads it from its new place), a remove closes it.
-  const editedSkill = editing ? skills.find((skill) => skill.name === editing.name) ?? null : null;
-  useEffect(() => {
-    if (editing && editedSkill?.origin && editedSkill.origin !== editing.origin) {
-      setEditing({ ...editing, origin: editedSkill.origin, startEditing: false, startReview: false });
-    }
-  }, [editing, editedSkill?.origin]);
-
   const importSkill = async () => {
     const trimmed = source.trim();
     if (!trimmed) return;
@@ -466,45 +391,18 @@ export function SkillsSection({ bot, review }: {
 
   const help = <>{featureEnabled ? t("skills.learned.hintOn") : t("skills.learned.hintOff")} {t("botPanel.skills.whenRelevant")}.</>;
 
-  const rowActions: SkillRowActions = { libraryOn, skillWrites, working, openSkill, toggle, share, unshare, remove, reviewSkill };
-
   const tail = (
     <>
       {skillWrites && <WriteCommandCard bot={bot} taken={skills.map((skill) => skill.name)} onSaved={() => void refresh()} />}
 
       {skillWrites && <OrgSkillsCard bot={bot} onAdded={() => void refresh()} />}
 
-      {editing && (
-        <SkillEditorPage
-          botId={bot.id}
-          target={editing}
-          onClose={() => setEditing(null)}
-          onPanelClose={closePanel}
-          onSaved={() => void refresh()}
-          // #4148: on the profile page the row is compact; what it no longer
-          // shows, and its actions, are here.
-          details={plain && editedSkill ? <SkillDetails a={rowActions} skill={editedSkill} /> : undefined}
-          actions={plain && editedSkill ? <SkillDetailActions a={rowActions} skill={editedSkill} /> : undefined}
-        />
-      )}
-
-      {/* after the open skill, so Turn on from it shows its review on top */}
-      {skillWrites && reviewing && (
-        <SkillReviewDialog
-          skill={reviewing.skill}
-          text={reviewing.text}
-          error={error}
-          working={working === reviewing.skill.name}
-          onCancel={() => setReviewing(null)}
-          onEnable={() => void enableReviewed()}
-          onPanelClose={closePanel}
-        />
-      )}
+      {overlays}
     </>
   );
 
-  // The bot's profile page (plain surface, #2313; in place on the Knowledge
-  // tab, #3400): "To review" first, then one card labelled Skills with one
+  // The plain surface (the bot page's Skills modal, opened from its folder's
+  // "..." menu, M-20261119-081; before it in place on Knowledge, #3400): one card labelled Skills with one
   // "+ Add" at the label's right whose menu says what each choice does (from
   // the library, upload a file, write a command, import from a link); "Learn
   // from use" a switch row of the card; each skill a row (the book icon, the
@@ -540,17 +438,6 @@ export function SkillsSection({ bot, review }: {
     const allAssigned = skillWrites && libraryOn && libraryPool.length === 0 && assignedSkills.length > 0;
     return (
       <>
-        {review && (
-          <ReviewCard
-            staged={staged}
-            loading={loading}
-            canDecide={skillWrites}
-            working={deciding}
-            error={decideError}
-            onDecide={(entry, behavior) => void decideStaged(entry, behavior)}
-            onOpenChat={review.onOpenChat}
-          />
-        )}
         <PaneSection title={t("botSettings.nav.skills")} help={help} action={empty ? undefined : add("")} plain data-skills-section="">
           <div className={PLAIN_CARD} data-settings-surface="">
             {learning && <div data-skill-learning="">{learning}</div>}

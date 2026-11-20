@@ -2,19 +2,26 @@ import { Check, ChevronRight, Folder } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { entryDepth, entryName, isCoreWorkspaceFile } from "@/lib/workspace-files";
+import { entryDepth, entryName, isCoreWorkspaceFile, type WorkspaceEntry } from "@/lib/workspace-files";
 import { MarkdownEditor } from "../../markdown/MarkdownEditor";
 import { PLAIN_FIELD } from "../../SettingsPrimitives";
 import { KIND_ICON } from "../FilesSection";
 import { inputCls } from "../field";
 import { RulesCounter } from "../RulesSection";
 import { LoadBadge, WORKSPACE_DRAG, buttonCls, downloadEntry, entryDetails, entryKind } from "./helpers";
-import { RowMenu } from "./menus";
+import { RowMenu, type WorkspaceEntryExtras } from "./menus";
 import type { useWorkspaceFiles } from "./useWorkspaceFiles";
 
 type Files = ReturnType<typeof useWorkspaceFiles>;
 
-export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Files; plain: boolean; quietCls: string; botId: string }) {
+export function WorkspaceFileList({ files, plain, quietCls, botId, extras }: {
+  files: Files;
+  plain: boolean;
+  quietCls: string;
+  botId: string;
+  /** the caller's items, grey line and mark for an entry (a skill's folder) */
+  extras?: ((entry: WorkspaceEntry) => WorkspaceEntryExtras | null) | undefined;
+}) {
   const {
     advanced, listing, open, setOpen, busy, renaming, setRenaming, conflict, setConflict, expanded, selected,
     dropTarget, setMoving, uploadRef, uploadFolderRef, toggleDir, run, openEntry, save, askDelete, rename,
@@ -61,6 +68,10 @@ export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Fi
           </button>
         );
         const details = advanced && entry.kind === "file" ? entryDetails(entry, now) : null;
+        const extra = extras?.(entry) ?? null;
+        const note = extra?.note ? (
+          <span data-file-note={entry.path} className={plain ? "truncate text-[12px] leading-4 text-ink-secondary" : "truncate text-[11.5px] text-ink-tertiary"}>{extra.note}</span>
+        ) : null;
         return (
           <li
             key={entry.path}
@@ -107,7 +118,14 @@ export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Fi
                 >
                   <ChevronRight size={plain ? 14 : 12} aria-hidden="true" className={cn("shrink-0 transition-transform", plain && "text-ink-secondary", folderOpen && "rotate-90")} />
                   <Icon size={plain ? 20 : 14} aria-hidden="true" className={plain ? "shrink-0 text-ink-secondary" : "shrink-0"} />
-                  <span className={plain ? "min-w-0 flex-1 truncate text-[14px] leading-5" : "min-w-0 flex-1 truncate text-[13px]"}>{name}/</span>
+                  {note ? (
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className={cn(plain ? "truncate text-[14px] leading-5" : "truncate text-[13px]", extra?.muted && "text-ink-secondary")}>{name}/</span>
+                      {note}
+                    </span>
+                  ) : (
+                    <span className={cn(plain ? "min-w-0 flex-1 truncate text-[14px] leading-5" : "min-w-0 flex-1 truncate text-[13px]", extra?.muted && "text-ink-secondary")}>{name}/</span>
+                  )}
                 </button>
               ) : (
                 <span className={plain ? "w-3.5 shrink-0" : "w-3 shrink-0"} aria-hidden="true" />
@@ -119,6 +137,7 @@ export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Fi
                   {details && (
                     <span className={cn("truncate text-[12px] leading-4 text-ink-secondary", entry.budget?.over && "text-danger")} data-file-details="">{details}</span>
                   )}
+                  {note}
                 </div>
               ) : nameControl}
               {entry.forgotten && (
@@ -136,6 +155,7 @@ export function WorkspaceFileList({ files, plain, quietCls, botId }: { files: Fi
                 onDownload={() => void run(() => downloadEntry(botId, entry.path))}
                 onDelete={() => void askDelete([entry.path])}
                 onUploadInto={() => { uploadFolderRef.current = entry.path; uploadRef.current?.click(); }}
+                {...(extra?.menu ? { extra: extra.menu } : {})}
               />
             </div>
             {!plain && details !== null && (

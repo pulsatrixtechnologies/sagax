@@ -46,7 +46,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <aside data-gallery-panel="" className="min-h-screen w-[420px] bg-panel p-4 text-ink">
       <div className="flex flex-col gap-6">
-        <section data-card="reference" className="flex flex-col gap-2"><h2 className={PANEL_LABEL}>Coding</h2><Card rows={reference} /></section>
+        <section data-card="reference" className="flex flex-col gap-2"><h2 className={PANEL_LABEL}>Task</h2><Card rows={reference} /></section>
         <section data-card="all" className="flex flex-col gap-2"><h2 className={PANEL_LABEL}>All states</h2><Card rows={all} /></section>
       </div>
     </aside>

@@ -5,7 +5,7 @@
 // (Grok Bot, the owner 2026-11-09): the mascot small and bare on the left,
 // no card, the bot's name and label stacked under it, aligned left. A bot
 // wearing a picture shows it on the stage.
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Lock, Shuffle } from "lucide-react";
 import type { LockInfo } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
@@ -16,6 +16,7 @@ import type { MascotSkinId } from "../../../shared/mascot-skins";
 import type { MascotCharacter, MascotLook } from "../../../shared/mascot-look";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
+import { useDrawnLeftInset } from "./drawn-inset";
 
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
 /** The mascot's size in the profile page's hero (Grok Bot's avatar, on the
@@ -137,6 +138,10 @@ export function MascotLookPreview({
 }: MascotLookPreviewProps): ReactNode {
   const motion = owlMotion ?? liveMotion ?? null;
   const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion };
+  // The profile hero's frame moves left by the air its art leaves, so the
+  // art's left edge lines up with the name's first letter (M-20261119-081).
+  const frameRef = useRef<HTMLSpanElement>(null);
+  const artInset = useDrawnLeftInset(frameRef, profile ? `${shown}|${owlSkin}|${previewSkin ?? ""}|${picture ? "picture" : ""}|${JSON.stringify(shownLook)}` : null);
   if (heading !== undefined) {
     // The profile page's hero (Grok Bot, the owner 2026-11-09): the mascot small
     // and bare on the left of the column, over the banner's lower edge, the
@@ -149,7 +154,7 @@ export function MascotLookPreview({
         className={cn("relative flex w-full flex-col items-start text-left", profile ? "gap-2" : "gap-1")}
       >
         {profile ? (
-          <span data-mascot-frame="" className="grid size-[168px] shrink-0 place-items-center">
+          <span ref={frameRef} data-mascot-frame="" data-mascot-art-inset={String(artInset)} style={artInset ? { marginLeft: -artInset } : undefined} className="grid size-[168px] shrink-0 place-items-center">
             <MascotStage {...stage} size={MASCOT_PROFILE_SIZE} pad={0} profile />
           </span>
         ) : (

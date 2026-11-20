@@ -61,7 +61,15 @@ vi.mock("../bot-settings/useBotSettingsDerived", () => ({
 const marker = (name: string) => () => createElement("div", { "data-section-body": name });
 vi.mock("../bot-settings/OverviewSection", () => ({ OverviewSection: marker("overview") }));
 vi.mock("../bot-settings/SoulSection", () => ({ SoulSection: marker("soul") }));
-vi.mock("../bot-settings/SkillsSection", () => ({ SkillsSection: marker("skills") }));
+vi.mock("../bot-settings/SkillsSection", () => ({
+  SkillsSection: marker("skills"),
+  // the Bot folder on Knowledge reads the skills for To review and its skills/ entries (M-20261119-081)
+  useManagedSkills: () => ({
+    skills: [], staged: [], loading: false, working: "", setWorking: () => {}, error: "", setError: () => {}, reviewing: null, setReviewing: () => {},
+    refresh: async () => {}, toggle: async () => {}, enableReviewed: async () => {}, share: async () => {}, unshare: async () => {},
+    deciding: "", decideError: "", decideStaged: async () => {}, assignmentBusy: { current: false }, putAssignments: async () => {},
+  }),
+}));
 vi.mock("../bot-settings/MemorySection", () => ({ MemorySection: marker("memory") }));
 vi.mock("../bot-settings/RulesSection", () => ({ RulesSection: marker("rules") }));
 vi.mock("../bot-settings/WorkspaceFilesSection", () => ({ WorkspaceFilesSection: marker("files") }));
@@ -392,13 +400,15 @@ describe("bot profile page shell", () => {
     expect(botProfileTabFor("memory")).toBe("knowledge");
     expect(botProfileTabFor("usage")).toBe("stats");
     expect(botProfileSubPageFor("soul")).toBe("personality");
-    expect(botProfileSubPageFor("memory")).toBe("folder");
+    // M-20261119-081: the folder is in place on Knowledge, no sub-page
+    expect(botProfileSubPageFor("memory")).toBeNull();
+    expect(botProfileSubPageFor("files")).toBeNull();
     expect(botProfileSubPageFor("routines")).toBe("routines");
     // #3398: the channels and the accounts are cards in place on General
     expect(botProfileSubPageFor("slack")).toBeNull();
     expect(botProfileSubPageFor("access")).toBeNull();
     expect(personaCategoryForSection("routines")).toBeNull();
-    // #3400: the skills are in place on Knowledge, no sub-page
+    // the skills have no sub-page: the Bot folder's "..." opens the Skills card in a modal (M-20261119-081)
     expect(botProfileSubPageFor("skills")).toBeNull();
     for (const section of ["model", "voice", "soul", "history", "rules"] as const) {
       const html = render(section);
@@ -585,21 +595,22 @@ describe("General cards and sub-pages", () => {
 });
 
 describe("Knowledge", () => {
-  it("draws Skills in place (#3400); Routines and the Folder open as sub-pages, the folder links the Memory page", () => {
-    const home = render("skills");
-    expect(selectedTab(home)).toBe("knowledge");
-    expect(subPageOf(home)).toBeUndefined();
-    expect(home).toContain('data-bot-profile-row="page-routines"');
-    expect(home).toContain('data-bot-profile-row="page-folder"');
-    expect(home).not.toContain('data-bot-profile-row="page-skills"');
+  // M-20261119-081: To review, then the Bot folder in place; no Skills card, no Write a command, no Its work
+  it("draws To review and the Bot folder in place; no Skills card, no Routines or Folder and memory row", () => {
+    expect(KNOWLEDGE_SECTIONS).toEqual(["skills", "files"]);
     for (const id of KNOWLEDGE_SECTIONS) {
       const html = render(id);
-      expect(sectionHtml(html, id).open).toBe(true);
-      expect(bodiesOf(sectionHtml(html, id).html)).toEqual([id]);
+      expect(selectedTab(html), id).toBe("knowledge");
+      expect(subPageOf(html), id).toBeUndefined();
+      expect(html).toContain('data-settings-group="bot-profile-review"');
+      expect(bodiesOf(sectionHtml(html, "files").html), id).toEqual(["files"]);
+      expect(html).not.toContain('data-bot-profile-row="page-routines"');
+      expect(html).not.toContain('data-bot-profile-row="page-folder"');
+      expect(html).not.toContain('data-bot-profile-row="page-skills"');
+      // the Skills card is not on the tab (it opens in a modal from the folder's menu)
+      expect(html).not.toContain('data-section-body="skills"');
+      expect(html).not.toContain(">Its work<");
     }
-    const folder = render("files");
-    expect(folder).toContain("data-bot-profile-memory");
-    expect(folder).toContain(">Open the Memory page<");
   });
 });
 
@@ -642,7 +653,8 @@ describe("Stats and Simple mode", () => {
     setLocale("fr");
     // Section bodies are mocked, so the names come from the page's own landmarks.
     expect(render("rules")).toContain('aria-label="Règles"');
-    expect(render("skills")).toContain('aria-label="Compétences"');
+    // the skills are managed from the Bot folder (M-20261119-081), named in French too
+    expect(render("skills")).toContain('aria-label="Dossier du bot"');
     expect(render("skills")).not.toContain(">Skills<");
     expect(render("history")).toContain('aria-label="Changements"');
   });

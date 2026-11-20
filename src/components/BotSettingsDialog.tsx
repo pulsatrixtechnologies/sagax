@@ -276,8 +276,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           <button
               type="button"
               data-bot-panel-gear=""
-              // a Settings section, so the bot's profile page opens on its Settings tab (#2126)
-              onClick={() => dispatch({ type: "openPersonaEditor", botId: bot.id, section: "appearance" })}
+              // the bot's page on General, nothing open over it (M-20261119-082): the
+              // mascot's modal opens only from Appearance's row (or the header's mascot)
+              onClick={() => dispatch({ type: "openPersonaEditor", botId: bot.id, section: "overview" })}
               aria-label={t("botPanel.editPersona")}
               title={t("botPanel.editPersona")}
               className={CIRCLE_BUTTON}

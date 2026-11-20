@@ -92,9 +92,14 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  *   the people and groups and Who can see it.
  * - Appearance is not a tab: the mascot editor is a modal that the header's
  *   mascot opens (owner 2026-11-19). A link to the Appearance section opens it.
- * - Knowledge (#3400): To review and Skills in place (the learnings that
- *   wait, decided in place; the skills with their "+ Add"), then Its work
- *   (Routines, Folder and memory).
+ * - Knowledge (#3400, then M-20261119-081): To review (the learnings that
+ *   wait, decided in place), then the Bot folder in place (Use memory, the
+ *   path, SOUL.md, MEMORY.md, RULES.md, docs/, inbox/, memory/, rules/,
+ *   skills/, New, Upload and its "..." menu). The Skills, Write a command
+ *   and Its work sections are gone: the skills are managed from the
+ *   folder's "..." menu (Skills, Learn from use, Write a command) and from
+ *   each skills/<name>/ entry's (its actions); the Memory page is in the
+ *   folder's menu; Routines has no row (a link to it still opens its page).
  * - Stats: the usage over 7, 30 or 90 days.
  * - Outcomes (#4098), the second tab: each result the person wants kept
  *   true, read from the bot's routines (shared/outcomes.ts); it holds no
@@ -114,7 +119,6 @@ export const BOT_PROFILE_SUBPAGES = [
   "advanced",
   "versions",
   "routines",
-  "folder",
 ] as const;
 export type BotProfileSubPage = (typeof BOT_PROFILE_SUBPAGES)[number];
 
@@ -130,13 +134,12 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
   advanced: [],
   versions: ["history"],
   routines: [],
-  folder: ["files"],
 };
 
 /** The cards a tab draws in place, controls and all (#3398): the
- * channels and the bot's accounts; Knowledge's To review and Skills
- * (#3400). Not sub-pages any more. */
-export const BOT_PROFILE_CARDS = ["channels", "accounts", "skills"] as const;
+ * channels and the bot's accounts; Knowledge's To review and Bot folder
+ * (M-20261119-081, before it To review and Skills, #3400). Not sub-pages. */
+export const BOT_PROFILE_CARDS = ["channels", "accounts", "folder"] as const;
 export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 
 /** The persona sections each in-place card holds (a deep link to one opens
@@ -144,15 +147,16 @@ export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 export const BOT_PROFILE_CARD_SECTIONS: Readonly<Record<BotProfileCard, readonly PersonaCategory[]>> = {
   channels: ["slack"],
   accounts: ["access"],
-  skills: ["skills"],
+  // the skills are managed from the folder (its "..." menu opens them), the files are its rows
+  folder: ["skills", "files"],
 };
 
 /** The card's grey group on the page, for a deep link to scroll to. */
 export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = {
   channels: "bot-profile-channels",
   accounts: "bot-profile-accounts",
-  // a link to the skills lands on To review, the top of the two cards
-  skills: "bot-profile-review",
+  // a link to the folder or the skills lands on To review, the top of the two cards
+  folder: "bot-profile-review",
 };
 
 /** The groups of each tab in the page's order: a card drawn in place, or
@@ -168,8 +172,7 @@ export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArra
   ],
   outcomes: [],
   knowledge: [
-    { id: "skills", pages: [], card: "skills" },
-    { id: "work", pages: ["routines", "folder"] },
+    { id: "folder", pages: [], card: "folder" },
   ],
   stats: [],
 };
@@ -220,9 +223,13 @@ export function botProfileCardOf(category: PersonaCategory): BotProfileCard | nu
   return BOT_PROFILE_CARDS.find((card) => BOT_PROFILE_CARD_SECTIONS[card].includes(category)) ?? null;
 }
 
+/** The tab a sub-page with no row opens over (Personality: General). Routines
+ * lost its row (M-20261119-081) and still opens over Knowledge, its home. */
+const ROWLESS_PAGE_TAB: Partial<Record<BotProfileSubPage, BotProfileTab>> = { routines: "knowledge" };
+
 /** The tab of a sub-page. */
 export function botProfileTabOfPage(page: BotProfileSubPage): BotProfileTab {
-  return BOT_PROFILE_TABS.find((tab) => botProfileTabPages(tab).includes(page)) ?? "general";
+  return BOT_PROFILE_TABS.find((tab) => botProfileTabPages(tab).includes(page)) ?? ROWLESS_PAGE_TAB[page] ?? "general";
 }
 
 /** The tab whose page holds `category`, or null for a header section. */

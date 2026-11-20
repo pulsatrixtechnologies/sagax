@@ -131,7 +131,7 @@ describe("bot panel Coding tab (the owner 2026-11-06)", () => {
     expect(tabs()).toEqual(["activity", "library", "coding"]);
     expect(selected()).toBe("coding");
     const codingTab = host.querySelector<HTMLElement>('[data-panel-tab="coding"]')!;
-    expect(codingTab.textContent).toBe("Coding");
+    expect(codingTab.textContent).toBe("Task");
     const body = host.querySelector<HTMLElement>("[data-bot-panel-coding]")!;
     expect(body).not.toBeNull();
     expect(body.querySelector("[data-coding-panel-host] [data-test-session]")?.textContent).toBe("This session");

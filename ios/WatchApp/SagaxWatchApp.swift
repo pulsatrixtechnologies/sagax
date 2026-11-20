@@ -39,6 +39,14 @@ private enum WatchDemo {
         return arguments[option + 1]
     }
 
+    /// `-watch-demo-scroll <botId>`: the roster opens scrolled to that bot, for a capture.
+    static var scrollTo: String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let option = arguments.firstIndex(of: "-watch-demo-scroll"),
+              arguments.indices.contains(option + 1) else { return nil }
+        return arguments[option + 1]
+    }
+
     static let server = DemoServer(language: DemoLanguage(identifier: Bundle.main.preferredLocalizations.first))
 }
 #endif
@@ -53,43 +61,38 @@ private struct WatchHome: View {
     @ObservedObject private var notifications = WatchNotificationHandler.shared
     @Environment(\.scenePhase) private var phase
     @State private var path: [WatchDestination] = []
-    @State private var bots: [Bot] = []
+    @State private var rows: [WatchBotRow] = []
     @State private var loaded = false
     @State private var failed = false
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                if session.client != nil {
-                    NavigationLink(value: WatchDestination.waiting) {
-                        Label("To answer", systemImage: "tray")
-                    }
-                    ForEach(bots) { bot in
-                        NavigationLink(value: WatchDestination.chat(bot.id)) {
-                            HStack(spacing: 8) {
-                                MascotCharacterView(bot: bot, size: 32)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(verbatim: bot.name)
-                                        .font(.headline)
-                                    if !bot.title.isEmpty {
-                                        Text(verbatim: bot.title)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
+            ScrollViewReader { scroller in
+                List {
+                    if session.client != nil {
+                        NavigationLink(value: WatchDestination.waiting) {
+                            Label("To answer", systemImage: "tray")
+                        }
+                        ForEach(rows) { row in
+                            NavigationLink(value: WatchDestination.chat(row.id)) {
+                                WatchBotRowView(row: row)
                             }
                         }
+                        if failed {
+                            Label("Couldn’t load your bots.", systemImage: "wifi.exclamationmark")
+                            Button("Retry") { Task { await loadBots() } }
+                        } else if rows.isEmpty {
+                            if loaded { Text("No bots yet.") } else { ProgressView() }
+                        }
+                    } else {
+                        Label("Open Sagax on your paired iPhone.", systemImage: "iphone")
                     }
-                    if failed {
-                        Label("Couldn’t load your bots.", systemImage: "wifi.exclamationmark")
-                        Button("Retry") { Task { await loadBots() } }
-                    } else if bots.isEmpty {
-                        if loaded { Text("No bots yet.") } else { ProgressView() }
-                    }
-                } else {
-                    Label("Open Sagax on your paired iPhone.", systemImage: "iphone")
                 }
+                #if DEBUG
+                .onChange(of: rows.count) {
+                    if let target = WatchDemo.scrollTo, rows.contains(where: { $0.id == target }) { scroller.scrollTo(target, anchor: .top) }
+                }
+                #endif
             }
             .navigationTitle("Sagax")
             .navigationDestination(for: WatchDestination.self) { destination in
@@ -97,7 +100,7 @@ private struct WatchHome: View {
                 case .waiting:
                     WatchWaitingInbox(session: session)
                 case .chat(let id):
-                    if let bot = bots.first(where: { $0.id == id }) {
+                    if let bot = rows.first(where: { $0.id == id })?.bot {
                         WatchChat(bot: bot, session: session)
                     }
                 }
@@ -109,7 +112,7 @@ private struct WatchHome: View {
             await loadBots()
             #if DEBUG
             if path.isEmpty {
-                if WatchDemo.screen == "chat", let pixel = bots.first(where: { $0.id == "demo-pixel" }) {
+                if WatchDemo.screen == "chat", let pixel = rows.first(where: { $0.id == "demo-pixel" }) {
                     path = [.chat(pixel.id)]
                 } else if WatchDemo.screen == "inbox" { path = [.waiting] }
             }
@@ -132,13 +135,21 @@ private struct WatchHome: View {
     @MainActor private func loadBots() async {
         guard let client = session.client else { return }
         do {
-            async let fleet = client.fleet(messages: 0)
+            // The newest few messages of each bot: its last words, read by
+            // the phone's roster rules (WatchRoster).
+            async let fleet = client.fleet(messages: WatchRoster.messagesPerBot)
+            // The cards waiting on the person, the same list "To answer" shows.
+            async let waiting = try? WatchWaitingList.read(using: client)
             // The desktop sidecar has no organization viewer. Ownerless and local
             // bots remain visible there, using the same ownership rule as iOS.
             let person = client.connection.serverEnvironmentId == nil ? nil : try await client.authSession().principalId
-            let mine = try await OrgJoin.offered(fleet.bots, principalId: person)
+            let snapshot = try await fleet
+            let mine = OrgJoin.offered(snapshot.bots, principalId: person)
+            var transcripts = CompanionState()
+            transcripts.hydrate(snapshot)
+            let cardBots = Set((await waiting)?.waiting.map(\.botId) ?? [])
             try Task.checkCancellation()
-            bots = mine
+            rows = WatchRoster.rows(mine, transcripts: transcripts, cardBots: cardBots)
             failed = false
             loaded = true
         } catch {

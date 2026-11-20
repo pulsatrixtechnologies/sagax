@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
 import { RECORD_CARD_TTL_MS, recordCardLanguage } from "@/lib/record-cards";
 import {
-  readDetailCounts, readDetailPage, readFieldChoices, writeField,
-  type RecordEditField,
+  readDetailCounts, readDetailPage, readFieldChoices, readNoteImage, writeField,
+  RECORD_TITLE_FIELD, type RecordEditField,
 } from "@/lib/record-detail";
 import type { RecordRef } from "../../shared/record-cards";
 import type { RecordChoice, RecordFieldEdit } from "./RecordFieldSelect";
@@ -17,14 +17,20 @@ const DEPENDENTS: Partial<Record<RecordEditField, RecordEditField[]>> = {
   subtype: ["item"],
 };
 
-/** The detail of one open ticket card: related tabs and editable fields,
- * read through the record's detail route. Absent (`enabled` false), or once the
+/** The title written in place: the console listed it as editable. */
+export interface RecordTitleEdit {
+  save: (value: string) => Promise<void>;
+}
+
+/** The detail of one open ticket card: related tabs, the images its notes
+ * name, editable fields and its title, read through the record's detail route. Absent (`enabled` false), or once the
  * server has no such route, `related` and `edits` are undefined and the
  * original card is shown. */
 export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () => void) {
   const { product, kind, id } = ref;
   const lang = recordCardLanguage();
   const [fields, setFields] = useState<RecordEditField[]>([]);
+  const [titleEditable, setTitleEditable] = useState(false);
   const [saved, setSaved] = useState<Partial<Record<RecordEditField, string>>>({});
   const [stamps, setStamps] = useState<Partial<Record<RecordEditField, number>>>({});
   const [downloadError, setDownloadError] = useState(false);
@@ -39,7 +45,10 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       record,
       async counts(fresh: boolean) {
         const read = await readDetailCounts(record, fresh);
-        if (live.current === token) setFields(read.fields);
+        if (live.current === token) {
+          setFields(read.fields);
+          setTitleEditable(read.title);
+        }
         return read.counts;
       },
       async page(tab: RelatedPage["tab"], fresh: boolean): Promise<RelatedPage> {
@@ -62,6 +71,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     live.current = source?.token;
     choices.current = new Map();
     setFields([]);
+    setTitleEditable(false);
     setSaved({});
     setStamps({});
     setDownloadError(false);
@@ -105,10 +115,24 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     },
   }), [source, saved, stamps, refreshTabs]);
 
+  // the title goes through the same write path, as text; the card is read again after
+  const title = useMemo<RecordTitleEdit | undefined>(() => {
+    if (!source || tabs.missing || !titleEditable) return undefined;
+    return {
+      save: async (value: string) => {
+        await writeField(source.record, RECORD_TITLE_FIELD, value);
+        if (live.current !== source.token) return;
+        changed.current();
+      },
+    };
+  }, [source, tabs.missing, titleEditable]);
+  // a note's images, read as the person through the same detail route
+  const readImage = useMemo(() => source ? (src: string) => readNoteImage(source.record, src) : undefined, [source]);
+
   const edits = useMemo(() => {
     if (!source || tabs.missing || !fields.length) return undefined;
     return Object.fromEntries(fields.map((field) => [field, edit(field)])) as Partial<Record<RecordEditField, RecordFieldEdit>>;
   }, [source, tabs.missing, fields, edit]);
-  const related = useMemo(() => tabs.related && { ...tabs.related, notice: downloadError ? t("recordCard.related.downloadFailed") : undefined }, [tabs.related, downloadError]);
-  return { related, edits, refresh: refreshTabs, missing: tabs.missing };
+  const related = useMemo(() => tabs.related && { ...tabs.related, readImage, notice: downloadError ? t("recordCard.related.downloadFailed") : undefined }, [tabs.related, readImage, downloadError]);
+  return { related, edits, title, refresh: refreshTabs, missing: tabs.missing };
 }

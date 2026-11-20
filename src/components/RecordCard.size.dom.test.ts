@@ -118,25 +118,26 @@ describe("the opened record card's size", () => {
     expect(heightOf()).toBe("840px");
   });
 
-  it("a card with tabs takes the whole height; any other is as tall as its content, up to that height", () => {
+  // M-20261119-084: a step from a ticket (tabs, the whole height) to its company (as tall as its content)
+  // resized the window under the person; the opened card now takes its whole size for every record
+  it("takes its whole kept size for every record, a state and a loading card too: a step never resizes it", () => {
     show({ raw: ticketCard(NOW, "fr"), related: related() });
     expect(classes(frame())).toContain(FULL_HEIGHT_CLASS);
     expect(classes(frame())).not.toContain(MOST_HEIGHT_CLASS);
     for (const [raw, record] of [[companyCard(NOW, "fr"), COMPANY_REF], [projectCard(NOW, "fr"), PROJECT_REF], [invoiceCard(NOW, "fr"), INVOICE_REF]] as const) {
       show({ raw, record });
-      expect(classes(frame())).toContain(MOST_HEIGHT_CLASS);
-      expect(classes(frame())).not.toContain(FULL_HEIGHT_CLASS);
-      // the same width and the same height to go up to, for every record
+      expect(classes(frame())).toContain(FULL_HEIGHT_CLASS);
+      expect(classes(frame())).not.toContain(MOST_HEIGHT_CLASS);
+      // the same width and the same height, for every record
       expect([widthOf(), heightOf()]).toEqual(["1000px", "720px"]);
       expect(classes(shell())).toContain(WIDTH_CLASS);
     }
-    // a state and a loading card too
     show({ miss: { state: "no_access" } });
     expect(widthOf()).toBe("1000px");
-    expect(classes(frame())).toContain(MOST_HEIGHT_CLASS);
+    expect(classes(frame())).toContain(FULL_HEIGHT_CLASS);
     show({});
     expect(widthOf()).toBe("1000px");
-    expect(classes(frame())).toContain(MOST_HEIGHT_CLASS);
+    expect(classes(frame())).toContain(FULL_HEIGHT_CLASS);
   });
 
   it("is resized by its two sides, its bottom edge and its bottom corners", () => {
@@ -271,13 +272,12 @@ describe("the opened record card's size", () => {
     expect(heightOf()).toContain("696px");
   });
 
-  it("offers its bottom edge and corners only when it takes the height it may", () => {
-    // a card as tall as its content (no layout engine here: it never reaches its max-height): the sides only
+  it("offers its sides, its bottom edge and its corners for every record, since it always takes its height", () => {
     show({ raw: companyCard(NOW, "fr"), record: COMPANY_REF, label: "Acme Fabrication" });
     expect(edge("vertical")).not.toBeNull();
     expect(leftEdge()).not.toBeNull();
-    expect(edge("horizontal")).toBeNull();
-    expect(corner("se")).toBeNull();
+    expect(edge("horizontal")).not.toBeNull();
+    expect(corner("se")).not.toBeNull();
     show({ raw: ticketCard(NOW, "fr"), related: related() });
     expect(edge("horizontal")).not.toBeNull();
     expect(corner("se")).not.toBeNull();
@@ -377,7 +377,7 @@ describe("the opened record card reads", () => {
   it("shows several notes at once, each with its whole text", () => {
     show({ raw: ticketCard(NOW, "fr"), related: related() });
     act(() => [...host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.startsWith("Toutes"))!.click());
-    const bodies = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"] li p[dir="auto"]')];
+    const bodies = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"] li [data-record-note-body]')];
     expect(bodies).toHaveLength(3);
     for (const body of bodies) expect(body.className).not.toContain("line-clamp");
     expect(bodies[0]!.textContent).toContain("The counter queue stays blocked.");
@@ -420,7 +420,7 @@ describe("the opened record card reads", () => {
     try {
       show({ raw: ticketCard(NOW, "fr"), related: related() });
       const note = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"] li')].find((item) => item.textContent?.includes("stops after"))!;
-      const body = note.querySelector<HTMLElement>('p[dir="auto"]')!;
+      const body = note.querySelector<HTMLElement>("[data-record-note-body]")!;
       const fold = note.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
       expect(fold.getAttribute("aria-expanded")).toBe("true");
       expect(fold.textContent).toBe("Moins");
@@ -448,7 +448,7 @@ describe("the opened record card reads", () => {
     expect([...host.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(["Notes3", "Temps0", "Configurations2", "Dépenses0", "Activités1", "Pièces jointes0", "Discussion2", "Interne1", "Résolution0", "Toutes3"]);
     // the product's link, Ask, copy and refresh, on one row
     const actions = host.querySelector("[data-record-actions]")!;
-    expect(actions.querySelector("[data-record-open]")!.textContent).toBe("Ouvrir dans Nimbus Desk");
+    expect(actions.querySelector("[data-record-open]")!.textContent).toBe("Ouvrir sur le Web");
     expect(actions.querySelector("[data-record-ask]")!.textContent).toBe("Demander");
     expect(actions.querySelector("[data-record-copy]")).not.toBeNull();
     expect(actions.querySelector("[data-record-refresh]")).not.toBeNull();

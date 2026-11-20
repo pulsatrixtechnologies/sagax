@@ -1,11 +1,15 @@
 // The detail of a ticket card: the client of GET and POST
 // /api/me/records/:product/:kind/:id/detail (server/routes/record-cards.ts).
-// It reads the related tabs (counts, pages, attachments), the choices of an
-// editable field and writes one field. The server reads the ticket under the
-// person before every access; this module only asks and parses.
+// It reads the related tabs (counts, pages, attachments), the images a note
+// names, the choices of an editable field and writes one field (the title as
+// text). The server reads the ticket under the person before every access;
+// this module only asks and parses.
 //
-// A server without the route answers 404 (or 405): `RecordDetailMissing`, and
-// the card stays the original one.
+// A server without the route answers 404 (or 405) with no code of the
+// console: `RecordDetailMissing`, and the card stays the original one. A 404
+// that carries the console's code (a section the product refused, a record
+// it does not know) is that section's failure only: it never takes the
+// card's tabs and fields away (M-20261119-084).
 import { api, ApiError } from "@/state/store";
 import { activeLocale } from "@/lib/i18n";
 import { downloadBlob } from "@/lib/diagram-view";
@@ -14,9 +18,13 @@ import { RELATED_TABS, type RelatedPage, type RelatedTab } from "@/components/Re
 import type { RecordChoice } from "@/components/RecordFieldSelect";
 import type { RecordRef } from "../../shared/record-cards";
 
-/** The fields a person may change on a ticket. */
+/** The fields a person may change on a ticket by a choice. */
 export const RECORD_EDIT_FIELDS = ["status", "priority", "board", "type", "subtype", "item", "owner", "team", "agreement", "contact"] as const;
 export type RecordEditField = (typeof RECORD_EDIT_FIELDS)[number];
+/** The field a person writes as text: the title (M-20261119-084). */
+export const RECORD_TITLE_FIELD = "summary";
+/** The longest title the product keeps. */
+export const RECORD_TITLE_MAX = 100;
 
 /** Raised when the server has no detail route: the original card is shown. */
 export class RecordDetailMissing extends Error {}
@@ -24,6 +32,8 @@ export class RecordDetailMissing extends Error {}
 export interface RecordDetailCounts {
   counts: Partial<Record<RelatedTab, number>>;
   fields: RecordEditField[];
+  /** the console lists the title as editable */
+  title: boolean;
 }
 
 export interface RecordDetailPage {
@@ -41,11 +51,18 @@ export function recordDetailPath(ref: RecordRef, query: Record<string, string | 
   return `/api/me/records/${encodeURIComponent(ref.product)}/${encodeURIComponent(ref.kind)}/${encodeURIComponent(ref.id)}/detail?${parts.join("&")}`;
 }
 
+/** Only a route that is not there: a 404 or 405 with no code of the console. */
+export function detailRouteMissing(error: unknown): boolean {
+  if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 405)) return false;
+  const body = error.body as { code?: unknown } | undefined;
+  return !(body && typeof body === "object" && typeof body.code === "string" && body.code);
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     return await api<T>(path, init);
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 405)) throw new RecordDetailMissing();
+    if (detailRouteMissing(error)) throw new RecordDetailMissing();
     throw error;
   }
 }
@@ -66,7 +83,7 @@ export function parseDetailCounts(raw: unknown): RecordDetailCounts {
   }
   const asked = isObject(raw) && Array.isArray(raw.fields) ? raw.fields : [];
   const fields = RECORD_EDIT_FIELDS.filter((field) => asked.includes(field));
-  return { counts, fields };
+  return { counts, fields, title: asked.includes(RECORD_TITLE_FIELD) };
 }
 
 /** Newer consoles include instants. Older ones already formatted the person's local time. */
@@ -136,7 +153,26 @@ export async function readFieldChoices(ref: RecordRef, field: RecordEditField, f
   return all;
 }
 
-export async function writeField(ref: RecordRef, field: RecordEditField, value: string): Promise<void> {
+/** An image a note names, through the card's own detail path (the console
+ * reads it with the person's key): the browser never calls the product and
+ * never holds a key. Only an image comes back (png, jpeg, gif or webp). */
+export async function readNoteImage(ref: RecordRef, src: string): Promise<Blob> {
+  const body = await call<unknown>(recordDetailPath(ref, { section: "image", field: src }));
+  if (!isObject(body) || typeof body.base64 !== "string") throw new Error("missing image");
+  const type = text(body.contentType);
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(type)) throw new Error("not an image");
+  return new Blob([Uint8Array.from(atob(body.base64), char => char.charCodeAt(0))], { type });
+}
+
+/** A title as the product keeps it: one line of 1 to 100 characters, trimmed; null when it is not one. */
+export function titleValue(value: string): string | null {
+  const trimmed = value.trim();
+  const chars = [...trimmed];
+  const control = chars.some((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127; });
+  return !chars.length || chars.length > RECORD_TITLE_MAX || control ? null : trimmed;
+}
+
+export async function writeField(ref: RecordRef, field: RecordEditField | typeof RECORD_TITLE_FIELD, value: string): Promise<void> {
   const answer = await call<unknown>(recordDetailPath(ref, {}), { method: "POST", body: JSON.stringify({ field, value }) });
   if (!isObject(answer) || answer.updated !== true) throw new Error("not updated");
 }

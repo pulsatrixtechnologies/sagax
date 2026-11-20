@@ -99,7 +99,8 @@ export function createRecordCardsClient(deps: { call: PersonProductsCall }): Rec
     detail(subjectToken, ref, query, change) {
       const [base] = recordCardPath(ref, "en").split("?");
       return deps.call(change ? "POST" : "GET", `${base}/detail?${query}`, change, {
-        subjectToken, timeoutMs: 30_000, maxBytes: query.get("section") === "download" ? RECORD_DOWNLOAD_RESPONSE_BYTES : 4 * 1024 * 1024,
+        // a file or a note's image comes back whole, as base64
+        subjectToken, timeoutMs: 30_000, maxBytes: query.get("section") === "download" || query.get("section") === "image" ? RECORD_DOWNLOAD_RESPONSE_BYTES : 4 * 1024 * 1024,
       });
     },
     get(principalId, subjectToken, ref, lang, fresh = false) {

@@ -12,7 +12,11 @@
  *   neighbour  the link hover card (the conforming neighbour) beside a ticket card
  *   chat       live chips in a paragraph, a list and a table: click (pin), Escape; hover opens nothing (#4785)
  *   related    the same chips with the ticket's detail route answered: a rich ticket (six notes of every kind, one
- *              resource, two configurations, its editable fields) and a company with little content (#5053)
+ *              resource, two configurations, its editable fields) and a company with little content (#5053);
+ *              a note written in the product's Markdown with inline images and a signature, three attachments,
+ *              an editable title and the owners (M-20261119-084). &console=old answers as the console did
+ *              before M-20261119-084: the attachments refused as a bare 404, integration accounts among the
+ *              owners (one person twice), no editable title
  * The time is held still (scene `now`), so a capture is the same every run. */
 import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,6 +38,7 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang: Lang = params.get("lang") === "en" ? "en" : "fr";
 await loadLocale(lang);
 const scene = params.get("scene") ?? "overview";
+const oldConsole = params.get("console") === "old";
 // 2026-11-17 14:34 in Toronto
 const NOW = Date.parse("2026-11-17T14:34:00-05:00");
 
@@ -54,11 +59,29 @@ function read(raw: RecordCardAnswer | RecordCardMiss) {
 
 // a rich ticket (M-20261119-055): several notes of every kind, one resource, two configurations
 const L = (fr: string, en: string) => (lang === "fr" ? fr : en);
+// a note as the product stores it (M-20261119-084): an inline image, bold, a phone link, escaped brackets and
+// parentheses, and a signature of small linked icons; every address is invented
+const INLINE = "https://desk.example.test/v4_6_release/api/inlineimages/acme";
+const SHOT_GUID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const ICON_GUIDS = ["1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f"];
+const MARKDOWN_NOTE = [
+  L("Bonjour,", "Hello,"),
+  "",
+  L("J'ai reçu ce courriel ce matin, est-ce qu'il est légitime\\? Capture ci-dessous \\(le lien pointe ailleurs\\).", "I got this email this morning, is it legitimate\\? Screenshot below \\(the link points elsewhere\\)."),
+  "",
+  `![\\[image\\]](${INLINE}/${SHOT_GUID})`,
+  "",
+  L("**Merci de me répondre avant midi.**", "**Please answer before noon.**"),
+  "",
+  "Ada Lindqvist | Acme Fabrication | [418 555-0142](tel:4185550142)",
+  ICON_GUIDS.map((guid, index) => `[![\\[image\\]](${INLINE}/${guid})](https://social.example.test/acme/${index + 1})`).join(" "),
+].join("\n");
 const relatedPages = {
   schedule: { lines: [
     { member: "Noor Haddad", date: "2026-11-18 09:00", end: "2026-11-18 10:30", where: L("À distance", "Remote"), doneFlag: false },
   ] },
   notes: { lines: [
+    { author: "Ada Lindqvist", date: "2026-11-18 09:30", kind: "discussion", text: MARKDOWN_NOTE },
     { author: "Ada Lindqvist", date: "2026-11-18 08:45", kind: "discussion", text: L("L'imprimante s'arrête après la première page. Le bac de remplacement est prêt à l'accueil.\nNous imprimons à l'étage en attendant, mais la file du comptoir reste bloquée pour les étiquettes d'expédition.", "The printer stops after the first page. The replacement tray is ready at reception.\nWe print upstairs meanwhile, but the counter queue stays blocked for the shipping labels.") },
     { author: "Noor Haddad", date: "2026-11-18 08:10", kind: "internal", text: L("Apporter le rouleau d'entraînement de rechange. Le pilote a été réinstallé hier sans effet durable : vérifier le port réseau et le câble avant de remplacer la pièce.", "Bring the spare feed roller. The driver was reinstalled yesterday with no lasting effect: check the network port and the cable before replacing the part.") },
     { author: "Noor Haddad", date: "2026-11-17 16:20", kind: "discussion", text: L("Bonjour Ada, nous regardons le pilote et le port réseau de l'imprimante. Un technicien passe demain matin à 9 h.", "Hello Ada, we are looking at the printer's driver and network port. A technician comes by tomorrow morning at 9.") },
@@ -76,12 +99,50 @@ const relatedPages = {
   ] },
   expenses: { tab: "expenses", lines: [{ date: L("17 nov.", "Nov 17"), member: "Noor Haddad", type: L("Déplacement", "Travel"), amount: "12,50 $" }] },
   activities: { tab: "activities", lines: [{ subject: L("Confirmer la qualité d'impression", "Confirm print quality"), type: L("Suivi", "Follow-up"), date: L("19 nov.", "Nov 19"), assigned: "Noor Haddad" }] },
-  attachments: { tab: "attachments", lines: [{ name: "print-test.txt", size: "10 B", date: L("18 nov.", "Nov 18"), id: "42" }] },
+  attachments: { tab: "attachments", lines: [
+    { name: "print-test.txt", size: "10 B", date: L("18 nov.", "Nov 18"), id: "42" },
+    { name: L("Capture d'écran 2026-11-18.png", "Screenshot 2026-11-18.png"), size: "34.9 KB", date: L("18 nov.", "Nov 18"), id: "43" },
+    { name: L("Courriel suspect.eml", "Suspicious email.eml"), size: "499.9 KB", date: L("18 nov.", "Nov 18"), id: "44" },
+  ] },
 };
 const relatedCounts = Object.fromEntries(RELATED_TABS.map(key => [key, relatedPages[key].lines.length]));
 
 const statuses = [{ value: "1", label: lang === "fr" ? "En cours" : "In progress" }, { value: "2", label: lang === "fr" ? "En attente" : "Waiting" }];
 let status = statuses[0]!;
+// the owners as the console answers them: the organization's people; before M-20261119-084 the integration
+// accounts too, one of them carrying a person's own name (the same person listed twice)
+const PEOPLE = [{ value: "11", label: "Ada Lindqvist" }, { value: "12", label: "Bruno Tremblay" }, { value: "13", label: "Noor Haddad" }, { value: "14", label: "Sacha Morin" }];
+const OWNERS = oldConsole
+  ? [{ value: "90", label: "Phone System Integration" }, { value: "11", label: "Ada Lindqvist" }, { value: "91", label: "Ada Lindqvist" }, { value: "92", label: "Backup Monitor API" }, { value: "93", label: "Calendar Bridge" }, ...PEOPLE.slice(1)]
+  : PEOPLE;
+let title: string | undefined;
+
+/** A png of the note's images, drawn here (no file, no network): a screenshot, or a small round icon. */
+async function notePng(guid: string): Promise<string> {
+  const icon = ICON_GUIDS.indexOf(guid);
+  const canvas = document.createElement("canvas");
+  canvas.width = icon >= 0 ? 32 : 640;
+  canvas.height = icon >= 0 ? 32 : 300;
+  const ctx = canvas.getContext("2d")!;
+  if (icon >= 0) {
+    ctx.fillStyle = icon === 0 ? "#2563eb" : "#4b5563";
+    ctx.beginPath();
+    ctx.arc(16, 16, 15, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#f3f4f6"; ctx.fillRect(0, 0, 640, 300);
+    ctx.fillStyle = "#1f2937"; ctx.fillRect(0, 0, 640, 40);
+    ctx.fillStyle = "#ffffff"; ctx.font = "16px sans-serif"; ctx.fillText(L("Votre boîte est pleine", "Your mailbox is full"), 20, 26);
+    ctx.fillStyle = "#9ca3af";
+    for (const [y, w] of [[80, 520], [110, 460], [140, 500], [170, 300]] as const) ctx.fillRect(20, y, w, 12);
+    ctx.fillStyle = "#2563eb"; ctx.fillRect(20, 220, 180, 40);
+    ctx.fillStyle = "#ffffff"; ctx.fillText(L("Valider le compte", "Verify the account"), 36, 246);
+  }
+  const blob = await new Promise<Blob>((done) => canvas.toBlob((made) => done(made!), "image/png"));
+  let binary = "";
+  for (const byte of new Uint8Array(await blob.arrayBuffer())) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
 
 function Card({ record, label, answerOf, pinned, miss, loading }: { record: RecordRef; label: string; answerOf?: Record<string, unknown>; pinned?: boolean; miss?: RecordCardMiss; loading?: boolean }) {
   const value = miss ?? (answerOf ? parseRecordCardAnswer(answer(answerOf)) : null);
@@ -202,13 +263,20 @@ window.fetch = async (input, init) => {
     const query = new URL(url, window.location.href).searchParams;
     if (init?.method === "POST") {
       const change = JSON.parse(String(init.body));
-      status = statuses.find(choice => choice.value === change.value) ?? status;
+      if (change.field === "summary") title = change.value;
+      else status = statuses.find(choice => choice.value === change.value) ?? status;
       return json({ updated: true });
     }
     switch (query.get("section")) {
-      case "counts": return json({ counts: relatedCounts, fields: RECORD_EDIT_FIELDS });
-      case "choices": return json({ choices: statuses, next: null });
+      case "counts": return json({ counts: oldConsole ? { ...relatedCounts, attachments: undefined } : relatedCounts, fields: oldConsole ? RECORD_EDIT_FIELDS : [...RECORD_EDIT_FIELDS, "summary"] });
+      case "choices": return json({ choices: query.get("field") === "owner" ? OWNERS : statuses, next: null });
       case "download": return json({ name: "print-test.txt", contentType: "text/plain", base64: btoa("Print test") });
+      case "image": {
+        const guid = (query.get("field") ?? "").split("/").at(-1) ?? "";
+        return [SHOT_GUID, ...ICON_GUIDS].includes(guid) ? json({ contentType: "image/png", base64: await notePng(guid) }) : new Response(JSON.stringify({ state: "unavailable", code: "detail_invalid" }), { status: 400 });
+      }
+      // the console before M-20261119-084: its documents read refused, answered as a bare 404
+      case "attachments": if (oldConsole) return new Response(JSON.stringify({ state: "unavailable" }), { status: 404, headers: { "content-type": "application/json" } }); return json({ ...relatedPages.attachments, next: null });
       default: return json({ ...relatedPages[query.get("section") as RelatedTab], next: null });
     }
   }
@@ -222,7 +290,7 @@ window.fetch = async (input, init) => {
       const fields = (card.fields as Array<Record<string, unknown>>).map((field, index) => ({
         ...field, edit_key: ["board", "type"][index],
       }));
-      return json(answer({ ...card, fields, state: { label: status.label, tone: "open" } }));
+      return json(answer({ ...card, fields, ...(title ? { title } : {}), state: { label: status.label, tone: "open" } }));
     }
     return json(make ? answer(make(Date.now(), lang)) : { state: "unknown" });
   }

@@ -146,6 +146,12 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const detail = useRecordDetail(current.ref, current.ref.kind === "ticket" && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
   const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
+  // the way here, from the chip's record to this one (M-20261119-084): a number reads with its kind
+  const way = [{ ref: record, label }, ...trail];
+  const crumbs = trail.length ? way.map((step, index) => {
+    const words = /^#?\d+$/.test(step.label.trim()) ? `${recordKindName(findRecordKind(products, step.ref).kind) ?? t("recordCard.kindFallback")} ${step.label}` : step.label;
+    return { label: words, ...(index < way.length - 1 ? { onOpen: () => setTrail((steps) => steps.slice(0, index)) } : {}) };
+  }) : undefined;
   return (
     <RecordCard
       key={`${current.ref.product}/${current.ref.kind}/${current.ref.id}`}
@@ -156,6 +162,8 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       read={detail.related ? { ...read, refresh } : read}
       related={detail.related}
       edits={detail.edits}
+      titleEdit={detail.title}
+      trail={crumbs}
       canOpenRecord={(ref) => Boolean(findRecordKind(products, ref).kind)}
       pinned={opened}
       onClose={onClose}

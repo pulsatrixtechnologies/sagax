@@ -52,7 +52,7 @@ describe("RecordCard", () => {
     expect(text()).toContain("En cours");
     expect(text()).toContain("Priorité 2 - Élevée");
     expect(text()).toContain("Acme Fabrication");
-    expect(text()).toContain("Ouvrir dans Nimbus Desk");
+    expect(text()).toContain("Ouvrir sur le Web");
     expect(text()).toContain("Demander");
     expect(host.querySelectorAll("[data-record-notes] [data-record-note]")).toHaveLength(3);
     expect(text()).toContain("4 autres notes");
@@ -158,7 +158,7 @@ describe("RecordCard", () => {
     expect(compact.querySelector("[data-record-ask] span")!.className).toContain("hidden");
     expect(compact.querySelector("[data-record-actions] time")!.className).toContain("hidden");
     // the open button keeps its label
-    expect(compact.querySelector("[data-record-open]")!.textContent).toBe("Ouvrir dans Nimbus Desk");
+    expect(compact.querySelector("[data-record-open]")!.textContent).toBe("Ouvrir sur le Web");
   });
 
   it("puts the state chip first, then the priority, in the head", () => {

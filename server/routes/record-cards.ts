@@ -24,6 +24,31 @@ import { evaluateCustomRules, type CustomRule } from "../../shared/custom-rules.
 import { validRecordRef, type RecordRef } from "../../shared/record-cards.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
+/** The one field written as text: the ticket's title (M-20261119-084). */
+export const RECORD_TITLE_FIELD = "summary";
+const RECORD_TITLE_MAX = 100;
+
+/** A field change the route accepts: a field name, and either a title (one
+ * line of 1 to 100 characters, trimmed) or the id of a choice. */
+export function fieldChange(body: unknown): { field: string; value: string } | null {
+  const raw = body as { field?: unknown; value?: unknown } | null | undefined;
+  if (typeof raw?.field !== "string" || !/^[a-z]{1,32}$/.test(raw.field) || typeof raw.value !== "string") return null;
+  if (raw.field === RECORD_TITLE_FIELD) {
+    const value = raw.value.trim();
+    const chars = [...value];
+    const control = chars.some((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127; });
+    return chars.length && chars.length <= RECORD_TITLE_MAX && !control ? { field: raw.field, value } : null;
+  }
+  return /^[1-9][0-9]*$/.test(raw.value) ? { field: raw.field, value: raw.value } : null;
+}
+
+/** The console's code of a refused detail call, kept so the app tells a
+ * refused section from a route that is not there (M-20261119-084). */
+function consoleCode(body: unknown): string | undefined {
+  const code = (body as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" && /^[a-z_]{1,64}$/.test(code) ? code : undefined;
+}
+
 export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)?$/;
 const RECORD_DETAIL_WRITE_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)$/;
 
@@ -40,7 +65,9 @@ export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, 
   const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior === "deny");
   if (!org.length) return { kind: "none" };
   const tool = `${ref.product}_${change ? "tickets_write" : "query"}`;
-  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify({ kind: ref.kind, id: ref.id, ...(change ? { action: "update", set: { [change.field]: { id: change.value } } } : {}) }), hints: { readOnly: !change } }, home);
+  // the title is written as text, every other field as the id of a choice
+  const set = change ? { [change.field]: change.field === RECORD_TITLE_FIELD ? change.value : { id: change.value } } : undefined;
+  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify({ kind: ref.kind, id: ref.id, ...(set ? { action: "update", set } : {}) }), hints: { readOnly: !change } }, home);
   if (!facts.products.includes(ref.product)) facts.products.push(ref.product);
   const decision = evaluateCustomRules(org, facts, {
     products: [{ id: ref.product, ...(productName ? { name: productName } : {}) }],
@@ -95,8 +122,9 @@ export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandle
     if (method === "POST") {
       let body;
       try { body = await readBody(req); } catch { return send(400, { error: "invalid field change" }); }
-      if (typeof body?.field !== "string" || !/^[a-z]{1,32}$/.test(body.field) || typeof body.value !== "string" || !/^[1-9][0-9]*$/.test(body.value)) return send(400, { error: "invalid field change" });
-      change = { field: body.field, value: body.value };
+      const asked = fieldChange(body);
+      if (!asked) return send(400, { error: "invalid field change" });
+      change = asked;
     }
     const rule = await deps.orgRule(person.principalId, token, ref, change);
     if (rule.kind === "deny") return send(detail ? 403 : 200, { state: "org_refused", rule: rule.rule });
@@ -109,7 +137,8 @@ export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandle
       }
       const result = await deps.client.detail(token, ref, query, change);
       if (result.ok) return send(200, result.body);
-      return send(result.status && result.status >= 400 ? result.status : 502, { state: "unavailable" });
+      const code = consoleCode(result.body);
+      return send(result.status && result.status >= 400 ? result.status : 502, { state: "unavailable", ...(code ? { code } : {}) });
     }
     const read = await deps.client.get(person.principalId, token, ref, lang, url.searchParams.get("fresh") === "1");
     if (read.ok) return send(200, { card: read.card });

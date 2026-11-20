@@ -19345,7 +19345,16 @@
       "settings.skin.custom.accentFrom": "5bb00303f68f210f5db8fd5dc98e89504a85da8f782225e009b9d40181d63e80",
       "settings.skin.custom.accentTo": "6d1ac1444f9f8d33d3b54fa5bfcfef08e26d42e850c894febcb2448af320b197",
       "settings.skin.custom.hex": "4c97af40d230d88cb10b096a47b7f2ec26ec4a55d469d9838b9cffb53eb0930e",
-      "settings.skin.custom.preview": "58e5c8b3197c274876a8967ffc1eb94a06980f9bdcfff81540baf6cdc43ee0bc"
+      "settings.skin.custom.preview": "58e5c8b3197c274876a8967ffc1eb94a06980f9bdcfff81540baf6cdc43ee0bc",
+      "recordCard.openWeb": "822ecad5a382fc32d4c32c1020c28c84d5323395be27e21f53f9d9060d62b6b6",
+      "recordCard.trail": "49b4f71779ff9f0f51fa94c8c6e493ce0adcac67826540b90bbda42f865c3081",
+      "recordCard.title.edit": "03c5d7d83923bbdb2a3f0de1bfd6c6fd5b60ce6abc0b5fe715781b0b044d5dee",
+      "recordCard.title.label": "7e8cd2056da73a7fefb6cd91f4e5d199d08d9058c517b9a2476b1b520324d674",
+      "recordCard.title.save": "e4bccdfb27e3b76b8cb23c3569049dd35c22d077c2f5e33d85495dfa85fcc055",
+      "recordCard.title.cancel": "19766ed6ccb2f4a32778eed80d1928d2c87a18d7c275ccb163ec6709d3eb2e27",
+      "recordCard.title.invalid": "8d6c079cfafad19d48226d01230a14f56e823c11adfe3636227d2d69b19f72f2",
+      "recordCard.title.saveFailed": "d928af7cc996e8cae5cc307a296e1920192846b474cb1765bc6c3e5758653f1e",
+      "recordCard.related.noteImage": "1aa4cb0bcca76e92e30677e809bb3d4b5c066715ef4d558184e319496bcc5125"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

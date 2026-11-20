@@ -31,13 +31,15 @@ export interface RecordRelatedTabsProps {
   error?: string;
   countError?: string;
   notice?: string;
+  /** a note's image, read as the person through the card's detail route (never the product from the browser) */
+  readImage?: (src: string) => Promise<Blob>;
 }
 
 /** The tabs of the opened card (#5053). They take the room left under the
  * record's text and grow with the card; the card's one scroller scrolls them
  * (never a box of their own), and the tab row stays in view at its top while
  * it does. A row too narrow for the six tabs wraps: no tab is ever cut. */
-export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, countError, notice }: RecordRelatedTabsProps) {
+export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, countError, notice, readImage }: RecordRelatedTabsProps) {
   const id = useId();
   return (
     <section className="flex shrink-0 grow flex-col" data-record-related>
@@ -50,7 +52,7 @@ export function RecordRelatedTabs({ counts, tab, onTab, page, loading, error, co
       {(countError || notice) && <span role="status" className="px-6 pt-3 text-[13px] leading-[18px] text-popover-ink-secondary">{countError || notice}</span>}
       <div role="tabpanel" id={`${id}-panel-${tab}`} aria-labelledby={`${id}-tab-${tab}`}
         key={tab} tabIndex={0} aria-busy={loading} className="px-6 pb-5 pt-3 focus-visible:outline-none">
-        {error ? <p role="status" className="py-2 text-popover-ink-secondary">{error}</p> : page?.tab === tab ? page.tab === "notes" ? <TicketNotes notes={page.lines} /> : <RelatedLines page={page} /> :
+        {error ? <p role="status" className="py-2 text-popover-ink-secondary">{error}</p> : page?.tab === tab ? page.tab === "notes" ? <TicketNotes notes={page.lines} readImage={readImage} /> : <RelatedLines page={page} /> :
           <p role="status" className="py-2 text-popover-ink-secondary">{t("recordCard.loading")}</p>}
       </div>
     </section>

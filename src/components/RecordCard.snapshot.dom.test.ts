@@ -5,7 +5,11 @@
 // to draw them exactly as they were. The hovered ones still are that DOM, to
 // the byte. The opened ones were taken again with #5053, which redrew the
 // opened card (a window over the chat: larger, resizable, a label on every
-// fact) and left the hovered tooltip alone.
+// fact) and left the hovered tooltip alone. M-20261119-084 took them again
+// for three asked changes only: the action reads "Open on the web" (no
+// product name, no arrow) on both, and the opened card takes its whole
+// height (its bottom handles always there) and draws a record's text with
+// the chat's Markdown renderer.
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

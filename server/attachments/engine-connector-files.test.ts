@@ -203,7 +203,7 @@ describe("placeEngineFiles", () => {
     expect(() => readEngineFile(swapped)).toThrow();
   });
 
-  it("removes a blob attach_file would refuse unread, and says it was not kept", async () => {
+  it("removes a forged name attach_file would refuse unread (the CLI never writes one), and says it was not kept", async () => {
     const { results, folder, blob } = engine();
     const path = blob("mcp-claude_ai_Docs_Hub-blob-1763600000005-ee33ff.pem", Buffer.from("-----BEGIN CERTIFICATE-----"));
     const place = computer();

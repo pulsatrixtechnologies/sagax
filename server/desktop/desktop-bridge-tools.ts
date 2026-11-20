@@ -447,20 +447,40 @@ async function pullSavedFiles(request: (operation: DesktopBridgeOperation) => Pr
 /** Copy one file the Mac saved into the conversation's folder here. */
 async function pullAttachment(request: (operation: DesktopBridgeOperation) => Promise<unknown>, saved: SavedOnMac, save: (name: string, data: Buffer) => string): Promise<ToolResult> {
   if (typeof saved.path !== "string") return text("Your Mac did not save the file.", true);
-  const parts: Buffer[] = [];
-  for (let offset = 0, guard = 0; guard < 64; guard += 1) {
-    const read = desktopToolResult(await request({ action: "read_file", path: saved.path, encoding: "base64", offset, max_bytes: PULL_CHUNK }));
-    const body = read.content[0]?.type === "text" ? read.content[0].text : "";
-    if (read.isError) return text(`The attachment could not be copied from your Mac: ${body}`, true);
-    const more = /\n\[(\d+) more bytes; read again with offset (\d+)\]$/.exec(body);
-    const data = Buffer.from(more ? body.slice(0, more.index) : body, "base64");
-    parts.push(data);
-    if (!more) break;
-    offset = Number(more[2]);
+  let data: Buffer;
+  try {
+    data = await pullDesktopFile(request, saved.path, 64 * PULL_CHUNK);
+  } catch (error) {
+    return text(`The attachment could not be copied from your Mac: ${error instanceof Error ? error.message : String(error)}`, true);
   }
   const name = typeof saved.name === "string" && saved.name ? saved.name : "attachment";
-  const file = save(name, Buffer.concat(parts));
-  return text(JSON.stringify({ path: file, name, mime: typeof saved.mime === "string" ? saved.mime : null, bytes: Buffer.concat(parts).length, onMac: saved.path }));
+  const file = save(name, data);
+  return text(JSON.stringify({ path: file, name, mime: typeof saved.mime === "string" ? saved.mime : null, bytes: data.length, onMac: saved.path }));
+}
+
+/** One whole file of the person's computer, read through their desktop app
+ * in chunks (read_file, base64): a Mac app's saved attachment, or a file a
+ * bot hands to the chat with attach_file (#5138). Throws with the desktop's
+ * own words when it cannot be read, and a 413 above `maxBytes`. */
+export async function pullDesktopFile(request: (operation: DesktopBridgeOperation) => Promise<unknown>, path: string, maxBytes: number): Promise<Buffer> {
+  const parts: Buffer[] = [];
+  let total = 0;
+  for (let offset = 0; ;) {
+    const read = desktopToolResult(await request({ action: "read_file", path, encoding: "base64", offset, max_bytes: PULL_CHUNK }));
+    const body = read.content[0]?.type === "text" ? read.content[0].text : "";
+    if (read.isError) throw new Error(body || "it could not be read");
+    const more = /\n\[(\d+) more bytes; read again with offset (\d+)\]$/.exec(body);
+    const data = Buffer.from(more ? body.slice(0, more.index) : body, "base64");
+    total += data.length;
+    if (total + (more ? Number(more[1]) : 0) > maxBytes) throw Object.assign(new Error(`file exceeds ${maxBytes} bytes`), { status: 413 });
+    parts.push(data);
+    if (!more) break;
+    const next = Number(more[2]);
+    // the desktop moves forward or the file changed under the read
+    if (!(next > offset)) throw new Error("the file changed while it was read");
+    offset = next;
+  }
+  return Buffer.concat(parts, total);
 }
 
 export function desktopToolResult(value: unknown): ToolResult {

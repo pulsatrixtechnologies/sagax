@@ -29,6 +29,8 @@ import {
   type PersonalMcpInput,
 } from "../people/person-connections.ts";
 import type { McpProbeResult } from "../mcp/mcp-probe.ts";
+import { placeConnectorFiles, type PersonPlace } from "../attachments/connector-files.ts";
+import { isSandboxBridgeForward } from "../perspicax/sandbox-bridge-forward.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -254,6 +256,9 @@ export interface InternalIntegrationsDeps {
     botId: string;
     frame: unknown;
   }): Promise<{ status: number; body?: unknown; toolsChanged?: true }>;
+  /** #5138: the person's own places of this turn, most preferred first,
+   * where a file a connector returns is written (never the Sagax server). */
+  connectorFilePlaces?(capability: InternalCapabilityView): readonly PersonPlace[];
 }
 
 export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps): InternalRouteHandler {
@@ -664,8 +669,15 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
         res.end();
         return;
       }
+      // #5138 (M-20261120-008): a file the connector returned goes to the
+      // person's own place, never to the engine on this server; a script in
+      // the person's server environment gets it as it is, already there
+      const places = deps.connectorFilePlaces;
+      const body = answer.status === 200 && places && !isSandboxBridgeForward(ctx.headers)
+        ? await placeConnectorFiles(answer.body, () => places(capability))
+        : answer.body;
       res.writeHead(answer.status, { "content-type": "application/json", ...relayHeaders });
-      res.end(JSON.stringify(answer.body));
+      res.end(JSON.stringify(body));
       return;
     }
 

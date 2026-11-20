@@ -94,27 +94,49 @@ export async function saveBotAttachment(input: SaveBotAttachmentInput): Promise<
   // A VM turn's tools never wrote to the host, so it gets roots only.
   const file = await openSource(guestHost ?? requested, roots, input.guest ? undefined : input.savedThisTurn);
   try {
-    const mime = mimeFor(file.name);
-    const name = displayNameFor(input.name, file.name);
-    if (extensionForMime(mime)) {
-      if (file.bytes > imageMaxBytes()) throw statusError(413, `image exceeds ${imageMaxBytes()} bytes`);
-      const saved = saveImage(await file.read(), mime);
-      // The name lets the reply's inline picture of this file show the copy (deliveredCopy).
-      return { attachment: { kind: "image", path: saved.path, mime: saved.mime, name }, bytes: saved.bytes };
-    }
-    if (!extensionForFileMime(mime)) {
-      throw statusError(415, `${file.name} is not a supported attachment type. Supported: ${ATTACH_SUPPORTED_TYPES}.`);
-    }
-    // Same per-kind ceilings as an upload: 1 GiB videos, 250 MiB otherwise.
-    const maximum = maxBytesForFileMime(mime);
-    if (file.bytes > maximum) throw statusError(413, `file exceeds ${maximum} bytes`);
-    const saved = await saveFile(file.stream({ start: 0, autoClose: false }), name || basename(file.name), mime, {
-      expectedBytes: file.bytes,
-    });
-    return { attachment: { kind: "file", path: saved.path, mime: saved.mime, name: saved.name }, bytes: saved.bytes };
+    return await storeBotAttachment({ name: file.name, bytes: file.bytes, read: file.read, stream: () => file.stream({ start: 0, autoClose: false }) }, input.name);
   } finally {
     await file.handle.close().catch(() => undefined);
   }
+}
+
+/** The largest file of this name attach_file takes (images and the other
+ * kinds have their own ceilings, as an upload). */
+export function botAttachmentMaxBytes(fileName: string): number {
+  const mime = mimeFor(fileName);
+  return extensionForMime(mime) ? imageMaxBytes() : maxBytesForFileMime(mime);
+}
+
+/** #5138: a file read from the person's own place (their computer or their
+ * server environment), handed to the chat with the same checks. */
+export async function saveBotAttachmentBytes(input: { fileName: string; bytes: Buffer; name?: string }): Promise<SavedBotAttachment> {
+  const bytes = input.bytes;
+  return storeBotAttachment({ name: basename(input.fileName.replace(/\\/g, "/")), bytes: bytes.length, read: async () => bytes, stream: async function* () { yield bytes; } }, input.name);
+}
+
+/** Copy one source into the private attachment store, as an image or a file. */
+async function storeBotAttachment(
+  file: { name: string; bytes: number; read: () => Promise<Buffer>; stream: () => AsyncIterable<Uint8Array> },
+  requestedName: string | undefined,
+): Promise<SavedBotAttachment> {
+  const mime = mimeFor(file.name);
+  const name = displayNameFor(requestedName, file.name);
+  if (extensionForMime(mime)) {
+    if (file.bytes > imageMaxBytes()) throw statusError(413, `image exceeds ${imageMaxBytes()} bytes`);
+    const saved = saveImage(await file.read(), mime);
+    // The name lets the reply's inline picture of this file show the copy (deliveredCopy).
+    return { attachment: { kind: "image", path: saved.path, mime: saved.mime, name }, bytes: saved.bytes };
+  }
+  if (!extensionForFileMime(mime)) {
+    throw statusError(415, `${file.name} is not a supported attachment type. Supported: ${ATTACH_SUPPORTED_TYPES}.`);
+  }
+  // Same per-kind ceilings as an upload: 1 GiB videos, 250 MiB otherwise.
+  const maximum = maxBytesForFileMime(mime);
+  if (file.bytes > maximum) throw statusError(413, `file exceeds ${maximum} bytes`);
+  const saved = await saveFile(file.stream(), name || basename(file.name), mime, {
+    expectedBytes: file.bytes,
+  });
+  return { attachment: { kind: "file", path: saved.path, mime: saved.mime, name: saved.name }, bytes: saved.bytes };
 }
 
 /**

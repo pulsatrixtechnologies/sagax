@@ -272,6 +272,51 @@ lui-même." On every server (solo and organization):
   `server/host-lazy-claim.e2e.test.ts`, `server/group-local-vm.e2e.test.ts`,
   `server/place-view.e2e.test.ts`, `server/desktop/desktop-bridge.e2e.test.ts`.
 
+## A downloaded file lands in the person's place, never on the server (2026-11-20, #5138)
+
+Decision M-20261120-008. A bot downloaded a ticket's spreadsheet with the
+Perspicax `documents_download` action: Perspicax answers a binary body as an
+MCP embedded resource (`resource.blob`), Sagax relayed it unchanged, and the
+engine, which runs on the Sagax server, wrote it into its own folder there
+(Claude Code: `<config>/projects/<task>/<session>/tool-results/
+mcp-perspicax-blob-<n>.bin`). No tool of the person's places reaches that
+folder, and `attach_file` refused it, so the bot could neither copy it to the
+person's drive nor post it in the chat.
+
+- `server/attachments/connector-files.ts` `placeConnectorFiles`: every
+  answer Sagax relays to an engine from Perspicax (route
+  `/api/internal/perspicax/mcp`) and from the person's own and plugin MCP
+  servers (`/api/internal/personal-mcp`) has each blob written into the
+  person's place for the turn and replaced by one text line naming its path
+  there. The name is the vendor's (Content-Disposition) or `download` with
+  the kind the bytes show (`.xlsx`, `.pdf`, ...), behind a short hash.
+- `server/index-leaves/personPlaces.ts`: the places are the turn's own
+  (`ownAttachmentRoots`: the speaker's, the owner's for a routine), the
+  person's computer first (the Sagax attachments folder of their desktop
+  app) when it is mounted, else their server environment
+  (`/workspace/attachments`). `copyToPersonPlace` is the one copy into them,
+  also used for chat attachments (`stagePendingAttachments`). No place: the
+  bytes are dropped and the line says why; nothing is kept on the server.
+- `attach_file`: a path that is not a file of the server's own folders is
+  read from the person's place (their computer through the desktop app's
+  `read_file`, in chunks, `pullDesktopFile`; their server environment under
+  `/workspace`, in slices) and posted to the chat with the usual checks.
+  The bot can also copy the file with its own tools on the person's
+  computer (for example to a drive they named).
+- A script in the person's server environment (the Perspicax bridge,
+  `forwardTurn`) keeps the bytes: they already arrive in that environment.
+  The header that says so carries a secret of the process
+  (`server/perspicax/sandbox-bridge-forward.ts`).
+- Not covered yet: a connector the engine reaches itself (a claude.ai
+  connector) is not relayed by Sagax, so its blobs still land in the
+  engine's folder.
+
+Tests: `server/routes/connector-files-delivery.test.ts` (the person's case
+through the real routes: the spreadsheet lands on the person's computer, the
+engine sees no blob, `attach_file` posts it, another person's turn reads
+nothing), `server/attachments/connector-files.test.ts`,
+`server/index-leaves/personPlaces.test.ts`.
+
 ## Server environments (organization mode)
 
 On an organization server, bots run shell, file and browser tools in a

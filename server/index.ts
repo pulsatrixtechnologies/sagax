@@ -1796,6 +1796,8 @@ import { createAttachTeamBoat } from "./index-leaves/attachTeamBoat.ts";
 import { createAttributeSandboxEntries } from "./index-leaves/attributeSandboxEntries.ts";
 import { createAutoComputerStateFor } from "./index-leaves/autoComputerStateFor.ts";
 import { createAutoPickForTurn } from "./index-leaves/autoPickForTurn.ts";
+import { createRunHeavyTeam } from "./index-leaves/runHeavyTeam.ts";
+import { createHeavyExpertFence } from "./heavy-team.ts";
 import { createCancelDirectTurnDispatch } from "./index-leaves/cancelDirectTurnDispatch.ts";
 import { createCancelGroupTurnOperations } from "./index-leaves/cancelGroupTurnOperations.ts";
 import { createCardAnswerRefusal } from "./index-leaves/cardAnswerRefusal.ts";
@@ -6959,6 +6961,7 @@ bindLeafHost({
   get routineReadinessDeps() { return routineReadinessDeps; },
   get waitDrafted() { return waitDrafted; },
   get readAndDraft() { return readAndDraft; },
+  get heavyExpertFence() { return heavyExpertFence; },
   get waitsBoot() { return waitsBoot; },
   get botWaits() { return botWaits; },
   get shellLoopGuard() { return shellLoopGuard; },
@@ -8220,6 +8223,7 @@ const autoRefusalsFor = createAutoRefusalsFor(getLeafHost);
 const autoEnginesFor = createAutoEnginesFor(getLeafHost);
 const relayEnginesFor = createRelayEnginesFor(getLeafHost);
 const autoPickForTurn = createAutoPickForTurn(getLeafHost);
+const runHeavyTeam = createRunHeavyTeam(getLeafHost);
 const voicePickForTurn = createVoicePickForTurn(getLeafHost);
 const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
 const orgTurnAccess = createOrgTurnAccess(getLeafHost);
@@ -19441,6 +19445,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
   get reachMeTeams() { return reachMeTeams; },
   get readAndDraft() { return readAndDraft; },
+  get heavyExpertFence() { return heavyExpertFence; },
   get readinessFailureClass() { return readinessFailureClass; },
   get recordedBotOwner() { return recordedBotOwner; },
   get redactSecretsInText() { return redactSecretsInText; },
@@ -21941,6 +21946,15 @@ const readAndDraft = createReadAndDraft({
     set.add(threadId);
     waitDrafted.set(checkKey, set);
   }
+});
+// #5089: a Heavy expert's conversation only reads: each permission request it opens is refused here
+const heavyExpertFence = createHeavyExpertFence({
+  confines: (threadId) => {
+    const bot = store.botByThread(threadId);
+    return bot ? store.isHeavyExpert(bot.id, threadId) : false;
+  },
+  adapter: (instanceId) => registry.get(instanceId)?.adapter,
+  decide: (row) => appendDecision(DATA_DIR, row),
 });
 const waitsBoot = createWaitsBootstrap({
   store,
@@ -37944,6 +37958,7 @@ const startTurnRunner = createStartTurn({
   autoModelRecord,
   autoPayerKey,
   autoPickForTurn,
+  runHeavyTeam,
   autoRecallEnabled,
   autoRecallPrompt,
   autoStartTarget,

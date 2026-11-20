@@ -57,11 +57,15 @@ export function createStartTurn(host: StartTurnHost) {
       await computerHelpersStartTurn(state);
       await computerMountStartTurn(state);
 
+      // #4901: a Heavy turn's team works first; the Leader's prompt carries what it found
+      await host.runHeavyTeam?.(state);
+
       await promptStartTurn(state);
 
       const dispatchedConfig = state.sessionConfig(state.liveBot?.soul ?? state.bot.soul);
       if (state.strictResume && !state.voiceView && !(state.opts?.cardContinuation && state.continuingRoutine) && dispatchedConfig !== state.plannedConfig) state.dispatchContext = state.decideContext(dispatchedConfig);
       await dispatchStartTurn(state);
+      state.heavyTracker?.leaderStarted();
 
       await streamStartTurn(state);
     } catch (cause: any) {

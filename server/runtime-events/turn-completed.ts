@@ -9,6 +9,7 @@ import { firstSignedOut } from "../engines/engine-refusals.ts";
 import { resendOnSignedOutBackup } from "../engines/signed-out-carry-on.ts";
 import { routineReportsByStreak, routineRunRowInEveryChat } from "../../shared/routine-repeat.ts";
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
+import { heavyUsage } from "../heavy-team.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
  * rang "needs you" from its card. #3695, #3990: any other run of a routine
@@ -347,11 +348,14 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     const promptBytes = host.turnPromptBytes.get(event.threadId);
     const promptSize = promptBytes ? promptBytes.stable + promptBytes.volatile : 0;
     const buckets = host.turnContextBuckets.get(event.threadId);
+    // #5089: a Heavy turn's experts spent too: their cost reads in this turn's usage
+    const heavy = heavyUsage.take(event.threadId);
+    const plus = (own: number | undefined, extra: number | undefined) => (heavy ? (own ?? 0) + (extra ?? 0) : own);
     host.store.addTaskUsage(bot.id, event.threadId, {
-      input: tokens?.input,
-      output: tokens?.output,
-      cachedInput: tokens?.cachedInput,
-      costUsd: event.cost ?? null,
+      input: plus(tokens?.input, heavy?.input),
+      output: plus(tokens?.output, heavy?.output),
+      cachedInput: plus(tokens?.cachedInput, heavy?.cachedInput),
+      costUsd: heavy?.costUsd != null ? (event.cost ?? 0) + heavy.costUsd : event.cost ?? null,
       context: {
         tokens: lastContext?.tokens,
         window: lastContext?.window ?? host.modelContextWindow(contextModel),

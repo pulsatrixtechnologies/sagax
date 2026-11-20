@@ -79,6 +79,8 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         const askerEarly = bot ?? (speaker ? host.store.bot(speaker.botId) : undefined);
         // a harness ask is only a card, and no adapter could take a refusal
         if (askerEarly && !event.harnessAsk && host.readAndDraft.answers(event, askerEarly, (message) => pushMessage(message))) break;
+        // #5089: a Heavy expert only reads: the server refuses its request, no card
+        if (askerEarly && !event.harnessAsk && host.heavyExpertFence?.answers(event, askerEarly)) break;
       }
       // A structured ask carries the model's own options and has no
       // allow/deny answer, so it is a question no matter which channel the

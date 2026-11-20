@@ -2,9 +2,9 @@
 // with one provider, several providers, and only local models.
 import { describe, expect, it } from "vitest";
 
-import { HEAVY_MAX_AGENTS, HEAVY_SINGLE_PROVIDER_AGENTS } from "../../shared/model-mode.ts";
+import { HEAVY_MAX_AGENTS } from "../../shared/model-mode.ts";
 import { bareModelId, modelForTier, type AutoEngine, type AutoRequest, type CatalogFacts, type CatalogLookup } from "./model-auto.ts";
-import { bestPerProvider, composeHeavyTeam, localSize, pickModeModel, rankForMode, resolveModes } from "./model-mode.ts";
+import { bestPerProvider, heavySeats, localSize, pickModeModel, rankForMode, resolveModes } from "./model-mode.ts";
 
 const FACTS: Record<string, CatalogFacts> = {
   "claude-opus-5-5": { name: "Claude Opus 5.5", reasoning: true, vision: true, context: 1_000_000, costInput: 4, costOutput: 20, releaseDate: "2026-09-22" },
@@ -114,17 +114,21 @@ describe("modes with one provider", () => {
   });
 
 
-  it("Heavy runs several agents on the strongest model, which also leads", () => {
+  it("Heavy's leader is the strongest model; one account seats its two strongest models (#5089)", () => {
     const pick = pickModeModel(one, "heavy")!;
     expect(pick.selection.model).toBe("claude-fable-5-1");
-    expect(models(pick.team)).toEqual(Array(HEAVY_SINGLE_PROVIDER_AGENTS).fill("claude-fable-5-1"));
+    expect(models(pick.team)[0]).toBe("claude-fable-5-1");
+    expect(new Set(models(pick.team)).size).toBe(pick.team!.length);
+    expect(pick.team!.length).toBe(2);
   });
 
-  it("two sign-ins of one provider are one provider", () => {
+  it("two accounts of one provider each get a seat before a second model does (#5089)", () => {
     const second = claude({ instanceId: "claude-work", displayName: "Claude Code (work)" });
     const pick = pickModeModel(request([claude(), second]), "heavy")!;
-    expect(pick.team).toHaveLength(HEAVY_SINGLE_PROVIDER_AGENTS);
-    expect(new Set((pick.team ?? []).map((agent) => agent.instanceId))).toEqual(new Set(["claude"]));
+    expect(pick.team!.slice(0, 2).map((seat) => seat.instanceId).toSorted()).toEqual(["claude", "claude-work"]);
+    // then the second models, on each account
+    expect(pick.team!.length).toBe(4);
+    expect(new Set(pick.team!.slice(2).map((seat) => seat.model)).has("claude-fable-5-1")).toBe(false);
   });
 
   it("takes the effort the engine offers, and none when it offers none", () => {
@@ -166,7 +170,7 @@ describe("modes with several providers", () => {
   });
 
 
-  it("Heavy's team is the best model of each provider, the strongest leading", () => {
+  it("Heavy's seats are each account's strongest model first, the strongest leading", () => {
     const pick = pickModeModel(all, "heavy")!;
     expect(models(pick.team)).toEqual(["gpt-6-astra", "claude-opus-5-5", "gemini-3-pro", "grok-4.7", "k3"]);
     expect(pick.selection.model).toBe("gpt-6-astra");
@@ -177,8 +181,10 @@ describe("modes with several providers", () => {
     expect(pickModeModel(request(many), "heavy")!.team).toHaveLength(HEAVY_MAX_AGENTS);
   });
 
-  it("two providers make a team of two, never padded", () => {
-    expect(models(pickModeModel(request([claudeOpus(), grok]), "heavy")!.team)).toEqual(["claude-opus-5-5", "grok-4.7"]);
+  it("two accounts seat their strongest models first, then their second ones, never padded", () => {
+    const seats = heavySeats(request([claudeOpus(), grok]));
+    expect(models(seats).slice(0, 2)).toEqual(["claude-opus-5-5", "grok-4.7"]);
+    expect(new Set(seats.map((seat) => `${seat.instanceId}/${seat.model}`)).size).toBe(seats.length);
   });
 
   it("an engine that serves several vendors counts once per vendor", () => {
@@ -216,16 +222,16 @@ describe("modes with only local models", () => {
   });
 
 
-  it("Heavy runs several agents on the strongest local model (one provider)", () => {
+  it("Heavy with only local models seats the strongest one (the experts share it)", () => {
     const pick = pickModeModel(onlyLocal, "heavy")!;
-    expect(models(pick.team)).toEqual(Array(HEAVY_SINGLE_PROVIDER_AGENTS).fill("incoai--Qwen3.5-122B-A10B"));
+    expect(models(pick.team)).toEqual(["incoai--Qwen3.5-122B-A10B"]);
   });
 
   it("a local model never outranks a model the catalogue knows", () => {
     const mixed = request([claudeOpus(), server()]);
     expect(pickModeModel(mixed, "expert")!.selection.model).toBe("claude-opus-5-5");
-    // the server is a provider of its own: the team has both
-    expect(models(pickModeModel(mixed, "heavy")!.team)).toEqual(["claude-opus-5-5", "incoai--Qwen3.5-122B-A10B"]);
+    // ranked models seat first; a local one only when nothing ranked is usable
+    expect(models(pickModeModel(mixed, "heavy")!.team)[0]).toBe("claude-opus-5-5");
   });
 
   it("a mode with nothing usable returns null so Auto reads the request as before", () => {
@@ -247,11 +253,11 @@ describe("resolveModes", () => {
     expect(Object.keys(modes)).toEqual(["auto", "fast", "expert", "heavy"]);
     expect(modes.expert.pick).toMatchObject({ model: "claude-opus-5-5", modelLabel: "Claude Opus 5.5", engineLabel: "Claude Code" });
     expect(modes.expert.effort).toBe("high");
-    expect(modes.heavy.team).toHaveLength(2);
+    expect(modes.heavy.team!.slice(0, 2).map((seat) => seat.model)).toEqual(["claude-opus-5-5", "grok-4.7"]);
     expect(modes.fast.pick?.model).toBe("grok-4-fast");
   });
 
-  it("composeHeavyTeam of nothing is no team", () => {
-    expect(composeHeavyTeam([])).toEqual([]);
+  it("heavySeats of nothing is no seat", () => {
+    expect(heavySeats(request([], { instanceId: "none", model: "none", auto: true }))).toEqual([]);
   });
 });

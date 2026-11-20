@@ -17,7 +17,7 @@
 import type { EffortLevel, ModelSelection } from "../../shared/model-selection.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import {
-  FORCED_MODEL_MODES, HEAVY_MAX_AGENTS, HEAVY_SINGLE_PROVIDER_AGENTS,
+  FORCED_MODEL_MODES, HEAVY_MAX_AGENTS,
   type ForcedModelMode, type ModeModel, type ModeResolution, type ModelMode,
 } from "../../shared/model-mode.ts";
 import { providerOfModel } from "../../shared/model-provider.ts";
@@ -175,15 +175,67 @@ const toModel = (contender: Contender): ModeModel => ({
   instanceId: contender.engine.instanceId, model: contender.id, engineLabel: contender.engine.displayName, modelLabel: contender.label,
 });
 
-/** The agents of a Team of Experts (the owner's rules): with several
- * providers the team is the best model of each, strongest first, at most
- * HEAVY_MAX_AGENTS; with one provider it is its strongest model, several
- * agents on it, as Grok does with its own. `ranked` is rankForMode(heavy). */
-export function composeHeavyTeam(ranked: readonly Contender[]): ModeModel[] {
-  const [first] = ranked;
-  if (!first) return [];
-  if (ranked.length >= 2) return ranked.slice(0, HEAVY_MAX_AGENTS).map(toModel);
-  return Array.from({ length: HEAVY_SINGLE_PROVIDER_AGENTS }, () => toModel(first));
+/** Heavy's seats (#5089, owner 2026-11-19: "when the person has several
+ * subscriptions or accounts, the experts take different ones, and different
+ * models of the same provider"): every account (an engine instance) the
+ * person can use gives its strongest model, then its second strongest; the
+ * accounts' first seats come first, strongest first, then the second
+ * models. At most HEAVY_MAX_AGENTS seats. Only this person's engines are
+ * here (autoEnginesFor), and an account at its usage limit is already out
+ * of the request (limit failover, #5031). The leader (the turn itself, on
+ * Expert's pick) chooses how many experts sit (server/heavy-team.ts
+ * assignSeats); with one seat they share it. Nothing ranked: the best local
+ * or server row of each provider. */
+export function heavySeats(request: AutoRequest): ModeModel[] {
+  const base = request.base.instanceId;
+  const skip = request.skip ?? [];
+  const firsts: Contender[] = [];
+  const seconds: Contender[] = [];
+  for (const engine of orderEngines(request.engines, base)) {
+    for (const slice of sliceByProvider(engine, engine.models.options, false)) {
+      const first = modelForTier(slice.engine, "top", request.catalog, skip);
+      if (!first) continue;
+      firsts.push({ engine, id: first.id, label: first.label, providerId: slice.providerId, candidate: first });
+      const second = modelForTier(slice.engine, "top", request.catalog, [...skip, { instanceId: engine.instanceId, model: first.id }]);
+      if (second && second.id !== first.id) seconds.push({ engine, id: second.id, label: second.label, providerId: slice.providerId, candidate: second });
+    }
+  }
+  const order = strongerFirst(base);
+  const ranked = [...firsts.toSorted(order), ...seconds.toSorted(order)];
+  const seats = ranked.length ? ranked : rankForMode(request, "heavy");
+  const seen = new Set<string>();
+  return seats.filter((seat) => {
+    const key = `${seat.engine.instanceId}\u0000${seat.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, HEAVY_MAX_AGENTS).map(toModel);
+}
+
+// ── Auto takes Heavy on a big or risky task (D-20261119-086) ─────────────
+
+/** A request that could cost something hard to undo: the person's data,
+ * money, security, a production system. English and French. */
+const RISKY = new RegExp([
+  "delete", "drop (the )?(table|database)", "wipe", "purge", "rm -rf", "irreversible", "migrat\\w*", "production", "\\bprod\\b", "deploy\\w*",
+  "release", "rollback", "security", "vulnerab\\w*", "credentials?", "passwords?", "secrets?", "firewall", "payments?", "invoices?", "billing",
+  "contracts?", "legal", "compliance", "database schema", "architecture",
+  "supprim\\w*", "efface[rz]?", "irréversible", "migr\\w*", "déplo\\w*", "sécurité", "mots? de passe", "pare-feu", "paiements?", "factur\\w*",
+  "contrats?", "juridique", "conformité", "base de données",
+].map((word) => `(?:^|[^\\p{L}])${word}(?![\\p{L}])`).join("|"), "iu");
+
+/** How long or how many parts make a big task. */
+const BIG_CHARS = 1_500;
+const BIG_ITEMS = 6;
+
+/** D-20261119-086: whether plain Auto takes Heavy for this request, and why
+ * (it says so in one line in the conversation). Null for an ordinary one. */
+export function heavyWorthy(text: string): "big" | "risky" | null {
+  const body = text.trim();
+  if (!body) return null;
+  if (RISKY.test(body)) return "risky";
+  const items = body.split("\n").filter((line) => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(line)).length;
+  return body.length >= BIG_CHARS || items >= BIG_ITEMS ? "big" : null;
 }
 
 // ── the pick ─────────────────────────────────────────────────────────────
@@ -224,7 +276,7 @@ export function pickModeModel(request: AutoRequest, mode: ForcedModelMode): Auto
     ...(first.engine.via ? { via: first.engine.via } : {}),
     ...(first.engine.instanceId !== base.instanceId ? { fromEngineLabel: own?.displayName ?? base.instanceId } : {}),
     chain,
-    ...(mode === "heavy" ? { team: composeHeavyTeam(ranked) } : {}),
+    ...(mode === "heavy" ? { team: heavySeats(request) } : {}),
   };
 }
 

@@ -66,6 +66,8 @@ export type StartTurnHost = {
   autoModelRecord: any,
   autoPayerKey: any,
   autoPickForTurn: any,
+  /** #4901: the Team of Experts of a Heavy turn (server/index-leaves/runHeavyTeam.ts). */
+  runHeavyTeam: any,
   autoRecallEnabled: any,
   autoRecallPrompt: any,
   autoStartTarget: any,

@@ -196,9 +196,11 @@ export interface AutoPick {
   account?: { instanceId: string; pick: AccountPick; moved: boolean };
   /** #4900: the composer mode that made the pick (reason "mode"). */
   mode?: ForcedModelMode;
-  /** #4900: Heavy only, the agents that work in parallel before this model
-   * (the Leader) answers (server/models/model-mode.ts composeHeavyTeam). */
+  /** #4900, #5089: Heavy only, the seats of its experts, before this model
+   * (the leader) acts (server/models/model-mode.ts heavySeats). */
   team?: ModeModel[];
+  /** D-20261119-086: plain Auto took Heavy for this request, and why. */
+  autoHeavy?: "big" | "risky";
 }
 
 export interface AutoRequest {

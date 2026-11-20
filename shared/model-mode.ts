@@ -62,12 +62,10 @@ export interface ModeResolution {
   pick: ModeModel | null;
   /** The reasoning level the mode asks for, when the engine offers one. */
   effort?: EffortLevel;
-  /** Heavy: the agents that work in parallel, before the Leader answers. */
+  /** Heavy: the seats its experts take (an account and a model each,
+   * different accounts first), before the leader acts. */
   team?: ModeModel[];
 }
 
-/** Heavy with one provider: this many agents on its strongest model. */
-export const HEAVY_SINGLE_PROVIDER_AGENTS = 3;
-/** Heavy with several providers: at most this many agents, the best model of
- * each provider (the strongest providers when the person has more). */
+/** Heavy: at most this many seats, and experts (D-20261119-084: 2 to 5). */
 export const HEAVY_MAX_AGENTS = 5;

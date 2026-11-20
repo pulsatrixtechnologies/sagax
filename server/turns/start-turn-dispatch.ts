@@ -86,6 +86,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       const textIds = new Set(state.activeMessages.filter((m: any) => m.kind === "text" && !m.roomRequest).map((m: any) => m.id));
       noteBotRead(state.bot.id, state.threadId, carriedIds.some((id) => textIds.has(id)) ? carriedIds : state.contextOrder.filter((id: any) => textIds.has(id)));
     }
+    // #5089: a Heavy expert's hidden conversation only reads (store.confineHeavyExpert)
+    const heavyExpert = store.isHeavyExpert?.(state.bot.id, state.threadId) === true;
     // Slice 4: this turn's credentials (an owner key is read now).
     // (solo mode takes no extra await: its dispatch timing is unchanged; a
     // solo pi turn carries the person's own model servers, #2983)
@@ -187,8 +189,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(engineCommand ? { harnessCommand: { name: engineCommand.command.name, args: engineCommand.args, ...(engineCommand.command.path ? { path: engineCommand.command.path } : {}) } } : {}),
       ...(state.recalled && !state.warmOnly && !engineCommand ? { recalled: state.recalled } : {}),
       images: modelImages,
-      approvalMode: engineTurnLevel(state.bot, state.threadId, auditFullAccessTurn(state.bot, state.threadId, approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId))),
-      approvalModeNow: () => liveApprovalMode(state.bot, state.threadId, state.commsDepth > 0),
+      // #5089: a Heavy expert asks for everything, and the server refuses it (server/heavy-team.ts)
+      approvalMode: heavyExpert ? "ask" : engineTurnLevel(state.bot, state.threadId, auditFullAccessTurn(state.bot, state.threadId, approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId))),
+      approvalModeNow: () => (heavyExpert ? "ask" : liveApprovalMode(state.bot, state.threadId, state.commsDepth > 0)),
       toolScope: state.toolScope,
       ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
       model: state.model,
@@ -217,7 +220,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       // and so does an interrupted call turn's marker
       mentionTurn: state.tagged.length > 0 || Boolean(state.userMessage.voiceCall?.interrupted),
       integrations: state.integrations,
-      ...(withholdHostToolsFor(state.instance) ? { withholdHostTools: true } : {}),
+      // #5089: a Heavy expert gets no shell, file or fetch tool of its own, as on an organization server
+      ...(withholdHostToolsFor(state.instance) || (heavyExpert && state.instance.adapter?.capabilities?.withholdsHostTools === true) ? { withholdHostTools: true } : {}),
       ...turnCommandEnvironment(state.instance, state.bot.id, state.threadId),
       toolErrorCorrectiveRounds: toolErrorCorrectiveRoundsFor(cfg, process.env, { botEnabled: state.bot.loopGuard }),
       // Auto may leave their computer mid-turn: the engine's own traffic

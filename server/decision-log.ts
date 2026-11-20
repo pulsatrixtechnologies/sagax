@@ -79,6 +79,8 @@ export type DecisionSource =
   | "question"
   | "auto-fallback"
   | "routine"
+  /** #5089: a Heavy expert's request, refused by the server (experts only read) */
+  | "heavy"
   | "skill"
   | "profile"
   /** a bot proposed an approval rule from chat (propose_rule); the card waits */

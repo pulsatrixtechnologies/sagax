@@ -85,6 +85,9 @@ export type TurnState = {
   /** #3431: the Proactive alerts section of an owner's one-to-one turn. */
   proactiveAskPrompt: any;
   autoContinuing: boolean;
+  /** #4901: a Heavy turn's team ran: the Leader's notes, and the row's tracker. */
+  heavyNotes: string | undefined;
+  heavyTracker: any;
   /** The model a routine run, webhook run or proactive wake a usage limit refused goes on with
    * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts); its wake skips the fast pick. */
   limitTakeover: any;
@@ -267,6 +270,8 @@ export function createTurnState(init: {
     warmOnly: undefined,
     proactiveAskPrompt: undefined,
     autoContinuing: false,
+    heavyNotes: undefined,
+    heavyTracker: undefined,
     limitTakeover: undefined,
     fastDetour: false,
 

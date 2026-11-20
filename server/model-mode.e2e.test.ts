@@ -30,7 +30,8 @@ it("stores a mode, names what each mode runs, and runs the turn on it", () => fi
   expect(Object.keys(preview.modes)).toEqual(["auto", "fast", "expert", "heavy"]);
   expect(preview.modes.fast).toMatchObject({ pick: { model: "claude-haiku-5-5" } });
   expect(preview.modes.expert.pick.model).toBe("claude-fable-5-2");
-  expect(preview.modes.heavy.team).toHaveLength(3);
+  // #5089: one account here: Heavy seats its two strongest models
+  expect(preview.modes.heavy.team.map((seat: { model: string }) => seat.model)).toEqual(["claude-fable-5-2", "claude-fable-5-1"]);
   expect(preview.pick).toMatchObject({ mode: "fast", reason: "mode", tier: "fast", model: "claude-haiku-5-5" });
 
   await f.cli("send", "--bot", f.bot.id, "--task", f.bot.activeTaskId, "--text", "Say hello.");

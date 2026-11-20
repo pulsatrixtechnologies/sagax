@@ -38,6 +38,8 @@ import { ChatViewHeader } from "./ChatViewHeader";
 import { ChatViewPagePanel } from "./ChatViewPagePanel";
 import { ChatViewSheets } from "./ChatViewSheets";
 import { ChatEdgeFade } from "@/components/ChatEdgeFade";
+import { ThoughtsPanelHost } from "../ThoughtsPanel";
+import { HeavyLeaderContext } from "../HeavyTeamRow";
 import { useState } from "react";
 import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 
@@ -212,7 +214,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <div ref={topSentinelRef} className="h-2 w-full pointer-events-none" aria-hidden="true" />
           ) : null}
           {windowedMessages.length === 0 && !bot.busy && (!streamHasEarlier || !streamDrawn) && <EmptyChat bot={bot} />}
-          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}>
+          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={<BotAvatar bot={bot} size={34} trackPointer={false} />}>
             <ConversationGalleryProvider>
             <MessagesList
               confidential={confidential}
@@ -236,7 +238,7 @@ export function ChatViewShell(m: Record<string, any>) {
               seen={seenRow}
             />
             </ConversationGalleryProvider>
-          </ChatBusyContext></LiveTurnsContext></LiveToolsContext></ChatRowsContext.Provider>
+          </HeavyLeaderContext></ChatBusyContext></LiveTurnsContext></LiveToolsContext></ChatRowsContext.Provider>
           {laterCount > 0 && (
             <div className="flex justify-center">
               <button
@@ -262,6 +264,8 @@ export function ChatViewShell(m: Record<string, any>) {
       </div>
 
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
+      {/* #4901: the Thoughts panel of a Heavy run, docked in the right-hand slot */}
+      <ThoughtsPanelHost messages={messages} busy={Boolean(busy)} />
 
       {/* #2149: the dev context pods (</>) live only in a coding window
           (CodingChat), never in the plain chat. */}

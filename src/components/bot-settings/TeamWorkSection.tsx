@@ -379,17 +379,21 @@ export function TeamWorkSection({ work, now, streaming, bots, orchestrator, open
   );
   return (
     <section data-bot-settings-section="coding" data-team-work="" className="flex flex-col gap-2">
-      <div className="flex min-w-0 items-center justify-between gap-3">
+      {/* #5112: the counter is never cut. The title keeps its width, the
+          counter and Clear finished take the rest of the row, and when both
+          do not fit on it (French at the panel's default width) Clear
+          finished goes under the counter, on the right. */}
+      <div data-team-head="" className="flex min-w-0 items-start justify-between gap-3">
         <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={onOpenHistory} />
         {(count || settled > 0) && (
-          <span className="flex min-w-0 items-center gap-3">
-            {count && <span data-team-count className={cn(PANEL_LABEL, "min-w-0 truncate")}>{count}</span>}
+          <span data-team-head-meta="" className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-0.5">
+            {count && <span data-team-count className={cn(PANEL_LABEL, "min-w-0 text-right")}>{count}</span>}
             {settled > 0 && onClear && (
               <button
                 type="button"
                 data-team-clear-finished={String(settled)}
                 onClick={() => onClear({ finished: true })}
-                className={cn(PANEL_LABEL, "shrink-0 rounded-md hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
+                className={cn(PANEL_LABEL, "shrink-0 whitespace-nowrap rounded-md hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
               >
                 {t("teamWork.clear.finished")}
               </button>

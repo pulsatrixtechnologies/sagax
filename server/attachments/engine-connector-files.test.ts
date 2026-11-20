@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { zipArchive } from "../testing/archive-fixtures.mjs";
 import type { PersonPlace } from "./connector-files.ts";
-import { engineBlobPaths, placeEngineFiles, projectBlobFolder, sessionBlobFolder } from "./engine-connector-files.ts";
+import { engineBlobPaths, placeEngineFiles, projectBlobFolder, readEngineFile, sessionBlobFolder } from "./engine-connector-files.ts";
 
 const ROOT = mkdtempSync(join(tmpdir(), "sagax-engine-files-"));
 afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
@@ -165,6 +165,42 @@ describe("placeEngineFiles", () => {
     expect(await placeEngineFiles(output, folder, [place])).toEqual({ output, moved: 0 });
     expect(place.files.size).toBe(0);
     expect(readFileSync(credentials, "utf8")).toBe("{\"token\":\"x\"}");
+  });
+
+  it("moves a resource the engine read (ReadMcpResource) and names the person's path in each field", async () => {
+    const { results, folder, blob } = engine();
+    const path = blob("mcp-resource-1763600000006-0-gh44ij.xlsx");
+    const place = computer();
+    const output = { contents: [{ uri: "docs://files/43", mimeType: XLSX, blobSavedTo: path, text: `[Resource from claude_ai_Docs_Hub at docs://files/43] Binary content (${XLSX}, 1.2KB) saved to ${path}` }] };
+    const { output: placed, moved } = await placeEngineFiles(output, folder, [place]);
+    expect(moved).toBe(1);
+    expect(readdirSync(results)).toEqual([]);
+    const onComputer = [...place.files.keys()][0]!;
+    const entry = (placed as typeof output).contents[0]!;
+    expect(entry.blobSavedTo).toBe(onComputer);
+    expect(entry.text).toContain(onComputer);
+    expect(entry.text).toContain("attach_file");
+    expect(entry.uri).toBe("docs://files/43");
+  });
+
+  it("answers in time when the copy to the person's place is slow, and keeps nothing on the server", async () => {
+    const { results, folder, blob } = engine();
+    const path = blob("mcp-claude_ai_Docs_Hub-blob-1763600000007-kk55ll.xlsx");
+    let release: () => void = () => {};
+    const slow: PersonPlace = { kind: "computer", save: () => new Promise((resolve) => { release = () => resolve("C:\\late.xlsx"); }) };
+    const { output } = await placeEngineFiles(said(path), folder, [slow], undefined, 50);
+    release();
+    expect(readdirSync(results)).toEqual([]);
+    expect((output as Array<{ text: string }>)[0]!.text).toMatch(/was not kept: the copy to the person's place did not finish in time/);
+  });
+
+  it("reads through no link, even one swapped in after the check", () => {
+    const { config, results } = engine();
+    const credentials = join(config, ".credentials.json");
+    writeFileSync(credentials, "{\"token\":\"x\"}");
+    const swapped = join(results, "mcp-claude_ai_Docs_Hub-blob-1763600000008-mm66nn.json");
+    symlinkSync(credentials, swapped);
+    expect(() => readEngineFile(swapped)).toThrow();
   });
 
   it("removes a blob attach_file would refuse unread, and says it was not kept", async () => {

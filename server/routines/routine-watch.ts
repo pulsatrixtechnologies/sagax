@@ -51,6 +51,8 @@ import type { RoutinePrecheckVerdict } from "./routine-precheck.ts";
 import { resolveWatchSource, UnmappedWatchBuiltin, watchRepairHint } from "./watch-tool-resolution.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
 import { defang } from "../../shared/defang.ts";
+import { parseToolId } from "../../shared/approval-describe.ts";
+import { isUpstreamHandle, UPSTREAM_QUERY_TOOL_NAME } from "../mcp/mcp-shape.ts";
 
 export { canonicalJson };
 
@@ -302,13 +304,19 @@ function sha(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 32);
 }
 
-/** `$.a.b[0]`, `a.b.0`, `items.length`, `["a key"]`. Undefined when absent. */
-export function readJsonPath(value: unknown, path: string): unknown {
+/** The segments of a `$.a.b[0]` / `a.b.0` / `["a key"]` path. */
+function jsonPathSegments(path: string): string[] {
   const text = path.trim().replace(/^\$\.?/, "");
-  if (!text) return value;
   const segments: string[] = [];
   const pattern = /\[(\d+)\]|\["((?:[^"\\]|\\.)*)"\]|([^.[\]]+)/g;
   for (const match of text.matchAll(pattern)) segments.push(match[1] ?? (match[2] !== undefined ? JSON.parse(`"${match[2]}"`) as string : match[3]!));
+  return segments;
+}
+
+/** `$.a.b[0]`, `a.b.0`, `items.length`, `["a key"]`. Undefined when absent. */
+export function readJsonPath(value: unknown, path: string): unknown {
+  const segments = jsonPathSegments(path);
+  if (!segments.length) return value;
   let current: unknown = value;
   for (const segment of segments) {
     if (current === null || current === undefined) return undefined;
@@ -325,15 +333,100 @@ export function readJsonPath(value: unknown, path: string): unknown {
   return current;
 }
 
-function parsedJson(probe: Extract<WatchProbe, { kind: "output" }>): unknown {
-  if (probe.value !== undefined && typeof probe.value !== "string") return probe.value;
-  const text = (typeof probe.value === "string" ? probe.value : probe.text).trim();
+function jsonOfText(raw: string): unknown {
+  const text = raw.trim();
   if (!text || !/^[[{"\d-]|^(true|false|null)$/.test(text)) return undefined;
   try {
     return JSON.parse(text) as unknown;
   } catch {
     return undefined;
   }
+}
+
+function parsedJson(probe: Extract<WatchProbe, { kind: "output" }>): unknown {
+  if (probe.value !== undefined && typeof probe.value !== "string") return probe.value;
+  return jsonOfText(typeof probe.value === "string" ? probe.value : probe.text);
+}
+
+/** A path of this file's syntax as a JMESPath expression (quoted names,
+ * `[n]` indexes); "" for the root. */
+function jmesPathOf(path: string): string {
+  let out = "";
+  for (const segment of jsonPathSegments(path)) {
+    out += /^\d+$/.test(segment) ? `[${segment}]` : `${out ? "." : ""}${JSON.stringify(segment)}`;
+  }
+  return out;
+}
+
+/** A copy of `value` with `replacement` at `path` (objects along the way). */
+function withJsonPath(value: unknown, path: string, replacement: unknown): unknown {
+  const segments = jsonPathSegments(path);
+  const put = (current: unknown, index: number): unknown => {
+    if (index === segments.length) return replacement;
+    const segment = segments[index]!;
+    if (Array.isArray(current) && /^\d+$/.test(segment)) {
+      const copy = [...current];
+      copy[Number(segment)] = put(current[Number(segment)], index + 1);
+      return copy;
+    }
+    const base = current && typeof current === "object" && !Array.isArray(current) ? current as Record<string, unknown> : {};
+    return { ...base, [segment]: put(Object.hasOwn(base, segment) ? base[segment] : undefined, index + 1) };
+  };
+  return put(value, 0);
+}
+
+/** What to change when a tracked list does not fit a watch. */
+const HANDLE_NEXT_STEP = "Track only the key and the fields to compare (track.fields), or filter the query so its answer stays under 16 KiB.";
+
+/** #4802: past 16 KiB a Perspicax answer comes back as a result handle
+ * (`res_…`) with a summary and an empty `items`, the real count beside it.
+ * That empty list is not the answer: a tracked list is read from the handle
+ * through the same server's api_result_query (the key and the tracked fields
+ * only), and a list that cannot be read that way fails the check and says
+ * why and what to change, never a silent "0 items". */
+async function readHandleList(
+  deps: Pick<RoutineWatchDeps, "callTool">, routine: WatchRoutine, watch: BuiltWatchPrecheck, tool: string, value: unknown, signal: AbortSignal,
+): Promise<{ value: unknown; truncated: boolean } | null> {
+  const track = watch.track;
+  const json = typeof value === "string" ? jsonOfText(value) : value;
+  if (!track || !json || typeof json !== "object" || Array.isArray(json)) return null;
+  const handle = (json as Record<string, unknown>).handle;
+  if (!isUpstreamHandle(handle)) return null;
+  const listed = track.items ? readJsonPath(json, track.items) : json;
+  if (Array.isArray(listed) && listed.length > 0) return null;
+  const fail = (why: string) => new RoutineWatchError(
+    `The tool answered with a result handle (${handle}) instead of the list${track.items ? ` at ${clip(track.items, 80)}` : ""}, and ${why}. ${HANDLE_NEXT_STEP}`);
+  const list = jmesPathOf(track.items ?? "");
+  const keyField = track.key ?? "id";
+  const fields = track.fields ?? [];
+  const projection = fields.length
+    ? `.{${[`"k": ${jmesPathOf(keyField) || "@"}`, ...fields.map((field, index) => `"f${index}": ${jmesPathOf(field) || "@"}`)].join(", ")}}`
+    : "";
+  const queryTool = `${tool.slice(0, tool.length - parseToolId(tool).name.length)}${UPSTREAM_QUERY_TOOL_NAME}`;
+  const answer = await deps.callTool(routine, queryTool, { handle, expression: `${list}[*]${projection}`, limit: L.maxItems }, signal);
+  signal.throwIfAborted();
+  if ("error" in answer) throw fail(`reading the handle failed: ${clip(answer.error, 200)}`);
+  const read = typeof answer.value === "string" ? jsonOfText(answer.value) : answer.value;
+  if (answer.isError) throw fail(`reading the handle failed: ${clip(typeof answer.value === "string" ? answer.value : JSON.stringify(answer.value) ?? "", 200)}`);
+  const result = read && typeof read === "object" && !Array.isArray(read) ? (read as Record<string, unknown>).result : undefined;
+  if (!Array.isArray(result)) {
+    throw fail(read && typeof read === "object" && isUpstreamHandle((read as Record<string, unknown>).handle)
+      ? "the tracked list is still above 16 KiB" : "reading the handle gave no list");
+  }
+  const items = fields.length
+    ? result.map((row) => {
+      const fieldsOf = row && typeof row === "object" ? row as Record<string, unknown> : {};
+      // a field the item lacks reads as absent, as it does on an inline answer
+      let item: unknown = {};
+      if (fieldsOf.k !== null && fieldsOf.k !== undefined) item = withJsonPath(item, keyField, fieldsOf.k);
+      fields.forEach((field, index) => {
+        const got = fieldsOf[`f${index}`];
+        if (got !== null && got !== undefined) item = withJsonPath(item, field, got);
+      });
+      return item;
+    })
+    : result;
+  return { value: track.items ? withJsonPath(json, track.items, items) : items, truncated: (read as Record<string, unknown>).truncated === true };
 }
 
 function clip(text: string, max: number): string {
@@ -759,10 +852,12 @@ async function readResolvedWatch(deps: RoutineWatchDeps, routine: WatchRoutine, 
     const answer = await deps.callTool(routine, source.tool, source.args ?? {}, signal);
     if ("error" in answer) throw new RoutineWatchError(answer.error);
     if (answer.isError) throw new RoutineWatchError(`The tool answered with an error: ${clip(typeof answer.value === "string" ? answer.value : JSON.stringify(answer.value) ?? "", 200)}`);
-    let text = typeof answer.value === "string" ? answer.value : JSON.stringify(answer.value) ?? "";
+    const fromHandle = await readHandleList(deps, routine, watch, source.tool, answer.value, signal);
+    const value = fromHandle ? fromHandle.value : answer.value;
+    let text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
     const truncated = Buffer.byteLength(text) > L.maxOutputBytes;
     if (truncated) text = Buffer.from(text).subarray(0, L.maxOutputBytes).toString("utf8");
-    return { probe: { kind: "output", text, value: truncated ? undefined : answer.value, truncated } };
+    return { probe: { kind: "output", text, value: truncated ? undefined : value, truncated: truncated || fromHandle?.truncated === true } };
   }
   const place = await deps.place(routine);
   if (place.kind === "refuse") throw new RoutineWatchError(place.reason);

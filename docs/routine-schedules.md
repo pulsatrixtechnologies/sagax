@@ -214,6 +214,12 @@ When the run starts:
   each item named by `key` (default `id`) and compared on `fields` only.
   Without it a text output compares line by line; files compare entry by
   entry.
+- A tracked list a connector answered as a result handle (Perspicax past
+  16 KiB: `handle: "res_…"`, `items: []`, the real `count` beside it) is
+  read from the handle through that server's `api_result_query`, the key
+  and `fields` only (#4802). It is never read as an empty list: a list
+  still too big, or a handle that cannot be read, fails the check with the
+  reason and what to change (fewer `fields`, a narrower query).
 - `firstRun`: `baseline` (default) records the first reading without
   running; `wake` runs once with the whole result.
 

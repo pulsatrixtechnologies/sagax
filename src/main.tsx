@@ -2,8 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import {
-  BROWSER_SIGN_IN_FAILED, previewBrowserSignIn, resolveSessionState, SERVICE_TRUST_REASON, takeBrowserSignInFromLocation, takePairingFromLocation, takeInvitedEmailFromLocation,
+  BROWSER_SIGN_IN_FAILED, isConnected, pairPromptIsStale, previewBrowserSignIn, resolveSessionState, SERVICE_TRUST_REASON, takeBrowserSignInFromLocation, takePairingFromLocation, takeInvitedEmailFromLocation,
+  type SessionState,
 } from "./lib/session";
+import { servedPage } from "./lib/desktop";
 import { applyBrand, bootstrapBrand } from "./lib/brand";
 import { allowUiSnapshot, clearUiSnapshot, readUiSnapshot, setLaunchSnapshot } from "./lib/ui-snapshot";
 import { holdWrites, releaseWrites, writesHeld } from "./lib/write-gate";
@@ -66,10 +68,21 @@ installAccessibility();
 // Hardware acceleration and spell checking, handed to the desktop shell.
 installDesktopShellPreferences();
 
+/** Why the pairing screen stays on the desktop app's own page: the server's own
+ * reason (a refusal, or a server that lends its port to this machine as a service
+ * only). Nothing to say when this machine is home. */
+function pairScreenReason(state: SessionState | null): string | undefined {
+  if (!state || isConnected(state)) return undefined;
+  if (state.kind === "loopback") return SERVICE_TRUST_REASON;
+  if (state.kind === "session") return undefined;
+  return state.error;
+}
+
 /** A pairing link lands on /pair. A remote browser without a session lands
  * there too, because every API call would otherwise fail with "pair this
  * device"; on the owner's own machine the server trusts loopback and this
- * check is a single fast request. */
+ * check is a single fast request. On that machine /pair is only the stale
+ * address the window restored (2026-11-20), so the server is asked first. */
 async function chooseRoot(): Promise<React.ReactNode> {
   if (detachedAssistant) {
     const { DetachedAssistant } = await import("./components/retro-assistant/DetachedAssistant");
@@ -78,6 +91,14 @@ async function chooseRoot(): Promise<React.ReactNode> {
   if (floatingBot) {
     const { FloatingBotWindow } = await import("./components/floating-bots/FloatingBotWindow");
     return <FloatingBotWindow />;
+  }
+  // 2026-11-20: the desktop window restores the address it was on, so one visit to
+  // /pair left the Personal app on the pairing screen for good. The server still
+  // decides who is home; a remote browser keeps being sent to the pairing screen.
+  let resolved: SessionState | null = null;
+  if (!servedPage() && location.pathname === "/pair" && !/[#&](?:code|signin)=/.test(location.hash)) {
+    resolved = await resolveSessionState();
+    if (pairPromptIsStale({ served: false, pathname: location.pathname, hash: location.hash }, resolved)) history.replaceState(null, "", "/");
   }
   // An invite link works without a session: redeeming it is the sign-in.
   if (location.pathname === "/join") return <JoinPage initialToken={takeInviteTokenFromLocation()} />;
@@ -89,11 +110,13 @@ async function chooseRoot(): Promise<React.ReactNode> {
       return preview ? <BrowserSignInPage credential={signIn} owner={preview.owner} /> : <PairPage initialCode={null} reason={BROWSER_SIGN_IN_FAILED} />;
     }
     const pairing = takePairingFromLocation();
-    return <PairPage initialCode={pairing.code} autoSubmit={pairing.auto} initialEmail={takeInvitedEmailFromLocation()} />;
+    // This machine's own page, and the server says it is not home: the pairing
+    // screen stays, with the server's reason (refused, or service trust only).
+    return <PairPage initialCode={pairing.code} autoSubmit={pairing.auto} initialEmail={takeInvitedEmailFromLocation()} reason={pairScreenReason(resolved)} />;
   }
   // 2026-10-20: a deploy, a restart or a provider that is slow to confirm a
   // sign-in is retried in silence; the sign-in screen only for a real end.
-  const session = await resolveSessionState();
+  const session = resolved ?? await resolveSessionState();
   launchSessionUnreachable = session.kind === "unreachable";
   if (session.kind === "session") {
     try {
@@ -201,7 +224,9 @@ async function launch(): Promise<void> {
     return;
   }
   const [, chosen] = await Promise.all([floatingBot ? undefined : bootstrapBrand(), chooseRoot()]);
-  allowUiSnapshot(workspacePage && appForOwnerHere);
+  // A restored /pair address went back to "/" in chooseRoot (2026-11-20): this
+  // launch is the owner's workspace all the same, so it may store the next one.
+  allowUiSnapshot((workspacePage || location.pathname === "/") && appForOwnerHere);
   createRoot(container).render(<StrictMode><PageBoundary>{chosen}</PageBoundary></StrictMode>);
 }
 void launch();

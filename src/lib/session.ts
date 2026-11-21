@@ -153,6 +153,17 @@ export function isOwnerOrAdmin(state: SessionState | null): boolean {
   return state.kind === "loopback" ? state.trust !== "service" : state.kind === "session" && state.scopes.includes("admin");
 }
 
+/** 2026-11-20: the desktop window restores the address it was on, so one visit to
+ * `/pair` left the Personal app on the pairing screen for good. The prompt is stale
+ * on the app's own page once the server says this machine is home. */
+export function pairPromptIsStale(page: { served: boolean; pathname: string; hash: string }, state: SessionState): boolean {
+  // A browser (or the desktop app looking at a server) keeps the pairing screen.
+  if (page.served || page.pathname !== "/pair") return false;
+  // A pairing or sign-in link in the address bar is still a request to pair.
+  if (/[#&](?:code|signin)=/.test(page.hash)) return false;
+  return isConnected(state);
+}
+
 /** Pull `#code=…` off the URL and out of history, the way a pairing link is meant to be consumed. */
 export function takePairingCodeFromLocation(): string | null {
   return takePairingFromLocation().code;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, resolveSessionState, signInScreenDue, SERVICE_TRUST_REASON, signInWithBrowserGrant,
+  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairPromptIsStale, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, resolveSessionState, signInScreenDue, SERVICE_TRUST_REASON, signInWithBrowserGrant,
   takeBrowserSignInFromLocation, takeInvitedEmailFromLocation, takePairingCodeFromLocation, takeSignInErrorFromLocation, type EnvironmentDescriptor,
 } from "./session";
 import { UNKNOWN_SESSION_RETRIES } from "../../shared/session-refusal";
@@ -13,6 +13,39 @@ describe("what the pair page says about why it was shown", () => {
     expect(reasonWorthShowing("403")).toBeNull();
     expect(reasonWorthShowing(undefined)).toBeNull();
     expect(reasonWorthShowing("unauthorized: this session has expired or was revoked; pair this device again")).toMatch(/expired or was revoked/);
+  });
+});
+
+describe("the pairing screen the desktop window restored (2026-11-20)", () => {
+  const localPair = { served: false, pathname: "/pair", hash: "" };
+
+  it("is stale on the app's own page when the server trusts this machine as its owner", () => {
+    expect(pairPromptIsStale(localPair, { kind: "loopback" })).toBe(true);
+    expect(pairPromptIsStale(localPair, { kind: "session", id: "s1", label: "Safari", scopes: [], expiresAt: 1 })).toBe(true);
+  });
+
+  it("stays when the server refuses this machine (a definitive sign-in refusal)", () => {
+    expect(pairPromptIsStale(localPair, { kind: "unauthenticated", error: "unauthorized: pair this device to use the server remotely", code: "sign_in_required" })).toBe(false);
+    expect(pairPromptIsStale(localPair, { kind: "unreachable", error: "fetch failed" })).toBe(false);
+  });
+
+  it("stays for a remote browser on the same address", () => {
+    expect(pairPromptIsStale({ served: true, pathname: "/pair", hash: "" }, { kind: "session", id: "s1", label: "Safari", scopes: [], expiresAt: 1 })).toBe(false);
+    expect(pairPromptIsStale({ served: true, pathname: "/pair", hash: "" }, { kind: "loopback" })).toBe(false);
+  });
+
+  it("stays while the address still carries a pairing or sign-in credential", () => {
+    expect(pairPromptIsStale({ served: false, pathname: "/pair", hash: "#code=ABCD12" }, { kind: "loopback" })).toBe(false);
+    expect(pairPromptIsStale({ served: false, pathname: "/pair", hash: "#signin=sgx_pair_" + "a".repeat(43) + "&auto=1" }, { kind: "loopback" })).toBe(false);
+  });
+
+  it("stays when a service-trust server only lends its port to this machine", () => {
+    expect(pairPromptIsStale(localPair, { kind: "loopback", trust: "service" })).toBe(false);
+  });
+
+  it("says nothing about another address", () => {
+    expect(pairPromptIsStale({ served: false, pathname: "/", hash: "" }, { kind: "loopback" })).toBe(false);
+    expect(pairPromptIsStale({ served: false, pathname: "/join", hash: "" }, { kind: "loopback" })).toBe(false);
   });
 });
 

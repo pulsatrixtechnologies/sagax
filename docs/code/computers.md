@@ -307,15 +307,69 @@ person's drive nor post it in the chat.
   `forwardTurn`) keeps the bytes: they already arrive in that environment.
   The header that says so carries a secret of the process
   (`server/perspicax/sandbox-bridge-forward.ts`).
-- Not covered yet: a connector the engine reaches itself (a claude.ai
-  connector) is not relayed by Sagax, so its blobs still land in the
-  engine's folder.
+- A connector the engine reaches itself: see the next section (#5140).
 
 Tests: `server/routes/connector-files-delivery.test.ts` (the person's case
 through the real routes: the spreadsheet lands on the person's computer, the
 engine sees no blob, `attach_file` posts it, another person's turn reads
 nothing), `server/attachments/connector-files.test.ts`,
 `server/index-leaves/personPlaces.test.ts`.
+
+## A file from the engine's own connector lands in the person's place too (2026-11-20, #5140)
+
+Same decision. A connector the engine reaches by itself is not relayed by
+Sagax: Claude Code's claude.ai connectors (`mcp__claude_ai_<Name>__<tool>`)
+and, when the turn also loads the engine's own MCP configuration (the
+person's Claude Code servers), those servers; in a bot's own turn and in the
+connector hub's Claude host (`call_connector`,
+`server/connectors/hosts/claude-host.ts`, which the bots on Codex, Grok and
+pi use to reach them). Claude Code decodes a binary MCP result in its own MCP
+client and writes it into its session folder on the server before any hook
+and before the model (`<config>/projects/<folder key>/<session>/tool-results/
+mcp-<server>-blob-<time>-<random>.<ext>`, a picture too beside the one the
+model sees; a resource read with ReadMcpResource as `mcp-resource-...`); the
+result reads `Binary content (<type>, <size>) saved to <path>` or `[Image
+source: <path>]`. The other engines write no such file (measured on Codex
+0.169.0 and Grok 1.0.89: a blob goes to the model as JSON text; pi's MCP
+extension drops it).
+
+- `server/attachments/engine-connector-files.ts` `placeEngineFiles`: each
+  path of the engine's own blob folder any string of a result names is read
+  (a regular file of that folder, no link and no second name, nothing
+  `sensitiveReadPath` refuses, then one descriptor opened without following
+  a link, `readEngineFile`), written into the person's place by the one
+  placement of #5138 (`placeOneFile`, `copyToPersonPlace`), removed from the
+  engine's folder whatever happened, and the result names the person's
+  path with the #5138 line. A path the output names elsewhere is never
+  read, moved or removed.
+- A bot's own turn: `claudeHookSettings` adds one synchronous PostToolUse
+  entry (`omb-hook connector-files`, 120 s timeout) when the engine loads
+  connectors of its own on an organization server (`hooks.connectorFiles`,
+  `hooksIntegration`; the same reading as `ENABLE_CLAUDEAI_MCP_SERVERS` in
+  `turn-prepare-mcp.ts`). Its matcher (`connector-files-matcher.ts`): the
+  claude.ai connector tools and ReadMcpResource, or, with the engine's own
+  configuration loaded, every MCP tool but Sagax's own mounts. The helper
+  forwards only a result that names a saved file, and of it only those
+  strings (`connector-files-slim.ts`: a picture's base64 never travels, so
+  the route's 1 MB body holds), then puts Sagax's strings back into the
+  engine's result. `ingestEngineHook` places the files of the session the
+  hook's own `transcript_path` and `session_id` name, within 100 s, and
+  answers `updatedMCPToolOutput` (`updatedToolOutput` for ReadMcpResource).
+- `call_connector`: the Claude host returns the folder its one-call process
+  wrote in (`engineFolder`, the sign-in's `projects/<key of its working
+  folder>`), and the route places the files the result names
+  (`connectorFilePlaces`, an organization server).
+- A solo server is the person's own computer: the engine's folder is
+  already theirs, nothing is moved.
+- Not covered here: pictures Sagax relays (the engine keeps a copy of each
+  picture it shows the model, #5155).
+
+Tests: `server/routes/engine-connector-files-delivery.test.ts` (the real
+hook helper and route: the file lands on the person's computer, none is left
+under the engine's folder, the engine reads the person's path; a picture
+over 1 MiB; another person's turn gets its own place only; the same file
+through `call_connector`), `server/attachments/engine-connector-files.test.ts`,
+`server/hooks/omb-hook.test.ts`, `server/drivers/claude.test.ts`.
 
 ## Server environments (organization mode)
 

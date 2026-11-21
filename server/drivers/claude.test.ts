@@ -46,6 +46,7 @@ import {
   oneShotIsolationArgs,
 } from "./claude.ts";
 import { CLAUDE_ORG_TOOLS, CLAUDE_UNUSED_TOOLS } from "./host-tools.ts";
+import { CLAUDE_AI_TOOLS_MATCHER, engineConnectorToolsMatcher } from "./claude/connector-files-matcher.ts";
 import { AUTO_ALLOWLIST_COPY, claudeLaunchLevel } from "../testing/claude-level.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
@@ -170,6 +171,28 @@ describe("ClaudeDriver.decodeConfig", () => {
     expect(settings.SessionStart![0]!.hooks[0]!.async).toBeUndefined();
     // a fresh or resumed session never waits on the helper
     expect(settings.SessionStart![0]!.matcher).toBe("compact");
+    // no claude.ai connector to watch: nothing more waits
+    expect(settings.PostToolUse).toHaveLength(1);
+  });
+
+  it("waits on the engine's own connector tools only, to move a file they saved into the person's place (#5140)", () => {
+    type Entry = Array<{ matcher: string; hooks: Array<{ command: string; timeout?: number; async?: boolean }> }>;
+    const settings = claudeHookSettings("/tmp/helper.ts", { connectorFilesMatcher: CLAUDE_AI_TOOLS_MATCHER }) as Record<string, Entry>;
+    const [background, files] = settings.PostToolUse!;
+    expect(background!.hooks[0]!.async).toBe(true);
+    const matches = new RegExp(files!.matcher);
+    for (const tool of ["mcp__claude_ai_Docs_Hub__download_file", "ReadMcpResourceTool", "ReadMcpResource"]) expect(matches.test(tool), tool).toBe(true);
+    for (const other of ["mcp__perspicax__cw_psa_action", "mcp__agents__attach_file", "Read", "mcp__claude-ai_X__y", "ReadMcpResourceDirTool"]) expect(matches.test(other), other).toBe(false);
+    // synchronous, with room to copy to the person's computer
+    expect(files!.hooks[0]!.async).toBeUndefined();
+    expect(files!.hooks[0]!.timeout).toBe(120);
+    expect(files!.hooks[0]!.command.endsWith(" connector-files")).toBe(true);
+  });
+
+  it("with the engine's own configuration loaded, waits on every MCP tool but Sagax's own mounts (#5140)", () => {
+    const matches = new RegExp(engineConnectorToolsMatcher(["agents", "ogb", "perspicax", "sagax-desktop", "browser"]));
+    for (const tool of ["mcp__claude_ai_Docs_Hub__get", "mcp__my-files__download", "mcp__agentsx__get", "ReadMcpResourceTool"]) expect(matches.test(tool), tool).toBe(true);
+    for (const tool of ["mcp__agents__attach_file", "mcp__ogb__approve", "mcp__perspicax__cw_psa_query", "mcp__sagax-desktop__screenshot", "mcp__browser__open", "Bash"]) expect(matches.test(tool), tool).toBe(false);
   });
 
   it("keeps the per-turn hook token where workspace backups never look", () => {
@@ -2790,6 +2813,35 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     // user-scope servers, skills and hooks stay out
     expect(seen.argv[seen.argv.indexOf("--setting-sources") + 1]).toBe("project");
   });
+
+  it("waits on the connectors the engine loads itself whenever it loads them, the person's own Claude Code servers included (#5140)", async () => {
+    await create();
+    type Seen = { env: Record<string, string | null | undefined>; settings: { hooks?: { PostToolUse?: Array<{ matcher: string; hooks: Array<{ command: string }> }> } } };
+    const turn = async (threadId: string, extra: Record<string, unknown>): Promise<Seen> => {
+      const dump = join(scratch, `${threadId}.json`);
+      process.env.FAKE_CLAUDE_DUMP = dump;
+      const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi", integrations: { hooks: { url: "http://127.0.0.1:1/hooks", token: "bearer", connectorFiles: true } }, ...extra });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId, 30_000);
+      return JSON.parse(readFileSync(dump, "utf8")) as Seen;
+    };
+    const connectorFiles = (seen: Seen) => seen.settings.hooks?.PostToolUse?.find((entry) => entry.hooks.some((hook) => hook.command.endsWith(" connector-files")));
+
+    // "Also use my Claude Code MCP servers": the engine loads its own servers and the account's connectors
+    const own = await turn("t-files-user-mcp", { mcpFromUserConfig: true });
+    expect(own.env.ENABLE_CLAUDEAI_MCP_SERVERS).not.toBe("false");
+    const ownMatcher = new RegExp(connectorFiles(own)!.matcher);
+    for (const tool of ["mcp__claude_ai_Docs_Hub__download_file", "mcp__my-files__download", "ReadMcpResourceTool"]) expect(ownMatcher.test(tool), tool).toBe(true);
+    expect(ownMatcher.test("mcp__ogb__approve")).toBe(false);
+
+    const claudeAi = await turn("t-files-claude-ai", { claudeAiConnectors: true });
+    expect(claudeAi.env.ENABLE_CLAUDEAI_MCP_SERVERS).not.toBe("false");
+    expect(connectorFiles(claudeAi)!.matcher).toBe(CLAUDE_AI_TOOLS_MATCHER);
+
+    // isolated: the engine holds no connector of its own, nothing to wait on
+    const isolated = await turn("t-files-isolated", {});
+    expect(isolated.env.ENABLE_CLAUDEAI_MCP_SERVERS).toBe("false");
+    expect(connectorFiles(isolated)).toBeUndefined();
+  }, 90_000);
 
   it("never keeps claude.ai connectors on a guest's confined turn", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });

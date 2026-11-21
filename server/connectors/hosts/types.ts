@@ -8,6 +8,7 @@
 // decides and never keeps a token of the provider.
 import type { ConnectorHostPoolStats } from "../host-pool.ts";
 import type { ConnectorAccount, ConnectorEntry, ConnectorProvider } from "../types.ts";
+import type { EngineBlobFolder } from "../../attachments/engine-connector-files.ts";
 
 /** One approved call, exactly as the person's settings decided it. */
 export interface ConnectorHostCall {
@@ -37,6 +38,10 @@ export interface ConnectorHostResult {
   usage?: ConnectorHostUsage;
   /** #3357: the call ran on a process the pool already kept warm. */
   warm?: boolean;
+  /** #5140: where the provider's own CLI saves a binary result of this call
+   * on this server (Claude Code's tool-results folders); the route moves
+   * each file `text` names there into the calling person's place. */
+  engineFolder?: EngineBlobFolder;
 }
 
 /** One model round of a host, in the usage ledger's terms: `input` is the

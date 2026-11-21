@@ -1,4 +1,4 @@
-// omb-hook — the one command Sagax registers for Claude Code hooks
+// omb-hook: the one command Sagax registers for Claude Code hooks
 // (PostToolUse, PostToolUseFailure, PreCompact, SessionStart). Claude Code runs it with the
 // hook's JSON on stdin and waits for it, so it obeys three rules learned
 // the hard way by other harnesses:
@@ -9,7 +9,7 @@
 //      Code's own per-hook timeout, and speaks only to the loopback harness.
 //   3. It is dependency-free and does no work itself: it forwards the event
 //      to POST /api/internal/hook with the turn's capability token (read
-//      from SAGAX_HOOK_TOKEN_FILE at run time — the token rotates per turn
+//      from SAGAX_HOOK_TOKEN_FILE at run time: the token rotates per turn
 //      while the CLI process, and its environment, live on) and prints the
 //      harness's `hookSpecificOutput`, if any, for Claude Code to apply.
 //
@@ -22,7 +22,7 @@
 // base64 never travels, whatever its size, and the helper puts Sagax's
 // strings back into the engine's own result.
 //
-// stdout is the hook channel — never console.log anything else here.
+// stdout is the hook channel: never console.log anything else here.
 import { readFileSync } from "node:fs";
 import { reportBackgroundError } from "../background-error.ts";
 import { mergeToolResponse, namesEngineFile, slimToolResponse } from "./connector-files-slim.ts";

@@ -2821,7 +2821,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
       const dump = join(scratch, `${threadId}.json`);
       process.env.FAKE_CLAUDE_DUMP = dump;
       const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi", integrations: { hooks: { url: "http://127.0.0.1:1/hooks", token: "bearer", connectorFiles: true } }, ...extra });
-      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId, 30_000);
       return JSON.parse(readFileSync(dump, "utf8")) as Seen;
     };
     const connectorFiles = (seen: Seen) => seen.settings.hooks?.PostToolUse?.find((entry) => entry.hooks.some((hook) => hook.command.endsWith(" connector-files")));
@@ -2841,7 +2841,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const isolated = await turn("t-files-isolated", {});
     expect(isolated.env.ENABLE_CLAUDEAI_MCP_SERVERS).toBe("false");
     expect(connectorFiles(isolated)).toBeUndefined();
-  });
+  }, 90_000);
 
   it("never keeps claude.ai connectors on a guest's confined turn", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });

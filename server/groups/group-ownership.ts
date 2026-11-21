@@ -55,10 +55,11 @@ export function ownsGroup(group: Pick<OwnedGroup, "createdBy" | "humanIds">, act
  * themselves (channelFilterViewer) and sees a room only when it lists them;
  * before, they saw every room, so some of theirs never did: one they made
  * here (`createdBy`, withCreatorListed listed a signed-in member only), or
- * one from before the organization with no person behind it whose bots are
- * all theirs. A conversation between two people and an archived room are
- * never touched. */
-export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: readonly string[]; memberIds?: readonly string[]; peopleDm?: boolean; archivedAt?: number }>(
+ * one from before the organization with no person behind it and no bot of
+ * anyone else (a bot that no longer exists names no one). A conversation
+ * between two people, a bot pair's channel (it lists no people: its bots'
+ * owner sees it, pairChannelOwnedBy) and an archived room are never touched. */
+export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: readonly string[]; memberIds?: readonly string[]; dm?: boolean; peopleDm?: boolean; archivedAt?: number }>(
   groups: readonly G[],
   personId: string,
   botOwner: (botId: string) => string | null | undefined,
@@ -66,12 +67,31 @@ export function unlistedOwnRooms<G extends { createdBy?: string; humanIds?: read
   const person = norm(personId);
   if (!person) return [];
   return groups.filter((group) => {
-    if (group.peopleDm || group.archivedAt) return false;
+    if (group.dm || group.peopleDm || group.archivedAt) return false;
     if ((group.humanIds ?? []).some((entry) => norm(entry) === person)) return false;
     const owner = groupOwnerId(group);
     if (owner !== null) return owner === person;
-    return (group.memberIds ?? []).every((botId) => norm(botOwner(botId) ?? "") === person);
+    return (group.memberIds ?? []).every((botId) => {
+      const botsOwner = norm(botOwner(botId) ?? "");
+      return !botsOwner || botsOwner === person;
+    });
   });
+}
+
+/** #5152: a bot pair's channel (`dm`: two bots of one person talking, no
+ * people by design, dm-has-no-humans) belongs to its bots' owner. On an
+ * organization server everyone is filtered for themselves and a room shows
+ * through its people, so this names who sees the channel: the one person
+ * who owns every bot in it. */
+export function pairChannelOwnedBy(
+  group: { dm?: boolean; memberIds?: readonly string[] },
+  personId: string,
+  botOwner: (botId: string) => string | null | undefined,
+): boolean {
+  const person = norm(personId);
+  const bots = group.memberIds ?? [];
+  if (!group.dm || !person || !bots.length) return false;
+  return bots.every((botId) => norm(botOwner(botId) ?? "") === person);
 }
 
 /** The fields only the owner may change. */

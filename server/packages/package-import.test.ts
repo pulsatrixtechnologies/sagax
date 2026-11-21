@@ -126,6 +126,26 @@ describe("importing a whole team", () => {
     ]);
   });
 
+  // #5152: an organization server shows a room through its people
+  it("lists the person the rooms are for, and records them as the maker", async () => {
+    const app = await installation();
+    const document = app.parsePackageDocument(fixture("full-team.v2.json"));
+    const listed = app.importer.importPackageDocument(document, { trust: "file", mode: "add", roomOwner: "pr_operator", listRoomOwner: true }, app.deps);
+    if (listed.alreadyAdded) throw new Error("unexpected");
+    expect(app.store.group(listed.groups[0]!.id)).toMatchObject({ createdBy: "pr_operator", humanIds: ["pr_operator"] });
+    // a personal server records the maker only, as a member's import did
+    const solo = app.importer.importPackageDocument(document, { trust: "file", mode: "add", roomOwner: "pr_operator" }, app.deps);
+    if (solo.alreadyAdded) throw new Error("unexpected");
+    expect(app.store.group(solo.groups[0]!.id)).toMatchObject({ createdBy: "pr_operator" });
+    expect(app.store.group(solo.groups[0]!.id)!.humanIds).toBeUndefined();
+    // the legacy project room too
+    const { parseTeamManifest } = await import("../team/team-manifest.ts");
+    const manifest = parseTeamManifest({ format: "openmaus.team", version: 2, team: { name: "Field", members: [{ key: "writer", name: "Field writer", appearance: { color: "purple" } }] } } as never);
+    const project = app.importer.importTeamManifest(manifest, { mode: "project", cwd: null, roomOwner: "pr_operator", listRoomOwner: true }, app.deps);
+    expect(project.group).toBeTruthy();
+    expect(app.store.group(project.group!.id)).toMatchObject({ createdBy: "pr_operator", humanIds: ["pr_operator"] });
+  });
+
   it("imports the same file twice as two independent copies", async () => {
     const app = await installation();
     const document = app.parsePackageDocument(fixture("full-team.v2.json"));

@@ -283,8 +283,13 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     const shared = await api("POST", "/api/groups", undefined, { name: "Console and colleague", memberIds: [operatorBot], humanIds: [memberId] });
     expect(shared.status, shared.text).toBe(201);
     const sharedRoom = shared.body.group.id as string;
+    // and one their phone makes with a colleague (an admin session): they stay in it too
+    const fromPhone = await api("POST", "/api/groups", operatorPhone, { name: "Phone and colleague", memberIds: [operatorBot], humanIds: [memberId] });
+    expect(fromPhone.status, fromPhone.text).toBe(201);
+    const phoneRoom = fromPhone.body.group.id as string;
+    const ownRooms = [operatorRoom, sharedRoom, phoneRoom];
     const seesOwn = (stream: { text: () => string }) => frames(stream).some((frame) => frame.kind === "bot" && frame.bot?.id === operatorBot)
-      && [operatorRoom, sharedRoom].every((id) => frames(stream).some((frame) => frame.kind === "group" && frame.group?.id === id));
+      && ownRooms.every((id) => frames(stream).some((frame) => frame.kind === "group" && frame.group?.id === id));
     await waitFor(async () => seesOwn(operatorStream) && seesOwn(phoneStream));
     await sleep(300);
 
@@ -299,8 +304,7 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
       expect(bots).toContain(operatorBot);
       expect(bots).not.toContain(memberBot);
       const rooms = (await api("GET", "/api/groups", who)).body.groups.map((group: any) => group.id);
-      expect(rooms).toContain(operatorRoom);
-      expect(rooms).toContain(sharedRoom);
+      for (const id of ownRooms) expect(rooms).toContain(id);
     }
     expect((await api("GET", "/api/bots", member)).body.bots.map((bot: any) => bot.id)).toContain(memberBot);
     operatorStream.close();

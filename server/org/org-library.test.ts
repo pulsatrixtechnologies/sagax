@@ -275,7 +275,7 @@ describe("adding from the shelf", () => {
     await library.settled();
     expect(library.list().packages[0]).toMatchObject({ blob: "ready", installed: null });
 
-    const outcome = library.add(TEAM_ID, app.importDeps);
+    const outcome = library.add(TEAM_ID, app.importDeps, "pr_operator");
     if (!outcome.ok || outcome.value.alreadyAdded) throw new Error(JSON.stringify(outcome));
     expect(outcome.status).toBe(201);
     const result = outcome.value.result;
@@ -329,6 +329,8 @@ describe("adding from the shelf", () => {
     // The group chat carries its keys and hashes.
     const room = app.store.group(result.groups[0]!.id)!;
     expect(room.installedPackage).toMatchObject({ installId, key: "desk", memberKeys: ["lead", "scout", "writer"] });
+    // #5152: it lists the person who added it (a room shows through its people)
+    expect(room).toMatchObject({ createdBy: "pr_operator", humanIds: ["pr_operator"] });
     for (const part of app.parts.ROOM_PARTS) expect(room.installedPackage!.parts[part]).toEqual({ r: expect.stringMatching(hex), w: expect.stringMatching(hex) });
     for (const part of ["name", "bulletin"] as const) expect(room.installedPackage!.parts[part].w, part).toBe(room.installedPackage!.parts[part].r);
 

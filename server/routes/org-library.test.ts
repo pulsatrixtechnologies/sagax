@@ -40,6 +40,8 @@ function routes(library: Library | null, extras?: Partial<{ importDeps: ReturnTy
     handler: createOrgLibraryRoutes({
       library: () => library,
       importDeps: importDeps as never,
+      // #5152: the operator at this computer asks for the add
+      roomOwner: (who) => (who.kind === "loopback" ? "pr_operator" : ""),
       projectBot: projectBot as never,
       projectGroup: projectGroup as never,
     }),
@@ -123,7 +125,8 @@ describe("organization library routes", () => {
     const call = ctx("/api/org-library/add", "POST", { packageId: PACKAGE_ID });
     await handler(call.context);
     expect(importDeps).toHaveBeenCalledOnce();
-    expect(add).toHaveBeenCalledWith(PACKAGE_ID, { kind: "deps" });
+    // #5152: the rooms it makes list whoever asked
+    expect(add).toHaveBeenCalledWith(PACKAGE_ID, { kind: "deps" }, "pr_operator");
     expect(projectBot).toHaveBeenCalledWith({ id: "b1" }, auth);
     expect(projectGroup).toHaveBeenCalledWith({ id: "g1" });
     expect(call.sent).toEqual([{

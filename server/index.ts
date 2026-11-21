@@ -11964,14 +11964,22 @@ principals.localOperator(cfg.profile?.email);
 // #5152: on an organization server the operator at this computer sees their
 // own rooms only (channelFilterViewer). Their rooms that do not list them
 // (unlistedOwnRooms: made here before withCreatorListed listed them, or from
-// before the organization) list them now, as one they make today does.
+// before the organization) list them now, as one they make today does; their
+// bots' pair channels list nobody and are theirs through their bots
+// (groupVisible). One room that cannot take it never stops the start.
 if (IDENTITY.kind === "perspicax") {
   const operator = localPrincipalId();
   const botOwner = (botId: string) => {
     const bot = store.bot(botId);
     return bot ? effectiveBotOwner(bot) : undefined;
   };
-  for (const group of unlistedOwnRooms(store.groups, operator, botOwner)) store.patchGroup(group.id, { humanIds: [operator, ...(group.humanIds ?? [])] });
+  for (const group of unlistedOwnRooms(store.groups, operator, botOwner)) {
+    try {
+      store.patchGroup(group.id, { humanIds: [operator, ...(group.humanIds ?? [])] });
+    } catch (error) {
+      console.warn(`[rooms] could not list the operator in room ${group.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }
 // 2026-10-26 (one approval level): the owner's permission mode was a
 // second setting beside the approval level. A mode someone chose is carried
@@ -22408,6 +22416,7 @@ orgLibrary = new OrgLibrary({
 ROUTES.push(createOrgLibraryRoutes({
   library: () => orgLibrary,
   importDeps: async () => packageImportDeps(await defaultSelection()),
+  roomOwner: (auth) => creatingBotOwnerId(auth),
   projectBot: (bot, auth) => projectBotTranscript(publicBot(store.bot(bot.id) ?? bot), viewerForApproval(auth)),
   projectGroup: (group) => ({ ...publicGroupState(store.group(group.id) ?? group), messages: [] })
 }));

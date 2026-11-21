@@ -150,11 +150,17 @@ async function runPackageImport(
   const importDeps: PackageImportDeps = memberImport
     ? { ...baseDeps, mcp: { ...baseDeps.mcp, refusal: () => "A member's import adds no server to the server's MCP list" } }
     : baseDeps;
+  // The rooms are the person's who imports: a member's own, else the caller
+  // (the operator at this computer, an admin). #5152: on an organization
+  // server a room shows through its people, so they are listed in it too.
+  const organization = deps.isPerspicax();
+  const roomOwner = memberImport ? memberOwner : organization ? deps.creatingBotOwnerId(caller) : "";
+  const roomOptions = { ...options, ...(roomOwner ? { roomOwner, listRoomOwner: organization } : {}) };
   let imported: PackageImportResult;
   try {
     const result = "document" in source
-      ? importPackageDocument(source.document, { ...options, trust: "file" }, importDeps)
-      : importTeamManifest(source.manifest, options, importDeps);
+      ? importPackageDocument(source.document, { ...roomOptions, trust: "file" }, importDeps)
+      : importTeamManifest(source.manifest, roomOptions, importDeps);
     // A file import always gets a fresh install id, so it never reports
     // "already added"; that answer belongs to the organization library.
     if (result.alreadyAdded) return { status: 200, body: result };
@@ -167,9 +173,6 @@ async function runPackageImport(
     for (const bot of imported.bots) {
       const patched = deps.store.patchBot(bot.id, { ownerUserId: memberOwner, ...deps.memberImportReset() });
       if (patched) deps.broadcast({ kind: "bot", bot: deps.publicBot(patched) });
-    }
-    for (const created of [...imported.groups, ...(imported.group ? [imported.group] : [])]) {
-      deps.store.patchGroup(created.id, { createdBy: memberOwner });
     }
   }
   return { status: 201, body: {

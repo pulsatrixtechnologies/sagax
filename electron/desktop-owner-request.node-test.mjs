@@ -63,6 +63,34 @@ test("a request redirected toward the server from elsewhere never carries it: me
   assert.equal(isAppServerRequest(req({ id: 7, url: `${APP}/api/new` }), PORT, own), true);
 });
 
+// M-20261120-026: the app's page is served with `referrer-policy: no-referrer`
+// (server/static-ui.ts PAGE_HEADERS) and Chromium sends no Origin on a
+// same-origin GET fetch (measured in real Chromium and in Electron 44 against a
+// server answering like the app's). The session check at launch carried
+// neither header, lost the capability and PairPage opened on the app's own
+// server. webRequest's `initiatorOrigin` names the origin that issued the
+// request; a page controls neither it nor the redirect ledger above.
+test("a same-origin GET with no Origin and no Referer is still the app's call, by its initiator", () => {
+  // the session check at launch (`GET /api/auth/session`) and every other
+  // fetch, stream and file preview of the app's own page: no Origin (GET),
+  // no Referer (no-referrer page)
+  assert.equal(isAppServerRequest(req({ url: `${APP}/api/auth/session`, referrer: "", initiatorOrigin: APP }), PORT), true);
+  assert.equal(isAppServerRequest(req({ resourceType: "other", url: `${APP}/api/events`, referrer: "", initiatorOrigin: APP }), PORT), true);
+  assert.equal(isAppServerRequest(req({ resourceType: "image", url: `${APP}/api/threads/t/messages/m/file?preview=1&ref=3`, referrer: "", initiatorOrigin: APP }), PORT), true);
+  // an origin that is not the app's stays refused, opaque ("null", a
+  // sandboxed bot page) or not; an absent initiator behaves like before
+  assert.equal(isAppServerRequest(req({ referrer: "", initiatorOrigin: "https://evil.example" }), PORT), false);
+  assert.equal(isAppServerRequest(req({ referrer: "", initiatorOrigin: "null" }), PORT), false);
+  assert.equal(isAppServerRequest(req({ referrer: "", initiatorOrigin: null }), PORT), false);
+  assert.equal(isAppServerRequest(req({ referrer: "" }), PORT), false);
+  // an Origin header stays the answer even against a matching initiator
+  assert.equal(isAppServerRequest(req({ referrer: "", initiatorOrigin: APP, requestHeaders: { Origin: "https://evil.example" } }), PORT), false);
+  // and a request redirected toward the port from elsewhere stays refused
+  const ledger = createRedirectLedger();
+  ledger.noteRedirect({ id: 42, url: "https://media.example.test/clip.mp4" }, PORT);
+  assert.equal(isAppServerRequest(req({ id: 42, resourceType: "media", referrer: "", initiatorOrigin: APP }), PORT, ledger), false);
+});
+
 test("Origin: null is never made up for by the app's Referer", () => {
   assert.equal(isAppServerRequest(req({ referrer: `${APP}/`, requestHeaders: { Origin: "null" } }), PORT), false);
   assert.equal(isAppServerRequest(req({ referrer: `${APP}/`, requestHeaders: { origin: "https://evil.example" } }), PORT), false);

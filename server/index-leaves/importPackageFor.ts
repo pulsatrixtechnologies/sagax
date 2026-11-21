@@ -17,7 +17,12 @@ async function importPackageFor(raw: unknown, ownerPrincipalId: string): Promise
   }
   let result: PackageImportResult;
   try {
-    const imported = importPackageDocument(document, { mode: "add", cwd: null, trust: "file" }, host.packageImportDeps(await host.defaultSelection()));
+    // #5152: the rooms are the person's the bots are for, listed in them on an
+    // organization server (a room shows through its people)
+    const imported = importPackageDocument(document, {
+      mode: "add", cwd: null, trust: "file",
+      roomOwner: ownerPrincipalId, listRoomOwner: host.IDENTITY.kind === "perspicax",
+    }, host.packageImportDeps(await host.defaultSelection()));
     if (imported.alreadyAdded) throw new host.ConsoleRefusal(409, "already_added", "This package was already added.");
     result = imported;
   } catch (error) {

@@ -914,8 +914,10 @@ export class OrgLibrary {
   }
 
   /** POST /api/org-library/add — one click, no confirmation: the person's
-   * click is the decision. Idempotent per install id. */
-  add(packageId: string, importDeps: PackageImportDeps):
+   * click is the decision. Idempotent per install id. `roomOwner` (#5152):
+   * the person who clicked, listed in the rooms the package makes (an
+   * organization server shows a room through its people). */
+  add(packageId: string, importDeps: PackageImportDeps, roomOwner?: string):
     OrgLibraryOutcome<{ alreadyAdded: true; installId: string } | { alreadyAdded: false; result: PackageImportResult }> {
     const library = this.library;
     const entry = this.visibleEntry(packageId);
@@ -975,6 +977,7 @@ export class OrgLibrary {
       const imported = importPackageDocument(document.value, {
         trust: "org",
         mode: "add",
+        ...(roomOwner ? { roomOwner, listRoomOwner: true } : {}),
         org: { installId, ref: entry.ref, packageId, sha256: release.sha256, publisher, adminOrigin: library.adminOrigin, organizationId: library.organizationId },
       }, importDeps);
       if (imported.alreadyAdded) {

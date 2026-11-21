@@ -46,7 +46,7 @@ import "./safety/network-guard.ts";
 import { serverLog } from "./process/server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./process/event-loop-lag.ts";
 import { settledChipLabel } from "./waits/waiting-chip.ts";
-import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownership.ts";
+import { groupOwnerId, ownsGroup, unlistedOwnRooms, type GroupActor } from "./groups/group-ownership.ts";
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -1051,7 +1051,7 @@ import { PhoneSecretBridge, PhoneSecretSubmissionRegistry } from "./phone/phone-
 import { effectiveBotOwner as resolveBotOwner, recordedBotOwner } from "./bots/bot-owner.ts";
 import { cloudGuestSendRefusal, cloudThreadRefusal } from "./cloud-thread-refusal.ts";
 import { legacyPersonKey, personKey, speakerFor } from "./request-speaker.ts";
-import { channelViewerId, searchHitVisible } from "./rooms/channel-visibility.ts";
+import { channelFilterViewer, channelViewerId, searchHitVisible } from "./rooms/channel-visibility.ts";
 import { atLeast, botLevel, canOnBot, canInChannel, type BotFacts, type BotGrant, type Level, type TeamRef, type Viewer as AuthzViewer } from "./auth/authz.ts";
 import { canOnThread, threadOwner as privateThreadOwner, narrowBotForViewer, ownThreads, type ThreadAction } from "./threads/thread-privacy.ts";
 import { type ApprovalViewer } from "./approvals/approval-audience.ts";
@@ -11961,6 +11961,26 @@ principals.onDisabledChanged((person, disabled) => orgAudit({
   actor: { kind: "worker" }
 }));
 principals.localOperator(cfg.profile?.email);
+// #5152: on an organization server the operator at this computer sees their
+// own rooms only (channelFilterViewer). Their rooms that do not list them
+// (unlistedOwnRooms: made here before withCreatorListed listed them, or from
+// before the organization) list them now, as one they make today does; their
+// bots' pair channels list nobody and are theirs through their bots
+// (groupVisible). One room that cannot take it never stops the start.
+if (IDENTITY.kind === "perspicax") {
+  const operator = localPrincipalId();
+  const botOwner = (botId: string) => {
+    const bot = store.bot(botId);
+    return bot ? effectiveBotOwner(bot) : undefined;
+  };
+  for (const group of unlistedOwnRooms(store.groups, operator, botOwner)) {
+    try {
+      store.patchGroup(group.id, { humanIds: [operator, ...(group.humanIds ?? [])] });
+    } catch (error) {
+      console.warn(`[rooms] could not list the operator in room ${group.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
 // 2026-10-26 (one approval level): the owner's permission mode was a
 // second setting beside the approval level. A mode someone chose is carried
 // into the level once (approval-level-migration.ts), then dropped. It runs
@@ -22396,6 +22416,7 @@ orgLibrary = new OrgLibrary({
 ROUTES.push(createOrgLibraryRoutes({
   library: () => orgLibrary,
   importDeps: async () => packageImportDeps(await defaultSelection()),
+  roomOwner: (auth) => creatingBotOwnerId(auth),
   projectBot: (bot, auth) => projectBotTranscript(publicBot(store.bot(bot.id) ?? bot), viewerForApproval(auth)),
   projectGroup: (group) => ({ ...publicGroupState(store.group(group.id) ?? group), messages: [] })
 }));
@@ -29003,24 +29024,24 @@ const continuationThreadScope = new AsyncLocalStorage<string | null>();
  * still names one is refused whole. */
 /** Who acts, by principal: a session's principal (or its anonymous id),
  * the operator on loopback, nobody for a local service. */
-/** Whose channels and bots a request may see (requests, live frames and
- * search all read this). Unfiltered, like loopback: the operator's own phone
- * (an admin code paired from this computer), and a session without a
- * principal on a personal server (a chat-only device keeps seeing the
- * operator's bots; its scope still gates it). On an organization server a
- * session without a principal (an interim-era pairing, a chat-only code made
- * from this computer) stays filtered: it sees no one's Directs or sections. */
 /** The person reading a conversation between two people: the signed-in
  * person, or the operator at this computer. */
 function groupReaderId(auth: RequestAuth): string | undefined {
   if (auth.kind === "session") return channelViewerId(auth);
   return auth.kind === "loopback" && auth.trust !== "service" ? localPrincipalId() : undefined;
 }
+/** Whose channels and bots a request may see (requests, live frames and
+ * search all read this): channelFilterViewer (server/rooms/channel-visibility.ts).
+ * On an organization server the operator at this computer and their own
+ * phone are filtered for themselves, like any person (#5152). */
 function channelFilterViewerId(auth: RequestAuth): string | undefined {
-  const viewerId = channelViewerId(auth);
-  if (!viewerId) return undefined;
-  if (viewerId.startsWith("anon:")) return IDENTITY.kind === "perspicax" ? viewerId : undefined;
-  return auth.scopes.includes("admin") && viewerId === localPrincipalId() ? undefined : viewerId;
+  return channelFilterViewer({
+    viewerId: channelViewerId(auth),
+    organization: IDENTITY.kind === "perspicax",
+    admin: auth.scopes.includes("admin"),
+    localPrincipalId: localPrincipalId(),
+    operatorAtComputer: auth.kind === "loopback" && auth.trust !== "service"
+  });
 }
 /** The actor's sign-in email: sign-in lists and invites stay in emails. */
 function actorEmail(auth: RequestAuth): string | undefined {

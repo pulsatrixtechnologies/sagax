@@ -35,6 +35,9 @@ export interface OrgLibraryRouteDeps {
   library(): Library | null;
   /** The importer's view of this installation, built only when an add runs. */
   importDeps(): Promise<PackageImportDeps>;
+  /** #5152: who asked for an add (their principal; empty for nobody): the
+   * rooms it makes list them. */
+  roomOwner(auth: RequestAuth): string;
   /** Each imported bot, as the inline route projected it. */
   projectBot(bot: BotRecord, auth: RequestAuth): unknown;
   /** Each imported group, messages cleared, as the inline route projected it. */
@@ -60,7 +63,7 @@ export function createOrgLibraryRoutes(deps: OrgLibraryRouteDeps): RouteHandler 
       if (!packageId) return json(res, 400, { error: "Choose a package from your organization's library." });
       const library = deps.library();
       if (!library) return json(res, 404, { error: NOT_LISTED, code: "not_listed" });
-      const outcome = library.add(packageId, await deps.importDeps());
+      const outcome = library.add(packageId, await deps.importDeps(), deps.roomOwner(auth) || undefined);
       if (!outcome.ok) return json(res, outcome.status, { error: outcome.error, code: outcome.code });
       if (outcome.value.alreadyAdded) return json(res, 200, outcome.value);
       const imported = outcome.value.result;

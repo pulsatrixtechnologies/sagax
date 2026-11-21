@@ -147,6 +147,18 @@ export function isConnected(state: SessionState | null): boolean {
   return state?.kind === "session" || (state?.kind === "loopback" && state.trust !== "service");
 }
 
+/** Why the pairing screen is the screen to draw for this answer: the server's own
+ * reason for a refusal, or the line for a server that trusts this machine only as
+ * a service. Nothing to say when this machine is home, and nothing for a server
+ * that is merely unreachable: 2026-10-20 decided a deploy or a restart is retried
+ * in silence, so its raw fetch line never reaches the person. */
+export function pairingScreenReason(state: SessionState | null): string | undefined {
+  if (!state || isConnected(state)) return undefined;
+  if (state.kind === "loopback") return SERVICE_TRUST_REASON;
+  if (state.kind === "unauthenticated") return state.error;
+  return undefined;
+}
+
 /** The owner on this machine or an admin session: who may manage the server. */
 export function isOwnerOrAdmin(state: SessionState | null): boolean {
   if (!state) return false;

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import {
-  BROWSER_SIGN_IN_FAILED, isConnected, pairPromptIsStale, previewBrowserSignIn, resolveSessionState, SERVICE_TRUST_REASON, takeBrowserSignInFromLocation, takePairingFromLocation, takeInvitedEmailFromLocation,
+  BROWSER_SIGN_IN_FAILED, pairingScreenReason, pairPromptIsStale, previewBrowserSignIn, resolveSessionState, takeBrowserSignInFromLocation, takePairingFromLocation, takeInvitedEmailFromLocation,
   type SessionState,
 } from "./lib/session";
 import { servedPage } from "./lib/desktop";
@@ -68,16 +68,6 @@ installAccessibility();
 // Hardware acceleration and spell checking, handed to the desktop shell.
 installDesktopShellPreferences();
 
-/** Why the pairing screen stays on the desktop app's own page: the server's own
- * reason (a refusal, or a server that lends its port to this machine as a service
- * only). Nothing to say when this machine is home. */
-function pairScreenReason(state: SessionState | null): string | undefined {
-  if (!state || isConnected(state)) return undefined;
-  if (state.kind === "loopback") return SERVICE_TRUST_REASON;
-  if (state.kind === "session") return undefined;
-  return state.error;
-}
-
 /** A pairing link lands on /pair. A remote browser without a session lands
  * there too, because every API call would otherwise fail with "pair this
  * device"; on the owner's own machine the server trusts loopback and this
@@ -98,7 +88,7 @@ async function chooseRoot(): Promise<React.ReactNode> {
   let resolved: SessionState | null = null;
   if (!servedPage() && location.pathname === "/pair" && !/[#&](?:code|signin)=/.test(location.hash)) {
     resolved = await resolveSessionState();
-    if (pairPromptIsStale({ served: false, pathname: location.pathname, hash: location.hash }, resolved)) history.replaceState(null, "", "/");
+    if (pairPromptIsStale({ served: false, pathname: location.pathname, hash: location.hash }, resolved)) history.replaceState(null, "", `/${location.search}`);
   }
   // An invite link works without a session: redeeming it is the sign-in.
   if (location.pathname === "/join") return <JoinPage initialToken={takeInviteTokenFromLocation()} />;
@@ -112,7 +102,7 @@ async function chooseRoot(): Promise<React.ReactNode> {
     const pairing = takePairingFromLocation();
     // This machine's own page, and the server says it is not home: the pairing
     // screen stays, with the server's reason (refused, or service trust only).
-    return <PairPage initialCode={pairing.code} autoSubmit={pairing.auto} initialEmail={takeInvitedEmailFromLocation()} reason={pairScreenReason(resolved)} />;
+    return <PairPage initialCode={pairing.code} autoSubmit={pairing.auto} initialEmail={takeInvitedEmailFromLocation()} reason={pairingScreenReason(resolved)} />;
   }
   // 2026-10-20: a deploy, a restart or a provider that is slow to confirm a
   // sign-in is retried in silence; the sign-in screen only for a real end.
@@ -126,10 +116,10 @@ async function chooseRoot(): Promise<React.ReactNode> {
       /* offline */
     }
   }
-  if (session.kind === "unauthenticated") return <PairPage initialCode={null} reason={session.error} />;
+  if (session.kind === "unauthenticated") return <PairPage initialCode={null} reason={pairingScreenReason(session)} />;
   // A service-trust server answers this machine's requests without a session
   // but refuses to let it manage anything: sign in first, as a remote browser would.
-  if (session.kind === "loopback" && session.trust === "service") return <PairPage initialCode={null} reason={SERVICE_TRUST_REASON} />;
+  if (session.kind === "loopback" && session.trust === "service") return <PairPage initialCode={null} reason={pairingScreenReason(session)} />;
   if (location.pathname === "/desktop-viewer") {
     const { DesktopViewer } = await import("./components/DesktopViewer");
     return <DesktopViewer />;

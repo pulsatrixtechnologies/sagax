@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairPromptIsStale, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, resolveSessionState, signInScreenDue, SERVICE_TRUST_REASON, signInWithBrowserGrant,
+  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairingScreenReason, pairPromptIsStale, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, resolveSessionState, signInScreenDue, SERVICE_TRUST_REASON, signInWithBrowserGrant,
   takeBrowserSignInFromLocation, takeInvitedEmailFromLocation, takePairingCodeFromLocation, takeSignInErrorFromLocation, type EnvironmentDescriptor,
 } from "./session";
 import { UNKNOWN_SESSION_RETRIES } from "../../shared/session-refusal";
@@ -13,6 +13,23 @@ describe("what the pair page says about why it was shown", () => {
     expect(reasonWorthShowing("403")).toBeNull();
     expect(reasonWorthShowing(undefined)).toBeNull();
     expect(reasonWorthShowing("unauthorized: this session has expired or was revoked; pair this device again")).toMatch(/expired or was revoked/);
+  });
+});
+
+describe("the line under the pairing screen (2026-11-20: never a raw fetch line)", () => {
+  it("says nothing while this machine is home", () => {
+    expect(pairingScreenReason(null)).toBeUndefined();
+    expect(pairingScreenReason({ kind: "loopback" })).toBeUndefined();
+    expect(pairingScreenReason({ kind: "session", id: "s1", label: "Safari", scopes: [], expiresAt: 1 })).toBeUndefined();
+  });
+
+  it("keeps the server's refusal and the service-trust line", () => {
+    expect(pairingScreenReason({ kind: "unauthenticated", error: "unauthorized: pair this device to use the server remotely", code: "sign_in_required" })).toMatch(/pair this device/);
+    expect(pairingScreenReason({ kind: "loopback", trust: "service" })).toBe(SERVICE_TRUST_REASON);
+  });
+
+  it("stays silent for a server that is only unreachable (a deploy, a restart)", () => {
+    expect(pairingScreenReason({ kind: "unreachable", error: "Failed to fetch", status: 503 })).toBeUndefined();
   });
 });
 

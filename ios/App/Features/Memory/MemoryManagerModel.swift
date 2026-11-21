@@ -35,6 +35,17 @@ final class MemoryManagerModel: ObservableObject {
     }
 
     func loadSources(_ session: Session) async {
+        #if DEBUG
+        // `-store-preview -memory-preview`: one bot memory source, no computer
+        // and no network (MemoryManagerUITests); browsing it reads an empty
+        // page. The flag alone is the switch: a store preview can carry a
+        // client of its own, and the run must not depend on it.
+        if ProcessInfo.processInfo.arguments.contains("-memory-preview") {
+            sources = [MemoryManagerSource(id: "preview-memory", kind: .bot, name: "Scout", mayWrite: true, botId: "preview-scout")]
+            error = nil
+            return
+        }
+        #endif
         guard let client = session.settingsClient else {
             sources = []
             error = String(localized: "Not connected.")
@@ -57,6 +68,15 @@ final class MemoryManagerModel: ObservableObject {
         browse = nil
         selected = []
         defer { busy = false }
+        #if DEBUG
+        // The same `-memory-preview` fixture: the page this push opens reads an
+        // empty set of notes, so the test proves the push itself (the crash of
+        // TestFlight 0.8.42 was the push, not the notes).
+        if ProcessInfo.processInfo.arguments.contains("-memory-preview") {
+            browse = MemoryBrowse(folders: [], notes: [], mayWrite: false)
+            return
+        }
+        #endif
         guard let client = session.settingsClient else {
             browse = MemoryBrowse(folders: [], notes: [], mayWrite: false)
             return

@@ -71,6 +71,9 @@ struct MessageRow: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = MainStackProbe.noteRow(kind: message.kind.rawValue)
+        #endif
         VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
             if !revealedBlocked, session.isBlockedLine(message, in: chat) {
                 // someone this person blocked: folded, for them only

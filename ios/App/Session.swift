@@ -830,6 +830,10 @@ final class Session: ObservableObject {
                 // the chat transcript can be timed before and after LazyVStack.
                 applyLongTranscriptPreview(count: longCount)
             }
+            if let richCount = RichTranscriptPreview.count(in: arguments) {
+                // The chat-open stack measure: a long thread of rich rows.
+                applyLongTranscriptPreview(count: richCount, rich: true)
+            }
             if arguments.contains("-threads-preview"),
                let pagesURL = Bundle.main.url(forResource: "ThreadPreviewPages", withExtension: "json"),
                let pagesData = try? Data(contentsOf: pagesURL),
@@ -1372,10 +1376,12 @@ final class Session: ObservableObject {
     /// Replaces the first bot's thread with a synthetic long transcript for
     /// LazyVStack measurement (StorePreview Scout, or demo Atlas). One thread
     /// keeps the home roster cheap while the open chat carries ~2000 rows.
-    func applyLongTranscriptPreview(count: Int) {
+    func applyLongTranscriptPreview(count: Int, rich: Bool = false) {
         guard let bot = state.bots.first else { return }
         let threadId = bot.threadId
-        let generated = LongTranscript.messages(count: count, idPrefix: "long-\(threadId)")
+        let generated = rich
+            ? RichTranscriptPreview.messages(count: count, idPrefix: "rich-\(threadId)")
+            : LongTranscript.messages(count: count, idPrefix: "long-\(threadId)")
         state.messages[threadId] = generated
         state.hasMore[threadId] = false
         state.activeLeafIds[threadId] = generated.last?.id

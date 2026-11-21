@@ -134,6 +134,46 @@ public struct ChatWidgetNode: Hashable, Sendable, Identifiable {
         let next = ancestors + [self]
         for child in children { child.walk(next, visit) }
     }
+
+    /// How deep a tree is drawn, this node included: the server's own limit for
+    /// a tree `show_widget` posts (`WIDGET_LIMITS.depth` in `shared/widget.ts`).
+    /// The phone lays a widget out on its main thread, whose stack is 1 MB on an
+    /// iPhone, one layout level per nesting level: a tree deeper than this (an
+    /// older payload, a hand-written one, a tree the server let through before
+    /// the limit shipped) is drawn at this depth, every leaf kept (#5159).
+    public static let maxDepth = 10
+
+    /// Levels below this node, itself included: a leaf is 1.
+    public var depth: Int { 1 + (children.map(\.depth).max() ?? 0) }
+
+    /// Every leaf (a node with no children), in drawing order: what a tree must
+    /// keep when its nesting is collapsed to `maxDepth`.
+    public func leaves() -> [ChatWidgetNode] {
+        children.isEmpty ? [self] : children.flatMap { $0.leaves() }
+    }
+
+    /// This node, its subtree nested at most `limit` deep. Past the limit a
+    /// container gives its place to its children: every word, field and button
+    /// stays, in order, and only the containers that were pure nesting go, with
+    /// the layout props that held them apart. Nothing changes for a tree already
+    /// within the limit, which is every card the server accepts today.
+    public func cappedDepth(limit: Int = ChatWidgetNode.maxDepth) -> ChatWidgetNode {
+        Self.shallowing(self, limit: limit).first ?? self
+    }
+
+    /// The nodes that stand in for `node` where `limit` levels are left: one for
+    /// the node itself, or its own stand-ins when the node no longer fits.
+    private static func shallowing(_ node: ChatWidgetNode, limit: Int) -> [ChatWidgetNode] {
+        if node.children.isEmpty { return [node] }
+        guard limit > 1 else {
+            // No room for this container: its children come up in its place, and
+            // so do theirs, until only leaves are left to place.
+            return node.children.flatMap { shallowing($0, limit: 1) }
+        }
+        var capped = node
+        capped.children = node.children.flatMap { shallowing($0, limit: limit - 1) }
+        return [capped]
+    }
 }
 
 /// A widget that took its one answer: it folds to a line and takes no more presses.
@@ -195,7 +235,8 @@ public struct ChatWidgetPayload: Hashable, Sendable, Codable {
     private var raw: WidgetJSON
 
     public init(root: ChatWidgetNode?, rev: Int = 0, settled: ChatWidgetSettled? = nil, booking: ChatWidgetBookingState? = nil) {
-        self.root = root
+        // Drawn within the phone's layout budget; `raw` keeps the tree whole.
+        self.root = root?.cappedDepth()
         self.rev = rev
         self.settled = settled
         self.booking = booking
@@ -205,7 +246,9 @@ public struct ChatWidgetPayload: Hashable, Sendable, Codable {
     public init(from decoder: any Decoder) throws {
         raw = (try? WidgetJSON(from: decoder)) ?? .null
         let object = raw.object ?? [:]
-        root = object["root"].flatMap { ChatWidgetNode(json: $0, fallbackId: "n0") }
+        // Capped here too: this is the path a wire payload takes, and the phone
+        // lays out every level under it on its main thread's stack (#5159).
+        root = object["root"].flatMap { ChatWidgetNode(json: $0, fallbackId: "n0") }?.cappedDepth()
         rev = Int(object["rev"]?.number ?? 0)
         if let settledJSON = object["settled"], settledJSON.object != nil,
            let data = try? JSONEncoder().encode(settledJSON) {

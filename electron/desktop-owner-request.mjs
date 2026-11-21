@@ -9,13 +9,17 @@
 // - a frame: the page that embeds it is the app (a page preview, a widget
 //   document the app serves); a frame of another origin is not;
 // - anything else (an API call, an event stream, a WebSocket, the app's own
-//   picture or file preview): its Origin, when it has one, else its Referer,
-//   is the app;
+//   picture or file preview): its Origin when it has one, else its Referer
+//   when it has one, else the origin webRequest says issued it; all three
+//   are read from the request, and the page controls none of them;
 // - never a request whose chain began elsewhere (a redirect toward the port).
-// A picture, a clip or a segment that message content names loads with no
-// Referer (the chat draws an absolute address with referrerpolicy
-// no-referrer, src/lib/content-referrer.ts) and from no frame of the app, so
-// it never carries the capability, even when it points at the server's port.
+// The app's own page sends no Origin on a same-origin GET fetch and no
+// Referer (the server serves it with referrer-policy: no-referrer,
+// server/static-ui.ts), so its own GET calls (the session check at launch,
+// its streams and file previews) name the app only through the issuing
+// origin (M-20261120-026). A load a message content names from no frame of
+// the app, an opaque origin (a sandboxed bot page) or another origin names
+// nothing, so it never carries the capability, even toward the server's port.
 
 function originOf(value) {
   if (typeof value !== "string" || !value) return null;
@@ -123,5 +127,15 @@ export function isAppServerRequest(details, serverPort, ledger) {
   const origin = header(details.requestHeaders, "origin");
   if (origin !== undefined) return origin === app;
   const requester = originOf(details.referrer) ?? originOf(header(details.requestHeaders, "referer"));
-  return requester === app;
+  if (requester === app) return true;
+  // The app's own page carries neither header on its own calls: Chromium
+  // sends no Origin on a same-origin GET fetch, and the page is served with
+  // `referrer-policy: no-referrer` (server/static-ui.ts), so there is no
+  // Referer either (M-20261120-026: the session check lost the capability at
+  // launch and Personal opened on the pairing screen). webRequest names the
+  // origin that issued the request, which the page controls no more than the
+  // ledger above: it says the page that asks is the app. Another origin, an
+  // opaque one ("null", a sandboxed bot page) or no initiator at all (an
+  // older Electron, a request the browser started itself) stays refused.
+  return details.initiatorOrigin === app;
 }

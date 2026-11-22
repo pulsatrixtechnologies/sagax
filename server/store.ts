@@ -3177,11 +3177,11 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
    * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
-    const included = (bot?.tasks ?? []).filter((task) => include(task) && !task.closedBy);
+    const included = (bot?.tasks ?? []).filter((task) => include(task));
     // A routine run's own task never makes the bot read busy (2026-11-03).
     // A closed thread is finished work. Its leftover activity used to keep the
     // bot "waiting on you" or working after close_thread (#5011).
-    const tasks = included.filter((task) => !task.routineRunId);
+    const tasks = included.filter((task) => !task.routineRunId && !task.closedBy);
     const legacy = this.legacyActivities.get(botId);
     const activities = [
       legacy,

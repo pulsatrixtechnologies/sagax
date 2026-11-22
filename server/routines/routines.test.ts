@@ -12,7 +12,7 @@ import { routineRepeatingRule } from "./routine-report.ts";
 /** #3695, #3990: a run of a routine that does not post each result reads its rule after the work;
  * `told`: the run of a streak that tells the person (3 whatever the schedule, owner rule 2026-11-18). */
 const repeating = (prompt: string, told = 3) => `${prompt}\n\n${routineRepeatingRule(told)}`;
-import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
+import { ROUTINE_FLEXIBLE_WINDOW_CLOSED, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_WAITING_FOR_WINDOW } from "./routine-execution.ts";
 import {
   nextOccurrence,
   PREWAKE_LEAD_MS,
@@ -2196,6 +2196,90 @@ describe("RoutineManager", () => {
       status: "missed",
       error: "The routine ended before this scheduled run could start",
     });
+  });
+
+  const hourlyFlexible = (anchorAt: number) => ({
+    type: "interval" as const,
+    everyMinutes: 60,
+    anchorAt,
+    weekdays: [1, 2, 3, 4, 5],
+    window: { start: "08:00", end: "17:00" },
+    timing: "flexible" as const,
+    windowEarlyMinutes: 15,
+    windowLateMinutes: 15,
+  });
+
+  it("misses a queued flexible run once its late window closes, and says so (#5127)", async () => {
+    const mondayAtSeven = new Date(2026, 7, 17, 7, 0, 0).getTime();
+    const slot = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(mondayAtSeven);
+    h.setBot("busy");
+    const routine = h.manager.create({
+      name: "Hourly dispatch",
+      prompt: "Dispatch open tickets",
+      botId: "maus-interval",
+      schedule: hourlyFlexible(slot),
+    });
+    expect(routine.nominalRunAt).toBe(slot);
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    const queued = h.manager.listRuns()[0]!;
+    expect(queued).toMatchObject({ status: "queued", slotAt: slot });
+    expect(queued.startedAt).toBeUndefined();
+    expect(queued.error).toBeUndefined();
+    h.setNow(slot + 15 * 60_000 + 1_000);
+    h.setBot("ready");
+    await h.manager.tick();
+    expect(h.started).toHaveLength(0);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "missed", error: ROUTINE_FLEXIBLE_WINDOW_CLOSED });
+    expect(h.failed.map((run) => run.id)).toContain(queued.id);
+    const kept = h.manager.getRoutine(routine.id)!;
+    expect(kept.enabled).toBe(true);
+    expect(kept.nextRunAt).toBeGreaterThan(slot + 15 * 60_000);
+  });
+
+  it("says why a flexible run waits outside its hours, then starts once they open (#5127)", async () => {
+    const mondayAtSeven = new Date(2026, 7, 17, 7, 0, 0).getTime();
+    const slot = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(mondayAtSeven);
+    let early: ReturnType<typeof h.manager.create> | undefined;
+    for (let index = 0; index < 12 && !early; index += 1) {
+      const routine = h.manager.create({
+        name: `Window ${index}`,
+        prompt: "Dispatch open tickets",
+        botId: "maus-interval",
+        schedule: hourlyFlexible(slot),
+      });
+      if (routine.nextRunAt! < slot) early = routine;
+    }
+    expect(early?.nextRunAt).toBeLessThan(slot);
+    h.setNow(early!.nextRunAt!);
+    await h.manager.tick();
+    const queued = h.manager.listRuns().find((run) => run.routineId === early!.id)!;
+    expect(queued).toMatchObject({ status: "queued", attention: ROUTINE_WAITING_FOR_WINDOW });
+    h.setNow(slot);
+    await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.id === queued.id)).toMatchObject({ status: "running" });
+  });
+
+  it("keeps a saved window change as the schedule the next run uses (#5127)", () => {
+    const anchorAt = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(anchorAt - 60_000);
+    const routine = h.manager.create({
+      name: "Hourly dispatch",
+      prompt: "Dispatch open tickets",
+      botId: "maus-interval",
+      schedule: hourlyFlexible(anchorAt),
+    });
+    const widened = h.manager.update(routine.id, {
+      schedule: { ...hourlyFlexible(anchorAt), window: { start: "08:00", end: "23:00" } },
+    });
+    expect(widened?.schedule).toMatchObject({ window: { start: "08:00", end: "23:00" } });
+    // An older client that omits the window does not clear it.
+    const reread = h.manager.update(routine.id, {
+      schedule: { type: "interval", everyMinutes: 60, anchorAt, timing: "flexible", windowEarlyMinutes: 15, windowLateMinutes: 15 },
+    });
+    expect(reread?.schedule).toMatchObject({ window: { start: "08:00", end: "23:00" } });
   });
 
   it("preserves exact timestamps for manual and webhook interval work", async () => {

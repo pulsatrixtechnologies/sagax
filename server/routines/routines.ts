@@ -96,7 +96,7 @@ import { SignalLedger } from "../proactive/signal-ledger.ts";
 import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
-import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
+import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_FLEXIBLE_WINDOW_CLOSED, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, ROUTINE_WAITING_FOR_WINDOW, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { wakeStreakOf } from "./routine-run-card.ts";
 
@@ -1838,6 +1838,16 @@ export function nextScheduledRun(run: Pick<RoutineRun, "routineId" | "triggerSou
   const interval = schedule.type === "interval" ? schedule.everyMinutes * 60_000 : schedule.type === "daily" ? LOCAL_DAY_MS
     : following !== null ? following - at : null;
   return interval === null ? undefined : { at, interval };
+}
+
+/** #5127: the last instant a queued flexible run may still start. With the
+ * nominal slot, that is the late edge. Without it (a run queued before the
+ * slot was stored), the hashed start plus both sides, which is never earlier
+ * than the late edge. */
+function flexibleDeadline(schedule: Parameters<typeof cappedWindow>[0], run: Pick<RoutineRun, "slotAt" | "scheduledFor">): number {
+  const window = cappedWindow(schedule, run.slotAt ?? run.scheduledFor);
+  if (run.slotAt != null) return run.slotAt + window.late * 60_000;
+  return run.scheduledFor + (window.early + window.late) * 60_000;
 }
 
 function latestIntervalOccurrence(
@@ -4286,6 +4296,16 @@ export class RoutineManager {
         const definition = triggerSource === "schedule"
           ? this.routines.find((routine) => routine.id === run.routineId)
           : undefined;
+        // #5127: a flexible run starts inside its late window. Once that
+        // window has closed, the queued receipt ends with a reason instead
+        // of sitting with no error until a later slot or a person's prompt.
+        if (definition && isFlexibleSchedule(definition.schedule)) {
+          const deadline = flexibleDeadline(definition.schedule, run);
+          if (now > deadline) {
+            this.missQueuedRun(run, ROUTINE_FLEXIBLE_WINDOW_CLOSED);
+            continue;
+          }
+        }
         if (definition?.schedule.type === "interval") {
           const zone = this.zoneOf(definition);
           const latest = latestIntervalOccurrence(definition.schedule, now, zone);
@@ -4301,6 +4321,12 @@ export class RoutineManager {
           if (!mayDispatch) {
             if (nextOccurrence(definition.schedule, now, zone) === null) {
               this.missQueuedRun(run, "The routine ended before this scheduled run could start");
+            } else if (run.attention !== ROUTINE_WAITING_FOR_WINDOW) {
+              // #5127: outside the allowed hours the run stays queued, and
+              // the row says why. A later tick starts it once the hours open.
+              run.attention = ROUTINE_WAITING_FOR_WINDOW;
+              this.saveLater();
+              this.emitRun(run);
             }
             continue;
           }
@@ -4661,6 +4687,7 @@ export class RoutineManager {
           (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
         if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
           const run = this.newRun(routine, scheduledFor, false, allocations);
+          if (flexible && firedNominal != null) run.slotAt = firedNominal;
           // A one-time routine held while its person was away runs late
           // on their return rather than being written off as missed.
           if (late > CATCH_UP_MS && !(routine.onlyWhenPresent && routine.schedule.type === "once")) {

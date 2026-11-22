@@ -76,6 +76,9 @@ export interface RoutineRun {
   botId: string;
   runOn: RoutineRunOn;
   scheduledFor: number;
+  /** #5127: the nominal slot a flexible scheduled run belongs to. The late
+   * window is measured from this, not from the hashed start. */
+  slotAt?: number;
   status: RoutineRunStatus;
   manual: boolean;
   /** Slice 6, fix 2: a run Perspicax rate limited stays queued until this

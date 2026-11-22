@@ -5561,6 +5561,18 @@ describe("ClaudeDriver resume recovery (fake CLI)", () => {
     expect(text).toBe(REBUILD);
   });
 
+  it("logs why the saved session could not be resumed before starting a new one", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await instance.adapter.sendTurn({ threadId: "t-logged", text: "what now?", resumeCursor: "an-outside-session", recoveryText: REBUILD });
+      await recorder.until((e) => e.type === "turn.completed");
+      const lines = logged.mock.calls.map((call) => String(call[0]));
+      expect(lines.find((line) => line.includes("could not resume session an-outside-session"))).toMatch(/claude \(claude-test\): could not resume session an-outside-session for thread t-logged, starting a new one:/);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("does not announce a replacement as rebuilt when there was nothing to replay", async () => {
     // recoveryPromptFor falls back to the turn text when the harness attached
     // no rebuild: that session holds the turn, not the conversation, and the

@@ -5,7 +5,7 @@ import { createCredentialConfirmRoutes, CREDENTIAL_CONFIRM_PATH } from "./creden
 import { confirmPaidKey } from "../credentials/paid-key-confirm.ts";
 
 function call(body: unknown) {
-  const handler = createCredentialConfirmRoutes({ confirm: confirmPaidKey });
+  const handler = createCredentialConfirmRoutes({ rememberPaidKey: confirmPaidKey });
   let status = 0;
   let payload: unknown;
   const res = { setHeader() { return res; } };

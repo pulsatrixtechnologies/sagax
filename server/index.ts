@@ -31205,7 +31205,7 @@ ROUTES.push(createUsageMeterRoutes({
 }));
 // A person's own Experimental switches and browser profiles (#1098,
 // server/routes/person-settings.ts): theirs, on an organization server.
-ROUTES.push(createCredentialConfirmRoutes({ confirm: confirmPaidKey }));
+ROUTES.push(createCredentialConfirmRoutes({ rememberPaidKey: confirmPaidKey }));
 ROUTES.push(createPersonSettingsRoutes({
   store: personSettings,
   principal: (auth) => personSettingsOwner(sessionPrincipal(auth)),

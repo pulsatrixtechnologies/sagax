@@ -143,9 +143,21 @@ export function fieldValue(item: unknown, field: VaultFillField): string | null 
       return value(rows.find((row) => row.purpose === "PASSWORD") ?? rows.find((row) => row.id === "password"));
     case "totp":
       return value(rows.find((row) => row.type === "OTP" || row.type === "otp"));
-    case "apiKey":
-      return value(rows.find((row) => row.id === "credential" || String(row.label ?? "").toLowerCase() === "credential"))
-        ?? value(rows.find((row) => row.purpose === "PASSWORD"));
+    case "apiKey": {
+      const credential = value(rows.find((row) => row.id === "credential" || String(row.label ?? "").toLowerCase() === "credential"));
+      if (credential) return credential;
+      const extra = value(rows.find((row) => {
+        const kind = String(row.type ?? "").toUpperCase();
+        const purpose = String(row.purpose ?? "");
+        return kind === "CONCEALED" && purpose !== "PASSWORD" && row.id !== "password";
+      }));
+      if (extra) return extra;
+      const itemRecord = record(item);
+      const category = String(itemRecord?.category ?? "");
+      const notes = itemRecord?.notesPlain;
+      if ((category === "SECURE_NOTE" || category === "Secure Note") && typeof notes === "string" && notes) return notes;
+      return value(rows.find((row) => row.purpose === "PASSWORD"));
+    }
     default:
       return null;
   }
@@ -266,14 +278,14 @@ export class OnePassword {
         const items = await this.connectGet(`/v1/vaults/${vault.id}/items`);
         for (const item of (Array.isArray(items) ? items : []).map(record)) {
           if (!item || typeof item.id !== "string" || !ID.test(item.id)) continue;
-          if (!["LOGIN", "PASSWORD", "API_CREDENTIAL"].includes(String(item.category))) continue;
+          if (!["LOGIN", "PASSWORD", "API_CREDENTIAL", "SECURE_NOTE"].includes(String(item.category))) continue;
           out.push({ id: item.id, vaultId: vault.id, vaultName: String(vault.name ?? ""), title: String(item.title ?? "").slice(0, 120), category: String(item.category), domains: domainsOf(item.urls) });
           if (out.length >= MAX_ITEMS) return out;
         }
       }
       return out;
     }
-    const items = await this.op(["item", "list", "--categories", "Login,Password,API Credential", "--format=json"]);
+    const items = await this.op(["item", "list", "--categories", "Login,Password,API Credential,Secure Note", "--format=json"]);
     for (const item of (Array.isArray(items) ? items : []).map(record)) {
       const vault = record(item?.vault);
       if (!item || typeof item.id !== "string" || !ID.test(item.id) || typeof vault?.id !== "string" || !ID.test(vault.id)) continue;

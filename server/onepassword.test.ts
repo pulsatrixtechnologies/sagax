@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { fieldValue, locateOp, OnePassword, safeBinaryPath, type ExecFileFn, type FetchFn } from "./onepassword.ts";
+import { onePasswordCanAdd, onePasswordImportKind } from "../shared/credential-vault.ts";
 
 const FAKE_OP = "/opt/fake-1password/bin/op";
 const located = async () => FAKE_OP;
@@ -192,5 +193,21 @@ describe("1Password", () => {
     expect(fieldValue(ITEM, "totp")).toBe("123456");
     expect(fieldValue({ fields: [{ id: "credential", value: "fake-api-credential" }] }, "apiKey")).toBe("fake-api-credential");
     expect(fieldValue({}, "password")).toBeNull();
+  });
+
+  it("offers a login's extra fields and a text-only item as secrets", () => {
+    expect(fieldValue({
+      category: "LOGIN",
+      fields: [
+        { id: "password", purpose: "PASSWORD", value: "fake-1p-password" },
+        { id: "client", label: "Client Secret", type: "CONCEALED", value: "fake-client-secret" },
+      ],
+    }, "apiKey")).toBe("fake-client-secret");
+    expect(fieldValue({ category: "SECURE_NOTE", notesPlain: "fake-note-text", fields: [] }, "apiKey")).toBe("fake-note-text");
+    expect(onePasswordImportKind("LOGIN", [])).toBe("apiKey");
+    expect(onePasswordImportKind("SECURE_NOTE", [])).toBe("note");
+    expect(onePasswordImportKind("Login", ["example.test"])).toBe("login");
+    expect(onePasswordCanAdd({ category: "LOGIN", domains: [] })).toBe(true);
+    expect(onePasswordCanAdd({ category: "LOGIN", domains: ["example.test"] })).toBe(true);
   });
 });

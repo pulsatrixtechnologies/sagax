@@ -35,6 +35,14 @@ describe("secretRef", () => {
     expect(again).toEqual({ ok: false, error: `${ref} was already used: each secretRef works once. Ask again with request_credential.` });
   });
 
+  it("knows a live ref for a label without returning the value", () => {
+    const vault = new SecretVault(clock);
+    vault.saveRef(ATLAS, "card-1", "CxOps", "ntn_canary_value");
+    expect(vault.hasLiveRef("atlas", "CxOps")).toBe(true);
+    expect(vault.hasLiveRef("other", "CxOps")).toBe(false);
+    expect(JSON.stringify(vault.hasLiveRef("atlas", "CxOps"))).not.toContain("ntn_canary_value");
+  });
+
   it("works only for the bot and conversation that asked", () => {
     const vault = new SecretVault(clock);
     const ref = vault.saveRef(ATLAS, "card-1", "Notion key", "ntn_canary_value");

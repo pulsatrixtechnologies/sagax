@@ -32,7 +32,7 @@
 // only answered to the person's own app.
 import { randomUUID } from "node:crypto";
 
-import { botVaultPrincipal, bindingUrl, isVaultGrantMode, normalizeVaultDomain, siteAddable, VAULT_ITEM_KINDS, vaultDomainMatches, VAULT_LOGIN_TARGET, vaultHandle, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault.ts";
+import { botVaultPrincipal, bindingUrl, isVaultGrantMode, normalizeVaultDomain, onePasswordImportKind, siteAddable, VAULT_ITEM_KINDS, vaultDomainMatches, VAULT_LOGIN_TARGET, vaultHandle, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault.ts";
 import { isVaultDuplicateMode, isVaultExportFormat, isVaultImportFormat, type VaultExportFormat, type VaultTransferItem } from "../../shared/credential-vault-transfer.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { CredentialVaultError, type CredentialVault, type PurchaseListing, type VaultItemInput } from "../vault/credential-vault.ts";
@@ -384,7 +384,7 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
         const listed = (await deps.onePassword.listItems()).find((row) => row.id === itemId && row.vaultId === vaultId);
         if (!listed) return json(res, 404, { error: "No such 1Password item", code: "unknown_item" });
         const item = deps.vault.create(principalId, {
-          kind: listed.category === "API_CREDENTIAL" ? "apiKey" : "login",
+          kind: onePasswordImportKind(listed.category, listed.domains),
           name: typeof input.name === "string" && input.name.trim() ? input.name : listed.title || "1Password item",
           domains: input.domains ?? listed.domains,
         }, { source: "1password", onePassword: { via: status.via, vaultId, itemId } });

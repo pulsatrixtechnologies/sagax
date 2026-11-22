@@ -141,6 +141,19 @@ describe("the sidebar at 1338 px (wide)", () => {
     expect(container.querySelector("[data-drawer-scrim]")).toBeNull();
   });
 
+  it("orders bots inside a team from the saved order (#5024)", async () => {
+    localStorage.setItem("sagax.sectionBotOrder.v1", JSON.stringify({ Ops: ["iris", "atlas"] }));
+    state.sections = ["Ops"];
+    state.bots = [
+      bot("atlas", "Atlas", "Service desk"),
+      bot("iris", "Iris"),
+    ].map((entry) => ({ ...entry, section: "Ops" }));
+    await draw();
+    const atlas = row("atlas");
+    const iris = row("iris");
+    expect(iris.compareDocumentPosition(atlas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("draws the Primary Bot as a regular row when that style is chosen (#4853)", async () => {
     localStorage.setItem("sagax.primaryBotStyle.v1", "row");
     state.bots = [bot("nova", "Nova", "Desk"), bot("atlas", "Atlas", "Service desk")];

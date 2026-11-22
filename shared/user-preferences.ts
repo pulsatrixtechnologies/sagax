@@ -65,6 +65,8 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.sidebarHidden.v1",
   // the person's own sidebar sections (src/lib/personal-sections.ts)
   "sagax.sidebarSections.v1",
+  // the order of bots inside each sidebar team (src/lib/section-bot-order.ts, #5024)
+  "sagax.sectionBotOrder.v1",
   // sub-teams: which team sits under which (src/lib/section-tree.ts, #2045)
   "sagax.sectionParents.v1",
   // Settings > Appearance > Sidebar: keep unassigned people in their own

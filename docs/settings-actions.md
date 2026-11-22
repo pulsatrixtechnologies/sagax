@@ -290,6 +290,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New team ({name, botIds}) | Sidebar > New team | `sagax_settings` set `section.create` | simple; organisation : organisation |
 | Rename a team | Sidebar > team menu > Rename | `sagax_settings` get, set `section.name` | simple; organisation : organisation |
 | Bots in a team ({addBotIds, removeBotIds}) | Sidebar > team | `sagax_settings` set `section.bots` | simple; organisation : organisation |
+| Order of bots inside sidebar teams ({team name: [bot ids], first to last}) | Sidebar > drag a bot inside its team | `sagax_settings` get, set `section.order` | simple |
 | Delete a team (true) | Sidebar > team menu > Delete | `sagax_settings` set `section.delete` | suppression |
 | The teams of the sidebar (read only) | Sidebar | `sagax_settings` get, set `section.list` | simple |
 

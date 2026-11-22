@@ -746,6 +746,7 @@ add({
   key: "section.bots", family: "section", target: "section", value: "object", label: "Bots in a team ({addBotIds, removeBotIds})", where: "Sidebar > team",
   write: (ids, v) => ({ method: "PUT", path: "/api/sidebar-sections", query: { section: ids.target! }, body: v }), classes: serverWide,
 });
+pref("section.order", "section", "sagax.sectionBotOrder.v1", "object", "Order of bots inside sidebar teams ({team name: [bot ids], first to last})", "Sidebar > drag a bot inside its team");
 add({
   key: "section.delete", family: "section", target: "section", value: "boolean", label: "Delete a team (true)", where: "Sidebar > team menu > Delete",
   write: (ids, v) => v === true ? { method: "DELETE", path: "/api/sidebar-sections", query: { section: ids.target! } } : "value is true.",

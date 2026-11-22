@@ -204,6 +204,7 @@ export function useChatViewPresence({
   // toggles the bot panel. No sharing pill, no gear (JC 2026-11-06).
   const chatHeader = side ? null : (
     <BotChatHeader
+      plain
       name={bot.name}
       label={(bot.title ?? "")}
       panelOpen={pillPanelOpen}

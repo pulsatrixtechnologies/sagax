@@ -1,4 +1,5 @@
 import { redactSecretsInText } from "./redact.ts";
+import { toolResultPrefix } from "./tools/tool-results.ts";
 
 /** What a task is called before its first message names it. */
 export const UNTITLED_TASK = "New task";
@@ -18,7 +19,7 @@ export function titleFromMessage(text: string): string {
   // Redact before cutting: a key cut short no longer looks like a key, and
   // its start would stay in the title (and in every copy of it).
   const line = redactSecretsInText(text.trim().split("\n")[0]!.trim());
-  return line.length > 48 ? `${line.slice(0, 47)}…` : line || UNTITLED_TASK;
+  return line.length > 48 ? `${toolResultPrefix(line, 47)}…` : line || UNTITLED_TASK;
 }
 
 /** One usable line out of a model's title reply: the first line, no

@@ -114,6 +114,38 @@ describe("GrokDriver turns (fake fetch)", () => {
     expect(grokHttpReasoningEffort("grok-4.5", "xhigh")).toBe("high");
   });
 
+  it("routes both turns of one thread to the same prompt cache and keeps the prefix", async () => {
+    const calls: Array<{ conv: string | null; messages: Array<{ role: string; content: unknown }> }> = [];
+    script = [];
+    await create();
+    globalThis.fetch = (async (url, init) => {
+      if (String(url).endsWith("/language-models") || String(url).endsWith("/models")) return Response.json({ models: [] });
+      const headers = new Headers(init?.headers);
+      const body = init?.body ? JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: unknown }> } : { messages: [] };
+      calls.push({ conv: headers.get("x-grok-conv-id"), messages: body.messages });
+      return sseResponse(SSE_BODY("answer-one"));
+    }) as typeof fetch;
+    const stable = "STABLE-PREFIX";
+    await instance.adapter.sendTurn({
+      threadId: "thread-ada", text: "first question",
+      system: `${stable}\nVOL`, systemStable: stable, systemVolatile: "VOL",
+    });
+    await recorder.until((event) => event.threadId === "thread-ada" && event.type === "turn.completed");
+    await instance.adapter.sendTurn({
+      threadId: "thread-ada", text: "second question",
+      system: `${stable}\nVOL-2`, systemStable: stable, systemVolatile: "VOL-2",
+      transcript: [
+        { role: "user", text: "first question" },
+        { role: "assistant", text: "answer-one" },
+      ],
+    });
+    await recorder.until((event) => event.type === "turn.completed" && calls.length >= 2);
+    expect(calls.map((call) => call.conv)).toEqual(["thread-ada", "thread-ada"]);
+    expect(calls[0]!.messages[0]).toEqual({ role: "system", content: stable });
+    expect(calls[1]!.messages.slice(0, calls[0]!.messages.length)).toEqual(calls[0]!.messages);
+    expect(calls[1]!.messages.at(-1)).toMatchObject({ role: "user" });
+  });
+
   it("normalizes a full turn into the canonical event sequence", async () => {
     script = [];
     await create();

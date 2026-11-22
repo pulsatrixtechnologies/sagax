@@ -195,6 +195,12 @@ export const GrokDriver: ProviderDriver<GrokConfig> = {
         const level = grokHttpReasoningEffort(model, effort);
         return level ? { reasoning_effort: level } : {};
       },
+      // xAI stores a prompt cache per server. The same conversation id on
+      // every turn of a thread routes those turns to one server (docs: x-grok-conv-id).
+      conversationHeaders: (threadId) => {
+        const id = threadId.replace(/[\r\n]/g, "").trim().slice(0, 128);
+        return id ? { "x-grok-conv-id": id } : {};
+      },
       effortLevels: GROK_HTTP_EFFORT,
       httpErrorLabel: "xAI",
       missingKeyError: `Save an xAI API key in Settings → API keys, or set ${config.apiKeyEnv}.`,

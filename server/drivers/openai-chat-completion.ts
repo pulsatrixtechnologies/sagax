@@ -298,13 +298,14 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     maxTokens?: number,
     apiKey = "",
     effort?: EffortLevel,
+    conversationId?: string,
   ): Promise<Completion> => {
     const streams = { assistant_text: new ChatSpecialTokenStream(), reasoning_text: new ChatSpecialTokenStream() };
     const forward = onDelta && ((delta: string, kind: "assistant_text" | "reasoning_text") => {
       const shown = streams[kind].feed(delta);
       if (shown) onDelta(shown, kind);
     });
-    const completion = await completeRaw(messages, model, stream, signal, forward, tools, onUsage, maxTokens, apiKey, effort);
+    const completion = await completeRaw(messages, model, stream, signal, forward, tools, onUsage, maxTokens, apiKey, effort, conversationId);
     if (onDelta) for (const kind of ["reasoning_text", "assistant_text"] as const) {
       const shown = streams[kind].finish();
       if (shown) onDelta(shown, kind);
@@ -323,6 +324,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     maxTokens?: number,
     apiKey = "",
     effort?: EffortLevel,
+    conversationId?: string,
   ): Promise<Completion> => {
     if (options.responsesApi?.(model) && !responsesRefused.endpoint.has(model)) {
       httpTrace("try-/responses");
@@ -348,7 +350,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     } else {
       httpTrace("endpoint-/chat/completions");
     }
-    return completeChat(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey, effort);
+    return completeChat(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey, effort, conversationId);
   };
 
   const completeChat = async (
@@ -362,6 +364,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     maxTokens?: number,
     apiKey = "",
     effort?: EffortLevel,
+    conversationId?: string,
   ): Promise<Completion> => {
     // Idle timer that is renewed on every received chunk during streaming
     const timeoutController = new AbortController();
@@ -390,7 +393,11 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
       const response = options.chatRequest ? await options.chatRequest(payload, apiKey, activeSignal) : await fetch(`${options.apiUrl}/chat/completions`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
-        headers: { ...auth(apiKey), "content-type": "application/json" },
+        headers: {
+          ...auth(apiKey),
+          "content-type": "application/json",
+          ...(conversationId ? options.conversationHeaders?.(conversationId) : {}),
+        },
         body: payload,
         signal: activeSignal,
       });

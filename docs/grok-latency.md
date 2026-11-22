@@ -252,6 +252,26 @@ permission holds p50 4.5 s (n=2274); session/new|load p50 0.22 s; spawn -> promp
   waits 10 s on a short conversation and up to 30 s on a long one (grokAdaptiveStallMs);
   SAGAX_GROK_STALL_RETRY_MS still fixes it (0 turns it off).
 
+## Grok HTTP prompt cache key (2026-11-22)
+
+Measured on a fake xAI server in this repository (no live key, so these
+numbers are Sagax's own request, not the vendor's time to first token).
+Two turns of one thread, the second carrying the first turn's transcript:
+
+- before: `x-grok-conv-id` absent on both turns; `reasoning_effort` absent;
+  the second request extended the first (system prefix identical, 188 bytes
+  of the JSON prefix); local send to `turn.completed` 7 ms then about 1 ms;
+  `turn.completed` cost null on both even when the fake usage carried
+  `cost_in_usd_ticks`.
+- after the cache header, same fixture: both turns send
+  `x-grok-conv-id: thread-ada` and `reasoning_effort: high`; the prefix is
+  still 188 bytes and the second request still extends the first; local
+  send to `turn.completed` 7 ms then 1 ms. The vendor stores a prompt
+  cache per server, and that header is what routes a conversation to one
+  server. The stable half was already the system message; this change
+  does not rebuild it. Cost stayed null here; the ticks are read in the
+  per-turn cost change.
+
 ## Cold start on every turn (#4215, 2026-11-13)
 
 What the production lines showed: path=spawn on every turn, setup 2.7 to 13.6 s,

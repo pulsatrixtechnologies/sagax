@@ -59,6 +59,9 @@ export interface RuntimeOptions<Config> {
   /** Extra JSON fields for one chat-completions call, such as Grok's
    * `reasoning_effort`. Absent on engines whose chat path must not carry it. */
   chatEffortBody?: (model: string, effort: EffortLevel | undefined) => Record<string, unknown>;
+  /** Headers that pin one conversation to one cache server. Grok HTTP sends
+   * `x-grok-conv-id`. Absent on engines that do not route a cache that way. */
+  conversationHeaders?: (threadId: string) => Record<string, string>;
   httpErrorLabel: string;
   missingKeyError: string;
   unavailableReason: string;

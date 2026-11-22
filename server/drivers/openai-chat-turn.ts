@@ -362,7 +362,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
             if (streamKind === "assistant_text") answerStreamed = true;
             const shown = holdback && streamKind === "assistant_text" ? holdback.feed(text) : text;
             if (shown) delta(shown, streamKind);
-          }, tools.definitions, undefined, undefined, apiKey, turn.effort);
+          }, tools.definitions, undefined, undefined, apiKey, turn.effort, turn.threadId);
           // A reply cut off at the token limit may be a call cut short; running half of one is worse than saying so.
           const written = holdback && !completion.toolCalls.length && completion.finishReason !== "length" ? textToolCalls(completion.text, tools.definitions) : null;
           unreadable = written?.kind === "unreadable" && !askedAgain;

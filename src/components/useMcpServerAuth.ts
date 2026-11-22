@@ -11,7 +11,7 @@ import {
   SIGN_IN_POLL_MS,
   SIGN_IN_WAIT_MS,
   isRemoteMcpListing,
-  openSignInPage,
+  reserveConnectionPage,
   signedInToolsCheck,
   type ClientDraft,
   type McpServerListing,
@@ -139,6 +139,7 @@ export function useMcpServerAuth(args: {
       return next;
     });
     setNotice(null);
+    const page = reserveConnectionPage();
     try {
       const result = await api(`/api/mcp/servers/${encodeURIComponent(name)}/oauth/start`, {
         method: "POST",
@@ -148,8 +149,11 @@ export function useMcpServerAuth(args: {
           ...(account?.label ? { newAccount: { label: account.label } } : {}),
         }),
       });
-      if (typeof result.authorizationUrl !== "string") throw new Error(t("mcp.oauth.error"));
-      if (!(await openSignInPage(result.authorizationUrl))) {
+      if (typeof result.authorizationUrl !== "string") {
+        page.cancel();
+        throw new Error(t("mcp.oauth.error"));
+      }
+      if (!(await page.open(result.authorizationUrl))) {
         enableAfterSignIn.current.delete(name);
         setOauthError((current) => ({ ...current, [name]: { key: "mcp.oauth.popupBlocked" } }));
         return;
@@ -161,6 +165,7 @@ export function useMcpServerAuth(args: {
       });
       waitForSignIn(name, typeof result.account === "string" ? result.account : account?.id);
     } catch (cause) {
+      page.cancel();
       const detail = cause as Error & { body?: { code?: unknown; redirectUri?: unknown } };
       if (detail.body?.code === "client_required" && typeof detail.body.redirectUri === "string") {
         const redirectUri = detail.body.redirectUri;

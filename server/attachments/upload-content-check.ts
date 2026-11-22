@@ -75,6 +75,8 @@ const ALLOWED: Readonly<Record<string, readonly SniffedKind[]>> = {
   "application/msword": ["ole"], "application/vnd.ms-excel": ["ole"], "application/vnd.ms-powerpoint": ["ole"],
   "application/rtf": ["rtf", "text"], "text/rtf": ["rtf", "text"],
   "text/plain": ["text"], "text/markdown": ["text"], "text/csv": ["text"], "text/tab-separated-values": ["text"],
+  "text/x-conf": ["text"], "text/x-cfg": ["text"], "text/x-ini": ["text"], "text/x-cnf": ["text"],
+  "text/x-env": ["text"], "text/x-toml": ["text"], "text/x-yaml": ["text"], "text/x-yml": ["text"],
   "application/json": ["text"],
   "audio/ogg": ["ogg"], "audio/opus": ["ogg"], "audio/flac": ["flac"], "audio/x-flac": ["flac"],
   "audio/wav": ["wav"], "audio/x-wav": ["wav"], "audio/wave": ["wav"],

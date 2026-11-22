@@ -23,7 +23,7 @@ import {
 import type { ModelSelection } from "./contracts.ts";
 import * as mdb from "./messages/message-db.ts";
 import { peerAllowKey } from "./peers/peer-approval-key.ts";
-import { canAccessTeam } from "./peers/peer-roster.ts";
+import { canAccessTeam, peerStatus, peerStatusWords, teammateAvailabilityPrompt } from "./peers/peer-roster.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./rooms/section-context.ts";
@@ -47,6 +47,44 @@ describe("Store", () => {
     store.patchTask(bot.id, routine!.threadId, { routineRunId: "run-1" });
     store.setTaskActivity(bot.id, routine!.threadId, "working");
     expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
+  });
+
+  it("a setup failure on one thread does not mark a reachable bot as needing setup (#5015)", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Ops" }, { seedMessages: false });
+    const main = bot.tasks![0]!;
+    store.setTaskActivity(bot.id, main.threadId, "dead");
+    // Every conversation failed to start, and nothing has run: needs setup.
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "dead", busy: false });
+
+    const later = store.createTask(bot.id, "Delegated write", false)!;
+    store.setTaskActivity(bot.id, later.threadId, "working");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "working", busy: true });
+    store.setTaskActivity(bot.id, later.threadId, "idle");
+    // Idle and reachable. The stuck setup failure must not come back.
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
+
+    const routine = store.createTask(bot.id, "Webhook run", false)!;
+    store.patchTask(bot.id, routine.threadId, { routineRunId: "run-1" });
+    store.setTaskActivity(bot.id, main.threadId, "dead");
+    store.setTaskActivity(bot.id, later.threadId, "dead");
+    store.setTaskActivity(bot.id, routine.threadId, "working");
+    // A running routine means the bot can take work, and it does not count as busy.
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
+    store.setTaskActivity(bot.id, routine.threadId, "idle");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
+
+    // A routine that failed to start stays on that routine.
+    store.setTaskActivity(bot.id, main.threadId, "idle");
+    store.setTaskActivity(bot.id, routine.threadId, "dead");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
+
+    const folded = store.bot(bot.id)!;
+    const status = peerStatus(folded.activity, folded.busy);
+    expect(peerStatusWords(status)).toBe("available");
+    const line = teammateAvailabilityPrompt([{ id: bot.id, name: bot.name, activity: folded.activity, busy: folded.busy }]);
+    expect(line).toBe(" Team availability: every teammate is available.");
+    expect(line).not.toContain("needs setup");
   });
 
   it("keeps a settled question visible without occupying its thread, and scopes attention between people (#1984)", () => {

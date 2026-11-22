@@ -22,6 +22,7 @@ import { sumTurnModels, type NativeTurnResult } from "./session-types.ts";
 import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 import { reportBackgroundError } from "../../background-error.ts";
+import { clearRelayedPictures, projectBlobFolder } from "../../attachments/engine-connector-files.ts";
 
 export function attachClaudeWire(ctx: ClaudeTurnCtx): void {
   const {
@@ -39,6 +40,14 @@ const settle = (
 ) => {
   const t = session.turn;
   if (!t || t.settled) return;
+  // #5155: a picture Sagax relayed stays in the result for the model, and
+  // Claude Code keeps a copy in this session's folder. On an organization
+  // server that copy is removed when the turn ends. A solo server is the
+  // person's own computer, so nothing is removed there.
+  if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" && session.configDir && session.sessionId && t.input.cwd) {
+    try { clearRelayedPictures(projectBlobFolder(session.configDir, t.input.cwd).root, session.sessionId); }
+    catch (error) { console.error(`[claude] relayed pictures were not cleared: ${error instanceof Error ? error.message : "failed"}`); }
+  }
   // #1768: a concurrent refresh of this person's login home can revoke
   // the token this process held. Renew once under the shared flight and
   // relaunch before treating the sign-in as gone.

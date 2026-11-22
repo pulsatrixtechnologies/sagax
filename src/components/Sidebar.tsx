@@ -2527,10 +2527,10 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   // Search and New ride in the title bar when there is one and no brand row.
   const titleBarHead = (macInset || browser) && !showLogo;
   const { accountPlaces, archivedBots } = roster;
-  // The head's round buttons are search and New only (owner 2026-11-17): the
-  // bot panel toggle lives at the right end of the chat header. The rail draws
-  // search and New in its foot (#4093, the reference's rail keeps its controls
-  // at the bottom) beside its own Expand sidebar button.
+  // The head's round buttons are Collapse sidebar, search and New (the bot
+  // panel toggle lives at the right end of the chat header). Collapse is the
+  // wide sidebar's way back to the rail (#5017). The rail draws search and
+  // New in its foot (#4093) beside its own Expand sidebar button.
   const searchButton = (
     <button
       type="button"
@@ -2557,7 +2557,20 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       <Plus {...CIRCLE_ICON} aria-hidden="true" />
     </button>
   );
-  const headButtons = <>{searchButton}{newButton}</>;
+  const collapseButton = viewport === "wide" && density !== "icons" ? (
+    <button
+      type="button"
+      data-sidebar-compact-toggle
+      aria-expanded="true"
+      onClick={() => setSidebarCollapsed(true)}
+      aria-label={t("sidebar.collapse")}
+      title={t("sidebar.collapse")}
+      className={SIDEBAR_HEAD_BUTTON}
+    >
+      <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
+    </button>
+  ) : null;
+  const headButtons = <>{collapseButton}{searchButton}{newButton}</>;
   const railButtons = <>{searchButton}{newButton}</>;
 
   return (
@@ -2670,6 +2683,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           showThreads={showThreads}
           dispatch={dispatch}
           setMenu={actions.setMenu}
+          renameBotId={actions.renameBotId}
+          onRenameStarted={() => actions.setRenameBotId(null)}
         />
         <SidebarSectionList
           density={density}

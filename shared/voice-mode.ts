@@ -290,7 +290,7 @@ export function botSpeech(
 
 /** Why voice mode cannot run for this person: no xAI key serves them, or
  * their own access is turned off. */
-export type VoiceModeRefusalCause = "no_credentials" | "payer_disabled" | "perspicax_unreachable" | "server_engine_not_allowed";
+export type VoiceModeRefusalCause = "no_credentials" | "payer_disabled" | "perspicax_unreachable" | "server_engine_not_allowed" | "act_as_personal_refused" | "confirm_paid_key" | "personal_keys_disabled";
 
 /** The id a person sheet's `sagax_server_engines` uses for voice mode on the
  * organization's xAI key (2026-10-16). */
@@ -347,7 +347,7 @@ export interface VoiceModeStatus {
   keys?: VoiceKeyState[];
   /** For the speaker only (the access card's audience); `admin` adds the
    * organization's key hint, as on every access card. */
-  refusal?: { cause: VoiceModeRefusalCause; admin?: true; keysUrl?: string };
+  refusal?: { cause: VoiceModeRefusalCause; admin?: true; keysUrl?: string; error?: string; confirm?: { from: string; to: string; form: string; via: string; aspect: string } };
   /** The providers this person has a usable key for, in the default order
    * (2026-10-29). Only these are offered in the settings. */
   providers?: { tts: VoiceTtsProvider[]; stt: VoiceSttProvider[] };

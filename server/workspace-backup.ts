@@ -9,6 +9,7 @@ import {
 import { isAbsolute, join, parse, posix, relative, resolve, sep, win32 } from "node:path";
 import { homedir } from "node:os";
 import { backup, DatabaseSync } from "node:sqlite";
+import { cjkSearchText } from "./messages/cjk-search.ts";
 import { pipeline } from "node:stream/promises";
 import { isMainThread, Worker } from "node:worker_threads";
 import * as tar from "tar";
@@ -1566,12 +1567,14 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
     try {
       db.exec("BEGIN");
       if (manifest.sourceDataDir !== resolve(dataDir)) {
-        const update = db.prepare("UPDATE messages SET json = ?, text = ? WHERE thread_id = ? AND id = ?");
+        const searchText = (db.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>).some((column) => column.name === "search_text");
+        const update = db.prepare(`UPDATE messages SET json = ?, text = ?${searchText ? ", search_text = ?" : ""} WHERE thread_id = ? AND id = ?`);
         for (const row of db.prepare("SELECT thread_id, id, json FROM messages").iterate()) {
           const message: unknown = JSON.parse(String(row.json));
           rebaseMessage(message, manifest.sourceDataDir, resolve(dataDir));
           const json = JSON.stringify(message);
-          if (json !== row.json) update.run(json, record(message) && typeof message.text === "string" ? message.text : null, row.thread_id, row.id);
+          const text = record(message) && typeof message.text === "string" ? message.text : null;
+          if (json !== row.json) update.run(json, text, ...(searchText ? [cjkSearchText(text)] : []), row.thread_id, row.id);
         }
       }
       // Import is not a server restart: the source may still be running.

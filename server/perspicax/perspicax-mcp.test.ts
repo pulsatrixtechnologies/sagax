@@ -1810,6 +1810,54 @@ describe("large memory journals", () => {
     await h.mcp.endAll();
   });
 
+  it("sends each part of a rewrite with the latest base version, after a stale base is refused (#5143)", async () => {
+    const original = `${"é".repeat(2100)}\n`;
+    expect(original.length).toBeLessThanOrEqual(4096);
+    expect(Buffer.byteLength(original)).toBeGreaterThan(4096);
+    let version = "v1";
+    const accepted: { base: string; body: string }[] = [];
+    const refused: string[] = [];
+    const h = harness({ mcp: ({ body }) => {
+      if (!body) return new Response(null, { status: 204 });
+      if (body.id === undefined) return new Response(null, { status: 202 });
+      if (body.method !== "tools/call") return Response.json({ jsonrpc: "2.0", id: body.id, result: { content: [] } });
+      const base = body.params?.arguments?.base_version;
+      const piece = String(body.params?.arguments?.body ?? "");
+      expect(Buffer.byteLength(piece)).toBeLessThanOrEqual(4096);
+      if (base !== version) {
+        refused.push(String(base));
+        return Response.json({ jsonrpc: "2.0", id: body.id, result: {
+          isError: true,
+          content: [{ type: "text", text: "the note changed since you read it" }],
+          structuredContent: {
+            code: "policy_denied",
+            details: { reason: "memory_conflict", status: 403, current_version: version, current: { version, title: "Journal", body: "" } },
+          },
+        } });
+      }
+      accepted.push({ base, body: piece });
+      version = `v${accepted.length + 1}`;
+      return Response.json({ jsonrpc: "2.0", id: body.id, result: {
+        structuredContent: { id: "note-1", place: "team:desk", status: "published" },
+        content: [{ type: "text", text: "stored" }],
+      } });
+    } });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const result = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "memory_save", arguments: { id: "note-1", place: "team:desk", base_version: "v1", body: original } } } });
+    expect(result.body).toMatchObject({ result: { structuredContent: { parts: expect.any(Array) } } });
+    expect(accepted.map((part) => part.base)).toEqual(["v1", "v2"]);
+    expect(refused).toEqual(["v1"]);
+    const journal = (result.body as { result: { structuredContent: { journal: string } } }).result.structuredContent.journal;
+    expect(accepted.map((part) => {
+      const header = `[journal ${journal} ${accepted.indexOf(part) + 1}/${accepted.length}]\n`;
+      expect(part.body.startsWith(header)).toBe(true);
+      expect(part.body.endsWith("\n[/journal]")).toBe(true);
+      return part.body.slice(header.length, -"\n[/journal]".length);
+    }).join("")).toEqual(original);
+    expect(accepted.every((part) => part.body.includes("é"))).toBe(true);
+    await h.mcp.endAll();
+  });
+
   it("retries an interrupted journal without sending its acknowledged prefix again", async () => {
     const attempts: number[] = [];
     const h = harness({ writeOnceScope: () => "run", mcp: ({ body }) => {

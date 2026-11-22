@@ -135,7 +135,7 @@ export interface PreferenceSync {
  * page keeps what it had.
  */
 export async function startPreferenceSync(deps: PreferenceSyncDeps): Promise<PreferenceSync | null> {
-  let record = null as { stored?: unknown; preferences?: unknown } | null;
+  let record = null as { stored?: unknown; preferences?: unknown; updatedAt?: unknown } | null;
   try {
     const response = await deps.fetch(PREFERENCES_PATH, { credentials: "same-origin", signal: AbortSignal.timeout(deps.timeoutMs ?? 2_000) });
     if (!response.ok) return null;
@@ -166,6 +166,10 @@ export async function startPreferenceSync(deps: PreferenceSyncDeps): Promise<Pre
   }
   let patchable = true;
   let busy = false;
+  // A frame we have already applied (the record this page loaded, or a later
+  // one). A replay of that record must not wipe a choice this page has saved
+  // since, such as Primary Bot row (#4853).
+  let seenAt = typeof record?.updatedAt === "number" ? record.updatedAt : 0;
   const check = async () => {
     if (busy) return;
     const now = readPreferences(deps.storage);
@@ -196,7 +200,10 @@ export async function startPreferenceSync(deps: PreferenceSyncDeps): Promise<Pre
     else void put(deps, now, true);
   };
   const receive = (incoming: unknown) => {
-    const server = cleanUserPreferences(incoming && typeof incoming === "object" ? (incoming as { preferences?: unknown }).preferences : undefined);
+    const frame = incoming && typeof incoming === "object" ? incoming as { preferences?: unknown; updatedAt?: unknown } : {};
+    if (typeof frame.updatedAt === "number" && frame.updatedAt <= seenAt) return [];
+    if (typeof frame.updatedAt === "number") seenAt = frame.updatedAt;
+    const server = cleanUserPreferences(frame.preferences);
     const local = readPreferences(deps.storage);
     const changed: string[] = [];
     for (const key of USER_PREFERENCE_KEYS) {

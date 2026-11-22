@@ -1011,7 +1011,11 @@ import { isAccountEmail, isPrincipalId, PrincipalRegistry, type Principal } from
 import { OrgTeams } from "./org/org-teams.ts";
 import { compatServers, compatServerOwner, compatServerVisible } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
-import { providersOfDriver, providersOfInstance, resolveEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
+import { providersOfDriver, providersOfInstance, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
+import { auditCredentialDecision } from "./credentials/credential-audit.ts";
+import { confirmPaidKey, paidKeyIsConfirmed } from "./credentials/paid-key-confirm.ts";
+import { createCredentialConfirmRoutes } from "./routes/credential-confirm.ts";
+import type { CredentialDecision, CredentialPolicy } from "../shared/credential-resolver.ts";
 import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
 import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type GrokLiveAccess, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
@@ -7127,6 +7131,10 @@ bindLeafHost({
   get _orgRefusalOfImpl() { return _orgRefusalOfImpl; },
   get orgEngineRefusal() { return orgEngineRefusal; },
   get orgTurnAccess() { return orgTurnAccess; },
+  get resolveGovernedEngineAccess() { return resolveGovernedEngineAccess; },
+  get credentialPolicyFor() { return credentialPolicyFor; },
+  get auditCredentialDecision() { return auditCredentialDecisionFor; },
+  get noteCredentialServed() { return noteCredentialServed; },
   get botOneShotText() { return botOneShotText; },
   get botTitleEngine() { return botTitleEngine; },
   get piTurnPerson() { return piTurnPerson; },
@@ -8938,12 +8946,12 @@ const pushActivities = createLiveActivityTokenStore(DATA_DIR);
 const liveActivityHub = new LiveActivityHub({
   config: apnsConfig,
   store: pushActivities,
-  // while any stream of this person is open the phone updates activities locally
-  personStreaming: (person) => tokensOfConnectedDevices(
+  // a phone with an open stream updates locally; a closed phone still gets a push
+  liveDeviceTokens: (person) => tokensOfConnectedDevices(
     sseClients,
     person,
     IDENTITY.kind !== "perspicax" ? localPrincipalId() : undefined,
-  ).length > 0
+  ),
 });
 const pushHub = new PushHub({
   config: apnsConfig,
@@ -9458,7 +9466,7 @@ const turnSpeakers = new ThreadSpeakers(
 const connectorSetupProofs = createConnectorSetupProofs();
 const turnSpeakerPrincipals = new SpeakerDerivedMap<string>((threadId) => turnSpeakers.get(threadId));
 /** Who ran each thread's current turn, for a key the provider refuses. */
-const turnAccessByThread = new Map<string, { via: TurnAccess["via"]; payer: AccessPayer; payerPrincipalId?: string; routine?: true; payerSub?: string; provider?: ModelProvider }>();
+const turnAccessByThread = new Map<string, { via: TurnAccess["via"]; payer: AccessPayer; payerPrincipalId?: string; routine?: true; payerSub?: string; provider?: ModelProvider; form?: "personal-account" | "org-account" | "personal-key" | "org-key"; fallback?: { from: string; to: string; automatic: boolean } }>();
 /** Threads whose last admitted turn (Direct or room) descends from a routine
  * or other automation: a bot hop it starts carries the mark, so no turn a
  * routine started ever reaches someone's Perspicax access (slice 5, D5). */
@@ -14877,8 +14885,8 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
-    // 0.8.46: closed without the person (expired, or the requester's default
-    // answer): its cards say so instead of staying open or reading answered.
+    // 0.8.46: closed without the person. #5037: a default_answer is never
+    // their reply, so the cards say expired, not that a default was used.
     unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has
@@ -16574,6 +16582,35 @@ function noteAccountDemand(row: Pick<UsageRow, "botId" | "threadId" | "instanceI
 /** #5014: the account a conversation's turn took and why: on the thread (the
  * model chip reads it) when it changed, and in the Events lens when the
  * account changed or was picked for the first time. Never a row in the chat. */
+/** #5180: Act as consent, the personal-key switch, and a paid-key confirmation. */
+function credentialPolicyFor(threadId: string | undefined, speaker: { principalId?: string } | undefined, botId?: string): CredentialPolicy {
+  const run = threadId ? activeRoutineRunForThread(threadId) : null;
+  const slug = run && (!botId || run.botId === botId) ? (run.actAs?.trim() ?? "") : "";
+  const principalId = speaker?.principalId?.trim().toLowerCase() ?? "";
+  const settings = principalId && isPrincipalId(principalId) ? personSettings.get(principalId) : undefined;
+  return {
+    aspect: "chat",
+    ...(slug ? { actingAs: slug } : {}),
+    allowPersonalWhenActingAs: settings?.allowPersonalCredentialWhenActingAs === true,
+    personalKeysEnabled: cfg.organization?.personalKeys !== false,
+    paidKeyConfirmed: paidKeyIsConfirmed(threadId),
+  };
+}
+function auditCredentialDecisionFor(threadId: string | undefined, botId: string | undefined, decision: CredentialDecision, speaker?: { principalId?: string }): void {
+  const principalId = speaker?.principalId?.trim();
+  auditCredentialDecision(DATA_DIR, { threadId, botId, decision, ...(principalId ? { payerPrincipalId: principalId } : {}) });
+}
+function noteCredentialServed(botId: string, threadId: string, decision: Extract<CredentialDecision, { ok: true }>): void {
+  if (!store.taskByThread(botId, threadId)) return;
+  store.patchTask(botId, threadId, {
+    credentialServed: {
+      form: decision.form,
+      via: decision.via,
+      aspect: decision.aspect,
+      ...(decision.fallback ? { fallback: { from: decision.fallback.from, to: decision.fallback.to, automatic: decision.fallback.automatic } } : {}),
+    },
+  });
+}
 function noteAccountPick(botId: string, threadId: string, pick: AccountPick, moved: boolean): void {
   const task = store.taskByThread(botId, threadId);
   if (!task) return;
@@ -23986,6 +24023,9 @@ type OrgAccessRefusal = {
   reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true;
   /** #1137: the owner pays; the person who wrote reads the card too. */
   ownerPays?: true; speakerPrincipalId?: string; ownerName?: string;
+  /** #5180: the words of an Act as refusal or a paid-key confirmation, and the confirmation the client answers. */
+  error?: string;
+  confirm?: { from: string; to: string; form: string; via: string; aspect: string };
 };
 function orgRefusalOf(...args: any[]) {
   return (_orgRefusalOfImpl ??= createOrgRefusalOf(getLeafHost) as any)(...args);
@@ -24246,7 +24286,8 @@ const workspaceBackupRoutes = createWorkspaceBackupRoutes({
   appVersion: serverVersion(),
   readBody,
   restored: workspaceRestore,
-  ...workspaceBackupAccess
+  ...workspaceBackupAccess,
+  ...(CLOUD_HOME ? { restart: () => { gracefulShutdown(); } } : {}),
 });
 // Route modules (server/routes/README.md). `workspaceAccess` is assigned at
 // boot, after this line, so the dependency reads it per request.
@@ -25579,6 +25620,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     addDisabledMcpServer,
     botAddMcpServer: (current, body, botId) => mcpServersHost.botAdd(current, body, botId),
     redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId) as never,
+    refSavedForLabel: (botId, label) => customSecretVault.hasLiveRef(botId, label),
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,
@@ -31171,6 +31213,7 @@ ROUTES.push(createUsageMeterRoutes({
 }));
 // A person's own Experimental switches and browser profiles (#1098,
 // server/routes/person-settings.ts): theirs, on an organization server.
+ROUTES.push(createCredentialConfirmRoutes({ rememberPaidKey: confirmPaidKey }));
 ROUTES.push(createPersonSettingsRoutes({
   store: personSettings,
   principal: (auth) => personSettingsOwner(sessionPrincipal(auth)),
@@ -31927,6 +31970,8 @@ const voiceModeDeps: VoiceModeDeps = {
   serverKeyAllowed: (speaker) => serverEngineAllowedFor(speaker.principalId, VOICE_SERVER_ENGINE),
   // #4567: the person's own connected Grok account, before any API key.
   // A disabled person has none. The token is never logged.
+  credentialPolicy: (speaker, threadId) => ({ ...credentialPolicyFor(threadId, speaker), aspect: "voice" }),
+  auditCredential: (decision, speaker, threadId) => auditCredentialDecisionFor(threadId, undefined, decision, speaker),
   grokAccount: async (speaker) => {
     if (speaker.disabled) return undefined;
     if (IDENTITY.kind === "perspicax") {
@@ -33821,6 +33866,7 @@ const orgOpsDeps: OpsDeps = {
         allowedMarketplaces: policy?.mode === "list" ? [...policy.allow] : null,
         allowedEngines: cfg.organization?.allowedEngines ? [...cfg.organization.allowedEngines] : null,
         ownAccountsOutsideList: cfg.organization?.ownAccountsOutsideList === true,
+        personalKeys: cfg.organization?.personalKeys !== false,
         // 2026-10-30 (lot 2): per model, `<engine>/<model>`, and each engine's models to switch
         disabledModels: orgDisabledModels(),
         // #4435: never an account a person added
@@ -33893,6 +33939,17 @@ const orgOpsDeps: OpsDeps = {
       orgAudit({ category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["ownAccountsOutsideList"], before: { ownAccountsOutsideList: before }, after: { ownAccountsOutsideList: changes.ownAccountsOutsideList }, actor });
       // Turned off: a bot kept on its owner's own engine moves to Auto now.
       applyOrgEngineAllowList();
+      broadcast({ kind: "config", ...configStatus() });
+    }
+    if (changes.personalKeys !== undefined) {
+      // #5180: personal API keys are on unless an admin turns them off.
+      const before = cfg.organization?.personalKeys !== false;
+      const organization = { ...cfg.organization };
+      if (changes.personalKeys) delete organization.personalKeys;
+      else organization.personalKeys = false;
+      saveConfig({ organization });
+      cfg.organization = organization;
+      orgAudit({ category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["personalKeys"], before: { personalKeys: before }, after: { personalKeys: changes.personalKeys }, actor });
       broadcast({ kind: "config", ...configStatus() });
     }
     if (changes.defaults) {

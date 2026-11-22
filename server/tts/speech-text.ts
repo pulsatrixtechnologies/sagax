@@ -188,6 +188,8 @@ export function speakableDelta(input: string): string {
 /** Sentence-ish boundary: `.`/`!`/`?` followed by space, but not inside a
  * decimal, an ellipsis, or a common abbreviation. */
 const BOUNDARY = /(?<!\b(?:e\.g|i\.e|etc|vs|Dr|Mr|Mrs|Ms|No|approx))(?<![.\d])([.!?])(["')\]]*)\s+/g;
+const WORD_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "word" });
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
  * Split speakable text into utterances a synthesizer can start on.
@@ -218,7 +220,7 @@ export function toUtterances(input: string, { minChars = 12, maxChars = 320 } = 
     const parts = piece.length <= maxChars ? [piece] : splitLong(piece, maxChars);
     for (const part of parts) {
       const prev = out[out.length - 1];
-      if (prev && (prev.length < minChars || part.length < minChars)) {
+      if (prev && prev.length + part.length + 1 <= maxChars && (prev.length < minChars || part.length < minChars)) {
         out[out.length - 1] = `${prev} ${part}`;
       } else {
         out.push(part);
@@ -235,19 +237,45 @@ function splitLong(text: string, maxChars: number): string[] {
     const window = rest.slice(0, maxChars);
     // prefer a clause break, then any space; never cut a word in half
     const at = Math.max(window.lastIndexOf(", "), window.lastIndexOf("; "), window.lastIndexOf(" — "));
-    const cut = at > maxChars / 2 ? at + 1 : window.lastIndexOf(" ");
-    // No space and no clause: still take a piece the speak route will accept
-    // (500 characters). Dropping the rest would leave a long answer unread.
-    if (cut <= 0) {
-      out.push(rest.slice(0, maxChars));
-      rest = rest.slice(maxChars);
-      continue;
-    }
+    let cut = at > maxChars / 2 ? at + 1 : window.lastIndexOf(" ");
+    if (cut <= 0) cut = unspacedCut(rest, maxChars);
+    // No word boundary inside the cap: still take a piece the speak route
+    // accepts, on a grapheme boundary so a mark or a surrogate stays whole.
+    if (cut <= 0) cut = graphemeCut(rest, maxChars);
+    if (cut <= 0) break;
     out.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
   }
   if (rest) out.push(rest);
   return out;
+}
+
+/** The last word start that still fits, or a grapheme inside one Katakana run. */
+function unspacedCut(text: string, maxChars: number): number {
+  let firstWord: Intl.SegmentData | undefined;
+  let cut = -1;
+  for (const segment of WORD_SEGMENTER.segment(text)) {
+    if (segment.index > maxChars) break;
+    if (!segment.isWordLike) continue;
+    if (firstWord) cut = segment.index;
+    else firstWord = segment;
+  }
+  if (cut > 0 || !firstWord || !/^[\p{Script_Extensions=Katakana}\p{M}]+$/u.test(firstWord.segment)) return cut;
+  for (const { index } of GRAPHEME_SEGMENTER.segment(firstWord.segment)) {
+    const boundary = firstWord.index + index;
+    if (boundary > maxChars) break;
+    if (index > 0) cut = boundary;
+  }
+  return cut;
+}
+
+function graphemeCut(text: string, maxChars: number): number {
+  let cut = -1;
+  for (const { index } of GRAPHEME_SEGMENTER.segment(text)) {
+    if (index > maxChars) break;
+    if (index > 0) cut = index;
+  }
+  return cut;
 }
 
 /** A tool-activity chip as a spoken progress line ("reading core.ts").

@@ -129,11 +129,10 @@ struct CardView: View {
                     }
                 }
                 if !card.subtitle.isEmpty, AllowRuleText.savedRule(card) == nil {
-                    Text(card.subtitle)
+                    CardMarkdown(source: card.subtitle)
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.attentionSecondary)
                         .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let skill = card.skillRequest {

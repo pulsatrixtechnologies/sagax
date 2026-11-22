@@ -12,8 +12,8 @@ import {
   type LiveActivityContentState,
   type LiveActivityPhase,
 } from "./activity-content.ts";
-import type { LiveActivityTokenStore } from "./activity-devices.ts";
-import { buildLiveActivityRequest } from "./activity-payload.ts";
+import type { LiveActivityToken, LiveActivityTokenStore } from "./activity-devices.ts";
+import { buildLiveActivityRequest, type LiveActivityAttributes } from "./activity-payload.ts";
 import type { ApnsConfigResult } from "./config.ts";
 import { maskSecret } from "./config.ts";
 import { PushRateLimiter } from "./decide.ts";
@@ -43,6 +43,8 @@ export interface LiveActivityUpdate {
   isPermission?: boolean;
   confidential?: boolean;
   sinceMs?: number;
+  /** MausPalette colour name for a remote start. Absent: blue. */
+  color?: string;
 }
 
 export interface LiveActivityHubDeps {
@@ -53,8 +55,11 @@ export interface LiveActivityHubDeps {
   log?: ApnsLog;
   /** High-priority limiter (tests inject a tight one). */
   highPriorityLimiter?: PushRateLimiter;
-  /** Skip pushes while this person has a live stream (app follows locally). */
+  /** Skip pushes while this person has a live stream (app follows locally).
+   * When liveDeviceTokens is also set, that list decides per phone. */
   personStreaming?(person: string): boolean;
+  /** APNs device tokens of this person's phones whose event stream is open. */
+  liveDeviceTokens?(person: string): string[];
 }
 
 const defaultLog: ApnsLog = {
@@ -73,6 +78,8 @@ export class LiveActivityHub {
   private notConfiguredLogged = false;
   /** Last content we built per person\0bot (for done from prior). */
   private readonly lastContent = new Map<string, LiveActivityContentState>();
+  /** Bots we already started remotely and have not seen go quiet. */
+  private readonly remoteStarted = new Set<string>();
 
   constructor(deps: LiveActivityHubDeps) {
     this.deps = deps;
@@ -97,14 +104,30 @@ export class LiveActivityHub {
     this.enabled = sender !== null;
   }
 
+  /** A phone whose stream is open follows the activity locally. A token with
+   * no device id is skipped while any of this person's phones is in the app. */
+  private reaches(person: string, token: LiveActivityToken): boolean {
+    const live = this.deps.liveDeviceTokens?.(person) ?? [];
+    if (this.deps.personStreaming?.(person) && live.length === 0) return false;
+    if (token.deviceToken && live.includes(token.deviceToken)) return false;
+    if (!token.deviceToken && (this.deps.personStreaming?.(person) || live.length > 0)) return false;
+    return true;
+  }
+
   /** Bot state change for one person. Never throws. */
   submit(update: LiveActivityUpdate): void {
     try {
       const person = update.personId.trim().toLowerCase();
       const botId = update.botId.trim();
       if (!person || !botId) return;
-      const tokens = this.deps.store.listForBot(person, botId);
-      if (!tokens.length) return;
+      const key = this.contentKey(person, botId);
+      if (update.phase === "done" || update.phase === "answered") this.remoteStarted.delete(key);
+      const updates = this.deps.store.listForBot(person, botId).filter((token) => this.reaches(person, token));
+      const starts = update.phase === "needsYou"
+        ? this.deps.store.listStarts(person).filter((token) => this.reaches(person, token))
+        : [];
+      const starting = !updates.length && starts.length > 0 && !this.remoteStarted.has(key);
+      if (!updates.length && !starting) return;
       if (!this.sender) {
         if (!this.notConfiguredLogged) {
           this.notConfiguredLogged = true;
@@ -113,8 +136,10 @@ export class LiveActivityHub {
         }
         return;
       }
-      if (this.deps.personStreaming?.(person)) return;
-      const run = this.deliver({ ...update, personId: person, botId }).catch((error) => {
+      // Claim the spell before the send, so a second frame in the same turn
+      // does not start the activity twice. A total failure gives it back.
+      if (starting) this.remoteStarted.add(key);
+      const run = this.deliver({ ...update, personId: person, botId }, updates, starts).catch((error) => {
         this.log.warn(`push-activity: send failed (${error instanceof Error ? error.message : String(error)})`);
       });
       this.inflight.add(run);
@@ -132,12 +157,77 @@ export class LiveActivityHub {
     return `${person}\0${botId}`;
   }
 
-  private async deliver(update: LiveActivityUpdate): Promise<void> {
+  /** Push-to-start, once per needs-you spell. A working bot is never started
+   * from here. No alert: the approval push is the one buzz. */
+  private async deliverStart(
+    update: LiveActivityUpdate,
+    starts: LiveActivityToken[],
+    bundleId: string,
+    nowMs: number,
+  ): Promise<void> {
+    const sender = this.sender;
+    if (!sender) return;
+    const key = this.contentKey(update.personId, update.botId);
+    if (!this.highLimiter.tryTake(update.personId, nowMs)) {
+      this.log.warn(`push-activity: high-priority rate limited (start bot ${update.botId})`);
+      return;
+    }
+    const contentState = buildLiveActivityContentState({
+      phase: "needsYou",
+      botName: update.botName,
+      line: update.line,
+      threadId: update.threadId,
+      requestId: update.requestId,
+      options: update.options,
+      optionLabels: update.optionLabels,
+      isPermission: update.isPermission,
+      confidential: update.confidential,
+      sinceMs: update.sinceMs,
+    }, nowMs);
+    const request = buildLiveActivityRequest({
+      event: "start",
+      contentState,
+      attributes: this.startAttributes(update),
+      bundleId,
+      nowMs,
+      staleDateSec: Math.floor(nowMs / 1000) + ACTIVITY_STALE_AFTER_SEC,
+      priority: 10,
+    });
+    let started = false;
+    for (const device of starts) {
+      const outcome = await sender.send({ token: device.token, environment: device.environment }, request);
+      if (outcome.ok) {
+        started = true;
+        this.deps.store.noteSent(update.personId, device.token, "needsYou", nowMs);
+      } else if (outcome.prune) {
+        this.deps.store.prune(device.token);
+        this.log.info(`push-activity: removed token ${maskSecret(device.token)} (${outcome.status} ${outcome.reason})`);
+      }
+    }
+    if (!started) this.remoteStarted.delete(key);
+  }
+
+  private startAttributes(update: LiveActivityUpdate): LiveActivityAttributes {
+    const name = (update.botName || "Bot").replace(/\s+/g, " ").trim().slice(0, 80) || "Bot";
+    const color = update.color?.trim().slice(0, 40) || "blue";
+    return {
+      botId: update.botId,
+      threadId: update.threadId?.trim() || "",
+      name,
+      color,
+    };
+  }
+
+  private async deliver(update: LiveActivityUpdate, updates: LiveActivityToken[], starts: LiveActivityToken[]): Promise<void> {
     const sender = this.sender;
     if (!sender || !this.deps.config.configured) return;
     const bundleId = this.deps.config.config.bundleId;
     const nowMs = this.now();
-    const tokens = this.deps.store.listForBot(update.personId, update.botId);
+    const tokens = updates;
+    if (!tokens.length && update.phase === "needsYou" && starts.length) {
+      await this.deliverStart(update, starts, bundleId, nowMs);
+      return;
+    }
     if (!tokens.length) return;
 
     const event = update.phase === "done" || update.phase === "answered" ? "end" as const : "update" as const;

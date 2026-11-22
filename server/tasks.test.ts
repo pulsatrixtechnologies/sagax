@@ -165,6 +165,10 @@ describe("tasks", () => {
     store.titleTaskFromFirstMessage(bot.id, "something else entirely");
     expect(store.activeTask(bot.id)!.title).toBe("Audit the payroll spreadsheet");
     expect(titleFromMessage("x".repeat(80))).toHaveLength(48);
+    const clipped = titleFromMessage(`${"a".repeat(46)}𠮷z`);
+    expect(Buffer.from(clipped).toString("utf8")).toBe(clipped);
+    expect(clipped.endsWith("…")).toBe(true);
+    expect(clipped.includes("\uFFFD")).toBe(false);
   });
 
   it("returns the task it named, so a caller knows which title it may replace", async () => {

@@ -3,7 +3,11 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 it("passes the previous report to the real fake-engine turn only when continuity is enabled", async () => {
-  const fixture = await launchVerificationServer();
+  // #5086 (#5123): the fake engine's default turn ends on a Bash call after the
+  // reply, so the run goes on once and the dump becomes that continuation,
+  // which has no previous report. This run's reply is the report: no tool
+  // after it, so the dump is the run prompt continuity is measured on.
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]" });
   const env = { SAGAX_URL: fixture.info.url };
   const api = async (method: string, path: string, body?: unknown) => {
     const response = await fetch(`${fixture.info.url}${path}`, {

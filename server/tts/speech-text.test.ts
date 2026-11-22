@@ -146,6 +146,30 @@ describe("toUtterances", () => {
     for (const piece of out) expect(piece.length).toBeLessThanOrEqual(500);
     expect(out.join("")).toBe(long);
   });
+
+  it.each(["漢".repeat(325), "日本語の文章を読み上げます。".repeat(40)])("bounds unspaced speech without dropping text", (text) => {
+    const out = toUtterances(text, { maxChars: 320 });
+    expect(out.length).toBeGreaterThan(1);
+    expect(out.every((piece) => piece.length > 0 && piece.length <= 320)).toBe(true);
+    expect(out.join("")).toBe(speakable(text));
+  });
+
+  it("keeps a supplementary-plane letter whole at an odd boundary", () => {
+    const text = "𠮷".repeat(95);
+    const out = toUtterances(text, { maxChars: 91 });
+    expect(out.length).toBeGreaterThan(1);
+    expect(out[0]!.length).toBeLessThanOrEqual(91);
+    expect(out.every((piece) => Buffer.from(piece).toString("utf8") === piece)).toBe(true);
+    expect(out.join("")).toBe(text);
+  });
+
+  it("caps a decomposed Katakana word without splitting its graphemes", () => {
+    const text = "カ\u3099".repeat(321);
+    const out = toUtterances(text, { maxChars: 320 });
+    expect(out.length).toBeGreaterThan(1);
+    expect(out.every((piece) => piece.length > 0 && piece.length <= 320 && /^(?:カ\u3099)+$/u.test(piece))).toBe(true);
+    expect(out.join("")).toBe(speakable(text));
+  });
 });
 
 describe("narrateTool", () => {

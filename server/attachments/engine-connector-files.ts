@@ -25,7 +25,7 @@
 // place by the one placement of #5138 (placeOneFile, copyToPersonPlace),
 // removed from the engine's folder whatever happened, and the result names
 // the person's path instead. Nothing else in the result changes.
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, unlinkSync, type Stats } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, unlinkSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 
 import { sensitiveReadPath } from "../safety/sensitive-path.ts";
@@ -285,4 +285,42 @@ export async function placeEngineFiles(
     return lines.length ? `${out}\n${lines.join("\n")}` : out;
   });
   return { output: rewritten, moved: placed.size };
+}
+
+const PICTURE_EXT = /\.(png|jpe?g|gif|webp)$/i;
+
+/** The first bytes of a picture, for a blob the engine saved as `.bin`. */
+function pictureMagic(path: string): boolean {
+  let fd: number;
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW); } catch { return false; }
+  try {
+    const head = Buffer.alloc(12);
+    const n = readSync(fd, head, 0, head.length, 0);
+    const bytes = head.subarray(0, n);
+    if (bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))) return true;
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true;
+    if (bytes.subarray(0, 6).equals(Buffer.from("GIF87a")) || bytes.subarray(0, 6).equals(Buffer.from("GIF89a"))) return true;
+    return bytes.subarray(0, 4).equals(Buffer.from("RIFF")) && bytes.subarray(8, 12).equals(Buffer.from("WEBP"));
+  } finally { closeSync(fd); }
+}
+
+/** #5155: after the turn, picture copies Claude Code kept for a relayed
+ * image are removed from this session's tool-results folder. A document
+ * stays (the hook of #5140 moves those). A link is never removed. */
+export function clearRelayedPictures(projectRoot: string, sessionId: string): number {
+  if (!new RegExp(`^${SESSION}$`).test(sessionId)) return 0;
+  const dir = join(projectRoot, sessionId, "tool-results");
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return 0; }
+  let removed = 0;
+  for (const name of names) {
+    if (!new RegExp(`^${BLOB_NAME}$`).test(name)) continue;
+    const path = join(dir, name);
+    let stat;
+    try { stat = lstatSync(path); } catch { continue; }
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1) continue;
+    if (!PICTURE_EXT.test(name) && !pictureMagic(path)) continue;
+    try { unlinkSync(path); removed += 1; } catch { /* already gone */ }
+  }
+  return removed;
 }

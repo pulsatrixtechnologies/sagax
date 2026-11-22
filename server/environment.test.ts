@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SERVER_FEATURE_NAMES } from "../shared/server-features.ts";
-import { environmentDescriptor, environmentLabel, linkVersion, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
+import { environmentDescriptor, environmentLabel, linkVersion, loadEnvironmentId, releaseVersion, reportableServerVersion, serverVersion } from "./environment.ts";
 import { hostname } from "node:os";
 import { identityDescriptor } from "./auth/oidc-login.ts";
 
@@ -150,6 +150,14 @@ describe("environment identity", () => {
     expect(environmentLabel({ SAGAX_PUBLIC_URL: "https://bot.pulsatrix.example.test/" })).toBe("bot.pulsatrix.example.test");
     expect(environmentLabel({ SAGAX_PUBLIC_URL: "not a url" })).toBe(hostname());
     expect(environmentLabel({})).toBe(hostname());
+  });
+
+  it("does not report a missing or placeholder version to the tunnel", () => {
+    expect(reportableServerVersion("0.1.107")).toBe("0.1.107");
+    expect(reportableServerVersion("0.8.169-rc.1")).toBe("0.8.169-rc.1");
+    expect(reportableServerVersion("0.0.0")).toBeUndefined();
+    expect(reportableServerVersion("unknown")).toBeUndefined();
+    expect(reportableServerVersion("not a version")).toBeUndefined();
   });
 
   it("falls back to the checkout's package.json version, then to unknown", () => {

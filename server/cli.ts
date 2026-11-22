@@ -33,6 +33,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { phonePairingLink } from "../shared/pairing-link.ts";
+import { reportableServerVersion } from "./environment.ts";
 import { parseAllowList } from "./auth/account-signin.ts";
 import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./activity/admin-activity.ts";
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
@@ -45,7 +46,7 @@ import { runServiceCommand } from "./cli/service-cli.ts";
 import { runFleetCommand, type FleetInput } from "./fleet/fleet-cli.ts";
 import { startFleetAgent } from "./fleet/fleet-agent.ts";
 import { fleetLayout } from "./fleet/fleet.ts";
-import { browserSignInLines, pairingBlock } from "./cli/cli-pairing.ts";
+import { browserSignInLines, desktopOwnedRefusal, pairingBlock } from "./cli/cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli/cli-prompts.ts";
 import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
@@ -324,6 +325,13 @@ export function serverVersion(here = HERE): string {
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** The release the tunnel may be told. A missing package reads as 0.0.0 here;
+ * that must not replace the bundle's real version, and a placeholder is omitted. */
+function tunnelAppVersion(): string | undefined {
+  const local = serverVersion();
+  return reportableServerVersion(local === "0.0.0" ? undefined : local);
+}
+
 // ── talking to a running server (loopback = owner) ────────────────────
 /** Set only inside `openmausbot serve` on a service-trust server: the secret
  * it handed the server it started, which opens that server's pairing route. */
@@ -461,8 +469,8 @@ async function mintPairing(port: number, options: { label?: string; client?: boo
   if (options.label) request.label = options.label;
   if (options.client) request.scopes = ["client"];
   const { status, body } = await api(port, "/api/auth/pairing", { method: "POST", body: JSON.stringify(request) });
-  if (refusedAsService(status, body)) throw new Error(SERVICE_TRUST_HELP);
-  if (status !== 200) throw new Error(`server refused to mint a pairing code: ${typeof body?.error === "string" ? body.error : status}`);
+  const refusal = refusedAsService(status, body) ? SERVICE_TRUST_HELP : desktopOwnedRefusal(status, body);
+  if (refusal || status !== 200) throw new Error(refusal ?? `server refused to mint a pairing code: ${typeof body?.error === "string" ? body.error : status}`);
   const url = options.publicUrl ? `${options.publicUrl}/pair#code=${body.code}` : typeof body.url === "string" ? body.url : null;
   // The phone-app invite. This command asks over loopback; a server that
   // knows its public address already built the invite with the same builder,
@@ -509,7 +517,7 @@ export async function runPair(options: CliOptions): Promise<number> {
       const { readCliStartup } = await import("./cli/cli-setup.ts");
       launch = applyStartupPreferences(options, readCliStartup(options.dataDir));
       origin = launch.publicUrl;
-      if (launch.tunnel) origin = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() }).credentials.read()).address ?? undefined;
+      if (launch.tunnel) origin = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: tunnelAppVersion() }).credentials.read()).address ?? undefined;
       if (launch.tailscale) {
         const status = await tailscaleStatus();
         if (!("failure" in status) && status.status.dnsName) origin = `https://${status.status.dnsName}`;
@@ -600,7 +608,7 @@ export async function runStatus(options: CliOptions, io: CliIo = defaultIo()): P
     code = 1;
   }
   if (!options.json) {
-    const account = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() }).credentials.read());
+    const account = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: tunnelAppVersion() }).credentials.read());
     if (fleetCredential()) io.log(`public address: managed by the fleet (${FLEET_CREDENTIAL_ENV} is set; the address is fetched when serve --tunnel starts)`);
     else if (account.address) io.log(`public address: ${account.address} (signed in as ${account.email ?? "?"}; serve it with --tunnel)`);
   }
@@ -680,7 +688,7 @@ export async function runAccess(options: CliOptions, io: CliIo = defaultIo()): P
 }
 
 export async function runLogin(options: CliOptions, io: CliIo = defaultIo()): Promise<number> {
-  const account = createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() });
+  const account = createTunnelAccount({ dataDir: options.dataDir, version: tunnelAppVersion() });
   if (fleetCredential()) io.log(`note: ${FLEET_CREDENTIAL_ENV} is set, so serve --tunnel will use that credential rather than this account`);
   if (account.credentials.status === "unavailable") {
     io.error(`${account.credentials.file} exists but could not be read; fix or remove it, then try again`);
@@ -723,7 +731,7 @@ export async function runLogin(options: CliOptions, io: CliIo = defaultIo()): Pr
 }
 
 export async function runLogout(options: CliOptions, io: CliIo = defaultIo()): Promise<number> {
-  const account = createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() });
+  const account = createTunnelAccount({ dataDir: options.dataDir, version: tunnelAppVersion() });
   const before = describeTunnelAccount(account.credentials.read());
   if (!before.email) {
     io.log("this machine is not signed in");
@@ -821,12 +829,12 @@ async function planTunnel(options: CliOptions, log: (line: string) => void, reco
     // A fleet-started container: the credential is the whole identity.
     log(`tunnel: using the installation credential from ${FLEET_CREDENTIAL_ENV}`);
     try {
-      access = await fleetAccess({ credential, version: serverVersion() });
+      access = await fleetAccess({ credential, version: tunnelAppVersion() });
     } catch (error) {
       return { error: `--tunnel: ${message(error)}` };
     }
   } else {
-    account = createTunnelAccount({ dataDir: options.dataDir, version: serverVersion(), recovery, log: (line) => log(`tunnel: ${line}`) });
+    account = createTunnelAccount({ dataDir: options.dataDir, version: tunnelAppVersion(), recovery, log: (line) => log(`tunnel: ${line}`) });
     if (account.credentials.status === "unavailable") return fail(`${account.credentials.file} exists but could not be read; fix or remove it`);
     if (!describeTunnelAccount(account.credentials.read()).email) {
       return fail("no account on this machine yet: run `openmausbot login` first, then `openmausbot serve --tunnel`");
@@ -1150,7 +1158,7 @@ export async function runOnboardingCommand(
     if (interactive && options.pair && !options.local && (options.command === "setup" || !saved)) {
       io.log("\nOne optional step: connect your phone. You can skip this and start chatting here.");
       const result = await (flow.phoneSetup ?? runPhoneSetup)(launch, prompts, {
-        accountReady: (value) => !!describeTunnelAccount(createTunnelAccount({ dataDir: value.dataDir, version: serverVersion() }).credentials.read()).email,
+        accountReady: (value) => !!describeTunnelAccount(createTunnelAccount({ dataDir: value.dataDir, version: tunnelAppVersion() }).credentials.read()).email,
         login: (value, ui) => runLogin(value, {
           log: ui.log, error: ui.log,
           ask: (question) => /code/i.test(question) ? ui.secret(question) : ui.ask(question),

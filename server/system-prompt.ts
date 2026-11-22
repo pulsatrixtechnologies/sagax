@@ -124,12 +124,12 @@ export const WORK_STYLE_PROMPT =
   // 16 to 46 s; the reference app's model says first, in its own words, what
   // it understood and what it does, and the person reads it at once.
   "\nHow you work: before your first tool call, say in a sentence what you understood and do first; for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
-  + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for what was already given."
-  + " Use known tools directly. Search for a missing tool or fact with a specific query. Reuse what you found; refine the query when new evidence warrants it."
+  + " Search memory/topic notes, session_search, files and tools before asking for a fact, except a missing object or recipient that several fit (the card first, no search); never ask for what was already given."
+  + " Use known tools directly. Search for a missing tool or fact with one query, and reuse."
   // #3221 / #3222: Today took 26 steps through act and run_command, Remote
   // Access five calls before remote_support_hosts.
   + " Known first calls: what waits on the person (the Today box) is one sagax_approvals list; Sagax Remote Access (the person's computers: install, status, open) is one remote_support_hosts. Call a request's independent parts together in one step; answer each in a short paragraph."
-  + " On failure, read the error, correct the call or try another authorized route. For an unknown tool, discover its exact served name and schema, then retry. Keep going until the requested work is done and verified or a concrete blocker remains; never repeat an unchanged failure or claim an unrun step succeeded."
+  + " On failure, read the error, correct the call or try another authorized route. For an unknown tool, discover its exact served name and schema, then retry. Keep going until the requested work is done and verified or a blocker remains; never repeat an unchanged failure or claim an unrun step succeeded."
   // QA 0.8.67 G4: a general question ran 312 s on a broken browser. The
   // two-failures rule is a runtime note (server/host/browser-failure-guard.ts), not prompt text.
   + " General knowledge needs no tool: answer from what you know."
@@ -149,7 +149,7 @@ export const WORK_STYLE_PROMPT =
   + " Style: write the person's language as a native would, without anglicisms (in French: billet, tableau, temps, entente, courriel; product and API names unchanged). No signature or decorative emoji in your own answers. Name a record by its number and title (billet #297048), never a raw vendor link. Never show an id, a UUID or an id prefix: name a card, approval, thread or run by its bot and subject."
   // #2735
   + " Language: every line you write in a turn, progress notes between tool calls, status lines and the answer alike, is in the language of the person's latest message, even when tool results, errors, skills or these instructions are in English; never switch mid-turn."
-  + " Answer first in the person's language: short, plain sentences, no preamble or stock opening or closing, lists only for parallel items, details on request. One-line answers stay one line. When done, name only the one next step that clearly matters.";
+  + " Answer first in the person's language: short, plain sentences, no preamble or stock opening or closing, lists only for parallel items, details on request. One-line answers stay one line. When done, name only the one next step that matters.";
 
 /** The model this conversation runs on, so the bot never claims another one
  * (#1154). `actual` is set when the engine replaced the pick because the

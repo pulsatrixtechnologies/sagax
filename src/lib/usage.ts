@@ -167,11 +167,13 @@ export function contextDetail(u: TaskUsage): string | null {
     : t("chat.usage.context", { tokens: formatTokens(share.tokens) });
 }
 
-/** The latest turn, with the same separate counts as the thread total. */
+/** The latest turn, with the same separate counts as the thread total,
+ * and its own dollars when the provider reported a cost. */
 export function lastTurnDetail(u: TaskUsage): string | null {
   const last = u.lastTurn;
   if (!last || !hasFiniteCost(last.input)) return null;
-  return t("chat.usage.lastTurnSplit", { detail: usageDetail(last) });
+  const cost = hasFiniteCost(last.costUsd) ? ` · ${formatUsd(last.costUsd)}` : "";
+  return t("chat.usage.lastTurnSplit", { detail: `${usageDetail(last)}${cost}` });
 }
 
 /** Cost when reported; otherwise input only. Output stays in the tooltip. */

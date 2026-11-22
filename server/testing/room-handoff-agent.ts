@@ -61,7 +61,8 @@ async function askPermission(server: AgentsIntegration, ask: { tool_name: string
     });
   } finally {
     child.stdin.destroy();
-    await waitForExit(child, { signal: "SIGTERM", graceMs: 500 });
+    // 500ms SIGKILL cut a process that was still exiting on a loaded runner (#4478)
+    await waitForExit(child, { signal: "SIGTERM", graceMs: 30_000 });
   }
 }
 
@@ -271,7 +272,8 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
   } finally {
     closing = true;
     clearTimeout(timer); clearTimeout(delayTimer); clearInterval(gateTimer); lines.close(); child.stdin.destroy();
-    await waitForExit(child, { signal: "SIGTERM", graceMs: 500 });
+    // 500ms SIGKILL cut a process that was still exiting on a loaded runner (#4478)
+    await waitForExit(child, { signal: "SIGTERM", graceMs: 30_000 });
     // pid: which provider process ran the turn, so a fixture can tell a
     // retained session from a fresh one.
     appendFileSync(`${planPath}.evidence.jsonl`, JSON.stringify({ botId, turnIndex, threadId: integration.env.SAGAX_THREAD_ID, pid: process.pid,

@@ -1,7 +1,7 @@
 // The compact sidebar (the reference design's "Activer ou désactiver la barre latérale
 // compacte"): the icons rail, its expand button in the rail's foot, Enter on
-// the edge, its arrow keys. The head no longer holds Collapse sidebar (#4484 reversed),
-// the reference's button (sidebar panel icon, first in its top button row).
+// the edge, its arrow keys. The wide sidebar's head holds the same control as
+// Collapse sidebar (#5017), first in its top button row.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,12 +66,18 @@ describe("compact sidebar", () => {
     expect(html).toContain('aria-description="Enter turns the compact sidebar on or off"');
   });
 
-  it.each(["comfortable", "compact"] as const)("has no Collapse sidebar button and no bot panel button in the head, no rail toggle or rail keys at %s density", (density) => {
+  it.each(["comfortable", "compact"] as const)("offers Collapse sidebar in the head, before search, at %s density (#5017)", (density) => {
     fixture.density = density;
     const html = render();
+    const toggle = (html.match(/<button[^>]*data-sidebar-compact-toggle[^>]*>/g) ?? [])[0] ?? "";
+    expect(toggle).toContain('aria-expanded="true"');
+    expect(toggle).toContain('aria-label="Collapse sidebar"');
+    expect(toggle).toContain('title="Collapse sidebar"');
     expect(html).not.toContain("data-sidebar-collapse");
-    expect(html).not.toContain('aria-label="Collapse sidebar"');
-    expect(html).not.toContain("data-sidebar-compact-toggle");
+    expect(html).not.toContain("data-sidebar-bot-panel");
+    expect(html.indexOf("data-sidebar-compact-toggle")).toBeGreaterThan(-1);
+    expect(html.indexOf("data-sidebar-compact-toggle")).toBeLessThan(html.indexOf("data-sidebar-search"));
+    expect(html.indexOf("data-sidebar-compact-toggle")).toBeLessThan(html.indexOf("data-sidebar-foot"));
     expect(html).not.toContain("data-sidebar-rail");
   });
 

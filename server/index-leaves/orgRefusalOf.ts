@@ -12,7 +12,9 @@ function orgRefusalOf(plan: Extract<EngineCredentialPlan, { ok: false }>, speake
     ...(plan.payer ? { payer: plan.payer } : {}),
     ...(plan.payerPrincipalId ? { payerPrincipalId: plan.payerPrincipalId } : {}),
     ...(plan.routine ? { routine: true as const } : {}),
-    ...(plan.ownerPays ? { ownerPays: true as const, ...(speakerId ? { speakerPrincipalId: speakerId } : {}) } : {})
+    ...(plan.ownerPays ? { ownerPays: true as const, ...(speakerId ? { speakerPrincipalId: speakerId } : {}) } : {}),
+    ...(plan.error ? { error: plan.error } : {}),
+    ...(plan.confirm ? { confirm: plan.confirm } : {}),
   };
 }
   return orgRefusalOf;

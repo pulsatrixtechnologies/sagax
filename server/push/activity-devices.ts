@@ -89,6 +89,8 @@ export interface LiveActivityTokenStore {
   list(person: string): LiveActivityToken[];
   /** Update tokens for this person and bot (not push-to-start). */
   listForBot(person: string, botId: string): LiveActivityToken[];
+  /** Push-to-start tokens for this person (not tied to one bot). */
+  listStarts(person: string): LiveActivityToken[];
   register(person: string, input: ActivityRegistration): LiveActivityToken;
   remove(person: string, token: string): boolean;
   /** Drop every update token for this person and bot (activity ended). */
@@ -171,6 +173,9 @@ export function createLiveActivityTokenStore(
       return (load().get(personKey(person)) ?? []).filter(
         (entry) => entry.kind === "update" && entry.botId === bot,
       );
+    },
+    listStarts(person) {
+      return (load().get(personKey(person)) ?? []).filter((entry) => entry.kind === "start");
     },
     register(person, input) {
       const key = requirePerson(person);

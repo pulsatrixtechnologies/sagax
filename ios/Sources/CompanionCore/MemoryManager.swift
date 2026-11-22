@@ -151,7 +151,9 @@ public struct MemoryNoteDetail: Hashable, Sendable, Identifiable {
     public var scope: String?
     public var path: String?
     public var hash: String?
-    public var version: Int?
+    /// Perspicax content hash (64 hex characters). A number from an older
+    /// answer is kept as its decimal text so it can go back as `base_version`.
+    public var version: String?
     public var mayEdit: Bool
     public var bodyKind: MemoryBodyKind
 
@@ -164,7 +166,7 @@ public struct MemoryNoteDetail: Hashable, Sendable, Identifiable {
         scope: String? = nil,
         path: String? = nil,
         hash: String? = nil,
-        version: Int? = nil,
+        version: String? = nil,
         mayEdit: Bool,
         bodyKind: MemoryBodyKind
     ) {
@@ -257,13 +259,79 @@ public struct PerspicaxEntry: Codable, Hashable, Sendable {
     public var tags: [String]?
     public var topic: String?
     public var scope: String?
-    public var version: Int?
+    /// The note's content hash. Perspicax sends a string; a whole number from
+    /// an older answer is stored as decimal text (#4941).
+    public var version: String?
     public var mayEdit: Bool?
     public var sealed: Bool?
+
+    public init(
+        id: String,
+        title: String,
+        body: String,
+        tags: [String]? = nil,
+        topic: String? = nil,
+        scope: String? = nil,
+        version: String? = nil,
+        mayEdit: Bool? = nil,
+        sealed: Bool? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.tags = tags
+        self.topic = topic
+        self.scope = scope
+        self.version = version
+        self.mayEdit = mayEdit
+        self.sealed = sealed
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, title, body, tags, topic, scope, version, sealed
         case mayEdit = "may_edit"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        body = try container.decode(String.self, forKey: .body)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags)
+        topic = try container.decodeIfPresent(String.self, forKey: .topic)
+        scope = try container.decodeIfPresent(String.self, forKey: .scope)
+        version = Self.readVersion(container, forKey: .version)
+        mayEdit = try container.decodeIfPresent(Bool.self, forKey: .mayEdit)
+        sealed = try container.decodeIfPresent(Bool.self, forKey: .sealed)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(tags, forKey: .tags)
+        try container.encodeIfPresent(topic, forKey: .topic)
+        try container.encodeIfPresent(scope, forKey: .scope)
+        try container.encodeIfPresent(version, forKey: .version)
+        try container.encodeIfPresent(mayEdit, forKey: .mayEdit)
+        try container.encodeIfPresent(sealed, forKey: .sealed)
+    }
+
+    /// A version field: a string (the content hash), or a whole number kept
+    /// as decimal text. Missing, null and blank are nil. Anything else is
+    /// nil rather than a failed entry.
+    static func readVersion<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>, forKey key: Key) -> String? {
+        guard container.contains(key) else { return nil }
+        if (try? container.decodeNil(forKey: key)) == true { return nil }
+        if let text = try? container.decode(String.self, forKey: key) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let number = try? container.decode(Int.self, forKey: key) {
+            return String(number)
+        }
+        return nil
     }
 }
 

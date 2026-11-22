@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Contact, CreditCard, FileDown, FileUp, KeyRound, KeySquare, LockKeyhole, MapPin, StickyNote } from "lucide-react";
 
-import { allowBotAlways, deleteCredential, importOnePasswordItem, loadCredentials, loadOnePasswordItems, revealCredential, revealCredentialNotes, revokeBot, type CredentialVaultState, type OnePasswordItem, type VaultItemListing } from "@/lib/credential-vault";
+import { allowBotAlways, deleteCredential, importOnePasswordItem, loadCredentials, loadOnePasswordItems, onePasswordCanAdd, revealCredential, revealCredentialNotes, revokeBot, type CredentialVaultState, type OnePasswordItem, type VaultItemListing } from "@/lib/credential-vault";
 import { copyText } from "@/lib/copy-text";
 import { botLabel } from "@/lib/human-label";
 import { activeLocale, t } from "@/lib/i18n";
@@ -483,7 +483,7 @@ function OnePasswordCard({ data, onImported }: { data: CredentialVaultState; onI
                       {shown.map((item) => (
                         <li key={`${item.vaultId}:${item.id}`} className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate">{item.title} <span className="text-[12px] text-ink-tertiary">{item.vaultName}{item.domains.length ? ` · ${item.domains.join(", ")}` : ""}</span></span>
-                          <button type="button" className={PILL} disabled={busy || item.domains.length === 0} title={item.domains.length === 0 ? t("vault.onePassword.noSite") : undefined} onClick={() => void pick(item)}>{t("vault.onePassword.add")}</button>
+                          <button type="button" className={PILL} disabled={busy || !onePasswordCanAdd(item)} title={!onePasswordCanAdd(item) ? t("vault.onePassword.noSite") : undefined} onClick={() => void pick(item)}>{t("vault.onePassword.add")}</button>
                         </li>
                       ))}
                       {shown.length === 0 && <li className="text-[12.5px] text-ink-secondary">{t("vault.onePassword.none")}</li>}

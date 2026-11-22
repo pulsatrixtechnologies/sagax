@@ -9,7 +9,12 @@ import { launchVerificationServer, runControlOmb, verificationServerEnvironment 
 import { waitForExit } from "../testing/cleanup.ts";
 
 it("reports every run into the bot's main thread while fresh executions, approvals, deletion and unread stay reachable", async () => {
-  const fixture = await launchVerificationServer();
+  // #5086 (#5122): the fake engine's default turn ends on a Bash call after the
+  // reply. That is a turn with nothing said after its last tool, so the run
+  // goes on once in the same thread and the last launch carries --resume.
+  // This run's reply is the report: no tool after it, so each run stays a
+  // fresh execution.
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]" });
   const evidence: unknown[] = [{ fixture: fixture.info }];
   let broker: Socket | undefined;
   const api = async (method: string, path: string, body?: unknown, status = 200) => {

@@ -62,7 +62,8 @@ export interface ProxyOptions {
     code: string,
     deviceName: unknown,
     pairRequestId?: unknown,
-  ) => { token: string; device: unknown } | { error: string };
+    replacesToken?: unknown,
+  ) => { token: string; device: unknown } | { error: string; code?: string };
   /** What the phone should call this computer in its connection list. */
   serverName: () => string;
   /** Every host the phone could dial later, best first — sent with the
@@ -436,8 +437,11 @@ export function createProxyHandler(options: ProxyOptions) {
             String(credential ?? ""),
             body.deviceName,
             body.pairRequestId,
+            body.replacesToken,
           );
-          if ("error" in result) return sendJson(res, 401, { error: result.error });
+          if ("error" in result) {
+            return sendJson(res, 401, result.code ? { error: result.error, code: result.code } : { error: result.error });
+          }
           // `hosts` rides along whichever way the phone paired — QR, typed
           // address, or discovery — so every paired device learns the full
           // fallback list, not just the ones that scanned a QR. Absent, not

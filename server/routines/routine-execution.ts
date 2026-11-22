@@ -15,6 +15,13 @@ export const ROUTINE_SUPERSEDED_BY_NEW_RUN = "Stopped waiting: a new run of this
  * holding its routine and its bot's queue forever. */
 export const ROUTINE_TURN_LOST_MS = 30 * 60_000;
 export const ROUTINE_TURN_LOST = "The run's turn ended without a result: nothing has worked on it for 30 minutes";
+/** #5127: a queued flexible run that is still inside its late window, held
+ * because the clock is outside the routine's allowed hours. */
+export const ROUTINE_WAITING_FOR_WINDOW = "Waits for its allowed hours before it can start.";
+/** #5127: a queued flexible run whose late window closed before it started. */
+export const ROUTINE_FLEXIBLE_WINDOW_CLOSED = "This run's flexible window closed before it could start, so it did not run. The next one stays on the schedule.";
+/** #5074: Run now on a routine whose schedule is off does not turn it back on. */
+export const ROUTINE_SCHEDULE_STILL_OFF = "Started by hand. The schedule is still off, so this does not turn it back on.";
 
 /** Waiting since a notice window before its routine's next occurrence came due, with no hand-off still open: that occurrence starts instead. */
 export function supersededBy(dueAt: number, run: Pick<RoutineRun, "status" | "waitingSince" | "threadId">, handedOffWorkLive?: (threadId: string) => boolean): boolean {

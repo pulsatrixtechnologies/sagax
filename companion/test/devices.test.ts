@@ -10,6 +10,7 @@ import {
   bearerToken,
   cleanDeviceName,
   DeviceRegistry,
+  MAX_DEVICES,
   MAX_PAIRING_ATTEMPTS,
   PAIRING_TTL_MS,
 } from "../src/devices.ts";
@@ -287,6 +288,84 @@ describe("DeviceRegistry", () => {
     writeFileSync(join(DATA_DIR, "devices.json"), "{ not json");
     expect(new DeviceRegistry().count()).toBe(0);
   });
+
+  it("replaces the phone's own device on a re-pair and starts that device with fresh grants", () => {
+    const registry = new DeviceRegistry();
+    const replacedIds: string[] = [];
+    registry.onReplaced((id) => replacedIds.push(id));
+    const phone = pair(registry, "Pocket");
+    expect(registry.setCloudDesktopAccess(phone.device.id, true)).toBe(true);
+    expect(registry.setBrowserControlAccess(phone.device.id, true)).toBe(true);
+    const { code } = registry.openPairing();
+
+    const next = registry.redeem(code, "Pocket", undefined, phone.token);
+    if ("error" in next) throw new Error(next.error);
+
+    expect(registry.count()).toBe(1);
+    expect(registry.authenticate(phone.token)).toBeNull();
+    expect(registry.authenticate(next.token)?.id).toBe(next.device.id);
+    expect(next.device.id).not.toBe(phone.device.id);
+    expect(next.device.cloudDesktopAccess).toBe(false);
+    expect(next.device.browserControlAccess).toBe(false);
+    expect(next).not.toHaveProperty("replaced");
+    expect(replacedIds).toEqual([phone.device.id]);
+    expect(new DeviceRegistry().authenticate(phone.token)).toBeNull();
+    expect(new DeviceRegistry().authenticate(next.token)?.name).toBe("Pocket");
+  });
+
+  it("ignores an unknown, empty or non-string replacesToken and answers the same shape", () => {
+    const registry = new DeviceRegistry();
+    const kept = pair(registry, "Pocket");
+    for (const token of ["not-a-live-token", "", 12]) {
+      const { code } = registry.openPairing();
+      const next = registry.redeem(code, "Pocket", undefined, token);
+      if ("error" in next) throw new Error(next.error);
+      expect(Object.keys(next).sort()).toEqual(["device", "token"]);
+      expect(registry.authenticate(kept.token)?.id).toBe(kept.device.id);
+    }
+    expect(registry.count()).toBe(4);
+  });
+
+  it("lets a phone already at the device cap re-pair itself, and refuses a new phone", () => {
+    const registry = new DeviceRegistry();
+    const phones = Array.from({ length: MAX_DEVICES }, (_, index) => pair(registry, `Phone ${index}`));
+    expect(registry.count()).toBe(MAX_DEVICES);
+    const blocked = registry.openPairing();
+    expect(registry.redeem(blocked.code, "New phone")).toEqual({
+      error: "too many paired devices: remove an old phone on your computer first",
+      code: "pairing_device_limit",
+    });
+    expect(registry.count()).toBe(MAX_DEVICES);
+
+    let current = phones[0]!;
+    for (let n = 0; n < 25; n += 1) {
+      const { code } = registry.openPairing();
+      const next = registry.redeem(code, "Pocket", undefined, current.token);
+      if ("error" in next) throw new Error(next.error);
+      expect(registry.authenticate(current.token)).toBeNull();
+      current = next;
+    }
+    expect(registry.count()).toBe(MAX_DEVICES);
+    expect(registry.authenticate(current.token)?.name).toBe("Pocket");
+    expect(registry.authenticate(phones[1]!.token)?.name).toBe("Phone 1");
+  });
+
+  it("does not replace again when the same pairing request is replayed", () => {
+    const registry = new DeviceRegistry();
+    const phone = pair(registry, "Pocket");
+    const other = pair(registry, "Tablet");
+    const requestId = "repair-request-01";
+    const { code } = registry.openPairing();
+    const replacedIds: string[] = [];
+    registry.onReplaced((id) => replacedIds.push(id));
+
+    const first = registry.redeem(code, "Pocket", requestId, phone.token);
+    const replay = registry.redeem(code, "Pocket", requestId, other.token);
+    expect(replay).toEqual(first);
+    expect(replacedIds).toEqual([phone.device.id]);
+    expect(registry.count()).toBe(2);
+    expect(registry.authenticate(other.token)?.id).toBe(other.device.id);
+  });
 });
 
 describe("authenticate under a failing disk", () => {
@@ -366,6 +445,23 @@ describe("a pairing that cannot be saved", () => {
     expect("error" in result).toBe(true);
     expect(registry.count()).toBe(0);
     expect(registry.list()).toEqual([]);
+  });
+
+  it("keeps the old device when a replacement cannot be saved", () => {
+    const registry = new DeviceRegistry();
+    const phone = pair(registry, "Pocket");
+    const replacedIds: string[] = [];
+    registry.onReplaced((id) => replacedIds.push(id));
+    (registry as unknown as { persist: () => void }).persist = () => {
+      throw new Error("EROFS: read-only file system");
+    };
+    const { code } = registry.openPairing();
+    const result = registry.redeem(code, "Pocket", undefined, phone.token);
+    expect("error" in result).toBe(true);
+    expect(registry.count()).toBe(1);
+    expect(registry.authenticate(phone.token)?.id).toBe(phone.device.id);
+    expect(replacedIds).toEqual([]);
+    expect(new DeviceRegistry().authenticate(phone.token)?.id).toBe(phone.device.id);
   });
 });
 

@@ -113,6 +113,90 @@ describe("Live Activity hub", () => {
     expect(sent).toHaveLength(0);
   });
 
+  it("starts a Live Activity for a closed phone when the bot needs the person and no activity is running", async () => {
+    const { store, hub, sent } = setup();
+    const start = "c".repeat(64);
+    store.register("pr_bob", { token: start, kind: "start", environment: "production", appVersion: "", deviceName: "", deviceToken: "d".repeat(64) });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow this?", threadId: "t1", requestId: "r1", color: "green" });
+    await hub.drain();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.path).toBe(`/3/device/${start}`);
+    expect(sent[0]!.headers["apns-priority"]).toBe("10");
+    const body = sent[0]!.body as { aps: Record<string, unknown> };
+    expect(body.aps.event).toBe("start");
+    expect(body.aps["attributes-type"]).toBe("BotActivityAttributes");
+    expect(body.aps.attributes).toEqual({ botId: "scout", threadId: "t1", name: "Scout", color: "green" });
+    expect(body.aps.alert).toBeUndefined();
+    expect(body.aps["content-state"]).toMatchObject({ kind: "needsYou", headline: "Scout needs you" });
+  });
+
+  it("does not start a Live Activity for a bot that is only working", async () => {
+    const { store, hub, sent } = setup();
+    store.register("pr_bob", { token: "c".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "working", line: "Reading" });
+    await hub.drain();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("updates a running activity and does not start a second one", async () => {
+    const { store, hub, sent } = setup();
+    store.register("pr_bob", { token: TOKEN_A, kind: "update", botId: "scout", environment: "production", appVersion: "", deviceName: "" });
+    store.register("pr_bob", { token: "c".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    await hub.drain();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.path).toBe(`/3/device/${TOKEN_A}`);
+    expect((sent[0]!.body as { aps: { event: string } }).aps.event).toBe("update");
+  });
+
+  it("starts once for a needs-you spell, then again after the bot goes quiet", async () => {
+    const { store, hub, sent } = setup();
+    store.register("pr_bob", { token: "c".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    await hub.drain();
+    expect(sent).toHaveLength(1);
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "done" });
+    await hub.drain();
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Again" });
+    await hub.drain();
+    expect(sent).toHaveLength(2);
+  });
+
+  it("starts the closed phone while another phone of the same person is in the app", async () => {
+    const open = "d".repeat(64);
+    const closed = "e".repeat(64);
+    const { store, hub, sent } = setup();
+    void hub;
+    store.register("pr_bob", { token: "c".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "", deviceToken: open });
+    store.register("pr_bob", { token: "f".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "", deviceToken: closed });
+    const streaming = new LiveActivityHub({
+      config: CONFIG,
+      store,
+      transport: async (input) => {
+        sent.push({ host: input.host, path: input.path, headers: input.headers, body: JSON.parse(input.body) });
+        return { status: 200 };
+      },
+      now: () => 10_000,
+      liveDeviceTokens: () => [open],
+    });
+    streaming.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    await streaming.drain();
+    expect(sent.map((row) => row.path)).toEqual([`/3/device/${"f".repeat(64)}`]);
+  });
+
+  it("drops a push-to-start token APNs answers 410 for and tries the next one", async () => {
+    const { store, hub, sent } = setup({ answer: (token) => token.startsWith("c") ? { status: 410, reason: "Unregistered" } : { status: 200 } });
+    store.register("pr_bob", { token: "c".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    await hub.drain();
+    expect(store.list("pr_bob").some((row) => row.token.startsWith("c"))).toBe(false);
+    store.register("pr_bob", { token: "f".repeat(64), kind: "start", environment: "production", appVersion: "", deviceName: "" });
+    hub.submit({ personId: "pr_bob", botId: "scout", botName: "Scout", phase: "needsYou", line: "Allow?" });
+    await hub.drain();
+    expect(sent.map((row) => row.path)).toEqual([`/3/device/${"c".repeat(64)}`, `/3/device/${"f".repeat(64)}`]);
+  });
+
   it("rate-limits high-priority Live Activity pushes", async () => {
     const { store, hub, sent, tick } = setup({ limiter: new PushRateLimiter(1, 60_000) });
     store.register("pr_bob", { token: TOKEN_A, kind: "update", botId: "scout", environment: "production", appVersion: "", deviceName: "" });

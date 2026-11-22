@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { zipArchive } from "../testing/archive-fixtures.mjs";
 import type { PersonPlace } from "./connector-files.ts";
-import { engineBlobPaths, placeEngineFiles, projectBlobFolder, readEngineFile, sessionBlobFolder } from "./engine-connector-files.ts";
+import { clearRelayedPictures, engineBlobPaths, placeEngineFiles, projectBlobFolder, readEngineFile, sessionBlobFolder } from "./engine-connector-files.ts";
 
 const ROOT = mkdtempSync(join(tmpdir(), "sagax-engine-files-"));
 afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
@@ -211,5 +211,35 @@ describe("placeEngineFiles", () => {
     expect(place.files.size).toBe(0);
     expect(readdirSync(results)).toEqual([]);
     expect((output as Array<{ text: string }>)[0]!.text).toMatch(/was not kept: it is a hidden or credential file/);
+  });
+});
+
+describe("clearRelayedPictures (#5155)", () => {
+  it("after the turn, a relayed picture is gone and a document in the same folder stays", () => {
+    const { project, results, blob } = engine();
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 5, 6, 7]);
+    blob("mcp-perspicax-blob-1763600000000-aa11bb.png", png);
+    blob("mcp-sagax_desktop-blob-1763600000001-cc22dd.jpg", jpg);
+    blob("mcp-perspicax-blob-1763600000003-ff44aa.bin", png);
+    blob("mcp-perspicax-blob-1763600000002-ee33ff.pdf");
+    writeFileSync(join(results, "notes.txt"), "keep");
+    const linked = join(results, "mcp-perspicax-blob-1763600000004-ab12cd.png");
+    symlinkSync(join(results, "notes.txt"), linked);
+    const other = join(project, "11111111-2222-4333-8444-555555555555", "tool-results");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "mcp-perspicax-blob-1-zz.png"), png);
+
+    expect(clearRelayedPictures(project, SESSION)).toBe(3);
+
+    expect(readdirSync(results).sort()).toEqual([
+      "mcp-perspicax-blob-1763600000002-ee33ff.pdf",
+      "mcp-perspicax-blob-1763600000004-ab12cd.png",
+      "notes.txt",
+    ]);
+    const kept = readdirSync(results).map((name) => readFileSync(join(results, name)));
+    expect(kept.some((bytes) => bytes.equals(png) || bytes.equals(jpg))).toBe(false);
+    expect(readFileSync(join(other, "mcp-perspicax-blob-1-zz.png")).equals(png)).toBe(true);
+    expect(clearRelayedPictures(project, "nope")).toBe(0);
   });
 });

@@ -34,9 +34,6 @@ struct DesktopModelMenu: View {
     @State private var loaded = false
     @State private var query = ""
     @State private var saving = false
-    @State private var effortOpen = false
-    /// #2106: Auto's Optimize for Intelligence / Balance / Cost under the Auto row.
-    @State private var autoEditOpen = false
     /// #5091: Manual's list is open (else the modes).
     @State private var manualOpen = false
     @FocusState private var searching: Bool
@@ -81,16 +78,14 @@ struct DesktopModelMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if effortOpen {
-                effortPage
-            } else if !manualOpen {
+            if !manualOpen {
                 modesPage
             } else {
                 row(title: Text("Manual"), trailing: nil, chevron: false, id: "desktop-mode-back") { manualOpen = false }
                     .padding(.horizontal, 6)
                 searchField
                 list
-                if !simple, !efforts.isEmpty { settings }
+                if !simple, !efforts.isEmpty { reasoning }
                 VStack(spacing: 0) {
                     row(title: Text("Providers"), trailing: nil, chevron: true, id: "model-menu-providers") {
                         close()
@@ -115,15 +110,10 @@ struct DesktopModelMenu: View {
             simple = ModelMenu.isSimple(stored: stored)
             loaded = true
         }
-        .onValueChange(of: selection.auto) { on in
-            if on != true { autoEditOpen = false }
-        }
-        // Escape: the effort page, then Auto Edit, then the search, then the menu
+        // Escape: Manual's list, then the search, then the menu
         .background {
             Button("Close") {
-                if effortOpen { effortOpen = false }
-                else if autoEditOpen { autoEditOpen = false }
-                else if manualOpen && query.isEmpty { manualOpen = false }
+                if manualOpen && query.isEmpty { manualOpen = false }
                 else if !query.isEmpty { query = "" }
                 else { close() }
             }
@@ -151,7 +141,7 @@ struct DesktopModelMenu: View {
                 row(title: modeName(candidate), trailing: modeBlurb(candidate), chevron: false, checked: mode == candidate, id: "desktop-mode-\(candidate.rawValue)") {
                     pickMode(candidate)
                 }
-                if candidate == .auto, mode == .auto { autoOptimizePanel }
+                if candidate == .auto, mode == .auto { optimizeLine }
             }
             row(title: Text("Manual"), trailing: mode == nil ? Text(verbatim: currentModelName) : Text("Choose a model yourself"), chevron: true, checked: mode == nil, id: "desktop-mode-manual") {
                 manualOpen = true
@@ -301,183 +291,155 @@ struct DesktopModelMenu: View {
             .padding(.bottom, 4)
     }
 
-    /// ModelSearchRow: the label 13 (its tags on the field fill), its detail
-    /// 11.5, the check in the accent, a star on a model. Auto (#2106) gets
-    /// Edit and an Optimize for panel under the row.
+    /// One text edge, then the fixed icon zone (#5051): the check, a model's
+    /// star and a chevron share the icon slot. The star of the model in use
+    /// sits in the side slot, beside its check. Auto's Optimize for is one
+    /// line under the row while Auto is on.
     private func modelRow(_ row: ModelMenuRow) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+        let starBesideCheck = row.kind == .model && row.current
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
                 Button { pick(row) } label: {
                     HStack(spacing: 6) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 6) {
-                                Text(verbatim: row.label).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
-                                ForEach(row.tags, id: \.self) { tag in
-                                    Text(verbatim: tag)
-                                        .font(theme.font(10.5))
-                                        .foregroundStyle(theme.inkSecondary)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 1)
-                                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                }
-                                // M-20261119-015: only this account of the person's offers the model
-                                if let badge = row.badge {
-                                    Text(verbatim: badge)
-                                        .font(theme.font(10.5))
-                                        .foregroundStyle(theme.accent)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 1)
-                                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                        .accessibilityHint(Text(verbatim: row.badgeHint ?? ""))
-                                }
-                            }
-                            // M-20261119-015: the account it runs on, while the provider has several
-                            if let account = row.account {
-                                Text(verbatim: account).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
-                            }
-                            if let detail = row.detail {
-                                Text(verbatim: detail).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
-                            }
-                            if row.notResponding {
-                                Text("Not responding").font(theme.font(11.5)).foregroundStyle(theme.warning)
-                            }
-                        }
+                        modelNames(row)
                         Spacer(minLength: 4)
-                        if row.current {
-                            DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+                        if !starBesideCheck {
+                            Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
+                        }
+                        if row.kind != .model {
+                            iconSlot {
+                                if row.current {
+                                    DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+                                }
+                            }
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.leading, 8)
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .hoverEffect(.highlight)
                 .accessibilityIdentifier("desktop-model-row.\(row.instanceId ?? row.kind.rawValue).\(row.modelId ?? "")")
-                if row.kind == .auto {
-                    Button { autoEditOpen.toggle() } label: {
-                        Text("Edit")
-                            .font(theme.font(12))
-                            .foregroundStyle(theme.inkSecondary)
-                            .padding(.horizontal, 8)
-                            .frame(height: 24)
-                            .background(autoEditOpen ? theme.inset : .clear, in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Edit"))
-                    .accessibilityIdentifier("desktop-model-auto-edit")
-                }
                 if row.kind == .model {
                     let starred = favorites.keys.contains(row.key)
-                    Button { favorites.toggle(row.key, session: session) } label: {
-                        Image(systemName: starred ? "star.fill" : "star")
-                            .font(.system(size: 12))
-                            .foregroundStyle(starred ? theme.warning : theme.inkTertiary)
-                            .frame(width: 24, height: 24)
-                            .contentShape(Rectangle())
+                    starButton(row, starred: starred, width: starBesideCheck ? ModelMenuLayout.sideSlot : ModelMenuLayout.iconSlot)
+                    if starBesideCheck {
+                        iconSlot {
+                            DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(starred ? Text("Remove \(row.label) from favorites") : Text("Add \(row.label) to favorites"))
                 }
             }
-            if row.kind == .auto, autoEditOpen {
-                autoOptimizePanel
+            .padding(.trailing, 8)
+            if row.kind == .auto, row.current {
+                optimizeLine.padding(.horizontal, 8)
             }
         }
     }
 
-    /// #2106: Optimize for Intelligence / Balance / Cost under the Auto row.
-    private var autoOptimizePanel: some View {
-        let current = selection.autoOptimize ?? .balance
-        return VStack(alignment: .leading, spacing: 0) {
-            Text("Optimize for")
-                .font(theme.font(11.5))
-                .foregroundStyle(theme.inkSecondary)
-                .padding(.horizontal, 8)
-                .padding(.top, 4)
-                .padding(.bottom, 2)
-            ForEach(ModelAutoOptimize.allCases, id: \.self) { value in
-                Button {
-                    setAutoOptimize(value)
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(LocalizedStringKey(value.labelKey))
-                            .font(theme.font(13))
-                            .foregroundStyle(theme.ink)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        DesktopIconView(icon: .check, size: 14)
-                            .foregroundStyle(theme.accent)
-                            .opacity(current == value ? 1 : 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 30)
-                    .contentShape(Rectangle())
+    private func modelNames(_ row: ModelMenuRow) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text(verbatim: row.label).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
+                ForEach(row.tags, id: \.self) { tag in
+                    Text(verbatim: tag)
+                        .font(theme.font(10.5))
+                        .foregroundStyle(theme.inkSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityIdentifier("desktop-model-auto-optimize.\(value.rawValue)")
+                // M-20261119-015: only this account of the person's offers the model
+                if let badge = row.badge {
+                    Text(verbatim: badge)
+                        .font(theme.font(10.5))
+                        .foregroundStyle(theme.accent)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .accessibilityHint(Text(verbatim: row.badgeHint ?? ""))
+                }
+            }
+            // M-20261119-015: the account it runs on, while the provider has several
+            if let account = row.account {
+                Text(verbatim: account).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+            }
+            if let detail = row.detail {
+                Text(verbatim: detail).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
+            }
+            if row.notResponding {
+                Text("Not responding").font(theme.font(11.5)).foregroundStyle(theme.warning)
             }
         }
-        .padding(.bottom, 4)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Optimize for"))
-        .accessibilityIdentifier("desktop-model-auto-optimize")
     }
 
-    // MARK: Settings
-
-    /// ModelMenuSettings: Effort › with the level in use ("Default").
-    private var settings: some View {
-        VStack(spacing: 0) {
-            row(title: Text("Effort"),
-                trailing: Text(verbatim: selection.effort.flatMap { efforts.contains($0) ? BotPanelModel.effortLabel($0) : nil } ?? String(localized: "Default")),
-                chevron: true, id: "model-menu-effort") { effortOpen = true }
+    private func starButton(_ row: ModelMenuRow, starred: Bool, width: CGFloat) -> some View {
+        Button { favorites.toggle(row.key, session: session) } label: {
+            Image(systemName: starred ? "star.fill" : "star")
+                .font(.system(size: 12))
+                .foregroundStyle(starred ? theme.warning : theme.inkTertiary)
+                .frame(width: width, height: ModelMenuLayout.iconSlot)
+                .contentShape(Rectangle())
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .accessibilityLabel(starred ? Text("Remove \(row.label) from favorites") : Text("Add \(row.label) to favorites"))
+    }
+
+    private func iconSlot<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content().frame(width: ModelMenuLayout.iconSlot, height: ModelMenuLayout.iconSlot)
+    }
+
+    /// #5051: Optimize for on one line under Auto, the small control at the right.
+    private var optimizeLine: some View {
+        ModelMenuOptimizeLine(
+            selected: selection.autoOptimize ?? .balance,
+            idPrefix: "desktop-model-auto-optimize",
+            ink: theme.ink,
+            secondary: theme.inkSecondary,
+            track: theme.ink.opacity(0.06),
+            chosen: theme.ink.opacity(0.10),
+            onPick: setAutoOptimize
+        )
+    }
+
+    // MARK: Reasoning
+
+    /// Every level the model takes, whole, on balanced lines past four (#5051).
+    private var reasoning: some View {
+        ModelMenuReasoning(
+            levels: efforts,
+            selected: selection.effort,
+            idPrefix: "model-menu-effort",
+            ink: theme.ink,
+            secondary: theme.inkSecondary,
+            track: theme.ink.opacity(0.06),
+            chosen: theme.ink.opacity(0.10),
+            onPick: setEffort
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .overlay(alignment: .top) { Rectangle().fill(theme.hairline).frame(height: 1) }
     }
 
-    /// EffortSubmenu: Back, then Default and the model's levels.
-    private var effortPage: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button { effortOpen = false } label: {
-                HStack(spacing: 4) {
-                    DesktopIconView(icon: .chevronLeft, size: 14)
-                    Text("Effort").font(theme.font(12.5, .medium))
-                }
-                .foregroundStyle(theme.inkSecondary)
-                .padding(.horizontal, 8)
-                .frame(height: 30)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("Back"))
-            ForEach([nil] + efforts.map(Optional.some), id: \.self) { level in
-                let on = level == nil ? (selection.effort.map { !efforts.contains($0) } ?? true) : selection.effort == level
-                row(title: Text(verbatim: level.map(BotPanelModel.effortLabel) ?? String(localized: "Default")),
-                    trailing: nil, chevron: false, checked: on, id: "model-menu-effort.\(level ?? "default")") {
-                    var next = selection
-                    next.effort = level
-                    apply(next, updateBotDefault: true, keepOpen: true)
-                    effortOpen = false
-                }
-            }
-        }
-        .padding(.horizontal, 6)
-    }
-
-    /// A 30 pt menu row (`px-2 py-1.5 text-[13px] rounded-lg`).
+    /// A 30 pt menu row. The trailing words end on one edge; the check and the
+    /// chevron share the icon slot (#5051).
     private func row(title: Text, trailing: Text?, chevron: Bool, checked: Bool? = nil, id: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 title.font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
                 Spacer(minLength: 4)
-                if let trailing { trailing.font(theme.font(13)).foregroundStyle(theme.inkSecondary).lineLimit(1) }
-                if let checked { DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent).opacity(checked ? 1 : 0) }
-                if chevron { DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary) }
+                if let trailing {
+                    trailing.font(theme.font(13)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                }
+                Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
+                iconSlot {
+                    if checked == true {
+                        DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+                    } else if chevron {
+                        DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
+                    }
+                }
             }
             .padding(.horizontal, 8)
             .frame(height: 30)
@@ -498,7 +460,7 @@ struct DesktopModelMenu: View {
             var next = selection
             next.auto = true
             next.mode = nil
-            // Absent means Balance; store it so Edit shows the live choice.
+            // Absent means Balance; store it so Optimize for shows the live choice.
             next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
         case .follow:
@@ -517,7 +479,12 @@ struct DesktopModelMenu: View {
         next.auto = true
         next.mode = nil
         next.autoOptimize = value
-        autoEditOpen = false
+        apply(next, updateBotDefault: true, keepOpen: true)
+    }
+
+    private func setEffort(_ level: String?) {
+        var next = selection
+        next.effort = level
         apply(next, updateBotDefault: true, keepOpen: true)
     }
 

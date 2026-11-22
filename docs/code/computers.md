@@ -361,8 +361,12 @@ extension drops it).
   (`connectorFilePlaces`, an organization server).
 - A solo server is the person's own computer: the engine's folder is
   already theirs, nothing is moved.
-- Not covered here: pictures Sagax relays (the engine keeps a copy of each
-  picture it shows the model, #5155).
+- A picture Sagax relays stays in the result, because the model must see
+  it, and Claude Code keeps a copy in that same folder. When the turn ends
+  on an organization server, those picture copies are removed
+  (`clearRelayedPictures`, called from the Claude turn settle). A document
+  the hook already moved is left alone, and a link is never removed. A
+  solo server is the person's own computer: nothing is removed there (#5155).
 
 Tests: `server/routes/engine-connector-files-delivery.test.ts` (the real
 hook helper and route: the file lands on the person's computer, none is left

@@ -2664,6 +2664,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           showThreads={showThreads}
           dispatch={dispatch}
           setMenu={actions.setMenu}
+          renameBotId={actions.renameBotId}
+          onRenameStarted={() => actions.setRenameBotId(null)}
         />
         <SidebarSectionList
           density={density}

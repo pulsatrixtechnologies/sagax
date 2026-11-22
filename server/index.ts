@@ -1571,6 +1571,7 @@ import { providerOfInstance } from "../shared/model-provider.ts";
 import { accountPickText, accountSwitchSettingOf, cleanAccountSwitchDefaults, type AccountPick, type AccountSwitchSetting } from "../shared/account-switch.ts";
 import { createAccountMeter } from "./usage/account-meter.ts";
 import { createAccountSwitch } from "./usage/account-switch-host.ts";
+import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
 import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
@@ -16537,6 +16538,8 @@ const accountSwitch = createAccountSwitch({
     const refusal = activeEngineRefusal(instanceId, undefined, Date.now());
     return refusal?.cause === "usage_limit" || refusal?.cause === "credits";
   },
+  learnedDataDir: DATA_DIR,
+  learnedRouting: (person) => personLearnedRouting(person),
 });
 /** An engine's access and environment, as the limit failover reads them
  * (whether it bills each use, server/usage/limit-failover.ts billsEachUse). */
@@ -16562,7 +16565,7 @@ function autoAccountFor(input: { botId: string; threadId: string; payer: string;
   const last = task?.autoModel?.instanceId;
   const current = last && pool.includes(last) ? last : input.selection.instanceId;
   const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
-  const choice = accountSwitch.choose({ payer: input.payer, threadId: input.threadId, driverKind: home.driverKind, current, pool, fresh });
+  const choice = accountSwitch.choose({ payer: input.payer, threadId: input.threadId, driverKind: home.driverKind, current, pool, fresh, ...learnedAccountInput(input.threadId, input.selection.model) });
   // said once the turn really starts (start-turn-prepare-validate.ts), never for a preview
   return choice ? { instanceId: choice.instanceId, pick: choice.pick, moved: choice.instanceId !== current } : null;
 }
@@ -16576,6 +16579,59 @@ function noteAccountDemand(row: Pick<UsageRow, "botId" | "threadId" | "instanceI
   if (!payer) return;
   usageForecast.record(payer, row.botId, row.costUsd);
   accountMeter.noteSpend(payer, row.instanceId, row.costUsd);
+}
+/** The model the person chose, and whether a paid key is already confirmed
+ * for this turn. Learning uses these to pick an account. It does not receive
+ * a list of other models. */
+function learnedAccountInput(threadId: string, model: string | undefined): { model?: string; paid: (instanceId: string) => boolean; paidConfirmed: (instanceId: string) => boolean } {
+  return {
+    ...(model ? { model } : {}),
+    paid: (instanceId) => billsEachUse(limitFailoverConfig(instanceId)),
+    paidConfirmed: () => paidKeyIsConfirmed(threadId),
+  };
+}
+/** A settled turn's outcome, on the account and model that ran. A stop is
+ * not an outcome. Counts go to usage/learned-routing.json. */
+function recordLearnedTurn(turn: {
+  threadId: string;
+  botId?: string;
+  instanceId: string;
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  ttftMs: number;
+  ok: boolean;
+  stopped: boolean;
+  limited: "quota" | "rate_limited" | null;
+  costTier: number;
+}): void {
+  try {
+    const live = registry.get(turn.instanceId);
+    const facts = live ? { instanceId: turn.instanceId, driverKind: live.driverKind, displayName: engineDisplayName(live) } : null;
+    const provider = (facts && providerOfInstance(facts)?.id) || live?.driverKind || "provider";
+    const task = turn.botId ? store.taskByThread(turn.botId, turn.threadId) : undefined;
+    const fresh = !task?.resumeCursors || task.resumeCursors[turn.instanceId] === undefined;
+    const outcome = outcomeOfSettledTurn({
+      instanceId: turn.instanceId,
+      model: turn.model,
+      provider,
+      promptTokens: turn.promptTokens,
+      fresh,
+      ttftMs: turn.ttftMs,
+      durationMs: turn.durationMs,
+      outputTokens: turn.outputTokens,
+      ok: turn.ok,
+      stopped: turn.stopped,
+      limited: turn.limited,
+      quotaBurn: 0,
+      costTier: turn.costTier,
+      at: Date.now(),
+    });
+    if (outcome) accountSwitch.record(outcome);
+  } catch (error) {
+    reportBackgroundError(error);
+  }
 }
 /** #5014: the account a conversation's turn took and why: on the thread (the
  * model chip reads it) when it changed, and in the Events lens when the
@@ -16667,7 +16723,8 @@ const limitFailover = createLimitFailoverHost({
     const task = store.taskByThread(botId, threadId);
     // no engine session open on its account: a new conversation, no cache to keep
     const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
-    return accountSwitch.choose({ payer, threadId, driverKind, current, pool, fresh });
+    const model = task?.modelSelection?.model ?? store.projectBotForTask(botId, threadId)?.modelSelection?.model;
+    return accountSwitch.choose({ payer, threadId, driverKind, current, pool, fresh, ...learnedAccountInput(threadId, model) });
   },
   accountRank: (payer, driverKind, pool) => accountSwitch.rank(payer, driverKind, pool),
   noteAccountPick: (botId, threadId, pick, moved) => noteAccountPick(botId, threadId, pick, moved),
@@ -19345,6 +19402,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get autoApprovals() { return autoApprovals; },
   get autoTurnsByThread() { return autoTurnsByThread; },
   get bookTurnUsage() { return bookTurnUsage; },
+  get recordLearnedTurn() { return recordLearnedTurn; },
   get botForThread() { return botForThread; },
   get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
   get ownPlaceRefusalForTurn() { return (threadId: string) => ownPlaceRefusal(turnWorkplaces.get(threadId)?.decision); },
@@ -31324,6 +31382,17 @@ ROUTES.push(createModelSwitchRoutes({
       }
     },
   },
+  learnedRouting: {
+    read: (owner) => personLearnedRouting(owner === "installation" ? null : owner),
+    save: (owner, on) => {
+      if (owner === "installation") {
+        saveConfig({ learnedRouting: on });
+        cfg.learnedRouting = on;
+      } else {
+        personSettings.setLearnedRouting(owner, on);
+      }
+    },
+  },
   // #4417: the person's default context size per provider, read per turn
   contextDefaults: {
     read: (owner) => contextDefaultsOf(owner),
@@ -34065,6 +34134,12 @@ function personAccountSwitchDefaults(principalId: string | null | undefined): Re
 /** #5014: the same map for a settings owner (GET/PUT /api/me/models). */
 function accountSwitchDefaultsOf(owner: string | "installation"): Record<string, AccountSwitchSetting> {
   return owner === "installation" ? cleanAccountSwitchDefaults(cfg.accountSwitchByProvider) : { ...personSettings.get(owner).accountSwitchByProvider };
+}
+/** Learned routing is this person's own switch. Off until they turn it on.
+ * A solo server keeps it on the installation, the same way as the account strategy. */
+function personLearnedRouting(person: string | null): boolean {
+  if (IDENTITY.kind !== "perspicax") return cfg.learnedRouting === true;
+  return person ? personSettings.get(person).learnedRouting === true : false;
 }
 /** #4417: the same map for a settings owner (GET/PUT /api/me/models). */
 function contextDefaultsOf(owner: string | "installation"): Record<string, number> {
@@ -38993,6 +39068,7 @@ const gracefulShutdown = createGracefulShutdown({
       noteTurnsCutByShutdown();
       // #4250: what was told this tick reaches the disk before the restart
       signalLedger.flush();
+      accountSwitch.flush();
       if (workspaceAccessTimer) clearInterval(workspaceAccessTimer);
       // Child MCP processes and the HTTP listener can remain alive while the
       // asynchronous shutdown jobs drain. Invalidate their turn bearers before

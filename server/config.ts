@@ -664,6 +664,8 @@ const appConfigSchema = z.object({
     strategy: z.enum(["high-water", "most-free", "fill-up"]),
     threshold: z.number().int().min(10).max(100),
   })).optional(),
+  /** A solo server's person: learned routing among their accounts. Off until set. */
+  learnedRouting: z.boolean().optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -938,6 +940,8 @@ export interface AppConfig extends HelperConfig {
   contextByProvider?: Record<string, number>;
   /** #5014: a solo server's account strategy per provider. */
   accountSwitchByProvider?: Record<string, { strategy: "high-water" | "most-free" | "fill-up"; threshold: number }>;
+  /** A solo server's person: learned routing among their accounts. Off until set. */
+  learnedRouting?: boolean;
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -2066,6 +2070,7 @@ export function saveConfig(
   if (checkedPatch.harnessByProvider !== undefined) disk.harnessByProvider = checkedPatch.harnessByProvider;
   if (checkedPatch.contextByProvider !== undefined) disk.contextByProvider = checkedPatch.contextByProvider;
   if (checkedPatch.accountSwitchByProvider !== undefined) disk.accountSwitchByProvider = checkedPatch.accountSwitchByProvider;
+  if (checkedPatch.learnedRouting !== undefined) disk.learnedRouting = checkedPatch.learnedRouting;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;

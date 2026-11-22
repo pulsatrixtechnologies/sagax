@@ -255,7 +255,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       // group turns run on the room's thread — the speaking bot's task
       // tally is not the right home for a shared room's spend, so only
       // 1:1 task turns are tallied for now.
-      settleTurnTask(event, ctx, host, { internal, reviewAnswer, reply, clientStopped, stopped, lastReported, lastContext });
+      settleTurnTask(event, ctx, host, { internal, reviewAnswer, reply, clientStopped, stopped, lastReported, lastContext, failureCause });
       if (speaker) {
         host.releaseTurnResources(host.turnResourceOwners.get(event.threadId));
         host.groupSpeakers.delete(event.threadId);
@@ -394,6 +394,7 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
           ? { kind: "bot", ...(settledTask?.openedBy?.botId ? { botId: settledTask.openedBy.botId } : {}) }
           : host.turnTriggers.get(event.threadId) ?? { kind: "owner" }
     });
+    noteLearnedTurn(host, event, { botId: bot.id, instanceId: selection.instanceId, model: selection.model }, tokens, stopped, turn.failureCause);
     const digestSettled = completedTurnId ? host.scheduleTurnDigest({
         botId: bot.id,
         botName: bot.name,
@@ -560,6 +561,7 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
         ? { kind: "routine", routineId: routineRun.routineId, label: routineRun.routineName, ...(routineRun.runAs ? { runAsPrincipalId: routineRun.runAs } : {}) }
         : host.turnTriggers.get(event.threadId) ?? { kind: "owner" }
     });
+    noteLearnedTurn(host, event, { botId: speaker.botId, instanceId: selection?.instanceId, model: selection?.model }, tokens, stopped, turn.failureCause);
     // Appends are asynchronous. Refresh after persistence so the settled
     // turn appears immediately, without waiting for another message.
     void flushUsageLedger(DATA_DIR).then(() => {
@@ -578,6 +580,33 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
       });
     }
     host.liveTurnByThread.delete(event.threadId);
+  }
+}
+
+/** One settled turn, for the learned router. The model is the person's.
+ * A missing account is skipped. Learning never fails the turn. */
+function noteLearnedTurn(host: any, event: any, who: { botId?: string; instanceId?: string; model?: string }, tokens: { input?: number; output?: number } | undefined, stopped: boolean, failureCause: unknown): void {
+  if (!who.instanceId || !who.model) return;
+  try {
+    const durationMs = host.turnDuration?.(event.threadId)?.durationMs ?? 0;
+    const first = host.turnCounters?.(event.threadId)?.firstResponseMs;
+    const cause = typeof failureCause === "string" ? failureCause : undefined;
+    host.recordLearnedTurn?.({
+      threadId: event.threadId,
+      ...(who.botId ? { botId: who.botId } : {}),
+      instanceId: who.instanceId,
+      model: who.model,
+      promptTokens: tokens?.input ?? 0,
+      outputTokens: tokens?.output ?? 0,
+      durationMs,
+      ttftMs: typeof first === "number" ? first : durationMs,
+      ok: event.ok === true,
+      stopped: stopped === true,
+      limited: host.limitKindOf?.(cause, event.stopReason) ?? null,
+      costTier: host.billsEachUse?.(host.limitFailoverConfig?.(who.instanceId)) ? 2 : 1,
+    });
+  } catch (error) {
+    host.reportBackgroundError?.(error);
   }
 }
 

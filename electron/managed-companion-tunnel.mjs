@@ -103,6 +103,16 @@ export function withoutManagedCompanionTunnelAccess(credentials) {
   return next;
 }
 
+/** The connector this command downloaded into the data dir. */
+export function stagedCloudflaredPath({
+  appPath,
+  platform = process.platform,
+  arch = process.arch,
+} = {}) {
+  const executable = platform === "win32" ? "cloudflared.exe" : "cloudflared";
+  return path.join(String(appPath ?? ""), "dist-native", "cloudflared", `${platform}-${arch}`, executable);
+}
+
 /** Packaged apps only trust the connector shipped in Resources. Development
  * can opt into an absolute binary path, use a freshly-staged release, or fall
  * back to PATH for contributor convenience. */
@@ -122,13 +132,7 @@ export function resolveCloudflaredBinary({
   const override = environment.SAGAX_CLOUDFLARED_PATH?.trim();
   if (override) return path.isAbsolute(override) && exists(override) ? override : null;
 
-  const staged = path.join(
-    String(appPath ?? ""),
-    "dist-native",
-    "cloudflared",
-    `${platform}-${arch}`,
-    executable,
-  );
+  const staged = stagedCloudflaredPath({ appPath, platform, arch });
   if (exists(staged)) return staged;
   const pathEntry = Object.entries(environment).find(([name]) => name.toLowerCase() === "path");
   const pathValue = pathEntry?.[1];

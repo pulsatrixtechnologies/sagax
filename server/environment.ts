@@ -177,6 +177,16 @@ export function linkVersion(root: string = SERVER_ROOT): string {
   return version === "unknown" || version === "0.0.0" ? "" : version;
 }
 
+const RELEASE_VERSION = /^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
+
+/** The version to tell the tunnel control plane, or none. It records what it
+ * is told and can stop a public address for a release below its minimum, so
+ * a version this server could not read (0.0.0, unknown) must not stand in. */
+export function reportableServerVersion(version = serverVersion()): string | undefined {
+  if (version === "0.0.0" || version === "unknown") return undefined;
+  return RELEASE_VERSION.test(version) ? version : undefined;
+}
+
 /** This server's display name: SAGAX_ENVIRONMENT_LABEL, else the
  * organization's name (SAGAX_ORG_NAME), else the host of its public address
  * (SAGAX_PUBLIC_URL), else the machine's host name. A container's host name is

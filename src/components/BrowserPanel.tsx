@@ -12,6 +12,7 @@ import { browserDot, reportScreenDot } from "@/lib/screen-status";
 import { ComputerScreen, type ScreenAction } from "./computer/ComputerScreen";
 import { SandboxDesktopModal } from "./computer/SandboxDesktopModal";
 import type { TeachStep } from "../../shared/teach-recording";
+import { usePageVisible } from "@/lib/page-visible";
 import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useAnchoredDismissRoot } from "./AnchoredPopover";
@@ -476,16 +477,6 @@ type PreviewState = "connecting" | "busy" | "live" | "offline" | "error";
 type PreviewFrame = { seq: number; src: string; viewerId: string };
 /** A closed browser or a failed preview is asked again this often. */
 const PREVIEW_RETRY_MS = 10_000;
-
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", update);
-    return () => document.removeEventListener("visibilitychange", update);
-  }, []);
-  return visible;
-}
 
 /** The Computer tab's live view of the bot's browser, like the VM's square:
  * the same screencast as the take-control window, watch-only on the server

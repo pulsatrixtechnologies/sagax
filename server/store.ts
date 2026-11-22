@@ -3177,15 +3177,30 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
    * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
-    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId);
+    const included = (bot?.tasks ?? []).filter((task) => include(task));
+    // A routine run's own task never makes the bot read busy (2026-11-03).
+    const tasks = included.filter((task) => !task.routineRunId);
     const legacy = this.legacyActivities.get(botId);
     const activities = [
       legacy,
       ...tasks.map((task) => task.activity),
     ];
-    const activity = (["waiting-on-you", "no-signal", "working", "dead"] as const)
-      .find((candidate) => activities.includes(candidate)) ?? "idle";
-    return { activity, busy: Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true) };
+    const busy = Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true);
+    const ranked = (["waiting-on-you", "no-signal", "working"] as const)
+      .find((candidate) => activities.includes(candidate));
+    if (ranked) return { activity: ranked, busy };
+    // An explicit room marker (setActivity) still says the bot itself is dead.
+    if (legacy === "dead") return { activity: "dead", busy };
+    // #5015: one thread left "dead" by a setup error must not read as
+    // "unavailable, needs setup" while the bot can still take work. A
+    // conversation or a routine that is not dead (running, idle after a
+    // run, or waiting) means the bot is reachable. list_bots and the turn's
+    // availability line both read this fold, so they agree. Needs setup
+    // only when every conversation is dead and no routine shows it can run.
+    const reachable = tasks.some((task) => task.activity !== "dead")
+      || included.some((task) => Boolean(task.routineRunId) && task.activity !== "dead");
+    if (!reachable && tasks.some((task) => task.activity === "dead")) return { activity: "dead", busy };
+    return { activity: "idle", busy };
   }
 
   /** Who owns a bot, as one key per person. index.ts sets the server's own

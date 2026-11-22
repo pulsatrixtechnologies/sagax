@@ -549,8 +549,12 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     invariants(w);
   });
 
-  it("S07h default_answer resumes the branch instead of expiring (R6)", async () => {
+  // #5037: a default_answer is the delegate's note, never the person's reply.
+  // The question stays unanswered and the wait ends as it does with no default.
+  it("S07h a default_answer never answers for the person: the wait expires (#5037)", async () => {
     const w = world();
+    const closed: Array<{ id: string; reason: string; defaulted: boolean }> = [];
+    (w.runner as unknown as { unparked: (a: { id: string }, reason: string, defaulted: boolean) => void }).unparked = (a, reason, defaulted) => closed.push({ id: a.id, reason, defaulted });
     const root = beginChief(w);
     const child = ok(enqueueFrom(w, root, { ...workFor("dev", "Pick a colour"), defaultAnswer: "blue" }));
     w.runner.script("dev", needsInput("GO?"), complete("painted blue"));
@@ -559,16 +563,13 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     expect(get(w, child.id).status).toBe("needs_input");
     w.clock.advance(4 * 60 * 60_000 + 60_000);
     await drain(w);
-    expect(kinds(w, child.id)).toContain("answered");
-    const runs = w.runner.runs(child.id);
-    expect(runs).toHaveLength(2);
-    expect(runs[1]!.input!.answer).toMatch(/declared default answer/);
-    expect(runs[1]!.input!.answer).toMatch(/blue/);
     const c = get(w, child.id);
-    expect(c.status).toBe("completed");
-    expect(c.outcome).toBe("done");
-    expect(c.result).toBe("painted blue");
-    expect(get(w, root.id).status).toBe("completed");
+    expect(c).toMatchObject({ status: "expired", outcome: "expired" });
+    expect(c.result).toMatch(/did not answer within 240m/);
+    expect(c.result).not.toMatch(/blue/);
+    expect(w.runner.runs(child.id)).toHaveLength(1);
+    expect(kinds(w, child.id)).not.toContain("answered");
+    expect(closed).toEqual([{ id: child.id, reason: expect.stringMatching(/did not answer within 240m/), defaulted: false }]);
     invariants(w);
   });
 

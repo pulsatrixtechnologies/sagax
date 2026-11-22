@@ -416,7 +416,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1000,
-            "description": "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)."
+            "description": "Not an answer from the person. A question they never reply to stays unanswered: the wait expires the same way as when this is left out, after the delay, with a mid-delay push reminder. Never resume the run on a value sent here."
           },
           "work": {
             "type": "string",

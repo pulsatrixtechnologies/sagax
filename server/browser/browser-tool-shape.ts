@@ -260,7 +260,15 @@ export function shapeBrowserToolResult(result: unknown, options: { toolName?: st
     return { ...part, text: outcome.trimmed ? outcome.text + BROWSER_NARROWING_HINT : outcome.text };
   });
   if (!textParts) return { ...result, content };
-  return { ...Object.fromEntries(Object.entries(result).filter(([key]) => key !== "structuredContent")), content };
+  const shaped = { ...Object.fromEntries(Object.entries(result).filter(([key]) => key !== "structuredContent")), content };
+  if (result.isError !== true) return shaped;
+  const joined = content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n");
+  const library = /error while loading shared libraries: ([^:\s]+)/.exec(joined)?.[1];
+  if (!library || !/^Chrome exited early \(exit code:/.test(joined)) return shaped;
+  return {
+    ...shaped,
+    content: [...content, { type: "text", text: `Chrome is missing the system library ${library}. On Linux, run \`sudo openmausbot browser install --with-deps\`, then retry the browser install as the user running the server.` }],
+  };
 }
 
 /** Replace held secrets (shared/redact.ts scrubHeldSecrets: saved login

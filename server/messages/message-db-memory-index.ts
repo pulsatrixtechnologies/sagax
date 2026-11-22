@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { ensureSearchIndex } from "./cjk-search.ts";
+
 /** The bot's memory files — MEMORY.md, memory/<topic>.md, memory/log/<day>.md —
  * indexed for the same session_search. One row per file, with the size and
  * mtime it was indexed at so a search can notice a file the bot's own file
@@ -16,20 +18,8 @@ export function ensureMemoryIndex(db: DatabaseSync): void {
       bytes INTEGER NOT NULL,
       PRIMARY KEY (bot_id, path)
     );
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-      text, content='memory_files', content_rowid='rowid', tokenize='unicode61'
-    );
-    CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_files BEGIN
-      INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_files BEGIN
-      INSERT INTO memory_fts(memory_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memory_fts_au AFTER UPDATE ON memory_files BEGIN
-      INSERT INTO memory_fts(memory_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-      INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
   `);
+  ensureSearchIndex(db, { table: "memory_files", fts: "memory_fts", view: "memory_search", triggerPrefix: "memory_fts" });
   // Sealed memory rows (docs/content-encryption.md): `text` empty, the text
   // in `sealed` under the bot's key, its keyed words and prefixes in a
   // contentless FTS5 table, like the transcripts' blind index.

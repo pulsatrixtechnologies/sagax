@@ -29,7 +29,7 @@ import { maxBytesForAttachment } from "./attachments.ts";
 const OWNED_FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/;
 const FILE_TAG = /^<attached-file[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?[\t ]*\/>$/;
 /** Text formats the upload endpoint accepts that a bot can read as is. */
-const TEXT_EXTENSIONS = new Set([".txt", ".md", ".csv", ".tsv", ".json"]);
+const TEXT_EXTENSIONS = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".conf", ".cfg", ".ini", ".cnf", ".env", ".toml", ".yaml", ".yml"]);
 /** Inline at most this much text per file, and in all, per turn. */
 export const INLINE_FILE_MAX_BYTES = 100 * 1024;
 export const INLINE_TOTAL_MAX_BYTES = 256 * 1024;

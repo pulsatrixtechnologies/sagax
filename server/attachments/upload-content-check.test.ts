@@ -31,6 +31,8 @@ describe("upload content check", () => {
     expect(assertContentMatches("application/zip", zip, "enforce")).toBe("zip");
     expect(assertContentMatches("application/vnd.openxmlformats-officedocument.wordprocessingml.document", zip, "enforce")).toBe("zip");
     expect(assertContentMatches("text/markdown", Buffer.from("# hi"), "enforce")).toBe("text");
+    expect(assertContentMatches("text/x-conf", Buffer.from("server {\n}\n"), "enforce")).toBe("text");
+    expect(() => assertContentMatches("text/x-conf", png, "enforce")).toThrow(/does not match/);
   });
 
   it("takes any other content as an inert download, but still refuses an executable (port of OpenMausBot #5800)", () => {

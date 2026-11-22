@@ -186,6 +186,18 @@ const DOCUMENT_MIMES: Readonly<Record<string, string>> = {
   json: "application/json",
   pdf: "application/pdf",
   evtx: "application/x-ms-evtx",
+  // Plain-text config a browser often types as nothing (#5005). Each
+  // extension that fits a stored name keeps its own type; .properties is
+  // longer than that name allows, so it rides as text.
+  conf: "text/x-conf",
+  cfg: "text/x-cfg",
+  ini: "text/x-ini",
+  cnf: "text/x-cnf",
+  env: "text/x-env",
+  toml: "text/x-toml",
+  yaml: "text/x-yaml",
+  yml: "text/x-yml",
+  properties: "text/plain",
   rtf: "application/rtf",
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

@@ -770,6 +770,19 @@ describe("private document intake", () => {
     expect(documentMime({ name: "archive.zip", type: "application/zip" })).toBeNull();
   });
 
+  it("accepts plain-text config files the browser types as nothing (#5005)", () => {
+    expect(documentMime({ name: "nginx.conf", type: "" })).toBe("text/x-conf");
+    expect(documentMime({ name: "app.CFG", type: "application/octet-stream" })).toBe("text/x-cfg");
+    expect(documentMime({ name: "php.ini", type: "" })).toBe("text/x-ini");
+    expect(documentMime({ name: "my.cnf", type: "" })).toBe("text/x-cnf");
+    expect(documentMime({ name: "service.env", type: "" })).toBe("text/x-env");
+    expect(documentMime({ name: "Cargo.toml", type: "" })).toBe("text/x-toml");
+    expect(documentMime({ name: "config.yaml", type: "" })).toBe("text/x-yaml");
+    expect(documentMime({ name: "config.yml", type: "" })).toBe("text/x-yml");
+    // .properties is longer than a stored attachment extension, so it rides as text.
+    expect(documentMime({ name: "site.properties", type: "" })).toBe("text/plain");
+  });
+
   it("uses the server path and safe name returned by the private store", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       path: "/private/attachments/123.pdf",

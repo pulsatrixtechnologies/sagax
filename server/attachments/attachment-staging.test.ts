@@ -12,10 +12,12 @@ const dir = mkdtempSync(join(tmpdir(), "omb-staging-"));
 const store = join(dir, "attachments");
 mkdirSync(store);
 const README = "0b5a3c1e-1111-4111-8111-111111111111.md";
+const CONF = "1c6b4d2f-4444-4444-8444-444444444444.conf";
 const PDF = "9d1e2f3a-2222-4222-8222-222222222222.pdf";
 const LARGE = "8c1d2e3f-3333-4333-8333-333333333333.pdf";
 const LARGE_BYTES = Buffer.alloc(1024 * 1024 + 17, 0x5a);
 writeFileSync(join(store, README), "# Hello\nworld\n");
+writeFileSync(join(store, CONF), "worker_processes 1;\n");
 writeFileSync(join(store, PDF), Buffer.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x01]));
 writeFileSync(join(store, LARGE), LARGE_BYTES);
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -27,6 +29,13 @@ describe("attachments in a turn", () => {
     const text = ["read these", tag(README, "README.md"), tag(PDF, "spec.pdf"), "`" + tag(README, "quoted") + "`", `<attached-file path="/etc/passwd" name="x" />`].join("\n\n");
     const files = attachedFilesInText(text, store);
     expect(files.map((file) => file.name)).toEqual(["README.md", "spec.pdf"]);
+  });
+
+  it("inlines a small config file the same way as other text (#5005)", () => {
+    const text = tag(CONF, "nginx.conf");
+    const out = stageTurnAttachments(text, attachedFilesInText(text, store), { kind: "user-sandbox" });
+    expect(out.text).toContain(`<attached-file path="/workspace/attachments/1c6b4d2f-nginx.conf" name="nginx.conf" />`);
+    expect(out.text).toContain("<attached-file-content name=\"nginx.conf\">\nworker_processes 1;\n");
   });
 
   it("points the bot at the server environment copy and inlines small text", () => {

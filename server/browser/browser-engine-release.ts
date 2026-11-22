@@ -71,6 +71,6 @@ export function resolveAgentBrowserReleaseAsset(
   arch: string = process.arch,
   musl = false,
 ): AgentBrowserReleaseAsset | null {
-  const key = platform === "linux" && musl ? `linux-musl-${arch}` : `${platform}-${arch}`;
+  const key = platform === "android" || (platform === "linux" && musl) ? `linux-musl-${arch}` : `${platform}-${arch}`;
   return RELEASES.get(key) ?? null;
 }

@@ -45,7 +45,7 @@ import { runServiceCommand } from "./cli/service-cli.ts";
 import { runFleetCommand, type FleetInput } from "./fleet/fleet-cli.ts";
 import { startFleetAgent } from "./fleet/fleet-agent.ts";
 import { fleetLayout } from "./fleet/fleet.ts";
-import { browserSignInLines, pairingBlock } from "./cli/cli-pairing.ts";
+import { browserSignInLines, desktopOwnedRefusal, pairingBlock } from "./cli/cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli/cli-prompts.ts";
 import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
@@ -461,8 +461,8 @@ async function mintPairing(port: number, options: { label?: string; client?: boo
   if (options.label) request.label = options.label;
   if (options.client) request.scopes = ["client"];
   const { status, body } = await api(port, "/api/auth/pairing", { method: "POST", body: JSON.stringify(request) });
-  if (refusedAsService(status, body)) throw new Error(SERVICE_TRUST_HELP);
-  if (status !== 200) throw new Error(`server refused to mint a pairing code: ${typeof body?.error === "string" ? body.error : status}`);
+  const refusal = refusedAsService(status, body) ? SERVICE_TRUST_HELP : desktopOwnedRefusal(status, body);
+  if (refusal || status !== 200) throw new Error(refusal ?? `server refused to mint a pairing code: ${typeof body?.error === "string" ? body.error : status}`);
   const url = options.publicUrl ? `${options.publicUrl}/pair#code=${body.code}` : typeof body.url === "string" ? body.url : null;
   // The phone-app invite. This command asks over loopback; a server that
   // knows its public address already built the invite with the same builder,

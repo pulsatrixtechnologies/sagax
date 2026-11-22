@@ -263,7 +263,7 @@ function hold(tool: string, text: string): HeldResult | undefined {
     return undefined;
   }
   if (value === null || typeof value !== "object") return undefined;
-  const handle = heldResults.put(tool, value, text.length);
+  const handle = heldResults.put(tool, value, Buffer.byteLength(text, "utf8"));
   return { handle, shape: describeShape(value), example: exampleQuery(value) };
 }
 

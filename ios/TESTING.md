@@ -71,22 +71,69 @@ before suspecting the model: re-capture with
 `node scripts/capture/companion-fixtures.mjs` from the repo root and read the
 diff.
 
-**Stack frames of the transcript rows (#3108).** 0.8.71 crashed the instant a
-chat opened: the Release body getters of `MessageRow` had grown 58 KB and
-31 KB stack frames and blew the main thread's 1 MB stack. Before a TestFlight
-cut, run the check on a Release archive (it reads the prologues, no device
-needed):
+**The main thread's stack when a chat opens (#3108, #4767, #5159).** 0.8.71,
+0.8.153 and 0.8.167 crashed the instant a chat opened: "Thread stack size
+exceeded due to excessive recursion" on the main thread, whose stack is 1 MB
+on a phone. Our own frames were a few percent of it; the rest was SwiftUI's
+layout recursion, as deep as the layouts nested above the transcript. Every
+modifier whose body branches (`@ViewBuilder` with `if #available`, `if` or
+`switch` around `content` or `self`) nests one more stack, and the chat screen
+chained `.onValueChange` 33 times above the transcript, branched. It is one
+`onChange` on every OS now, and a bot's widget tree is drawn within
+`ChatWidgetNode.maxDepth` so a card's shape stops adding levels too. Three
+checks hold it:
 
-```sh
-xcodebuild archive -project ios/Sagax.xcodeproj -scheme Sagax \
-  -destination 'generic/platform=iOS' -archivePath /tmp/Sagax.xcarchive \
-  CODE_SIGNING_ALLOWED=NO
-scripts/check-ios-stack-frames.sh /tmp/Sagax.xcarchive
-```
+- every PR: `scripts/testing/ios-modifier-chain.guard.test.ts` (a guard test,
+  no Xcode): `onValueChange` stays one modifier type on every OS, a new
+  conditional modifier helper is refused unless listed with its reason, a file
+  applies those helpers three times at most, and one file chains
+  `onValueChange` forty times at most (the chat file holds 36 today, 33 of them
+  in a row above the transcript; the measure below is the real budget, this
+  only catches a runaway chain early);
+- before every TestFlight archive: the measure itself, headless (no window,
+  a throwaway simulator), optimized like a Release:
 
-It fails when a `MessageRow`-family body getter reserves more than 64 KB. Keep
-each message kind in its own small view (`MessageKindContent` and friends in
-`MessageRow.swift`) rather than growing one `@ViewBuilder` switch.
+  ```sh
+  scripts/check-ios-chat-stack.sh
+  ```
+
+  `ChatOpenStackUITests` opens a long conversation of rich rows (every store
+  preview card, nested callouts, a bot card nested 40 deep) and 2000 plain rows,
+  and fails when the deepest point the main stack reached
+  (`MainStackProbe`, `-stack-probe`) passes nine tenths of a phone's 1 MB
+  (943 713 bytes): 870 920 for the 2000 plain rows and 843 528 for the 600 rich
+  ones on 2026-11-21, once `onValueChange` went unary, against the 1008 KB a
+  phone crashed at; the first transcript row drew at 651 417 bytes deep, which
+  is what SwiftUI's own chain from the window down to it costs. The
+  simulator's own main thread has 8 MB, so read the number against 1 MB, not
+  against what the simulator survives. Half of 1 MB is the goal, and the budget
+  only comes down; a raise needs the new measure and its reason here.
+  `MemoryManagerUITests` runs on the same build: Tools > Memory > a source is a
+  navigation push, and it died in `EnvironmentObject.error()` in TestFlight
+  0.8.42;
+- on the archive, the static frames of the transcript rows' getters:
+
+  ```sh
+  xcodebuild archive -project ios/Sagax.xcodeproj -scheme Sagax \
+    -destination 'generic/platform=iOS' -archivePath /tmp/Sagax.xcarchive \
+    CODE_SIGNING_ALLOWED=NO
+  scripts/check-ios-stack-frames.sh /tmp/Sagax.xcarchive
+  ```
+
+Keep each message kind in its own small view (`MessageKindContent` and friends
+in `MessageRow.swift`) rather than growing one `@ViewBuilder` switch, and keep
+modifiers that a screen chains unary.
+
+Three things must not grow that stack, and each has its own hold: the modifier
+chain above the transcript (unary helpers, the rule above), the number of
+messages (the transcript is a `LazyVStack`, so rows are laid out as they
+appear), and a message's shape. For the shape: a bot writes a widget tree, and
+the phone lays out one level per level. A tree nested past
+`ChatWidgetNode.maxDepth` is drawn with its empty nesting collapsed and every
+word, field and button kept in order: the cap is the server's own limit for
+`show_widget` (`WIDGET_LIMITS.depth` in `shared/widget.ts`), so it only bites on
+a payload older than that limit or hand-written. `ChatWidgetDepthTests` holds
+it, and the rich fixture of the measure above carries a card nested 40 deep.
 
 ---
 

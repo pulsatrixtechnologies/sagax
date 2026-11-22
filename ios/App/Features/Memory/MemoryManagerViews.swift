@@ -8,10 +8,17 @@ import SwiftUI
 
 struct MemoryManagerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// Owned here, not on the first page: every page this stack pushes reads it
+    /// from the environment (`@EnvironmentObject` on the browse, note, create,
+    /// move and trash pages), and a pushed page gets the environment of the
+    /// stack, not of the page it was pushed from. Set on the first page only,
+    /// the push trapped in `EnvironmentObject.error()` and the app died opening
+    /// a memory source (TestFlight 0.8.42, #5159).
+    @StateObject private var model = MemoryManagerModel()
 
     var body: some View {
         NavigationStack {
-            MemorySourcesPage()
+            MemorySourcesPage(model: model)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(String(localized: "Done")) { dismiss() }
@@ -19,6 +26,7 @@ struct MemoryManagerSheet: View {
                     }
                 }
         }
+        .environmentObject(model)
         .accessibilityIdentifier("memory-manager-panel")
     }
 }
@@ -37,7 +45,10 @@ private enum MemoryRoute: Hashable {
 
 struct MemorySourcesPage: View {
     @EnvironmentObject private var session: Session
-    @StateObject private var model = MemoryManagerModel()
+    /// The sheet's own model (MemoryManagerSheet), watched here so the list
+    /// redraws when it loads: owned outside the stack, observed inside it, and
+    /// the same one the pushed pages read from the environment.
+    @ObservedObject var model: MemoryManagerModel
 
     var body: some View {
         ThemedList {
@@ -98,7 +109,11 @@ struct MemorySourcesPage: View {
         .navigationTitle(String(localized: "Memory"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: MemoryRoute.self) { route in
-            destination(route)
+            // Injected here as well as on the stack, so a pushed page resolves
+            // its `@EnvironmentObject` whatever environment SwiftUI hands the
+            // destination: the lookup failing here is what crashed TestFlight
+            // 0.8.42 when a memory source was opened (#5159).
+            destination(route).environmentObject(model)
         }
         .task { await model.loadSources(session) }
         .environmentObject(model)

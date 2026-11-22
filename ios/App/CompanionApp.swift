@@ -26,6 +26,9 @@ struct CompanionApp: App {
         // What's new needs to know whether this launch follows an earlier
         // use of the app (a pairing saved), before any pairing of this launch.
         ReleaseNotesStore.captureLaunch(paired: !SagaxSharedConnectionStore.loadRegistry().connections.isEmpty)
+        #if DEBUG
+        MainStackProbe.startIfRequested()
+        #endif
     }
 
     var body: some Scene {

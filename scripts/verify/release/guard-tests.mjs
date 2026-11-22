@@ -337,6 +337,10 @@ export const GUARD_TESTS = [
   // repository (hashed, never in clear). Run only by the full suite, it went
   // red on main with #2995 and stayed there unseen; about 5 s.
   "scripts/testing/cleared-bot-names.guard.test.ts",
+  // #5159: the iPhone app's modifier chains stay flat (no conditional
+  // onValueChange, no new conditional modifier, a few per file): each one
+  // nested a stack, and the chat screen overflowed the phone's main thread.
+  "scripts/testing/ios-modifier-chain.guard.test.ts",
   ...SOURCE_TEXT_TESTS,
 ];
 

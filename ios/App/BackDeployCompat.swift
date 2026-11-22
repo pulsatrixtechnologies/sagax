@@ -31,17 +31,35 @@ private struct OnValueChange<V: Equatable>: ViewModifier {
     let value: V
     let initial: Bool
     let action: (V) -> Void
+    @State private var firedFirst = false
 
-    @ViewBuilder
+    /// One `onChange` on every OS, never a branch around `content`.
+    ///
+    /// A body that branches makes its result a dynamic list, so the next
+    /// modifier in the chain wraps it again: the chat screen chains this helper
+    /// 25 times above the transcript and every branch was one more stack for
+    /// the main thread to walk when the chat was pushed, on top of the layouts
+    /// SwiftUI already nests down to a row. The iPhone's main thread has 1 MB
+    /// and TestFlight 0.8.71, 0.8.153 and 0.8.167 overflowed it the instant a
+    /// chat opened (#5159).
+    ///
+    /// `onChange(of:perform:)` is iOS 14 and fires on the same edges as the iOS
+    /// 17 form, which adds only the `initial` flag: that one is read in
+    /// `onAppear`, which is what the app did by hand before this helper.
+    /// Deprecated on 17, kept there on purpose: the one path every OS runs.
     func body(content: Content) -> some View {
-        if #available(iOS 17.0, *) {
-            content.onChange(of: value, initial: initial) { _, newValue in action(newValue) }
-        } else if initial {
-            content.onChange(of: value) { newValue in action(newValue) }
-                .onAppear { action(value) }
-        } else {
-            content.onChange(of: value) { newValue in action(newValue) }
-        }
+        content
+            .onChange(of: value) { newValue in action(newValue) }
+            .onAppear { fireFirst(value) }
+    }
+
+    /// The first read, for the two call sites that ask for it: once, and only
+    /// when the screen appeared with a value to report. A `guard`, because a
+    /// branch anywhere in this struct is what grew the stack.
+    private func fireFirst(_ value: V) {
+        guard initial, !firedFirst else { return }
+        firedFirst = true
+        action(value)
     }
 }
 

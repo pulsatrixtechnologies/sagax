@@ -10,6 +10,10 @@
 # exceeds the budget, or when the frames nested in one pull (MessageRow.body,
 # content, kindContent) add up past it. 0.8.71: 91 152 bytes for that chain.
 #
+# Static frames only: 0.8.153 and 0.8.167 passed it (27 904 bytes) and still
+# crashed, the rest of the stack being SwiftUI's layout recursion (#5159).
+# The measure of the whole stack on chat open is scripts/check-ios-chat-stack.sh.
+#
 # Usage: scripts/check-ios-stack-frames.sh <.xcarchive or unstripped Sagax binary> [budget bytes]
 # The archive comes from: xcodebuild archive -project ios/Sagax.xcodeproj -scheme Sagax \
 #   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO

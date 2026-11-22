@@ -84,9 +84,9 @@ export function toggleSidebarCollapsed(
  * window width"). */
 export const SIDEBAR_RAIL_WIDTH = 88;
 /** Dragging the sidebar's edge narrower than this snaps it to the icons
- * rail; dragging the rail's edge past it expands the sidebar again. There is
- * no collapse button: the edge, its double-click and Settings > Appearance
- * are the ways in and out. */
+ * rail; dragging the rail's edge past it expands the sidebar again. The wide
+ * sidebar's head has a collapse button too (#5017); the edge, its
+ * double-click and Settings > Appearance stay ways in and out. */
 export const SIDEBAR_SNAP_WIDTH = 180;
 
 export type SidebarDragTarget = { collapsed: true } | { collapsed: false; width: number };

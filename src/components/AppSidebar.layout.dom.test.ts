@@ -125,6 +125,17 @@ describe("the sidebar at 1338 px (wide)", () => {
     // the foot: avatar and name, then the round apps grid
     expect(container.querySelector("[data-sidebar-account-row] [data-account-pill-name]")?.textContent).toBe("Sample Person");
     expect(container.querySelector("[data-sidebar-account-row] [data-sidebar-connect-apps] [data-apps-grid-icon]")).not.toBeNull();
+    // #5017: the wide sidebar can collapse back to the rail
+    const collapse = container.querySelector<HTMLButtonElement>("[data-sidebar-compact-toggle]");
+    expect(collapse?.getAttribute("aria-label")).toBe("Collapse sidebar");
+    await act(async () => { collapse!.click(); });
+    expect(aside().getAttribute("data-sidebar-density")).toBe("icons");
+    expect(savedDensity()).toBe("icons");
+    const expand = container.querySelector<HTMLButtonElement>("[data-sidebar-compact-toggle]");
+    expect(expand?.getAttribute("aria-label")).toBe("Expand sidebar");
+    await act(async () => { expand!.click(); });
+    expect(aside().getAttribute("data-sidebar-density")).toBe("comfortable");
+    expect(savedDensity()).toBe("comfortable");
     // the drawer's controls are phone-only (CSS), and closed
     expect(classes(drawerButton())).toContain("sm:hidden");
     expect(container.querySelector("[data-drawer-scrim]")).toBeNull();

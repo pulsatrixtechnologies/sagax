@@ -47,4 +47,6 @@ export interface DigestAccess {
   payerPrincipalId?: string;
   /** The bot's routine (or a hop one started): the owner's credentials. */
   routine?: true;
+  /** #5180: which of the four forms served. Absent on rows from before it. */
+  form?: "personal-account" | "org-account" | "personal-key" | "org-key";
 }

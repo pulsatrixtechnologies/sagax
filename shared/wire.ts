@@ -310,6 +310,13 @@ export interface WireTask {
   /** #5014: the account of its provider the last turn here took by the
    * person's account strategy, and why (the model chip says it). Server-derived. */
   accountPick?: AccountPick;
+  /** #5180: which credential form served the last turn here. No secret. */
+  credentialServed?: {
+    form: "personal-account" | "org-account" | "personal-key" | "org-key";
+    via: string;
+    aspect: "chat" | "engine" | "connector" | "voice";
+    fallback?: { from: string; to: string; automatic: boolean };
+  };
   /** true: the thread runs on its bot's model and moves with it; false: a
    * person picked this thread's model. Derived at projection, never stored;
    * absent from servers older than this field. */

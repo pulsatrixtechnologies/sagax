@@ -126,6 +126,18 @@ never a row or a banner in the chat. Tests: `account-strategy.test.ts`,
 `limit-failover-host.test.ts` ("the account strategy before a turn"),
 `model-switches.test.ts`, `shared/account-switch.test.ts`.
 
+## One credential decision (#5180)
+
+`shared/credential-resolver.ts` is the policy on top of the order each
+caller already has. It does not reorder. Act as may use a personal account
+or personal API key only when that person set
+`allowPersonalCredentialWhenActingAs` (off by default). A fallback onto a
+paid API key waits for `POST /api/me/credential-confirm`. Personal API keys
+stay on unless `organization.personalKeys` is false. The proposed merged
+order is `docs/credential-order.md` and is not applied. The turn records
+the form on the thread (`credentialServed`) and an audit row
+`credential.resolve` with no secret.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via

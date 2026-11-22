@@ -32,8 +32,8 @@ export function createPersonSettingsRoutes(deps: PersonSettingsRouteDeps): Route
     if (method !== "PATCH") return PASS;
     const body = await readBody(req).catch(() => undefined);
     if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "Send { features }, { browserProfiles } or { pendingApprovalExpireDays }." });
-    const { features, browserProfiles, pendingApprovalExpireDays } = body as {
-      features?: unknown; browserProfiles?: unknown; pendingApprovalExpireDays?: unknown;
+    const { features, browserProfiles, pendingApprovalExpireDays, allowPersonalCredentialWhenActingAs } = body as {
+      features?: unknown; browserProfiles?: unknown; pendingApprovalExpireDays?: unknown; allowPersonalCredentialWhenActingAs?: unknown;
     };
     if (features !== undefined && (!features || typeof features !== "object" || Array.isArray(features))) {
       return json(res, 400, { error: "features must be an object." });
@@ -49,6 +49,7 @@ export function createPersonSettingsRoutes(deps: PersonSettingsRouteDeps): Route
       if (features !== undefined) deps.store.setFeatures(principalId, features as Record<string, unknown>);
       if (browserProfiles !== undefined) deps.store.setBrowserProfiles(principalId, browserProfiles);
       if (pendingApprovalExpireDays !== undefined) deps.store.setPendingApprovalExpireDays(principalId, pendingApprovalExpireDays);
+      if (allowPersonalCredentialWhenActingAs !== undefined) deps.store.setAllowPersonalCredentialWhenActingAs(principalId, allowPersonalCredentialWhenActingAs);
       const after = deps.store.get(principalId);
       deps.saved?.(principalId, before, after);
       return json(res, 200, after);

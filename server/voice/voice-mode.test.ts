@@ -178,7 +178,7 @@ describe("voice mode when xAI fails", () => {
     const speak = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak", body: { text: "Bonjour." } });
     expect(speak.body).toMatchObject({ code: "voice_provider", failure: "key" });
     const heard = await call({ method: "POST", path: "/api/bots/b-quasar/voice/transcribe", raw: WAV, contentType: "audio/wav" });
-    expect(heard.body).toMatchObject({ code: "voice_provider", failure: "quota" });
+    expect(heard.body).toMatchObject({ code: "out_of_credits", failure: "quota", out_of_credits: true });
     expect(lines.some((line) => line.includes("xAI stream failed (org-key, organization's key ···t6Yb)"))).toBe(true);
     expect(leaks(lines)).toBe(false);
   });
@@ -494,6 +494,41 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     ] });
   });
 
+  it("serves a connected account and an API key, and asks before a paid fallback under a policy", async () => {
+    const account = "grok-account-token-fixture";
+    const policy = { aspect: "voice" as const, personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false };
+    const withAccount = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }),
+      grokAccount: async () => account, credentialPolicy: () => policy,
+    }, { principalId: "p-ada" });
+    expect(withAccount).toMatchObject({ ok: true, keys: [{ source: "grok-account" }] });
+    const withKey = await resolveVoiceKeys({
+      organization: true, serverKey: () => undefined, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }),
+      personalKey: () => MINE_KEY, credentialPolicy: () => policy,
+    }, { principalId: "p-ada" });
+    expect(withKey).toMatchObject({ ok: true, keys: [{ source: "voice-key" }] });
+    const asked = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => true,
+      resolveOwnKey: async () => ({ ok: true, key: OWN_KEY, fingerprint: "fp" }),
+      credentialPolicy: () => policy,
+    }, { principalId: "p-ada", sub: "sub-ada" });
+    // no account, so the personal key is the first form, not a fallback
+    expect(asked).toMatchObject({ ok: true, keys: [{ source: "perspicax-key" }] });
+    const acting = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => true,
+      resolveOwnKey: async () => ({ ok: true, key: OWN_KEY, fingerprint: "fp" }),
+      personalKey: () => MINE_KEY,
+      credentialPolicy: () => ({ ...policy, actingAs: "service-desk" }),
+    }, { principalId: "p-ada", sub: "sub-ada" });
+    expect(acting).toMatchObject({ ok: true, keys: [{ source: "org-key" }] });
+    const blocked = await resolveVoiceKeys({
+      organization: true, serverKey: () => undefined, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }),
+      personalKey: () => MINE_KEY,
+      credentialPolicy: () => ({ ...policy, actingAs: "service-desk" }),
+    }, { principalId: "p-ada" });
+    expect(blocked).toMatchObject({ ok: false, cause: "act_as_personal_refused" });
+  });
+
   it("still serves with the person's voice key when Perspicax cannot be reached", async () => {
     const deps = { organization: true, serverKey: () => undefined, hasOwnKey: () => true, resolveOwnKey: async () => ({ ok: false as const, error: "unreachable" as const }) };
     expect(await resolveVoiceKeys({ ...deps, personalKey: () => MINE_KEY }, { principalId: "p-ada", sub: "sub-ada" })).toMatchObject({ ok: true, keys: [{ source: "voice-key" }] });
@@ -558,7 +593,7 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak", body: { text: "Bonjour." } });
     expect(out.status).toBe(502);
     expect(out.body).toEqual({
-      error: CREDITS, code: "voice_provider", failure: "quota", key: { source: "org-key", last4: "t6Yb" },
+      error: CREDITS, code: "out_of_credits", failure: "quota", out_of_credits: true, key: { source: "org-key", last4: "t6Yb" },
       tried: [{ source: "perspicax-key", last4: "c0Je", failure: "quota" }, { source: "org-key", last4: "t6Yb", failure: "quota" }],
     });
     expect(xai.synthesize).toHaveBeenCalledTimes(2);

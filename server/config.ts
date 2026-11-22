@@ -534,6 +534,9 @@ const appConfigSchema = z.object({
      * choice). Absent or false: an engine off the list is off for everyone,
      * admins included. */
     ownAccountsOutsideList: z.boolean().optional(),
+    /** #5180: personal API keys inside the organization. Absent means on.
+     * An admin sets false to turn them off. */
+    personalKeys: z.boolean().optional(),
     /** 2026-10-30 (lot 2): models the organization turned off, as
      * `<engine>/<model>` (shared/offered-models.ts). Off for everyone. */
     disabledModels: z.array(z.string().max(300)).max(2000).optional(),
@@ -860,6 +863,8 @@ export interface AppConfig extends HelperConfig {
     allowedEngines?: string[];
     /** 2026-10-30: own subscriptions and keys run engines outside the list. */
     ownAccountsOutsideList?: boolean;
+    /** #5180: personal API keys. Absent means on. */
+    personalKeys?: boolean;
     /** 2026-10-30: models the organization turned off (`<engine>/<model>`). */
     disabledModels?: string[];
     /** #1098: folders of the server's disk an admin opened to members as

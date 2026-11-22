@@ -250,7 +250,7 @@ const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow", "approvalOwn",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
   "routineRunId", "routineResults", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
-  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived", "accountPick",
+  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived", "accountPick", "credentialServed",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 

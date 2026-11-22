@@ -31,6 +31,8 @@ function accessCardFor(bot: BotRecord, refusal: OrgAccessRefusal, engine: string
     ...(refusal.payer ? { payer: refusal.payer } : {}),
     ...(refusal.payerPrincipalId ? { payerPrincipalId: refusal.payerPrincipalId } : {}),
     ...(refusal.routine ? { routine: true as const } : {}),
+    ...(refusal.error ? { error: refusal.error } : {}),
+    ...(refusal.confirm ? { confirm: refusal.confirm } : {}),
     ...(refusal.reason === "no_access" && !offline && subscriptionDriver(driver) ? { subscriptionSignIn: true as const } : {})
   };
 

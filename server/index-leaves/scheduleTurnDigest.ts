@@ -45,7 +45,7 @@ async function scheduleTurnDigest(input: {
     });
     // Organization server: which credentials this turn ran with (no secret).
     const ran = host.IDENTITY.kind === "perspicax" ? host.turnAccessByThread.get(input.threadId) : undefined;
-    if (ran) digest.access = { via: ran.via, payer: ran.payer, ...(ran.payerPrincipalId ? { payerPrincipalId: ran.payerPrincipalId } : {}), ...(ran.routine ? { routine: true as const } : {}) };
+    if (ran) digest.access = { via: ran.via, payer: ran.payer, ...(ran.payerPrincipalId ? { payerPrincipalId: ran.payerPrincipalId } : {}), ...(ran.routine ? { routine: true as const } : {}), ...(ran.form ? { form: ran.form } : {}) };
     const message = host.store.appendMessage(input.threadId, {
         role: "bot",
         kind: "digest",

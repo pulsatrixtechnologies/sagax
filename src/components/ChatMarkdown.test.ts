@@ -771,13 +771,16 @@ describe("ChatMarkdown attachments", () => {
     };
     const revealInFolder = vi.fn(async () => "shown" as const);
 
-    it("offers Show in folder in the local desktop app, without printing the path", () => {
+    it("offers Show in folder in the local desktop app, without a download or the path (#5018)", () => {
       vi.stubGlobal("window", { ogb: { revealInFolder, remoteClient: { active: false } } });
       try {
         const html = render(true);
-        expect(html).toContain("This file is outside this chat&#x27;s working folder, so it can&#x27;t be saved from here");
+        // The link no longer tries the working-folder download, so the
+        // outside-folder sentence is not the click's result.
+        expect(html).not.toContain("This file is outside this chat&#x27;s working folder, so it can&#x27;t be saved from here");
         expect(html).not.toContain("the linked file is outside");
         expect(html).toContain("Show in folder");
+        expect(html).not.toContain('title="Save a copy"');
         expect(html).not.toContain("<code");
       } finally {
         vi.unstubAllGlobals();
@@ -806,17 +809,49 @@ describe("ChatMarkdown attachments", () => {
       expect(render(true)).toContain(`>${filePath}</code>`);
     });
 
-    it("keeps other failures visible while offering the local file manager", () => {
+    it("does not download an absolute path the local file manager can open (#5018)", () => {
       vi.stubGlobal("window", { ogb: { revealInFolder, remoteClient: { active: false } } });
       try {
         const html = render(false);
-        expect(html).toContain("the linked file is outside this conversation&#x27;s workspace");
+        expect(html).not.toContain("the linked file is outside this conversation&#x27;s workspace");
         expect(html).toContain("Show in folder");
-        expect(html).toContain("lucide-rotate-ccw");
+        expect(html).not.toContain("lucide-rotate-ccw");
+        expect(html).not.toContain('title="Save a copy"');
       } finally {
         vi.unstubAllGlobals();
       }
     });
+  });
+
+  it("offers Show in folder at once for an absolute local path and does not offer a download (#5018)", () => {
+    vi.stubGlobal("window", { ogb: { revealInFolder: vi.fn(async () => "shown"), remoteClient: { active: false } } });
+    const save = vi.spyOn(AttachmentPreview, "useLocalFileSave").mockReturnValue({
+      state: "idle",
+      reason: "",
+      savedTo: "",
+      outsideWorkspace: false,
+      folder: null,
+      save: vi.fn(async () => undefined),
+    });
+    try {
+      const html = renderToStaticMarkup(createElement(ChatMarkdown, {
+        text: "[hosts](/etc/hosts)",
+        message: { threadId: "thread-1", messageId: "message-1" },
+      }));
+      expect(html).toContain("Show in folder");
+      expect(html).toContain(">hosts<");
+      expect(html).not.toContain('title="Save a copy"');
+      expect(html).not.toContain("lucide-download");
+      const directory = renderToStaticMarkup(createElement(ChatMarkdown, {
+        text: "[Applications](/Applications)",
+        message: { threadId: "thread-1", messageId: "message-1" },
+      }));
+      expect(directory).toContain("Show in folder");
+      expect(directory).not.toContain('title="Save a copy"');
+    } finally {
+      save.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("makes a message-authorized file link downloadable", () => {

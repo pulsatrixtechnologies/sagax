@@ -22,6 +22,7 @@ type DataAttributes = { [key: `data-${string}`]: string | boolean | undefined };
 export function ChatHeaderBar({
   start,
   center,
+  align = "center",
   children,
   className,
   startClassName,
@@ -33,8 +34,10 @@ export function ChatHeaderBar({
 }: {
   /** Back arrow or X, the thread title: left end. */
   start?: ReactNode;
-  /** The pill, centered on the column. */
+  /** The title. Centered on the column, or at the left when align is start. */
   center?: ReactNode;
+  /** #4536: the bot conversation's title sits at the top left, on the bar, and does not float over the messages. */
+  align?: "center" | "start";
   /** Controls at the right end. */
   children?: ReactNode;
   className?: string;
@@ -55,18 +58,27 @@ export function ChatHeaderBar({
         "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end gap-2 px-5 py-2.5",
         // Room for the drawer button, which overlays this corner below sm.
         "pl-11 sm:pl-5",
+        // A left title sits on the chat ground, so message text cannot show through it.
+        align === "start" && "bg-app",
         className,
       )}
     >
       <ChatEdgeFade edge="top" />
-      {start && <div data-chat-header-start="" className={cn("mr-auto flex min-w-0 max-w-[20%] items-center gap-1", startClassName)}>{start}</div>}
+      {start && <div data-chat-header-start="" className={cn("flex min-w-0 max-w-[20%] items-center gap-1", align !== "start" && "mr-auto", startClassName)}>{start}</div>}
       {/* Centered by auto margins, never a transform: Blink takes a
           -webkit-app-region box from the untransformed layout, so a
           translate(-50%, -50%) left the pill's no-drag box half a pill to the
-          right and below it and the window drag ate clicks on its left half. */}
+          right and below it and the window drag ate clicks on its left half.
+          align start keeps the title in the bar's flow, at the left. */}
       <div
         data-chat-header-center=""
-        className={cn("absolute inset-0 m-auto flex h-fit w-fit max-w-[60%] items-center gap-2", centerClassName)}
+        data-chat-header-align={align}
+        className={cn(
+          align === "start"
+            ? "relative z-[1] mr-auto flex h-fit min-w-0 max-w-[70%] items-center gap-2"
+            : "absolute inset-0 m-auto flex h-fit w-fit max-w-[60%] items-center gap-2",
+          centerClassName,
+        )}
         style={centerStyle}
       >
         {center}

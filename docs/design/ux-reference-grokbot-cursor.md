@@ -1974,10 +1974,11 @@ Rules that hold at every width:
   update in progress (downloading, staged, installing), the routines count,
   the apps grid, then the avatar; a downloaded update is not there (it is the
   account menu's first row, and the avatar's dot).
-- Header: a 40px pill, the mascot 24px, "Name · Title" on one line, 14/20
-  medium, the name, the dot and the title in the primary ink, the title cut
-  first (#4163 corrected the 36px, 20px, regular and grey title #4093 wrote:
-  see "Round controls and the chat pill").
+- Header: the bot conversation's name is a plain title at the top left
+  (avatar, then "Name · Title" on one line, 14/20 medium, no pill fill or
+  ring), on the bar's own ground so it does not sit over the messages
+  (#4536). A group, a split pane, a coding chat and a bot-to-bot window keep
+  the 40px pill (mascot 24px, the title cut first; #4163).
 - Reading column: the transcript, the cards and the composer share one
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the

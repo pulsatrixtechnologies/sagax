@@ -325,21 +325,22 @@ describe("one dot per screen in the picker (Owner 2026-10-15)", () => {
 });
 
 describe("the bot's Works on", () => {
-  it("offers Auto, This computer and Cloud (no Off since #2593), with the meaning in each tooltip (#1316)", () => {
+  it("offers Auto, This computer, Local VM and Cloud (no Off since #2593), with the meaning in each tooltip (#1316)", () => {
     const markup = renderToStaticMarkup(createElement(WorksOnControl, { value: null, onChange: () => {}, organization: true }));
     // the Workspace page titles it: one visible title, the heading for the
     // radio group read by assistive tech only, the meaning shown under it
     expect(markup).not.toContain("border-t border-hairline/40 pt-5");
     expect(markup).toContain('<h3 id="works-on-setting" class="sr-only">Workspace</h3>');
     expect(markup).toMatch(/<p id="works-on-setting-hint"[^>]*>The bot picks where each task runs/);
-    expect(markup.match(/role="radio"/g)).toHaveLength(3);
-    for (const label of [">Auto · picks per task<", ">This computer<", ">Cloud (server environment)<"]) expect(markup).toContain(label);
+    expect(markup.match(/role="radio"/g)).toHaveLength(4);
+    for (const label of [">Auto · picks per task<", ">This computer<", ">Local VM<", ">Cloud (server environment)<"]) expect(markup).toContain(label);
     expect(markup).not.toContain('data-works-on-choice="off"');
-    // a Local VM or the browser is still Auto: the bot picks those per task
-    for (const place of ["vm", "browser"]) expect(markup).not.toContain(`data-works-on-choice="${place}"`);
+    // the browser is still Auto: the bot picks it per task
+    expect(markup).not.toContain('data-works-on-choice="browser"');
     expect(markup).toMatch(/aria-checked="true"[^>]*data-works-on-choice="auto"/);
     expect(worksOnTip(null)).toMatch(/^Picks the place for each task among the available ones/);
     expect(worksOnTip("local")).toBe("This computer, the one running Sagax.");
+    expect(worksOnTip("vm")).toBe("The Local VM on this computer.");
     expect(worksOnTip("cloud")).toBe("The cloud computer.");
   });
 });

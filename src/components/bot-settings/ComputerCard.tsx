@@ -18,7 +18,7 @@
 // the card. A viewer who may not change it sees no "...".
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "lucide-react";
+import { Box, Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -26,6 +26,7 @@ import { t } from "@/lib/i18n";
 import { useStoreSelector } from "@/state/store-selector";
 import { cn } from "@/lib/cn";
 import { effectivePlace, placeLabelKey, placeOffered } from "@/lib/place";
+import { localVmChoice, localVmDesktopState, type LocalVmChoice } from "@/lib/local-vm-choice";
 import { placeLabel } from "@/lib/place-labels";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { isMacPlatform } from "@/lib/is-mac-platform";
@@ -95,7 +96,7 @@ export type ComputerMenuOption = PillOption<ComputerSelectValue> & {
   /** The grey line under the name. */
   detail: string;
   /** The leading mark: an icon, or a dot for a connected computer. */
-  lead: "auto" | "cloud" | "computer" | "online";
+  lead: "auto" | "cloud" | "computer" | "vm" | "online";
 };
 
 /** The grey line of a named computer: its OS, then that it is this one. */
@@ -104,14 +105,17 @@ function desktopDetail(platform: string): string {
   return os ? `${osLabel(os)} \u00b7 ${t("place.local")}` : t("place.local");
 }
 
-/** Options for the computer row's context menu: Cloud + each online local computer from
- * `computerChoices` (chat Computer menu / OrgComputerTab), plus Auto so the
- * bot's Works on can follow. Never Off: it hid the card. Solo (no bridge desktops) falls back to
- * the Works on set alone. Auto's "picks per task" is its grey line, not its name. */
+/** Options for the computer row's context menu: Auto, This computer, Local VM
+ * and Cloud. Local VM is listed when a connected computer registered one
+ * (or on a solo server, whose Local VM is its own). It stays in the list,
+ * not selectable, with the reason, only when it cannot be used. A cloud
+ * home has none. Never Off: it hid the card. Auto's "picks per task" is its
+ * grey line, not its name. */
 export function computerSelectOptions(
   bridge: DesktopBridgeStatus | null,
   organization: boolean,
   cloudOffered = true,
+  vmChoice: LocalVmChoice = localVmChoice({ desktop: localVmDesktopState(bridge, organization) }),
 ): ComputerMenuOption[] {
   const choices = computerChoices(bridge);
   const localChoices = choices.filter((choice): choice is Extract<ComputerChoice, { source: "local" }> => choice.source === "local");
@@ -122,9 +126,14 @@ export function computerSelectOptions(
   const local: ComputerMenuOption = only
     ? { value: "local", label: placeLabel(only.key, only.name), detail: desktopDetail(only.platform), lead: "online" }
     : { value: "local", label: t(placeLabelKey("local", organization)), detail: t("computerMenu.localDetail"), lead: "computer" };
-  // No cloud computer for this person (solo, no Boat or VPS computer): only
-  // This computer, and Auto, which only chooses between the two, goes too.
-  return cloudOffered ? [auto, local, cloud] : [local];
+  const vm: ComputerMenuOption | null = vmChoice.shown
+    ? { value: "vm", label: t("place.vm"), detail: vmChoice.reason ?? t("computerMenu.vmDetail"), lead: "vm", disabled: !vmChoice.selectable }
+    : null;
+  const places = [local, ...(vm ? [vm] : [])];
+  // No cloud computer and no Local VM: only This computer. Auto, which would
+  // only choose between places, goes too. With a Local VM, Auto stays.
+  if (!cloudOffered && places.length === 1) return places;
+  return [...(cloudOffered || places.length > 1 ? [auto] : []), ...places, ...(cloudOffered ? [cloud] : [])];
 }
 
 /** The cloud computer's one name, on the card and in its menu row. */
@@ -145,6 +154,7 @@ export function computerCardTitle(
     if (desktop) return placeLabel(`desktop:${desktop.id}`, desktop.name.trim() || t("computerScreen.computer"));
     return t(placeLabelKey("local", organization));
   }
+  if (mode === "vm") return t("place.vm");
   return t("botPanel.computerCard.title");
 }
 
@@ -182,22 +192,23 @@ function useAutoSurface(botId: string, threadId: string | undefined, enabled: bo
 }
 
 /** The menu's one row: leading mark, name over a grey line, check. */
-function ComputerMenuRow({ lead, label, detail, checked, dim = false, onPick, autoFocus, ...data }: {
+function ComputerMenuRow({ lead, label, detail, checked, dim = false, disabled = false, onPick, autoFocus, ...data }: {
   lead: ComputerMenuOption["lead"] | "offline";
   label: string;
   detail: string;
   checked: boolean;
   dim?: boolean;
+  disabled?: boolean;
   onPick: () => void;
   autoFocus?: boolean;
   "data-computer-card-option"?: string;
   "data-computer-card-host"?: string;
 }) {
-  const LeadIcon = lead === "auto" ? Sparkles : lead === "cloud" ? Cloud : lead === "computer" ? Laptop : null;
+  const LeadIcon = lead === "auto" ? Sparkles : lead === "cloud" ? Cloud : lead === "vm" ? Box : lead === "computer" ? Laptop : null;
   return (
-    <button type="button" role="menuitemradio" aria-checked={checked} autoFocus={autoFocus} {...data}
+    <button type="button" role="menuitemradio" aria-checked={checked} aria-disabled={disabled || undefined} disabled={disabled} autoFocus={autoFocus} {...data}
       data-computer-menu-row={lead}
-      onClick={onPick} className={cn(MENU_ROW, "h-auto py-1.5", dim && "text-ink-tertiary")}>
+      onClick={disabled ? undefined : onPick} className={cn(MENU_ROW, "h-auto py-1.5", (dim || disabled) && "text-ink-tertiary")}>
       <span aria-hidden="true" data-computer-menu-lead={lead} className="flex size-4 shrink-0 items-center justify-center text-ink-secondary">
         {LeadIcon
           ? <LeadIcon size={14} />
@@ -285,8 +296,18 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
     : undefined;
   const selectValue: ComputerSelectValue | null = chosenHost ? null : computerSelectValue(bot.computer);
   const config = useStoreSelector((current) => current.config);
+  const instances = useStoreSelector((current) => (current as { instances?: Array<{ instanceId: string; displayName?: string; capabilities?: { computerMcp?: boolean } }> }).instances);
+  const engine = instances?.find((instance) => instance.instanceId === bot.modelSelection?.instanceId);
   const cloudOffered = placeOffered("cloud", config, organization);
-  const options = useMemo(() => computerSelectOptions(bridge, organization, cloudOffered), [bridge, organization, cloudOffered]);
+  const vmChoice = localVmChoice({
+    cloudHome: config?.cloudHome === true,
+    policyAllows: config?.managedPolicy?.computers.localVm !== false,
+    organizationName: config?.managedPolicy?.organizationName,
+    modelCanUseComputer: engine ? engine.capabilities?.computerMcp === true : null,
+    modelName: engine?.displayName,
+    desktop: localVmDesktopState(bridge, organization),
+  });
+  const options = useMemo(() => computerSelectOptions(bridge, organization, cloudOffered, vmChoice), [bridge, organization, cloudOffered, vmChoice]);
   const title = chosenHost ? chosenHost.name : computerCardTitle(bot.computer, bridge, organization);
   const place = effectivePlace(bot);
   const active = activeComputer(bridge ?? EMPTY_BRIDGE, place);
@@ -438,8 +459,10 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
             }}>
             {menuEnabled && options.map((option, index) => (
               <ComputerMenuRow key={option.value} lead={option.lead} label={option.label} detail={option.detail}
-                checked={option.value === selectValue} data-computer-card-option={option.value} autoFocus={index === 0 && menu.keyboard}
+                checked={option.value === selectValue} disabled={option.disabled === true}
+                data-computer-card-option={option.value} autoFocus={index === 0 && menu.keyboard && option.disabled !== true}
                 onPick={() => {
+                  if (option.disabled) return;
                   closeMenu();
                   if (chosenHost) void hostComputer.select(null);
                   if (option.value !== selectValue) onPatch?.(modeToPatch(option.value));

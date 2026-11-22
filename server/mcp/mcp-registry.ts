@@ -684,15 +684,20 @@ export function parseMcpServersImport(
   return { ok: true, servers };
 }
 
+/** At most 32 characters, and never ending in a hyphen the length cut created. */
+function clipMcpSlug(value: string): string {
+  return value.slice(0, 32).replace(/-+$/, "");
+}
+
 function slugMcpName(raw: string): string {
-  let slug = raw.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
-  if (slug && !/^[a-z]/.test(slug)) slug = `server-${slug}`.slice(0, 32);
+  let slug = clipMcpSlug(raw.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, ""));
+  if (slug && !/^[a-z]/.test(slug)) slug = clipMcpSlug(`server-${slug}`);
   // 2026-10-30 (one reserved-name rule, shared/mcp-reserved-names.ts): an
   // imported name in a reserved family (`mcp-atlassian`, the host
   // `mcp.example.com`) takes the name without it; a built-in name stays
   // refused.
   if (slug && RESERVED_MCP_PREFIX.test(slug)) {
-    const rest = slug.replace(RESERVED_MCP_PREFIX, "").replace(/^[^a-z]+/, "").replace(/[-_]+$/, "").slice(0, 32);
+    const rest = clipMcpSlug(slug.replace(RESERVED_MCP_PREFIX, "").replace(/^[^a-z]+/, "").replace(/[-_]+$/, ""));
     if (rest && !reservedMcpName(rest)) slug = rest;
   }
   return slug;

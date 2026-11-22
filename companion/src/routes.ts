@@ -156,6 +156,12 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/api\/push\/activities$/ },
   { method: "POST", path: /^\/api\/push\/activities$/ },
   { method: "DELETE", path: /^\/api\/push\/activities$/ },
+  // Alert pushes. The phone registers its device token here. Sagax already
+  // sends approvals, questions, sign-ins and replies when APNs is configured;
+  // this only lets a paired phone reach that registration. The relay stays closed.
+  { method: "GET", path: /^\/api\/push\/devices$/ },
+  { method: "POST", path: /^\/api\/push\/devices$/ },
+  { method: "DELETE", path: /^\/api\/push\/devices$/ },
   { method: "GET", path: /^\/api\/instances$/ },
   // Run Claude Code's own `claude update` on the host when a turn failed
   // because it is too old for the model. A fixed command against the host's

@@ -599,7 +599,16 @@ describe("phone push registration", () => {
       expect(allowed(method, "/api/push/activities/extra"), method).toBe(false);
     }
     expect(allowed("POST", "/api/push/relay")).toBe(false);
-    expect(allowed("GET", "/api/push/devices")).toBe(false);
+  });
+
+  it("lets a paired phone register for pushes, and not the server relay", () => {
+    for (const method of ["GET", "POST", "DELETE"] as const) {
+      expect(allowed(method, "/api/push/devices"), method).toBe(true);
+      expect(denyReason({ method, path: "/api/push/devices", authenticated: false })?.status).toBe(401);
+    }
+    expect(allowed("PUT", "/api/push/devices")).toBe(false);
+    expect(allowed("POST", "/api/push/devices/extra")).toBe(false);
+    expect(allowed("POST", "/api/push/relay")).toBe(false);
   });
 });
 

@@ -539,6 +539,14 @@ describe("isContextMessage", () => {
     expect(isContextMessage({ kind: "call", text: "Call with Ada · 0:42" })).toBe(false);
   });
 
+  it("keeps a bot's team progress report out of context, so it never echoes a settled result back to the engine", () => {
+    // The room result the requester is handed is context once.
+    expect(isContextMessage({ kind: "text", roomRequest: { id: "r1", phase: "result" }, text: "UNIT_CHECKS" })).toBe(true);
+    // The chat line that summarises it for the person (server/runtime-coordinator.ts
+    // peerReport) is the same result again: shown to the person, not fed back.
+    expect(isContextMessage({ kind: "text", text: "* Engineering lead: UNIT_CHECKS", teamReport: true })).toBe(false);
+  });
+
   it("keeps a digest row, and only one that carries its digest", () => {
     expect(isContextMessage({
       kind: "digest",

@@ -31,8 +31,11 @@ export interface ContextMessage {
 /** Active-branch messages a provider reads as conversation context: text,
  * widgets and live apps (by their text fallback), digests, compaction records
  * and room results. A Live call's row (kind "call") is a record for people,
- * never context. */
-export function isContextMessage(m: Pick<Message, "kind" | "text" | "digest" | "roomRequest">): boolean {
+ * never context. A bot's team progress report (teamReport) echoes the room
+ * results the requester is already handed, so it stays out of context too: it
+ * would offer a settled result to the engine a second time. */
+export function isContextMessage(m: Pick<Message, "kind" | "text" | "digest" | "roomRequest" | "teamReport">): boolean {
+  if (m.teamReport) return false;
   return Boolean(((m.kind === "text" || m.kind === "widget" || m.kind === "app") && m.text) || (m.kind === "digest" && m.digest) || m.kind === "compaction" || m.roomRequest?.phase === "result");
 }
 

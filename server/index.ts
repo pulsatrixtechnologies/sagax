@@ -14444,7 +14444,7 @@ const coordinator: Coordinator = createCoordinator({
       const key = { kind: "team.peer_report", key: root.id };
       const existing = commandReceipt<Message>(key.kind, key.key)?.result;
       if (existing) store.patchMessage(root.threadId, existing.id, { text });
-      else store.appendMessage(root.threadId, { role: "bot", kind: "text", text }, key);
+      else store.appendMessage(root.threadId, { role: "bot", kind: "text", text, teamReport: true }, key);
       store.patchTask(root.botId, root.threadId, { unread: true });
       return true;
     },

@@ -350,7 +350,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | This run card | Settings > General > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
 | Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > Permissions > Privacy | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
-| Show the account menu above my name in the sidebar (on; off, the default, keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
+| Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
 | Routines badge | Settings > General > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
 | Sidebar density | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |
 | Fresh topic after | Settings > General > Appearance | `sagax_settings` get, set `appearance.freshTopicAfter` | simple |

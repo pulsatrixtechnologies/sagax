@@ -178,6 +178,56 @@ describe("fast-gate.sh", () => {
     expect(out).not.toContain("src/a.ts is imported by");
   });
 
+  // #4407. Why the three lots of 2026-11-15 were not run:
+  // #4383 (claude-account-api): the test starts the server by its path, so
+  // no import reached it, and two known failures dropped the whole file.
+  // That gap is closed (#4413); the case above still guards it.
+  // #4385 (surface.test.ts): shared/place-view.ts is imported by
+  // server/surface.ts, whose test reaches it one file away. The related
+  // list is alphabetical and the 150s ceiling filled with earlier files
+  // that only launch the server, so surface.test.ts was cut.
+  // #4388 (workspace-backup and single-stream): scripts/control-omb.ts is
+  // imported by the server suites. Past 25 importers the gate kept only the
+  // fixture's own test, then the ceiling cut the rest.
+  it("runs the stem tests of a file that imports a shared module, past the time ceiling (#4407)", () => {
+    write("shared/place-view.ts", "export const PLACE = 1;\n");
+    write("server/surface.ts", 'import { PLACE } from "../shared/place-view.ts";\nexport const s = PLACE;\n');
+    write("server/index.ts", 'import { PLACE } from "../shared/place-view.ts";\nexport const i = PLACE;\n');
+    write("server/surface.test.ts", 'import { s } from "./surface.ts";\n');
+    write("server/index.test.ts", 'import { i } from "./index.ts";\n');
+    const weights: Record<string, number> = {};
+    for (let n = 0; n < 6; n++) {
+      const name = `server/a${n}-launch.e2e.test.ts`;
+      write(name, 'const HERE = import.meta.dirname;\nspawn(process.execPath, [join(HERE, "index.ts")]);\n');
+      weights[name] = 40;
+    }
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify(weights));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("shared/place-view.ts", "export const PLACE = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests,related", "--dry-run");
+    const tests = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(tests).toContain("'server/surface.test.ts'");
+    expect(tests).toContain("'server/index.test.ts'");
+    expect(tests).not.toContain("launch.e2e.test.ts");
+    expect(out).toContain("the ceiling cut");
+  });
+
+  it("runs every test that imports the verification fixture, past the 25 file bound (#4407)", () => {
+    write("scripts/control-omb.ts", "export const launch = 1;\n");
+    write("scripts/control-omb.test.ts", 'import { launch } from "./control-omb.ts";\n');
+    for (let i = 1; i <= 26; i++) write(`server/e${String(i).padStart(2, "0")}.e2e.test.ts`, 'import { launch } from "../scripts/control-omb.ts";\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("scripts/control-omb.ts", "export const launch = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'scripts/control-omb.test.ts'");
+    expect(line).toContain("'server/e01.e2e.test.ts'");
+    expect(line).toContain("'server/e26.e2e.test.ts'");
+    expect(out).not.toContain("only the tests of its own name");
+  });
+
   // #4138: four tests went red on main because they reach the changed file
   // through other files (a chat test renders a bar that renders the touched
   // pill), and lots ran only the tests beside their files.

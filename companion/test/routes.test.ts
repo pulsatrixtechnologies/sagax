@@ -592,6 +592,17 @@ describe("library artifacts", () => {
   });
 });
 
+describe("phone push registration", () => {
+  it("lets a paired phone register Live Activity tokens, and not the server relay", () => {
+    for (const method of ["GET", "POST", "DELETE"] as const) {
+      expect(allowed(method, "/api/push/activities"), method).toBe(true);
+      expect(allowed(method, "/api/push/activities/extra"), method).toBe(false);
+    }
+    expect(allowed("POST", "/api/push/relay")).toBe(false);
+    expect(allowed("GET", "/api/push/devices")).toBe(false);
+  });
+});
+
 describe("browser control", () => {
   it("allows the live stream and the action channel, and nothing else under browser/", () => {
     expect(allowed("GET", "/api/bots/b1/browser/live")).toBe(true);

@@ -150,6 +150,12 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // which providers are set up is not reading their keys.
   { method: "GET", path: /^\/api\/config$/ },
   { method: "GET", path: /^\/api\/events$/ },
+  // Live Activity tokens. A paired phone registers them so the server can
+  // update, end and start an activity after the app is closed. The push
+  // relay between servers is a different route and stays closed.
+  { method: "GET", path: /^\/api\/push\/activities$/ },
+  { method: "POST", path: /^\/api\/push\/activities$/ },
+  { method: "DELETE", path: /^\/api\/push\/activities$/ },
   { method: "GET", path: /^\/api\/instances$/ },
   // Run Claude Code's own `claude update` on the host when a turn failed
   // because it is too old for the model. A fixed command against the host's

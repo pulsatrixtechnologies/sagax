@@ -23,7 +23,11 @@ function observeLiveActivityFrame(payload: Record<string, unknown>) {
       muted: (note, person) => host.viewerNotificationMuted({ kind: "notify", notification: note }, person),
       now: () => Date.now()
     });
-    for (const update of updates) host.liveActivityHub.submit(update);
+    for (const update of updates) {
+      const bot = update.botId ? store.bot(update.botId) : undefined;
+      const color = bot && typeof bot.color === "string" ? bot.color : undefined;
+      host.liveActivityHub.submit(color ? { ...update, color } : update);
+    }
   } catch (error) {
     console.warn(`push-activity: a frame could not be read (${error instanceof Error ? error.message : String(error)})`);
   }

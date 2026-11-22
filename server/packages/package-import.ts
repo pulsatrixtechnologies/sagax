@@ -117,6 +117,19 @@ export interface PackageImportOptions {
   /** #2669: each agent's frontmatter `tools` as its tool selection (by
    * package agent key), already checked against the bot's engine. */
   toolScopes?: Readonly<Record<string, ToolScope>>;
+  /** #5152: the person the new rooms are for, recorded as their maker
+   * (`createdBy`). With `listRoomOwner` (an organization server, where a
+   * room shows through its people) they are listed in each room too, or
+   * nobody would see the rooms they asked for. */
+  roomOwner?: string;
+  listRoomOwner?: boolean;
+}
+
+/** Who the importer lists in a room it creates, and who made it. */
+function roomOwnership(options: PackageImportOptions): { humanIds?: string[]; extra?: { createdBy: string } } {
+  const owner = options.roomOwner?.trim();
+  if (!owner) return {};
+  return { ...(options.listRoomOwner ? { humanIds: [owner] } : {}), extra: { createdBy: owner } };
 }
 
 /** What an organization install created, for DATA_DIR/org-library/state.json
@@ -453,7 +466,8 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
     const groupIds = new Map<string, string>();
     for (const room of pkg?.rooms ?? []) {
       const ids = room.members.map((key) => botIds.get(key)!);
-      let created = store.createGroup(room.name, ids, false, section);
+      const owned = roomOwnership(options);
+      let created = store.createGroup(room.name, ids, false, section, undefined, owned.humanIds, owned.extra);
       createdGroups.push(created);
       const responder = room.defaultResponder;
       const defaultResponder = responder.kind === "agent"
@@ -543,7 +557,8 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
     // leaves no half-built project behind.
     if (!pkg && options.mode === "project" && importedBots.length > 0) {
       const roomName = options.room?.trim() || name;
-      group = store.createGroup(roomName, importedBots.map((bot) => bot.id), false, section);
+      const owned = roomOwnership(options);
+      group = store.createGroup(roomName, importedBots.map((bot) => bot.id), false, section, undefined, owned.humanIds, owned.extra);
       createdGroups.push(group);
       if (options.cwd) {
         // `cwd` is the folder the room WANTS; the store pins it on the

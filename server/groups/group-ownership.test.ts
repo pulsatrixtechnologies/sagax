@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupOwnerId, groupPatchOwnerRefusal, isSelfLeave, mayDeleteGroup, ownsGroup } from "./group-ownership.ts";
+import { groupOwnerId, groupPatchOwnerRefusal, isSelfLeave, mayDeleteGroup, ownsGroup, pairChannelOwnedBy, unlistedOwnRooms } from "./group-ownership.ts";
 
 const owner = { id: "pr_owner", email: "owner@example.test", orgAdmin: false };
 const member = { id: "pr_member", email: "member@example.test", orgAdmin: false };
@@ -68,5 +68,52 @@ describe("group ownership", () => {
     expect(groupPatchOwnerRefusal(withMine, { memberIds: ["bot_m", "bot_a"] }, member, botOwner)).toMatch(/owner/);
     expect(groupPatchOwnerRefusal(withMine, { memberIds: [] }, owner, botOwner)).toBeNull();
     expect(groupPatchOwnerRefusal(withMine, { memberIds: ["bot_a"], name: "Mine" }, member, botOwner)).toMatch(/owner/);
+  });
+});
+
+// #5152: the operator's own rooms that do not list them
+describe("unlistedOwnRooms", () => {
+  const owners: Record<string, string> = { "bot-local": "pr_local", "bot-ada": "pr_ada" };
+  const botOwner = (botId: string) => owners[botId];
+  const rooms = [
+    { id: "made-here", createdBy: "PR_LOCAL", humanIds: [] as string[], memberIds: ["bot-local"] },
+    { id: "made-here-with-ada", createdBy: "pr_local", humanIds: ["pr_ada"], memberIds: ["bot-local"] },
+    { id: "made-here-for-a-team", createdBy: "pr_local", humanIds: ["team:T1"], memberIds: [] as string[] },
+    { id: "before-the-org", memberIds: ["bot-local"] },
+    { id: "before-the-org-empty", humanIds: [] as string[], memberIds: [] as string[] },
+    { id: "already-listed", createdBy: "pr_local", humanIds: ["pr_local", "pr_ada"], memberIds: ["bot-local"] },
+    { id: "ada-made-it", createdBy: "pr_ada", humanIds: [] as string[], memberIds: ["bot-local"] },
+    { id: "lists-ada-first", humanIds: ["pr_ada"], memberIds: ["bot-local"] },
+    { id: "nobody-with-ada-bot", memberIds: ["bot-local", "bot-ada"] },
+    { id: "nobody-bot-gone", memberIds: ["bot-local", "bot-gone"] },
+    { id: "nobody-ada-bot-gone", memberIds: ["bot-ada", "bot-gone"] },
+    { id: "a-dm", createdBy: "pr_local", humanIds: [] as string[], peopleDm: true },
+    { id: "a-bot-pair", dm: true, memberIds: ["bot-local", "bot-local-2"] },
+    { id: "archived", createdBy: "pr_local", humanIds: [] as string[], archivedAt: 1 },
+  ];
+  it("finds the person's rooms that do not list them, and no one else's", () => {
+    expect(unlistedOwnRooms(rooms, "pr_local", botOwner).map((room) => room.id)).toEqual([
+      "made-here", "made-here-with-ada", "made-here-for-a-team", "before-the-org", "before-the-org-empty", "nobody-bot-gone",
+    ]);
+  });
+  it("finds nothing for nobody", () => {
+    expect(unlistedOwnRooms(rooms, " ", botOwner)).toEqual([]);
+  });
+});
+
+// #5152: a bot pair's channel lists no people; its bots' owner sees it
+describe("pairChannelOwnedBy", () => {
+  const owners: Record<string, string> = { "bot-local": "pr_local", "bot-local-2": "PR_LOCAL", "bot-ada": "pr_ada" };
+  const botOwner = (botId: string) => owners[botId];
+  it("is the owner's when every bot in it is theirs", () => {
+    expect(pairChannelOwnedBy({ dm: true, memberIds: ["bot-local", "bot-local-2"] }, "pr_local", botOwner)).toBe(true);
+  });
+  it("is nobody's else, nor a room's, nor a pair with a bot that no longer exists", () => {
+    expect(pairChannelOwnedBy({ dm: true, memberIds: ["bot-local", "bot-local-2"] }, "pr_ada", botOwner)).toBe(false);
+    expect(pairChannelOwnedBy({ dm: true, memberIds: ["bot-local", "bot-ada"] }, "pr_local", botOwner)).toBe(false);
+    expect(pairChannelOwnedBy({ dm: true, memberIds: ["bot-local", "bot-gone"] }, "pr_local", botOwner)).toBe(false);
+    expect(pairChannelOwnedBy({ memberIds: ["bot-local", "bot-local-2"] }, "pr_local", botOwner)).toBe(false);
+    expect(pairChannelOwnedBy({ dm: true, memberIds: [] }, "pr_local", botOwner)).toBe(false);
+    expect(pairChannelOwnedBy({ dm: true, memberIds: ["bot-local"] }, " ", botOwner)).toBe(false);
   });
 });

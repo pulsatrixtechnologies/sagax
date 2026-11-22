@@ -119,6 +119,21 @@ describe("additive portable team backups", () => {
     expect(readMemoryFile(noMemory.id).text).toBe("");
   });
 
+  // #5152: an organization server shows a room through its people
+  it("lists the owner in each room of an organization restore, never in a bot pair's channel", () => {
+    const { store, routines, chief, scout } = fixture();
+    store.createGroup(`${chief.name} ⇄ ${scout.name}`, [chief.id, scout.id], true);
+    const backup = createTeamBackup(store, routines.listRoutines(), "My team");
+    const restored = importTeamBackup(store, routines, JSON.parse(JSON.stringify(backup)), selection(), { ownerUserId: "pr_owner" });
+    const room = restored.groups.find((group) => !group.dm)!;
+    const pair = restored.groups.find((group) => group.dm)!;
+    expect(store.group(room.id)!.humanIds).toEqual(["pr_owner"]);
+    expect(store.group(pair.id)!.humanIds).toBeUndefined();
+    // a solo restore names nobody, as before
+    const solo = importTeamBackup(store, routines, JSON.parse(JSON.stringify(backup)), selection());
+    expect(solo.groups.every((group) => store.group(group.id)!.humanIds === undefined)).toBe(true);
+  });
+
   it("round-trips all bots, sections, Chiefs, rooms, tasks and branches without changing originals", () => {
     const { store, routines, chief, scout, otherChief, archived, group } = fixture();
     const backup = createTeamBackup(store, routines.listRoutines(), "My team");

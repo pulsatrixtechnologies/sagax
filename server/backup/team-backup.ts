@@ -194,7 +194,7 @@ export interface TeamBackupImportOptions {
   visibility?: BotVisibility;
   /** Organization server (slice 8): every bot is this person's. */
   ownerUserId?: string;
-  /** A room's people, by its backup key. */
+  /** A room's people, by its backup key. Absent: `ownerUserId` (#5152). */
   groupHumanIds?: (sourceKey: string) => string[] | undefined;
   /** Who a routine runs as, by its index in the backup. */
   routineRunAs?: (index: number) => string | undefined;
@@ -311,7 +311,10 @@ export function importTeamBackup(store: Store, routines: RoutineManager, input: 
       const group = store.createGroup(takeImportName(source.name, takenGroups), source.memberIds.map((id) => botIds.get(id)!), source.dm, sectionFor(source.section));
       groups.push(group);
       groupIds.set(source.key, group.id);
-      const humans = options.groupHumanIds?.(source.key);
+      // #5152: an organization restore's room is its owner's, listed in it as
+      // an organization copy lists its importer (a room shows through its
+      // people; a bot pair's channel lists none by design)
+      const humans = options.groupHumanIds?.(source.key) ?? (options.ownerUserId && !source.dm ? [options.ownerUserId] : undefined);
       if (humans) store.patchGroup(group.id, { humanIds: humans });
       if (channels && group.section) {
         channelFor(group.section);

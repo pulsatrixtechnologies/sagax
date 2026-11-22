@@ -12,6 +12,11 @@
 //         carries no `live.call` frame, their GET /api/live/call reads no
 //         call, and their own start is refused without the other call's
 //         details; a member's stream carries nothing either.
+//   NI-3  the local operator (#5152): a member's bot answers the member, who
+//         hears its notification. The stream of the operator at this computer
+//         (loopback) and of a phone they paired from it with admin access
+//         (their own admin session) carries the operator's own bots and rooms
+//         only: nothing of the member's bot. Their lists say the same.
 //
 // A silence is only worth something beside the noise: the admin's own bot,
 // created after the refusal (or the call), reaches the admin's stream, so
@@ -46,13 +51,14 @@ let log = "";
 let idp: FakeOidcProvider;
 let live: FakeOpenAiLive;
 
-type Auth = { cookie?: string };
+type Auth = { cookie?: string; token?: string };
 const api = async (method: string, path: string, auth?: Auth, body?: unknown): Promise<{ status: number; body: any; text: string }> => {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
       ...(auth?.cookie ? { cookie: auth.cookie } : {}),
+      ...(auth?.token ? { authorization: `Bearer ${auth.token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -85,12 +91,17 @@ async function waitFor<T>(read: () => Promise<T | null | undefined | false>, ms 
   }
 }
 
-async function openStream(auth: Auth): Promise<{ text: () => string; close: () => void }> {
-  const { body } = await api("POST", "/api/auth/stream-ticket", auth);
-  expect(body.ticket).toMatch(/^sgx_tick_/);
+/** A signed-in stream, or with no auth the operator at this computer (loopback). */
+async function openStream(auth?: Auth): Promise<{ text: () => string; close: () => void }> {
+  let query = "";
+  if (auth) {
+    const { body } = await api("POST", "/api/auth/stream-ticket", auth);
+    expect(body.ticket).toMatch(/^sgx_tick_/);
+    query = `?ticket=${encodeURIComponent(body.ticket)}`;
+  }
   return new Promise((resolve, reject) => {
     let received = "";
-    const req = request(`${BASE}/api/events?ticket=${encodeURIComponent(body.ticket)}`, { headers: { accept: "text/event-stream" } }, (res) => {
+    const req = request(`${BASE}/api/events${query}`, { headers: { accept: "text/event-stream" } }, (res) => {
       expect(res.statusCode).toBe(200);
       res.setEncoding("utf8");
       res.on("data", (chunk: string) => { received += chunk; });
@@ -140,6 +151,8 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
         SAGAX_ANTHROPIC_API_KEY: ORG_KEY,
         SAGAX_ORG_NAME: "Acme",
         SAGAX_MISUSE_GUARDRAILS: "enforce",
+        // NI-3: a loopback request is the operator at this computer
+        SAGAX_LOOPBACK_TRUST: "owner",
         // NI-2: Live calls on, against the fake GPT-Live
         SAGAX_LIVE_CALLS: "1",
         SAGAX_OPENAI_LIVE_URL: live.url,
@@ -233,4 +246,69 @@ posixOnly("Perspicax organization: a member's bot is never announced in another 
     beaStream.close();
     memberStream.close();
   }, 60_000);
+
+  it("NI-3: the local operator's stream carries their own bots, never a member's (#5152)", async () => {
+    // a phone the operator paired from this computer with admin access: an
+    // admin session that is the local operator
+    const opened = await api("POST", "/api/auth/pairing", undefined, { scopes: ["admin", "client"], label: "Operator phone" });
+    expect(opened.status, opened.text).toBe(200);
+    const paired = await api("POST", "/api/auth/pair", undefined, { code: opened.body.code });
+    expect(paired.status, paired.text).toBe(200);
+    expect(paired.body.session.principalId).toBeTruthy();
+    const operatorPhone: Auth = { token: paired.body.token };
+    const member = await signIn(MEMBER);
+    const created = await api("POST", "/api/bots", member, { name: "Survey helper" });
+    expect(created.status, created.text).toBe(201);
+    const memberBot = created.body.bot.id as string;
+    const operatorStream = await openStream();
+    const phoneStream = await openStream(operatorPhone);
+    const memberStream = await openStream(member);
+    const aboutMemberBot = (stream: { text: () => string }) => frames(stream).filter((frame) => frame.kind === "notify" && frame.notification?.botId === memberBot);
+
+    // the member's bot answers the member: the member hears its notification
+    const sent = await api("POST", `/api/bots/${memberBot}/messages`, member, { text: "Summarize the site visit" });
+    expect(sent.status, sent.text).toBeLessThan(300);
+    await waitFor(async () => aboutMemberBot(memberStream).length > 0, 40_000);
+
+    // ordering barrier: the operator's own bot, and a room they make at this
+    // computer, reach both of the operator's streams
+    const own = await api("POST", "/api/bots", undefined, { name: "Console helper" });
+    expect(own.status, own.text).toBe(201);
+    const operatorBot = own.body.bot.id as string;
+    const room = await api("POST", "/api/groups", undefined, { name: "Console room", memberIds: [operatorBot] });
+    expect(room.status, room.text).toBe(201);
+    const operatorRoom = room.body.group.id as string;
+    // a room they make with a colleague, as the room picker does: they stay in it
+    const memberId = (await api("GET", "/api/config", member)).body.viewer.principalId as string;
+    const shared = await api("POST", "/api/groups", undefined, { name: "Console and colleague", memberIds: [operatorBot], humanIds: [memberId] });
+    expect(shared.status, shared.text).toBe(201);
+    const sharedRoom = shared.body.group.id as string;
+    // and one their phone makes with a colleague (an admin session): they stay in it too
+    const fromPhone = await api("POST", "/api/groups", operatorPhone, { name: "Phone and colleague", memberIds: [operatorBot], humanIds: [memberId] });
+    expect(fromPhone.status, fromPhone.text).toBe(201);
+    const phoneRoom = fromPhone.body.group.id as string;
+    const ownRooms = [operatorRoom, sharedRoom, phoneRoom];
+    const seesOwn = (stream: { text: () => string }) => frames(stream).some((frame) => frame.kind === "bot" && frame.bot?.id === operatorBot)
+      && ownRooms.every((id) => frames(stream).some((frame) => frame.kind === "group" && frame.group?.id === id));
+    await waitFor(async () => seesOwn(operatorStream) && seesOwn(phoneStream));
+    await sleep(300);
+
+    expect(aboutMemberBot(operatorStream)).toEqual([]);
+    expect(aboutMemberBot(phoneStream)).toEqual([]);
+    // nor any other frame of the member's bot
+    expect(operatorStream.text()).not.toContain(memberBot);
+    expect(phoneStream.text()).not.toContain(memberBot);
+    // the operator's lists say what their streams say
+    for (const who of [undefined, operatorPhone]) {
+      const bots = (await api("GET", "/api/bots", who)).body.bots.map((bot: any) => bot.id);
+      expect(bots).toContain(operatorBot);
+      expect(bots).not.toContain(memberBot);
+      const rooms = (await api("GET", "/api/groups", who)).body.groups.map((group: any) => group.id);
+      for (const id of ownRooms) expect(rooms).toContain(id);
+    }
+    expect((await api("GET", "/api/bots", member)).body.bots.map((bot: any) => bot.id)).toContain(memberBot);
+    operatorStream.close();
+    phoneStream.close();
+    memberStream.close();
+  }, 90_000);
 });

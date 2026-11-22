@@ -183,6 +183,20 @@ describe("live preferences between a person's devices", () => {
     expect(remote.patches).toEqual([{ set: { [COLLAPSED]: "[\"general\"]" }, remove: [] }]);
   });
 
+  it("keeps Primary Bot row when an older preferences frame omits it (#4853)", async () => {
+    const key = "sagax.primaryBotStyle.v1";
+    const storage = memory({ "omb-skin": "paper" });
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") return new Response(JSON.stringify({ stored: true }), { status: 200 });
+      return new Response(JSON.stringify({ stored: true, preferences: { "omb-skin": "paper" }, updatedAt: 5 }), { status: 200 });
+    });
+    const sync = (await startPreferenceSync({ fetch: fetch as unknown as typeof fetch, storage, setInterval: noTimer }))!;
+    storage.setItem(key, "row");
+    await sync.check();
+    sync.receive({ preferences: { "omb-skin": "paper" }, updatedAt: 5 });
+    expect(storage.values.get(key)).toBe("row");
+  });
+
   it("a key removed on another device is removed here", async () => {
     const storage = memory();
     const remote = liveServer({ "omb-skin": "paper", [SECTIONS]: TWO });

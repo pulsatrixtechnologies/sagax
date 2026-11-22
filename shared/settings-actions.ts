@@ -903,6 +903,7 @@ pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This r
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
 pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > Permissions > Privacy");
 pref("appearance.accountMenuAbove", "appearance", "sagax.accountMenuAbove.v1", "enum:on|off", "Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.primaryBotStyle", "appearance", "sagax.primaryBotStyle.v1", "enum:tile|row", "Primary Bot in the sidebar (tile, the large tile; row, a regular row)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > General > Appearance");
 pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > General > Appearance");
 pref("appearance.freshTopicAfter", "appearance", "sagax.freshTopicAfter.v1", "string", "Fresh topic after", "Settings > General > Appearance");

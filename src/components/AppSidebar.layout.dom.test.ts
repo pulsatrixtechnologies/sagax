@@ -141,6 +141,18 @@ describe("the sidebar at 1338 px (wide)", () => {
     expect(container.querySelector("[data-drawer-scrim]")).toBeNull();
   });
 
+  it("draws the Primary Bot as a regular row when that style is chosen (#4853)", async () => {
+    localStorage.setItem("sagax.primaryBotStyle.v1", "row");
+    state.bots = [bot("nova", "Nova", "Desk"), bot("atlas", "Atlas", "Service desk")];
+    (state.bots[0] as { chiefOfStaff?: boolean }).chiefOfStaff = true;
+    prefs.setSidebarDensity("comfortable");
+    await draw();
+    const primary = container.querySelector("[data-primary-row] [data-sidebar-bot-row='nova']");
+    expect(primary).not.toBeNull();
+    expect(primary!.textContent).toContain("Nova");
+    expect(container.querySelector("[data-sidebar-tile-labels]")).toBeNull();
+  });
+
   it("keeps a rail the person chose, with its own way back to the full sidebar", async () => {
     prefs.setSidebarDensity("icons");
     await draw();

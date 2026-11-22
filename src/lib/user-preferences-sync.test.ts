@@ -190,7 +190,7 @@ describe("live preferences between a person's devices", () => {
       if (init?.method === "PATCH") return new Response(JSON.stringify({ stored: true }), { status: 200 });
       return new Response(JSON.stringify({ stored: true, preferences: { "omb-skin": "paper" }, updatedAt: 5 }), { status: 200 });
     });
-    const sync = (await startPreferenceSync({ fetch: fetch as unknown as typeof fetch, storage, setInterval: noTimer }))!;
+    const sync = (await startPreferenceSync({ fetch: fetch as unknown as typeof globalThis.fetch, storage, setInterval: noTimer }))!;
     storage.setItem(key, "row");
     await sync.check();
     sync.receive({ preferences: { "omb-skin": "paper" }, updatedAt: 5 });

@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`verify-first rule (2026-10-19) > lets the missing-object card win over search-before-asking 1`] = `
+{
+  "verify": "A request whose object or recipient is missing and several fit ("Envoie-moi le rapport": which report, to whom, when nothing earlier in this conversation names it) is a real decision: ask it with the card as your first step, in one turn, with zero tool calls before it; never search sessions, skills, files or a catalog to guess it.",
+  "work": "Search memory/topic notes, session_search, files and tools before asking for a fact, except a missing object or recipient that several fit (the card first, no search); never ask for what was already given.",
+}
+`;

@@ -144,12 +144,9 @@ chat.timeline.title
 chat.timeline.titleRunning
 chat.usage.cachedNote
 chat.usage.cardContext
-chat.usage.cardHint
 chat.usage.cardLast
-chat.usage.cardThread
 chat.usage.cardWindow
 chat.usage.contextNudge
-chat.usage.costAria
 chat.usage.in
 chat.usage.inCached
 chat.usage.lastTurn

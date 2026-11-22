@@ -108,6 +108,10 @@ type OpenAIChatTurnState = {
   toolsReused: boolean;
   usage: Usage;
   hasUsage: boolean;
+  /** Sum of the provider's own per-call costs. Null when none reported one. */
+  costUsd: number | null;
+  /** Sum of cached input tokens, once any call reported the split. */
+  cachedInput?: number;
   ok: boolean;
   stopReason: string | null;
   failure: string | undefined;
@@ -204,7 +208,7 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
 async function finalizeOpenAIChatTurn(ctx: OpenAIChatTurnCtx, state: OpenAIChatTurnState): Promise<void> {
   const { turn, turnId, abort, approval, turnEntry, resolveDone, messages } = ctx;
   const { options, emit, base, active, warmToolSessions } = ctx.deps;
-  let { tools, mountIntegrations, toolsFp, toolsReused, usage, hasUsage, ok, stopReason, failure, seenCalls, denials, unread, model } = state;
+  let { tools, mountIntegrations, toolsFp, toolsReused, usage, hasUsage, costUsd, cachedInput, ok, stopReason, failure, seenCalls, denials, unread, model } = state;
   turnEntry.ending = true;
   approval.close();
   let cleanupFailed = false;
@@ -263,8 +267,10 @@ async function finalizeOpenAIChatTurn(ctx: OpenAIChatTurnCtx, state: OpenAIChatT
     }
   }
   if (active.get(turn.threadId) === turnEntry) active.delete(turn.threadId);
-  emit({ ...base(turn.threadId, turnId), type: "turn.completed", ok, stopReason, cost: null,
-    ...(hasUsage && (options.includeUsageInCompleted || seenCalls.size) ? { usage } : {}),
+  emit({ ...base(turn.threadId, turnId), type: "turn.completed", ok, stopReason, cost: costUsd,
+    ...(hasUsage && (options.includeUsageInCompleted || seenCalls.size) ? {
+      usage: { input: usage.input, output: usage.output, ...(cachedInput !== undefined ? { cachedInput } : {}) },
+    } : {}),
     ...(denials.length ? { denials } : {}),
   });
   resolveDone();
@@ -285,6 +291,8 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
   let toolsReused = false;
   const usage: Usage = { input: 0, output: 0 };
   let hasUsage = false;
+  let costUsd: number | null = null;
+  let cachedInput: number | undefined;
   let ok = false;
   let stopReason: string | null = null;
   let failure: string | undefined;
@@ -362,7 +370,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
             if (streamKind === "assistant_text") answerStreamed = true;
             const shown = holdback && streamKind === "assistant_text" ? holdback.feed(text) : text;
             if (shown) delta(shown, streamKind);
-          }, tools.definitions, undefined, undefined, apiKey, turn.effort);
+          }, tools.definitions, undefined, undefined, apiKey, turn.effort, turn.threadId);
           // A reply cut off at the token limit may be a call cut short; running half of one is worse than saying so.
           const written = holdback && !completion.toolCalls.length && completion.finishReason !== "length" ? textToolCalls(completion.text, tools.definitions) : null;
           unreadable = written?.kind === "unreadable" && !askedAgain;
@@ -475,8 +483,13 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
       if (completion.usage) {
         usage.input += completion.usage.input;
         usage.output += completion.usage.output;
+        if (typeof completion.usage.cachedInput === "number") cachedInput = (cachedInput ?? 0) + completion.usage.cachedInput;
+        if (typeof completion.usage.costUsd === "number") costUsd = (costUsd ?? 0) + completion.usage.costUsd;
         hasUsage = true;
-        emit({ ...base(turn.threadId, turnId), type: "thread.token-usage.updated", ...usage });
+        emit({
+          ...base(turn.threadId, turnId), type: "thread.token-usage.updated",
+          input: usage.input, output: usage.output, ...(cachedInput !== undefined ? { cachedInput } : {}),
+        });
       }
       // Reasoning on a tool-call round belongs to the protocol, not a final reply.
       const reply = completion.text.trim() ? completion.text : completion.toolCalls.length || unreadable ? "" : completion.reasoning;
@@ -674,7 +687,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
     failure = safeText(asError(value).message).slice(0, 2_000);
   } finally {
     await finalizeOpenAIChatTurn(ctx, {
-      tools, mountIntegrations, toolsFp, toolsReused, usage, hasUsage, ok, stopReason, failure,
+      tools, mountIntegrations, toolsFp, toolsReused, usage, hasUsage, costUsd, cachedInput, ok, stopReason, failure,
       toolFailed, toolStopped, correctiveRounds, denials, seenCalls, nudged, unread, model,
     });
   }

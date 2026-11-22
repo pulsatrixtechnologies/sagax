@@ -556,6 +556,22 @@ plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
 `server/usage/limit-failover-host.test.ts`.
 
+## Reasoning effort per turn (2026-11-22)
+
+One function, `effortForTurn` (`server/turns/turn-effort.ts`), sets the
+effort of a turn. A call and a Grok HTTP background one-shot (a helper
+or a permission review) run at the lowest level the engine offers, "low"
+where it exists, and a bot already set below that keeps its own level.
+Codex with no saved effort stays unset, so the next turn of its thread
+does not inherit that level.
+A chat, the warm that prepares that chat, and a routine run use the saved
+effort (a routine's own level wins). Grok's HTTP API is included: a chat,
+warm or routine that saved nothing runs at high, that API's own default,
+and the chat-completions body carries `reasoning_effort` for a model that
+takes one (grok-4.5 stops at high; grok-4.6 and later take xhigh; an older
+model sends no field). Other engines leave an unset chat effort unset.
+Tests: `server/turns/turn-effort.test.ts`, `server/drivers/grok.test.ts`.
+
 ## A refused run goes on elsewhere, and says who refused (2026-11-02)
 
 A routine run, a webhook run or a proactive wake whose turn a limit refused

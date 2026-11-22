@@ -174,6 +174,8 @@ describe("usage formatting", () => {
     expect(lastTurnDetail({ input: 0, output: 0, costUsd: null, turns: 0 })).toBeNull();
     expect(lastTurnDetail({ input: 500_000, output: 5_000, costUsd: null, turns: 3, lastTurn: { input: 210_000, output: 1_200, cachedInput: 209_000, costUsd: null } }))
       .toBe("Last message: 1k uncached input · 209k cached input · 1.2k output");
+    expect(lastTurnDetail({ input: 500_000, output: 5_000, costUsd: 0.04, turns: 3, lastTurn: { input: 210_000, output: 1_200, cachedInput: 209_000, costUsd: 0.02 } }))
+      .toBe("Last message: 1k uncached input · 209k cached input · 1.2k output · $0.02");
   });
 });
 

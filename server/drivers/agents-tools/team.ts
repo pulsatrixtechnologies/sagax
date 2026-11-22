@@ -416,7 +416,7 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
     const opened = `Opened thread "${threadTitle}" ${where} [thread id: ${threadId}].`;
     if (r.self === true && r.parallel === true) {
       if (r.state === "failed") return { text: `${opened} It could not start: ${String(r.error ?? "unknown reason")}. Tell the person.`, isError: true };
-      return { text: `${opened} It runs as a parallel task of this conversation${r.state === "queued" ? " (waiting for a free slot)" : ""}: the person sees its card here, and its result is posted back here when it finishes. Do not wait for it; carry on or end your turn.` };
+      return { text: `${opened} It runs as a parallel task of this conversation${r.state === "queued" ? " (waiting for a free slot)" : ""}: the person sees its card here, and its result is posted back here when it finishes. Do not wait for it; carry on or end your turn. To steer it or send it a follow-up, while it runs or after, use coordinate_bots with bot_ids ["${BOT_ID}"] and thread_id "${threadId}".` };
     }
     if (r.self === true) {
       if (r.state === "running") {

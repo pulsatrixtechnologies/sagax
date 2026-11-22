@@ -201,8 +201,14 @@ A bot's Dynamic Island / lock-screen Live Activity is started on the phone
 with `pushType: .token`. The phone registers each activity's push token
 (and, on iOS 17.2+, the push-to-start token) at `POST /api/push/activities`
 for that person and bot. When the bot's state changes (working, needs you,
-done) and the phone's live stream is not open, the server sends an APNs
+done) and that phone's live stream is not open, the server sends an APNs
 push with:
+
+When the bot needs the person and that phone has no running activity, the
+server starts one with the push-to-start token (`event: start`,
+`attributes-type: BotActivityAttributes`, no alert of its own). A bot that
+is only working is never started from the server. A second phone that is
+in the app is left to update its own activity.
 
 - `apns-push-type: liveactivity`
 - `apns-topic: <bundleId>.push-type.liveactivity`

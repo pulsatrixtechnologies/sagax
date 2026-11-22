@@ -8945,12 +8945,12 @@ const pushActivities = createLiveActivityTokenStore(DATA_DIR);
 const liveActivityHub = new LiveActivityHub({
   config: apnsConfig,
   store: pushActivities,
-  // while any stream of this person is open the phone updates activities locally
-  personStreaming: (person) => tokensOfConnectedDevices(
+  // a phone with an open stream updates locally; a closed phone still gets a push
+  liveDeviceTokens: (person) => tokensOfConnectedDevices(
     sseClients,
     person,
     IDENTITY.kind !== "perspicax" ? localPrincipalId() : undefined,
-  ).length > 0
+  ),
 });
 const pushHub = new PushHub({
   config: apnsConfig,

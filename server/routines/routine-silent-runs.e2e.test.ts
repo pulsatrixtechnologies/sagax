@@ -19,8 +19,13 @@ const REPORT = "3 invoices without a PO: #1201, #1207, #1210. I drafted the remi
 
 it("a silent run leaves the chat and sidebar untouched; a reporting run posts one message, never the prompt", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "sagax-silent-routines-"));
+  // #5086 (#5124): the fake engine's default turn ends on a Bash call after the
+  // reply, so a quiet ending is not the final message and the next scripted
+  // reply is consumed as the continuation. These replies are the final
+  // message: no tool after them, so a NOTHING_TO_REPORT line stays quiet.
   const fixture = await launchVerificationServer({
     ...process.env,
+    FAKE_CLAUDE_TOOL_CALLS: "[]",
     FAKE_CLAUDE_REPLIES: JSON.stringify([QUIET, REPORT, REPORT, QUIET]),
     FAKE_CLAUDE_REPLY_STATE: join(scratch, "reply-index"),
   });

@@ -264,7 +264,7 @@ export function shapeBrowserToolResult(result: unknown, options: { toolName?: st
   if (result.isError !== true) return shaped;
   const joined = content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n");
   const library = /error while loading shared libraries: ([^:\s]+)/.exec(joined)?.[1];
-  if (!library || !/^Chrome exited early \(exit code:/.test(joined)) return shaped;
+  if (!library || !joined.startsWith("Chrome exited early (exit code:")) return shaped;
   return {
     ...shaped,
     content: [...content, { type: "text", text: `Chrome is missing the system library ${library}. On Linux, run \`sudo openmausbot browser install --with-deps\`, then retry the browser install as the user running the server.` }],

@@ -311,7 +311,7 @@ describe("createInternalIntegrationsRoutes", () => {
   });
 
   it("POST /request-credential says when a file card's secret is saved for tools only", async () => {
-    const appendMessage = vi.fn(() => ({ id: "sec-file" }));
+    const appendMessage = vi.fn((_threadId: string, _message: Record<string, unknown>) => ({ id: "sec-file" }));
     const route = createInternalIntegrationsRoutes(deps({
       appendMessage,
       refSavedForLabel: () => true,
@@ -321,7 +321,7 @@ describe("createInternalIntegrationsRoutes", () => {
       body: { label: "CxOps", reason: "the deploy token", delivery: "file" },
     });
     await run();
-    const message = appendMessage.mock.calls[0]?.[1] as { secret: { description: string } };
+    const message = appendMessage.mock.calls[0]![1] as { secret: { description: string } };
     expect(message.secret.description).toContain("only for Sagax's own tools");
     expect(message.secret.description).not.toContain("ntn_");
     expect(sent[0]).toMatchObject({ status: 201, body: { delivery: "file", savedAs: "ref" } });

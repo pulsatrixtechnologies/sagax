@@ -15,6 +15,7 @@ import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
 import type { Completion, CompletionJson, RuntimeOptions, Usage } from "./openai-chat-types.ts";
 import { ChatSpecialTokenStream, stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
+import { chatUsageCostUsd } from "./chat-usage-cost.ts";
 
 /** Optional per-step TTFT markers (SAGAX_TURN_TRACE=1). No secrets. */
 function httpTrace(step: string): void {
@@ -53,10 +54,17 @@ function httpErrorDetail(body: string, limit = 500): string {
   return message.slice(0, limit) + suffix;
 }
 
-const usageFrom = (usage: CompletionJson["usage"]): Usage | null =>
-  usage
-    ? { input: usage.prompt_tokens ?? 0, output: usage.completion_tokens ?? 0 }
-    : null;
+const usageFrom = (usage: CompletionJson["usage"]): Usage | null => {
+  if (!usage) return null;
+  const cached = usage.prompt_tokens_details?.cached_tokens;
+  const cost = chatUsageCostUsd(usage);
+  return {
+    input: usage.prompt_tokens ?? 0,
+    output: usage.completion_tokens ?? 0,
+    ...(typeof cached === "number" && Number.isFinite(cached) && cached >= 0 ? { cachedInput: cached } : {}),
+    ...(cost !== undefined ? { costUsd: cost } : {}),
+  };
+};
 
 const completionUsage = (json: CompletionJson) => json.usage ?? json.x_groq?.usage;
 
@@ -385,7 +393,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
 
       const payload = JSON.stringify({
         ...options.requestBody(model, messages, stream),
-        ...(options.chatEffortBody?.(model, effort) ?? {}),
+        ...options.chatEffortBody?.(model, effort),
         ...(tools.length ? { tools } : {}),
         ...(typeof maxTokens === "number" ? { max_tokens: maxTokens } : {}),
       });
@@ -430,7 +438,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
             input: count(tokenUsage?.prompt_tokens),
             output: count(tokenUsage?.completion_tokens),
             cachedInput: count(tokenUsage?.prompt_tokens_details?.cached_tokens),
-            costUsd: count(tokenUsage?.cost),
+            costUsd: chatUsageCostUsd(tokenUsage),
           });
         }
         const bodyError = completionError(json, "completion error");

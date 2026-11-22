@@ -114,6 +114,23 @@ describe("GrokDriver turns (fake fetch)", () => {
     expect(grokHttpReasoningEffort("grok-4.5", "xhigh")).toBe("high");
   });
 
+  it("books a turn's cost from xAI ticks", async () => {
+    script = [{ sse: [
+      'data: {"choices":[{"delta":{"content":"ok"}}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":80},"cost_in_usd_ticks":150000000}}',
+      "data: [DONE]",
+      "",
+    ].join("\n") }];
+    await create();
+    await instance.adapter.sendTurn({ threadId: "t-cost", text: "hi" });
+    const done = await recorder.until((event) => event.type === "turn.completed");
+    expect(done).toMatchObject({
+      ok: true,
+      cost: 0.015,
+      usage: { input: 120, output: 4, cachedInput: 80 },
+    });
+  });
+
   it("routes both turns of one thread to the same prompt cache and keeps the prefix", async () => {
     const calls: Array<{ conv: string | null; messages: Array<{ role: string; content: unknown }> }> = [];
     script = [];

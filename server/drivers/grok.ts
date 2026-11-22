@@ -190,14 +190,18 @@ export const GrokDriver: ProviderDriver<GrokConfig> = {
       // What xAI listed for the model; else the written rule, as before.
       imageInput: (model) => images.get(model) ?? grokSeesImages(model),
       models: () => catalog, refreshModels, modelsForKey,
-      requestBody: (model, messages, stream) => ({ model, messages, stream }),
+      requestBody: (model, messages, stream) => ({
+        model, messages, stream,
+        ...(stream ? { stream_options: { include_usage: true } } : {}),
+      }),
+      includeUsageInCompleted: true,
       chatEffortBody: (model, effort) => {
         const level = grokHttpReasoningEffort(model, effort);
         return level ? { reasoning_effort: level } : {};
       },
       // xAI stores a prompt cache per server. The same conversation id on
       // every turn of a thread routes those turns to one server (docs: x-grok-conv-id).
-      conversationHeaders: (threadId) => {
+      conversationHeaders: (threadId): Record<string, string> => {
         const id = threadId.replace(/[\r\n]/g, "").trim().slice(0, 128);
         return id ? { "x-grok-conv-id": id } : {};
       },

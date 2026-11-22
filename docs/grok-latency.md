@@ -269,8 +269,10 @@ Two turns of one thread, the second carrying the first turn's transcript:
   send to `turn.completed` 7 ms then 1 ms. The vendor stores a prompt
   cache per server, and that header is what routes a conversation to one
   server. The stable half was already the system message; this change
-  does not rebuild it. Cost stayed null here; the ticks are read in the
-  per-turn cost change.
+  does not rebuild it. The same fake usage
+  (`cost_in_usd_ticks` 150000000) booked `turn.completed` cost null before
+  and 0.015 dollars after, with usage input 120, output 4, cached 80, in
+  7 ms on that fixture.
 
 ## Cold start on every turn (#4215, 2026-11-13)
 

@@ -24,6 +24,7 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
+import { accountMenuAbove } from "@/lib/account-menu-above";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,6 +32,9 @@ import { SidebarProfileMenu } from "./SidebarProfileMenu";
 let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
+  // The rows sit above the name unless turned off (#5016). This test is the
+  // folded menu, the button a click opens.
+  accountMenuAbove.set("off");
   fixture.state = { config: { profile: { name: "Sample Person", email: "person@example.com" } } as AppState["config"] };
   container = document.createElement("div");
   document.body.append(container);

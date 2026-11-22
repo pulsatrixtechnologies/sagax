@@ -223,8 +223,9 @@ describe("sidebar footer row", () => {
 });
 
 describe("the foot's profile (the reference design's row)", () => {
-  // Settings > Appearance "Show the account menu above my name" (#4541), off by default
-  it("keeps the account menu behind the name by default: the reference look", () => {
+  // Settings > Appearance "Show the account menu above my name" (#4541).
+  // On unless the person turns it off (#5016); this is the off state.
+  it("keeps the account menu behind the name when the switch is off", () => {
     const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
     expect(html).not.toContain('role="menu"');
     const trigger = /<button[^>]*>(?=<span[^>]*data-sidebar-account-pill)/.exec(html)?.[0] ?? "";

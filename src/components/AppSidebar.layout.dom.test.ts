@@ -125,9 +125,45 @@ describe("the sidebar at 1338 px (wide)", () => {
     // the foot: avatar and name, then the round apps grid
     expect(container.querySelector("[data-sidebar-account-row] [data-account-pill-name]")?.textContent).toBe("Sample Person");
     expect(container.querySelector("[data-sidebar-account-row] [data-sidebar-connect-apps] [data-apps-grid-icon]")).not.toBeNull();
+    // #5017: the wide sidebar can collapse back to the rail
+    const collapse = container.querySelector<HTMLButtonElement>("[data-sidebar-compact-toggle]");
+    expect(collapse?.getAttribute("aria-label")).toBe("Collapse sidebar");
+    await act(async () => { collapse!.click(); });
+    expect(aside().getAttribute("data-sidebar-density")).toBe("icons");
+    expect(savedDensity()).toBe("icons");
+    const expand = container.querySelector<HTMLButtonElement>("[data-sidebar-compact-toggle]");
+    expect(expand?.getAttribute("aria-label")).toBe("Expand sidebar");
+    await act(async () => { expand!.click(); });
+    expect(aside().getAttribute("data-sidebar-density")).toBe("comfortable");
+    expect(savedDensity()).toBe("comfortable");
     // the drawer's controls are phone-only (CSS), and closed
     expect(classes(drawerButton())).toContain("sm:hidden");
     expect(container.querySelector("[data-drawer-scrim]")).toBeNull();
+  });
+
+  it("orders bots inside a team from the saved order (#5024)", async () => {
+    localStorage.setItem("sagax.sectionBotOrder.v1", JSON.stringify({ Ops: ["iris", "atlas"] }));
+    state.sections = ["Ops"];
+    state.bots = [
+      bot("atlas", "Atlas", "Service desk"),
+      bot("iris", "Iris"),
+    ].map((entry) => ({ ...entry, section: "Ops" }));
+    await draw();
+    const atlas = row("atlas");
+    const iris = row("iris");
+    expect(iris.compareDocumentPosition(atlas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("draws the Primary Bot as a regular row when that style is chosen (#4853)", async () => {
+    localStorage.setItem("sagax.primaryBotStyle.v1", "row");
+    state.bots = [bot("nova", "Nova", "Desk"), bot("atlas", "Atlas", "Service desk")];
+    (state.bots[0] as { chiefOfStaff?: boolean }).chiefOfStaff = true;
+    prefs.setSidebarDensity("comfortable");
+    await draw();
+    const primary = container.querySelector("[data-primary-row] [data-sidebar-bot-row='nova']");
+    expect(primary).not.toBeNull();
+    expect(primary!.textContent).toContain("Nova");
+    expect(container.querySelector("[data-sidebar-tile-labels]")).toBeNull();
   });
 
   it("keeps a rail the person chose, with its own way back to the full sidebar", async () => {

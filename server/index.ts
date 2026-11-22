@@ -24240,7 +24240,8 @@ const workspaceBackupRoutes = createWorkspaceBackupRoutes({
   appVersion: serverVersion(),
   readBody,
   restored: workspaceRestore,
-  ...workspaceBackupAccess
+  ...workspaceBackupAccess,
+  ...(CLOUD_HOME ? { restart: () => { gracefulShutdown(); } } : {}),
 });
 // Route modules (server/routes/README.md). `workspaceAccess` is assigned at
 // boot, after this line, so the dependency reads it per request.

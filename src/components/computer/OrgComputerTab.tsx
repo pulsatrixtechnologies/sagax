@@ -28,6 +28,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { AlertTriangle, Check, ChevronDown, Cpu, Ellipsis, Globe, HardDrive, Info, Laptop, MemoryStick, Monitor, Server, type LucideIcon } from "lucide-react";
 import { workspaceDiskLevel } from "../../../shared/workspace-disk";
 import { cn } from "@/lib/cn";
+import { usePageVisible } from "@/lib/page-visible";
 
 import { hostPlaceKey, parseHostPlaceKey, remoteHostPlaces } from "../../../shared/remote-bot-hosts";
 import { osLabel } from "../../../shared/bot-computer-host";
@@ -571,16 +572,6 @@ export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: 
  * screen (ComputerScreen), its frame and its name below, like the others. */
 export function BrowserScreen({ children }: { children: ReactNode }) {
   return <div className="flex flex-col" data-browser-view="">{children}</div>;
-}
-
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", update);
-    return () => document.removeEventListener("visibilitychange", update);
-  }, []);
-  return visible;
 }
 
 /** The cloud screen's state: "starting" while the environment's cluster

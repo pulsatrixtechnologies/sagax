@@ -96,7 +96,7 @@ import { SignalLedger } from "../proactive/signal-ledger.ts";
 import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
-import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_FLEXIBLE_WINDOW_CLOSED, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, ROUTINE_WAITING_FOR_WINDOW, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
+import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_FLEXIBLE_WINDOW_CLOSED, ROUTINE_SCHEDULE_STILL_OFF, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, ROUTINE_WAITING_FOR_WINDOW, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { wakeStreakOf } from "./routine-run-card.ts";
 
@@ -3524,6 +3524,8 @@ export class RoutineManager {
       if (request) run.sourceThreadId = request.threadId;
       if (startedBy === "person" || (request && startedBy !== null)) run.startedBy = "person";
       if (request) this.rememberRoutineRequest(request, run.id, this.now());
+      // #5074: Run now on a routine that is off does not turn the schedule back on.
+      if (!routine.enabled) run.attention = ROUTINE_SCHEDULE_STILL_OFF;
     }, () => this.discardResultsThreads(allocations));
     if (routine.resultsThreadId !== previousDestination) this.emitRoutine(routine);
     this.emitRun(run);
@@ -4556,7 +4558,7 @@ export class RoutineManager {
         run.threadId = task.threadId;
         run.startedAt = startedAt;
         run.status = "running";
-        run.attention = undefined;
+        if (run.attention !== ROUTINE_SCHEDULE_STILL_OFF) run.attention = undefined;
         try {
           this.save();
         } catch (error) {
@@ -4685,7 +4687,17 @@ export class RoutineManager {
         );
         const scheduledQueued = this.runs.some(run => run.routineId === routine.id && run.status === "queued" &&
           (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
-        if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
+        // #5074: a one-time routine already started by hand is that
+        // occurrence. The due time does not queue a second copy and does
+        // not count a skip. The schedule still ends, below.
+        const handRun = routine.schedule.type === "once"
+          ? this.runs.find((run) => run.routineId === routine.id
+            && (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "manual"
+            && ["queued", "running", "waiting"].includes(run.status))
+          : undefined;
+        if (handRun) {
+          handRun.consumedSchedule = true;
+        } else if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
           const run = this.newRun(routine, scheduledFor, false, allocations);
           if (flexible && firedNominal != null) run.slotAt = firedNominal;
           // A one-time routine held while its person was away runs late
@@ -5251,6 +5263,7 @@ export class RoutineManager {
     const trouble = this.runTrouble.get(run.id);
     this.runTrouble.delete(run.id);
     this.finalWords.delete(run.id);
+    const scheduleOff = run.attention === ROUTINE_SCHEDULE_STILL_OFF;
     run.attention = undefined;
     delete run.waitingOn;
     if (outcome.declared?.status === "failed") {
@@ -5377,6 +5390,10 @@ export class RoutineManager {
     } else delete run.completionNotes;
     if (withNotes) delete run.quiet;
     this.settleRepeatingStreak(run);
+    // #5074: a one-time routine run by hand before it was due has done that
+    // occurrence. The due time does not start the same work again.
+    if (run.status === "completed") this.consumeManualOnce(run);
+    if (scheduleOff) run.attention = ROUTINE_SCHEDULE_STILL_OFF;
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());
     // A run that completes ends the owner's open notices for its bot.
@@ -5866,6 +5883,22 @@ export class RoutineManager {
     }
   }
 
+  /** #5074: a manual run that finished a still-armed one-time routine is that
+   * occurrence. The due time does not start the same work again. A routine
+   * that was already off is left as it is. */
+  private consumeManualOnce(run: RoutineRun): void {
+    if ((run.triggerSource ?? (run.manual ? "manual" : "schedule")) !== "manual") return;
+    if (run.status !== "completed" && run.status !== "nothing_to_report") return;
+    const routine = this.routines.find((candidate) => candidate.id === run.routineId);
+    if (!routine || routine.schedule.type !== "once" || !routine.enabled) return;
+    run.consumedSchedule = true;
+    routine.enabled = false;
+    routine.nextRunAt = null;
+    routine.updatedAt = Math.max(this.now(), routine.updatedAt + 1);
+    this.saveLater();
+    this.emitRoutine(routine);
+  }
+
   /** Nothing to do: recorded, never a turn, a message or a notification.
    * Not a failure (no onRunFailed), and the source card is left alone. */
   private quietRun(run: RoutineRun, reason: string) {
@@ -5874,7 +5907,9 @@ export class RoutineManager {
     run.quietReason = redactSecretsInText(reason).slice(0, 200);
     run.finishedAt = this.now();
     this.saveLater();
+    this.consumeManualOnce(run);
     this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
+    this.maybeDeleteWhenFinished(run.routineId);
   }
 
   private missQueuedRun(run: RoutineRun, message: string) {
@@ -6370,11 +6405,15 @@ export class RoutineManager {
     if (!routine?.deleteWhenFinished || !scheduleHasKnownEnd(routine.schedule)) return;
     if (this.runs.some((run) => run.routineId === routineId && ACTIVE_RUN_STATUSES.has(run.status))) return;
     if (routine.schedule.type === "once") {
-      const scheduledSettled = this.runs.some((run) =>
+      // A scheduled occurrence that settled, or a hand run that stood for
+      // that occurrence (#5074). A Run now on a routine already turned off
+      // does not carry consumedSchedule, so it does not delete the routine.
+      const settled = this.runs.some((run) =>
         run.routineId === routineId
         && !ACTIVE_RUN_STATUSES.has(run.status)
-        && (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
-      if (!scheduledSettled) return;
+        && (run.consumedSchedule === true
+          || (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule"));
+      if (!settled) return;
       this.remove(routineId);
       return;
     }

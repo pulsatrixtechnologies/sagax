@@ -79,6 +79,9 @@ export interface RoutineRun {
   /** #5127: the nominal slot a flexible scheduled run belongs to. The late
    * window is measured from this, not from the hashed start. */
   slotAt?: number;
+  /** #5074: a manual run of a one-time routine stood for its scheduled
+   * occurrence, so delete-when-finished may drop the routine when it settles. */
+  consumedSchedule?: true;
   status: RoutineRunStatus;
   manual: boolean;
   /** Slice 6, fix 2: a run Perspicax rate limited stays queued until this

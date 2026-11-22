@@ -35,8 +35,20 @@ const session = (principalId: string): RequestAuth => ({
   session: { id: `s-${principalId}`, label: "web", scopes: ["client"], createdAt: 1, lastSeenAt: 1, principalId } as SessionRecord,
 });
 
-/** The status each bearer's handshake gets (101: accepted), and what was asked. */
-const answers: Record<string, number> = {};
+/** The status each bearer's handshake gets (101: accepted), and what was
+ * asked. A list answers each attempt in turn: a name the provider does not
+ * know is refused, the same credential without a name is taken (#5179). */
+const answers: Record<string, number | number[]> = {};
+const attempts = new Map<string, number>();
+/** The status of the next handshake for this bearer: a list answers each
+ * attempt in turn, the last one holding for the ones after it. */
+const nextStatus = (bearer: string): number => {
+  const answer = answers[bearer] ?? 401;
+  const seen = attempts.get(bearer) ?? 0;
+  attempts.set(bearer, seen + 1);
+  if (typeof answer === "number") return answer;
+  return answer[Math.min(seen, answer.length - 1)] ?? 401;
+};
 const asked: string[] = [];
 let xai: Server;
 let xaiSockets: WebSocketServer;
@@ -46,6 +58,8 @@ let origin = "";
 let clock = 1_000_000;
 const usage: VoiceUsage[] = [];
 const log: string[] = [];
+/** the voice each accepted session was given ("" = the provider's own default) */
+const spoken: string[] = [];
 
 /** xAI's own words on a refused handshake, as its API writes them. */
 function refusalBody(status: number): string {
@@ -59,15 +73,20 @@ beforeAll(async () => {
   xaiSockets.on("connection", (socket) => {
     socket.send(JSON.stringify({ type: "session.created", session: { model: "grok-voice-fake" } }));
     socket.on("message", (raw) => {
-      const event = JSON.parse(String(raw)) as { type: string };
-      if (event.type === "session.update") socket.send(JSON.stringify({ type: "session.updated", session: {} }));
+      const event = JSON.parse(String(raw)) as { type: string; session?: { voice?: unknown } };
+      // what the session was asked to speak with: "" for the provider's own
+      // default voice (#5179)
+      if (event.type === "session.update") {
+        spoken.push(typeof event.session?.voice === "string" ? event.session.voice : "");
+        socket.send(JSON.stringify({ type: "session.updated", session: {} }));
+      }
     });
   });
   xai = createServer((_req, res) => { res.writeHead(404); res.end(); });
   xai.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const bearer = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
     asked.push(bearer);
-    const status = answers[bearer] ?? 401;
+    const status = nextStatus(bearer);
     if (status === 101) {
       xaiSockets.handleUpgrade(req, socket, head, (ws) => xaiSockets.emit("connection", ws, req));
       return;
@@ -130,6 +149,8 @@ beforeEach(() => {
   asked.length = 0;
   usage.length = 0;
   log.length = 0;
+  spoken.length = 0;
+  attempts.clear();
 });
 
 async function until<T>(what: string, check: () => T | undefined | null | false, ms = 4000): Promise<T> {
@@ -143,8 +164,8 @@ async function until<T>(what: string, check: () => T | undefined | null | false,
 }
 
 /** One call of `person` to the bot: the frame that opened or refused it, then a hang-up. */
-async function placeCall(person: string): Promise<Record<string, any>> {
-  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=fr&threadId=t-1`, { headers: { origin, "x-test-person": person } });
+async function placeCall(person: string, voice?: string): Promise<Record<string, any>> {
+  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=fr&threadId=t-1${voice ? `&voice=${voice}` : ""}`, { headers: { origin, "x-test-person": person } });
   const frames: Array<Record<string, any>> = [];
   ws.on("message", (data, binary) => { if (!binary) frames.push(JSON.parse(String(data)) as Record<string, any>); });
   await new Promise<void>((resolve, reject) => { ws.once("open", () => resolve()); ws.once("error", reject); });
@@ -282,5 +303,62 @@ describe("a refused realtime handshake keeps the reason xAI gave", () => {
     bridge.start();
     expect(await bridge.ready).toBe(false);
     expect(grokVoiceFailure(bridge.lastError ?? "")).toBe("down");
+  });
+});
+
+// #5179, seen on a production organization server: the voice name sent with the person's own
+// credential was refused ("xAI could not find that voice"), the key behind it
+// was out of credits, and the call ended as "the realtime voice service did
+// not answer": two causes mixed, and the call died although the person's own
+// credential could have spoken on its default voice.
+describe("a voice the provider does not know", () => {
+  it("calls the same credential back on its own default voice instead of losing the call", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[BEN_KEY] = [404, 101];
+    answers[ORG_KEY] = 101;
+    const call = await placeCall("p-ben", "eve");
+    expect(call).toMatchObject({ type: "ready", key: { source: "perspicax-key", last4: BEN_KEY.slice(-4) } });
+    // the person's own credential serves it twice: the organization's key was
+    // never asked, because the name was the problem, not the credential
+    expect(asked).toEqual([BEN_KEY, BEN_KEY]);
+    // the retry carries no voice name: the provider answers its own default
+    expect(spoken).toEqual([""]);
+    expect(call.voiceReset).toEqual({ asked: "eve" });
+    // the log says a voice, not a credential: no "refused" line for it
+    expect(log.filter((line) => line.includes("refused"))).toEqual([]);
+    expect(log.some((line) => line.includes(`the person's Perspicax key ···${BEN_KEY.slice(-4)} does not know the voice "eve"`) && line.includes("its own default voice"))).toBe(true);
+  });
+
+  it("says the voice to the person when no credential knows it, and never calls it credits or a network", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[BEN_KEY] = 404;
+    answers[ORG_KEY] = 402;
+    const call = await placeCall("p-ben", "eve");
+    expect(call.type).toBe("refused");
+    expect(call.code).toBe("realtime_voice_unknown");
+    // the call is in French: the person's own language, the words of the voice
+    expect(call.error).toBe("Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.");
+    // each cause stays on its own line: the voice first (the credential closest
+    // to the person), the organization's credits behind it
+    expect(call.tried).toEqual([
+      { source: "perspicax-key", last4: BEN_KEY.slice(-4), failure: "voice" },
+      { source: "org-key", last4: ORG_KEY.slice(-4), failure: "quota" },
+    ]);
+    // the person's credential was asked twice (the name, then its own default
+    // voice); the organization's key was asked once: credits are not a name
+    expect(asked).toEqual([BEN_KEY, BEN_KEY, ORG_KEY]);
+    expect(spoken).toEqual([]);
+  });
+
+  it("keeps a plain out-of-credits call saying credits (#5180)", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[BEN_KEY] = 402;
+    answers[ORG_KEY] = 402;
+    const call = await placeCall("p-ben", "eve");
+    expect(call.type).toBe("refused");
+    expect(call.code).toBe("realtime_key_refused");
+    expect(call.error).not.toContain("ne connaît pas cette voix");
+    // no second attempt: the name was never the problem
+    expect(asked).toEqual([BEN_KEY, ORG_KEY]);
   });
 });

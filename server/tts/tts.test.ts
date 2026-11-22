@@ -160,6 +160,26 @@ describe("configuration", () => {
     expect(voiceReady({}, "v-per-bot")).toBe(false);
   });
 
+  // #5179: an organization server had `tts.voice` empty, so it looked like it
+  // could not speak at all. An empty name is not a missing voice on Grok:
+  // xAI answers its own default voice when no name is sent (server/tts/grok.ts
+  // synthesize, server/voice/realtime-call.ts realtimeSessionUpdate).
+  it("takes xAI's own default voice when nobody named one", async () => {
+    const { voiceConfigured, voiceReady } = await voice();
+    const xai: AppConfig = { xai: { key: "xai-org-key" }, tts: { provider: "xai" } };
+    expect(voiceConfigured(xai)).toBe(true);
+    expect(voiceReady(xai, undefined, { xaiKeyGiven: true })).toBe(true);
+    // the organization's key not given to this person still says no
+    expect(voiceReady(xai, undefined, { xaiKeyGiven: false })).toBe(false);
+    expect(voiceReady(xai, "eve", { xaiKeyGiven: true })).toBe(true);
+    // no "Pick a voice" gate on the way: the name is optional, xAI's own
+    // default voice answers (server/tts/grok.test.ts proves the request body)
+    expect(voiceReady(xai)).toBe(true);
+    // the other providers keep asking for a name: their default is one of the
+    // voices of that account, only the provider's list knows it
+    expect(voiceConfigured(cfg({ key: "k" }))).toBe(false);
+  });
+
   it("never reports the key itself", async () => {
     const { describeVoice } = await voice();
     const described = describeVoice(cfg({ key: "sk-secret", voice: "v-1" }));

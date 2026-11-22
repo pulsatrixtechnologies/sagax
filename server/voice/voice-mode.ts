@@ -80,7 +80,7 @@ import { readForVoice } from "../tts/voice-reading.ts";
 import { speakableDelta } from "../tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
-import { noCallReason, voiceSentenceLanguage, type NoCallLanguage } from "./grok-account-voice.ts";
+import { noCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage } from "./grok-account-voice.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
 import { RealtimeCallBridge, REALTIME_SAMPLE_RATE, type RealtimeBot, type RealtimeHistoryLine, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
 import { firstAudioNotice, parseVoiceAudioTiming, providerFallbackNotice, streamedTranscriptNotice, uploadedTranscriptNotice, type VoiceAudioTiming } from "./voice-timing.ts";
@@ -114,6 +114,7 @@ import {
   voiceKeyAuth,
   voiceKeyFailureIsFinal,
   voiceKeyRef,
+  voiceFailureCause,
   withVoiceKeys,
   type VoiceKeyCandidate,
   type VoiceKeyRefusal,
@@ -634,55 +635,87 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   const link = deps.realtime.session(target, auth, callId);
   const tried: VoiceKeyRefusal[] = [];
   const ordered = refusals.order(who, keys).map((entry) => entry.candidate);
+  // set when the name the person asked for is what the provider refused, and
+  // the same credential was asked back on its own default voice (#5179)
+  let voiceReset: { asked: string } | null = null;
   for (const candidate of ordered) {
-    const early: Array<Record<string, unknown>> = [];
-    let live = false;
-    const usage = usageFor(candidate);
-    const attempt = new RealtimeCallBridge({
-      callId,
-      openUpstream: () => onThisKey(candidate, () => deps.realtime!.openUpstream(candidate.key)),
-      sendText: (frame) => (live ? page.sendText(JSON.stringify(frame)) : early.push(frame)),
-      sendBinary: (pcm) => { if (live) page.sendBinary(pcm); },
-      closePage: (code) => { if (live) page.close(code); },
-      work: link.work,
-      respond: link.respond,
-      bot: link.bot,
-      history: link.history,
-      ...(voice ? { voice } : {}),
-      language,
-      usage: (seconds) => usage("grok-realtime", Math.round(seconds.input + seconds.output)),
-      log: (line) => (deps.log ?? console.warn)(line),
-      now,
-    });
-    attempt.start();
-    const opened = await Promise.race([
-      attempt.ready,
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), REALTIME_READY_MS).unref()),
-    ]);
-    if (gone) { attempt.end("page"); return; }
-    if (!opened) {
-      attempt.end("upstream");
-      const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
-      const failure = grokVoiceFailure(message);
-      tried.push({ ...voiceKeyRef(candidate), failure });
-      if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
-      (deps.log ?? console.warn)(`[voice-realtime] xAI realtime refused the ${describeVoiceKey(candidate)} (${failure})`);
-      continue;
+    voiceReset = null;
+    // A voice the provider does not know is not the credential's fault, so it
+    // never moves the call to another credential: the same credential is asked
+    // once more with the provider's own default voice (no name in the session).
+    // Credits, a refused key and an outage do move on, as before.
+    const names: Array<string | undefined> = voice ? [voice, undefined] : [undefined];
+    for (let ask = 0; ask < names.length; ask += 1) {
+      const name = names[ask];
+      const early: Array<Record<string, unknown>> = [];
+      let live = false;
+      const usage = usageFor(candidate);
+      const attempt = new RealtimeCallBridge({
+        callId,
+        openUpstream: () => onThisKey(candidate, () => deps.realtime!.openUpstream(candidate.key)),
+        sendText: (frame) => (live ? page.sendText(JSON.stringify(frame)) : early.push(frame)),
+        sendBinary: (pcm) => { if (live) page.sendBinary(pcm); },
+        closePage: (code) => { if (live) page.close(code); },
+        work: link.work,
+        respond: link.respond,
+        bot: link.bot,
+        history: link.history,
+        ...(name ? { voice: name } : {}),
+        language,
+        usage: (seconds) => usage("grok-realtime", Math.round(seconds.input + seconds.output)),
+        log: (line) => (deps.log ?? console.warn)(line),
+        now,
+      });
+      attempt.start();
+      const opened = await Promise.race([
+        attempt.ready,
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), REALTIME_READY_MS).unref()),
+      ]);
+      if (gone) { attempt.end("page"); return; }
+      if (!opened) {
+        attempt.end("upstream");
+        const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
+        const failure = grokVoiceFailure(message);
+        if (failure === "voice" && name && ask + 1 < names.length) {
+          // the name, not the credential: ask it back on the provider's default
+          voiceReset = { asked: name };
+          (deps.log ?? console.warn)(`[voice-realtime] the ${describeVoiceKey(candidate)} does not know the voice "${name}": asking it back on its own default voice`);
+          continue;
+        }
+        tried.push({ ...voiceKeyRef(candidate), failure });
+        if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+        (deps.log ?? console.warn)(`[voice-realtime] xAI realtime refused the ${describeVoiceKey(candidate)} (${failure})`);
+        break;
+      }
+      refusals.forget(who, voiceKeyRef(candidate));
+      bridge = attempt;
+      live = true;
+      // a key of theirs out of credits or rejected: the page says it once in
+      // the call's own line (`voiceMode.keyFallback`), never at every call
+      const skipped = refusals.untold(who, tried);
+      page.sendText(JSON.stringify({
+        type: "ready",
+        sampleRate: REALTIME_SAMPLE_RATE,
+        callId,
+        key: voiceKeyRef(candidate),
+        ...(skipped.length ? { skipped } : {}),
+        ...(voiceReset ? { voiceReset } : {}),
+      }));
+      for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
+      return;
     }
-    refusals.forget(who, voiceKeyRef(candidate));
-    bridge = attempt;
-    live = true;
-    // a key of theirs out of credits or rejected: the page says it once in
-    // the call's own line (`voiceMode.keyFallback`), never at every call
-    const skipped = refusals.untold(who, tried);
-    page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(skipped.length ? { skipped } : {}) }));
-    for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
+  }
+  // No credential took the call. The cause is named in one sentence, the one
+  // that belongs to the credential closest to the person, and an unknown voice
+  // is never dressed up as credits or as a network (#5179, #5180).
+  const cause = voiceFailureCause(tried);
+  const words = voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language);
+  if (cause === "voice") {
+    refuse("realtime_voice_unknown", voiceNameCallReason(words), { tried, ...(voiceReset ? { voiceReset } : {}) });
     return;
   }
-  // every key refused for itself: say why in one line when a connected
-  // account was among them, never fall back to text to speech
-  const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
-  const plain = keyRefused ? noCallReason(tried, voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language)) : null;
+  const keyRefused = cause === "key" || cause === "credits";
+  const plain = keyRefused ? noCallReason(tried, words) : null;
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
     plain ?? (keyRefused ? "The realtime voice key was refused. Fix it in Settings > Providers > Voice." : "The realtime voice is not reachable. Try the call again."),
     { tried });

@@ -35,6 +35,7 @@ import { randomUUID } from "node:crypto";
 
 import { spokenConsent } from "../../shared/call-consent.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { grokVoiceFailure } from "../tts/grok.ts";
 
 /** xAI's Voice Agent API. Tests point SAGAX_XAI_REALTIME_URL at a loopback fake. */
 export const XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime";
@@ -433,11 +434,16 @@ export class RealtimeCallBridge {
       }
       case "error": {
         const message = String(event.error?.message ?? "the realtime voice failed");
+        const failure = grokVoiceFailure(message);
         this.lastError = message;
-        this.deps.log(`[voice-realtime] upstream error: ${String(event.error?.code ?? event.error?.type ?? "error").slice(0, 60)}`);
+        // the kind is logged, so an unknown voice and dry credits never read
+        // as one another in the journal (#5179)
+        this.deps.log(`[voice-realtime] upstream error: ${String(event.error?.code ?? event.error?.type ?? failure).slice(0, 60)} (${failure})`);
         // a cancel with nothing to cancel is not a failure
         if (/cancel/i.test(message)) return;
-        this.deps.sendText({ type: "error", message: "The voice had a problem. Keep talking, or hang up and call again." });
+        // a voice the provider does not know names what to do (pick another
+        // voice); everything else stays a problem to keep talking through
+        this.deps.sendText({ type: "error", message: failure === "voice" ? message : "The voice had a problem. Keep talking, or hang up and call again." });
         return;
       }
       default:

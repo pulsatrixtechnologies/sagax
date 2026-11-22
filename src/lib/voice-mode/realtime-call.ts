@@ -104,6 +104,9 @@ export function realtimeRefusalText(code: string | undefined, fallback: string):
   if (code === "realtime_key_refused") return "The realtime voice key was refused. Fix it in Settings > Voice.";
   if (code === "realtime_not_configured") return "No realtime voice is set up. Add an xAI key in Settings > Voice.";
   if (code === "realtime_unreachable") return "The realtime voice service did not answer. Call again in a moment.";
+  // #5179: the server named the voice it could not find, in the person's
+  // language, with the words to act on: never rewrite it as a network failure
+  if (code === "realtime_voice_unknown") return "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.";
   return fallback;
 }
 
@@ -262,7 +265,7 @@ export class RealtimeVoiceCall {
     socket.onclose = (event) => {
       if (this.socket !== socket || this.closed || this.refused) return;
       const { code, reason } = event as CloseEvent;
-      if (reason === "realtime_key_refused" || reason === "realtime_not_configured" || reason === "realtime_unreachable") {
+      if (reason === "realtime_key_refused" || reason === "realtime_not_configured" || reason === "realtime_unreachable" || reason === "realtime_voice_unknown") {
         this.emit("note", realtimeRefusalText(reason, REALTIME_DROP_TEXT.server), reason);
         this.set({ phase: "ended" });
         return;

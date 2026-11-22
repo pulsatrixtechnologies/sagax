@@ -65,10 +65,15 @@ describe("Grok voice", () => {
     expect(seen).toHaveLength(0);
     expect(describeVoice(config)).toEqual({ configured: true, ready: true, provider: "xai", voice: "ara", baseUrl: "", model: "", keys: { elevenlabs: false, fish: false } });
     expect(JSON.stringify(describeVoice(config))).not.toContain("fixture-voice-key");
+    // #5179: an organization server had `tts.voice` empty. On Grok that is a
+    // complete choice, not
+    // a missing voice: the name is optional and xAI answers its own default
+    // voice, so the installation speaks instead of looking unable to.
     const noVoice: AppConfig = { xai: config.xai, tts: { provider: "xai" } };
-    expect(voiceReady(noVoice)).toBe(false);
+    expect(voiceReady(noVoice)).toBe(true);
     expect(voiceReady(noVoice, "eve")).toBe(true);
-    expect(() => speak(noVoice, "hi")).toThrow("Pick a voice");
+    expect((await speak(noVoice, "hi")).mime).toBe("audio/mpeg");
+    expect(JSON.parse(seen[0]!.body)).not.toHaveProperty("voice_id");
   });
 
   it("loads the provider's current voice catalogue", async () => {

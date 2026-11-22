@@ -27,7 +27,8 @@ import { atRestChunks, atRestSizeSync, readAtRestSync } from "../encryption/cont
 import { maxBytesForAttachment } from "./attachments.ts";
 
 const OWNED_FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/;
-const FILE_TAG = /^<attached-file[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?[\t ]*\/>$/;
+const FILE_TAG = /^<attached-(?:file|image)[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?[\t ]*\/>$/;
+const IMAGE_STORED = /\.(png|jpe?g|gif|webp)$/i;
 /** Text formats the upload endpoint accepts that a bot can read as is. */
 const TEXT_EXTENSIONS = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".conf", ".cfg", ".ini", ".cnf", ".env", ".toml", ".yaml", ".yml"]);
 /** Inline at most this much text per file, and in all, per turn. */
@@ -77,7 +78,7 @@ type MarkdownNode = { type: string; children?: MarkdownNode[]; value?: string; p
  * tags only (never one quoted in code or prose), pointing at a regular file
  * directly inside the attachments folder. */
 export function attachedFilesInText(text: string, attachmentsDir: string): TurnAttachedFile[] {
-  if (!text.includes("<attached-file")) return [];
+  if (!text.includes("<attached-file") && !text.includes("<attached-image")) return [];
   const found: TurnAttachedFile[] = [];
   const pending: MarkdownNode[] = [fromMarkdown(text) as MarkdownNode];
   let canonicalRoot: string;
@@ -188,6 +189,26 @@ export function stageTurnAttachments(
     if (where) staged.unshift(file);
   }
   return { text: out, staged };
+}
+
+/** Image tags vision already lifted out of the provider text. They still
+ * need the same copy as any other file (#5134): the model saw the picture,
+ * and the bot also gets a path in the person's place. `source` is the
+ * original message. When it is the provider text, the tags are still in
+ * it and the ordinary staging pass names them. */
+export function stageMissingImages(
+  providerText: string,
+  source: string | undefined,
+  attachmentsDir: string,
+  target: StagingTarget | null,
+  already: readonly { file: string }[],
+): { text: string; staged: TurnAttachedFile[] } {
+  if (!source || source === providerText || !target) return { text: "", staged: [] };
+  const seen = new Set(already.map((file) => file.file));
+  const images = attachedFilesInText(source, attachmentsDir).filter((file) => !seen.has(file.file) && IMAGE_STORED.test(file.file));
+  if (!images.length) return { text: "", staged: [] };
+  const synthetic = images.map((file) => `<attached-image path="${file.serverPath}" name="${escapeAttribute(file.name)}" />`).join("\n\n");
+  return stageTurnAttachments(synthetic, attachedFilesInText(synthetic, attachmentsDir), target);
 }
 
 /** Read one file for copying, in chunks the transports accept. */

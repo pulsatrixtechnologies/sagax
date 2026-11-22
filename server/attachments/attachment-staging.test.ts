@@ -6,18 +6,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, displayName, stageTurnAttachments, targetPath } from "./attachment-staging.ts";
+import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, displayName, stageMissingImages, stageTurnAttachments, targetPath } from "./attachment-staging.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "omb-staging-"));
 const store = join(dir, "attachments");
 mkdirSync(store);
 const README = "0b5a3c1e-1111-4111-8111-111111111111.md";
 const CONF = "1c6b4d2f-4444-4444-8444-444444444444.conf";
+const PNG = "2d7c5e30-5555-4555-8555-555555555555.png";
 const PDF = "9d1e2f3a-2222-4222-8222-222222222222.pdf";
 const LARGE = "8c1d2e3f-3333-4333-8333-333333333333.pdf";
 const LARGE_BYTES = Buffer.alloc(1024 * 1024 + 17, 0x5a);
 writeFileSync(join(store, README), "# Hello\nworld\n");
 writeFileSync(join(store, CONF), "worker_processes 1;\n");
+writeFileSync(join(store, PNG), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]));
 writeFileSync(join(store, PDF), Buffer.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x01]));
 writeFileSync(join(store, LARGE), LARGE_BYTES);
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -29,6 +31,25 @@ describe("attachments in a turn", () => {
     const text = ["read these", tag(README, "README.md"), tag(PDF, "spec.pdf"), "`" + tag(README, "quoted") + "`", `<attached-file path="/etc/passwd" name="x" />`].join("\n\n");
     const files = attachedFilesInText(text, store);
     expect(files.map((file) => file.name)).toEqual(["README.md", "spec.pdf"]);
+  });
+
+  it("copies a pasted image into the server environment like any other file (#5134)", () => {
+    const text = `<attached-image path="${join(store, PNG)}" name="shot.png" />`;
+    const files = attachedFilesInText(text, store);
+    expect(files.map((file) => file.name)).toEqual(["shot.png"]);
+    const out = stageTurnAttachments(text, files, { kind: "user-sandbox" });
+    expect(out.text).toContain(`<attached-file path="/workspace/attachments/2d7c5e30-shot.png" name="shot.png" />`);
+    expect(out.staged.map((file) => file.file)).toEqual([PNG]);
+    expect(out.text).not.toContain(store);
+  });
+
+  it("still names the workspace copy after vision has taken the image tag off the prompt (#5134)", () => {
+    const source = `look\n\n<attached-image path="${join(store, PNG)}" name="shot.png" />`;
+    const provider = "look";
+    const out = stageMissingImages(provider, source, store, { kind: "user-sandbox" }, []);
+    expect(out.text).toContain(`<attached-file path="/workspace/attachments/2d7c5e30-shot.png" name="shot.png" />`);
+    expect(out.staged.map((file) => file.file)).toEqual([PNG]);
+    expect(stageMissingImages(source, source, store, { kind: "user-sandbox" }, []).staged).toEqual([]);
   });
 
   it("inlines a small config file the same way as other text (#5005)", () => {

@@ -1,3 +1,4 @@
+import { fallbackVoiceId } from "../../shared/voice-providers.ts";
 import type { AppConfig } from "../config.ts";
 import { voiceCredential } from "../included-services.ts";
 import * as chatterbox from "./chatterbox.ts";
@@ -87,7 +88,7 @@ export function providerConfigured(cfg: AppConfig): boolean {
 
 export function voiceConfigured(cfg: AppConfig): boolean {
   const provider = voiceProvider(cfg);
-  if (provider === "xai") return Boolean(grokVoiceKey(cfg) && cfg.tts?.voice);
+  if (provider === "xai") return Boolean(grokVoiceKey(cfg) && fallbackVoiceId("xai", cfg.tts?.voice));
   if (provider === "system") {
     return systemVoices.systemVoicesAvailable() && Boolean(cfg.tts?.voice);
   }
@@ -101,7 +102,7 @@ export function voiceConfigured(cfg: AppConfig): boolean {
 export function voiceReady(cfg: AppConfig, voiceId?: string, access?: VoiceKeyAccess): boolean {
   const provider = voiceProvider(cfg);
   if (!voiceKeyGiven(provider, access)) return false;
-  if (provider === "xai") return Boolean(grokVoiceKey(cfg, access) && (voiceId || cfg.tts?.voice));
+  if (provider === "xai") return Boolean(grokVoiceKey(cfg, access) && fallbackVoiceId("xai", voiceId || cfg.tts?.voice));
   if (provider === "system") {
     return systemVoices.systemVoicesAvailable() && Boolean(voiceId || cfg.tts?.voice);
   }
@@ -170,7 +171,7 @@ export function speak(cfg: AppConfig, text: string, voiceId?: string, run?: syst
     if (access?.xaiKeyGiven === false) throw new XaiVoiceNotGiven();
     const key = grokVoiceKey(cfg);
     if (!key) throw new NoVoiceConfigured("key", "Add an xAI key in Settings > Providers. Grok voice uses it.");
-    const voice = voiceId || cfg.tts?.voice;
+    const voice = fallbackVoiceId("xai", voiceId || cfg.tts?.voice);
     if (!voice) throw new NoVoiceConfigured("voice");
     return grok.synthesize(text, voice, key);
   }

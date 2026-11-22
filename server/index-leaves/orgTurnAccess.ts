@@ -9,7 +9,7 @@ export type Host = Record<string, any>;
  * and for a one-shot call of the same bot alike (#3519): one resolution,
  * never a copy. `ranOn` is what a turn records for the account it ran on
  * (turnAccessByThread). Throws EngineAccessLost when nothing may serve. */
-async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, model: string | null | undefined) {
+async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, model: string | null | undefined, threadId?: string) {
   const { resolveEngineAccess } = host;
   if (host.IDENTITY.kind !== "perspicax") return { access: undefined, ranOn: undefined };
   // #1422: a local pi model (the model this turn runs, never the bot's own
@@ -18,13 +18,20 @@ async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { in
   // #2024: so does a Perspicax model server's, whose key comes with it.
   if (host.piLocalModel({ instanceId: instance.instanceId, model })) return { access: host.withPiModelServers(host.piLocalTurnAccess(bot, speaker), instance, bot, speaker), ranOn: undefined };
   const input = host.orgEngineInput(bot, instance, speaker);
-  const outcome = await materializeEngineAccess(input, resolveEngineAccess(input), engineAccessDeps(host,
+  const policy = host.credentialPolicyFor?.(threadId, speaker, bot.id);
+  const governedInput = policy ? { ...input, policy } : input;
+  const governed = host.resolveGovernedEngineAccess
+    ? host.resolveGovernedEngineAccess(governedInput)
+    : { plan: resolveEngineAccess(governedInput), decision: null };
+  if (governed.decision) host.auditCredentialDecision?.(threadId, bot.id, governed.decision, speaker);
+  const outcome = await materializeEngineAccess(governedInput, governed.plan, engineAccessDeps(host,
     // the turn's own sign-in on this engine (a second Grok account runs in its own folder)
     host.turnSlotFor(bot, instance)));
   if (!outcome.ok) throw new host.EngineAccessLost(outcome.plan ? host.orgRefusalOf(outcome.plan, speaker) : { reason: outcome.reason }, outcome.detail);
   const { plan } = outcome;
   const provider = plan.provider;
   const payerSub = plan.payerPrincipalId ? (plan.payer === "owner" ? input.owner.sub : input.person?.(plan.payerPrincipalId)?.sub) : undefined;
+  if (threadId && plan.credential?.ok) host.noteCredentialServed?.(bot.id, threadId, plan.credential);
   return {
     access: host.withPiModelServers(outcome.access, instance, bot, speaker),
     ranOn: {
@@ -33,7 +40,8 @@ async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { in
       ...(plan.payerPrincipalId ? { payerPrincipalId: plan.payerPrincipalId } : {}),
       ...(plan.routine ? { routine: true as const } : {}),
       ...(payerSub ? { payerSub } : {}),
-      ...(provider ? { provider } : {})
+      ...(provider ? { provider } : {}),
+      ...(plan.credential ? { form: plan.credential.form, ...(plan.credential.fallback ? { fallback: plan.credential.fallback } : {}) } : {}),
     }
   };
 }
@@ -76,7 +84,7 @@ export function createOrgTurnAccess(getHost: () => Host): any {
 async function orgTurnAccess(threadId: string, bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, model: string | null | undefined) {
   const host = getHost();
   if (host.IDENTITY.kind !== "perspicax") return undefined;
-  const { access, ranOn } = await resolveBotEngineAccess(host, bot, instance, speaker, model);
+  const { access, ranOn } = await resolveBotEngineAccess(host, bot, instance, speaker, model, threadId);
   if (ranOn) host.turnAccessByThread.set(threadId, ranOn);
   return access;
 

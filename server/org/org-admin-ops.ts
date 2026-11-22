@@ -47,6 +47,8 @@ export interface Policies {
   /** 2026-10-30: members may run an engine outside the list on their own
    * subscription or key. False by default. */
   ownAccountsOutsideList: boolean;
+  /** #5180: personal API keys. Absent on an older console answer means on. */
+  personalKeys?: boolean;
   /** 2026-10-30 (lot 2): the models turned off for everyone, `<engine>/<model>`. */
   disabledModels: string[];
   /** Each engine's models, to switch them one by one (Perspicax). */
@@ -99,6 +101,8 @@ export interface SettingsChanges {
   pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
   allowedEngines?: string[] | null;
   ownAccountsOutsideList?: boolean;
+  /** #5180: personal API keys inside the organization. */
+  personalKeys?: boolean;
   /** 2026-10-30 (lot 2): the whole list of models off, `<engine>/<model>`. */
   disabledModels?: string[];
   defaults?: { engine?: string | null; model?: string | null; approvalMode?: string | null };
@@ -127,7 +131,7 @@ export async function timed(check: () => Promise<TestResult | null>): Promise<{ 
 }
 
 function settingsChanges(body: Record<string, unknown>): SettingsChanges | string {
-  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "allowGrokBridge", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
+  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "allowGrokBridge", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "personalKeys", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
   if (extra) return extra;
   if (!Object.keys(body).length) return "Send at least one setting.";
   const out: SettingsChanges = {};
@@ -171,6 +175,10 @@ function settingsChanges(body: Record<string, unknown>): SettingsChanges | strin
   if (body.ownAccountsOutsideList !== undefined) {
     if (typeof body.ownAccountsOutsideList !== "boolean") return "ownAccountsOutsideList is true or false.";
     out.ownAccountsOutsideList = body.ownAccountsOutsideList;
+  }
+  if (body.personalKeys !== undefined) {
+    if (typeof body.personalKeys !== "boolean") return "personalKeys is true or false.";
+    out.personalKeys = body.personalKeys;
   }
   if (body.defaults !== undefined) {
     const value = objectBody(body.defaults);

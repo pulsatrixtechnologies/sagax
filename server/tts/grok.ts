@@ -5,6 +5,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import { WebSocket as WsWebSocket } from "ws";
+import { XAI_DEFAULT_VOICE } from "../../shared/voice-providers.ts";
 import type { Audio, Voice } from "./elevenlabs.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -85,12 +86,20 @@ const sttSchema = z.object({ text: z.string(), language: z.string().optional() }
 export type GrokVoiceFailure = "key" | "quota" | "busy" | "down" | "voice" | "other";
 
 export function grokVoiceFailure(message: string): GrokVoiceFailure {
+  // Credits win over a network reading: a 503 body that says out_of_credits
+  // is not "could not reach" (#5179, #5180).
+  if (/out_of_credits|needs credits|spending limit|insufficient_quota/i.test(message)) return "quota";
   if (/rejected the key/.test(message)) return "key";
-  if (/needs credits/.test(message)) return "quota";
   if (/rate-limiting/.test(message)) return "busy";
   if (/could not find that voice/.test(message)) return "voice";
   if (/Could not reach (?:Grok|OpenAI|ElevenLabs) voice|timed out|(?:Grok|OpenAI|ElevenLabs) voice failed \(HTTP 5\d\d[):]|not reachable/.test(message)) return "down";
   return "other";
+}
+
+/** True when a voice failure is spent credits, including a 5xx that only
+ * looked like a network error. */
+export function voiceOutOfCredits(message: string): boolean {
+  return grokVoiceFailure(message) === "quota" || /out_of_credits/i.test(message);
 }
 
 /** The HTTP status `ws` reports when xAI refuses a socket's handshake
@@ -105,6 +114,9 @@ export function handshakeStatus(event: unknown): number | null {
 /** A socket error as a Grok voice message: a refused handshake says why
  * (key, credits, rate limit), anything else is the network. */
 function socketFailure(event: unknown): string {
+  const record = event as { message?: unknown; error?: { message?: unknown } } | null;
+  const text = [record?.message, record?.error?.message].find((value): value is string => typeof value === "string") ?? "";
+  if (/out_of_credits|spending limit|insufficient_quota/i.test(text)) return "The xAI account needs credits to generate speech. out_of_credits";
   const status = handshakeStatus(event);
   return status === null ? "Could not reach Grok voice. Check your connection." : refusal(status);
 }
@@ -135,7 +147,7 @@ export function refusal(status: number, detail: { code?: string; error?: string 
     if (/credit|spending limit|billing|exhausted/i.test(said)) return "The xAI account needs credits to generate speech.";
     return "xAI rejected the key or its TTS permissions. Check the xAI key in Settings.";
   }
-  if (status === 402 || /credit|spending limit|billing/i.test(said)) return "The xAI account needs credits to generate speech.";
+  if (status === 402 || status === 503 && /out_of_credits|credit|spending limit|billing/i.test(said) || /out_of_credits|credit|spending limit|billing/i.test(said)) return "The xAI account needs credits to generate speech. out_of_credits";
   if (status === 429 || /rate limit|too many requests/i.test(said)) return "xAI is rate-limiting speech. Wait a moment and try again.";
   if (status === 404) return "xAI could not find that voice. Refresh the voice list and select a voice again.";
   // xAI's category only ("Client specified an invalid argument"), never its message
@@ -240,8 +252,9 @@ export interface SynthesizeOptions {
 
 export async function synthesize(text: string, voiceId: string | undefined, key: string, options: SynthesizeOptions = {}): Promise<Audio> {
   const body: Record<string, unknown> = { text, language: options.language || "auto", output_format: { codec: "mp3" } };
-  // no voice: xAI's default voice
-  if (voiceId) body.voice_id = voiceId;
+  // Undefined leaves xAI's own default. An empty id is a real voice (#5179).
+  const voice = voiceId === undefined ? undefined : (voiceId.trim() || XAI_DEFAULT_VOICE);
+  if (voice) body.voice_id = voice;
   if (typeof options.speed === "number" && options.speed !== 1) body.speed = options.speed;
   const response = await request("/tts", {
     method: "POST",
@@ -311,7 +324,8 @@ export async function synthesizeStream(
     language: options.language || "auto",
     output_format: { codec: "pcm", sample_rate: VOICE_STREAM_RATE },
   };
-  if (voiceId) body.voice_id = voiceId;
+  const streamVoice = voiceId === undefined ? undefined : (voiceId.trim() || XAI_DEFAULT_VOICE);
+  if (streamVoice) body.voice_id = streamVoice;
   if (typeof options.speed === "number" && options.speed !== 1) body.speed = options.speed;
   const timeout = AbortSignal.timeout(60_000);
   const response = await request("/tts", {
@@ -565,7 +579,8 @@ export function openSpeechStream(
     sample_rate: String(VOICE_STREAM_RATE),
     optimize_streaming_latency: String(SPEECH_STREAM_LATENCY),
   });
-  if (options.voice) query.set("voice", options.voice);
+  const speechVoice = options.voice === undefined ? undefined : (options.voice.trim() || XAI_DEFAULT_VOICE);
+  if (speechVoice) query.set("voice", speechVoice);
   if (typeof options.speed === "number" && options.speed !== 1) query.set("speed", String(options.speed));
   const url = `${wsBase()}/tts?${query}`;
   let socket: WebSocket;

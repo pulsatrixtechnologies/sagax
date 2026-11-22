@@ -10,6 +10,7 @@ import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreGetter, useSt
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { accountPickChipLine } from "@/lib/account-pick";
+import { credentialFormLabelKey } from "../../shared/credential-resolver";
 import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
 import { needsCli } from "./EngineSetup";
 import type { ModelMenuRow } from "./ModelMenu";
@@ -386,8 +387,11 @@ export function ModelPicker({
   if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 
   // #5014: why the conversation runs on this account, in one line, under the chip's words
-  const pickedLine = accountPickChipLine(profile.tasks?.find((task) => task.threadId === (threadId ?? bot.threadId))?.accountPick, selection);
-  const titled = pickedLine ? `${composerLabel}\n${pickedLine}${followLine}` : `${composerLabel}${followLine}`;
+  const threadTask = profile.tasks?.find((task) => task.threadId === (threadId ?? bot.threadId));
+  const pickedLine = accountPickChipLine(threadTask?.accountPick, selection);
+  const servedForm = threadTask?.credentialServed?.form;
+  const servedLine = servedForm ? `\n${t("turnAccess.servedBy", { form: t(credentialFormLabelKey(servedForm)) })}` : "";
+  const titled = pickedLine ? `${composerLabel}\n${pickedLine}${followLine}${servedLine}` : `${composerLabel}${followLine}${servedLine}`;
   const composerTitle = bot.busy ? `${titled}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : titled;
   const ultracodeChip = isUltracodeEffort(selection.effort);
   const menuShownOpen = menu && !locked;
@@ -432,7 +436,7 @@ export function ModelPicker({
     menu,
     toggleMenu: () => toggleMenu(),
     composerLabel,
-    followLine,
+    followLine: followLine + servedLine,
     summary,
     selection,
     autoOn,

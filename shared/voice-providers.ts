@@ -37,6 +37,18 @@ export const VOICE_PROVIDER_LABELS: Record<VoiceProviderId, string> = {
 export const OPENAI_TTS_VOICES = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"] as const;
 export const OPENAI_DEFAULT_VOICE = "marin";
 
+/** xAI's public voice used when tts.voice is empty (#5179). */
+export const XAI_DEFAULT_VOICE = "ara";
+
+/** A saved voice, or the provider's built-in voice when the saved one is empty. */
+export function fallbackVoiceId(provider: string, voice: string | undefined): string | undefined {
+  const trimmed = voice?.trim();
+  if (trimmed) return trimmed;
+  if (provider === "xai") return XAI_DEFAULT_VOICE;
+  if (provider === "openai") return OPENAI_DEFAULT_VOICE;
+  return undefined;
+}
+
 /** A voice id as a provider lists it: short and plain (ElevenLabs ids are
  * 20 characters of letters and digits, OpenAI's are names). */
 export const PROVIDER_VOICE_ID = /^[\w.-]{1,64}$/;

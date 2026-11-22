@@ -385,6 +385,13 @@ export interface Task {
   autoModel?: AutoModelRecord;
   /** #5014: the account its provider's strategy took for the last turn, and why. */
   accountPick?: AccountPick;
+  /** #5180: which credential form served the last turn. No secret. */
+  credentialServed?: {
+    form: "personal-account" | "org-account" | "personal-key" | "org-key";
+    via: string;
+    aspect: "chat" | "engine" | "connector" | "voice";
+    fallback?: { from: string; to: string; automatic: boolean };
+  };
   /** true: runs on its bot's model and moves with it; false: a model a person
    * picked in this thread. Absent from servers older than the field. */
   followsBotModel?: boolean;

@@ -80,6 +80,7 @@ import { readForVoice } from "../tts/voice-reading.ts";
 import { speakableDelta } from "../tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
+import { paidApiKey, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
 import { noCallReason, voiceSentenceLanguage, type NoCallLanguage } from "./grok-account-voice.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
 import { RealtimeCallBridge, REALTIME_SAMPLE_RATE, type RealtimeBot, type RealtimeHistoryLine, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
@@ -275,6 +276,11 @@ export interface VoiceModeDeps {
   providerKeys?(provider: Exclude<VoiceTtsProvider, "xai">, speaker: VoiceSpeaker): Promise<VoiceKeyCandidate[]> | VoiceKeyCandidate[];
   /** The installed TTS choice for clients still using /api/tts/*. */
   legacyChoice?(speaker: VoiceSpeaker): { provider: VoiceTtsProvider; voice?: string };
+  /** #5180: Act as, personal keys, and a paid-key confirmation for this person.
+   * Absent: the voice key order is unchanged. */
+  credentialPolicy?(speaker: VoiceSpeaker, threadId?: string): CredentialPolicy;
+  /** #5180: one audit row for the decision. Never a key. */
+  auditCredential?(decision: CredentialDecision, speaker: VoiceSpeaker, threadId?: string): void;
   /** The person's synced voice preference (`omb.voiceMode.v1`): a client
    * that does not say which provider (the iPhone) gets the person's own
    * choice for this bot. */
@@ -321,7 +327,44 @@ export interface VoiceModeDeps {
   now?: () => number;
 }
 
-type KeyDeps = Pick<VoiceModeDeps, "organization" | "serverKey" | "hasOwnKey" | "resolveOwnKey" | "serverKeyAllowed" | "personalKey" | "grokAccount">;
+type KeyDeps = Pick<VoiceModeDeps, "organization" | "serverKey" | "hasOwnKey" | "resolveOwnKey" | "serverKeyAllowed" | "personalKey" | "grokAccount" | "credentialPolicy" | "auditCredential">;
+
+function voiceCredentialForm(source: string): CredentialForm | null {
+  if (source === "grok-account") return "personal-account";
+  if (source === "voice-key" || source === "perspicax-key") return "personal-key";
+  if (source === "org-key") return "org-key";
+  return null;
+}
+
+/** The voice order stays. The policy only drops a form or asks before a
+ * paid key. A solo server, and a caller with no policy, is unchanged. */
+function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys): VoiceKeys {
+  if (!resolved.ok || !deps.organization || !deps.credentialPolicy) return resolved;
+  const policy = { ...deps.credentialPolicy(speaker, threadId), aspect: "voice" as const };
+  const candidates: CredentialCandidate[] = [];
+  for (const entry of resolved.keys) {
+    const form = voiceCredentialForm(entry.source);
+    if (!form) continue;
+    candidates.push({ form, via: entry.source, present: true, available: true, paid: form !== "personal-account" && form !== "org-account" });
+  }
+  const decision = resolveCredential({ aspect: "voice", candidates, policy });
+  deps.auditCredential?.(decision, speaker, threadId);
+  if (!decision.ok) {
+    const cause = decision.reason === "no_credentials" ? "no_credentials" : decision.reason;
+    return { ok: false, cause, error: decision.error, ...(decision.reason === "confirm_paid_key" ? { confirm: decision.confirm } : {}) };
+  }
+  const keys = resolved.keys.filter((entry) => voiceCredentialForm(entry.source) === decision.form);
+  if (!keys.length) return resolved;
+  const withheld = resolved.keys.find((entry) => {
+    const form = voiceCredentialForm(entry.source);
+    return form !== null && form !== decision.form && (form === "personal-key" || form === "org-key");
+  });
+  const withheldForm = withheld ? voiceCredentialForm(withheld.source) : null;
+  const confirm = withheld && withheldForm && !paidApiKey({ form: decision.form })
+    ? { from: decision.form, to: withheldForm, form: withheldForm, via: withheld.source, aspect: "voice" as const }
+    : undefined;
+  return { ok: true, keys, ...(confirm ? { confirm } : {}) };
+}
 
 /** A connected Grok account speaks through the CLI voice host. Every other
  * source stays an API key on api.x.ai. */
@@ -332,7 +375,7 @@ function onThisKey<T>(candidate: { source: string }, run: () => T): T {
 /** Every key that may serve this person, in the order above (their connected
  * Grok account, their voice key, their Perspicax key, the organization's),
  * or why none does. Never returns a key to anyone but the caller of xAI. */
-export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker): Promise<VoiceKeys> {
+export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId?: string): Promise<VoiceKeys> {
   const serverKey = (await deps.serverKey())?.trim();
   const accountToken = speaker.disabled ? undefined : (await deps.grokAccount?.(speaker))?.trim();
   const account: VoiceKeyCandidate | null = accountToken
@@ -342,7 +385,7 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker): Pr
     const keys: VoiceKeyCandidate[] = [];
     if (account) keys.push(account);
     if (serverKey) keys.push({ key: serverKey, via: "server", source: "server", last4: keyLast4(serverKey) });
-    return keys.length ? { ok: true, keys } : { ok: false, cause: "no_credentials" };
+    return governVoiceKeys(deps, speaker, threadId, keys.length ? { ok: true, keys } : { ok: false, cause: "no_credentials" });
   }
   if (speaker.disabled) return { ok: false, cause: "payer_disabled" };
   const keys: VoiceKeyCandidate[] = [];
@@ -361,7 +404,7 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker): Pr
   // people it was given to (`sagax_server_engines` lists VOICE_SERVER_ENGINE).
   const orgAllowed = !deps.serverKeyAllowed || deps.serverKeyAllowed(speaker);
   if (serverKey && orgAllowed) keys.push({ key: serverKey, via: "org-key", source: "org-key", last4: keyLast4(serverKey) });
-  if (keys.length) return { ok: true, keys };
+  if (keys.length) return governVoiceKeys(deps, speaker, threadId, { ok: true, keys });
   // Perspicax could not say: their key there may well exist
   if (perspicax) return { ok: false, cause: perspicax };
   if (!serverKey) return { ok: false, cause: "no_credentials" };
@@ -381,6 +424,9 @@ const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
   server_engine_not_allowed: "Your organization has not given you its xAI voice. Add your own xAI key, or ask an admin.",
   payer_disabled: "Your access is turned off in your organization.",
   perspicax_unreachable: "Perspicax could not be reached to read your xAI key. Try again in a moment.",
+  act_as_personal_refused: "Acting as a role cannot use this person's account or API key unless they allowed it. They can allow it in their settings.",
+  confirm_paid_key: "Continuing would use a paid API key. Confirm that charge before this voice uses it.",
+  personal_keys_disabled: "Personal API keys are turned off for this organization.",
 };
 
 /** A refusal: an access card, never a key or a part of one. The card follows
@@ -388,13 +434,14 @@ const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
  * accessCardAudience): it is about the person whose credentials the voice
  * needed, the speaker, and reaches only them. It is answered to their own
  * request, never stored in a thread nor sent as a live frame. */
-function refusalBody(cause: VoiceModeRefusalCause, keysUrl: string | undefined, target: VoiceTarget, speaker: VoiceSpeaker, admin: boolean) {
+function refusalBody(cause: VoiceModeRefusalCause, keysUrl: string | undefined, target: VoiceTarget, speaker: VoiceSpeaker, admin: boolean, extra?: { error?: string; confirm?: { from: string; to: string; form: string; via: string; aspect: string } }) {
   const access = { reason: "no_access", ownerPrincipalId: target.ownerPrincipalId ?? "", payerPrincipalId: speaker.principalId };
   const forThem = !speaker.principalId || accessCardVisibleTo({ kind: "access", access }, speaker.principalId);
   return {
     code: "voice_no_access",
     cause,
-    error: REFUSAL_TEXT[cause],
+    error: extra?.error || REFUSAL_TEXT[cause],
+    ...(extra?.confirm ? { confirm: extra.confirm } : {}),
     ...(forThem
       ? { card: { kind: "access" as const, cause, ...(speaker.principalId ? { payerPrincipalId: speaker.principalId } : {}), ...(admin ? { admin: true } : {}), ...(keysUrl ? { keysUrl } : {}) } }
       : {}),
@@ -463,11 +510,14 @@ export interface VoiceProviderKeys {
  * it can say what is wrong instead of "didn't come through", and which key
  * it was (source and last four, never more; `tried` lists every key that
  * was refused on the way). The server log keeps the line. */
-export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null): { error: string; code: "voice_provider"; failure: GrokVoiceFailure; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
+export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null): { error: string; code: "voice_provider" | "out_of_credits"; failure: GrokVoiceFailure; out_of_credits?: true; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
+  const failure = grokVoiceFailure(message);
+  const credits = failure === "quota";
   return {
     error: plain || message,
-    code: "voice_provider",
-    failure: grokVoiceFailure(message),
+    code: credits ? "out_of_credits" : "voice_provider",
+    failure,
+    ...(credits ? { out_of_credits: true as const } : {}),
     ...(keys ? { key: keys.key, ...(keys.tried && keys.tried.length > 1 ? { tried: keys.tried } : {}) } : {}),
   };
 }
@@ -824,9 +874,9 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
  * resolveVoiceKeys, then OpenAI's, ElevenLabs' and the others, 2026-10-29;
  * none for a person turned off), and each role's keys in the order `choice`
  * asks for: the chosen provider first, then every other serving one. */
-async function voiceKeysFor(env: any, speaker: VoiceSpeaker, choice: { tts: "auto" | VoiceTtsProvider; stt: "auto" | VoiceSttProvider }): Promise<{ resolved: VoiceKeys; byProvider: Map<VoiceProviderId, VoiceKeyCandidate[]>; ttsKeys: VoiceKeyCandidate[]; sttKeys: VoiceKeyCandidate[] }> {
+async function voiceKeysFor(env: any, speaker: VoiceSpeaker, choice: { tts: "auto" | VoiceTtsProvider; stt: "auto" | VoiceSttProvider }, threadId?: string): Promise<{ resolved: VoiceKeys; byProvider: Map<VoiceProviderId, VoiceKeyCandidate[]>; ttsKeys: VoiceKeyCandidate[]; sttKeys: VoiceKeyCandidate[] }> {
   const { adapterOf, deps } = env;
-  const resolved = await resolveVoiceKeys(deps, speaker);
+  const resolved = await resolveVoiceKeys(deps, speaker, threadId);
   const byProvider = new Map<VoiceProviderId, VoiceKeyCandidate[]>();
   if (resolved.ok) byProvider.set("xai", resolved.keys);
   if (resolved.ok || resolved.cause !== "payer_disabled") {
@@ -942,9 +992,10 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
   const admin = deps.isAdmin?.(auth) === true;
   const who = speaker.principalId || "operator";
   const choice = requestedChoice(action, url, body as Record<string, unknown> | null, preference, target.botId);
-  const { resolved, byProvider, ttsKeys, sttKeys } = await voiceKeysFor(env, speaker, choice);
+  const { resolved, byProvider, ttsKeys, sttKeys } = await voiceKeysFor(env, speaker, choice, target.threadId || undefined);
   const voiceFor = (provider: VoiceProviderId): string | undefined => choice.voices[provider as VoiceTtsProvider] || undefined;
   const refusedCause = refusedCauseOf(resolved, ttsKeys, sttKeys);
+  const voiceExtra = resolved.ok ? undefined : { error: resolved.error, ...(resolved.confirm ? { confirm: resolved.confirm } : {}) };
   if (action === "status") {
     const org = deps.organization ? { organization: true } : {};
     let status: VoiceModeStatus;
@@ -969,7 +1020,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
         stt: candidateProvider(firstStt) as VoiceSttProvider,
       };
     } else {
-      status = { provider: "xai", available: false, ...org, refusal: { cause: refusedCause, ...(admin ? { admin: true } : {}), ...(keysUrl ? { keysUrl } : {}) } };
+      status = { provider: "xai", available: false, ...org, refusal: { cause: refusedCause, ...(admin ? { admin: true } : {}), ...(keysUrl ? { keysUrl } : {}), ...(voiceExtra?.error ? { error: voiceExtra.error } : {}), ...(voiceExtra?.confirm ? { confirm: voiceExtra.confirm } : {}) } };
       // what the person could still pick (a voice without ears, say)
       if (ttsKeys.length || sttKeys.length) {
         status.providers = {
@@ -997,7 +1048,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
   }
   // a voice alone (read aloud, the voice test) needs no ears
   if (!keys.length || (refusedCause && (action === "listen" || action === "transcribe" || !ttsKeys.length))) {
-    return json(res, 403, refusalBody(refusedCause ?? "no_credentials", keysUrl, target, speaker, admin));
+    return json(res, 403, refusalBody(refusedCause ?? "no_credentials", keysUrl, target, speaker, admin, voiceExtra));
   }
   /** a provider error without any of this person's keys */
   const allKeys = [...byProvider.values()].flat();
@@ -1013,12 +1064,15 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
   const failed = (what: string, error: unknown) => {
     if (error instanceof VoiceKeyFailure) {
       (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(error.used)]} ${what} failed (${error.used.via}, ${describeVoiceKey(error.used)}): ${error.message}`);
-      return providerFailureBody(error.message, { key: voiceKeyRef(error.used), tried: error.tried }, noCallReason(error.tried, words));
+      return withConfirm(providerFailureBody(error.message, { key: voiceKeyRef(error.used), tried: error.tried }, noCallReason(error.tried, words)));
     }
     const message = scrubAll(error instanceof Error ? error.message : String(error));
     (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
-    return providerFailureBody(message, { key: voiceKeyRef(keys[0]!) });
+    return withConfirm(providerFailureBody(message, { key: voiceKeyRef(keys[0]!) }));
   };
+  const withConfirm = <T extends { out_of_credits?: true }>(body: T): T & { confirm?: NonNullable<Extract<VoiceKeys, { ok: true }>["confirm"]> } => (
+    body.out_of_credits && resolved.ok && resolved.confirm ? { ...body, confirm: resolved.confirm } : body
+  );
   /** run `attempt` on the first key that takes it (server/voice/voice-keys.ts),
    * another provider taking over silently when one fails */
   const tryKeys = async <T,>(what: string, list: VoiceKeyCandidate[], attempt: (candidate: VoiceKeyCandidate) => Promise<T>) => {

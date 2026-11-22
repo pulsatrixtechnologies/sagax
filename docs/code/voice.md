@@ -221,6 +221,12 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   call it, and so does a phone line of Perspicax Voice, through
   `POST /api/org/link/grok-sign-in` with `voice_keys`
   (`server/org/org-link-routes.ts`): never write that order a second time.
+  #5180 runs that list through `shared/credential-resolver.ts` when a policy
+  is set: a connected Grok account and an API key can each serve, Act as
+  needs the person's consent for a personal credential, and a fallback onto
+  a paid key asks first. An empty `tts.voice` uses xAI's built-in voice
+  (`ara`). A key that is out of credits is `out_of_credits`, not a network
+  error.
 - A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
   `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
   only a failure of xAI is `down`. A key refused for itself is remembered,

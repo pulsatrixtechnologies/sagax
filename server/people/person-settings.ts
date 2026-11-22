@@ -60,6 +60,9 @@ export interface PersonSettings {
    * every bot of theirs receives with each turn (the operator's stays the
    * server's profile). Absent when empty. */
   aboutMe?: string;
+  /** #5180: Act as may use this person's account or API key. Absent means
+   * no. The person sets it; an admin does not. */
+  allowPersonalCredentialWhenActingAs?: boolean;
 }
 
 /** The server's limit for About me (server/config.ts profile.aboutMe). */
@@ -118,6 +121,7 @@ function parse(value: unknown): PersonSettings {
   const accountSwitchByProvider = cleanAccountSwitchDefaults(raw.accountSwitchByProvider);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
+  const allowPersonalCredentialWhenActingAs = raw.allowPersonalCredentialWhenActingAs === true;
   return {
     features,
     browserProfiles,
@@ -128,6 +132,7 @@ function parse(value: unknown): PersonSettings {
     ...(Object.keys(accountSwitchByProvider).length ? { accountSwitchByProvider } : {}),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
     ...(aboutMe ? { aboutMe } : {}),
+    ...(allowPersonalCredentialWhenActingAs ? { allowPersonalCredentialWhenActingAs: true } : {}),
   };
 }
 
@@ -235,6 +240,14 @@ export class PersonSettingsStore {
       throw new PersonSettingsError("pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).");
     }
     return this.save(principalId, { ...rest, pendingApprovalExpireDays: days as number });
+  }
+
+  /** #5180: Act as may use this person's own account or API key. */
+  setAllowPersonalCredentialWhenActingAs(principalId: string, allowed: unknown): PersonSettings {
+    if (typeof allowed !== "boolean") throw new PersonSettingsError("allowPersonalCredentialWhenActingAs is true or false.");
+    const current = this.get(principalId);
+    const { allowPersonalCredentialWhenActingAs: _, ...rest } = current;
+    return this.save(principalId, { ...rest, ...(allowed ? { allowPersonalCredentialWhenActingAs: true } : {}) });
   }
 
   /** #3424: the person's own About me, the whole text ("" clears it). */

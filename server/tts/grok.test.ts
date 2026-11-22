@@ -66,9 +66,11 @@ describe("Grok voice", () => {
     expect(describeVoice(config)).toEqual({ configured: true, ready: true, provider: "xai", voice: "ara", baseUrl: "", model: "", keys: { elevenlabs: false, fish: false } });
     expect(JSON.stringify(describeVoice(config))).not.toContain("fixture-voice-key");
     const noVoice: AppConfig = { xai: config.xai, tts: { provider: "xai" } };
-    expect(voiceReady(noVoice)).toBe(false);
+    // #5179: an empty tts.voice falls back to a valid voice.
+    expect(voiceReady(noVoice)).toBe(true);
     expect(voiceReady(noVoice, "eve")).toBe(true);
-    expect(() => speak(noVoice, "hi")).toThrow("Pick a voice");
+    await speak(noVoice, "hi");
+    expect(JSON.parse(seen.at(-1)?.body ?? "{}").voice_id).toBe("ara");
   });
 
   it("loads the provider's current voice catalogue", async () => {
@@ -263,6 +265,10 @@ describe("xAI refusals say why (checked live 2026-10-28: an invalid key is a 400
     expect(other).toBe("Grok voice failed (HTTP 400: Client specified an invalid argument). Try again later.");
     expect(other).not.toContain("Marie");
     expect(grok.grokVoiceFailure(grok.refusal(503, { code: "Service Unavailable" }))).toBe("down");
+    const credits = grok.refusal(503, { code: "out_of_credits", error: "out_of_credits" });
+    expect(grok.grokVoiceFailure(credits)).toBe("quota");
+    expect(credits).toContain("out_of_credits");
+    expect(grok.grokVoiceFailure(credits)).not.toBe("down");
     status = 400;
     errorBody = { error: "fixture-voice-key echoed" };
     const echoed = await grok.transcribe(new Uint8Array([1, 2]), "audio/wav", "fixture-voice-key").then(() => new Error("no refusal"), (caught: Error) => caught);

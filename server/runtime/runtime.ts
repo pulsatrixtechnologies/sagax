@@ -79,6 +79,8 @@ const JOIN_WAIT_MS = 30 * 60_000;
 const PEER_REPORT_WAIT_MS = 15 * 60_000;
 const RESULT_MAX = 12_000;
 const DETAIL_MAX = 400;
+/** progress() can run on every event. lastActivityAt catches up at this cadence. */
+export const PROGRESS_WRITE_MS = 10_000;
 
 const defaultClock: Clock = { now: () => Date.now(), monotonic: () => performance.now() };
 
@@ -889,14 +891,28 @@ result => this.turnEnded(n.id, result, live),
    * A root's own turn (begin) has no turn handle here; its activity still
    * keeps the tree out of the stall window. */
   progress(id: string): void {
+    const now = this.clock.now();
     const turn = this.turns.get(id);
     if (turn) {
       turn.activeAt = this.clock.monotonic();
-      this.rootActivity.set(turn.rootId, this.clock.now());
-      return;
+      this.rootActivity.set(turn.rootId, now);
     }
-    const n = this.store.get(id);
-    if (n?.status === "running") this.rootActivity.set(n.rootId, this.clock.now());
+    try {
+      const n = this.store.get(id);
+      if (!turn && n?.status === "running") this.rootActivity.set(n.rootId, now);
+      if (!n || n.status !== "running" || now - n.lastActivityAt < PROGRESS_WRITE_MS) return;
+      n.lastActivityAt = now;
+      const root = n.rootId === n.id ? undefined : this.store.get(n.rootId);
+      this.store.transaction(() => {
+        this.store.update(n);
+        if (root && !isTerminal(root) && now - root.lastActivityAt >= PROGRESS_WRITE_MS) {
+          root.lastActivityAt = now;
+          this.store.update(root);
+        }
+      });
+    } catch (error) {
+      this.log(`progress(${id}) failed: ${String(error)}`);
+    }
   }
 
   /** The person answered a parked question; the next turn carries it. */

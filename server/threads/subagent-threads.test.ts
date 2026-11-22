@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { READ_ONLY_TASK_LINE, resumeOpening, resumeRefusal, subagentRequest } from "./subagent-threads.ts";
+import { READ_ONLY_TASK_LINE, resumeOpening, resumeRefusal, steersOwnReport, subagentRequest } from "./subagent-threads.ts";
 
 const own = { threadId: "t-own", title: "Look only", openedBy: { botId: "bot-a" }, ownerPrincipalId: "p1" };
 const ok = { visible: true, ownerPrincipalId: "p1" };
+
+describe("steering a report-back thread", () => {
+  it("allows the opener to steer the thread it opened from this conversation", () => {
+    expect(steersOwnReport({ openedBy: { botId: "bot-a", threadId: "t-main" } }, "bot-a", "t-main")).toBe(true);
+    expect(steersOwnReport({ parallelOf: { threadId: "t-main", byBot: true } }, "bot-a", "t-main")).toBe(true);
+    expect(steersOwnReport({ openedBy: { botId: "bot-a", threadId: "t-other" } }, "bot-a", "t-main")).toBe(false);
+    expect(steersOwnReport({ openedBy: { botId: "bot-a", threadId: "t-main", kind: "work" } }, "bot-a", "t-main")).toBe(false);
+    expect(steersOwnReport({ parallelOf: { threadId: "t-main", byBot: false } }, "bot-a", "t-main")).toBe(false);
+    expect(steersOwnReport(undefined, "bot-a", "t-main")).toBe(false);
+  });
+});
 
 describe("resuming a sub-agent thread (parity D1)", () => {
   it("resumes only a thread the bot opened itself on itself", () => {

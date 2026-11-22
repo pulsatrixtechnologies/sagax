@@ -38,6 +38,21 @@ export interface ResumeScope {
   ownerPrincipalId?: string;
 }
 
+/** A report-back thread this bot opened from this conversation: the opener may steer it. */
+export function steersOwnReport(
+  task: {
+    openedBy?: { botId?: string; threadId?: string; kind?: string; roomLane?: unknown } | null;
+    parallelOf?: { threadId?: string; byBot?: boolean } | null;
+  } | null | undefined,
+  botId: string,
+  fromThreadId: string,
+): boolean {
+  if (!task) return false;
+  const opened = task.openedBy;
+  if (opened?.botId === botId && opened.threadId === fromThreadId && opened.kind === undefined && !opened.roomLane) return true;
+  return Boolean(task.parallelOf?.byBot && task.parallelOf.threadId === fromThreadId);
+}
+
 const NOT_FOUND = { status: 404, error: "you have no thread with that id: use list_threads, or open a new one with start_thread" };
 
 /** Whether a bot may resume this thread of its own: one it opened itself on

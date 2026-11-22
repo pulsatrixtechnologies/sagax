@@ -76,15 +76,18 @@ extension CompanionClient {
         ))
     }
 
-    /// `PUT /api/me/memory/entry` (save).
+    /// `PUT /api/me/memory/entry` (save). `baseVersion` is the note's content
+    /// hash, sent back as `base_version`. Perspicax refuses a stale copy with
+    /// 409 `memory_conflict` and `details.version` (the current hash). An
+    /// import overwrite does not come through here: it sends no version.
     public func savePerspicaxMemoryEntry(
         scope: String,
         id: String,
         title: String,
         body: String,
         tags: [String],
-        baseVersion: Int?
-    ) async throws -> PerspicaxEntry {
+        baseVersion: String?
+    ) async throws -> PerspicaxMemorySave {
         var payload: [String: Any] = [
             "scope": scope,
             "id": id,
@@ -92,8 +95,19 @@ extension CompanionClient {
             "body": body,
             "tags": tags,
         ]
-        if let baseVersion { payload["base_version"] = baseVersion }
-        return try await send(makeRequest("PUT", "/api/me/memory/entry", body: payload), as: PerspicaxEntry.self)
+        if let baseVersion, !baseVersion.isEmpty { payload["base_version"] = baseVersion }
+        let (data, response) = try await perform(makeRequest("PUT", "/api/me/memory/entry", body: payload))
+        if (response as? HTTPURLResponse)?.statusCode == 409,
+           let conflict = try? JSONDecoder().decode(PerspicaxConflictBody.self, from: data),
+           conflict.code == "memory_conflict" {
+            return .conflict(version: conflict.details?.version)
+        }
+        try Self.check(response, data)
+        do {
+            return .saved(try JSONDecoder().decode(PerspicaxEntry.self, from: data))
+        } catch {
+            throw APIError.transport("The computer sent something this app couldn't read.")
+        }
     }
 
     /// `POST /api/me/memory/bulk`
@@ -117,5 +131,29 @@ extension CompanionClient {
     /// `POST /api/me/memory/trash` restore one note (optional helper).
     public func restorePerspicaxMemoryTrash(scope: String, id: String) async throws {
         try await send(makeRequest("POST", "/api/me/memory/trash/undo", body: ["scope": scope, "id": id]))
+    }
+}
+
+/// `PUT /api/me/memory/entry`: a 409 `memory_conflict` is an answer, not a
+/// failure. The current hash is `details.version`; the note itself is not in
+/// the refusal, so the editor reloads it before the next save.
+public enum PerspicaxMemorySave: Sendable {
+    case saved(PerspicaxEntry)
+    case conflict(version: String?)
+}
+
+private struct PerspicaxConflictBody: Decodable {
+    var code: String?
+    var details: Details?
+
+    struct Details: Decodable {
+        var version: String?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = PerspicaxEntry.readVersion(container, forKey: .version)
+        }
+
+        enum CodingKeys: String, CodingKey { case version }
     }
 }

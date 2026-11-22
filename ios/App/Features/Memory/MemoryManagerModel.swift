@@ -200,13 +200,26 @@ final class MemoryManagerModel: ObservableObject {
                 )
             case .perspicax:
                 guard let scope = note.scope else { throw APIError.badURL }
-                let saved = try await client.savePerspicaxMemoryEntry(
+                let result = try await client.savePerspicaxMemoryEntry(
                     scope: scope, id: note.id, title: nextTitle, body: draft, tags: nextTags, baseVersion: note.version
                 )
-                self.note = MemoryManager.openPerspicaxNote(saved)
-                draft = self.note?.body ?? draft
-                draftTitle = self.note?.title ?? nextTitle
-                draftTags = (self.note?.tags ?? nextTags).joined(separator: ", ")
+                switch result {
+                case let .saved(saved):
+                    self.note = MemoryManager.openPerspicaxNote(saved)
+                    draft = self.note?.body ?? draft
+                    draftTitle = self.note?.title ?? nextTitle
+                    draftTags = (self.note?.tags ?? nextTags).joined(separator: ", ")
+                case .conflict:
+                    // The refusal carries the current hash, not the note. Show
+                    // the note as it is now; the next save sends that version.
+                    let current = try await client.perspicaxMemoryEntry(scope: scope, id: note.id)
+                    error = String(localized: "This note changed elsewhere. The other version was reloaded.")
+                    self.note = MemoryManager.openPerspicaxNote(current)
+                    draft = self.note?.body ?? draft
+                    draftTitle = self.note?.title ?? nextTitle
+                    draftTags = (self.note?.tags ?? []).joined(separator: ", ")
+                    return
+                }
             }
             editing = false
             notice = Notice(text: String(localized: "Saved"))

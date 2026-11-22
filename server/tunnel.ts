@@ -162,7 +162,7 @@ const STOPPED_TUNNEL: ManagedTunnelState = { status: "stopped", ready: false };
  * `recovery` and so start no background timers. */
 export function createTunnelAccount(options: {
   dataDir: string;
-  version: string;
+  version?: string;
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   machineName?: string;

@@ -1806,7 +1806,8 @@ describe("harness HTTP API", () => {
       // The rejected contender must not disturb the original owner.
       expect((await api("GET", "/api/health")).status).toBe(200);
     } finally {
-      await waitForExit(contender, { signal: "SIGTERM", graceMs: 1_000 });
+      // 1s was not enough for the rejected server to finish exiting (#4478)
+      await waitForExit(contender, { signal: "SIGTERM", graceMs: 30_000 });
     }
   });
 

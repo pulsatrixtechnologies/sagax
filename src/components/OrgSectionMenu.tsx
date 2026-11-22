@@ -72,21 +72,30 @@ export function OrgSectionMenuItems({ items, actions }: { items: Array<keyof Org
   );
 }
 
-/** A section name typed in place (a rename in the header): Enter saves, Escape cancels. */
+/** A section name typed in place (a rename in the header): Enter or leaving
+ * the field saves the stored name, Escape leaves it (#5065). */
 export function SectionNameInput({ initial = "", onSave, onCancel }: { initial?: string; onSave: (name: string) => Promise<string | null>; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  // Set before the first await so Enter and the blur that follows it save once.
+  const done = useRef(false);
   useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
   const save = async () => {
+    if (done.current) return;
     const name = value.trim();
-    if (!name || saving) return;
-    if (name === initial.trim()) { onCancel(); return; }
+    if (!name || name === initial.trim()) { done.current = true; onCancel(); return; }
+    done.current = true;
     setSaving(true);
     const failed = await onSave(name);
-    setSaving(false);
-    if (failed) setError(failed);
+    if (failed) {
+      done.current = false;
+      setSaving(false);
+      setError(failed);
+      return;
+    }
+    onCancel();
   };
   return (
     <div className="flex flex-col gap-1 px-2 py-1" data-section-name-input>
@@ -100,10 +109,10 @@ export function SectionNameInput({ initial = "", onSave, onCancel }: { initial?:
         onChange={(event) => { setValue(event.target.value); setError(null); }}
         onKeyDown={(event) => {
           if (event.key === "Enter") { event.preventDefault(); void save(); }
-          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); done.current = true; onCancel(); }
         }}
-        onBlur={() => { if (!saving && !error) onCancel(); }}
-        className="w-full rounded-md border border-hairline/60 bg-inset px-2 py-1 text-[12px] font-semibold uppercase tracking-wide text-sidebar-ink focus:outline-none"
+        onBlur={() => { void save(); }}
+        className="w-full rounded-md border border-hairline/60 bg-inset px-2 py-1 text-[13px] font-normal text-sidebar-ink focus:outline-none"
       />
       {error && <span role="alert" className="text-[11px] text-danger">{error}</span>}
     </div>

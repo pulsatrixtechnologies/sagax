@@ -124,7 +124,7 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
   let roomPlace = decideWorkplace({ desktopTargeted: false, routine: roomRoutine, principal: roomPrincipal, personAsked: Boolean(roomSpeakerId) });
   // (solo: no principal; an attached archive still gets its manifest)
   const roomPlaced = latestUser && !cardContinuation && !latestInBurst && (IDENTITY.kind !== "perspicax" || latestUser.sender?.id?.trim().toLowerCase() === roomPlace.principal)
-    ? workplaceTurnText(usesNativeImageInput ? resolvedLatestImages.text : latestUser.text ?? "", roomPlace)
+    ? workplaceTurnText(usesNativeImageInput ? resolvedLatestImages.text : latestUser.text ?? "", roomPlace, latestUser.text ?? "")
     : { text: null, staging: null, annotated: false };
   const latestOverride = roomPlaced.text !== null && (roomPlaced.staging !== null || roomPlaced.annotated)
     ? roomPlaced.text

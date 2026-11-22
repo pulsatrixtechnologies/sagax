@@ -361,8 +361,20 @@ extension drops it).
   (`connectorFilePlaces`, an organization server).
 - A solo server is the person's own computer: the engine's folder is
   already theirs, nothing is moved.
-- Not covered here: pictures Sagax relays (the engine keeps a copy of each
-  picture it shows the model, #5155).
+- A picture Sagax relays stays in the result, because the model must see
+  it, and Claude Code keeps a copy in that same folder. When the turn ends
+  on an organization server, those picture copies are removed
+  (`clearRelayedPictures`, called from the Claude turn settle). A document
+  the hook already moved is left alone, and a link is never removed. A
+  solo server is the person's own computer: nothing is removed there (#5155).
+- Grok writes an MCP result over 20 000 bytes into its session folder as
+  JSON, and a connector file's base64 stays there and in the session's
+  `updates.jsonl` and `chat_history.jsonl`. When a turn that loaded the
+  account's grok.com connectors ends on an organization server, those
+  spill files are deleted and the long base64 strings are taken out of
+  the two jsonl files (`clearGrokConnectorSpill`). The sessions link to
+  the person's real GROK_HOME is followed; no other link is. A solo
+  server is the person's own computer: nothing is removed there (#5157).
 
 Tests: `server/routes/engine-connector-files-delivery.test.ts` (the real
 hook helper and route: the file lands on the person's computer, none is left

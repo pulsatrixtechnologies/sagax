@@ -12,7 +12,7 @@ import { routineRepeatingRule } from "./routine-report.ts";
 /** #3695, #3990: a run of a routine that does not post each result reads its rule after the work;
  * `told`: the run of a streak that tells the person (3 whatever the schedule, owner rule 2026-11-18). */
 const repeating = (prompt: string, told = 3) => `${prompt}\n\n${routineRepeatingRule(told)}`;
-import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
+import { ROUTINE_FLEXIBLE_WINDOW_CLOSED, ROUTINE_SCHEDULE_STILL_OFF, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_WAITING_FOR_WINDOW } from "./routine-execution.ts";
 import {
   nextOccurrence,
   PREWAKE_LEAD_MS,
@@ -2196,6 +2196,191 @@ describe("RoutineManager", () => {
       status: "missed",
       error: "The routine ended before this scheduled run could start",
     });
+  });
+
+  const hourlyFlexible = (anchorAt: number) => ({
+    type: "interval" as const,
+    everyMinutes: 60,
+    anchorAt,
+    weekdays: [1, 2, 3, 4, 5],
+    window: { start: "08:00", end: "17:00" },
+    timing: "flexible" as const,
+    windowEarlyMinutes: 15,
+    windowLateMinutes: 15,
+  });
+
+  it("misses a queued flexible run once its late window closes, and says so (#5127)", async () => {
+    const mondayAtSeven = new Date(2026, 7, 17, 7, 0, 0).getTime();
+    const slot = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(mondayAtSeven);
+    h.setBot("busy");
+    const routine = h.manager.create({
+      name: "Hourly dispatch",
+      prompt: "Dispatch open tickets",
+      botId: "maus-interval",
+      schedule: hourlyFlexible(slot),
+    });
+    expect(routine.nominalRunAt).toBe(slot);
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    const queued = h.manager.listRuns()[0]!;
+    expect(queued).toMatchObject({ status: "queued", slotAt: slot });
+    expect(queued.startedAt).toBeUndefined();
+    expect(queued.error).toBeUndefined();
+    h.setNow(slot + 15 * 60_000 + 1_000);
+    h.setBot("ready");
+    await h.manager.tick();
+    expect(h.started).toHaveLength(0);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "missed", error: ROUTINE_FLEXIBLE_WINDOW_CLOSED });
+    expect(h.failed.map((run) => run.id)).toContain(queued.id);
+    const kept = h.manager.getRoutine(routine.id)!;
+    expect(kept.enabled).toBe(true);
+    expect(kept.nextRunAt).toBeGreaterThan(slot + 15 * 60_000);
+  });
+
+  it("says why a flexible run waits outside its hours, then starts once they open (#5127)", async () => {
+    const mondayAtSeven = new Date(2026, 7, 17, 7, 0, 0).getTime();
+    const slot = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(mondayAtSeven);
+    let early: ReturnType<typeof h.manager.create> | undefined;
+    for (let index = 0; index < 12 && !early; index += 1) {
+      const routine = h.manager.create({
+        name: `Window ${index}`,
+        prompt: "Dispatch open tickets",
+        botId: "maus-interval",
+        schedule: hourlyFlexible(slot),
+      });
+      if (routine.nextRunAt! < slot) early = routine;
+    }
+    expect(early?.nextRunAt).toBeLessThan(slot);
+    h.setNow(early!.nextRunAt!);
+    await h.manager.tick();
+    const queued = h.manager.listRuns().find((run) => run.routineId === early!.id)!;
+    expect(queued).toMatchObject({ status: "queued", attention: ROUTINE_WAITING_FOR_WINDOW });
+    h.setNow(slot);
+    await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.id === queued.id)).toMatchObject({ status: "running" });
+  });
+
+  it("keeps a saved window change as the schedule the next run uses (#5127)", () => {
+    const anchorAt = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const h = harness(anchorAt - 60_000);
+    const routine = h.manager.create({
+      name: "Hourly dispatch",
+      prompt: "Dispatch open tickets",
+      botId: "maus-interval",
+      schedule: hourlyFlexible(anchorAt),
+    });
+    const widened = h.manager.update(routine.id, {
+      schedule: { ...hourlyFlexible(anchorAt), window: { start: "08:00", end: "23:00" } },
+    });
+    expect(widened?.schedule).toMatchObject({ window: { start: "08:00", end: "23:00" } });
+    // An older client that omits the window does not clear it.
+    const reread = h.manager.update(routine.id, {
+      schedule: { type: "interval", everyMinutes: 60, anchorAt, timing: "flexible", windowEarlyMinutes: 15, windowLateMinutes: 15 },
+    });
+    expect(reread?.schedule).toMatchObject({ window: { start: "08:00", end: "23:00" } });
+  });
+
+  const finishThread = (h: ReturnType<typeof harness>, threadId: string, ok = true) => {
+    if (ok) {
+      h.manager.handleRuntimeEvent({
+        eventId: `text-${threadId}`, provider: "fake", threadId, createdAt: new Date().toISOString(),
+        type: "item.completed", itemType: "assistant_text", text: "Handed the work over.",
+      });
+    }
+    h.manager.handleRuntimeEvent({
+      eventId: `done-${threadId}`, provider: "fake", threadId, createdAt: new Date().toISOString(),
+      type: "turn.completed", ok,
+    });
+  };
+
+  it("a completed manual run of a one-time routine consumes that occurrence (#5074)", async () => {
+    const start = new Date(2026, 7, 17, 16, 0, 0).getTime();
+    const due = start + 2 * 60 * 60_000;
+    const h = harness(start);
+    const routine = h.manager.create({
+      name: "Retry after the reset",
+      prompt: "Hand the work over again",
+      botId: "maus-1",
+      schedule: { type: "once", at: due },
+    });
+    const manual = h.manager.runNow(routine.id, undefined, "person")!;
+    await h.manager.tick();
+    finishThread(h, h.started[0]!.threadId);
+    expect(h.manager.listRuns().find((run) => run.id === manual.id)?.status).toBe("completed");
+    expect(h.manager.getRoutine(routine.id)).toMatchObject({ enabled: false, nextRunAt: null });
+    h.setNow(due);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns().filter((run) => run.routineId === routine.id)).toHaveLength(1);
+  });
+
+  it("a failed manual run of a one-time routine leaves the occurrence armed (#5074)", async () => {
+    const start = new Date(2026, 7, 17, 16, 0, 0).getTime();
+    const due = start + 2 * 60 * 60_000;
+    const h = harness(start);
+    const routine = h.manager.create({
+      name: "Retry after the reset",
+      prompt: "Hand the work over again",
+      botId: "maus-1",
+      schedule: { type: "once", at: due },
+    });
+    h.manager.runNow(routine.id, undefined, "person");
+    await h.manager.tick();
+    finishThread(h, h.started[0]!.threadId, false);
+    expect(h.manager.getRoutine(routine.id)).toMatchObject({ enabled: true, nextRunAt: due });
+    h.setNow(due);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(2);
+    expect(h.manager.listRuns().filter((run) => run.triggerSource === "schedule")).toHaveLength(1);
+  });
+
+  it("a one-time routine still running by hand at its due time does not start a second copy (#5074)", async () => {
+    const start = new Date(2026, 7, 17, 16, 0, 0).getTime();
+    const due = start + 2 * 60 * 60_000;
+    const h = harness(start);
+    const routine = h.manager.create({
+      name: "Retry after the reset",
+      prompt: "Hand the work over again",
+      botId: "maus-1",
+      schedule: { type: "once", at: due },
+      deleteWhenFinished: true,
+    });
+    const manual = h.manager.runNow(routine.id, undefined, "person")!;
+    await h.manager.tick();
+    h.setNow(due);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns().filter((run) => run.routineId === routine.id)).toHaveLength(1);
+    expect(h.manager.getRoutine(routine.id)).toMatchObject({ enabled: false, nextRunAt: null });
+    expect(h.manager.getRoutine(routine.id)?.skippedRuns).toBeUndefined();
+    expect(h.manager.listRuns().find((run) => run.id === manual.id)?.consumedSchedule).toBe(true);
+    finishThread(h, h.started[0]!.threadId);
+    expect(h.manager.getRoutine(routine.id)).toBeNull();
+    expect(h.manager.listRuns().filter((run) => run.routineId === routine.id)).toHaveLength(1);
+  });
+
+  it("Run now on a routine that is off says the schedule is still off (#5074)", async () => {
+    const start = new Date(2026, 7, 17, 16, 0, 0).getTime();
+    const h = harness(start);
+    const routine = h.manager.create({
+      name: "Hourly check",
+      prompt: "Check the queue",
+      botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start },
+    });
+    h.manager.update(routine.id, { enabled: false });
+    const manual = h.manager.runNow(routine.id, undefined, "person")!;
+    expect(manual.attention).toBe(ROUTINE_SCHEDULE_STILL_OFF);
+    expect(h.manager.getRoutine(routine.id)).toMatchObject({ enabled: false, nextRunAt: null });
+    await h.manager.tick();
+    finishThread(h, h.started[0]!.threadId);
+    expect(h.manager.listRuns().find((run) => run.id === manual.id)).toMatchObject({
+      status: "completed",
+      attention: ROUTINE_SCHEDULE_STILL_OFF,
+    });
+    expect(h.manager.getRoutine(routine.id)).toMatchObject({ enabled: false, nextRunAt: null });
   });
 
   it("preserves exact timestamps for manual and webhook interval work", async () => {

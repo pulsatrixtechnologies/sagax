@@ -27,6 +27,7 @@ let url: string;
 let sessions: SessionRegistry;
 let maintenance: WorkspaceBackupMaintenance;
 let admin: ReturnType<SessionRegistry["issue"]>;
+let onRestart: (() => void) | undefined;
 
 function fakeArchive() {
   const id = randomUUID();
@@ -40,6 +41,7 @@ function fakeArchive() {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  onRestart = undefined;
   dataDir = mkdtempSync(join(tmpdir(), "omb-backup-http-"));
   maintenance = new WorkspaceBackupMaintenance();
   sessions = new SessionRegistry({ file: join(dataDir, "sessions.json") });
@@ -68,6 +70,7 @@ beforeEach(async () => {
     },
     status: () => ({ busy: maintenance.active, pendingRestore: maintenance.pendingRestore }),
     exclusive: (work, keepLocked) => maintenance.run(work, { idle: () => true, pause: () => {}, resume: () => {}, flush: async () => {} }, keepLocked),
+    restart: () => onRestart?.(),
   });
   server = createServer(async (req, res) => {
     const path = new URL(req.url!, url).pathname;
@@ -166,6 +169,18 @@ it("accepts drafts between 1 and 2 MiB and enforces the preference cap in UTF-8 
   expect((await rejected.json() as { error: string }).error).toContain("2 MB backup preference limit");
   expect(archive.create).toHaveBeenCalledOnce();
   expect(readdirSync(join(dataDir, ".backups"))).toHaveLength(1);
+});
+
+it("restarts itself after a restore when the server can, and says so on status", async () => {
+  onRestart = vi.fn();
+  const status = await fetch(`${url}/api/workspace-backup/status`, { headers: { authorization: `Bearer ${admin.token}` } });
+  expect(await status.json()).toMatchObject({ restarts: true });
+  const uploaded = await fetch(`${url}/api/workspace-backup/upload`, { method: "POST", headers: { authorization: `Bearer ${admin.token}` }, body: "fixture bytes" }).then((response) => response.json()) as { id: string };
+  const preview = await post("/api/workspace-backup/preview", { id: uploaded.id, password: PASSWORD }).then((response) => response.json()) as { id: string };
+  const restored = await post("/api/workspace-backup/restore", { id: preview.id, confirmation: "REPLACE" });
+  expect(restored.status).toBe(200);
+  expect(await restored.json()).toMatchObject({ restarting: true });
+  expect(onRestart).toHaveBeenCalledOnce();
 });
 
 it("says what the last restore asks to reconnect, by category and count only", async () => {

@@ -48,6 +48,8 @@ export function createWorkspaceBackupRoutes(options: {
   authorized: (req: IncomingMessage, auth: RequestAuth) => boolean;
   status: () => { busy: boolean; pendingRestore: boolean };
   restored: RestoreResult;
+  /** My Cloud and other servers that can restart themselves after a restore. */
+  restart?: () => void;
 }) {
   // ponytail: one bounded set per server; transfers expire after an hour.
   const artifacts = new Map<string, Artifact>();
@@ -117,6 +119,7 @@ export function createWorkspaceBackupRoutes(options: {
       if (method === "GET" && path === `${PREFIX}/status`) {
         json(res, 200, {
           ...options.status(),
+          ...(options.restart ? { restarts: true } : {}),
           lastRestoreId: options.restored.restored ? options.restored.id : null,
           // what the last restore asks to reconnect (counts by category only)
           lastRestoreReconnect: options.restored.restored ? options.restored.summary?.reconnect ?? null : null,
@@ -210,7 +213,12 @@ export function createWorkspaceBackupRoutes(options: {
           return commitPendingWorkspaceRestore(options.dataDir, body.id);
         }, true));
         artifacts.delete(body.id);
-        json(res, 200, { ...result, restoreId: body.id });
+        json(res, 200, { ...result, restoreId: body.id, ...(options.restart ? { restarting: true } : {}) });
+        if (options.restart) {
+          const restart = options.restart;
+          if (res.closed) restart();
+          else res.once("close", restart);
+        }
         return true;
       }
       json(res, 404, { error: "Unknown backup operation." });

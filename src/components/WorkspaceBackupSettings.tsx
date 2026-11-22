@@ -11,7 +11,7 @@ import { WorkspaceBackupRestartNotice } from "./workspace-backup-recovery";
 
 export { WorkspaceBackupRecovery, WorkspaceBackupRestartNotice } from "./workspace-backup-recovery";
 
-type BackupStatus = { busy: boolean; pendingRestore?: boolean; lastRestoreId?: string; lastRestoreReconnect?: WorkspaceBackupReconnect | null };
+type BackupStatus = { busy: boolean; pendingRestore?: boolean; restarts?: boolean; lastRestoreId?: string; lastRestoreReconnect?: WorkspaceBackupReconnect | null };
 const inputClass = "w-full rounded-lg border-[0.5px] border-border bg-inset px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-focus disabled:opacity-50";
 const primaryPill = "ui-button ui-button-primary min-h-[44px] gap-1.5 self-end font-medium disabled:opacity-50 md:min-h-0";
 const validPassword = (value: string) => value.length >= 12 && value.length <= 1024;
@@ -144,17 +144,18 @@ function WorkspaceBackupForm() {
     // This stage ID is also the restore ID. Persist it before the request so
     // a lost response still lets this browser recover its own drafts at boot.
     localStorage.setItem(WORKSPACE_RESTORE_MARKER, preview.id);
+    let restarting = false;
     try {
-      await api("/api/workspace-backup/restore", {
+      ({ restarting = false } = await api("/api/workspace-backup/restore", {
         method: "POST", body: JSON.stringify({ id: preview.id, confirmation: "REPLACE" }),
-      });
+      }) as { restarting?: boolean });
     } catch (cause) {
       if (cause instanceof Error && "status" in cause && cause.status === 404 && alive.current) {
         setPreview(null); setUploadedId(null); setConfirmation("");
       }
       throw cause;
     }
-    if (alive.current) { setStatus({ busy: false, pendingRestore: true }); setPreview(null); setConfirmation(""); }
+    if (alive.current) { setStatus({ busy: false, pendingRestore: true, restarts: restarting }); setPreview(null); setConfirmation(""); }
   });
 
   const disabled = busy !== null || !status || status.busy || Boolean(status.pendingRestore);
@@ -176,7 +177,7 @@ function WorkspaceBackupForm() {
   >
     <div data-settings-card="backups" className="flex flex-col">
       {error && <p role="alert" className="break-words px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
-      {status?.pendingRestore ? <div className="px-3.5 py-2.5"><WorkspaceBackupRestartNotice /></div> : <>
+      {status?.pendingRestore ? <div className="px-3.5 py-2.5"><WorkspaceBackupRestartNotice serverRestarts={status.restarts === true} /></div> : <>
         {status?.lastRestoreReconnect && <div className="px-3.5 pb-1.5"><WorkspaceBackupReconnectList reconnect={status.lastRestoreReconnect} title={t("backup.reconnect.lastTitle")} /></div>}
         <DescribedRow
           label={t("backup.exportAction")}

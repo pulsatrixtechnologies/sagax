@@ -589,6 +589,8 @@
   "backup.replace": "Replace installation",
   "backup.replaceWarning": "This replaces everything in this installation; it does not merge. A recoverable safety backup of the current installation is kept before replacement. Restart is required.",
   "backup.restart": "The backup is ready to restore. Fully quit Sagax and reopen it to finish. For a self-hosted server, restart the server process, then reload this browser. Do not just close this window.",
+  "backup.serverRestarting": "The backup is in place. This server is restarting to finish it. This page continues when it is back.",
+  "backup.serverRestartSlow": "This is taking longer than usual. Keep this page open. The restore stays in place until the server comes back.",
   "backup.restartAction": "Restart and restore",
   "backup.restartDesktop": "Your backup is ready. Restart Sagax to finish restoring it. Closing this window will not restart the server.",
   "backup.restartFailed": "Could not restart Sagax. Fully quit the app and reopen it to finish restoring.",

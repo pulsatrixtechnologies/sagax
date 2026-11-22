@@ -3,6 +3,7 @@
 // account menu above my name"): the popover's own rows and second levels,
 // docked in the page's flow. A row runs and the menu stays; the second level
 // opens and runs as in the popover; the name shows and hides the menu.
+// A press outside the menu, or Escape, closes it (#4854).
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -69,9 +70,31 @@ describe("a docked popover menu", () => {
     expect(menu()).not.toBeNull();
   });
 
-  it("is not closed by a click elsewhere on the page", () => {
-    flushSync(() => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
-    flushSync(() => document.body.click());
+  it("closes on a click elsewhere on the page, and on Escape (#4854)", () => {
+    flushSync(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(menu()).toBeNull();
+    flushSync(() => nameButton().click());
     expect(menu()).not.toBeNull();
+    flushSync(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(menu()).toBeNull();
+  });
+});
+
+describe("the account menu opened from the name", () => {
+  it("closes on a click elsewhere, and on Escape (#4854)", () => {
+    flushSync(() => root.unmount());
+    root = createRoot(host);
+    flushSync(() => root.render(createElement(SidebarPopoverMenu, {
+      items, ariaLabel: "Account", renderTrigger: () => createElement("span", null, "Owner"),
+    })));
+    const trigger = host.querySelector("button")!;
+    flushSync(() => trigger.click());
+    expect(host.querySelector('[role="menu"]')).not.toBeNull();
+    flushSync(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    flushSync(() => trigger.click());
+    expect(host.querySelector('[role="menu"]')).not.toBeNull();
+    flushSync(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 });

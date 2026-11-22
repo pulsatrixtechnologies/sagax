@@ -333,7 +333,8 @@ export function SidebarPopoverMenu({
   /** The menu stays open in the page's flow above its trigger, with the same
    * rows and second levels, instead of floating over it (Settings > Appearance
    * "Show the account menu above my name"). The trigger still opens and
-   * closes it. Nothing in a row changes: a click runs it and the menu stays. */
+   * closes it. A click on a row runs it and the menu stays. A press outside
+   * the menu, or Escape, closes it (#4854). */
   docked?: boolean;
   /** `data-tour` id for the trigger button */
   tourId?: string;
@@ -457,16 +458,21 @@ export function SidebarPopoverMenu({
     return root ? bindHoverIntent(root, hover) : undefined;
   }, [hover]);
 
-  const close = () => {
+  const dismiss = () => {
     clearTimers();
-    // docked, the menu is the page's own: a row leaves it open
-    if (docked) { setSub(null); return; }
     setPinned(false);
     setOpen(false);
     setSub(null);
   };
+  const close = () => {
+    clearTimers();
+    // a row of a docked menu runs and leaves the rows open; a press
+    // outside, or Escape, still puts them away (#4854)
+    if (docked) { setSub(null); return; }
+    dismiss();
+  };
 
-  usePopoverDismiss(open && !docked, dismissRef, close);
+  usePopoverDismiss(open, dismissRef, dismiss);
 
   const asking = items.filter((item) => item.attention);
   const attention = asking.length > 0;

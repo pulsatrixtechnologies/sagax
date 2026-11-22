@@ -164,7 +164,7 @@ import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { iconUnreadDotPosition } from "@/lib/bot-unread";
-import { sidebarBotActivityTasks } from "./SidebarBotActivity";
+import { closedActivityLeftover, sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
 import { plainPreviewText } from "@/lib/plain-preview";
@@ -1940,13 +1940,19 @@ export function BotListItem({
     (selected && !threadsListed) || selection?.selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
   );
   const activityTasks = sidebarBotActivityTasks(bot, pendingQueued);
+  // #5011: a closed thread can still carry "working" or "waiting on you"
+  // after nothing is running. That leftover is not the bot's live state.
+  // A thread picked back up is busy, so it still counts.
+  const liveTasks = bot.tasks ?? [];
+  const leftoverOnly = liveTasks.some((task) => closedActivityLeftover(task))
+    && liveTasks.every((task) => closedActivityLeftover(task) || !(task.busy || task.activity === "working" || task.activity === "waiting-on-you"));
   // #2082: a routine run (a proactive wake included) that waits on the
   // person counts too: its question lives in the run, not over the chat,
   // and the bot-wide activity leaves runs out.
-  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you")
+  const waiting = (!leftoverOnly && bot.activity === "waiting-on-you") || activityTasks.some((task) => task.activity === "waiting-on-you")
     || routineRunsWaiting(bot).length > 0;
   // Real work in a sibling still outranks an idle coordination wait.
-  const working = !waiting && (Boolean(bot.busy) || activityTasks.some((task) => task.busy || task.activity === "working"));
+  const working = !waiting && ((!leftoverOnly && Boolean(bot.busy)) || activityTasks.some((task) => task.busy || task.activity === "working"));
   // A routine run is shown in Automations, not in the sidebar: while the bot's
   // open thread is only a run's thread, its work keeps the mascot dot but
   // leaves the row's status line alone.

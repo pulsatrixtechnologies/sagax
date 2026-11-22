@@ -46,6 +46,7 @@ import "./safety/network-guard.ts";
 import { serverLog } from "./process/server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./process/event-loop-lag.ts";
 import { settledChipLabel } from "./waits/waiting-chip.ts";
+import { legacyWaitStillHeld } from "./waits/legacy-wait.ts";
 import { groupOwnerId, ownsGroup, unlistedOwnRooms, type GroupActor } from "./groups/group-ownership.ts";
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -13744,8 +13745,9 @@ const wireTask = (task: TaskRecord, botModel: ModelSelection, coordinated: Reado
   // time and survives reads; only a wake event in the store clears it.
   const { snoozedUntil, ...base } = toWireTask(task, botModel);
   const keepWarm = cacheKeepWarmStatus(task.threadId);
-  const wired = { ...base, waitingForTeammates: coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}),
-    ...(!task.busy && continuationHolds.has(task.threadId) ? HELD_ACTIVITY : {}) };
+  const closed = Boolean(task.closedBy);
+  const wired = { ...base, ...(closed ? { activity: "idle" as const, busy: false } : {}), waitingForTeammates: !closed && coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}),
+    ...(!closed && !task.busy && continuationHolds.has(task.threadId) ? HELD_ACTIVITY : {}) };
   const asleep = snoozedUntil === 0 || (snoozedUntil !== undefined && snoozedUntil > Date.now());
   return asleep ? { ...wired, snoozedUntil } : wired;
 };
@@ -13771,11 +13773,11 @@ const wireBot = (bot: BotRecord): WireBot => {
   const tasks = allTasks ? listedTasks(bot.threadId, allTasks) : undefined;
   // The aggregate only: a record projected onto one thread already carries
   // that thread's own activity.
-  const shown = store.bot(bot.id) === bot ? shownBotActivity(bot) : null;
-  if (shown) {
-    rest.activity = shown.activity;
-    rest.busy = shown.busy;
-  }
+  // Fold on the way out, so a closed thread's leftover activity does not
+  // keep the bot working or waiting until the next task write (#5011).
+  const folded = store.activityOf(bot.id, (task) => task.hidden !== true || task.threadId === bot.threadId);
+  rest.activity = folded.activity;
+  rest.busy = folded.busy;
   // As the aggregate itself (store.activityOf): a routine run's own task
   // never makes the bot read busy (2026-11-03).
   if (!rest.busy && allTasks?.some((task) => continuationHolds.has(task.threadId) && !task.routineRunId && (task.hidden !== true || task.threadId === bot.threadId))) {
@@ -17785,7 +17787,11 @@ function settleWaitingActivity(threadId: string): void {
   const next = runningTurnEngines.has(threadId) ? "working" : "idle";
   const bot = store.botByThread(threadId);
   if (bot && store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") store.setTaskActivity(bot.id, threadId, next);
-  if (bot && bot.threadId === threadId && bot.activity === "waiting-on-you") store.setActivity(bot.id, next);
+  const current = bot ? store.bot(bot.id) : null;
+  // The legacy slot is one per bot. Clearing it only when this thread was
+  // the selected one left a work thread's wait painted on the roster after
+  // the thread had closed (#5011).
+  if (current?.activity === "waiting-on-you" && !legacyWaitStillHeld(current.tasks ?? [], threadId)) store.setActivity(current.id, next);
 }
 
 /** 2026-11-09: a bot left on "Waiting for you" with no open card anywhere

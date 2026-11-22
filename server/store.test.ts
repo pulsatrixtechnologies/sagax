@@ -2198,8 +2198,14 @@ describe("Store change stream", () => {
     const closer = store.createBot();
     const task = store.createTask(bot.id, "Helper")!;
     expect(task).not.toHaveProperty("closedBy");
+    store.setTaskActivity(bot.id, task.threadId, "working");
+    expect(store.bot(bot.id)?.busy).toBe(true);
     expect(store.setTaskClosedBy(bot.id, task.threadId, { botId: closer.id, name: closer.name, at: 9 })!.closedBy)
       .toEqual({ botId: closer.id, name: closer.name, at: 9 });
+    // #5011: closing clears the activity that the working indicator reads.
+    expect(store.taskByThread(bot.id, task.threadId)).toMatchObject({ activity: "idle", busy: false });
+    expect(store.bot(bot.id)?.activity).toBe("idle");
+    expect(store.bot(bot.id)?.busy).toBe(false);
     expect(store.setTaskClosedBy(bot.id, "no-such-thread", { botId: closer.id, name: closer.name, at: 9 })).toBeNull();
     expect(new Store(selection).taskByThread(bot.id, task.threadId)?.closedBy).toEqual({ botId: closer.id, name: closer.name, at: 9 });
     // the person picking the thread back up clears the stamp entirely

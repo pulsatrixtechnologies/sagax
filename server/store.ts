@@ -3177,7 +3177,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
    * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
-    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId);
+    // A closed thread is finished work. Its leftover activity used to keep the
+    // bot "waiting on you" or working after close_thread (#5011).
+    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId && !task.closedBy);
     const legacy = this.legacyActivities.get(botId);
     const activities = [
       legacy,
@@ -4359,9 +4361,16 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!bot || !task) return null;
     if (!closedBy && !task.closedBy) return task;
     this.commitBotChange(bot, "who closed the thread", () => {
-      if (closedBy) task.closedBy = structuredClone(closedBy);
-      else delete task.closedBy;
+      if (closedBy) {
+        task.closedBy = structuredClone(closedBy);
+        // Closing ends the turn. The activity flag is not a record of the
+        // close, and leaving it set kept the working indicator on (#5011).
+        task.activity = "idle";
+        task.busy = false;
+        delete task.turnStartedAt;
+      } else delete task.closedBy;
     }, undefined, true);
+    this.refreshBotActivity(bot);
     this.emit({ type: "bot", botId });
     return task;
   }

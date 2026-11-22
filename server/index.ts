@@ -14875,8 +14875,8 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
-    // 0.8.46: closed without the person (expired, or the requester's default
-    // answer): its cards say so instead of staying open or reading answered.
+    // 0.8.46: closed without the person. #5037: a default_answer is never
+    // their reply, so the cards say expired, not that a default was used.
     unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has

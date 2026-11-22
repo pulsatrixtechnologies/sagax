@@ -1164,22 +1164,13 @@ result => this.turnEnded(n.id, result, live),
     return undefined;
   }
 
-  /** A parked question closed without the person: the default answer when
-   * the requester declared one, else expired. Either way its cards are told
-   * (runner.unparked), so none of them reads as answered by the person. */
+  /** A parked question closed without the person expires. A requester's
+   * default_answer is never applied as the person's reply (#5037): the
+   * question stays unanswered and the wait ends as it does when none was
+   * declared. The cards are told (runner.unparked) so none reads as answered. */
   private closeParked(n: Assignment, reason: string): void {
-    const defaulted = this.applyDefaultAnswer(n);
-    if (!defaulted) this.cancelTree(n, reason, "expired", "expired");
-    if (this.runner.unparked) this.safe("unparked", () => this.runner.unparked!(n, reason, defaulted));
-  }
-
-  /** R6: when the requester declared a default answer, apply it as the
-   * person's reply and resume instead of expiring. False when none. */
-  private applyDefaultAnswer(n: Assignment): boolean {
-    const raw = n.defaultAnswer?.trim();
-    if (!raw || n.status !== "needs_input") return false;
-    const note = "[Sagax: the requester's declared default answer, used because the person did not answer in time]";
-    return this.answer(n.id, `${note}\n${raw}`);
+    this.cancelTree(n, reason, "expired", "expired");
+    if (this.runner.unparked) this.safe("unparked", () => this.runner.unparked!(n, reason, false));
   }
 
   /** A parked question still unanswered: remind the person. First remind at

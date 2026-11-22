@@ -166,6 +166,25 @@ export function observerCalls(source: string): number {
   return OBSERVERS.reduce((total, name) => total + (text.match(new RegExp(`\\.${name}\\(`, "g"))?.length ?? 0), 0);
 }
 
+/** `onValueChange` calls that pass `initial: true`. The argument list runs to
+ * the `) {` that opens the closure, so a `)` inside `of:` does not cut it,
+ * and a comment that only mentions the flag does not count. */
+export function initialOnValueChangeCalls(source: string): number {
+  const text = stripSwift(source);
+  const mark = ".onValueChange(";
+  let count = 0;
+  let at = 0;
+  while ((at = text.indexOf(mark, at)) !== -1) {
+    const newline = text.indexOf(") {", at);
+    const tight = text.indexOf("){", at);
+    const ends = [newline, tight].filter((index) => index >= 0);
+    const end = ends.length ? Math.min(...ends) : at + mark.length;
+    if (/initial:\s*true/.test(text.slice(at, end))) count += 1;
+    at += mark.length;
+  }
+  return count;
+}
+
 /** How many times this file applies one of the helpers. */
 export function conditionalCalls(source: string, helpers: Helper[]): number {
   const text = stripSwift(source);
@@ -247,6 +266,39 @@ describe("iOS modifier chains stay flat (main thread stack, #5159)", () => {
   it("counts the observer chain of a file", () => {
     expect(observerCalls("x.onValueChange(of: a) {}.onValueChangePair(of: b) {}.modifier(OnValueChange(value: 1))")).toBe(2);
     expect(observerCalls("// .onValueChange(of: a) {}\nText(\".onValueChange(\")")).toBe(0);
+    expect(initialOnValueChangeCalls(".onValueChange(of: box.frame(in: .global).minY, initial: true) { _ in }")).toBe(1);
+    expect(initialOnValueChangeCalls(".onValueChange(of: a) { _ in }\n// initial: true\n.onValueChange(of: b, initial: true) { _ in }")).toBe(1);
+  });
+
+  // #5169: the words that name the budget and the chain match the code.
+  // The applied budget stays nine tenths (943 713 of 1 048 576). The measured
+  // peaks in ios/TESTING.md are unchanged: this does not move a threshold.
+  it("names the chat-open budget and the modifier chain as they are", () => {
+    const chat = files.find((file) => file.file === "ios/App/ChatView.swift");
+    expect(chat, "ChatView.swift").toBeTruthy();
+    const stripped = stripSwift(chat!.source);
+    const valueChanges = stripped.match(/\.onValueChange\(/g)?.length ?? 0;
+    const pairs = stripped.match(/\.onValueChangePair\(/g)?.length ?? 0;
+    expect(valueChanges).toBe(33);
+    expect(pairs).toBe(3);
+    expect(observerCalls(chat!.source)).toBe(36);
+
+    const compat = readFileSync(join(root, "ios/App/BackDeployCompat.swift"), "utf8");
+    expect(compat).toContain("33 times");
+    expect(compat).not.toContain("25 times");
+    expect(compat).toContain("ten today");
+    expect(compat).not.toMatch(/two call sites/);
+    const initials = files.reduce((total, file) => total + initialOnValueChangeCalls(file.source), 0);
+    expect(initials).toBe(10);
+
+    const ui = readFileSync(join(root, "ios/UITests/ChatOpenStackUITests.swift"), "utf8");
+    expect(ui).toContain("static let budget = deviceStack / 10 * 9");
+    expect(ui).toContain("under nine tenths of that 1 MB");
+    expect(ui).not.toMatch(/under half of that 1 MB/);
+
+    const releasing = readFileSync(join(root, "docs/releasing.md"), "utf8");
+    expect(releasing).toContain("nine tenths of a phone's 1 MB (943 713 bytes, #5159)");
+    expect(releasing).not.toMatch(/passes half of a phone's 1 MB/);
   });
 
   it(`chains observer helpers at most ${MAX_OBSERVER_CALLS_PER_FILE} times per file`, () => {

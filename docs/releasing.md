@@ -462,4 +462,4 @@ by downloading them back.
 
 The iOS app's `MARKETING_VERSION` (four places in `ios/project.yml`) is bumped to the same number as `forkVersion` in every release branch, with `CURRENT_PROJECT_VERSION` incremented for the next TestFlight upload. The two apps never show different version numbers. Rule set on 2026-10-09; first applied in 0.4.16.
 
-Before the TestFlight archive, `scripts/check-ios-chat-stack.sh` must pass: it opens a long conversation on a headless simulator and fails when the main thread's stack passes half of a phone's 1 MB (#5159). A failure is the crash on chat open of 0.8.71, 0.8.153 and 0.8.167: no archive until it is green. See `ios/TESTING.md`.
+Before the TestFlight archive, `scripts/check-ios-chat-stack.sh` must pass: it opens a long conversation on a headless simulator and fails when the main thread's stack passes nine tenths of a phone's 1 MB (943 713 bytes, #5159). A failure is the crash on chat open of 0.8.71, 0.8.153 and 0.8.167: no archive until it is green. Half of the stack is the goal in `ios/TESTING.md`; the check applied here is nine tenths. See `ios/TESTING.md`.

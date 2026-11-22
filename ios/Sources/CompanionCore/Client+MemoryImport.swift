@@ -53,6 +53,7 @@ public extension CompanionClient {
     }
 
     /// `PUT /api/me/memory/entry { scope, id, title, body, tags }` (the import's overwrite).
+    /// No `base_version`: an explicit overwrite replaces the note on purpose (#4941).
     func updatePerspicaxMemoryNote(scope: String, id: String, title: String, body: String, tags: [String]) async throws {
         try await send(makeRequest("PUT", "/api/me/memory/entry", body: [
             "scope": scope, "id": id, "title": title, "body": body, "tags": tags,

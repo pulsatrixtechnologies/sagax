@@ -37,6 +37,18 @@ final class ModelMenuTests: XCTestCase {
         )
     }
 
+    func testReasoningLevelsStayWholeOnBalancedLines() {
+        XCTAssertEqual(ModelMenuLayout.segmentsPerLine, 4)
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3]).map(\.count), [3])
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3, 4]).map(\.count), [4])
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3, 4, 5]).map(\.count), [3, 2])
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3, 4, 5, 6, 7]).map(\.count), [4, 3])
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3, 4, 5, 6, 7, 8]).map(\.count), [4, 4])
+        XCTAssertEqual(ModelMenuLayout.segmentLines([1, 2, 3, 4, 5, 6, 7, 8, 9]).map(\.count), [3, 3, 3])
+        XCTAssertEqual(ModelMenuLayout.sideSlot, 20)
+        XCTAssertEqual(ModelMenuLayout.iconSlot, 28)
+    }
+
     func testOnlyTheModelsThatRunAreOffered() {
         let menu = sections(selection: ModelSelection(instanceId: "claude", model: "opus"))
         XCTAssertEqual(menu.map(\.key), ["top", "claude", ModelMenu.localSectionKey], "signed out and not installed providers go")

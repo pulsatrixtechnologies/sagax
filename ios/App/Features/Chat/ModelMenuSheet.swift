@@ -104,6 +104,13 @@ struct ModelMenuSheet: View {
     private var selection: ModelSelection { current.currentTaskModelSelection }
     /// The open thread follows the bot's model (nil: an older server).
     private var follows: Bool? { profile.tasks?.first { $0.threadId == bot.threadId }?.followsBotModel }
+    /// The engine in use and the model's effort levels (`modelEffortLevels`).
+    private var active: Instance? { instances.first { $0.instanceId == selection.instanceId } }
+    private var efforts: [String] {
+        guard let active, selection.auto != true, active.capabilities?.modelVariants != true else { return [] }
+        let option = active.models.options.first { $0.id == selection.model }
+        return ModelEffort.pickerLevels(option, engine: active.capabilities?.effortLevels ?? [])
+    }
 
     private var menuLabels: ModelMenuLabels {
         ModelMenuLabels(
@@ -199,9 +206,14 @@ struct ModelMenuSheet: View {
                         Text("Manual").foregroundStyle(Theme.textPrimary)
                         Text(mode == nil ? currentModelName : String(localized: "Choose a model yourself")).font(.footnote).foregroundStyle(Theme.textSecondary).lineLimit(1)
                     }
-                    Spacer()
-                    if mode == nil { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
-                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textTertiary)
+                    Spacer(minLength: 4)
+                    menuIcon {
+                        if mode == nil {
+                            Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                        } else {
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textTertiary)
+                        }
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -230,8 +242,10 @@ struct ModelMenuSheet: View {
                     Text(words.name).foregroundStyle(Theme.textPrimary)
                     Text(words.blurb).font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
-                Spacer()
-                if on { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
+                Spacer(minLength: 4)
+                menuIcon {
+                    if on { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
+                }
             }
             .contentShape(Rectangle())
         }
@@ -261,21 +275,36 @@ struct ModelMenuSheet: View {
                 pageButton(String(localized: "All models"), id: "model-all", current: false) { page = .all }
             }
         }
+        if !efforts.isEmpty {
+            Section { reasoning }
+        }
     }
 
-    /// "Optimize for" under Auto: Intelligence, Balance or Cost (#2106).
+    /// "Optimize for" on one line under Auto (#5051): the label, then the small control.
     private var optimizeRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Optimize for").font(.footnote).foregroundStyle(Theme.textSecondary)
-            Picker("Optimize for", selection: Binding(
-                get: { selection.autoOptimize ?? .balance },
-                set: { setAutoOptimize($0) }
-            )) {
-                ForEach(ModelAutoOptimize.allCases, id: \.self) { Text(LocalizedStringKey($0.labelKey)).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("model-auto-optimize")
-        }
+        ModelMenuOptimizeLine(
+            selected: selection.autoOptimize ?? .balance,
+            idPrefix: "model-auto-optimize",
+            ink: Theme.textPrimary,
+            secondary: Theme.textSecondary,
+            track: Theme.textPrimary.opacity(0.06),
+            chosen: Theme.textPrimary.opacity(0.10),
+            onPick: setAutoOptimize
+        )
+    }
+
+    /// Every reasoning level whole, on balanced lines past four (#5051).
+    private var reasoning: some View {
+        ModelMenuReasoning(
+            levels: efforts,
+            selected: selection.effort,
+            idPrefix: "model-menu-effort",
+            ink: Theme.textPrimary,
+            secondary: Theme.textSecondary,
+            track: Theme.textPrimary.opacity(0.06),
+            chosen: Theme.textPrimary.opacity(0.10),
+            onPick: setEffort
+        )
     }
 
     /// "All models": a segment per provider, then that provider's models, each with a star.
@@ -330,6 +359,9 @@ struct ModelMenuSheet: View {
         if let shown {
             Section { segments(list.providers.map { ($0.id, $0.label) }, shown: shown.id) }
             manualAccounts(shown)
+            if !efforts.isEmpty {
+                Section { reasoning }
+            }
         }
     }
 
@@ -442,19 +474,27 @@ struct ModelMenuSheet: View {
 
     private func pageButton(_ title: String, id: String, current: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 0) {
                 Text(verbatim: title).foregroundStyle(Theme.textPrimary)
-                Spacer()
-                if current { Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent) }
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textTertiary)
+                Spacer(minLength: 4)
+                menuIcon {
+                    if current {
+                        Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                    } else {
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textTertiary)
+                    }
+                }
             }
             .contentShape(Rectangle())
         }
         .accessibilityIdentifier(id)
     }
 
+    /// The check, the star and the chevron share one icon slot. The star of
+    /// the model in use sits in the side slot, beside its check (#5051).
     private func row(row: ModelMenuRow, id: String, star: Bool = false) -> some View {
-        HStack(spacing: 8) {
+        let starBesideCheck = star && row.kind == .model && row.current
+        return HStack(spacing: 0) {
             Button { pick(row) } label: {
                 HStack(spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -495,8 +535,15 @@ struct ModelMenuSheet: View {
                         }
                     }
                     Spacer(minLength: 4)
-                    if row.current {
-                        Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                    if !starBesideCheck {
+                        Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
+                    }
+                    if !(star && row.kind == .model) {
+                        iconOnly {
+                            if row.current {
+                                Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                            }
+                        }
                     }
                 }
                 .contentShape(Rectangle())
@@ -508,14 +555,31 @@ struct ModelMenuSheet: View {
                 Button { favorites.toggle(row.key, session: session) } label: {
                     Image(systemName: starred ? "star.fill" : "star")
                         .foregroundStyle(starred ? Theme.warning : Theme.textTertiary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: starBesideCheck ? ModelMenuLayout.sideSlot : ModelMenuLayout.iconSlot, height: ModelMenuLayout.iconSlot)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .accessibilityLabel(starred ? Text("Remove \(row.label) from favorites") : Text("Add \(row.label) to favorites"))
                 .accessibilityIdentifier("model-favorite.\(row.instanceId ?? "").\(row.modelId ?? "")")
+                if starBesideCheck {
+                    iconOnly {
+                        Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                    }
+                }
             }
         }
+    }
+
+    /// Side slot, then the icon slot, so every row's icon shares one centre.
+    private func menuIcon<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
+            iconOnly { content() }
+        }
+    }
+
+    private func iconOnly<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content().frame(width: ModelMenuLayout.iconSlot, height: ModelMenuLayout.iconSlot)
     }
 
     // MARK: Pick
@@ -553,6 +617,12 @@ struct ModelMenuSheet: View {
         // Optimize belongs to plain Auto: choosing it leaves a mode
         next.mode = nil
         next.autoOptimize = value
+        apply(next, updateBotDefault: true, keepOpen: true)
+    }
+
+    private func setEffort(_ level: String?) {
+        var next = selection
+        next.effort = level
         apply(next, updateBotDefault: true, keepOpen: true)
     }
 

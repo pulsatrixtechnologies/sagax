@@ -74,10 +74,8 @@ struct FormCardView: View {
         let pressed = readable.flatMap { AskQuestionAnswer.action(in: $0) }
         return QuestionSheet(colors: colors, title: card.title) {
             if let contextLine {
-                Text(contextLine)
-                    .font(colors.font(13))
+                CardMarkdown(source: contextLine)
                     .foregroundStyle(colors.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             if checklist {
                 let only = questions[0]
@@ -101,7 +99,7 @@ struct FormCardView: View {
                     }, id: \.offset) { index, question in
                         let given = byQuestion[question.question]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         let value = given == AskQuestionAnswer.leftEmpty ? "" : given
-                        let label = Text(question.question)
+                        let label = CardMarkdown(source: question.question)
                             .font(colors.font(13))
                             .foregroundStyle(ink2)
                         let answerText = Text(value.isEmpty ? String(localized: "Not answered") : shown(question, value))

@@ -546,6 +546,18 @@ describe("verify-first rule (2026-10-19)", () => {
     expect(WORK_STYLE_PROMPT).not.toContain("at most two calls");
     expect(WORK_STYLE_PROMPT).not.toMatch(/[\u2013\u2014]/);
   });
+
+  // The verify rule says a missing object or recipient is the card first,
+  // with no search. The work-style rule used to say search before asking
+  // for any fact, so the two instructions disagreed. The work-style
+  // sentence now names that exception. The snapshot pins both sentences.
+  it("lets the missing-object card win over search-before-asking", () => {
+    const verify = VERIFY_FIRST_PROMPT.match(/A request whose object or recipient is missing[\s\S]*?guess it\./)?.[0];
+    const work = WORK_STYLE_PROMPT.match(/Search memory\/topic notes[\s\S]*?already given\./)?.[0];
+    expect(verify).toMatch(/zero tool calls before it/);
+    expect(work).toMatch(/except a missing object or recipient that several fit \(the card first, no search\)/);
+    expect({ verify, work }).toMatchSnapshot();
+  });
 });
 
 describe("longCommandsPrompt", () => {

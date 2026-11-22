@@ -124,7 +124,7 @@ export const WORK_STYLE_PROMPT =
   // 16 to 46 s; the reference app's model says first, in its own words, what
   // it understood and what it does, and the person reads it at once.
   "\nHow you work: before your first tool call, say in a sentence what you understood and do first; for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
-  + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for what was already given."
+  + " Search memory/topic notes, session_search, files and tools before asking for a fact, except a missing object or recipient that several fit (the card first, no search); never ask for what was already given."
   + " Use known tools directly. Search for a missing tool or fact with a specific query. Reuse what you found; refine the query when new evidence warrants it."
   // #3221 / #3222: Today took 26 steps through act and run_command, Remote
   // Access five calls before remote_support_hosts.

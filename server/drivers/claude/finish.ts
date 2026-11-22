@@ -11,6 +11,7 @@ import {
   renewalPrompt,
 } from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
+import { redactSecretsInText } from "../../../shared/redact.ts";
 import { claudeSignInExpired } from "../claude-errors.ts";
 import { classifyError, computeBackoff, interruptibleDelay, mayResendTurn, needsReconnect } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";
@@ -26,7 +27,7 @@ const UNCONFIRMED_STOP_RETRY_MS = [1_000, 5_000, 15_000, 60_000, 300_000, 600_00
 
 export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
   const {
-    session, threadId, emit, base, settle, settleResult, child,
+    session, threadId, emit, base, settle, settleResult, child, instanceId,
     retryState, renewedTurns, freshNextTurn, carriedCosts, carriedModels,
     active, sessions, sendTurn, retryScale,
     markClosed, currentTurnId, sessionId, noteAutocompactRefused,
@@ -311,6 +312,8 @@ const finalizeClose = async (code: number | null) => {
       // the replay: with nothing to replay it gets the turn text alone.
       // That announcement, with its notice, is what the person is told;
       // this is no retry of a failure.
+      // A refused resume used to look like an ordinary new session in the logs.
+      console.error(`claude (${instanceId}): could not resume session ${sessionId} for thread ${threadId}, starting a new one: ${redactSecretsInText(session.resumeRefusal ?? message)}`);
       retry.rebuilt = recovery.replayed;
       retryState.set(threadId, retry);
       active.set(threadId, { stop: () => { retry.cancelled = true; retryAbort.abort(); }, turnId });

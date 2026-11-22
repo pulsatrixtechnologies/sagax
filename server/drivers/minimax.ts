@@ -20,6 +20,7 @@ const MODELS: ModelCatalog = {
   // `custom: true` because the driver is access "custom": the picker opens
   // custom-access engines in the pane that lists only custom-flagged models.
   options: [
+    { id: "MiniMax-M3.1-Flash", label: "MiniMax M3.1 Flash", contextWindow: 1_000_000, custom: true },
     { id: "MiniMax-M3", label: "MiniMax M3", contextWindow: 1_000_000, custom: true },
     { id: "MiniMax-M2.7", label: "MiniMax M2.7", contextWindow: 204_800, custom: true },
     { id: "MiniMax-M2.7-highspeed", label: "MiniMax M2.7 Highspeed", contextWindow: 204_800, custom: true },

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { stepToolId } from "../../shared/searched-tool-call.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,6 +20,25 @@ describe("Muse Code driver", () => {
     expect(MuseCodeDriver.install?.signInCommand).toBe("muse login");
     expect(MuseCodeDriver.defaultConfig()).toEqual({ cli: "muse" });
     expect(MuseCodeDriver.models.default).toBe("muse-wonder-1.0");
+  });
+
+  it("keeps a missing temp directory inside model discovery", async () => {
+    const root = mkdtempSync(join(tmpdir(), "sagax-muse-"));
+    const previous = process.env.TMPDIR;
+    process.env.TMPDIR = join(root, "missing-temp-directory");
+    const instance = await MuseCodeDriver.create({
+      instanceId: "museCode", displayName: "Muse Code", enabled: true,
+      environment: {}, config: MuseCodeDriver.decodeConfig({ cli: "muse" }),
+    });
+    try {
+      await expect(instance.refreshModels?.()).resolves.toBeUndefined();
+      expect(instance.models.default).toBe(MuseCodeDriver.models.default);
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+      await instance.dispose();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("builds the picker from the account's own model list", () => {

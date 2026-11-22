@@ -972,6 +972,12 @@ export function commPreview(message: string): string {
 
 export interface WireMessage extends WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
+  /** A bot's own progress line that summarises what its teammates answered
+   * (server/runtime-coordinator.ts peerReport), shown to the person in chat.
+   * It echoes the room results the requester is already handed, so it is never
+   * fed back to the engine as conversation context: a second copy of a result
+   * the durable return path offers once (#4842, #4861, #4862). */
+  teamReport?: boolean;
   id: string;
   role: "bot" | "user";
   kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "productKey" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";

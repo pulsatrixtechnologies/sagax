@@ -17,6 +17,7 @@ import { clockAtHandoff } from "./turn-clock.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { turnQueuedAt } from "./turn-trace.ts";
 import { toolKeepBindTurn } from "../tools/tool-keep.ts";
+import { effortForTurn } from "./turn-effort.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
   const {
@@ -28,7 +29,6 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     auditFullAccessTurn,
     botRecoveryBackups,
     browserIsThePlace,
-    callTurnEffort,
     cfg,
     connectorPlanForTurn,
     claudeUserMcpEnabled,
@@ -59,7 +59,6 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     pluginDirsFor,
     pickFastSentenceModel,
     replaysNatively,
-    resolveEngineTurnEffort,
     runAsBotEngine,
     savedSteps,
     store,
@@ -126,9 +125,15 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     // waiting for the first word (server/voice/voice-call-effort.ts).
     // A pre-warm off a call (server/threads/thread-prewarm.ts) takes the next
     // turn's own effort and flags, or the turn would relaunch it.
-    const turnEffort = state.onCall
-      ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
-      : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
+    // One policy for every engine, Grok HTTP included (server/turns/turn-effort.ts).
+    // A warm of a call uses the call's effort, so the spawn contract matches.
+    const turnEffort = effortForTurn({
+      kind: state.onCall ? "call" : state.opts?.automationSource ? "routine" : state.warmOnly ? "warm" : "chat",
+      driverKind: state.instance.driverKind,
+      levels: state.instance.adapter.capabilities.effortLevels,
+      effort: state.effort,
+      routineEffort: state.routineEffort,
+    });
     // A routine run while the server boots waits for an engine start slot
     // (server/engines/engine-start-gate.ts): the runs that came due during a
     // restart start two at a time instead of every engine at once.

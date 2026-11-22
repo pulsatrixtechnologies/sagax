@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
-import { GrokDriver, xaiModelLabel } from "./grok.ts";
+import { GrokDriver, grokHttpReasoningEffort, xaiModelLabel } from "./grok.ts";
 
 const SSE_BODY = (text: string) =>
   [
@@ -93,6 +93,27 @@ describe("GrokDriver turns (fake fetch)", () => {
     expect(body?.messages?.[0]?.content).toBe("judge this card");
   });
 
+  it("sends the turn's reasoning effort, and high when the turn names none", async () => {
+    const bodies: Array<{ model?: string; reasoning_effort?: string }> = [];
+    script = [];
+    await create();
+    globalThis.fetch = (async (url, init) => {
+      if (String(url).endsWith("/language-models") || String(url).endsWith("/models")) return Response.json({ models: [] });
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return sseResponse(SSE_BODY("ok"));
+    }) as typeof fetch;
+    await instance.adapter.sendTurn({ threadId: "t-effort", text: "hi" });
+    await recorder.until((event) => event.type === "turn.completed");
+    await instance.adapter.sendTurn({ threadId: "t-effort-low", text: "hi", effort: "low" });
+    await recorder.until((event) => event.threadId === "t-effort-low" && event.type === "turn.completed");
+    expect(bodies.map((body) => [body.model, body.reasoning_effort])).toEqual([
+      ["grok-4.7", "high"],
+      ["grok-4.7", "low"],
+    ]);
+    expect(grokHttpReasoningEffort("grok-3-mini", "low")).toBeUndefined();
+    expect(grokHttpReasoningEffort("grok-4.5", "xhigh")).toBe("high");
+  });
+
   it("normalizes a full turn into the canonical event sequence", async () => {
     script = [];
     await create();
@@ -126,7 +147,7 @@ describe("GrokDriver turns (fake fetch)", () => {
       .map((line) => JSON.parse(line) as { dir: string; msg: { model?: string } });
     expect(entries.find((entry) => entry.dir === "out")?.msg.model).toBe("grok-4.7");
     expect(requestedModels).toEqual(["grok-4.7"]);
-    expect(instance.models.options).toContainEqual({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000 });
+    expect(instance.models.options).toContainEqual({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000, effortLevels: ["low", "medium", "high", "xhigh"], defaultEffort: "high" });
   });
 
   it("smoke: offers ask_user and returns the person's reply verbatim", async () => {
@@ -354,11 +375,13 @@ describe("GrokDriver live model list (#4416)", () => {
     const instance = await create("key-a");
     expect(ids(instance)).toEqual(["grok-4.7", "grok-4.7-fast", "grok-4.6", "grok-4.5", "grok-4-1-fast-reasoning"]);
     expect(instance.models.default).toBe("grok-4.7");
-    expect(instance.models.options).toContainEqual({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000 });
+    expect(instance.models.options).toContainEqual({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000, effortLevels: ["low", "medium", "high", "xhigh"], defaultEffort: "high" });
     expect(instance.models.options.find((option) => option.id === "grok-4.7-fast")?.label).toBe("Grok 4.7 Fast");
     expect(instance.models.options.find((option) => option.id === "grok-4-1-fast-reasoning")?.label).toBe("Grok 4.1 Fast Reasoning");
-    // Nothing is invented for a model the written list does not know.
-    expect(instance.models.options.find((option) => option.id === "grok-4.5")).toEqual({ id: "grok-4.5", label: "Grok 4.5" });
+    // The name is not invented. grok-4.5 takes an effort and stops at high.
+    expect(instance.models.options.find((option) => option.id === "grok-4.5")).toEqual({
+      id: "grok-4.5", label: "Grok 4.5", effortLevels: ["low", "medium", "high"], defaultEffort: "high",
+    });
   });
 
   it("drops a model the account lost, and keeps a written id that is only an alias", async () => {

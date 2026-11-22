@@ -348,7 +348,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     } else {
       httpTrace("endpoint-/chat/completions");
     }
-    return completeChat(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey);
+    return completeChat(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey, effort);
   };
 
   const completeChat = async (
@@ -361,6 +361,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     onUsage?: TextGenerationOptions["onUsage"],
     maxTokens?: number,
     apiKey = "",
+    effort?: EffortLevel,
   ): Promise<Completion> => {
     // Idle timer that is renewed on every received chunk during streaming
     const timeoutController = new AbortController();
@@ -381,6 +382,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
 
       const payload = JSON.stringify({
         ...options.requestBody(model, messages, stream),
+        ...(options.chatEffortBody?.(model, effort) ?? {}),
         ...(tools.length ? { tools } : {}),
         ...(typeof maxTokens === "number" ? { max_tokens: maxTokens } : {}),
       });

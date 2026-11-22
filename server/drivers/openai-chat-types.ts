@@ -56,6 +56,9 @@ export interface RuntimeOptions<Config> {
   authHeaders?: (apiKey: string) => Record<string, string>;
   models: () => ModelCatalog;
   requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean): Record<string, unknown>;
+  /** Extra JSON fields for one chat-completions call, such as Grok's
+   * `reasoning_effort`. Absent on engines whose chat path must not carry it. */
+  chatEffortBody?: (model: string, effort: EffortLevel | undefined) => Record<string, unknown>;
   httpErrorLabel: string;
   missingKeyError: string;
   unavailableReason: string;

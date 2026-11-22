@@ -1,6 +1,7 @@
 // xAI API driver. Grok uses the OpenAI chat-completions wire contract and
 // adds the shared transient-failure retry policy.
 import { titleCaseModelId, type ModelCatalog, type ProviderDriver } from "../contracts.ts";
+import type { EffortLevel } from "../../shared/model-selection.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { createKeyModelCatalogs } from "../models/key-model-catalogs.ts";
@@ -12,10 +13,36 @@ const DEFAULT_URL = "https://api.x.ai/v1";
 /** Fallback only, for when the account's own list cannot be read (no key,
  * xAI down, a malformed answer): the live list (`xaiModelCatalog`) replaces
  * it per key, so two keys can list different models. */
+/** Levels Grok 4.6 and later take. grok-4.5 stops at high. Older chat
+ * models are left without a level: the HTTP API rejects reasoning_effort
+ * on a model that does not reason. */
+const GROK_HTTP_EFFORT = ["low", "medium", "high", "xhigh"] as const satisfies readonly EffortLevel[];
+
+export function grokHttpEffortFor(id: string): { effortLevels: EffortLevel[]; defaultEffort: "high" } | undefined {
+  if (/^grok-4\.5(?:[^0-9]|$)/.test(id)) return { effortLevels: ["low", "medium", "high"], defaultEffort: "high" };
+  if (/^grok-4\.(?:[6-9]|\d{2,})/.test(id) || /^grok-[5-9]/.test(id)) return { effortLevels: [...GROK_HTTP_EFFORT], defaultEffort: "high" };
+  return undefined;
+}
+
+/** The level a Grok HTTP chat call sends. A model with no levels sends
+ * nothing. A level that model takes is sent as asked; anything else is
+ * the model's default, so an unset chat turn still names high. */
+export function grokHttpReasoningEffort(model: string, effort: EffortLevel | undefined): EffortLevel | undefined {
+  const facts = grokHttpEffortFor(model);
+  if (!facts) return undefined;
+  if (effort && facts.effortLevels.includes(effort)) return effort;
+  return facts.defaultEffort;
+}
+
+const withHttpEffort = <T extends { id: string; effortLevels?: EffortLevel[]; defaultEffort?: EffortLevel }>(option: T): T => {
+  const facts = option.effortLevels ? undefined : grokHttpEffortFor(option.id);
+  return facts ? { ...option, ...facts } : option;
+};
+
 const MODELS: ModelCatalog = {
   default: "grok-4.7",
   options: [
-    { id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000 },
+    withHttpEffort({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000 }),
     { id: "grok-4", label: "Grok 4" },
     { id: "grok-4-fast", label: "Grok 4 Fast" },
     { id: "grok-3-mini", label: "Grok 3 Mini" },
@@ -65,7 +92,7 @@ export function xaiModelCatalog(rows: readonly XaiModelRow[], images?: Map<strin
     if (row.output_modalities && !row.output_modalities.includes("text")) continue;
     const names = [id, ...(row.aliases ?? []).map((alias) => alias.trim()).filter(Boolean)];
     const known = names.map((name) => written.get(name)).find(Boolean);
-    const option = known ? { ...known } : { id, label: xaiModelLabel(id) };
+    const option = withHttpEffort(known ? { ...known } : { id, label: xaiModelLabel(id) });
     if (seen.has(option.id)) continue;
     seen.add(option.id);
     options.push(option);
@@ -164,6 +191,11 @@ export const GrokDriver: ProviderDriver<GrokConfig> = {
       imageInput: (model) => images.get(model) ?? grokSeesImages(model),
       models: () => catalog, refreshModels, modelsForKey,
       requestBody: (model, messages, stream) => ({ model, messages, stream }),
+      chatEffortBody: (model, effort) => {
+        const level = grokHttpReasoningEffort(model, effort);
+        return level ? { reasoning_effort: level } : {};
+      },
+      effortLevels: GROK_HTTP_EFFORT,
       httpErrorLabel: "xAI",
       missingKeyError: `Save an xAI API key in Settings → API keys, or set ${config.apiKeyEnv}.`,
       unavailableReason: "No xAI API key — open Settings → API keys.",

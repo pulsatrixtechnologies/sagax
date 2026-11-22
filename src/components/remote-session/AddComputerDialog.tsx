@@ -17,6 +17,7 @@ import { DialogFrame, DialogLayer, FIELD, FieldRow, GROUP_CARD, PILL, PillSelect
 import { useModalDialog } from "@/hooks/use-modal-dialog";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { usePageVisible } from "@/lib/page-visible";
 import { readableError } from "@/lib/plain-error";
 import { useStore } from "@/state/store";
 import { CopyBlock } from "./CopyBlock";
@@ -147,11 +148,17 @@ export function AddComputerDialog({ available = true, hosts = [], onClose, onIss
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(clock);
   }, [step]);
+  // Each list read is one short Perspicax MCP session (remote_support_hosts):
+  // none while the window is hidden, and one at once when it shows again.
+  const visible = usePageVisible();
+  const missed = useRef(false);
   useEffect(() => {
-    if (!waiting) return;
+    if (!waiting) { missed.current = false; return; }
+    if (!visible) { missed.current = true; return; }
+    if (missed.current) { missed.current = false; onIssued?.(); }
     const poll = window.setInterval(() => onIssued?.(), 5000);
     return () => window.clearInterval(poll);
-  }, [waiting, onIssued]);
+  }, [waiting, visible, onIssued]);
   // The host appeared: connected, and the bots chosen at step 2 apply to it.
   useEffect(() => {
     if (!waiting) return;

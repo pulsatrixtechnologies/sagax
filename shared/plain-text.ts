@@ -239,8 +239,9 @@ function plainTextBody(rawText: string, options: PlainTextOptions): string {
   out = out.replace(/^[ \t]{0,3}(?:[-*_][ \t]*){3,}$/gm, "");
   // emphasis: ***x***, **x**, __x__, *x*, _x_, ~~x~~. Underscores inside a
   // word (snake_case) are not emphasis, and a lone * (2 * 3) is not either.
-  out = out.replace(/(\*{1,3}|_{1,3})(?=\S)([\s\S]*?\S)\1(?![\p{L}\p{N}])/gu, (match, marks: string, inner: string, offset: number, whole: string) => {
-    if (marks[0] === "_" && offset > 0 && /[\p{L}\p{N}]/u.test(whole[offset - 1]!)) return match;
+  out = out.replace(/(\*{1,3})(?=\S)([\s\S]*?\S)\1/gu, "$2");
+  out = out.replace(/(_{1,3})(?=\S)([\s\S]*?\S)\1(?![\p{L}\p{N}])/gu, (match, _marks: string, inner: string, offset: number, whole: string) => {
+    if (/[\p{L}\p{N}]$/u.test(whole.slice(0, offset))) return match;
     return inner;
   });
   out = out.replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");

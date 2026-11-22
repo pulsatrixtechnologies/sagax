@@ -21,7 +21,9 @@ import type { ConnectorHub } from "../connectors/hub.ts";
 import type { ConnectorHostResult } from "../connectors/hosts/types.ts";
 import type { ConnectorAccount, ConnectorEntry } from "../connectors/types.ts";
 import type { HeldDecision } from "../harness/held-requests.ts";
-import type { InternalRouteHandler } from "./internal-route.ts";
+import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
+import { placeEngineFiles } from "../attachments/engine-connector-files.ts";
+import type { PersonPlace } from "../attachments/connector-files.ts";
 import { PASS } from "./table.ts";
 
 export const CONNECTORS_INTERNAL_PATH = "/api/internal/connectors";
@@ -160,6 +162,11 @@ export interface CallConnectorRouteDeps extends Omit<ConnectorsRouteDeps, "calla
    * this calling thread, and the conversation's Connectors record counts it
    * (the dev panel). Never fails the call. */
   ran?(input: CallConnectorRan): void;
+  /** #5140 (M-20261120-008): the calling person's own places of this turn,
+   * most preferred first (personPlaces.placesForTurn), where a file the
+   * host's own CLI saved on this server goes. Absent on a solo server, where
+   * that CLI already runs on the person's own computer. */
+  connectorFilePlaces?(capability: InternalCapabilityView): readonly PersonPlace[];
 }
 
 /** #3357: one call a host ran, as the route hands it on. */
@@ -262,7 +269,13 @@ export function createCallConnectorInternalRoute(deps: CallConnectorRouteDeps): 
     if (decision.behavior !== "allow") {
       return json(res, 200, { ok: false, declined: true, error: decision.message?.trim() || `The call to ${entry.name} (${toolId}) was declined, so it was not run.` });
     }
-    const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args, engine: held.engine });
+    const called = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args, engine: held.engine });
+    // #5140: a file the host's own CLI saved on this server goes to the
+    // person's place, as for the engine's connectors in a turn (one path)
+    const places = deps.connectorFilePlaces;
+    const result = called.engineFolder && places
+      ? { ...called, text: String((await placeEngineFiles(called.text, called.engineFolder, () => places(capability))).output) }
+      : called;
     try {
       deps.ran?.({ botId: capability.botId, threadId: capability.threadId, principalId, account, connector: entry, tool: toolId, engine: held.engine, result });
     } catch { /* bookkeeping never fails the call */ }

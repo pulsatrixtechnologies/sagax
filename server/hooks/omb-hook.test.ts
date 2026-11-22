@@ -22,13 +22,13 @@ afterAll(async () => {
   await removeTempDir(dir);
 });
 
-function run(stdin: string, env: Record<string, string>): Promise<{ code: number | null; stdout: string; stderr: string; ms: number }> {
+function run(stdin: string, env: Record<string, string>, args: string[] = []): Promise<{ code: number | null; stdout: string; stderr: string; ms: number }> {
   return new Promise((resolve) => {
     const started = Date.now();
     // Drop harness color flags: Node warns on stderr when both FORCE_COLOR and
     // NO_COLOR are set, and this helper's contract is an empty stderr.
     const { FORCE_COLOR: _fc, NO_COLOR: _nc, ...cleanEnv } = process.env;
-    const child = spawn(process.execPath, [HELPER], { env: { ...cleanEnv, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [HELPER, ...args], { env: { ...cleanEnv, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     let stdout = "";
@@ -146,4 +146,53 @@ describe("omb-hook helper: SessionStart context", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");
   }, 15_000);
+});
+
+describe("omb-hook helper: connector files (#5140)", () => {
+  const blobResult = { hook_event_name: "PostToolUse", tool_name: "mcp__claude_ai_Docs__get", tool_use_id: "tu-9", tool_response: [{ type: "text", text: "Binary content (application/pdf, 3KB) saved to /cfg/projects/p/s/tool-results/mcp-claude_ai_Docs-blob-1-a.pdf" }] };
+
+  it("forwards only a result that names a file the engine saved, marked as the connector-files entry", async () => {
+    const seen: unknown[] = [];
+    const url = await listen((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => { seen.push(JSON.parse(body)); res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ ok: true })); });
+    });
+    const plain = { ...blobResult, tool_response: [{ type: "text", text: "{\"files\":[]}" }] };
+    await run(JSON.stringify(plain), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
+    expect(seen).toEqual([]);
+    await run(JSON.stringify(blobResult), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
+    // only the hook's own fields and the strings that name a saved file
+    expect(seen).toEqual([{ event: "PostToolUse", mode: "connector-files", payload: { hook_event_name: "PostToolUse", tool_name: blobResult.tool_name, tool_use_id: "tu-9", tool_response: [{ type: null, text: blobResult.tool_response[0]!.text }] } }]);
+  }, 15_000);
+
+  it("never sends a picture's data, whatever its size, and puts Sagax's strings back into the engine's own result", async () => {
+    const picture = { type: "image", source: { type: "base64", media_type: "image/png", data: "A".repeat(3 * 1024 * 1024) } };
+    const saved = "/cfg/projects/p/s/tool-results/mcp-claude_ai_Docs-blob-2-b.png";
+    const event = { ...blobResult, tool_input: { big: "x".repeat(2048) }, tool_response: [picture, { type: "text", text: `[Image source: ${saved}]` }] };
+    const sizes: number[] = [];
+    const url = await listen((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        sizes.push(Buffer.byteLength(body));
+        const sent = JSON.parse(body) as { payload: { tool_response: unknown[] } };
+        expect(sent.payload.tool_response[0]).toEqual({ type: null, source: { type: null, media_type: null, data: null } });
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true, hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: [sent.payload.tool_response[0], { type: null, text: "[Image source: C:\\Sagax\\attachments\\ab-download.png]" }] } }));
+      });
+    });
+    const result = await run(JSON.stringify(event), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
+    expect(sizes).toHaveLength(1);
+    expect(sizes[0]).toBeLessThan(2048);
+    expect(JSON.parse(result.stdout)).toEqual({ hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: [picture, { type: "text", text: "[Image source: C:\\Sagax\\attachments\\ab-download.png]" }] } });
+  }, 15_000);
+
+  it("waits past the 4 s budget of the other hooks for the copy to the person's place", async () => {
+    const output = { hookSpecificOutput: { hookEventName: "PostToolUse", updatedMCPToolOutput: [{ type: "text", text: "saved on the person's own computer" }] } };
+    const url = await listen((_req, res) => { setTimeout(() => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ ok: true, ...output })); }, 4_300); });
+    const result = await run(JSON.stringify(blobResult), { SAGAX_HOOK_URL: url, SAGAX_HOOK_TOKEN_FILE: tokenFile }, ["connector-files"]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(output);
+  }, 20_000);
 });

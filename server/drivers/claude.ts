@@ -614,8 +614,13 @@ export function hookTokenFile(threadId: string, botId?: string): string {
 /** The `hooks` block for the private --settings file: one command for each
  * event the harness observes. Claude Code runs it with the event JSON on
  * stdin and applies any hookSpecificOutput it prints. The command string is
- * a shell line, so both paths are quoted (this repo's own path has a space). */
-export function claudeHookSettings(helperPath: string): Record<string, unknown> {
+ * a shell line, so both paths are quoted (this repo's own path has a space).
+ * `connectorFilesMatcher` (#5140, an organization turn whose engine loads
+ * connectors of its own): one more PostToolUse entry for those tools only
+ * (CLAUDE_AI_TOOLS_MATCHER, engineConnectorToolsMatcher), synchronous, that
+ * moves a file the engine saved into the person's place before the model
+ * reads the result. */
+export function claudeHookSettings(helperPath: string, options: { connectorFilesMatcher?: string } = {}): Record<string, unknown> {
   // JSON quoting is not shell quoting: $(), backticks and $names still
   // expand inside double quotes on POSIX. Windows paths come through env
   // variables so their backslashes are not JSON-escaped into the command.
@@ -637,8 +642,15 @@ export function claudeHookSettings(helperPath: string): Record<string, unknown> 
   // - SessionStart only matters after a compaction (it re-sends digests):
   //   matched on `compact`, so a fresh or resumed session never waits on it.
   const background = [{ matcher: "", hooks: [{ ...hook, async: true }] }];
+  // #5140: Claude Code writes a binary result of a connector it holds itself
+  // into its own folder on this server before any hook runs; this entry waits for
+  // Sagax to copy it into the person's place (a copy to their computer can
+  // take a while) and hands the engine the result naming it there.
+  const connectorFiles = options.connectorFilesMatcher
+    ? [{ matcher: options.connectorFilesMatcher, hooks: [{ type: "command", command: `${command} connector-files`, timeout: 120 }] }]
+    : [];
   return {
-    PostToolUse: background,
+    PostToolUse: [...background, ...connectorFiles],
     PostToolUseFailure: entry,
     PreCompact: background,
     SessionStart: [{ matcher: "compact", hooks: [hook] }],

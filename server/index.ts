@@ -25573,6 +25573,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     addDisabledMcpServer,
     botAddMcpServer: (current, body, botId) => mcpServersHost.botAdd(current, body, botId),
     redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId) as never,
+    refSavedForLabel: (botId, label) => customSecretVault.hasLiveRef(botId, label),
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,

@@ -191,6 +191,8 @@ export interface InternalIntegrationsDeps {
   credentialConfigured(credentialId: CredentialTargetId): boolean;
   /** Swap secretRef values in an add_mcp_server body before it is saved. */
   redeemMcpBody?<T>(body: T, botId: string, threadId: string): { ok: true; value: T; commit(): void } | { ok: false; error: string };
+  /** A live one-use ref for this label, for Sagax's own tools. Never the value. */
+  refSavedForLabel?(botId: string, label: string): boolean;
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
   activePath(threadId: string): ReadonlyArray<{
     id: string;
@@ -490,6 +492,10 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       if (!isCredentialTargetId(body.credentialId)) {
         const custom = parseCustomSecretRequest(body);
         if ("error" in custom) return json(res, 400, { error: custom.error });
+        const savedAsRef = custom.delivery === "file" && deps.refSavedForLabel?.(from.id, custom.label) === true;
+        const refNote = savedAsRef
+          ? ` ${custom.label} is already saved, but only for Sagax's own tools. ${from.name} needs it as a file for its commands, so enter it again here.`
+          : "";
         const message = deps.appendMessage(fromThreadId, {
           role: "bot",
           kind: "secret",
@@ -498,7 +504,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
           secret: {
             target: CUSTOM_SECRET_TARGET,
             label: custom.label,
-            description: `${custom.reason} ${deliveryNote(from.name, custom.delivery)}`,
+            description: `${custom.reason} ${deliveryNote(from.name, custom.delivery)}${refNote}`,
             placeholder: custom.placeholder || "Paste the secret",
             helpUrl: "",
             reason: custom.reason,
@@ -511,7 +517,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
           if (!prior.secret || !isPendingCustomSecretRequest(prior, custom.label, from.id, Boolean(owner.group))) continue;
           deps.patchMessage(fromThreadId, prior.id, { secret: { ...prior.secret, superseded: true } });
         }
-        return json(res, 201, { messageId: message.id, label: custom.label, delivery: custom.delivery });
+        return json(res, 201, { messageId: message.id, label: custom.label, delivery: custom.delivery, ...(savedAsRef ? { savedAs: "ref" as const } : {}) });
       }
       const credentialId: CredentialTargetId = body.credentialId;
       const target = CREDENTIAL_TARGETS[credentialId];

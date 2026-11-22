@@ -101,6 +101,7 @@ struct QuestionCardView: View {
             colors: colors,
             title: single ? current.question : named,
             meta: single ? nil : String(localized: "\(answeredCount) of \(questions.count)"),
+            markdownTitle: single,
             // #3471: the one quiet × skips it, never a refusal
             onDismiss: WaitingCardSkip.waits(card) && !answering ? { skip() } : nil,
             dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
@@ -115,10 +116,8 @@ struct QuestionCardView: View {
             }
             if !single {
                 tabs
-                Text(current.question)
-                    .font(colors.font(13.5))
+                CardMarkdown(source: current.question)
                     .foregroundStyle(colors.ink)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             if current.allowsMultiple {
                 Text("Choose all that apply")
@@ -234,14 +233,12 @@ struct QuestionCardView: View {
             return AskQuestionAnswer.picks(in: byQuestion[question.question] ?? "", labels: keys)
         }
         let unreadable = answer != nil && parts.allSatisfy { $0.picked.isEmpty && $0.rest.isEmpty }
-        return QuestionSheet(colors: colors, title: single ? questions[0].question : named) {
+        return QuestionSheet(colors: colors, title: single ? questions[0].question : named, markdownTitle: single) {
             ForEach(Array(questions.enumerated()), id: \.offset) { position, question in
                 VStack(alignment: .leading, spacing: 6) {
                     if !single {
-                        Text(question.question)
-                            .font(colors.font(13.5, .medium))
+                        CardMarkdown(source: question.question)
                             .foregroundStyle(colors.ink)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(question.options.enumerated()), id: \.offset) { row, option in

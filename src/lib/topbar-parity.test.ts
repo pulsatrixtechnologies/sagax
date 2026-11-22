@@ -42,13 +42,13 @@ describe("round controls, as the reference measures them (#4163)", () => {
     expect(list).toEqual(expect.arrayContaining(["size-9", "rounded-full", "border", "border-sidebar-circle-ring", "bg-sidebar-circle", "text-sidebar-circle-glyph", "hover:bg-sidebar-circle-hover"]));
     for (const old of ["bg-sidebar-elevated", "border-sidebar-hairline-weak", "text-sidebar-ink-secondary", "hover:text-sidebar-ink"]) expect(list).not.toContain(old);
     const sidebar = read("../components/Sidebar.tsx");
-    // the reference's top row: search, New, in that order (no collapse, no panel button: the panel toggle is at the chat header's right end)
+    // the wide head draws Collapse sidebar, then search, then New (#5017). The panel toggle is at the chat header's right end.
     const head = sidebar.slice(sidebar.indexOf("const searchButton ="), sidebar.indexOf("const railButtons ="));
     expect(head).not.toContain("<Ellipsis");
     expect(head).toContain("<Search {...CIRCLE_ICON}");
     expect(head).toContain("<Plus {...CIRCLE_ICON}");
     expect(head.indexOf("<Search")).toBeLessThan(head.indexOf("<Plus"));
-    expect(head).toContain("const headButtons = <>{searchButton}{newButton}</>");
+    expect(head).toContain("const headButtons = <>{collapseButton}{searchButton}{newButton}</>");
     expect(CIRCLE_ICON).toEqual({ size: 18, strokeWidth: 1.75 });
   });
 

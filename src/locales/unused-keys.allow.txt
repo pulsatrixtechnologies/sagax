@@ -609,7 +609,6 @@ sidebar.bot.chiefNeedsEngine
 sidebar.bot.chiefOfStaff
 sidebar.bot.duplicate
 sidebar.bot.editProfile
-sidebar.collapse
 sidebar.density.collapse
 sidebar.density.collapseAria
 sidebar.density.expand

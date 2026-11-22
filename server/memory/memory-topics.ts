@@ -6,6 +6,7 @@
 import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { hasCjk } from "../messages/cjk-search.ts";
 import { looksSealed } from "../encryption/content-file-crypto.ts";
 
 /** How much of a topic file is read to find its frontmatter. */
@@ -70,7 +71,7 @@ export function parseTopicHeader(text: string): TopicHeader {
  * aliases, lower-cased, for matching a message against without a search. */
 export function topicWords(name: string, header: TopicHeader): string[] {
   const text = [name.replace(/\.md$/i, "").replace(/[-_.]+/g, " "), header.title ?? "", header.description ?? "", ...header.aliases].join(" ");
-  return [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 3))];
+  return [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= (hasCjk(word) ? 2 : 3)))];
 }
 
 /** A topic's text without its header block, for a recalled passage. */

@@ -27,6 +27,7 @@ import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
+import { cjkSearchText, cjkTokenParts, ensureSearchIndex, ftsPhrase, hasCjk, withoutSearchMarks } from "./cjk-search.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { ensureMemoryIndex } from "./message-db-memory-index.ts";
 export type { SearchHit } from "./message-search-query.ts";
@@ -242,32 +243,11 @@ export function describeMissingFts5(error: unknown): Error | null {
 }
 
 function ensureRecallIndex(db: DatabaseSync): void {
-  const existed = db
-    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'")
-    .get();
   try {
-    db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-        text, content='messages', content_rowid='rowid', tokenize='unicode61'
-      );
-    `);
+    ensureSearchIndex(db, { table: "messages", fts: "messages_fts", view: "messages_search", triggerPrefix: "messages_fts" });
   } catch (error) {
     throw describeMissingFts5(error) ?? error;
   }
-  db.exec(`
-    CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
-      INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-      INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-  `);
-  // First time on an existing database: index everything already there.
-  if (!existed) db.exec("INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')");
 }
 
 // INSERT OR REPLACE would delete and re-insert the row under a new rowid
@@ -275,9 +255,9 @@ function ensureRecallIndex(db: DatabaseSync): void {
 // triggers on), leaving a dangling FTS entry. An upsert keeps the rowid and
 // runs the update trigger, so the index never drifts from the table.
 const UPSERT_MESSAGE =
-  "INSERT INTO messages (thread_id, id, at, role, kind, text, json, sealed, key_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+  "INSERT INTO messages (thread_id, id, at, role, kind, text, json, sealed, key_id, search_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
   "ON CONFLICT(thread_id, id) DO UPDATE SET at = excluded.at, role = excluded.role, kind = excluded.kind, " +
-  "text = excluded.text, json = excluded.json, sealed = excluded.sealed, key_id = excluded.key_id RETURNING rowid";
+  "text = excluded.text, json = excluded.json, sealed = excluded.sealed, key_id = excluded.key_id, search_text = excluded.search_text RETURNING rowid";
 
 /** The live handle — reopened when the file was removed out from under us
  * (tests wipe DATA_DIR between cases; a fresh Store must get a fresh DB,
@@ -583,7 +563,7 @@ const INDEX_SLICE_MS = 6;
 
 function writeRow(threadId: string, message: Message): void {
   const { values, key } = rowValues(threadId, message);
-  const row = cached(UPSERT_MESSAGE).get(threadId, message.id, message.at, message.role, message.kind, values.text, values.json, values.sealed, values.keyId) as { rowid: number } | undefined;
+  const row = cached(UPSERT_MESSAGE).get(threadId, message.id, message.at, message.role, message.kind, values.text, values.json, values.sealed, values.keyId, cjkSearchText(values.text)) as { rowid: number } | undefined;
   afterWrite(row?.rowid, threadId, message, key);
   tellMessageListeners(threadId, message.id);
 }
@@ -1461,8 +1441,8 @@ export function appendMessage(threadId: string, message: Message): void {
 
 export function updateMessage(threadId: string, message: Message): void {
   const { values, key } = rowValues(threadId, message);
-  const row = cached("UPDATE messages SET at = ?, role = ?, kind = ?, text = ?, json = ?, sealed = ?, key_id = ? WHERE thread_id = ? AND id = ? RETURNING rowid")
-    .get(message.at, message.role, message.kind, values.text, values.json, values.sealed, values.keyId, threadId, message.id) as { rowid: number } | undefined;
+  const row = cached("UPDATE messages SET at = ?, role = ?, kind = ?, text = ?, json = ?, sealed = ?, key_id = ?, search_text = ? WHERE thread_id = ? AND id = ? RETURNING rowid")
+    .get(message.at, message.role, message.kind, values.text, values.json, values.sealed, values.keyId, cjkSearchText(values.text), threadId, message.id) as { rowid: number } | undefined;
   afterWrite(row?.rowid, threadId, message, key);
   tellMessageListeners(threadId, message.id);
 }
@@ -1859,7 +1839,7 @@ function ftsQuery(query: string, mode: SearchMode = "all"): string | null {
     const terms = recallTerms(query).map(recallMatchTerm).filter(Boolean);
     return terms.length ? terms.join(" OR ") : null;
   }
-  return (content.length ? content : tokens).map((token) => `"${token}"`).join(" ");
+  return (content.length ? content : tokens).map(ftsPhrase).join(" ");
 }
 
 /** One recall term as FTS5 syntax. The index does no stemming, so a word
@@ -1869,6 +1849,7 @@ function ftsQuery(query: string, mode: SearchMode = "all"): string | null {
  * even in a quoted FTS phrase. Explicit all-term search stays unchanged. */
 export function recallMatchTerm(term: string): string | null {
   if (!/^[\p{L}\p{N}]+$/u.test(term)) return null;
+  if (hasCjk(term)) return ftsPhrase(term);
   if (!/^\p{L}{4,}$/u.test(term)) return `"${term}"`;
   const stem = term.length > 4 && term.endsWith("s") && !term.endsWith("ss") ? term.slice(0, -1) : term;
   return `"${stem}"*`;
@@ -1886,16 +1867,23 @@ const RECALL_FILLER = new Set(
  * de-duplicated, stop words and filler dropped. Ordinary separators between
  * letters split words; signs, language symbols and versions (`-10`, `c++`,
  * `v2.1`) survive as written rather than matching a different fact. */
+const trimToken = (raw: string) => raw.replace(/"/g, "").replace(/^[\s.,;:!?()[\]{}'`“”‘’]+|[\s.,;:!?()[\]{}'`“”‘’]+$/g, "").toLowerCase();
+
+/** Words first, then the CJK bigrams, each list capped on its own so a long Chinese message cannot crowd out the words. */
 export function recallTerms(query: string): string[] {
   const out: string[] = [];
-  for (const raw of query.split(/\s+|(?<=\p{L})[/,;:.—–-]+(?=\p{L})/u)) {
-    const token = raw.replace(/"/g, "").replace(/^[\s.,;:!?()[\]{}'`“”‘’]+|[\s.,;:!?()[\]{}'`“”‘’]+$/g, "").toLowerCase();
-    if (token.length < 2 && !/\d/.test(token)) continue;
-    if (!/[\p{L}\p{N}]/u.test(token)) continue;
-    if (STOP_WORDS.has(token) || RECALL_FILLER.has(token)) continue;
-    if (!out.includes(token)) out.push(token);
+  const bigrams: string[] = [];
+  for (const raw of query.split(/[\s、。！？；：，（）【】《》〈〉「」『』]+|(?<=\p{L})[/,;:.—–-]+(?=\p{L})/u)) {
+    const parts = hasCjk(raw) ? cjkTokenParts(raw.toLowerCase()) : { other: [raw], bigrams: [] };
+    for (const pair of parts.bigrams) if (!bigrams.includes(pair)) bigrams.push(pair);
+    for (const token of parts.other.map(trimToken)) {
+      if (token.length < 2 && !/\d/.test(token)) continue;
+      if (!/[\p{L}\p{N}]/u.test(token)) continue;
+      if (STOP_WORDS.has(token) || RECALL_FILLER.has(token)) continue;
+      if (!out.includes(token)) out.push(token);
+    }
   }
-  return out.slice(0, 16);
+  return [...out.slice(0, 16), ...bigrams.slice(0, 24)];
 }
 
 /** A row with text: a plain one's column, a sealed one's projection flag. */
@@ -2124,7 +2112,7 @@ function plainRecall(match: string, threadIds: readonly string[], limit: number,
       at: row.at,
       role: row.role,
       ...(row.kind === "digest" ? { kind: "digest" as const } : {}),
-      snippet: row.snippet.replace(/\s+/g, " ").trim(),
+      snippet: withoutSearchMarks(row.snippet).replace(/\s+/g, " ").trim(),
       score: row.score,
       digest: row.kind === "digest",
       ...(row.webhook_post ? { from: WEBHOOK_AUTHOR } : row.from_name ? { from: row.from_name } : {}),
@@ -2244,11 +2232,11 @@ export function indexMemoryFile(botId: string, path: string, text: string, stat:
   const sealed = key ? seal(key.dek, text, memoryRowAad(key, botId, path)) : null;
   const row = db()
     .prepare(
-      "INSERT INTO memory_files (bot_id, path, text, mtime_ms, bytes, sealed, key_id) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+      "INSERT INTO memory_files (bot_id, path, text, mtime_ms, bytes, sealed, key_id, search_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT(bot_id, path) DO UPDATE SET text = excluded.text, mtime_ms = excluded.mtime_ms, bytes = excluded.bytes, " +
-        "sealed = excluded.sealed, key_id = excluded.key_id RETURNING rowid",
+        "sealed = excluded.sealed, key_id = excluded.key_id, search_text = excluded.search_text RETURNING rowid",
     )
-    .get(botId, path, key ? "" : text, Math.trunc(stat.mtimeMs), stat.bytes, sealed, key?.keyId ?? null) as { rowid: number } | undefined;
+    .get(botId, path, key ? "" : text, Math.trunc(stat.mtimeMs), stat.bytes, sealed, key?.keyId ?? null, key ? null : cjkSearchText(text)) as { rowid: number } | undefined;
   // its keyed words just after, off the write (flushed before any recall)
   if (key && row) queueMemoryIndex(row.rowid, botId, key, text);
   // written plain (the bot's key not available yet): the migration seals it
@@ -2378,7 +2366,7 @@ export function recallMemory(query: string, botId: string, limit = 12, mode: Sea
     )
     // SAFETY: the SELECT names exactly these four columns; snippet() is never null
     .all(match, botId, limit) as Array<{ path: string; mtime_ms: number; score: number; snippet: string }>;
-  const hits = rows.map((row) => ({ file: row.path, at: row.mtime_ms, snippet: row.snippet.replace(/\s+/g, " ").trim(), score: row.score }));
+  const hits = rows.map((row) => ({ file: row.path, at: row.mtime_ms, snippet: withoutSearchMarks(row.snippet).replace(/\s+/g, " ").trim(), score: row.score }));
   // only this bot's queued rows: another bot's wait for the background slices
   flushMemoryIndex({ botId });
   if (cached("SELECT 1 FROM memory_files WHERE bot_id = ? AND key_id IS NOT NULL LIMIT 1").get(botId)) {

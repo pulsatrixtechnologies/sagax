@@ -169,7 +169,8 @@ const proxy = createProxyHandler({
     // `authenticate` also stamps lastSeenAt, which is what makes the control
     // page able to say when a phone was last heard from.
     authenticate: (token) => devices.authenticate(token),
-    redeem: (code, deviceName, pairRequestId) => devices.redeem(code, deviceName, pairRequestId),
+    redeem: (code, deviceName, pairRequestId, replacesToken) =>
+      devices.redeem(code, deviceName, pairRequestId, replacesToken),
     serverName: machineName,
     // Recomputed per pairing rather than cached: addresses change when the
     // machine joins another network, and a pairing is exactly the moment the
@@ -187,6 +188,27 @@ companion.on("upgrade", proxy.upgrade);
 const managedOrigin = PRIVATE_ORIGIN ? createServer(gzipTunnelReplies(proxy)) : null;
 managedOrigin?.on("upgrade", proxy.upgrade);
 
+function disconnectDevice(deviceId: string): void {
+  connectedDevices.disconnect(deviceId);
+  proxy.disconnectDevice(deviceId);
+}
+
+// The harness hears a phone as this computer, so only we can tell it the
+// phone lost its access: a Live call that phone holds ends now, not at its
+// idle hang-up. Under the desktop app the notice needs the relay token; a
+// sidecar still waiting for it has no call to protect yet either.
+function deviceRevoked(deviceId: string): void {
+  if (parentPort && !mutationToken) return;
+  void notifyDeviceRevoked({ harnessPort: HARNESS_PORT, deviceId, mutationToken: mutationToken ?? undefined });
+}
+
+// After the pairing reply is written. Until then the request carrying it may
+// still belong to the device being replaced.
+devices.onReplaced((deviceId) => setImmediate(() => {
+  disconnectDevice(deviceId);
+  deviceRevoked(deviceId);
+}));
+
 const control = createControlServer({
   devices,
   controlToken: () => controlToken,
@@ -198,18 +220,8 @@ const control = createControlServer({
   },
   discovery: () => ({ advertising: mdns.advertising, name: service().name }),
   connectedDeviceIds: connectedDevices.ids,
-  disconnectDevice: (deviceId) => {
-    connectedDevices.disconnect(deviceId);
-    proxy.disconnectDevice(deviceId);
-  },
-  // The harness hears a phone as this computer, so only we can tell it the
-  // phone lost its access: a Live call that phone holds ends now, not at its
-  // idle hang-up. Under the desktop app the notice needs the relay token; a
-  // sidecar still waiting for it has no call to protect yet either.
-  revoked: (deviceId) => {
-    if (parentPort && !mutationToken) return;
-    void notifyDeviceRevoked({ harnessPort: HARNESS_PORT, deviceId, mutationToken: mutationToken ?? undefined });
-  },
+  disconnectDevice,
+  revoked: deviceRevoked,
   refreshTailscale: () => refreshTailnetName(),
 });
 

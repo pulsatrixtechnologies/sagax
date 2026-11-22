@@ -137,6 +137,8 @@ export class DeviceRegistry {
   private window: PairingWindow | null = null;
   private replay: PairingReplay | null = null;
   private replayExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Told after a re-pair has removed the previous device in the same save. */
+  private replacedListeners = new Set<(id: string) => void>();
   private lastSeenWrites = new Map<string, number>();
 
   /** Load the paired fleet, normalising as it goes.
@@ -218,17 +220,39 @@ export class DeviceRegistry {
     this.replayExpiryTimer = null;
   }
 
+  /** A device replaced by a re-pair, after the save that removed it. */
+  onReplaced(listener: (id: string) => void): void {
+    this.replacedListeners.add(listener);
+  }
+
+  /** The device whose stored digest matches this token, or none.
+   * Empty, non-string and unknown tokens match nothing. */
+  private deviceWithToken(token: unknown): DeviceRecord | undefined {
+    if (typeof token !== "string" || !token) return undefined;
+    const hash = sha256(token);
+    return this.devices.find((device) => sameDigest(device.tokenHash, hash));
+  }
+
   /** Redeem either pairing credential for a device token.
    *
    * Old clients receive the token exactly once. A client that supplies a
    * request id may repeat that same logical redemption until the pairing
    * window's original expiry, which is just enough to survive losing the
-   * response while changing routes. There is no general token-read endpoint. */
+   * response while changing routes. There is no general token-read endpoint.
+   *
+   * `replacesToken` is the token this phone already holds for this computer.
+   * After the credential checks, that device is removed in the same save
+   * that adds the new one, so a re-pair does not grow the list. It is read
+   * only after a valid pairing credential. The new device gets a fresh
+   * pairing's grants. An unknown token is ignored and the reply has the
+   * same shape either way. A replayed request returns the stored reply and
+   * does not replace again. */
   redeem(
     credential: string,
     name: unknown,
     pairRequestId?: unknown,
-  ): { device: PublicDevice; token: string } | { error: string } {
+    replacesToken?: unknown,
+  ): { device: PublicDevice; token: string } | { error: string; code?: string } {
     const presented = String(credential ?? "");
     const requestId =
       typeof pairRequestId === "string" && /^[A-Za-z0-9._-]{16,128}$/.test(pairRequestId)
@@ -262,11 +286,18 @@ export class DeviceRegistry {
       return { error: "that pairing credential is not right" };
     }
     // After the code, not before. Checked first, a full fleet answers every
-    // wrong guess with "too many paired devices" — which tells a guesser
+    // wrong guess with "too many paired devices", which tells a guesser
     // something about this machine, and costs them none of their five
     // attempts. The window survives, so removing a phone and retyping the
-    // same code still works.
-    if (this.devices.length >= MAX_DEVICES) return { error: "too many paired devices — remove one first" };
+    // same code still works. A matching replacesToken is counted out, so a
+    // phone already at the cap can re-pair itself.
+    const replaced = this.deviceWithToken(replacesToken);
+    if (this.devices.length - (replaced ? 1 : 0) >= MAX_DEVICES) {
+      return {
+        error: "too many paired devices: remove an old phone on your computer first",
+        code: "pairing_device_limit",
+      };
+    }
     // Consume the window without clearing a possible replay. `closePairing`
     // is the explicit cancel operation and intentionally clears both.
     this.window = null;
@@ -281,17 +312,22 @@ export class DeviceRegistry {
       cloudDesktopAccess: false,
       browserControlAccess: false,
     };
-    this.devices.push(device);
+    const previous = this.devices;
+    this.devices = [...previous.filter((entry) => entry !== replaced), device];
     // Unlike the lastSeenAt write below, this one must not be swallowed. A
     // device that lives in memory but not on disk is paired until the next
-    // restart and then silently is not — the phone keeps a token that stops
+    // restart and then silently is not: the phone keeps a token that stops
     // working for no reason it can show. Roll the registration back and say
     // so, so the user retries now rather than discovering it days later.
     try {
       this.persist();
     } catch (e) {
-      this.devices.pop();
+      this.devices = previous;
       return { error: `could not save the pairing: ${(e as Error).message}` };
+    }
+    if (replaced) {
+      this.lastSeenWrites.delete(replaced.id);
+      for (const listener of this.replacedListeners) listener(replaced.id);
     }
     const { tokenHash: _tokenHash, ...pub } = device;
     const result = { device: pub, token };

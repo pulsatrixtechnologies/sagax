@@ -220,23 +220,35 @@ it("a piece of work closed by the orchestrator, or cleared by the person, leaves
     };
 
     await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "Start the release.");
-    await expect.poll(repo, { timeout: 30_000 }).toBe(1);
+    await expect.poll(repo, { timeout: 60_000 }).toBe(1);
     // one step of three handed out and done: listed, never finished on its own
-    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("1/3");
+    await expect.poll(() => figures("Release"), { timeout: 60_000 }).toBe("1/3");
     expect((await work()).live[0].toCome.map((step: any) => step.name)).toEqual(["Test", "Ship"]);
 
     // the orchestrator closes it with the tool it declared the plan with
     await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "The release is done elsewhere.");
-    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("none");
+    await expect.poll(() => figures("Release"), { timeout: 60_000 }).toBe("none");
+    // The row can leave while the close turn is still finishing. The docs
+    // send has to be its own turn: on a loaded runner it joined the close
+    // turn and the second task never appeared (expected 1 to be 2, #5170).
+    const said = async (text: string) => ((await api(`/api/threads/${orc.activeTaskId}/messages`, undefined, "GET")).messages ?? [])
+      .some((message: any) => message.text === text);
+    const orcIdle = async () => {
+      const bot = (await api("/api/bots", undefined, "GET")).bots.find((candidate: any) => candidate.id === orc.id);
+      const task = bot?.tasks?.find((stored: any) => stored.threadId === orc.activeTaskId);
+      return Boolean(task && task.busy !== true);
+    };
+    await expect.poll(() => said("Closed"), { timeout: 60_000 }).toBe(true);
+    await expect.poll(orcIdle, { timeout: 60_000 }).toBe(true);
 
     // the person clears a row themselves
     await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "Start the docs.");
-    await expect.poll(repo, { timeout: 30_000 }).toBe(2);
-    await expect.poll(() => figures("Docs"), { timeout: 30_000 }).toBe("1/2");
+    await expect.poll(repo, { timeout: 60_000 }).toBe(2);
+    await expect.poll(() => figures("Docs"), { timeout: 60_000 }).toBe("1/2");
     const cleared = await api(`/api/bots/${orc.id}/team-work/clear?since=${since}`, { keys: ["work:docs"] });
     expect([...cleared.live, ...cleared.doneToday].map((item: any) => item.name)).toEqual([]);
     expect(await figures("Docs")).toBe("none");
   } finally {
     await session.close();
   }
-}, 180_000);
+}, 240_000);

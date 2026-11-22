@@ -271,11 +271,34 @@ if [ -f package.json ]; then
         // A source that a large part of the suite imports (a store, a test
         // helper) would bring hundreds of files: past the bound its importers
         // wait for the run after the merge, and the gate says so.
+        // #4407: two exceptions, because that wait is the version cut and the
+        // tests went red on main in between.
+        // A shared module: the stem tests of every file that imports it
+        // directly (place-view.ts is imported by surface.ts, so
+        // surface.test.ts runs). The time ceiling used to fill with earlier
+        // files and cut that test.
+        // The verification fixture (scripts/control-omb.ts): every test that
+        // imports it runs. The 25 bound used to keep only the test of its
+        // own name, then the ceiling cut the server suites that launch it.
         const most = 25;
+        const sharedModule = (f) => f.startsWith("shared/") && !isTest(f);
+        const verificationFixture = (f) => f === "scripts/control-omb.ts";
+        const stemTests = (file) => {
+          const stem = noExt(file) + ".";
+          return all.filter((t) => t.startsWith(stem));
+        };
         for (const source of sources) {
           const tests = [...(importers.get(source) ?? [])].filter(isTest);
-          if (tests.length <= most) { for (const t of tests) out.add(t); continue; }
-          console.error(`fast-gate: ${source} is imported by ${tests.length} test files: only the tests of its own name run here, the others run after the merge`);
+          if (verificationFixture(source) || tests.length <= most) {
+            for (const t of tests) out.add(t);
+          } else {
+            console.error(`fast-gate: ${source} is imported by ${tests.length} test files: only the tests of its own name run here, the others run after the merge`);
+          }
+          if (!sharedModule(source)) continue;
+          for (const importer of importers.get(source) ?? []) {
+            if (isTest(importer)) continue;
+            for (const t of stemTests(importer)) out.add(t);
+          }
         }
         // related: breadth first through the files that import a touched
         // source, nearest first.

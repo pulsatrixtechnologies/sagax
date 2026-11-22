@@ -81,10 +81,14 @@ describe("4 levels x a rule Deny / Ask / Allow / none", () => {
     const line = source.slice(start, source.indexOf("\n", start));
     expect(start).toBeGreaterThan(-1);
     expect(line).not.toContain("!baseVerdict?.approve");
-    // and both turn launches hand the engine its native level; they left
-    // index.ts for server/turns/ (9fe511cdb startTurn, 062d7c42e group member)
-    const launches = ["../turns/start-turn-dispatch.ts", "../turns/group-member-turn-launch-dispatch.ts"]
-      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8").match(/approvalMode: engineTurnLevel\(/g)?.length ?? 0);
-    expect(launches).toEqual([1, 1]);
+    // Both turn launches hand the engine its native level (9fe511cdb
+    // startTurn, 062d7c42e group member). #5089 holds a Heavy expert at Ask
+    // so the server can refuse every request; the ordinary launch still goes
+    // through engineTurnLevel, and it is the only approvalMode on that launch.
+    const dispatch = readFileSync(new URL("../turns/start-turn-dispatch.ts", import.meta.url), "utf8");
+    const member = readFileSync(new URL("../turns/group-member-turn-launch-dispatch.ts", import.meta.url), "utf8");
+    expect(dispatch.match(/approvalMode: heavyExpert \? "ask" : engineTurnLevel\(/g)?.length ?? 0).toBe(1);
+    expect(dispatch.match(/approvalMode:/g)?.length ?? 0).toBe(1);
+    expect(member.match(/approvalMode: engineTurnLevel\(/g)?.length ?? 0).toBe(1);
   });
 });

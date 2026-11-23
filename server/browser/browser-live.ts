@@ -162,6 +162,7 @@ export function browserStreamPort(value: unknown): number {
 type Action = { type: "take" | "release" | "restart" } | { type: "ack"; seq: number }
   | { type: "record-start" | "record-stop" | "record-discard" }
   | { type: "describe"; points: Array<{ x: number; y: number }> }
+  | { type: "viewport"; width: number; height: number }
   | { type: "command"; args: string[] } | { type: "input"; message: ObjectValue };
 
 /** HTTP bodies can select a fixed action, never a CLI command, flag, port or CDP method. */
@@ -183,6 +184,10 @@ export function parseBrowserLiveAction(value: unknown): Action {
     return { type: "describe", points };
   }
   if (body.type === "ack" && integer(body.seq, 1, Number.MAX_SAFE_INTEGER)) return { type: "ack", seq: body.seq };
+  // The live panel's stage (#5021). A headless page follows it; anything else is ignored later.
+  if (body.type === "viewport" && integer(body.width, 240, 1600) && integer(body.height, 240, 1600)) {
+    return { type: "viewport", width: body.width, height: body.height };
+  }
   if (body.type === "back" || body.type === "forward" || body.type === "reload") return { type: "command", args: [body.type] };
   if (body.type === "navigate" || body.type === "tab-new") {
     if (body.type === "tab-new" && body.url === undefined) return { type: "command", args: ["tab", "new", BROWSER_START_URL] };
@@ -638,6 +643,16 @@ export class BrowserLive {
         viewer.frameSeq = undefined; viewer.frameAt = undefined;
       }
       return { ok: true };
+    }
+    if (action.type === "viewport") {
+      // Only a browser this server launched. My Chrome and a headed window stay the person's size.
+      if (viewer.preview || !ownsBrowserViewport(viewer.spec.env ?? {})) return { ok: true, applied: false };
+      try {
+        await this.command(viewer, ["set", "viewport", String(action.width), String(action.height)], VIEWPORT_TIMEOUT_MS);
+        return { ok: true, applied: true };
+      } catch {
+        return { ok: true, applied: false };
+      }
     }
     if (action.type === "describe") {
       // Looking at a page element needs no control of the browser: it only reads.

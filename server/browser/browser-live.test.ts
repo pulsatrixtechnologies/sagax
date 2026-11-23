@@ -87,10 +87,10 @@ beforeEach(() => {
 });
 afterEach(() => { live.closeAll(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
-async function open({ botId = "bot-a", session = "profile-a", owner = "admin-a", current = () => true }: { botId?: string; session?: string; owner?: string; current?: () => boolean } = {}) {
+async function open({ botId = "bot-a", session = "profile-a", owner = "admin-a", current = () => true, env = {} }: { botId?: string; session?: string; owner?: string; current?: () => boolean; env?: NodeJS.ProcessEnv } = {}) {
   const res = new ResponseFixture();
   await live.open({ botId, session, owner, isCurrent: current, res: res as unknown as ServerResponse,
-    spec: { command: "/trusted/agent-browser", args: ["mcp", "--tools", "core"], env: { AGENT_BROWSER_SESSION: session, AGENT_BROWSER_SOCKET_DIR: "/isolated/socket" } } });
+    spec: { command: "/trusted/agent-browser", args: ["mcp", "--tools", "core"], env: { AGENT_BROWSER_SESSION: session, AGENT_BROWSER_SOCKET_DIR: "/isolated/socket", ...env } } });
   return { res, socket: SocketFixture.instances.at(-1)!, action: (body: unknown) => live.action({ viewerId: res.id, botId, owner, body }) };
 }
 
@@ -139,6 +139,21 @@ describe("browser viewer protocol boundary", () => {
     for (const url of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "--cdp=9222", "https://a:secret@example.com", "https://example.com\n--headed", "http:\\example.com"]) expect(() => parseBrowserLiveAction({ type: "navigate", url })).toThrow();
     for (const body of [{ type: "eval", script: "1" }, { type: "press", key: "Control+a" }, { type: "tab-close", tabId: "--all" }, { type: "tab-select", tabId: 1 }, { type: "config", port: 1 }]) expect(() => parseBrowserLiveAction(body)).toThrow();
   });
+  it("sizes a headless page to the panel and leaves another browser alone (#5021)", async () => {
+    expect(parseBrowserLiveAction({ type: "viewport", width: 420, height: 780, command: "eval" })).toEqual({ type: "viewport", width: 420, height: 780 });
+    for (const body of [{ type: "viewport", width: 10, height: 400 }, { type: "viewport", width: 400.5, height: 400 }, { type: "viewport" }]) {
+      expect(() => parseBrowserLiveAction(body)).toThrow();
+    }
+    const sized = await open({ session: "panel-a", env: { AGENT_BROWSER_HEADLESS: "1" } });
+    execute.mockClear();
+    await sized.action({ type: "viewport", width: 420, height: 780 });
+    expect(execute.mock.calls.at(-1)?.[1].slice(0, 4)).toEqual(["set", "viewport", "420", "780"]);
+    const plain = await open({ session: "panel-b" });
+    execute.mockClear();
+    await plain.action({ type: "viewport", width: 420, height: 780 });
+    expect(execute.mock.calls.map((call) => call[1][0])).not.toContain("set");
+  });
+
   it("bounds input coordinates, text and modifiers, and strips arbitrary CDP fields", () => {
     expect(parseBrowserLiveAction({ type: "input_mouse", eventType: "mousePressed", x: 12, y: 20, button: "left", clickCount: 1, method: "Runtime.evaluate" })).toEqual({ type: "input", message: { type: "input_mouse", eventType: "mousePressed", x: 12, y: 20, button: "left", clickCount: 1, deltaX: 0, deltaY: 0, modifiers: 0 } });
     expect(parseBrowserLiveAction({ type: "input_keyboard", eventType: "keyDown", key: "a", text: "a" })).toEqual({ type: "input", message: { type: "input_keyboard", eventType: "keyDown", key: "a", text: "a", modifiers: 0, windowsVirtualKeyCode: 0 } });

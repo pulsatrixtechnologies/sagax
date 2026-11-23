@@ -89,7 +89,11 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         ...state,
         activeView: "achievements",
         ...closedRightPanels,
-        achievementsFocus: { category: action.category ?? "all", nonce: state.achievementsFocus.nonce + 1 },
+        achievementsFocus: {
+          category: action.category ?? "all",
+          nonce: state.achievementsFocus.nonce + 1,
+          ...(action.achievementId ? { achievementId: action.achievementId } : {}),
+        },
         settingsOpen: false,
         personPanelId: null,
         computerOpen: false,

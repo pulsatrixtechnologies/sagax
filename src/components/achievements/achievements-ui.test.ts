@@ -153,6 +153,9 @@ describe("unlock toast", () => {
     expect(html).toContain("Skin unlocked: Galaxy (Owl)");
     expect(html).toContain('data-tier="legendary"');
     expect(html).toContain('role="status"');
+    expect(html).toContain('data-achievement-open="month-streak"');
+    expect(html).toContain("See achievement");
+    expect(html).toContain("cursor-pointer");
     expect(html).toContain('aria-live="polite"');
     setLocale("fr");
     const fr = renderToStaticMarkup(createElement(AchievementToast, { id: "trombi-summoned", leaving: false, onDismiss: () => {} }));
@@ -220,6 +223,30 @@ describe("achievements page body", () => {
     expect(html).not.toContain("Show my points");
   });
 
+  it("opens a card on the full rule, its progress and the date it was earned (#5073)", () => {
+    const items = snapshot().items.map((item) => {
+      if (item.id === "prompter") return { ...item, current: 4, target: 15 };
+      if (item.id === "not-so-fast") return { ...item, current: 10, target: 10, unlockedAt: Date.UTC(2026, 10, 19, 15) };
+      return item;
+    });
+    resetAchievementsForTests({ status: "ready", snapshot: snapshot({ items }) });
+    const closed = renderToStaticMarkup(createElement(AchievementsPage, { category: "mastery" }));
+    expect(slice(closed, 'data-achievement="prompter"')).toContain('aria-expanded="false"');
+    expect(closed).not.toContain("data-achievement-detail");
+    const open = renderToStaticMarkup(createElement(AchievementsPage, { category: "mastery", openId: "prompter" }));
+    const detail = slice(open, 'data-achievement-detail="prompter"');
+    expect(detail).toContain("15 times, correct a bot while it works (a message into its running turn) and the turn completes.");
+    expect(detail).toContain(">4/15<");
+    expect(detail).toContain('role="progressbar"');
+    expect(detail).toContain('aria-valuenow="4"');
+    expect(detail).toContain('aria-valuemax="15"');
+    const earned = renderToStaticMarkup(createElement(AchievementsPage, { category: "mastery", openId: "not-so-fast" }));
+    const earnedDetail = slice(earned, 'data-achievement-detail="not-so-fast"');
+    expect(earnedDetail).toContain("Stop a bot 10 times, and each time its next turn completes.");
+    expect(earnedDetail).toContain("Unlocked");
+    expect(earnedDetail).toContain(">150<");
+  });
+
   it("shows the share of people who have one when the server says it", () => {
     const items = snapshot().items.map((item) => (item.id === "hello-bot" ? { ...item, percent: 42 } : item));
     resetAchievementsForTests({ status: "ready", snapshot: snapshot({ items }) });
@@ -275,6 +302,19 @@ describe("achievements page body", () => {
     const pinch = slice(html, 'data-achievement="first-pinch"');
     expect(pinch).not.toContain("proud");
     expect(pinch).not.toContain("Look unlocked");
+  });
+});
+
+describe("an unlock opens its card (#5069)", () => {
+  it("the page shows that achievement's detail when the open names it", () => {
+    resetAchievementsForTests({ status: "ready", snapshot: snapshot() });
+    fixture.state = {
+      ...fixture.state,
+      achievementsFocus: { category: "onboarding", nonce: 3, achievementId: "hello-bot" },
+    };
+    const html = renderToStaticMarkup(createElement(AchievementsScreen));
+    expect(html).toContain('data-achievement-detail="hello-bot"');
+    expect(html).toContain("Create your first bot.");
   });
 });
 

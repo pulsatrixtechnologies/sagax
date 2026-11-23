@@ -191,7 +191,12 @@ requests (its referrer is the server's origin), never a widget's or another
 origin's; main's own calls to a server pass `bypassCustomProtocolHandlers`;
 the bundled page gets only `BUNDLED_EXTRA` in `electron/preload.cjs`, and
 main checks those channels with `desktopUiOnly` (`electron/local-origin.cjs`);
-anything touching this computer stays `localOnly`. Tests:
+anything touching this computer stays `localOnly`, except Show in folder
+(`revealInFolder`, `desktop:reveal-file`): the organization server's page in
+this app may ask the file manager to show one absolute path, and learns only
+shown, missing, invalid or failed. Opening a file, probing which paths exist
+and saving a copy stay on the local page. A paired remote client still has
+no file-manager bridge. Tests:
 `electron/bundled-ui.node-test.mjs`; real Electron:
 `scripts/verify/dev/verify-server-mode.ts`.
 

@@ -15,6 +15,7 @@ import type { TeachStep } from "../../../shared/teach-recording";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { panelStageRef } from "@/lib/browser-panel-viewport";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
@@ -162,7 +163,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           </button>)}
     </div>
     {error && <div role={reconnecting ? "status" : "alert"} className={`flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] ${reconnecting ? "text-ink-secondary" : "text-danger"}`}><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{t("browser.live.reconnect")}</button>}</div>}
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-inset/40">
+    <div ref={panelStageRef} data-browser-stage="" className="relative min-h-0 flex-1 overflow-hidden bg-inset/40">
       {recording && <div aria-hidden="true" data-recording-frame="" className={TEACH_RECORDING_FRAME} />}
       {frame ? <BrowserViewport frame={frame} {...viewport} driving={interactive} input={input}
         onReturnToToolbar={() => addressInput.current?.focus()}

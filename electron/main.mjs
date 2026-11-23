@@ -4550,8 +4550,10 @@ ipcMain.handle("app-icon:reset", desktopUiOnly("app-icon:reset", () => {
 
 // "Show in folder" for a bot-linked file outside its conversation's workspace.
 // The file must be on this computer: a window paired to another computer's
-// server is refused, because that server's paths mean nothing here.
-ipcMain.handle("desktop:reveal-file", localOnly("desktop:reveal-file", async (_event, rawPath) => {
+// server is refused, because that server's paths mean nothing here. The
+// organization server's page drawn from this app's bundle may ask too
+// (#5018): the answer is shown, missing, invalid or failed, never the file.
+ipcMain.handle("desktop:reveal-file", desktopUiOnly("desktop:reveal-file", async (_event, rawPath) => {
   if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
   return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target), openDirectory: (target) => shell.openPath(target), home: os.homedir() });
 }));

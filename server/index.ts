@@ -34498,10 +34498,14 @@ function surfaceRoutineHolders(from: BotRecord): Array<{ id: string; name: strin
  * (it names the bot or one of its conversations): the row is marked
  * `surface` then (decision-log.ts, admin-activity.ts), so the mark outlives
  * the bot. */
-function surfaceRowNow(row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }): boolean {
-  const botIds = [row.botId, row.target?.kind === "bot" ? row.target.id : undefined, typeof row.after?.botId === "string" ? row.after.botId : undefined];
+function surfaceRowNow(row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string; name?: string }; after?: Record<string, unknown> }): boolean {
+  // credential.resolve names a turn: the conversation id, and the bot id in
+  // the target name. A surface bot's row is marked here, so an administrator
+  // never sees the person, the bot, or the conversation.
+  const turn = row.target?.kind === "turn" ? row.target : undefined;
+  const botIds = [row.botId, row.target?.kind === "bot" ? row.target.id : undefined, turn?.name, typeof row.after?.botId === "string" ? row.after.botId : undefined];
   if (botIds.some((id) => typeof id === "string" && isSurfaceBot(store.bot(id)))) return true;
-  const threadIds = [row.threadId, row.target?.kind === "thread" ? row.target.id : undefined, typeof row.after?.threadId === "string" ? row.after.threadId : undefined];
+  const threadIds = [row.threadId, row.target?.kind === "thread" ? row.target.id : undefined, turn?.id, typeof row.after?.threadId === "string" ? row.after.threadId : undefined];
   return threadIds.some((id) => typeof id === "string" && id !== "" && isSurfaceBot(store.botByThread(id)));
 }
 /** Lot S1: a row an administrator's logs never show: marked when written. */

@@ -130,6 +130,10 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
   // the turn that opened it): [{ promptIncludes, plan }], first match wins.
   // `*`: the plan of every bot the file does not name.
   const plans = JSON.parse(readFileSync(planPath, "utf8"));
+  // A test that ignores SIGTERM passes stopGraceMs so the reap stays inside
+  // the suite timeout. The default stays the loaded-runner grace (#4478).
+  const askedGrace = plans.stopGraceMs;
+  const stopGraceMs = typeof askedGrace === "number" && askedGrace >= 0 && askedGrace <= 30_000 ? askedGrace : 30_000;
   const botPlan = plans[botId] ?? plans["*"] ?? {};
   const basePlan = (botPlan.byPrompt as Array<{ promptIncludes: string; plan: any }> | undefined)
     ?.find(rule => turnContext.includes(rule.promptIncludes))?.plan ?? botPlan;
@@ -273,7 +277,7 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
     closing = true;
     clearTimeout(timer); clearTimeout(delayTimer); clearInterval(gateTimer); lines.close(); child.stdin.destroy();
     // 500ms SIGKILL cut a process that was still exiting on a loaded runner (#4478)
-    await waitForExit(child, { signal: "SIGTERM", graceMs: 30_000 });
+    await waitForExit(child, { signal: "SIGTERM", graceMs: stopGraceMs });
     // pid: which provider process ran the turn, so a fixture can tell a
     // retained session from a fresh one.
     appendFileSync(`${planPath}.evidence.jsonl`, JSON.stringify({ botId, turnIndex, threadId: integration.env.SAGAX_THREAD_ID, pid: process.pid,

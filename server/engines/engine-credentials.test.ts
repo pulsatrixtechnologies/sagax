@@ -615,6 +615,11 @@ describe("resolveGovernedEngineAccess (#5180)", () => {
     }
   });
 
+  it("keeps server_engine_not_allowed when the organization has not given the engine", () => {
+    const notGiven = input({ speaker: bob, keyBacked: true, serverEngineAllowed: () => false, policy });
+    expect(resolveGovernedEngineAccess(notGiven).plan).toMatchObject({ ok: false, reason: "no_access", cause: "server_engine_not_allowed", payer: "speaker", payerPrincipalId: BOB });
+  });
+
   it("turns personal keys off without turning a subscription off", () => {
     const off = input({ keys: ["SUB-OWNER/anthropic"], keyBacked: true, policy: { ...policy, personalKeysEnabled: false } });
     expect(resolveGovernedEngineAccess(off).plan).toMatchObject({ ok: true, via: "org-key" });

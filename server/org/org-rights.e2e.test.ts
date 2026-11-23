@@ -242,7 +242,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect(log).not.toContain(BOB_KEY);
     // the thread says "your key" to bob, without the key
     const digest = await waitFor(async () => (await botOf(bob, x.id))?.messages.find((m) => m.kind === "digest" && (m as { digest?: { access?: unknown } }).digest?.access) ?? null, 15_000);
-    expect((digest as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "speaker-key", payer: "speaker", payerPrincipalId: ids.bob });
+    expect((digest as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "speaker-key", payer: "speaker", payerPrincipalId: ids.bob, form: "personal-key" });
     expect(JSON.stringify(digest)).not.toContain(BOB_KEY);
     expect([403, 404]).toContain((await api("GET", `/api/threads/${x.threadId}/messages`, dave)).status);
     expect([403, 404]).toContain((await api("GET", `/api/bots/${x.id}/grants`, dave)).status);
@@ -387,7 +387,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect((await api("POST", `/api/bots/${w.id}/messages`, bob, { text: "hi wendy" })).status).toBe(202);
     await waitFor(async () => (await botOf(bob, w.id))?.messages.some((m) => m.role === "bot" && m.kind === "text" && m.text), 30_000);
     const ownerPaid = await waitFor(async () => (await botOf(bob, w.id))?.messages.find((m) => m.kind === "digest" && (m as { digest?: { access?: unknown } }).digest?.access) ?? null, 15_000);
-    expect((ownerPaid as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "subscription", payer: "owner", payerPrincipalId: ids.erin });
+    expect((ownerPaid as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "subscription", payer: "owner", payerPrincipalId: ids.erin, form: "personal-account" });
     expect((await botOf(bob, w.id))?.messages.some((m) => m.kind === "access")).toBe(false);
     // isolation: bob's conversation stays his; erin paying gives her no read of it
     expect(JSON.stringify((await botOf(erin, w.id))?.messages ?? [])).not.toContain("hi wendy");

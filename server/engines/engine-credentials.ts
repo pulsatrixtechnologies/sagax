@@ -487,13 +487,17 @@ export function resolveGovernedEngineAccess(input: EngineCredentialInput, skip: 
       ...(bare.ownerPays ? { ownerPays: true as const } : {}),
     };
   if (!decision.ok) {
+    // A generic "nothing serves" keeps the engine's own cause. The
+    // organization not giving this engine stays server_engine_not_allowed,
+    // and an expired sign-in stays sign_in_expired.
+    const fromEngine = !bare.ok && bare.reason === "no_access" ? bare.cause : undefined;
     const cause: NoAccessCause = decision.reason === "confirm_paid_key"
       ? "confirm_paid_key"
       : decision.reason === "act_as_personal_refused"
         ? "act_as_personal_refused"
         : decision.reason === "personal_keys_disabled"
           ? "personal_keys_disabled"
-          : "no_credentials";
+          : fromEngine ?? "no_credentials";
     return {
       decision,
       plan: {

@@ -311,7 +311,7 @@ describe("createInternalIntegrationsRoutes", () => {
   });
 
   it("POST /request-credential says when a file card's secret is saved for tools only", async () => {
-    const appendMessage = vi.fn((_threadId: string, _message: { secret?: { description?: string } }) => ({ id: "sec-file" }));
+    const appendMessage = vi.fn<(threadId: string, message: { secret?: { description?: string } }) => { id: string }>(() => ({ id: "sec-file" }));
     const route = createInternalIntegrationsRoutes(deps({
       appendMessage,
       refSavedForLabel: () => true,

@@ -81,8 +81,11 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // only as the bot panel's 320x200 Computer thumbnail, once the person
 // granted Screen Recording (screen:thumbnail, never a prompt): never the
 // full frame (screenFrame), which the bot panel's live window replaces with
-// that thumbnail on this page (#3565).
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct"]);
+// that thumbnail on this page (#3565). Show in folder (revealInFolder) is
+// the one file-manager call (#5018): the person asks to show one absolute
+// path, and the page learns only shown, missing, invalid or failed. Opening
+// a file, listing which paths exist, and saving a copy stay on the local page.
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct", "revealInFolder"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).

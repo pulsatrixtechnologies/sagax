@@ -320,9 +320,16 @@ test("the preload gives the bundled organization page the desktop-UI parts, and 
   // draws them itself when the title bar is hidden.
   assert.ok(remote.bridge.windowControls, "a remote page keeps the caption buttons");
   assert.ok(bundled.bridge.windowControls, "the bundled page has the caption buttons");
-  for (const key of ["remoteClient", "environments", "setCredential", "saveFile", "pickFolder", "screenFrame", "companion", "desktopViewer", "approvals", "exportDiagnostics", "exportLogs"]) {
+  for (const key of ["remoteClient", "environments", "setCredential", "saveFile", "pickFolder", "screenFrame", "companion", "desktopViewer", "approvals", "exportDiagnostics", "exportLogs", "openLocalFile", "localFilesExist"]) {
     assert.equal(bundled.bridge[key], undefined, `the bundled page never gets ${key}`);
   }
+  // #5018: Show in folder on the organization server's page in this app.
+  // A plain remote page still has no file-manager bridge.
+  assert.equal(typeof remote.bridge.revealInFolder, "undefined", "a plain remote page cannot reveal a local path");
+  assert.equal(typeof bundled.bridge.revealInFolder, "function", "the bundled page can ask the file manager to show a path");
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.match(main, /ipcMain\.handle\("desktop:reveal-file", desktopUiOnly\("desktop:reveal-file"/);
+  assert.match(main, /if \(desktopRemoteAccess\) throw new Error\("That file is on the computer this app is connected to"\)/);
   // the local page asks nothing: it has the whole bridge
   const local = preloadBridge({ pageOrigin: "http://127.0.0.1:48996", bundled: true });
   assert.deepEqual(local.syncCalls, []);

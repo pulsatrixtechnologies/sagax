@@ -8,7 +8,9 @@ let localOrigin = null;
 // own bundle there (electron/bundled-ui.cjs), else null. Only its main frame
 // counts, and only for the desktop-UI channels (desktopUiOnly): floating
 // bots, window controls, links, confirmations, the updater. Anything that
-// touches this computer's files, screen, logins or helpers stays localOnly.
+// touches this computer's files, screen, logins or helpers stays localOnly,
+// except Show in folder (desktop:reveal-file), which the desktop's own UI
+// may call and which returns no file bytes.
 let bundledOrigin = null;
 
 function setLocalOrigin(origin) {

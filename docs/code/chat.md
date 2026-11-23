@@ -1009,8 +1009,10 @@ restores its words and citation alongside the current draft.
 Local absolute file and directory links offer the existing file-manager
 reveal action directly (#4483), without first attempting a download. On
 macOS it reads Show in Finder, on Windows Show in Explorer. The native
-bridge validates the path and reports a missing target. Remote clients
-continue to use server file access instead of opening a server path locally.
+bridge validates the path and reports a missing target. The same reveal is
+on the organization server's page drawn by this desktop app (#5018,
+`revealInFolder` in `BUNDLED_EXTRA`); a paired remote client keeps using
+server file access instead of opening a server path locally.
 
 ## Record links in a bot's reply (2026-11-16, #4507)
 

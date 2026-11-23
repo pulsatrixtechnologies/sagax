@@ -267,6 +267,20 @@ describe("BotListItem", () => {
     expect(markup).not.toContain("](https://");
   });
 
+  it("does not keep the working dots for a closed thread whose activity was never cleared (#5011)", () => {
+    const markup = renderRow(bot({
+      busy: true,
+      activity: "working",
+      tasks: [
+        { threadId: "thread-atlas", title: "Chat", createdAt: 1, activity: "idle", busy: false },
+        { threadId: "work", title: "Helper", createdAt: 2, activity: "working", busy: false, closedBy: { botId: "atlas", name: "Atlas", at: 3 } },
+      ],
+    }));
+    expect(markup).not.toContain('data-testid="working-dot"');
+    expect(markup).not.toContain("animate-status-pulse");
+    expect(markup).not.toContain('data-testid="waiting-dot"');
+  });
+
   it("shows typing dots instead of preview text while the bot works", () => {
     const markup = renderRow(bot({ busy: true }));
 

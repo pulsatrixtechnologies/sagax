@@ -226,7 +226,7 @@ extension ChatView {
         switch value.kind {
         case "everyone": return String(localized: "everyone responds")
         case "mentions": return String(localized: "@ to bring a bot in")
-        case "auto" where roomJevOn: return String(localized: "Jev picks who responds")
+        case "auto" where roomJevOn: return String(localized: "The decision model picks who responds")
         default:
             let id = value.kind == "auto" ? (value.fallbackBotId ?? room.memberIds.first) : value.botId
             let lead = id.flatMap { session.state.bot($0)?.name } ?? String(localized: "Lead")

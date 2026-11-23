@@ -14,11 +14,15 @@
 //     which High-water uses once it has about 7 days of history, else the
 //     simple rule (account-strategy.ts) answers;
 //   - isolation: only the person's own accounts and the organization's,
-//     never another person's (`open`).
+//     never another person's (`open`);
+//   - the learned sampler (learned-routing.ts) when this person turned it
+//     on. Off, or with a thin record, the planner's pick is unchanged.
+//     The sampler chooses an account. The person's model stays.
 import type { AccountPick, AccountStrategy, AccountSwitchSetting } from "../../shared/account-switch.ts";
 import type { AccountMeter } from "./account-meter.ts";
 import { PLAN_BUDGET_MS, PLAN_HORIZON_HOURS, planAccounts, type PlannerAccount, type PlannerResult } from "./account-planner.ts";
 import { hasRoom, pickAccountByRule, rankAccounts, underThreshold, type StrategyAccount, type StrategyPick } from "./account-strategy.ts";
+import { createLearnedRouter, type ActAsConsent, type LearnedRouter, type RoutingArm, type RoutingOutcome } from "./learned-routing.ts";
 import type { UsageForecast } from "./usage-forecast.ts";
 
 /** A cached plan is reused for this long by the same conversation. */
@@ -43,6 +47,12 @@ export interface AccountSwitchDeps {
   /** A monotonic clock in ms for the planner's budget. */
   clock?: () => number;
   budgetMs?: number;
+  /** This person turned learned routing on. Absent: off. Not an environment variable. */
+  learnedRouting?: (person: string | null) => boolean;
+  /** Directory for usage/learned-routing.json. The process passes its data directory. */
+  learnedDataDir?: string;
+  /** Sampler to use. Absent: one is created here. */
+  learned?: LearnedRouter;
 }
 
 export interface AccountChoiceInput {
@@ -55,13 +65,24 @@ export interface AccountChoiceInput {
   pool: readonly string[];
   /** No engine session is open on `current` (a new conversation). */
   fresh: boolean;
+  /** The model the person asked for. Learning may move the account, never this model. */
+  model?: string;
+  promptTokens?: number;
+  /** True when this credential bills each use. Absent: not a paid key. */
+  paid?: (instanceId: string) => boolean;
+  /** The person confirmed this paid credential for the turn. */
+  paidConfirmed?: (instanceId: string) => boolean;
+  /** 1 is cheapest. Absent: 1. */
+  costTier?: (instanceId: string, model: string) => number;
+  /** Set when the turn acts as someone. Only those credentials may be picked. */
+  actAs?: ActAsConsent | null;
 }
 
 export interface AccountChoice {
   instanceId: string;
   pick: AccountPick;
-  /** How the choice was made: the planner, or the simple rule and why. */
-  by: "planner" | "rule";
+  /** How the choice was made: the planner, the simple rule, or the sampler. */
+  by: "planner" | "rule" | "learned";
   fallback?: Extract<PlannerResult, { status: "fallback" }>["reason"];
 }
 
@@ -69,6 +90,10 @@ export interface AccountSwitch {
   choose(input: AccountChoiceInput): AccountChoice | null;
   /** The accounts with room, best first, for the limit failover. */
   rank(payer: string, driverKind: string, pool: readonly string[]): string[];
+  /** One settled turn. A stopped turn is not recorded. The person's switch does not have to be on. */
+  record(outcome: RoutingOutcome): void;
+  /** Write the counts now. The process calls this when it is shutting down. */
+  flush(): void;
 }
 
 /** Sagax has read something of this account's windows. */
@@ -78,6 +103,7 @@ const measured = (account: StrategyAccount) => account.fiveHour.usedPercent !== 
 export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
   const clock = deps.clock ?? (() => performance.now());
   const plans = new Map<string, { at: number; current: string; result: Extract<PlannerResult, { status: "planned" }> }>();
+  const learned = deps.learned ?? createLearnedRouter({ dataDir: deps.learnedDataDir });
   const accountsOf = (payer: string, pool: readonly string[]): { person: string | null; accounts: PlannerAccount[] } => {
     const person = deps.person(payer);
     // isolation first: never another person's account, whatever the pool says
@@ -115,6 +141,58 @@ export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
       const setting = deps.setting(person, deps.provider(input.current));
       const now = deps.now();
       const rule = { strategy: setting.strategy, threshold: setting.threshold, now, accounts, current: input.current, fresh: input.fresh };
+      // The sampler sits on the planner's pick. Off for this person, or still thin, the pick is unchanged.
+      const learnedOn = deps.learnedRouting?.(person) === true;
+      const applyLearned = (choice: AccountChoice): AccountChoice | null => {
+        if (!learnedOn) return choice;
+        const model = input.model ?? "";
+        const arms: RoutingArm[] = [];
+        for (const account of accounts) {
+          if (!hasRoom(account)) continue;
+          arms.push({
+            instanceId: account.instanceId,
+            model,
+            paid: input.paid?.(account.instanceId) === true,
+            paidConfirmed: input.paidConfirmed?.(account.instanceId) === true,
+            plannerEligible: true,
+            costTier: input.costTier?.(account.instanceId, model) ?? 1,
+          });
+        }
+        const decision = learned.choose({
+          enabled: true,
+          plannerInstanceId: choice.instanceId,
+          plannerModel: model,
+          currentInstanceId: input.current,
+          context: {
+            provider: deps.provider(input.current),
+            requestedModel: model,
+            hourUtc: new Date(now).getUTCHours(),
+            promptTokens: input.promptTokens ?? 0,
+            fresh: input.fresh,
+          },
+          arms,
+          actAs: input.actAs ?? null,
+        });
+        switch (decision.by) {
+          case "planner":
+            return choice;
+          case "held":
+            return null;
+          case "learned": {
+            if (decision.instanceId === choice.instanceId) return choice;
+            return {
+              instanceId: decision.instanceId,
+              pick: pickOf(setting.strategy, accounts, { instanceId: decision.instanceId, why: { kind: "planned" } }),
+              by: "learned",
+              ...(choice.fallback ? { fallback: choice.fallback } : {}),
+            };
+          }
+          default: {
+            const unreachable: never = decision;
+            return unreachable;
+          }
+        }
+      };
       let fallback: AccountChoice["fallback"];
       if (setting.strategy === "high-water") {
         const cached = plans.get(input.threadId);
@@ -143,18 +221,24 @@ export function createAccountSwitch(deps: AccountSwitchDeps): AccountSwitch {
           const pick = planned.pick.instanceId === input.current && planned.pick.why.kind !== "keeps" && !input.fresh
             ? pickAccountByRule(rule) ?? planned.pick
             : planned.pick;
-          return { instanceId: pick.instanceId, pick: pickOf(setting.strategy, accounts, pick), by: "planner" };
+          return applyLearned({ instanceId: pick.instanceId, pick: pickOf(setting.strategy, accounts, pick), by: "planner" });
         }
       }
       const pick = pickAccountByRule(rule);
       if (!pick) return null;
-      return { instanceId: pick.instanceId, pick: pickOf(setting.strategy, accounts, pick), by: "rule", ...(fallback ? { fallback } : {}) };
+      return applyLearned({ instanceId: pick.instanceId, pick: pickOf(setting.strategy, accounts, pick), by: "rule", ...(fallback ? { fallback } : {}) });
     },
     rank(payer, _driverKind, pool) {
       const { person, accounts } = accountsOf(payer, pool);
       if (!accounts.length) return [];
       const setting = deps.setting(person, deps.provider(accounts[0]!.instanceId));
       return rankAccounts({ strategy: setting.strategy, threshold: setting.threshold, now: deps.now(), accounts }).map((account) => account.instanceId);
+    },
+    record(outcome) {
+      learned.record(outcome);
+    },
+    flush() {
+      learned.flush();
     },
   };
 }

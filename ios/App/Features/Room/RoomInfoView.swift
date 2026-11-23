@@ -263,7 +263,7 @@ struct RoomResponderSection: View {
                     }
                 }
                 Section(String(localized: "Group behavior")) {
-                    Text(jevOn ? String(localized: "Auto (Jev)") : String(localized: "Auto")).tag(RoomResponder.Choice.auto)
+                    Text(String(localized: "Auto")).tag(RoomResponder.Choice.auto)
                     Text(String(localized: "Everyone responds")).tag(RoomResponder.Choice.everyone)
                     Text(String(localized: "Only when mentioned")).tag(RoomResponder.Choice.mentions)
                 }
@@ -286,8 +286,8 @@ struct RoomResponderSection: View {
         case .mentions: return String(localized: "Only explicitly @mentioned bots respond")
         case .auto:
             return jevOn
-                ? String(localized: "Jev picks who answers each plain message; @mentions override this")
-                : String(localized: "Jev is off, so plain messages go to \(lead); @mentions override this")
+                ? String(localized: "The decision model picks who answers each plain message; @mentions override this")
+                : String(localized: "The decision model is off, so plain messages go to \(lead); @mentions override this")
         case .lead: return String(localized: "Plain messages go to \(lead); @mentions override this")
         }
     }

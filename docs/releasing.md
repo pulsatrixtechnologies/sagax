@@ -102,7 +102,10 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    right after publication (0.5.4 showed "No notes were published").
 2. macOS: `SAGAX_MAC_IDENTITY="<Developer ID name or SHA-1 hash>" pnpm package:fork:mac`
    (a hash is required when the keychain holds two identities with the same
-   name), then notarize and staple each `.zip`/`.dmg`, re-zip and regenerate
+   name). Signing covers Mach-O, frameworks and apps, and skips data files
+   (locale `.pak`, `.lproj` contents, images, json). A hash uses
+   `scripts/mac-sign-by-hash.cjs`; a name, and `pnpm package:mac`, use
+   `scripts/mac-sign.cjs`. Then notarize and staple each `.zip`/`.dmg`, re-zip and regenerate
    `latest-mac.yml` (`node scripts/regenerate-mac-feed.mjs`). It keeps the
    `releaseNotes` line and fails when the feed has none: run
    `node scripts/embed-feed-release-notes.mjs release/latest-mac.yml`, then

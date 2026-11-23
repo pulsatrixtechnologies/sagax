@@ -50,6 +50,12 @@ describe("chat width mapping (#2004)", () => {
     expect(chatComposerShellClass("reading")).toContain("max(16px,");
     expect(chatComposerShellClass("wide")).toContain("max(16px,");
     expect(chatComposerShellClass("full")).not.toContain("960px");
+    // #5158: 48px under the field (pb-12), at every width, so a click does
+    // not meet an auto-hidden Dock or taskbar. pb-4 was about 16px.
+    for (const width of ["reading", "wide", "full"] as const) {
+      expect(chatComposerShellClass(width)).toContain("pb-12");
+      expect(chatComposerShellClass(width)).not.toMatch(/\bpb-4\b/);
+    }
 
     const reading = chatBubbleWidthClasses("reading");
     const wide = chatBubbleWidthClasses("wide");

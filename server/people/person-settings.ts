@@ -63,6 +63,9 @@ export interface PersonSettings {
   /** #5180: Act as may use this person's account or API key. Absent means
    * no. The person sets it; an admin does not. */
   allowPersonalCredentialWhenActingAs?: boolean;
+  /** Learned routing for this person's accounts. Absent means off. It picks
+   * an account only, never the model the person chose. */
+  learnedRouting?: boolean;
 }
 
 /** The server's limit for About me (server/config.ts profile.aboutMe). */
@@ -122,6 +125,7 @@ function parse(value: unknown): PersonSettings {
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
   const allowPersonalCredentialWhenActingAs = raw.allowPersonalCredentialWhenActingAs === true;
+  const learnedRouting = raw.learnedRouting === true;
   return {
     features,
     browserProfiles,
@@ -133,6 +137,7 @@ function parse(value: unknown): PersonSettings {
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
     ...(aboutMe ? { aboutMe } : {}),
     ...(allowPersonalCredentialWhenActingAs ? { allowPersonalCredentialWhenActingAs: true } : {}),
+    ...(learnedRouting ? { learnedRouting: true } : {}),
   };
 }
 
@@ -240,6 +245,14 @@ export class PersonSettingsStore {
       throw new PersonSettingsError("pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).");
     }
     return this.save(principalId, { ...rest, pendingApprovalExpireDays: days as number });
+  }
+
+  /** Learned routing for this person's accounts. Off drops the field. */
+  setLearnedRouting(principalId: string, enabled: unknown): PersonSettings {
+    if (typeof enabled !== "boolean") throw new PersonSettingsError("learnedRouting is true or false.");
+    const current = this.get(principalId);
+    const { learnedRouting: _, ...rest } = current;
+    return this.save(principalId, { ...rest, ...(enabled ? { learnedRouting: true } : {}) });
   }
 
   /** #5180: Act as may use this person's own account or API key. */

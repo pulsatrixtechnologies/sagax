@@ -6,6 +6,21 @@ import type { InternalRouteContext } from "./internal-route.ts";
 import type { InternalSessionsBot, InternalSessionsDeps, InternalSessionsTask } from "./internal-sessions-types.ts";
 import { PASS } from "./table.ts";
 
+/** What list_threads says a thread is doing. A closed thread is closed even
+ * when its activity flag was never cleared (#5011). A thread that is busy
+ * again (picked back up) is still running. */
+export function threadListState(
+  task: { activity?: string; closedBy?: unknown },
+  flags: { awaiting: boolean; busy: boolean; queued: boolean },
+): "running" | "waiting-on-you" | "queued" | "idle" | "closed" {
+  if (task.closedBy && !flags.busy) return "closed";
+  if (task.activity === "waiting-on-you" || flags.awaiting) return "waiting-on-you";
+  if (flags.busy) return "running";
+  if (flags.queued) return "queued";
+  if (task.closedBy) return "closed";
+  return "idle";
+}
+
 export async function handleInternalSessionsRoster(
   deps: InternalSessionsDeps,
   ctx: InternalRouteContext,
@@ -58,16 +73,12 @@ export async function handleInternalSessionsRoster(
       state: "running" | "waiting-on-you" | "queued" | "idle" | "closed";
       unread: boolean; openedAt: number; delegationId?: string; own: boolean;
     }> = [];
-    const stateOf = (bot: InternalSessionsBot, task: InternalSessionsTask) => {
-      // A teammate that ended on a NEEDS INPUT question waits on the
-      // person too, though its turn is over and nothing marks the task.
-      if (task.activity === "waiting-on-you" || deps.awaitingAnswer(task.threadId)) return "waiting-on-you" as const;
-      if (deps.threadBusy(bot.id, task.threadId)) return "running" as const;
-      if (queuedThreadPosition(bot.id, task.threadId) !== null) return "queued" as const;
-      if (deps.activeDirect(task.threadId)) return "queued" as const;
-      if (task.closedBy) return "closed" as const;
-      return "idle" as const;
-    };
+    const stateOf = (bot: InternalSessionsBot, task: InternalSessionsTask) =>
+      threadListState(task, {
+        awaiting: deps.awaitingAnswer(task.threadId),
+        busy: deps.threadBusy(bot.id, task.threadId),
+        queued: queuedThreadPosition(bot.id, task.threadId) !== null || deps.activeDirect(task.threadId),
+      });
     // On a Cloud home a turn that may use the lent Mac sees only the
     // conversations the owner alone opened and wrote in: a title is words
     // too (cloudLendingView).

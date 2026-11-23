@@ -759,7 +759,11 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
   if (!message) {
     return <span title={t("chatMarkdown.legacyFile")} className="break-words text-ink-secondary">{children}{revealable && <span className="ms-1.5"><OutsideWorkspaceFile filePath={filePath} /></span>}</span>;
   }
-  const label = save.state === "saving"
+  // #5018: an absolute local path opens in the file manager at once. The
+  // download is for a path this computer cannot reveal (a remote client).
+  const label = revealable
+    ? null
+    : save.state === "saving"
     ? t("folder.saving")
     : save.state === "saved"
       ? t("connectApps.skill.saved")
@@ -770,6 +774,12 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
   return (
     <span dir="ltr" className="inline-flex flex-wrap items-center gap-x-1.5 [unicode-bidi:isolate]">
       <TableFileButton path={filePath} name={name ?? fileName(filePath)} message={message} />
+      {revealable ? (
+        <span className="inline-flex items-center gap-1 break-words text-start">
+          {children}
+          <OutsideWorkspaceFile filePath={filePath} />
+        </span>
+      ) : (
       <button
         type="button"
         onClick={() => void save.save()}
@@ -788,6 +798,7 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
           <Download size={12} className="shrink-0" aria-hidden="true" />
         )}
       </button>
+      )}
       {label && (
         <span
           role={save.state === "failed" ? "alert" : "status"}
@@ -797,7 +808,7 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
           {save.state === "failed" ? saveFailureText(save) : label}
         </span>
       )}
-      {(revealable || (save.state === "failed" && save.outsideWorkspace)) && (
+      {!revealable && save.state === "failed" && save.outsideWorkspace && (
         <span className="inline-flex flex-wrap items-center gap-x-1.5 text-[12px]">
           <OutsideWorkspaceFile filePath={filePath} />
         </span>

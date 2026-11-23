@@ -143,7 +143,7 @@ export function ComposerEditor({
     <div className="relative">
       {/* App-ground from the pill midline down, full-bleed. Bubbles may
           tuck into the top half of the radius; they must not show below
-          center. End at the dock's pb-4 padding: a viewport-height
+          center. End at the dock's pb-12 padding: a viewport-height
           backdrop extends the document and lets focus scroll the header
           away. Only the decoration is bounded; upward menus stay free. */}
       <div

@@ -3179,7 +3179,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const bot = this.bot(botId);
     const included = (bot?.tasks ?? []).filter((task) => include(task));
     // A routine run's own task never makes the bot read busy (2026-11-03).
-    const tasks = included.filter((task) => !task.routineRunId);
+    // A closed thread is finished work. Its leftover activity used to keep the
+    // bot "waiting on you" or working after close_thread (#5011).
+    const tasks = included.filter((task) => !task.routineRunId && !task.closedBy);
     const legacy = this.legacyActivities.get(botId);
     const activities = [
       legacy,
@@ -4374,9 +4376,16 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!bot || !task) return null;
     if (!closedBy && !task.closedBy) return task;
     this.commitBotChange(bot, "who closed the thread", () => {
-      if (closedBy) task.closedBy = structuredClone(closedBy);
-      else delete task.closedBy;
+      if (closedBy) {
+        task.closedBy = structuredClone(closedBy);
+        // Closing ends the turn. The activity flag is not a record of the
+        // close, and leaving it set kept the working indicator on (#5011).
+        task.activity = "idle";
+        task.busy = false;
+        delete task.turnStartedAt;
+      } else delete task.closedBy;
     }, undefined, true);
+    this.refreshBotActivity(bot);
     this.emit({ type: "bot", botId });
     return task;
   }

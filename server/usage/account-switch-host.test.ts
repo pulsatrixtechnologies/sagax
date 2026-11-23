@@ -1,9 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { accountSwitchSettingOf, type AccountSwitchSetting } from "../../shared/account-switch.ts";
 import { createAccountMeter } from "./account-meter.ts";
 import { createAccountSwitch, type AccountSwitchDeps } from "./account-switch-host.ts";
+import { createLearnedRouter, type RoutingOutcome } from "./learned-routing.ts";
 import type { UsageForecast } from "./usage-forecast.ts";
+
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 const NOW = Date.UTC(2026, 10, 19, 15, 0);
 const HOUR = 3_600_000;
@@ -119,5 +133,109 @@ describe("the account strategy host (#5014)", () => {
   it("leaves a single account alone", () => {
     const w = world();
     expect(w.host.choose({ payer: "ada", threadId: "t1", driverKind: "claudeAgent", current: "claude", pool: ["claude", "claude-nimbus"], fresh: true })).toBeNull();
+  });
+});
+
+describe("learned routing on the account switch", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    delete process.env.SAGAX_LEARNED_ROUTING;
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  const input = { payer: "ada", threadId: "t-learn", driverKind: "claudeAgent", current: "claude", pool: ["claude", "claude-work"], fresh: false, model: "fast" };
+
+  function measured(w: ReturnType<typeof world>) {
+    w.meter.notePlan("ada", ["claude"], { fiveHour: window(20, NOW + 4 * HOUR) });
+    w.meter.notePlan("ada", ["claude-work"], { fiveHour: window(20, NOW + 3 * HOUR) });
+  }
+
+  function teach(router: ReturnType<typeof createLearnedRouter>, instanceId: string, model: string, bad: boolean) {
+    for (let i = 0; i < 20; i++) {
+      const row: RoutingOutcome = {
+        instanceId,
+        model,
+        context: { provider: "anthropic", requestedModel: model, hourUtc: 15, promptTokens: 0, fresh: false },
+        ttftMs: bad ? 2_000 : 180,
+        tokensPerSec: bad ? 8 : 90,
+        error: bad && i % 2 === 0,
+        rateLimited: bad && i % 3 === 0,
+        quotaBurn: bad ? 8 : 1,
+        costTier: 1,
+        at: NOW + i,
+      };
+      router.record(row);
+    }
+  }
+
+  it("stays on the planner when this person has not turned learning on, even if the server variable is set", () => {
+    const w = world();
+    measured(w);
+    const router = createLearnedRouter({ rng: mulberry32(4) });
+    teach(router, "claude", "fast", true);
+    teach(router, "claude-work", "fast", false);
+    process.env.SAGAX_LEARNED_ROUTING = "1";
+    const host = createAccountSwitch({ ...w.deps, learned: router });
+    expect(host.choose(input)).toMatchObject({ instanceId: "claude", by: "rule" });
+  });
+
+  it("moves this person's account once they turned learning on, and never their model", () => {
+    const w = world();
+    measured(w);
+    const router = createLearnedRouter({ rng: mulberry32(4) });
+    teach(router, "claude", "fast", true);
+    teach(router, "claude-work", "fast", false);
+    // A better model on the current account must not win: learning picks an account only.
+    teach(router, "claude", "slow", false);
+    const enabled = new Set<string>();
+    const host = createAccountSwitch({ ...w.deps, learned: router, learnedRouting: (person) => enabled.has(person ?? "") });
+    expect(host.choose(input)).toMatchObject({ instanceId: "claude", by: "rule" });
+    enabled.add("ada");
+    let moved = 0;
+    for (let i = 0; i < 30; i++) {
+      const choice = host.choose({ ...input, models: ["slow", "fast"] } as typeof input & { models: string[] });
+      expect(choice).not.toHaveProperty("model");
+      if (choice?.by === "learned" && choice.instanceId === "claude-work") moved += 1;
+    }
+    expect(moved).toBeGreaterThan(20);
+    enabled.delete("ada");
+    expect(host.choose(input)).toMatchObject({ instanceId: "claude", by: "rule" });
+  });
+
+  it("does not move onto an unconfirmed paid key", () => {
+    const w = world();
+    measured(w);
+    const router = createLearnedRouter({ rng: mulberry32(4) });
+    teach(router, "claude", "fast", true);
+    teach(router, "claude-work", "fast", false);
+    const host = createAccountSwitch({ ...w.deps, learned: router, learnedRouting: () => true });
+    for (let i = 0; i < 20; i++) {
+      const choice = host.choose({ ...input, paid: (id) => id === "claude-work" });
+      expect(choice?.instanceId).not.toBe("claude-work");
+      expect(choice).not.toHaveProperty("model");
+    }
+  });
+
+  it("stores the counts in the directory the process passed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-learned-host-"));
+    dirs.push(dir);
+    const w = world();
+    const host = createAccountSwitch({ ...w.deps, learnedDataDir: dir });
+    host.record({
+      instanceId: "claude",
+      model: "fast",
+      context: { provider: "anthropic", requestedModel: "fast", hourUtc: 15, promptTokens: 12, fresh: false },
+      ttftMs: 100,
+      tokensPerSec: 20,
+      error: false,
+      rateLimited: false,
+      quotaBurn: 0,
+      costTier: 1,
+      at: NOW,
+    });
+    host.flush();
+    const text = readFileSync(join(dir, "usage", "learned-routing.json"), "utf8");
+    expect(JSON.parse(text).total).toBe(1);
+    expect(text).not.toMatch(/sk-|bearer/);
   });
 });

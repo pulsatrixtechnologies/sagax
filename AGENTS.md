@@ -110,6 +110,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - Never fix the Codex Perspicax bridge by removing the reserved-variable guard or sharing `SAGAX_PERSPICAX_*` with another server (2026-10-30).
 - A provider's model list comes live from the person's own account; a written list is only a fallback and extra metadata, never a filter, and a new model needs no code change (2026-11-19, #4973).
 - Among a person's accounts of one provider, their strategy for that provider picks the account (High-water by default, never per bot); the Account line wins, a limit still moves it (2026-11-19, #5014).
+- Learned routing is the person's own switch, off until they turn it on, and it picks an account only, never the model they chose (2026-11-22).
 
 ## Capabilities
 

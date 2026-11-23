@@ -1048,6 +1048,13 @@ add({
   write: (_ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "PUT", path: "/api/me/models", body: { contextByProvider: v } } : "value is {<provider id>: <tokens> or null}.",
 });
 add({
+  key: "models.learnedRouting", family: "models", target: "none", value: "boolean",
+  label: "Learned account routing (true lets routing learn which of your accounts of one provider to use; it never changes the model you chose)",
+  where: "No screen yet: ask any of your bots",
+  read: () => ({ path: "/api/me/models", field: "learnedRouting" }),
+  write: (_ids, v) => typeof v === "boolean" ? { method: "PUT", path: "/api/me/models", body: { learnedRouting: v } } : "value is true or false.",
+});
+add({
   key: "models.claudeAccount", family: "models", target: "none", value: "object",
   label: "Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card", where: "Settings > Providers > Models > Claude > Add account",
   write: (_ids, v) => {

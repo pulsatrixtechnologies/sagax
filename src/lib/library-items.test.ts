@@ -17,7 +17,8 @@ describe("library grouping", () => {
   it("mixes files and artifacts, splits this week from older, newest first", () => {
     const items = libraryItems(
       [file("a".repeat(24), "plan.md", 1), file("b".repeat(24), "export.zip", 3), file("c".repeat(24), "old.md", 12)],
-      [artifact("art_0000001", "Dispatch email preview", 20), artifact("art_0000002", "Queue", 0.5)],
+      // 18 hours ago stays in this week in every time zone. 12 hours before noon UTC is local midnight, which is today.
+      [artifact("art_0000001", "Dispatch email preview", 20), artifact("art_0000002", "Queue", 0.75)],
     );
     const groups = groupLibraryItems(items, now);
     expect(groups.pinned).toEqual([]);

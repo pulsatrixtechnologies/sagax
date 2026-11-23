@@ -332,6 +332,12 @@ export function RoutineRunCard({
   );
   const handedTo = run.handedTo ?? [];
   const asked = handedTo.length > 0 && <DelegationLine entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />;
+  // #4787: on a result, the teammates fold into the row's meta instead of an
+  // Asked line under the card.
+  const askedLive = handedTo.some((entry) => entry.status !== "completed" && entry.status !== "failed" && entry.status !== "ended");
+  const askedMeta = form === "card" && handedTo.length > 0
+    ? `${t(askedLive ? "chat.askLine.asking" : "chat.askLine.asked")} ${handedTo.map((entry) => entry.name?.trim()).filter(Boolean).join(", ")}`
+    : "";
 
   // #3479: a lasting problem is said once; its row counts the runs since.
   // #3695: a repeating routine's one summary counts its runs with problems,
@@ -353,9 +359,10 @@ export function RoutineRunCard({
           ? <TriangleAlert size={12} className={tone} />
           : <Clock size={12} />;
 
-  // What the line says after the routine's name: the row's state words, or
-  // nothing for a result whose words are under it.
-  const said = form !== "row" ? "" : (() => {
+  // What the line says after the routine's name. A result (#4787) puts its
+  // one-line outcome on the row itself. A problem row says its sentence under
+  // the name. A plain row says its state in the line.
+  const said = form === "problem" ? "" : form === "card" ? compactDetail(brief) : (() => {
     if (running || (live && run.status !== "queued" && run.status !== "waiting")) return t("routines.status.running");
     if (run.status === "blocked" && !run.goalStatus) return routineRunBlockedLine(run);
     if (run.status === "failed" || run.status === "missed") {
@@ -474,19 +481,20 @@ export function RoutineRunCard({
     : live ? null : time;
   const nameRoom = resume || stop ? RUN_NAME_ROOM_ACTIONS : RUN_NAME_ROOM;
   const firstLine = (
-    <span data-routine-run-first-line className={RUN_FIRST_LINE}>
-      <span id={statusId} role="img" aria-label={statusLabel} title={statusLabel} className="flex shrink-0">{glyph}</span>
+    <span data-routine-run-first-line className={cn(RUN_FIRST_LINE, form === "card" && "h-auto min-h-6 w-full")}>
+      <span id={statusId} role="img" aria-label={statusLabel} title={statusLabel} data-routine-run-glyph={form === "card" ? "" : undefined} className={cn("flex shrink-0", form === "card" && "size-6 items-center justify-center rounded-md bg-inset")}>{glyph}</span>
       <span data-routine-run-name className={cn("min-w-0 shrink-0 truncate", nameRoom, spinnerWord && RUN_NAME_ROOM_WORD)} title={name}>{name}</span>
       {/* one tree whatever the line says (the flash rule, 2026-11-03): a
           part with nothing to say is hidden, never taken out */}
       <span data-routine-run-word className={spinnerWord ? "hidden shrink-0 items-center whitespace-nowrap @min-[30rem]/run-line:flex" : "contents"}>
         <Separator shown={Boolean(said && name)} />
-        <span data-routine-run-status={said ? true : undefined} dir="auto" aria-live="polite" className={cn(spinnerWord ? "shrink-0 whitespace-nowrap" : "min-w-8 truncate", !said && "hidden", running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{said}</span>
+        <span data-routine-run-status={form === "card" ? undefined : said ? true : undefined} data-routine-run-brief={form === "card" && said ? "" : undefined} dir="auto" aria-live="polite" className={cn(spinnerWord ? "shrink-0 whitespace-nowrap" : "min-w-8 truncate", form === "card" && "line-clamp-1", !said && "hidden", running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{said}</span>
       </span>
+      <span data-routine-run-meta className={cn("min-w-0 truncate text-ink-tertiary", !askedMeta && "hidden")}>{askedMeta}</span>
       <Separator shown={Boolean(pausedWords && (name || said))} />
       <span data-routine-auto-paused={pausedAfter ?? undefined} className={cn("min-w-8 truncate", !pausedWords && "hidden")}>{pausedWords}</span>
-      <Separator shown={Boolean(when && (name || said || pausedWords))} />
-      <span className={cn("shrink-0 text-ink-tertiary", !when && "hidden")}>{when}</span>
+      <Separator shown={form !== "card" && Boolean(when && (name || said || pausedWords))} />
+      <span className={cn("shrink-0 text-ink-tertiary", !when && "hidden", form === "card" && when && "ms-auto")}>{when}</span>
       {onOpen && <OpenChevron />}
     </span>
   );
@@ -526,18 +534,15 @@ export function RoutineRunCard({
       className="flex w-full min-w-0 max-w-[600px] flex-col items-start text-start"
     >
       {line}
-      {/* #4234: the result in a line or two that stands alone, under the
-          name, where the bot's words start; no surface and no band below */}
-      {form === "card" && brief && (
-        <p data-routine-run-brief dir="auto" title={brief} className={cn(RUN_INDENT, "line-clamp-2 text-[13px] leading-[18px] text-ink")}>{brief}</p>
-      )}
+      {/* #4787: a result's outcome is the one line on the row, not a
+          paragraph under a clock chip. */}
       {(state || items) && (
         <div className={cn(RUN_INDENT, "mt-1 flex w-full flex-col gap-2")}>
           {state && <div className="text-[12px] leading-4">{state}</div>}
           {items}
         </div>
       )}
-      {asked && <div className={cn(RUN_INDENT, "mt-1 w-full")}>{asked}</div>}
+      {asked && form !== "card" && <div className={cn(RUN_INDENT, "mt-1 w-full")}>{asked}</div>}
       {widget && <div data-routine-run-widget className="mt-2 w-full">{widget}</div>}
     </section>
   );

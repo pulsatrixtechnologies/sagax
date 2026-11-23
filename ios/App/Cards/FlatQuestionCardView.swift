@@ -52,10 +52,8 @@ struct FlatQuestionCardView: View {
                 dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
             ) {
                 if !card.subtitle.isEmpty {
-                    Text(card.subtitle)
-                        .font(colors.font(13))
+                    CardMarkdown(source: card.subtitle)
                         .foregroundStyle(colors.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(card.options.enumerated()), id: \.offset) { position, option in

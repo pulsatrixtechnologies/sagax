@@ -180,9 +180,13 @@ function providerOf(botId: string): VoiceTtsProvider | undefined {
 }
 
 async function failure(res: Response): Promise<Error> {
-  const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; cause?: VoiceModeRefusalCause; failure?: string; key?: unknown; tried?: unknown; card?: { keysUrl?: string; admin?: boolean } };
+  const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; out_of_credits?: boolean; cause?: VoiceModeRefusalCause; failure?: string; key?: unknown; tried?: unknown; card?: { keysUrl?: string; admin?: boolean } };
   if (res.status === 403 && body.code === "voice_no_access" && body.cause) {
     return new VoiceModeRefused(body.error ?? "Voice mode is not available.", body.cause, body.card?.keysUrl, body.card?.admin === true);
+  }
+  if (body.code === "out_of_credits" || body.out_of_credits === true) {
+    const key = cleanKeyInfo(body.key);
+    return new VoiceProviderError(body.error ?? "The voice key is out of credits.", "quota", res.status, { ...(key ? { key } : {}), tried: cleanRefusals(body.tried) });
   }
   if (body.code === "voice_provider") {
     const kind = PROVIDER_FAILURES.has(body.failure as VoiceProviderFailure) ? (body.failure as VoiceProviderFailure) : "other";

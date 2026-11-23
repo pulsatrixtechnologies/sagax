@@ -13,6 +13,7 @@ import { useStoreSelector } from "@/state/store-selector";
 import { openBotThread, startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
 import { ChatHeaderBar } from "@/components/ChatHeaderBar";
+import { UsageChip } from "@/components/UsageChip";
 
 /** Call overlay strip and the floating bot-pill header (or a side header). */
 export function ChatViewHeader({
@@ -75,8 +76,10 @@ export function ChatViewHeader({
       {/* Header */}
       {side ? (typeof side.header === "function" ? side.header(side.panel ? botPill : null) : side.header) : <ChatHeaderBar
         {...(headerDragProps as HTMLAttributes<HTMLDivElement>)}
-        // Every chat view floats this same bar (ChatHeaderBar): no band, the
-        // transcript scrolls under the pill and ChatEdgeFade softens it.
+        align="start"
+        // The bot's name is a plain title at the top left of this bar (#4536).
+        // The transcript keeps its room under the bar, and the bar's ground
+        // hides whatever scrolls there.
         // @container/chathead lets the chips on the right fold to icon
         // bubbles when the column is narrow. Pulsatrix Light makes it
         // `relative`.
@@ -91,6 +94,7 @@ export function ChatViewHeader({
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
+          <UsageChip usage={bot.tasks?.find((task) => task.threadId === bot.threadId)?.usage} />
           {/* No Computer button in the header (JC 2026-11-05): Computer
               opens from the bot panel. */}
           {/* The bot panel toggle (owner 2026-11-17): a round panel icon left of

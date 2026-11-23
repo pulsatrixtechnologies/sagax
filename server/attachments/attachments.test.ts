@@ -586,6 +586,20 @@ describe("shared files", () => {
     await expect(saveFile((async function* () { yield Buffer.from("x"); })(), "../evil.sh", mime)).rejects.toThrow(/filename, not a path/);
   });
 
+  it("keeps a plain-text config under its own extension (#5005)", async () => {
+    const bytes = Buffer.from("worker_processes 1;\n");
+    const saved = await saveFile((async function* () { yield bytes; })(), "nginx.conf", "text/x-conf");
+    expect(saved.name).toBe("nginx.conf");
+    expect(saved.mime).toBe("text/x-conf");
+    expect(saved.path.endsWith(".conf")).toBe(true);
+    expect(readFileSync(saved.path)).toEqual(bytes);
+    const properties = Buffer.from("welcome=Bonjour\n");
+    const text = await saveFile((async function* () { yield properties; })(), "site.properties", "text/plain");
+    expect(text.name).toBe("site.txt");
+    expect(text.path.endsWith(".txt")).toBe(true);
+    expect(readFileSync(text.path)).toEqual(properties);
+  });
+
   it("keeps a Windows event log as a binary attachment", async () => {
     const bytes = Buffer.alloc(4096);
     bytes.write("ElfFile\0");

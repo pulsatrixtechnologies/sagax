@@ -12,6 +12,7 @@ import {
   userSectionName,
 } from "@/lib/sidebar-layout";
 import { sidebarSectionAttention } from "@/lib/sidebar-attention";
+import { orderedBots, useSectionBotOrder } from "@/lib/section-bot-order";
 import { SidebarSectionHeader } from "../SidebarSectionHeader";
 import { SectionNameInput } from "../OrgSectionMenu";
 import { sidebarBotActivityTasks } from "../SidebarBotActivity";
@@ -124,6 +125,7 @@ export function SidebarSectionList({
     moveSidebarSection,
     layoutInteractive,
   } = drag;
+  const botOrder = useSectionBotOrder();
 
   return (
     <div className="flex flex-col gap-1">
@@ -134,7 +136,8 @@ export function SidebarSectionList({
         const team = teamMap.find((item) => (item.key ? userSectionId(item.name) : GENERAL_SECTION_ID) === id);
         const sectionName = team?.name || userSectionName(id);
         const sectionDisplayName = team?.key && !isMyTeamSectionName(team.name) ? team.name : sectionLabel(id);
-        const sectionChiefItems = (team?.chiefs ?? []).filter((bot) => !inTopGrid(bot));
+        const savedOrder = team?.key ? botOrder[team.name] : undefined;
+        const sectionChiefItems = orderedBots((team?.chiefs ?? []).filter((bot) => !inTopGrid(bot)), savedOrder);
         const sectionGroupItems =
           id === BOT_CHATS_SECTION_ID
             ? botChats
@@ -143,7 +146,7 @@ export function SidebarSectionList({
               : team
                 ? (team.key ? sectionedRooms.filter((group) => group.section === team.name) : unsectionedRooms)
                 : [];
-        const sectionBotItems = (team?.members ?? []).filter((bot) => !inTopGrid(bot));
+        const sectionBotItems = orderedBots((team?.members ?? []).filter((bot) => !inTopGrid(bot)), savedOrder);
         // A sub-team (#2045) sits under its parent, one step in, and folds
         // away with it.
         let ancestor = team?.parent;

@@ -37,9 +37,11 @@ private struct OnValueChange<V: Equatable>: ViewModifier {
     ///
     /// A body that branches makes its result a dynamic list, so the next
     /// modifier in the chain wraps it again: the chat screen chains this helper
-    /// 25 times above the transcript and every branch was one more stack for
-    /// the main thread to walk when the chat was pushed, on top of the layouts
-    /// SwiftUI already nests down to a row. The iPhone's main thread has 1 MB
+    /// 33 times above the transcript (36 observer calls in ChatView.swift, the
+    /// other three `onValueChangePair`; ios/TESTING.md) and every branch was
+    /// one more stack for the main thread to walk when the chat was pushed, on
+    /// top of the layouts SwiftUI already nests down to a row. The iPhone's
+    /// main thread has 1 MB
     /// and TestFlight 0.8.71, 0.8.153 and 0.8.167 overflowed it the instant a
     /// chat opened (#5159).
     ///
@@ -53,9 +55,10 @@ private struct OnValueChange<V: Equatable>: ViewModifier {
             .onAppear { fireFirst(value) }
     }
 
-    /// The first read, for the two call sites that ask for it: once, and only
-    /// when the screen appeared with a value to report. A `guard`, because a
-    /// branch anywhere in this struct is what grew the stack.
+    /// The first read, for every call site that passes `initial` (ten today):
+    /// once, and only when the screen appeared with a value to report. All of
+    /// them are read here, in `onAppear`. A `guard`, because a branch anywhere
+    /// in this struct is what grew the stack.
     private func fireFirst(_ value: V) {
         guard initial, !firedFirst else { return }
         firedFirst = true

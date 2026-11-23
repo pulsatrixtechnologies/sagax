@@ -93,7 +93,20 @@ const until = async (found: () => unknown, ms = 15_000) => {
   const end = Date.now() + ms;
   while (!found() && Date.now() < end) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
 };
-const settle = async () => { for (let i = 0; i < 12; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
+/** Twelve turns, then more until the page stops changing, up to 15s.
+ * A fixed twelve turns lost a guard once on a loaded release cut (#4478). */
+const settle = async () => {
+  const end = Date.now() + 15_000;
+  let previous = "";
+  let frames = 0;
+  while (Date.now() < end) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    frames += 1;
+    const html = document.body.innerHTML;
+    if (frames >= 12 && html === previous) return;
+    previous = html;
+  }
+};
 
 beforeAll(async () => {
   setAdvancedMode(true);

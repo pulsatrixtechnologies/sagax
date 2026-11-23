@@ -924,7 +924,8 @@ describe("pairing, end to end", () => {
       createProxyHandler({
         harnessPort: HARNESS_PORT,
         authenticate: (t) => registry.authenticate(t ?? undefined),
-        redeem: (code, deviceName, pairRequestId) => registry.redeem(code, deviceName, pairRequestId),
+        redeem: (code, deviceName, pairRequestId, replacesToken) =>
+          registry.redeem(code, deviceName, pairRequestId, replacesToken),
         serverName: () => "Ada's computer",
         hosts: () => ["macbook.tail1234.ts.net", "192.168.1.42", "openmausbot-abcd1234.local"],
         endpoints: () => [
@@ -1264,5 +1265,40 @@ describe("revoking a capability mid-stream", () => {
 
     relay.close();
     upstream.close();
+  });
+});
+
+describe("re-pair request", () => {
+  it("forwards replacesToken and keeps the device-limit code", async () => {
+    let seen: unknown;
+    const server = createServer(createProxyHandler({
+      harnessPort: 1,
+      authenticate: () => null,
+      redeem: (_code, _name, _id, replacesToken) => {
+        seen = replacesToken;
+        return {
+          error: "too many paired devices: remove an old phone on your computer first",
+          code: "pairing_device_limit",
+        };
+      },
+      serverName: () => "Ada",
+    }));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/pair`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ credential: "000000", deviceName: "Pocket", replacesToken: "omb_old" }),
+      });
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({
+        error: "too many paired devices: remove an old phone on your computer first",
+        code: "pairing_device_limit",
+      });
+      expect(seen).toBe("omb_old");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

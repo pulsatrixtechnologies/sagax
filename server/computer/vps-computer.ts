@@ -2,6 +2,7 @@
 // transport reaches the user's daemon and the official Cua MCP server stays
 // inside one managed container per bot.
 import { createHash, randomBytes } from "node:crypto";
+import { dockerCliMissing, dockerCliMissingProblem, dockerCliStartMessage } from "./vps-hints.ts";
 import { spawnChild } from "../process/spawn-helper.ts";
 import { createConnection, createServer, type AddressInfo } from "node:net";
 
@@ -421,7 +422,7 @@ export function defaultRunner(args: string[], options: VpsCommandOptions = {}): 
       fail(new Error(`Docker-over-SSH stdin failed: ${error.message}`));
     });
     child.on("error", (error) => {
-      fail(new Error(`Docker-over-SSH could not start: ${error.message}`));
+      fail(new Error(dockerCliStartMessage(error)));
     });
     child.on("close", (code, signal) => {
       if (failure) return;
@@ -773,6 +774,15 @@ const VPS_INVENTORY_STATES = new Set<ManagedVpsInventoryInstance["state"]>([
 ]);
 
 function inventoryFailure(alias: string, error: unknown): ManagedVpsInventory {
+  if (dockerCliMissing(error)) {
+    return {
+      configured: true,
+      available: false,
+      sshAlias: alias,
+      problem: `${dockerCliMissingProblem()} (VPS host: ${alias})`,
+      instances: [],
+    };
+  }
   const detail = (error instanceof Error ? error.message : String(error))
     .replace(/[\r\n\t]+/g, " ")
     .trim()

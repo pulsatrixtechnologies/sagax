@@ -100,15 +100,28 @@ function readMarks(dataDir: string): AlertMarks | null {
   }
 }
 
+function writeMarks(dataDir: string, marks: AlertMarks): void {
+  try {
+    mkdirSync(join(dataDir, "usage"), { recursive: true, mode: 0o700 });
+    writeFileSync(join(dataDir, "usage", ALERTS_FILE), JSON.stringify(marks), { mode: 0o600 });
+    unsavedMarks.delete(dataDir);
+  } catch {
+    // The newest receipt stays in memory and is tried again on the next call.
+    unsavedMarks.add(dataDir);
+  }
+}
+
 /** The notice this booking should raise, if any: the cap the first time the
  * month reaches it, the warning the first time it crosses the threshold, and
  * nothing again for either that month. A new month, or a different cap, is a
  * new budget and starts over. Marks live beside the ledger so a restart does
- * not repeat them; if they cannot be written the notice is still sent once
- * for this run. */
+ * not repeat them. A receipt that could not be written still wins over the
+ * older file, and the next call tries the write again. */
 export function takeSpendAlert(dataDir: string, state: SpendState | null): SpendAlert | null {
+  const pending = unsavedMarks.has(dataDir) ? memoryMarks.get(dataDir) : undefined;
+  if (pending) writeMarks(dataDir, pending);
   if (!state || (!state.warn && !state.exceeded)) return null;
-  const saved = readMarks(dataDir) ?? memoryMarks.get(dataDir) ?? null;
+  const saved = memoryMarks.get(dataDir) ?? readMarks(dataDir);
   const marks: AlertMarks = saved && saved.month === state.month && saved.monthlyUsd === state.monthlyUsd
     ? saved
     : { month: state.month, monthlyUsd: state.monthlyUsd };
@@ -117,18 +130,15 @@ export function takeSpendAlert(dataDir: string, state: SpendState | null): Spend
   // Reaching the cap also answers the warning: one notice, the stronger one.
   const next: AlertMarks = { ...marks, warn: true, ...(alert === "cap" ? { cap: true as const } : {}) };
   memoryMarks.set(dataDir, next);
-  try {
-    mkdirSync(join(dataDir, "usage"), { recursive: true, mode: 0o700 });
-    writeFileSync(join(dataDir, "usage", ALERTS_FILE), JSON.stringify(next), { mode: 0o600 });
-  } catch {
-    /* bookkeeping must never take down the turn */
-  }
+  writeMarks(dataDir, next);
   return alert;
 }
 const memoryMarks = new Map<string, AlertMarks>();
+const unsavedMarks = new Set<string>();
 
 export function resetSpendAlertsForTests(): void {
   memoryMarks.clear();
+  unsavedMarks.clear();
 }
 
 /** The notice's words. English like the server's other notification titles. */

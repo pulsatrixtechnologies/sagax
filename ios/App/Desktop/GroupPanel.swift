@@ -1047,7 +1047,7 @@ private struct GroupPanelAdvanced: View {
     private var responder: some View {
         let options: [(RoomResponder.Choice, String)] =
             members.map { (RoomResponder.Choice.lead(botId: $0.id), String(localized: "Lead: \($0.name)")) }
-            + [(.auto, jevOn ? AppStrings.localized("Auto (Jev)") : AppStrings.localized("Auto")),
+            + [(.auto, AppStrings.localized("Auto")),
                (.everyone, AppStrings.localized("Everyone responds")),
                (.mentions, AppStrings.localized("Only when mentioned"))]
         return VStack(alignment: .leading, spacing: 0) {
@@ -1077,8 +1077,8 @@ private struct GroupPanelAdvanced: View {
         case .mentions: return AppStrings.localized("Only explicitly @mentioned bots respond")
         case .auto:
             return jevOn
-                ? AppStrings.localized("Jev picks who answers each plain message; @mentions override this")
-                : String(localized: "Jev is off, so plain messages go to \(lead); @mentions override this")
+                ? AppStrings.localized("The decision model picks who answers each plain message; @mentions override this")
+                : String(localized: "The decision model is off, so plain messages go to \(lead); @mentions override this")
         case .lead: return String(localized: "Plain messages go to \(lead); @mentions override this")
         }
     }

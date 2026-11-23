@@ -6,10 +6,9 @@
 // composer. Never takes a click: the transcript under it stays usable.
 //
 // top: a child of the chat header (positioned, stacked over the transcript).
-//   The header has no ground of its own (Grok Bot, JC 2026-11-06): the
-//   transcript runs under the pill, still readable, and this light veil
-//   behind the pill fades it from the panel's top edge down to a little past
-//   the header's bottom edge. No opaque band.
+//   The band itself is the chat's ground, so a button that has scrolled
+//   under the header is hidden, not left looking clickable (#5137). Only
+//   the short reach past the header fades out.
 // bottom: a child of the composer dock (positioned, stacked over the
 //   transcript); it sits behind the dock's content and rises above it.
 //   Its fade is short: it must fit the gap the transcript already keeps
@@ -31,7 +30,7 @@ export function ChatEdgeFade({ edge }: { edge: "top" | "bottom" }) {
         top
           ? {
               height: `calc(100% + ${CHAT_EDGE_FADE_PX.top}px)`,
-              background: "linear-gradient(to bottom, var(--color-app), color-mix(in srgb, var(--color-app) 55%, transparent) 50%, transparent)",
+              background: `linear-gradient(to bottom, var(--color-app) calc(100% - ${CHAT_EDGE_FADE_PX.top}px), transparent)`,
             }
           : {
               height: `calc(100% + ${CHAT_EDGE_FADE_PX.bottom}px)`,

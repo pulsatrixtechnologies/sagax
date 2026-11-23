@@ -69,13 +69,13 @@ afterEach(() => {
 
 describe("sidebar header", () => {
   it.each(["comfortable", "compact", "icons"] as const)(
-    "keeps Expand sidebar on the rail only, no Collapse button, search and New, and no density menu at %s density",
+    "keeps Collapse sidebar on the wide sidebar and Expand on the rail, with search and New, and no density menu at %s density (#5017)",
     (density) => {
       fixture.density = density;
       const html = render();
       expect(html).toContain('aria-label="New"');
       expect(html).not.toContain("data-sidebar-collapse");
-      expect(html).not.toContain('aria-label="Collapse sidebar"');
+      expect(html.includes('aria-label="Collapse sidebar"')).toBe(density !== "icons");
       expect(html.includes('aria-label="Expand sidebar"')).toBe(density === "icons");
       expect(html).not.toContain('aria-label="Collapse sidebar to avatars"');
       expect(html).not.toContain("Choose sidebar density");
@@ -221,7 +221,7 @@ describe("sidebar head has no bot panel button", () => {
     expect(src).not.toContain("data-sidebar-bot-panel");
     expect(src).not.toContain("<Ellipsis");
     expect(src).not.toContain("<PanelRight");
-    expect(src).toContain("const headButtons = <>{searchButton}{newButton}</>");
+    expect(src).toContain("const headButtons = <>{collapseButton}{searchButton}{newButton}</>");
     expect(render()).not.toContain("data-sidebar-bot-panel");
   });
 });

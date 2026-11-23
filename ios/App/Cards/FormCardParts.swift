@@ -262,10 +262,8 @@ struct FormRowContent: View {
     }
 
     private func questionLabel(_ question: AskQuestion) -> some View {
-        Text(question.question)
-            .font(colors.font(13.5))
+        CardMarkdown(source: question.question)
             .foregroundStyle(colors.ink)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -804,10 +802,8 @@ struct FormHeadContent: View {
                     AskFactsTableView(colors: colors, facts: facts)
                 }
                 if let context = FormCardPieces.contextLine(message) {
-                    Text(context)
-                        .font(colors.font(13))
+                    CardMarkdown(source: context)
                         .foregroundStyle(colors.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
             }

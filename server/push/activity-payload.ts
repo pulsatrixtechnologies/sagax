@@ -16,11 +16,22 @@ import {
   type LiveActivityContentState,
 } from "./activity-content.ts";
 
-export type LiveActivityEvent = "update" | "end";
+export type LiveActivityEvent = "update" | "end" | "start";
+
+/** Static fields of BotActivityAttributes. Optional look fields stay off:
+ * a start without them decodes and draws the default character. */
+export interface LiveActivityAttributes {
+  botId: string;
+  threadId: string;
+  name: string;
+  color: string;
+}
 
 export interface LiveActivityPushInput {
   event: LiveActivityEvent;
   contentState: LiveActivityContentState;
+  /** Required for event "start": the activity's attributes. */
+  attributes?: LiveActivityAttributes;
   bundleId: string;
   nowMs: number;
   /** Unix seconds after which the card is stale. */
@@ -55,7 +66,13 @@ export function buildLiveActivityRequest(input: LiveActivityPushInput): ApnsRequ
   if (input.event === "end" && input.dismissalDateSec !== undefined && Number.isFinite(input.dismissalDateSec)) {
     aps["dismissal-date"] = Math.floor(input.dismissalDateSec);
   }
-  const priority = input.priority ?? (input.event === "end" || input.contentState.kind === "needsYou" ? 10 : 5);
+  // A remote start carries the attributes and no alert of its own: the
+  // approval notification is the one buzz.
+  if (input.event === "start" && input.attributes) {
+    aps["attributes-type"] = "BotActivityAttributes";
+    aps.attributes = input.attributes;
+  }
+  const priority = input.priority ?? (input.event === "end" || input.event === "start" || input.contentState.kind === "needsYou" ? 10 : 5);
   const body = JSON.stringify({ aps });
   return {
     headers: {

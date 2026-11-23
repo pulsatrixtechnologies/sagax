@@ -140,18 +140,45 @@ export async function signedInToolsCheck(
 export const SIGN_IN_WAIT_MS = 10 * 60_000;
 export const SIGN_IN_POLL_MS = 2_000;
 
-/** The system browser in the desktop app; a new tab on the web. The tab is
- * opened blank first so the provider never gets a handle on this window. */
-export async function openSignInPage(url: string): Promise<boolean> {
-  if (window.ogb?.openExternal) {
-    await window.ogb.openExternal(url);
-    return true;
+/** A page reserved during the click, before the sign-in request returns.
+ * Browsers only allow window.open from that click. Opening after the
+ * request is treated as a popup and blocked. */
+export function reserveConnectionPage(): { open(url: string): Promise<boolean>; cancel(): void } {
+  const desktop = Boolean(window.ogb?.openExternal);
+  let page: Window | null = null;
+  let cancelled = false;
+  if (!desktop) {
+    try {
+      page = window.open("", "_blank");
+      if (page) page.opener = null;
+    } catch {
+      page = null;
+    }
   }
-  const opened = window.open("", "_blank");
-  if (!opened) return false;
-  opened.opener = null;
-  opened.location.replace(url);
-  return true;
+  return {
+    cancel() {
+      cancelled = true;
+      if (!desktop) page?.close();
+    },
+    async open(url: string): Promise<boolean> {
+      if (cancelled) return false;
+      if (desktop && window.ogb?.openExternal) {
+        await window.ogb.openExternal(url);
+        return !cancelled;
+      }
+      if (!page || page.closed) return false;
+      page.location.replace(url);
+      return true;
+    },
+  };
+}
+
+/** The system browser in the desktop app; a new tab on the web. The tab is
+ * opened blank first so the provider never gets a handle on this window.
+ * Prefer reserveConnectionPage from the click handler: this opens only when
+ * it is still inside the user activation. */
+export async function openSignInPage(url: string): Promise<boolean> {
+  return reserveConnectionPage().open(url);
 }
 
 export interface ClientDraft {

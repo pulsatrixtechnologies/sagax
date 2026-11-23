@@ -9,6 +9,7 @@ import { turnLatencyLine } from "./turn-latency.ts";
 import { turnProcessStarts, turnQueueBusyMs, turnTraceMarks } from "../../turns/turn-trace.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import { reportBackgroundError } from "../../background-error.ts";
+import { clearGrokConnectorSpill } from "./grok-spill.ts";
 
 export type LifecycleDeps = {
   support: AcpSupport;
@@ -116,6 +117,16 @@ export function createSettle(deps: LifecycleDeps) {
 
     const current = session.current;
     if (!current || current.state.settled) return;
+    // #5157: a grok.com connector file spilled into the session folder
+    // (and its jsonl) is removed when the turn ends. Only an organization
+    // server, and only a turn that loaded those connectors.
+    if (support.driverKind === "grokAgent" && current.turn.grokCloudConnectors === true && process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") {
+      const home = session.env.GROK_HOME;
+      if (typeof home === "string" && home) {
+        try { clearGrokConnectorSpill(home); }
+        catch (error) { console.error(`[grok] connector spill was not cleared: ${error instanceof Error ? error.message : "failed"}`); }
+      }
+    }
     current.state.settled = true;
     current.acknowledge();
     current.stopQuietWatch?.();

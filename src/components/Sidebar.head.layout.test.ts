@@ -44,7 +44,8 @@ describe("sidebar head buttons", () => {
     expect(sidebar).toMatch(/const SIDEBAR_HEAD_BUTTON = cn\(\s*SIDEBAR_CIRCLE_BUTTON,/);
     // search and New, drawn in the head at full width (the bot panel toggle is at the chat header's right end); the rail's foot takes search and New (#4093)
     const buttons = sidebar.slice(sidebar.indexOf("const searchButton ="), sidebar.indexOf("const headButtons ="));
-    expect(buttons.match(/\bSIDEBAR_HEAD_BUTTON\b/g)).toHaveLength(2);
+    // search, New, and Collapse sidebar (#5017) wear the same round control
+    expect(buttons.match(/\bSIDEBAR_HEAD_BUTTON\b/g)).toHaveLength(3);
     expect(buttons).not.toContain("data-sidebar-bot-panel");
     expect(sidebar).toContain("const railButtons = <>{searchButton}{newButton}</>");
     expect(buttons).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);

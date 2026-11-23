@@ -46,6 +46,7 @@ import "./safety/network-guard.ts";
 import { serverLog } from "./process/server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./process/event-loop-lag.ts";
 import { settledChipLabel } from "./waits/waiting-chip.ts";
+import { legacyWaitStillHeld } from "./waits/legacy-wait.ts";
 import { groupOwnerId, ownsGroup, unlistedOwnRooms, type GroupActor } from "./groups/group-ownership.ts";
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -1010,7 +1011,11 @@ import { isAccountEmail, isPrincipalId, PrincipalRegistry, type Principal } from
 import { OrgTeams } from "./org/org-teams.ts";
 import { compatServers, compatServerOwner, compatServerVisible } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
-import { providersOfDriver, providersOfInstance, resolveEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
+import { providersOfDriver, providersOfInstance, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
+import { auditCredentialDecision } from "./credentials/credential-audit.ts";
+import { confirmPaidKey, paidKeyIsConfirmed } from "./credentials/paid-key-confirm.ts";
+import { createCredentialConfirmRoutes } from "./routes/credential-confirm.ts";
+import type { CredentialDecision, CredentialPolicy } from "../shared/credential-resolver.ts";
 import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
 import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type GrokLiveAccess, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
@@ -1567,6 +1572,7 @@ import { providerOfInstance } from "../shared/model-provider.ts";
 import { accountPickText, accountSwitchSettingOf, cleanAccountSwitchDefaults, type AccountPick, type AccountSwitchSetting } from "../shared/account-switch.ts";
 import { createAccountMeter } from "./usage/account-meter.ts";
 import { createAccountSwitch } from "./usage/account-switch-host.ts";
+import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
 import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
@@ -7126,6 +7132,10 @@ bindLeafHost({
   get _orgRefusalOfImpl() { return _orgRefusalOfImpl; },
   get orgEngineRefusal() { return orgEngineRefusal; },
   get orgTurnAccess() { return orgTurnAccess; },
+  get resolveGovernedEngineAccess() { return resolveGovernedEngineAccess; },
+  get credentialPolicyFor() { return credentialPolicyFor; },
+  get auditCredentialDecision() { return auditCredentialDecisionFor; },
+  get noteCredentialServed() { return noteCredentialServed; },
   get botOneShotText() { return botOneShotText; },
   get botTitleEngine() { return botTitleEngine; },
   get piTurnPerson() { return piTurnPerson; },
@@ -8937,12 +8947,12 @@ const pushActivities = createLiveActivityTokenStore(DATA_DIR);
 const liveActivityHub = new LiveActivityHub({
   config: apnsConfig,
   store: pushActivities,
-  // while any stream of this person is open the phone updates activities locally
-  personStreaming: (person) => tokensOfConnectedDevices(
+  // a phone with an open stream updates locally; a closed phone still gets a push
+  liveDeviceTokens: (person) => tokensOfConnectedDevices(
     sseClients,
     person,
     IDENTITY.kind !== "perspicax" ? localPrincipalId() : undefined,
-  ).length > 0
+  ),
 });
 const pushHub = new PushHub({
   config: apnsConfig,
@@ -9457,7 +9467,7 @@ const turnSpeakers = new ThreadSpeakers(
 const connectorSetupProofs = createConnectorSetupProofs();
 const turnSpeakerPrincipals = new SpeakerDerivedMap<string>((threadId) => turnSpeakers.get(threadId));
 /** Who ran each thread's current turn, for a key the provider refuses. */
-const turnAccessByThread = new Map<string, { via: TurnAccess["via"]; payer: AccessPayer; payerPrincipalId?: string; routine?: true; payerSub?: string; provider?: ModelProvider }>();
+const turnAccessByThread = new Map<string, { via: TurnAccess["via"]; payer: AccessPayer; payerPrincipalId?: string; routine?: true; payerSub?: string; provider?: ModelProvider; form?: "personal-account" | "org-account" | "personal-key" | "org-key"; fallback?: { from: string; to: string; automatic: boolean } }>();
 /** Threads whose last admitted turn (Direct or room) descends from a routine
  * or other automation: a bot hop it starts carries the mark, so no turn a
  * routine started ever reaches someone's Perspicax access (slice 5, D5). */
@@ -13744,8 +13754,9 @@ const wireTask = (task: TaskRecord, botModel: ModelSelection, coordinated: Reado
   // time and survives reads; only a wake event in the store clears it.
   const { snoozedUntil, ...base } = toWireTask(task, botModel);
   const keepWarm = cacheKeepWarmStatus(task.threadId);
-  const wired = { ...base, waitingForTeammates: coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}),
-    ...(!task.busy && continuationHolds.has(task.threadId) ? HELD_ACTIVITY : {}) };
+  const closed = Boolean(task.closedBy);
+  const wired = { ...base, ...(closed ? { activity: "idle" as const, busy: false } : {}), waitingForTeammates: !closed && coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}),
+    ...(!closed && !task.busy && continuationHolds.has(task.threadId) ? HELD_ACTIVITY : {}) };
   const asleep = snoozedUntil === 0 || (snoozedUntil !== undefined && snoozedUntil > Date.now());
   return asleep ? { ...wired, snoozedUntil } : wired;
 };
@@ -13771,11 +13782,11 @@ const wireBot = (bot: BotRecord): WireBot => {
   const tasks = allTasks ? listedTasks(bot.threadId, allTasks) : undefined;
   // The aggregate only: a record projected onto one thread already carries
   // that thread's own activity.
-  const shown = store.bot(bot.id) === bot ? shownBotActivity(bot) : null;
-  if (shown) {
-    rest.activity = shown.activity;
-    rest.busy = shown.busy;
-  }
+  // Fold on the way out, so a closed thread's leftover activity does not
+  // keep the bot working or waiting until the next task write (#5011).
+  const folded = store.activityOf(bot.id, (task) => task.hidden !== true || task.threadId === bot.threadId);
+  rest.activity = folded.activity;
+  rest.busy = folded.busy;
   // As the aggregate itself (store.activityOf): a routine run's own task
   // never makes the bot read busy (2026-11-03).
   if (!rest.busy && allTasks?.some((task) => continuationHolds.has(task.threadId) && !task.routineRunId && (task.hidden !== true || task.threadId === bot.threadId))) {
@@ -14875,8 +14886,8 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
-    // 0.8.46: closed without the person (expired, or the requester's default
-    // answer): its cards say so instead of staying open or reading answered.
+    // 0.8.46: closed without the person. #5037: a default_answer is never
+    // their reply, so the cards say expired, not that a default was used.
     unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has
@@ -16529,6 +16540,8 @@ const accountSwitch = createAccountSwitch({
     const refusal = activeEngineRefusal(instanceId, undefined, Date.now());
     return refusal?.cause === "usage_limit" || refusal?.cause === "credits";
   },
+  learnedDataDir: DATA_DIR,
+  learnedRouting: (person) => personLearnedRouting(person),
 });
 /** An engine's access and environment, as the limit failover reads them
  * (whether it bills each use, server/usage/limit-failover.ts billsEachUse). */
@@ -16554,7 +16567,7 @@ function autoAccountFor(input: { botId: string; threadId: string; payer: string;
   const last = task?.autoModel?.instanceId;
   const current = last && pool.includes(last) ? last : input.selection.instanceId;
   const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
-  const choice = accountSwitch.choose({ payer: input.payer, threadId: input.threadId, driverKind: home.driverKind, current, pool, fresh });
+  const choice = accountSwitch.choose({ payer: input.payer, threadId: input.threadId, driverKind: home.driverKind, current, pool, fresh, ...learnedAccountInput(input.threadId, input.selection.model) });
   // said once the turn really starts (start-turn-prepare-validate.ts), never for a preview
   return choice ? { instanceId: choice.instanceId, pick: choice.pick, moved: choice.instanceId !== current } : null;
 }
@@ -16569,9 +16582,91 @@ function noteAccountDemand(row: Pick<UsageRow, "botId" | "threadId" | "instanceI
   usageForecast.record(payer, row.botId, row.costUsd);
   accountMeter.noteSpend(payer, row.instanceId, row.costUsd);
 }
+/** The model the person chose, and whether a paid key is already confirmed
+ * for this turn. Learning uses these to pick an account. It does not receive
+ * a list of other models. */
+function learnedAccountInput(threadId: string, model: string | undefined): { model?: string; paid: (instanceId: string) => boolean; paidConfirmed: (instanceId: string) => boolean } {
+  return {
+    ...(model ? { model } : {}),
+    paid: (instanceId) => billsEachUse(limitFailoverConfig(instanceId)),
+    paidConfirmed: () => paidKeyIsConfirmed(threadId),
+  };
+}
+/** A settled turn's outcome, on the account and model that ran. A stop is
+ * not an outcome. Counts go to usage/learned-routing.json. */
+function recordLearnedTurn(turn: {
+  threadId: string;
+  botId?: string;
+  instanceId: string;
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  ttftMs: number;
+  ok: boolean;
+  stopped: boolean;
+  limited: "quota" | "rate_limited" | null;
+  costTier: number;
+}): void {
+  try {
+    const live = registry.get(turn.instanceId);
+    const facts = live ? { instanceId: turn.instanceId, driverKind: live.driverKind, displayName: engineDisplayName(live) } : null;
+    const provider = (facts && providerOfInstance(facts)?.id) || live?.driverKind || "provider";
+    const task = turn.botId ? store.taskByThread(turn.botId, turn.threadId) : undefined;
+    const fresh = !task?.resumeCursors || task.resumeCursors[turn.instanceId] === undefined;
+    const outcome = outcomeOfSettledTurn({
+      instanceId: turn.instanceId,
+      model: turn.model,
+      provider,
+      promptTokens: turn.promptTokens,
+      fresh,
+      ttftMs: turn.ttftMs,
+      durationMs: turn.durationMs,
+      outputTokens: turn.outputTokens,
+      ok: turn.ok,
+      stopped: turn.stopped,
+      limited: turn.limited,
+      quotaBurn: 0,
+      costTier: turn.costTier,
+      at: Date.now(),
+    });
+    if (outcome) accountSwitch.record(outcome);
+  } catch (error) {
+    reportBackgroundError(error);
+  }
+}
 /** #5014: the account a conversation's turn took and why: on the thread (the
  * model chip reads it) when it changed, and in the Events lens when the
  * account changed or was picked for the first time. Never a row in the chat. */
+/** #5180: Act as consent, the personal-key switch, and a paid-key confirmation. */
+function credentialPolicyFor(threadId: string | undefined, speaker: { principalId?: string } | undefined, botId?: string): CredentialPolicy {
+  const run = threadId ? activeRoutineRunForThread(threadId) : null;
+  const slug = run && (!botId || run.botId === botId) ? (run.actAs?.trim() ?? "") : "";
+  const principalId = speaker?.principalId?.trim().toLowerCase() ?? "";
+  const settings = principalId && isPrincipalId(principalId) ? personSettings.get(principalId) : undefined;
+  return {
+    aspect: "chat",
+    ...(slug ? { actingAs: slug } : {}),
+    allowPersonalWhenActingAs: settings?.allowPersonalCredentialWhenActingAs === true,
+    personalKeysEnabled: cfg.organization?.personalKeys !== false,
+    paidKeyConfirmed: paidKeyIsConfirmed(threadId),
+  };
+}
+function auditCredentialDecisionFor(threadId: string | undefined, botId: string | undefined, decision: CredentialDecision, speaker?: { principalId?: string }): void {
+  const principalId = speaker?.principalId?.trim();
+  auditCredentialDecision(DATA_DIR, { threadId, botId, decision, ...(principalId ? { payerPrincipalId: principalId } : {}) });
+}
+function noteCredentialServed(botId: string, threadId: string, decision: Extract<CredentialDecision, { ok: true }>): void {
+  if (!store.taskByThread(botId, threadId)) return;
+  store.patchTask(botId, threadId, {
+    credentialServed: {
+      form: decision.form,
+      via: decision.via,
+      aspect: decision.aspect,
+      ...(decision.fallback ? { fallback: { from: decision.fallback.from, to: decision.fallback.to, automatic: decision.fallback.automatic } } : {}),
+    },
+  });
+}
 function noteAccountPick(botId: string, threadId: string, pick: AccountPick, moved: boolean): void {
   const task = store.taskByThread(botId, threadId);
   if (!task) return;
@@ -16630,7 +16725,8 @@ const limitFailover = createLimitFailoverHost({
     const task = store.taskByThread(botId, threadId);
     // no engine session open on its account: a new conversation, no cache to keep
     const fresh = !task?.resumeCursors || task.resumeCursors[current] === undefined;
-    return accountSwitch.choose({ payer, threadId, driverKind, current, pool, fresh });
+    const model = task?.modelSelection?.model ?? store.projectBotForTask(botId, threadId)?.modelSelection?.model;
+    return accountSwitch.choose({ payer, threadId, driverKind, current, pool, fresh, ...learnedAccountInput(threadId, model) });
   },
   accountRank: (payer, driverKind, pool) => accountSwitch.rank(payer, driverKind, pool),
   noteAccountPick: (botId, threadId, pick, moved) => noteAccountPick(botId, threadId, pick, moved),
@@ -17785,7 +17881,11 @@ function settleWaitingActivity(threadId: string): void {
   const next = runningTurnEngines.has(threadId) ? "working" : "idle";
   const bot = store.botByThread(threadId);
   if (bot && store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") store.setTaskActivity(bot.id, threadId, next);
-  if (bot && bot.threadId === threadId && bot.activity === "waiting-on-you") store.setActivity(bot.id, next);
+  const current = bot ? store.bot(bot.id) : null;
+  // The legacy slot is one per bot. Clearing it only when this thread was
+  // the selected one left a work thread's wait painted on the roster after
+  // the thread had closed (#5011).
+  if (current?.activity === "waiting-on-you" && !legacyWaitStillHeld(current.tasks ?? [], threadId)) store.setActivity(current.id, next);
 }
 
 /** 2026-11-09: a bot left on "Waiting for you" with no open card anywhere
@@ -19308,6 +19408,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get autoApprovals() { return autoApprovals; },
   get autoTurnsByThread() { return autoTurnsByThread; },
   get bookTurnUsage() { return bookTurnUsage; },
+  get recordLearnedTurn() { return recordLearnedTurn; },
   get botForThread() { return botForThread; },
   get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
   get ownPlaceRefusalForTurn() { return (threadId: string) => ownPlaceRefusal(turnWorkplaces.get(threadId)?.decision); },
@@ -23980,6 +24081,9 @@ type OrgAccessRefusal = {
   reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true;
   /** #1137: the owner pays; the person who wrote reads the card too. */
   ownerPays?: true; speakerPrincipalId?: string; ownerName?: string;
+  /** #5180: the words of an Act as refusal or a paid-key confirmation, and the confirmation the client answers. */
+  error?: string;
+  confirm?: { from: string; to: string; form: string; via: string; aspect: string };
 };
 function orgRefusalOf(...args: any[]) {
   return (_orgRefusalOfImpl ??= createOrgRefusalOf(getLeafHost) as any)(...args);
@@ -24240,7 +24344,8 @@ const workspaceBackupRoutes = createWorkspaceBackupRoutes({
   appVersion: serverVersion(),
   readBody,
   restored: workspaceRestore,
-  ...workspaceBackupAccess
+  ...workspaceBackupAccess,
+  ...(CLOUD_HOME ? { restart: () => { gracefulShutdown(); } } : {}),
 });
 // Route modules (server/routes/README.md). `workspaceAccess` is assigned at
 // boot, after this line, so the dependency reads it per request.
@@ -25573,6 +25678,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     addDisabledMcpServer,
     botAddMcpServer: (current, body, botId) => mcpServersHost.botAdd(current, body, botId),
     redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId) as never,
+    refSavedForLabel: (botId, label) => customSecretVault.hasLiveRef(botId, label),
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,
@@ -31165,6 +31271,7 @@ ROUTES.push(createUsageMeterRoutes({
 }));
 // A person's own Experimental switches and browser profiles (#1098,
 // server/routes/person-settings.ts): theirs, on an organization server.
+ROUTES.push(createCredentialConfirmRoutes({ rememberPaidKey: confirmPaidKey }));
 ROUTES.push(createPersonSettingsRoutes({
   store: personSettings,
   principal: (auth) => personSettingsOwner(sessionPrincipal(auth)),
@@ -31280,6 +31387,17 @@ ROUTES.push(createModelSwitchRoutes({
         cfg.accountSwitchByProvider = map;
       } else {
         personSettings.setAccountSwitchDefaults(owner, map);
+      }
+    },
+  },
+  learnedRouting: {
+    read: (owner) => personLearnedRouting(owner === "installation" ? null : owner),
+    save: (owner, on) => {
+      if (owner === "installation") {
+        saveConfig({ learnedRouting: on });
+        cfg.learnedRouting = on;
+      } else {
+        personSettings.setLearnedRouting(owner, on);
       }
     },
   },
@@ -31921,6 +32039,8 @@ const voiceModeDeps: VoiceModeDeps = {
   serverKeyAllowed: (speaker) => serverEngineAllowedFor(speaker.principalId, VOICE_SERVER_ENGINE),
   // #4567: the person's own connected Grok account, before any API key.
   // A disabled person has none. The token is never logged.
+  credentialPolicy: (speaker, threadId) => ({ ...credentialPolicyFor(threadId, speaker), aspect: "voice" }),
+  auditCredential: (decision, speaker, threadId) => auditCredentialDecisionFor(threadId, undefined, decision, speaker),
   grokAccount: async (speaker) => {
     if (speaker.disabled) return undefined;
     if (IDENTITY.kind === "perspicax") {
@@ -33815,6 +33935,7 @@ const orgOpsDeps: OpsDeps = {
         allowedMarketplaces: policy?.mode === "list" ? [...policy.allow] : null,
         allowedEngines: cfg.organization?.allowedEngines ? [...cfg.organization.allowedEngines] : null,
         ownAccountsOutsideList: cfg.organization?.ownAccountsOutsideList === true,
+        personalKeys: cfg.organization?.personalKeys !== false,
         // 2026-10-30 (lot 2): per model, `<engine>/<model>`, and each engine's models to switch
         disabledModels: orgDisabledModels(),
         // #4435: never an account a person added
@@ -33887,6 +34008,17 @@ const orgOpsDeps: OpsDeps = {
       orgAudit({ category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["ownAccountsOutsideList"], before: { ownAccountsOutsideList: before }, after: { ownAccountsOutsideList: changes.ownAccountsOutsideList }, actor });
       // Turned off: a bot kept on its owner's own engine moves to Auto now.
       applyOrgEngineAllowList();
+      broadcast({ kind: "config", ...configStatus() });
+    }
+    if (changes.personalKeys !== undefined) {
+      // #5180: personal API keys are on unless an admin turns them off.
+      const before = cfg.organization?.personalKeys !== false;
+      const organization = { ...cfg.organization };
+      if (changes.personalKeys) delete organization.personalKeys;
+      else organization.personalKeys = false;
+      saveConfig({ organization });
+      cfg.organization = organization;
+      orgAudit({ category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["personalKeys"], before: { personalKeys: before }, after: { personalKeys: changes.personalKeys }, actor });
       broadcast({ kind: "config", ...configStatus() });
     }
     if (changes.defaults) {
@@ -34010,6 +34142,12 @@ function personAccountSwitchDefaults(principalId: string | null | undefined): Re
 /** #5014: the same map for a settings owner (GET/PUT /api/me/models). */
 function accountSwitchDefaultsOf(owner: string | "installation"): Record<string, AccountSwitchSetting> {
   return owner === "installation" ? cleanAccountSwitchDefaults(cfg.accountSwitchByProvider) : { ...personSettings.get(owner).accountSwitchByProvider };
+}
+/** Learned routing is this person's own switch. Off until they turn it on.
+ * A solo server keeps it on the installation, the same way as the account strategy. */
+function personLearnedRouting(person: string | null): boolean {
+  if (IDENTITY.kind !== "perspicax") return cfg.learnedRouting === true;
+  return person ? personSettings.get(person).learnedRouting === true : false;
 }
 /** #4417: the same map for a settings owner (GET/PUT /api/me/models). */
 function contextDefaultsOf(owner: string | "installation"): Record<string, number> {
@@ -38938,6 +39076,7 @@ const gracefulShutdown = createGracefulShutdown({
       noteTurnsCutByShutdown();
       // #4250: what was told this tick reaches the disk before the restart
       signalLedger.flush();
+      accountSwitch.flush();
       if (workspaceAccessTimer) clearInterval(workspaceAccessTimer);
       // Child MCP processes and the HTTP listener can remain alive while the
       // asynchronous shutdown jobs drain. Invalidate their turn bearers before

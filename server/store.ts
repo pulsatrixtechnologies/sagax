@@ -250,7 +250,7 @@ const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow", "approvalOwn",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
   "routineRunId", "routineResults", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
-  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived", "accountPick",
+  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived", "accountPick", "credentialServed",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
@@ -3177,15 +3177,32 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
    * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
-    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId);
+    const included = (bot?.tasks ?? []).filter((task) => include(task));
+    // A routine run's own task never makes the bot read busy (2026-11-03).
+    // A closed thread is finished work. Its leftover activity used to keep the
+    // bot "waiting on you" or working after close_thread (#5011).
+    const tasks = included.filter((task) => !task.routineRunId && !task.closedBy);
     const legacy = this.legacyActivities.get(botId);
     const activities = [
       legacy,
       ...tasks.map((task) => task.activity),
     ];
-    const activity = (["waiting-on-you", "no-signal", "working", "dead"] as const)
-      .find((candidate) => activities.includes(candidate)) ?? "idle";
-    return { activity, busy: Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true) };
+    const busy = Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true);
+    const ranked = (["waiting-on-you", "no-signal", "working"] as const)
+      .find((candidate) => activities.includes(candidate));
+    if (ranked) return { activity: ranked, busy };
+    // An explicit room marker (setActivity) still says the bot itself is dead.
+    if (legacy === "dead") return { activity: "dead", busy };
+    // #5015: one thread left "dead" by a setup error must not read as
+    // "unavailable, needs setup" while the bot can still take work. A
+    // conversation or a routine that is not dead (running, idle after a
+    // run, or waiting) means the bot is reachable. list_bots and the turn's
+    // availability line both read this fold, so they agree. Needs setup
+    // only when every conversation is dead and no routine shows it can run.
+    const reachable = tasks.some((task) => task.activity !== "dead")
+      || included.some((task) => Boolean(task.routineRunId) && task.activity !== "dead");
+    if (!reachable && tasks.some((task) => task.activity === "dead")) return { activity: "dead", busy };
+    return { activity: "idle", busy };
   }
 
   /** Who owns a bot, as one key per person. index.ts sets the server's own
@@ -4359,9 +4376,16 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!bot || !task) return null;
     if (!closedBy && !task.closedBy) return task;
     this.commitBotChange(bot, "who closed the thread", () => {
-      if (closedBy) task.closedBy = structuredClone(closedBy);
-      else delete task.closedBy;
+      if (closedBy) {
+        task.closedBy = structuredClone(closedBy);
+        // Closing ends the turn. The activity flag is not a record of the
+        // close, and leaving it set kept the working indicator on (#5011).
+        task.activity = "idle";
+        task.busy = false;
+        delete task.turnStartedAt;
+      } else delete task.closedBy;
     }, undefined, true);
+    this.refreshBotActivity(bot);
     this.emit({ type: "bot", botId });
     return task;
   }

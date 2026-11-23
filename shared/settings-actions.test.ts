@@ -155,4 +155,11 @@ describe("the settings registry", () => {
     expect(settingSpec("computer.remove")!.classes?.(null, { organization: true })).toEqual(["delete"]);
     expect(settingSpec("appearance.textSize")!.write({}, "large")).toEqual({ ui: "setPreference", input: { key: "sagax.a11y.textSize.v1", value: "large" } });
   });
+
+  it("exposes the Primary Bot sidebar style so a bot can read and set it (#4853)", () => {
+    expect(settingSpec("appearance.primaryBotStyle")!.value).toBe("enum:tile|row");
+    expect(settingSpec("appearance.primaryBotStyle")!.write({}, "row")).toEqual({ ui: "setPreference", input: { key: "sagax.primaryBotStyle.v1", value: "row" } });
+    expect(DEVICE_PREFERENCE_KEYS.has("sagax.primaryBotStyle.v1")).toBe(true);
+    expect((USER_PREFERENCE_KEYS as readonly string[]).includes("sagax.primaryBotStyle.v1")).toBe(true);
+  });
 });

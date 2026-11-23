@@ -144,6 +144,32 @@ final class MemoryManagerTests: XCTestCase {
         XCTAssertTrue(decoded.perspicax.available)
     }
 
+    func testPerspicaxVersionIsAStringAndAWholeNumberBecomesText() throws {
+        let hash = String(repeating: "ab", count: 32)
+        let hashed = """
+        {"id":"n1","title":"Hello","body":"Hi","version":"\(hash)","may_edit":true}
+        """.data(using: .utf8)!
+        let entry = try JSONDecoder().decode(PerspicaxEntry.self, from: hashed)
+        XCTAssertEqual(entry.version, hash)
+        XCTAssertEqual(MemoryManager.openPerspicaxNote(entry).version, hash)
+
+        let numbered = """
+        {"id":"n2","title":"Old","body":"Body","version":3}
+        """.data(using: .utf8)!
+        let older = try JSONDecoder().decode(PerspicaxEntry.self, from: numbered)
+        XCTAssertEqual(older.version, "3")
+
+        let blank = """
+        {"id":"n3","title":"New","body":"Body","version":"  "}
+        """.data(using: .utf8)!
+        XCTAssertNil(try JSONDecoder().decode(PerspicaxEntry.self, from: blank).version)
+
+        let absent = """
+        {"id":"n4","title":"New","body":"Body"}
+        """.data(using: .utf8)!
+        XCTAssertNil(try JSONDecoder().decode(PerspicaxEntry.self, from: absent).version)
+    }
+
     func testExcerptFromBodyAsTheDesktopList() {
         XCTAssertEqual(MemoryManager.excerpt(fromBody: "---\ntitle: x\n---\n# MEMORY\n\nDurable notes this bot keeps between tasks."), "Durable notes this bot keeps between tasks.")
         XCTAssertEqual(MemoryManager.excerpt(fromBody: "## Head\n```\n- [x] **Done** with [[Note|the note]] and [link](https://x.y)"), "Done with the note and link")

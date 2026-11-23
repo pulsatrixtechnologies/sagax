@@ -27,6 +27,7 @@ import {
   type RosterMember,
 } from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
+import { steersOwnReport } from "../threads/subagent-threads.ts";
 import type { HandedOver } from "../runtime/coordinator-types.ts";
 import { openWorkEcho, workRowsNamed } from "../team-work/team-work.ts";
 import { workEnd, workLabel } from "../team-work/work-label.ts";
@@ -702,6 +703,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       // standing: the one work thread this conversation has with each
       // teammate; new: a fresh thread on the teammate (contract §9).
       thread: z.enum(["standing", "new"]).default("standing"),
+      // A report-back thread this bot opened from this conversation.
+      threadId: z.string().trim().min(1).max(128).optional(),
       // resume: the result resumes the requester; none: a one-way notice.
       reply: z.enum(["resume", "none"]).default("resume"),
       // start_thread on a teammate arrives here (internal-rooms-threads.ts):
@@ -726,6 +729,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     // addressed directly. The runtime queues the batch and admits peers
     // as slots become available.
     const fresh = !destination && parsed.data.thread === "new";
+    const steerThread = parsed.data.threadId ?? "";
     // A slot may carry a teammate's name instead of its id — the
     // roster shows both, list_bots shows both, and a Primary Bot reading its
     // prompt reaches for the name. A unique reachable name resolves;
@@ -738,6 +742,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       botIds.push(resolved.id);
     }
     if (new Set(botIds).size !== botIds.length) return json(res, 400, { error: "bot_ids name the same teammate twice — send each teammate once" });
+    const steersOwn = !destination && botIds.length === 1 && botIds[0] === internalSender.id
+      && steersOwnReport(store.taskByThread(internalSender.id, steerThread), internalSender.id, address.threadId);
     // A bot named in the plan resolves like bot_ids; one that does not is left out.
     const label = workLabel(parsed.data, (raw) => { const found = resolveTeammate(store.bots, internalSender, raw); return "id" in found ? found.id : undefined; });
     // Outside a room the work lands in this conversation's work thread
@@ -757,7 +763,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       return tasks.find((task) => task.confidential !== true && task.archivedAt === undefined)?.threadId ?? bot?.threadId ?? "";
     };
     const targets = botIds.map(botId => ({ groupId: destination?.id,
-      threadId: destination ? destination.id === source?.id ? address.threadId : destination.threadId : directThread(botId), botId,
+      threadId: destination ? destination.id === source?.id ? address.threadId : destination.threadId : steersOwn ? steerThread : directThread(botId), botId,
     }));
     for (const target of targets) {
       // roomHandoffProblem's "no longer exists" is written for a route
@@ -768,7 +774,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       // the id the caller sent is echoed back, never a bot's name.
       const addressed = store.bot(target.botId);
       const eligibility =
-        target.botId === internalSender.id ? "Choose a teammate, not yourself"
+        target.botId === internalSender.id && !steersOwn ? "Choose a teammate, not yourself"
         : !addressed ? `No bot with id "${target.botId}" — call list_bots and copy the exact id from the result`
         : addressed.hidden ? `The bot with id "${target.botId}" is no longer available — call list_bots for the ones you can reach`
         : roomHandoffProblem(target, address) ?? engineEligibility(addressed);

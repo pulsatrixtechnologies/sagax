@@ -161,11 +161,12 @@ posixOnly("organization Full access", () => {
   afterAll(async () => {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
-      await waitForExit(child, 5_000);
+      // 5s cut a slow shutdown into SIGKILL on a loaded runner (#4478)
+      await waitForExit(child, 30_000);
     }
     await idp?.close();
     if (home) removeTempDir(home);
-  });
+  }, 60_000);
 
   it("FA-1: the owner turns Full on at once, the turn bypasses prompts, host tools stay withheld", async () => {
     // 2026-10-26 (owner): no organization switch; omb #2701: Full needs no confirmation dialog

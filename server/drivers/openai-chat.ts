@@ -20,6 +20,7 @@ import {
 import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { turnClockNote, turnClockNow } from "../turns/turn-clock.ts";
+import { effortForTurn } from "../turns/turn-effort.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -431,13 +432,16 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       const stream = typeof onDelta === "function";
       let streamed = false;
       let reply: Completion;
+      const backgroundEffort = options.driverKind === "grok"
+        ? effortForTurn({ kind: "background", driverKind: options.driverKind, levels: options.effortLevels })
+        : undefined;
       for (;;) {
         tried.add(model);
         try {
           reply = await complete(
             messages, model, stream, signal,
             onDelta ? (delta, kind) => { if (kind === "assistant_text") { streamed = true; onDelta(delta); } } : undefined,
-            [], onUsage, maxTokens, resolveKey(oneShotTurn(access)),
+            [], onUsage, maxTokens, resolveKey(oneShotTurn(access)), backgroundEffort,
           );
           break;
         } catch (error) {
@@ -459,6 +463,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         const { text, reasoning, toolCalls } = await complete(
           [{ role: "user", content: prompt }], model, false, signal,
           undefined, [], undefined, 400, resolveKey(oneShotTurn(access)),
+          options.driverKind === "grok"
+            ? effortForTurn({ kind: "background", driverKind: options.driverKind, levels: options.effortLevels })
+            : undefined,
         );
         if (toolCalls.length) throw new ChatProtocolError("permission review returned a tool call");
         const answer = (text.trim() ? text : reasoning).trim();

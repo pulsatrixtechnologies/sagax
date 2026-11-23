@@ -15,6 +15,7 @@ describe("plainPreviewText", () => {
     ["> quoted line\n>> nested", "quoted line nested"],
     ["| name | score |\n|---|:---:|\n| Ada | 9 |", "Ada : 9"],
     ["_lightly_ and *also* and ~~gone~~ and ***all***", "lightly and also and gone and all"],
+    ["中文*强调*旁边", "中文强调旁边"],
     ["above\n\n---\n\nbelow", "above below"],
     ["line one<br>line two", "line one line two"],
     ["a reply cut off mid **bold", "a reply cut off mid bold"],

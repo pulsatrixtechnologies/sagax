@@ -379,6 +379,21 @@ describe("Runtime: one tree, one lane", () => {
     invariants(w);
   });
 
+  it("keeps a running assignment's lastActivityAt fresh on real progress", async () => {
+    const w = world(() => "hold");
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.tick();
+    const stamped = w.store.get(child.id)!.lastActivityAt;
+    w.clock.advance(500);
+    w.runtime.progress(child.id);
+    expect(w.store.get(child.id)!.lastActivityAt).toBe(stamped);
+    w.clock.advance(10_000);
+    w.runtime.progress(child.id);
+    expect(w.store.get(child.id)!.lastActivityAt).toBe(stamped + 10_500);
+    expect(w.store.get(root.id)!.lastActivityAt).toBe(stamped + 10_500);
+  });
+
   it("stalls a turn with no activity on the monotonic clock, and a tree with no progress, but never a parked tree", async () => {
     const w = world(() => "hold", { turnStallMs: 1_000, stallMs: 10_000 });
     const root = w.runtime.begin(beginReq());

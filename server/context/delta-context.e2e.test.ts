@@ -272,7 +272,10 @@ it("offers a result that lands mid-turn after its source was stopped to the next
   f.plan[f.lead.id] = { reply: "STOPPED_SOURCE_RESULT", gateFile: f.gate("lead") };
   f.plan[f.chief.id] = f.delegate("build", [f.lead], "Build the export");
   await f.send("Please have Engineering build the export.");
-  await expect.poll(() => f.nodes().find((node: any) => node.botId === f.lead.id)?.status, { timeout: 15_000 }).toBe("running");
+  // 15s and 20s were not enough on a loaded runner: a poll saw false where
+  // it wanted the lead running, or its reply (#5146). The same case passed
+  // on the next run of main. Wait on the condition, up to 60s.
+  await expect.poll(() => f.nodes().find((node: any) => node.botId === f.lead.id)?.status, { timeout: 60_000 }).toBe("running");
   await f.api(`/api/bots/${f.chief.id}/interrupt`, { threadId: f.thread });
   // Interrupt stops the source. `wait` remaps that to failed when the
   // interrupted turn left an error activity and no bot text yet (or a
@@ -283,7 +286,7 @@ it("offers a result that lands mid-turn after its source was stopped to the next
   f.plan[f.chief.id] = { reply: "Working on something else", gateFile: f.gate("busy") };
   await f.send("Something unrelated while that finishes.");
   f.open(f.gate("lead"));
-  await expect.poll(async () => (await f.messages()).some((m: any) => m.tool?.name === "Engineering lead replied"), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await f.messages()).some((m: any) => m.tool?.name === "Engineering lead replied"), { timeout: 60_000 }).toBe(true);
   f.open(f.gate("busy"));
   await f.wait();
   expect(count(f.prompt(f.turns().at(-1)), "STOPPED_SOURCE_RESULT")).toBe(0);
@@ -300,7 +303,7 @@ it("offers a result that lands mid-turn after its source was stopped to the next
   await f.send("Anything else?");
   await f.wait();
   expect(count(f.prompt(f.turns().at(-1)), "STOPPED_SOURCE_RESULT")).toBe(0);
-}), hostTimeout(90_000));
+}), hostTimeout(180_000));
 
 // No provider reports that it read a message steered into a running turn, so
 // the next turn offers it once more, saying the session may already have it.

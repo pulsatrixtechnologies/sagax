@@ -746,6 +746,7 @@ add({
   key: "section.bots", family: "section", target: "section", value: "object", label: "Bots in a team ({addBotIds, removeBotIds})", where: "Sidebar > team",
   write: (ids, v) => ({ method: "PUT", path: "/api/sidebar-sections", query: { section: ids.target! }, body: v }), classes: serverWide,
 });
+pref("section.order", "section", "sagax.sectionBotOrder.v1", "object", "Order of bots inside sidebar teams ({team name: [bot ids], first to last})", "Sidebar > drag a bot inside its team");
 add({
   key: "section.delete", family: "section", target: "section", value: "boolean", label: "Delete a team (true)", where: "Sidebar > team menu > Delete",
   write: (ids, v) => v === true ? { method: "DELETE", path: "/api/sidebar-sections", query: { section: ids.target! } } : "value is true.",
@@ -902,7 +903,8 @@ pref("appearance.sendKey", "appearance", "omb-send-key", "enum:enter|mod-enter",
 pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This run card", "Settings > General > Appearance");
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
 pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > Permissions > Privacy");
-pref("appearance.accountMenuAbove", "appearance", "sagax.accountMenuAbove.v1", "enum:on|off", "Show the account menu above my name in the sidebar (on; off, the default, keeps it behind the name)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.accountMenuAbove", "appearance", "sagax.accountMenuAbove.v1", "enum:on|off", "Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.primaryBotStyle", "appearance", "sagax.primaryBotStyle.v1", "enum:tile|row", "Primary Bot in the sidebar (tile, the large tile; row, a regular row)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > General > Appearance");
 pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > General > Appearance");
 pref("appearance.freshTopicAfter", "appearance", "sagax.freshTopicAfter.v1", "string", "Fresh topic after", "Settings > General > Appearance");
@@ -1044,6 +1046,13 @@ add({
   label: "Context size, per provider ({<provider id>: <tokens> or null}; provider ids from GET /api/me/providers/catalog)", where: "Settings > Providers > provider > Models > Context size",
   read: () => ({ path: "/api/me/models", field: "contextByProvider" }),
   write: (_ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "PUT", path: "/api/me/models", body: { contextByProvider: v } } : "value is {<provider id>: <tokens> or null}.",
+});
+add({
+  key: "models.learnedRouting", family: "models", target: "none", value: "boolean",
+  label: "Learned account routing (true lets routing learn which of your accounts of one provider to use; it never changes the model you chose)",
+  where: "No screen yet: ask any of your bots",
+  read: () => ({ path: "/api/me/models", field: "learnedRouting" }),
+  write: (_ids, v) => typeof v === "boolean" ? { method: "PUT", path: "/api/me/models", body: { learnedRouting: v } } : "value is true or false.",
 });
 add({
   key: "models.claudeAccount", family: "models", target: "none", value: "object",

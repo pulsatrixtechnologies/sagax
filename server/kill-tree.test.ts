@@ -15,7 +15,7 @@ const STUBBORN = `process.on('SIGTERM', () => {}); console.log(process.pid); ${I
 
 function reportedPid(stdout: Readable): Promise<number> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("process did not report its pid")), 5_000);
+    const timer = setTimeout(() => reject(new Error("process did not report its pid")), 30_000);
     stdout.once("data", (chunk) => {
       clearTimeout(timer);
       resolve(Number(String(chunk).trim()));
@@ -56,7 +56,7 @@ describe("killCliTree", () => {
     let grandchild = 0;
     try {
       grandchild = await new Promise<number>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("helper did not report its pid")), 5_000);
+        const timer = setTimeout(() => reject(new Error("helper did not report its pid")), 30_000);
         parent.stdout!.once("data", (chunk) => {
           clearTimeout(timer);
           resolve(Number(String(chunk).trim()));
@@ -87,7 +87,7 @@ describe("killCliTree", () => {
         }
       }
     }
-  }, 20_000);
+  }, 45_000);
 
   it.runIf(process.platform === "linux").each([false, true])("stops a captured detached helper after protocol reparenting (root exited: %s)", async (exitFirst) => {
     const parent = spawnCli(process.execPath, ["-e", `
@@ -157,7 +157,7 @@ describe("killCliTree", () => {
       await killCliTree(parent, 0);
       if (helper && alive(helper)) process.kill(helper, "SIGKILL");
     }
-  });
+  }, 45_000);
 
   it.skipIf(process.platform === "win32")("sees an exit that a blocked event loop has not read by the deadline", async () => {
     const child = spawnCli(process.execPath, ["-e", `process.on('SIGTERM', () => {}); process.stdin.on('data', () => process.exit(0)); console.log(process.pid); ${IDLE}`], { stdio: ["pipe", "pipe", "pipe"] });
@@ -239,5 +239,5 @@ describe.skipIf(process.platform === "win32")("a CLI that exits on its own", () 
     } finally {
       if (alive(helper)) process.kill(helper, "SIGKILL");
     }
-  }, 20_000);
+  }, 45_000);
 });

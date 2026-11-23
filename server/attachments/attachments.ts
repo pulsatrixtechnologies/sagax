@@ -199,6 +199,16 @@ const FILE_MIMES: Readonly<Record<string, string>> = {
   "application/json": ".json",
   "application/pdf": ".pdf",
   "application/x-ms-evtx": ".evtx",
+  // Plain-text config (#5005). The stored name keeps the extension, so a
+  // bot reads nginx.conf as text rather than an inert download.
+  "text/x-conf": ".conf",
+  "text/x-cfg": ".cfg",
+  "text/x-ini": ".ini",
+  "text/x-cnf": ".cnf",
+  "text/x-env": ".env",
+  "text/x-toml": ".toml",
+  "text/x-yaml": ".yaml",
+  "text/x-yml": ".yml",
   "application/rtf": ".rtf",
   "text/rtf": ".rtf",
   "application/msword": ".doc",

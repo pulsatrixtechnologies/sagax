@@ -33,6 +33,7 @@ if (o.origin?.kind === "task-notification") return;
 // conversation on a fresh session, once, as for a CLI that exits
 // before `init` (classifyResumeFailure).
 if (o.is_error === true && sessionId && !session.sawInit && session.turn && !session.turn.settled) {
+  session.resumeRefusal = claudeResultError(o);
   closeSession(threadId, "resume refused");
   return;
 }

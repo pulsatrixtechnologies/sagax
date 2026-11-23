@@ -3,6 +3,13 @@
 // OpenMausBot #2930), so it signs in once with the link printed for it.
 import qrcode from "qrcode-terminal";
 
+/** The desktop app owns this server, so only the app or a paired device may mint a code. */
+export function desktopOwnedRefusal(status: number, body: unknown): string | null {
+  const error = (body as { error?: unknown } | null)?.error;
+  if (status !== 403 || typeof error !== "string" || !error.includes("must come from the desktop app")) return null;
+  return "The Sagax desktop app runs this server, so it only pairs devices from the app itself: open Sagax on this computer and use Settings, Remote access.";
+}
+
 /** The pairing link a device opens, rendered as text and a QR code.
  *
  * One window has two links. `url` opens the web app and is what a browser and

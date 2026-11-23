@@ -7,6 +7,9 @@ import type { EffortLevel } from "../../shared/model-selection.ts";
 export interface Usage {
   input: number;
   output: number;
+  cachedInput?: number;
+  /** The provider's own dollars for this call, when it reported one. */
+  costUsd?: number;
 }
 
 export interface Completion {
@@ -29,7 +32,14 @@ export interface CompletionJson {
   }>;
   error?: unknown;
   base_resp?: { status_code?: unknown; status_msg?: unknown };
-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cost?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+    cost?: number;
+    /** xAI: 10_000_000_000 ticks per dollar (chat-usage-cost.ts). */
+    cost_in_usd_ticks?: number;
+  };
   /** Groq reports streaming usage in its final x_groq envelope. */
   x_groq?: { usage?: CompletionJson["usage"] };
 }
@@ -56,6 +66,12 @@ export interface RuntimeOptions<Config> {
   authHeaders?: (apiKey: string) => Record<string, string>;
   models: () => ModelCatalog;
   requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean): Record<string, unknown>;
+  /** Extra JSON fields for one chat-completions call, such as Grok's
+   * `reasoning_effort`. Absent on engines whose chat path must not carry it. */
+  chatEffortBody?: (model: string, effort: EffortLevel | undefined) => Record<string, unknown>;
+  /** Headers that pin one conversation to one cache server. Grok HTTP sends
+   * `x-grok-conv-id`. Absent on engines that do not route a cache that way. */
+  conversationHeaders?: (threadId: string) => Record<string, string>;
   httpErrorLabel: string;
   missingKeyError: string;
   unavailableReason: string;

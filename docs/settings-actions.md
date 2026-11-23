@@ -290,6 +290,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New team ({name, botIds}) | Sidebar > New team | `sagax_settings` set `section.create` | simple; organisation : organisation |
 | Rename a team | Sidebar > team menu > Rename | `sagax_settings` get, set `section.name` | simple; organisation : organisation |
 | Bots in a team ({addBotIds, removeBotIds}) | Sidebar > team | `sagax_settings` set `section.bots` | simple; organisation : organisation |
+| Order of bots inside sidebar teams ({team name: [bot ids], first to last}) | Sidebar > drag a bot inside its team | `sagax_settings` get, set `section.order` | simple |
 | Delete a team (true) | Sidebar > team menu > Delete | `sagax_settings` set `section.delete` | suppression |
 | The teams of the sidebar (read only) | Sidebar | `sagax_settings` get, set `section.list` | simple |
 
@@ -350,7 +351,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | This run card | Settings > General > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
 | Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > Permissions > Privacy | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
-| Show the account menu above my name in the sidebar (on; off, the default, keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
+| Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
+| Primary Bot in the sidebar (tile, the large tile; row, a regular row) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.primaryBotStyle` | simple |
 | Routines badge | Settings > General > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
 | Sidebar density | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |
 | Fresh topic after | Settings > General > Appearance | `sagax_settings` get, set `appearance.freshTopicAfter` | simple |
@@ -396,6 +398,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools}) | Settings > Providers > Models > Engines > engine | `sagax_settings` get, set `models.engine` | simple; organisation : autrui |
 | Runs with, per provider ({<provider id>: <engine kind> or null}; provider ids from GET /api/me/providers/catalog) | Settings > Providers > provider > Runs with | `sagax_settings` get, set `models.harnessDefault` | simple |
 | Context size, per provider ({<provider id>: <tokens> or null}; provider ids from GET /api/me/providers/catalog) | Settings > Providers > provider > Models > Context size | `sagax_settings` get, set `models.contextDefault` | simple |
+| Learned account routing (true lets routing learn which of your accounts of one provider to use; it never changes the model you chose) | No screen yet: ask any of your bots | `sagax_settings` get, set `models.learnedRouting` | simple |
 | Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card | Settings > Providers > Models > Claude > Add account | `sagax_settings` set `models.claudeAccount` | simple |
 | Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card | Settings > Providers > Models > Codex > Add account | `sagax_settings` set `models.chatgptAccount` | simple |
 | Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in | Settings > Providers > Models > engine > Sign in | `sagax_settings` set `models.engineSignIn` | simple |

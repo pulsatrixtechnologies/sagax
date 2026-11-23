@@ -18,6 +18,7 @@ import { withoutExpired, withoutSuperseded } from "../memory/memory-entries.ts";
 import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "../memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";
 import { join } from "node:path";
+import { hasCjk } from "../messages/cjk-search.ts";
 
 /** Below this many characters a message is a nod, not a question. */
 export const RECALL_MIN_CHARS = 8;
@@ -84,18 +85,26 @@ export interface RecallResult {
   threadIds: string[];
 }
 
+/** A CJK character carries about a word, so it counts twice toward the minimum length. */
 export function recallQuery(text: string): string | null {
   const trimmed = text.trim();
-  if (trimmed.length < RECALL_MIN_CHARS) return null;
+  if (trimmed.length + [...trimmed].filter(hasCjk).length < RECALL_MIN_CHARS) return null;
   return recallTerms(trimmed.slice(0, RECALL_QUERY_CHARS)).length ? trimmed.slice(0, RECALL_QUERY_CHARS) : null;
 }
 
-/** FTS5 brackets the matched terms in a snippet. */
+/** FTS5 brackets the matched terms in a snippet; overlapping CJK bigrams share one bracket, so those count by term. */
 const plain = (snippet: string) => snippet.replace(/\[([^[\]]+)\]/g, "$1");
-const matchedTerms = (snippet: string) => new Set([...snippet.matchAll(/\[([^[\]]+)\]/g)].map((m) => m[1]!.toLowerCase())).size;
+function matchedTerms(terms: readonly string[], snippet: string): number {
+  const bigrams = terms.filter(hasCjk);
+  const regions = [...snippet.matchAll(/\[([^[\]]+)\]/g)].map((m) => m[1]!.toLowerCase());
+  return new Set(regions.flatMap((region) => (hasCjk(region) ? bigrams.filter((term) => region.includes(term)) : [region]))).size;
+}
 
+/** A Chinese word spans about two overlapping bigrams, so bigrams count half toward the content words of a question. */
 export function enoughMatches(query: string, snippet: string): boolean {
-  return recallTerms(query).length < MIN_TERMS_FOR_TWO || matchedTerms(snippet) >= 2;
+  const terms = recallTerms(query);
+  const bigrams = terms.filter(hasCjk).length;
+  return terms.length - bigrams + Math.ceil(bigrams / 2) < MIN_TERMS_FOR_TWO || matchedTerms(terms, snippet) >= 2;
 }
 
 function day(at?: number): string {
@@ -191,6 +200,7 @@ const TOPIC_PASSAGE_CHARS = 600;
  * ending ("restaurant"/"restaurants", "dine"/"dining" do not; "cafe"/"cafes" do). */
 function sameWord(term: string, word: string): boolean {
   if (term === word) return true;
+  if (hasCjk(term)) return word.includes(term);
   if (!/^\p{L}{4,}$/u.test(term) || word.length < 4) return false;
   const stem = term.length > 4 && term.endsWith("s") && !term.endsWith("ss") ? term.slice(0, -1) : term;
   return word.startsWith(stem) || (stem.startsWith(word) && stem.length - word.length <= 3);

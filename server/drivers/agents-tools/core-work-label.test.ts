@@ -15,6 +15,16 @@ type Props = Record<string, { type?: string; items?: { type?: string; properties
 const context = (api: ReturnType<typeof vi.fn>) => ({ botId: "orc", threadId: "t1", depth: 0, client: { api } }) as unknown as ToolCallContext;
 const body = (api: ReturnType<typeof vi.fn>, call = 0) => JSON.parse(String(api.mock.calls[call]![1]!.body)) as Record<string, unknown>;
 
+describe("default_answer is never the person's reply (#5037)", () => {
+  it("tells the model the wait expires unanswered, the same as with no default", () => {
+    const description = DEF_COORDINATE_BOTS.inputSchema.properties.default_answer.description;
+    expect(description).toMatch(/never/i);
+    expect(description).not.toMatch(/harness applies/);
+    expect(description).not.toMatch(/person's reply|as their reply|requester's default/i);
+    expect(description).toMatch(/expires/);
+  });
+});
+
 describe("work, step and plan on the two hand-over tools (#3463)", () => {
   it("are optional fields of coordinate_bots and send_to_bot", () => {
     for (const def of [DEF_COORDINATE_BOTS, DEF_SEND_TO_BOT]) {

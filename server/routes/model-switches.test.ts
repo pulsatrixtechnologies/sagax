@@ -115,4 +115,24 @@ describe("GET/PUT /api/me/models", () => {
     // null gives the provider back its default (High-water at 80 %)
     expect((await call(handler, "PUT", { accountSwitchByProvider: { anthropic: null } }))?.body).toMatchObject({ accountSwitchByProvider: {} });
   });
+
+  it("keeps learned routing on the person who turned it on, off for everyone else", async () => {
+    const flags = new Map<string, boolean>();
+    const handler = createModelSwitchRoutes({
+      org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
+      favorites: () => [], saveFavorites: () => {},
+      learnedRouting: {
+        read: (owner) => flags.get(owner) === true,
+        save: (owner, on) => { flags.set(owner, on); },
+      },
+    });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ learnedRouting: false });
+    expect((await call(handler, "PUT", { learnedRouting: true }))?.body).toMatchObject({ learnedRouting: true });
+    expect((await call(handler, "GET", undefined, { who: "p2" }))?.body).toMatchObject({ learnedRouting: false });
+    expect(flags.get("p1")).toBe(true);
+    expect(flags.has("p2")).toBe(false);
+    expect((await call(handler, "PUT", { learnedRouting: false }))?.body).toMatchObject({ learnedRouting: false });
+    expect((await call(handler, "PUT", { learnedRouting: "yes" }))?.status).toBe(400);
+    expect(flags.get("p1")).toBe(false);
+  });
 });

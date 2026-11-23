@@ -126,6 +126,33 @@ never a row or a banner in the chat. Tests: `account-strategy.test.ts`,
 `limit-failover-host.test.ts` ("the account strategy before a turn"),
 `model-switches.test.ts`, `shared/account-switch.test.ts`.
 
+Learned routing sits on that pick (`server/usage/learned-routing.ts`). It is
+each person's own switch, `learnedRouting` on GET/PUT `/api/me/models`
+(person settings, the installation's config when solo), off until they turn
+it on. There is no server environment variable for it. When it is on and the
+record is deep enough, a contextual Thompson sampler may move the turn to
+another account inside the planner's safe set. It never changes the model
+the person chose. An unconfirmed paid key stays out, and a turn that acts as
+someone stays on the credentials that consent lists. A settled turn calls
+`record` (latency to the first token, tokens per second, an error, a rate
+limit). The process passes its data directory, and the counts are
+`usage/learned-routing.json`: counts only, never a prompt and never a key.
+A stop is not recorded. Tests: `learned-routing.test.ts`,
+`learned-routing-wire.test.ts`, `account-switch-host.test.ts`,
+`turn-completed.test.ts`.
+
+## One credential decision (#5180)
+
+`shared/credential-resolver.ts` is the policy on top of the order each
+caller already has. It does not reorder. Act as may use a personal account
+or personal API key only when that person set
+`allowPersonalCredentialWhenActingAs` (off by default). A fallback onto a
+paid API key waits for `POST /api/me/credential-confirm`. Personal API keys
+stay on unless `organization.personalKeys` is false. The proposed merged
+order is `docs/credential-order.md` and is not applied. The turn records
+the form on the thread (`credentialServed`) and an audit row
+`credential.resolve` with no secret.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via
@@ -543,6 +570,22 @@ limit does (#1668); only when nothing else can answer does the turn end in
 plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
 `server/usage/limit-failover-host.test.ts`.
+
+## Reasoning effort per turn (2026-11-22)
+
+One function, `effortForTurn` (`server/turns/turn-effort.ts`), sets the
+effort of a turn. A call and a Grok HTTP background one-shot (a helper
+or a permission review) run at the lowest level the engine offers, "low"
+where it exists, and a bot already set below that keeps its own level.
+Codex with no saved effort stays unset, so the next turn of its thread
+does not inherit that level.
+A chat, the warm that prepares that chat, and a routine run use the saved
+effort (a routine's own level wins). Grok's HTTP API is included: a chat,
+warm or routine that saved nothing runs at high, that API's own default,
+and the chat-completions body carries `reasoning_effort` for a model that
+takes one (grok-4.5 stops at high; grok-4.6 and later take xhigh; an older
+model sends no field). Other engines leave an unset chat effort unset.
+Tests: `server/turns/turn-effort.test.ts`, `server/drivers/grok.test.ts`.
 
 ## A refused run goes on elsewhere, and says who refused (2026-11-02)
 

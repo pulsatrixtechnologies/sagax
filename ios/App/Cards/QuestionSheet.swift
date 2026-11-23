@@ -45,11 +45,13 @@ struct QuestionSheet<Content: View>: View {
     /// #3471: the × of a waiting card skips it ("Skip this without answering").
     var dismissLabel: String? = nil
     var dismissId: String? = nil
+    /// The title is the bot's question: draw it with the bubble's markdown (#5043).
+    var markdownTitle = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            QuestionSheetHeader(colors: colors, title: title, meta: meta, onDismiss: onDismiss, dismissLabel: dismissLabel, dismissId: dismissId)
+            QuestionSheetHeader(colors: colors, title: title, markdown: markdownTitle, meta: meta, onDismiss: onDismiss, dismissLabel: dismissLabel, dismissId: dismissId)
             content()
         }
         .padding(16)
@@ -63,17 +65,26 @@ struct QuestionSheet<Content: View>: View {
 struct QuestionSheetHeader: View {
     let colors: QuestionSheetColors
     let title: String
+    /// The title is the bot's own question (#5043).
+    var markdown = false
     var meta: String? = nil
     var onDismiss: (() -> Void)? = nil
     var dismissLabel: String? = nil
     var dismissId: String? = nil
 
     private var titleText: some View {
-        Text(title)
-            .font(colors.font(14, .semibold))
-            .foregroundStyle(colors.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
+        Group {
+            if markdown {
+                CardMarkdown(source: title)
+                    .foregroundStyle(colors.ink)
+            } else {
+                Text(title)
+                    .font(colors.font(14, .semibold))
+                    .foregroundStyle(colors.ink)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .textSelection(.enabled)
     }
 
     private var metaText: some View {
@@ -178,10 +189,8 @@ struct QuestionSheetRow: View {
                         .foregroundStyle(colors.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     if let detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(colors.font(12.5))
+                        CardMarkdown(source: detail)
                             .foregroundStyle(colors.inkSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 0)

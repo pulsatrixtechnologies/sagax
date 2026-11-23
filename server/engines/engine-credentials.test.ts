@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { TurnSpeaker } from "./engine-access.ts";
-import { materializeEngineAccess, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
+import { materializeEngineAccess, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-000000000001";
@@ -558,5 +558,67 @@ describe("#4410 lot 1: pi runs Claude models on the payer's own Claude sign-in",
     // a sign-in-only plan that cannot be read at dispatch is refused, never loops
     const alone = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] });
     expect(await materializeEngineAccess(alone, resolveEngineAccess(alone), deps(async () => { throw new Error("unreadable"); }))).toMatchObject({ ok: false, reason: "no_access" });
+  });
+});
+
+describe("resolveGovernedEngineAccess (#5180)", () => {
+  const policy = { aspect: "chat" as const };
+
+  it("keeps today's order when no policy gate applies", () => {
+    const base = input({ signedIn: [`${OWNER}/claudeAgent`], keys: ["SUB-OWNER/anthropic"], keyBacked: true, policy });
+    expect(resolveGovernedEngineAccess(base).plan).toMatchObject({ ok: true, via: "subscription" });
+    expect(resolveGovernedEngineAccess(base).decision).toMatchObject({ ok: true, form: "personal-account" });
+  });
+
+  it("refuses a personal credential under Act as unless the person allowed it", () => {
+    const acting = input({
+      signedIn: [`${OWNER}/claudeAgent`],
+      keys: ["SUB-OWNER/anthropic"],
+      keyBacked: true,
+      policy: { ...policy, actingAs: "service-desk" },
+    });
+    expect(resolveGovernedEngineAccess(acting).plan).toMatchObject({ ok: true, via: "org-key" });
+    const onlyPersonal = input({ signedIn: [`${OWNER}/claudeAgent`], keys: ["SUB-OWNER/anthropic"], policy: { ...policy, actingAs: "service-desk" } });
+    expect(resolveGovernedEngineAccess(onlyPersonal).plan).toMatchObject({ ok: false, cause: "act_as_personal_refused" });
+    const allowed = input({ signedIn: [`${OWNER}/claudeAgent`], policy: { ...policy, actingAs: "service-desk", allowPersonalWhenActingAs: true } });
+    expect(resolveGovernedEngineAccess(allowed).plan).toMatchObject({ ok: true, via: "subscription" });
+  });
+
+  it("asks before an expired subscription falls back onto a paid key, and serves Claude, pi and OpenCode keys", () => {
+    const expired = input({
+      speaker: bob,
+      signedIn: [`${BOB}/claudeAgent`],
+      subscriptionExpired: () => true,
+      keys: ["SUB-BOB/anthropic"],
+      policy,
+    });
+    const asked = resolveGovernedEngineAccess(expired);
+    expect(asked.plan).toMatchObject({ ok: false, cause: "confirm_paid_key" });
+    expect(asked.decision).toMatchObject({ ok: false, reason: "confirm_paid_key", confirm: { from: "personal-account", to: "personal-key" } });
+    const confirmed = resolveGovernedEngineAccess({ ...expired, policy: { ...policy, paidKeyConfirmed: true } });
+    expect(confirmed.plan).toMatchObject({ ok: true, via: "speaker-key", provider: "anthropic" });
+
+    for (const driver of ["claudeAgent", "piAgent", "opencodeGo"] as const) {
+      const instance = driver === "claudeAgent"
+        ? CLAUDE
+        : driver === "piAgent"
+          ? PI
+          : { instanceId: "opencode", driver: "opencodeGo", installed: true };
+      const provider = driver === "piAgent" ? "openai" : driver === "opencodeGo" ? "opencode" : "anthropic";
+      const served = resolveGovernedEngineAccess(input({
+        instance,
+        speaker: bob,
+        keys: [`SUB-BOB/${provider}`],
+        policy: { aspect: "engine" },
+      }));
+      expect(served.decision).toMatchObject({ ok: true, form: "personal-key", aspect: "engine" });
+    }
+  });
+
+  it("turns personal keys off without turning a subscription off", () => {
+    const off = input({ keys: ["SUB-OWNER/anthropic"], keyBacked: true, policy: { ...policy, personalKeysEnabled: false } });
+    expect(resolveGovernedEngineAccess(off).plan).toMatchObject({ ok: true, via: "org-key" });
+    const account = input({ signedIn: [`${OWNER}/claudeAgent`], keys: ["SUB-OWNER/anthropic"], policy: { ...policy, personalKeysEnabled: false } });
+    expect(resolveGovernedEngineAccess(account).plan).toMatchObject({ ok: true, via: "subscription" });
   });
 });

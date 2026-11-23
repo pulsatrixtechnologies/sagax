@@ -19,6 +19,7 @@ import {
   type SidebarDensity,
 } from "@/lib/sidebar-preferences";
 import type { SectionItemKind } from "@/lib/personal-sections";
+import { dropAnchor, placeBotInSection, readSectionBotOrder, writeSectionBotOrder } from "@/lib/section-bot-order";
 import { ITEM_DRAG_TYPE, isAutomaticSidebarSection, parseItemDrag, sectionLabel } from "./helpers";
 
 /** Section collapse/reorder and item drag onto sections. */
@@ -139,7 +140,16 @@ export function useSidebarSectionDnD({
     setItemDropId(null);
     if (isAutomaticSidebarSection(id)) return true;
     const item = parseItemDrag(event.dataTransfer.getData(ITEM_DRAG_TYPE));
-    if (item) assignSection(item.kind, item.id, section);
+    if (item) {
+      assignSection(item.kind, item.id, section);
+      // #5024: a bot dropped inside its team takes the place under the pointer
+      if (item.kind === "bot" && section.trim()) {
+        const present = [...event.currentTarget.querySelectorAll("[data-sidebar-bot-row]")]
+          .map((row) => row.getAttribute("data-sidebar-bot-row"))
+          .filter((rowId): rowId is string => Boolean(rowId));
+        writeSectionBotOrder(placeBotInSection(readSectionBotOrder(), section, item.id, dropAnchor(event.target, event.clientY, item.id), present));
+      }
+    }
     return true;
   };
 

@@ -23,6 +23,14 @@ describe("firstSentence", () => {
     expect(firstSentence("a".repeat(500), 200)).toHaveLength(200);
     expect(firstSentence("")).toBe("");
   });
+
+  it("stops at a Chinese sentence end and does not leave a lone surrogate", () => {
+    expect(firstSentence("第一句。第二句还很长。")).toBe("第一句。");
+    expect(firstSentence("好！下一句。")).toBe("好！");
+    const cut = firstSentence(`a${"𠮷".repeat(20)}`, 4);
+    expect(cut).toBe("a𠮷");
+    expect(Buffer.from(cut).toString("utf8")).toBe(cut);
+  });
 });
 
 describe("soulPatchFor", () => {

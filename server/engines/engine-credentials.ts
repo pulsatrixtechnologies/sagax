@@ -88,6 +88,14 @@ import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-li
 import type { TurnPayerMode } from "../../shared/turn-payer.ts";
 import { DRIVER_KEY_PROVIDERS } from "../../shared/harness-matrix.ts";
 import { ENGINE_VENDOR_ALIAS } from "../../shared/model-provider.ts";
+import {
+  formOfAccessVia,
+  resolveCredential,
+  type CredentialCandidate,
+  type CredentialDecision,
+  type CredentialPolicy,
+  type PaidKeyConfirm,
+} from "../../shared/credential-resolver.ts";
 
 /** `server` is solo mode only (and rows written before 2026-10-01). */
 export type AccessVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
@@ -103,7 +111,7 @@ export type AccessPayer = "speaker" | "owner" | "organization";
 /** Why no credentials serve a turn. */
 /** `owner_model_offline` (#1137) is decided by the server around the plan:
  * the owner pays and their computer, whose model the bot runs on, is offline. */
-export type NoAccessCause = "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired";
+export type NoAccessCause = "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired" | "act_as_personal_refused" | "confirm_paid_key" | "personal_keys_disabled";
 
 /** A key of the payer's in Perspicax. */
 export function keyVia(via: AccessVia | undefined): via is "owner-key" | "speaker-key" {
@@ -293,11 +301,17 @@ export interface EngineCredentialInput {
   /** #4410: the providers the organization's pi keys serve (names only,
    * config.ts piOrgKeyProviders). Absent means none known. */
   orgKeyProviders?: readonly string[];
+  /** #5180: Act as consent, the personal-key switch, and a paid-key
+   * confirmation. Absent: the order below is unchanged. */
+  policy?: CredentialPolicy;
+  /** An organization account sign-in this caller already has. Absent: that
+   * form is not a candidate, so the order below does not grow a new winner. */
+  orgAccountAvailable?: boolean;
 }
 
 export type EngineCredentialPlan =
-  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true; claudeAccount?: true }
-  | { ok: false; reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true; ownerPays?: true };
+  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true; claudeAccount?: true; credential?: Extract<CredentialDecision, { ok: true }> }
+  | { ok: false; reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true; ownerPays?: true; error?: string; confirm?: PaidKeyConfirm };
 
 const key = (id: string | undefined) => id?.trim().toLowerCase() ?? "";
 
@@ -334,8 +348,10 @@ function claudeSignInServes(input: EngineCredentialInput, principalId: string): 
 
 /** The resolution order above, pure. `skip.key` drops step 4 (the key went
  * away between admission and dispatch); `skip.signIn` drops step 3b (the
- * Claude sign-in could not be read at dispatch). */
-export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: boolean; signIn?: boolean } = {}): EngineCredentialPlan {
+ * Claude sign-in could not be read at dispatch). `personalAccount` and
+ * `personalKey` drop those forms for a policy pass (#5180) without
+ * changing the order of what remains. */
+export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: boolean; signIn?: boolean; personalAccount?: boolean; personalKey?: boolean } = {}): EngineCredentialPlan {
   if (input.identity !== "perspicax") return { ok: true, via: "server", payer: "organization" };
   const payer = turnPayer(input);
   const routine = { ...(payer.routine ? { routine: true as const } : {}), ...(payer.ownerPays ? { ownerPays: true as const } : {}) };
@@ -356,15 +372,15 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   // An expired sign-in is skipped: the payer's key or the organization's
   // serves, else the turn asks them to reconnect.
   const expired = signedIn && input.subscriptionExpired?.(payer.principalId, driver, input.instance.instanceId) === true;
-  if (signedIn && !expired) {
+  if (signedIn && !expired && !skip.personalAccount) {
     return { ok: true, via: "subscription", ...who };
   }
   // #4410: pi on the payer's own Claude sign-in (their bill, like a key of theirs)
-  const claudeAccount = !skip.signIn && driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
+  const claudeAccount = !skip.signIn && !skip.personalAccount && driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
   const signIn = claudeAccount ? { claudeAccount: true as const } : {};
   const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
   const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
-  if (!skip.key && provider && facts?.sub) {
+  if (!skip.key && !skip.personalKey && provider && facts?.sub) {
     return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, provider, ...signIn };
   }
   // #4410: the sign-in alone, only when no key of any step serves
@@ -372,7 +388,7 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   // An endpoint owned by this payer can also serve without authentication
   // (a local model server). Never substitute an org key or another file.
   if (input.instance.personalOwner) return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who };
-  if (!input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver)) {
+  if (!skip.personalKey && !input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver)) {
     // a key pasted on this server never pays pi's Claude models (pi has no file key)
     return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, localKey: true, ...signIn };
   }
@@ -390,6 +406,121 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   }
   if (claudeAccount) return signInOnly;
   return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "no_credentials", ...who };
+}
+
+/** The forms this engine can already run, in the order resolveEngineAccess
+ * uses. An organization account is not one of them: there is no organization
+ * sign-in source here (the server's own sign-in was retired), and adding one
+ * would change the order. The resolver still accepts that form when a caller
+ * has one (shared/credential-resolver.ts). */
+export function engineCredentialCandidates(input: EngineCredentialInput): CredentialCandidate[] {
+  const payer = turnPayer(input);
+  const driver = input.instance.driver;
+  const signedIn = Boolean(payer.principalId) && !input.instance.keyOnly && subscriptionDriver(driver) && input.subscriptionSignedIn(payer.principalId, driver, input.instance.instanceId);
+  const expired = signedIn && input.subscriptionExpired?.(payer.principalId, driver, input.instance.instanceId) === true;
+  const claudeSignedIn = driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && input.subscriptionSignedIn(payer.principalId, "claudeAgent", "claudeAgent");
+  const claudeExpired = claudeSignedIn && input.subscriptionExpired?.(payer.principalId, "claudeAgent", "claudeAgent") === true;
+  const isOwner = payer.principalId !== "" && key(payer.principalId) === key(input.owner.principalId);
+  const facts = payer.principalId === "" ? undefined : isOwner ? input.owner : input.person?.(payer.principalId);
+  const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
+  const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
+  const local = Boolean(!input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver));
+  const candidates: CredentialCandidate[] = [];
+  if (signedIn || claudeSignedIn) {
+    candidates.push({
+      form: "personal-account",
+      via: "subscription",
+      present: true,
+      available: (signedIn && !expired) || (claudeSignedIn && !claudeExpired),
+      ...(expired || claudeExpired ? { state: "expired" as const } : {}),
+      paid: false,
+    });
+  }
+  if (provider || local || input.instance.personalOwner) {
+    candidates.push({
+      form: "personal-key",
+      via: isOwner ? "owner-key" : "speaker-key",
+      present: true,
+      available: true,
+      paid: true,
+      ...(provider ? { provider } : {}),
+    });
+  }
+  if (input.keyBacked && !input.instance.personalOwner) {
+    const judged = payer.principalId || input.owner.principalId;
+    const allowed = input.orgEngineAllowed !== false && (!input.serverEngineAllowed || input.serverEngineAllowed(judged, input.instance.instanceId));
+    candidates.push({
+      form: "org-key",
+      via: "org-key",
+      present: true,
+      available: allowed,
+      paid: true,
+      ...(allowed ? {} : { state: "not_allowed" as const }),
+    });
+  }
+  return candidates;
+}
+
+/** The same engine order, then the #5180 policy: Act as consent, personal
+ * keys, and a confirmation before a fallback onto a paid API key. Without
+ * a policy this is resolveEngineAccess. */
+export function resolveGovernedEngineAccess(input: EngineCredentialInput, skip: { key?: boolean; signIn?: boolean } = {}): { plan: EngineCredentialPlan; decision: CredentialDecision | null } {
+  if (!input.policy) return { plan: resolveEngineAccess(input, skip), decision: null };
+  const decision = resolveCredential({
+    aspect: input.policy.aspect ?? "chat",
+    engine: input.instance.driver,
+    candidates: engineCredentialCandidates(input),
+    policy: input.policy,
+  });
+  const bare = resolveEngineAccess(input, skip);
+  const who = bare.ok
+    ? {
+      ...(bare.payer === "organization" ? { payer: "owner" as const } : { payer: bare.payer }),
+      ...(bare.payerPrincipalId ? { payerPrincipalId: bare.payerPrincipalId } : {}),
+      ...(bare.routine ? { routine: true as const } : {}),
+      ...(bare.ownerPays ? { ownerPays: true as const } : {}),
+    }
+    : {
+      ...(bare.payer ? { payer: bare.payer } : {}),
+      ...(bare.payerPrincipalId ? { payerPrincipalId: bare.payerPrincipalId } : {}),
+      ...(bare.routine ? { routine: true as const } : {}),
+      ...(bare.ownerPays ? { ownerPays: true as const } : {}),
+    };
+  if (!decision.ok) {
+    const cause: NoAccessCause = decision.reason === "confirm_paid_key"
+      ? "confirm_paid_key"
+      : decision.reason === "act_as_personal_refused"
+        ? "act_as_personal_refused"
+        : decision.reason === "personal_keys_disabled"
+          ? "personal_keys_disabled"
+          : "no_credentials";
+    return {
+      decision,
+      plan: {
+        ok: false,
+        reason: "no_access",
+        cause,
+        error: decision.error,
+        ...(decision.reason === "confirm_paid_key" ? { confirm: decision.confirm } : {}),
+        ...who,
+      },
+    };
+  }
+  const narrowed = resolveEngineAccess(input, {
+    ...skip,
+    personalAccount: decision.form !== "personal-account",
+    personalKey: decision.form !== "personal-key",
+  });
+  if (narrowed.ok && formOfAccessVia(narrowed.via) === decision.form) {
+    return { plan: { ...narrowed, credential: decision }, decision };
+  }
+  if (decision.form === "org-account") {
+    return {
+      decision,
+      plan: { ok: false, reason: "no_access", cause: "no_credentials", error: "This engine has no organization account sign-in to run.", ...who },
+    };
+  }
+  return { plan: narrowed.ok ? { ...narrowed, credential: decision } : narrowed, decision };
 }
 
 /** 2026-10-27 (#1098): the plan runs on the payer's own subscription or
@@ -438,6 +569,11 @@ function payerFacts(input: EngineCredentialInput, principalId: string): PersonFa
   return key(principalId) === key(input.owner.principalId) ? input.owner : input.person?.(principalId);
 }
 
+/** The next plan after a key or a sign-in disappears. A policy stays in force. */
+function planAfter(input: EngineCredentialInput, skip: { key?: boolean; signIn?: boolean }): EngineCredentialPlan {
+  return input.policy ? resolveGovernedEngineAccess(input, skip).plan : resolveEngineAccess(input, skip);
+}
+
 /** Turn a plan into what the driver needs, fetching the payer's key when the
  * plan uses it. A key Perspicax no longer has (no_key, user_inactive) falls
  * through to the next steps; an unreachable Perspicax is no_access. */
@@ -448,7 +584,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
   if (plan.via === "subscription" && plan.claudeAccount && payer) {
     const signIn = await deps.claudeSignIn?.(payer).catch(() => null);
     // unreadable since admission: the next steps serve, else the refusal
-    if (!signIn) return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
+    if (!signIn) return materializeEngineAccess(input, planAfter(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
     return {
       ok: true,
       plan,
@@ -472,11 +608,11 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
   if (keyVia(plan.via) && plan.provider && payer) {
     const facts = payerFacts(input, payer);
     const sub = facts?.sub;
-    if (!sub) return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
+    if (!sub) return materializeEngineAccess(input, planAfter(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     if (facts?.disabled) {
       // disabled since admission: never read the (cached) key
       deps.invalidate(sub, plan.provider);
-      return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
+      return materializeEngineAccess(input, planAfter(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     }
     const result = await deps.resolveKey(sub, plan.provider);
     if (result.ok && homeDriver(driver)) {
@@ -538,7 +674,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     }
     if (result.error === "no_key") {
       deps.invalidate(sub, plan.provider);
-      return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
+      return materializeEngineAccess(input, planAfter(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     }
     if (result.error === "user_inactive") {
       // Perspicax says the payer is out: refused, never the organization's

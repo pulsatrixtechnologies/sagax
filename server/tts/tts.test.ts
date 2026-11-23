@@ -162,8 +162,7 @@ describe("configuration", () => {
 
   // #5179: an organization server had `tts.voice` empty, so it looked like it
   // could not speak at all. An empty name is not a missing voice on Grok:
-  // xAI answers its own default voice when no name is sent (server/tts/grok.ts
-  // synthesize, server/voice/realtime-call.ts realtimeSessionUpdate).
+  // fallbackVoiceId supplies xAI's built-in voice (server/tts/grok.test.ts).
   it("takes xAI's own default voice when nobody named one", async () => {
     const { voiceConfigured, voiceReady } = await voice();
     const xai: AppConfig = { xai: { key: "xai-org-key" }, tts: { provider: "xai" } };

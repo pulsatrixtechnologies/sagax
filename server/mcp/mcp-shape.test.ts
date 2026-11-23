@@ -55,6 +55,17 @@ describe("ResultStore", () => {
     expect(QUERY_TOOL.description).toContain("tool_result_read");
   });
 
+  it("counts a held result in UTF-8 bytes, so a multibyte payload evicts sooner", () => {
+    const text = "ééé";
+    const encoded = JSON.stringify(text) ?? "";
+    expect(encoded.length).toBeLessThan(Buffer.byteLength(encoded, "utf8"));
+    const store = new ResultStore({ maxBytes: 12 });
+    const first = store.put("a", text);
+    const second = store.put("b", text);
+    expect(store.get(first)).toBeUndefined();
+    expect(store.get(second)?.value).toBe(text);
+  });
+
   it("drops the oldest result once the held bytes pass its capacity", () => {
     const store = new ResultStore({ maxBytes: 2_000 });
     const first = store.put("a", { blurb: "x".repeat(900) });

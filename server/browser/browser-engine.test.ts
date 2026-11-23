@@ -788,6 +788,7 @@ describe("finding the browser engine", () => {
       else expect(agentBrowserReleaseUrl(asset!)).toContain(`/v${AGENT_BROWSER_VERSION}/`);
     }
     expect(resolveAgentBrowserReleaseAsset("linux", "x64", true)?.target).toBe("linux-musl-x64");
+    expect(resolveAgentBrowserReleaseAsset("android", "arm64")?.target).toBe("linux-musl-arm64");
     expect(resolveAgentBrowserReleaseAsset("freebsd", "x64")).toBeNull();
     expect(isMusl("linux", (p) => p === "/lib/ld-musl-x86_64.so.1")).toBe(true);
     expect(isMusl("linux", () => false)).toBe(false);

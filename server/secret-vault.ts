@@ -123,6 +123,15 @@ export class SecretVault {
     return shown;
   }
 
+  /** Whether this bot still has a live one-use ref for this label. The value stays in the vault. */
+  hasLiveRef(botId: string, label: string): boolean {
+    const now = this.now();
+    for (const entry of this.refs.values()) {
+      if (entry.owner.botId === botId && entry.label === label && entry.expiresAt > now) return true;
+    }
+    return false;
+  }
+
   /** What this card's save gave the bot, while it still works; null after a restart, its use or its expiry. */
   savedFor(messageId: string): SavedSecret | null {
     const saved = this.byCard.get(messageId);

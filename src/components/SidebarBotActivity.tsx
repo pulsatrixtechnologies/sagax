@@ -6,6 +6,12 @@ import { t } from "@/lib/i18n";
 import { taskHiddenFromSidebar } from "@/lib/bot-unread";
 import { isArchived, orderedSidebarThreads, orderedThreadList, threadRecency, threadUpdatedLabel } from "./SidebarThreadRow";
 
+/** A closed thread whose activity flag was never cleared (#5011). A thread
+ * picked back up is busy, so that one still counts. */
+export function closedActivityLeftover(task: { closedBy?: unknown; busy?: boolean; activity?: string }): boolean {
+  return Boolean(task.closedBy) && task.busy !== true && (task.activity === "working" || task.activity === "waiting-on-you");
+}
+
 /** Attention is not history browsing: idle conversations never enter this list.
  * Read the sibling's own status, not the bot's aggregate busy/waiting flags. */
 export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown[]>, archivedApprovals = false): Array<Task & { queued: boolean }> {
@@ -21,6 +27,7 @@ export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown
     // An archived thread stays put away until it is unarchived; across bots
     // the one thing that still reaches the person is an approval it waits on.
     .filter((task) => !isArchived(task) || (archivedApprovals && task.activity === "waiting-on-you"))
+    .filter((task) => !closedActivityLeftover(task))
     .filter((task) => task.activity === "waiting-on-you" || task.activity === "working" || task.busy || task.waitingForTeammates === true || task.queued || task.unread);
 }
 

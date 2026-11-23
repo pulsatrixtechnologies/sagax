@@ -49,8 +49,8 @@ export function candidateProvider(candidate: { provider?: VoiceProviderId }): Vo
 }
 
 export type VoiceKeys =
-  | { ok: true; keys: VoiceKeyCandidate[] }
-  | { ok: false; cause: VoiceModeRefusalCause };
+  | { ok: true; keys: VoiceKeyCandidate[]; confirm?: { from: string; to: string; form: string; via: string; aspect: string } }
+  | { ok: false; cause: VoiceModeRefusalCause; error?: string; confirm?: { from: string; to: string; form: string; via: string; aspect: string } };
 
 export function voiceKeyRef(candidate: VoiceKeyCandidate | VoiceKeyRef): VoiceKeyRef {
   const provider = candidateProvider(candidate);

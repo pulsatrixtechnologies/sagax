@@ -92,8 +92,11 @@ export function speakerPrincipal(speaker: TurnSpeaker, ownerPrincipalId: string,
 /** The notification body for a refused turn (never provider text). A
  * no_access turn is the payer's to fix: the person who speaks, or the
  * owner for the bot's routines (engine-credentials.ts). */
-export function engineAccessNotice(reason: EngineAccessRefusal | "key_refused", engine: string, refusal: { payer?: "speaker" | "owner"; cause?: "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired"; routine?: boolean; ownerName?: string } = {}): string {
+export function engineAccessNotice(reason: EngineAccessRefusal | "key_refused", engine: string, refusal: { payer?: "speaker" | "owner"; cause?: "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired" | "act_as_personal_refused" | "confirm_paid_key" | "personal_keys_disabled"; routine?: boolean; ownerName?: string; error?: string } = {}): string {
   if (reason === "engine_missing") return `This bot uses ${engine}, which is not installed on this server.`;
+  if (refusal.cause === "act_as_personal_refused") return refusal.error || "Acting as a role cannot use this person's account or API key unless they allowed it.";
+  if (refusal.cause === "confirm_paid_key") return refusal.error || "Continuing would use a paid API key. Confirm that charge before this turn uses it.";
+  if (refusal.cause === "personal_keys_disabled") return refusal.error || "Personal API keys are turned off for this organization.";
   if (refusal.cause === "sign_in_expired") return `Your ${engine} sign-in has expired. Reconnect ${engine} to keep using this bot.`;
   if (refusal.cause === "owner_model_offline") return `${refusal.ownerName?.trim() || "The owner"}'s model isn't reachable right now.`;
   if (reason === "key_refused") return "The provider refused this bot's key.";

@@ -65,6 +65,8 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.sidebarHidden.v1",
   // the person's own sidebar sections (src/lib/personal-sections.ts)
   "sagax.sidebarSections.v1",
+  // the order of bots inside each sidebar team (src/lib/section-bot-order.ts, #5024)
+  "sagax.sectionBotOrder.v1",
   // sub-teams: which team sits under which (src/lib/section-tree.ts, #2045)
   "sagax.sectionParents.v1",
   // Settings > Appearance > Sidebar: keep unassigned people in their own
@@ -72,7 +74,7 @@ export const USER_PREFERENCE_KEYS = [
   // absent is on (#1661).
   "sagax.sidebarPeopleApart.v1",
   // Settings > Appearance > Sidebar: the account menu kept open above the name in
-  // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is off.
+  // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is on (#5016).
   "sagax.accountMenuAbove.v1",
   // Settings > Appearance > Sidebar: the Primary Bot as a large tile or a regular
   // row (src/lib/primary-bot-style.ts, #4588). "tile" | "row"; absent is tile.

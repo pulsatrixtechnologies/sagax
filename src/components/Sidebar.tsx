@@ -164,7 +164,7 @@ import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { iconUnreadDotPosition } from "@/lib/bot-unread";
-import { sidebarBotActivityTasks } from "./SidebarBotActivity";
+import { closedActivityLeftover, sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
 import { plainPreviewText } from "@/lib/plain-preview";
@@ -1940,13 +1940,19 @@ export function BotListItem({
     (selected && !threadsListed) || selection?.selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
   );
   const activityTasks = sidebarBotActivityTasks(bot, pendingQueued);
+  // #5011: a closed thread can still carry "working" or "waiting on you"
+  // after nothing is running. That leftover is not the bot's live state.
+  // A thread picked back up is busy, so it still counts.
+  const liveTasks = bot.tasks ?? [];
+  const leftoverOnly = liveTasks.some((task) => closedActivityLeftover(task))
+    && liveTasks.every((task) => closedActivityLeftover(task) || !(task.busy || task.activity === "working" || task.activity === "waiting-on-you"));
   // #2082: a routine run (a proactive wake included) that waits on the
   // person counts too: its question lives in the run, not over the chat,
   // and the bot-wide activity leaves runs out.
-  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you")
+  const waiting = (!leftoverOnly && bot.activity === "waiting-on-you") || activityTasks.some((task) => task.activity === "waiting-on-you")
     || routineRunsWaiting(bot).length > 0;
   // Real work in a sibling still outranks an idle coordination wait.
-  const working = !waiting && (Boolean(bot.busy) || activityTasks.some((task) => task.busy || task.activity === "working"));
+  const working = !waiting && ((!leftoverOnly && Boolean(bot.busy)) || activityTasks.some((task) => task.busy || task.activity === "working"));
   // A routine run is shown in Automations, not in the sidebar: while the bot's
   // open thread is only a run's thread, its work keeps the mascot dot but
   // leaves the row's status line alone.
@@ -2521,10 +2527,10 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   // Search and New ride in the title bar when there is one and no brand row.
   const titleBarHead = (macInset || browser) && !showLogo;
   const { accountPlaces, archivedBots } = roster;
-  // The head's round buttons are search and New only (owner 2026-11-17): the
-  // bot panel toggle lives at the right end of the chat header. The rail draws
-  // search and New in its foot (#4093, the reference's rail keeps its controls
-  // at the bottom) beside its own Expand sidebar button.
+  // The head's round buttons are Collapse sidebar, search and New (the bot
+  // panel toggle lives at the right end of the chat header). Collapse is the
+  // wide sidebar's way back to the rail (#5017). The rail draws search and
+  // New in its foot (#4093) beside its own Expand sidebar button.
   const searchButton = (
     <button
       type="button"
@@ -2551,7 +2557,20 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       <Plus {...CIRCLE_ICON} aria-hidden="true" />
     </button>
   );
-  const headButtons = <>{searchButton}{newButton}</>;
+  const collapseButton = viewport === "wide" && density !== "icons" ? (
+    <button
+      type="button"
+      data-sidebar-compact-toggle
+      aria-expanded="true"
+      onClick={() => setSidebarCollapsed(true)}
+      aria-label={t("sidebar.collapse")}
+      title={t("sidebar.collapse")}
+      className={SIDEBAR_HEAD_BUTTON}
+    >
+      <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
+    </button>
+  ) : null;
+  const headButtons = <>{collapseButton}{searchButton}{newButton}</>;
   const railButtons = <>{searchButton}{newButton}</>;
 
   return (
@@ -2664,6 +2683,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           showThreads={showThreads}
           dispatch={dispatch}
           setMenu={actions.setMenu}
+          renameBotId={actions.renameBotId}
+          onRenameStarted={() => actions.setRenameBotId(null)}
         />
         <SidebarSectionList
           density={density}

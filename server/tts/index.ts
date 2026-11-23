@@ -1,3 +1,4 @@
+import { fallbackVoiceId } from "../../shared/voice-providers.ts";
 import type { AppConfig } from "../config.ts";
 import { voiceCredential } from "../included-services.ts";
 import * as chatterbox from "./chatterbox.ts";
@@ -85,17 +86,15 @@ export function providerConfigured(cfg: AppConfig): boolean {
   return Boolean(elevenLabs(cfg));
 }
 
-/** An empty voice name is a complete choice on Grok: with no `voice_id` xAI
- * answers its own default voice (server/tts/grok.ts synthesize, proved in
- * server/tts/grok.test.ts), and a realtime call sends no name either
- * (server/voice/realtime-call.ts realtimeSessionUpdate). #5179: an
- * organization server had
- * `tts.voice` empty, and the installation was said unable to speak.
- * The other providers have no fixed default: theirs is one of the voices of
- * that account, which only the provider's list knows, so a name stays needed. */
+/** An empty voice name is a complete choice on Grok: `fallbackVoiceId`
+ * fills xAI's built-in voice so speech still goes out with a name (#5179).
+ * A realtime call whose name the provider refuses is asked again with no
+ * name (server/voice/voice-mode.ts). The other providers have no fixed
+ * default: theirs is one of the voices of that account, which only the
+ * provider's list knows, so a name stays needed. */
 export function voiceConfigured(cfg: AppConfig): boolean {
   const provider = voiceProvider(cfg);
-  if (provider === "xai") return Boolean(grokVoiceKey(cfg));
+  if (provider === "xai") return Boolean(grokVoiceKey(cfg) && fallbackVoiceId("xai", cfg.tts?.voice));
   if (provider === "system") {
     return systemVoices.systemVoicesAvailable() && Boolean(cfg.tts?.voice);
   }
@@ -109,8 +108,7 @@ export function voiceConfigured(cfg: AppConfig): boolean {
 export function voiceReady(cfg: AppConfig, voiceId?: string, access?: VoiceKeyAccess): boolean {
   const provider = voiceProvider(cfg);
   if (!voiceKeyGiven(provider, access)) return false;
-  // no name asked: xAI's own default voice answers (see voiceConfigured)
-  if (provider === "xai") return Boolean(grokVoiceKey(cfg, access));
+  if (provider === "xai") return Boolean(grokVoiceKey(cfg, access) && fallbackVoiceId("xai", voiceId || cfg.tts?.voice));
   if (provider === "system") {
     return systemVoices.systemVoicesAvailable() && Boolean(voiceId || cfg.tts?.voice);
   }
@@ -179,9 +177,9 @@ export function speak(cfg: AppConfig, text: string, voiceId?: string, run?: syst
     if (access?.xaiKeyGiven === false) throw new XaiVoiceNotGiven();
     const key = grokVoiceKey(cfg);
     if (!key) throw new NoVoiceConfigured("key", "Add an xAI key in Settings > Providers. Grok voice uses it.");
-    // no name asked: xAI speaks on its own default voice (see voiceConfigured),
-    // so an empty `tts.voice` never blocks the speech (#5179)
-    return grok.synthesize(text, voiceId || cfg.tts?.voice, key);
+    const voice = fallbackVoiceId("xai", voiceId || cfg.tts?.voice);
+    if (!voice) throw new NoVoiceConfigured("voice");
+    return grok.synthesize(text, voice, key);
   }
   if (provider === "system") {
     const voice = voiceId || cfg.tts?.voice;

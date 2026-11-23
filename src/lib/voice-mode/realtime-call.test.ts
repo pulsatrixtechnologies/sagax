@@ -92,22 +92,56 @@ describe("realtime call drop reasons", () => {
     expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.key, code: "dropped_key" }]);
   });
 
-  it("keeps the server's own sentence when neither side could place the call", () => {
-    const english = "No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.";
-    const french = "Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.";
-    expect(realtimeRefusalText("realtime_key_refused", english)).toBe(english);
-    expect(realtimeRefusalText("realtime_key_refused", french)).toBe(french);
-    expect(realtimeRefusalText("realtime_key_refused", "xAI rejected the key.")).toBe("The realtime voice key was refused. Fix it in Settings > Voice.");
+  // #5220: when the refusal only reaches the client as the socket closing on a
+  // reason code (the refused frame did not arrive in time), the client has no
+  // sentence to pass through. It must not invent its own hardcoded English
+  // voice text that pretends to know the cause; it shows the neutral server
+  // line instead. This is the socket path that used to force English on a
+  // French person for realtime_voice_unknown.
+  it("a socket that closed on a refusal code invents no client text of its own", async () => {
+    const { notes, close } = call();
+    await close(4000, "realtime_voice_unknown");
+    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.server, code: "realtime_voice_unknown" }]);
+    expect(notes[0]!.text).not.toMatch(/does not know that voice|ne connaît pas cette voix/i);
   });
 
-  // #5179: a voice the provider does not know is its own cause: the words the
-  // server wrote (in the person's language) are kept, and the fallback never
-  // says "the voice service did not answer".
-  it("keeps the words of a voice the provider does not know", () => {
-    const french = "Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.";
-    expect(realtimeRefusalText("realtime_voice_unknown", french)).toBe(french);
-    expect(realtimeRefusalText("realtime_voice_unknown", "The call could not start."))
-      .toBe("No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.");
+  // #5220: the server already writes the refusal in the person's own language.
+  // The client knows nothing of that language, so it must render exactly the
+  // words it received, for every refusal code. These tests read the sentence
+  // the person actually gets (the emitted note), not the internal code.
+  it("a French person reads a refused voice name in French", () => {
+    const words = "Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.";
+    const { notes, frame } = call();
+    frame({ type: "refused", code: "realtime_voice_unknown", error: words });
+    expect(notes).toEqual([{ text: words, code: "realtime_voice_unknown" }]);
+    // the client never lays its own English over the server's French
+    expect(notes[0]!.text).not.toMatch(/does not know that voice/i);
+  });
+
+  it("an English person reads a refused voice name in English", () => {
+    const words = "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.";
+    const { notes, frame } = call();
+    frame({ type: "refused", code: "realtime_voice_unknown", error: words });
+    expect(notes).toEqual([{ text: words, code: "realtime_voice_unknown" }]);
+  });
+
+  it("a credits refusal reaches the person as credits, never as the voice or the network", () => {
+    const words = "Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.";
+    const { notes, frame } = call();
+    frame({ type: "refused", code: "realtime_key_refused", error: words });
+    expect(notes).toEqual([{ text: words, code: "realtime_key_refused" }]);
+    expect(notes[0]!.text).not.toMatch(/service did not answer|ne connaît pas cette voix/i);
+  });
+
+  it("renders the server's own sentence unchanged for every refusal code", () => {
+    // a refused key, an unreachable service, a missing setup: whatever the
+    // server wrote, in the person's language, is exactly what shows
+    expect(realtimeRefusalText("Aucun appel : la clé xAI a été refusée. Régle-la dans Réglages > Voix."))
+      .toBe("Aucun appel : la clé xAI a été refusée. Régle-la dans Réglages > Voix.");
+    expect(realtimeRefusalText("Le service de voix n'a pas répondu. Rappelez dans un instant."))
+      .toBe("Le service de voix n'a pas répondu. Rappelez dans un instant.");
+    expect(realtimeRefusalText("No realtime voice is set up. Add an xAI key in Settings > Voice."))
+      .toBe("No realtime voice is set up. Add an xAI key in Settings > Voice.");
   });
 
   it("a call that went on over another key says which key was refused and why, as the other voice sockets do", () => {

@@ -7,11 +7,12 @@
 // over a responsive grid of compact cards: the badge, the name and its
 // points, one line of description, the progress of a locked one, the rarity
 // (or the share of this server's people who have it, when there are enough
-// people to say so) and what it unlocks. A secret stays masked until found. The header's segment
+// people to say so) and what it unlocks. A click opens the full rule, the
+// progress, the reward and the date earned (#5073). A secret stays masked until found. The header's segment
 // (All, Unlocked, Locked), search and Filters (category, reward) narrow the
 // rows together. The settings that hide the points or the toasts open from
 // the settings button of the header (AchievementSettingsPage, in a dialog).
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Lock, Trophy } from "lucide-react";
 import { ACHIEVEMENTS } from "../../../shared/achievements-catalog";
 import { ACHIEVEMENT_CATEGORIES, rarityForPoints, type AchievementCategory, type AchievementDefinition, type AchievementItemState, type AchievementReward, type Unlocks } from "../../../shared/achievements";
@@ -98,11 +99,67 @@ function MasteryUnlockPreview({ item, unlocked, unlocks }: { item: AchievementDe
 /** The cards' grid: as many columns as fit 300 px (3 to 4 at 1440, 2 at 1024, 1 on a phone). */
 const CARDS = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2.5";
 
+/** The date an achievement was earned, without the year when it is this year. */
+function earnedDate(at: number, locale = activeLocale()): string {
+  const date = new Date(at);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  try {
+    return date.toLocaleDateString(locale, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/** The card's opened body: the whole rule, progress toward it, what it
+ * gives, and the date it was earned. A secret stays masked until found. */
+function AchievementDetail({ item, state, unlocks, secret, description }: {
+  item: AchievementDefinition;
+  state?: AchievementItemState;
+  unlocks: Unlocks;
+  secret: boolean;
+  description: string;
+}) {
+  const unlocked = Boolean(state?.unlockedAt);
+  const mastery = item.category === "mastery";
+  const progress = state && !unlocked && !secret && state.target > 0 ? state.current / state.target : null;
+  const rewards = secret ? [] : item.rewards.map((reward) => displayReward(reward, unlocks)).filter((line): line is string => Boolean(line));
+  return (
+    <div id={`achievement-detail-${item.id}`} data-achievement-detail={item.id} className="mt-1 flex flex-col gap-2 border-t-[0.5px] border-border pt-2">
+      <p className="text-[13px] leading-5 text-ink">{description}</p>
+      {progress !== null && state && (
+        <div className="flex items-center gap-2">
+          <div className="achievement-progress flex-1" role="progressbar" aria-valuemin={0} aria-valuemax={state.target} aria-valuenow={state.current} aria-label={localized(item.name)}>
+            <span style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+          <span className="text-[12px] tabular-nums text-ink-secondary">{state.current}/{state.target}</span>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-4 text-ink-secondary">
+        <span data-achievement-detail-points="">{item.points}</span>
+        <span>{t("achievements.pointsUnit")}</span>
+        {unlocked && state?.unlockedAt ? <span>{t("achievements.panel.unlockedOn", { date: earnedDate(state.unlockedAt) })}</span> : !secret && <span>{t("achievements.locked")}</span>}
+      </div>
+      {rewards.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-[12px] leading-4 text-ink-secondary">
+          {rewards.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+      )}
+      {mastery && !secret && <MasteryUnlockPreview item={item} unlocked={unlocked} unlocks={unlocks} />}
+    </div>
+  );
+}
+
 /** One achievement as a compact card: the badge, the name and its points,
  * one line of description, the progress of a locked one (3 of 5), then the
- * rarity, the share of people who have it and what it unlocks. A secret
- * stays masked until found. */
-function AchievementRow({ item, state, unlocks }: { item: AchievementDefinition; state?: AchievementItemState; unlocks: Unlocks }) {
+ * rarity, the share of people who have it and what it unlocks. A click
+ * opens the full rule (#5073). A secret stays masked until found. */
+function AchievementRow({ item, state, unlocks, open, onToggle }: {
+  item: AchievementDefinition;
+  state?: AchievementItemState;
+  unlocks: Unlocks;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const unlocked = Boolean(state?.unlockedAt);
   const secret = item.hidden && !unlocked;
   const tier = rarityForPoints(item.points);
@@ -116,14 +173,21 @@ function AchievementRow({ item, state, unlocks }: { item: AchievementDefinition;
   const description = secret ? (item.hint ? localized(item.hint) : t("achievements.secretDescription")) : localized(item.description);
   return (
     <li
-      className="achievement-row flex min-w-0 flex-col gap-1.5 rounded-lg border-[0.5px] border-border bg-panel px-3 py-2.5 hover:bg-hover"
+      className={cn("achievement-row flex min-w-0 flex-col gap-1.5 rounded-lg border-[0.5px] border-border bg-panel px-3 py-2.5 hover:bg-hover", open && "ring-2 ring-inset ring-accent")}
       data-tier={tier}
       data-unlocked={unlocked ? "" : undefined}
       data-achievement={item.id}
       data-secret={secret ? "" : undefined}
       data-mastery={mastery ? "" : undefined}
+      data-open={open ? "" : undefined}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
+      <button
+        type="button"
+        className="flex min-w-0 items-center gap-2.5 text-start"
+        aria-expanded={open}
+        aria-controls={open ? `achievement-detail-${item.id}` : undefined}
+        onClick={onToggle}
+      >
         <span className="achievement-row-badge" aria-hidden="true">
           <Icon size={16} strokeWidth={2} />
         </span>
@@ -136,7 +200,7 @@ function AchievementRow({ item, state, unlocks }: { item: AchievementDefinition;
         <span className="achievement-row-points shrink-0 self-start" data-achievement-row-points="" title={t("achievements.panel.points", { points: item.points })}>
           {item.points}
         </span>
-      </div>
+      </button>
       {progress !== null && state && (
         <div className="flex items-center gap-2">
           <div className="achievement-progress flex-1" role="progressbar" aria-valuemin={0} aria-valuemax={state.target} aria-valuenow={state.current} aria-label={name}>
@@ -151,6 +215,7 @@ function AchievementRow({ item, state, unlocks }: { item: AchievementDefinition;
         {line && <span className="min-w-0 max-w-full truncate text-ink-secondary" title={line}>{line}</span>}
         {mastery && !secret && <MasteryUnlockPreview item={item} unlocked={unlocked} unlocks={unlocks} />}
       </div>
+      {open && <AchievementDetail item={item} state={state} unlocks={unlocks} secret={secret} description={description} />}
     </li>
   );
 }
@@ -166,7 +231,7 @@ export function achievementCategoryLabel(id: AchievementCategory | "all" | "sett
   return id === "all" ? t("achievements.category.all") : id === "settings" ? t("achievements.settings.title") : t(CATEGORY_LABEL[id]);
 }
 
-export function AchievementsPage({ category = "all", status: statusFilter = "all", reward = "all", search = "" }: {
+export function AchievementsPage({ category = "all", status: statusFilter = "all", reward = "all", search = "", openId = null, onOpenChange }: {
   category?: AchievementsNavCategory;
   /** The header's segment: All, Unlocked or Locked. */
   status?: AchievementStatusFilter;
@@ -174,6 +239,9 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
   reward?: AchievementRewardFilter;
   /** The header's search. */
   search?: string;
+  /** The card whose detail is open. The page keeps its own when no handler is given. */
+  openId?: string | null;
+  onOpenChange?: (id: string | null) => void;
 }) {
   const { status, snapshot } = useAchievements();
 
@@ -182,6 +250,14 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
     reportAchievement("achievements.viewed");
   }, []);
 
+  const [localOpen, setLocalOpen] = useState<string | null>(null);
+  const open = onOpenChange ? openId : (openId ?? localOpen);
+  const setOpen = (id: string | null) => { if (onOpenChange) onOpenChange(id); else setLocalOpen(id); };
+  const toggle = (id: string) => setOpen(open === id ? null : id);
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    document.querySelector(`[data-achievement="${CSS.escape(open)}"]`)?.scrollIntoView({ block: "center" });
+  }, [open]);
   const states = useMemo(() => new Map((snapshot?.items ?? []).map((item) => [item.id, item])), [snapshot]);
   const counts = useMemo(() => achievementCategoryCounts(new Set((snapshot?.items ?? []).filter((item) => item.unlockedAt).map((item) => item.id))), [snapshot]);
   const unlocks = unlocksFromSnapshot(snapshot ?? { rewards: [] });
@@ -201,7 +277,12 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
     .filter((section) => section.items.length > 0);
 
   return (
-    <div className="space-y-5" data-achievements-page="">
+    <div className="space-y-5" data-achievements-page="" onKeyDown={(event) => {
+      if (event.key !== "Escape" || !open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(null);
+    }}>
       {/* the level, its bar and what is left to the next one: the one place of the level (the header carries the count, the points and the streak) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border-[0.5px] border-border bg-elevated px-3.5 py-2.5 text-[12px] leading-4" data-achievement-progress="">
         <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink" data-achievement-level="">
@@ -222,15 +303,17 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
               const Icon = achievementIcon(item.icon);
               return (
                 <li key={item.id} className="achievement-row flex w-[220px] shrink-0 items-center gap-2.5 rounded-lg border-[0.5px] border-border bg-panel px-3 py-2.5 hover:bg-hover" data-tier={rarityForPoints(item.points)} data-unlocked="" data-recent-achievement={item.id}>
-                  <span className="achievement-row-badge">
-                    {showArt && reward ? (
-                      <Suspense fallback={null}><RewardPreview reward={reward} size={26} animated={false} /></Suspense>
-                    ) : (
-                      <Icon size={16} aria-hidden="true" />
-                    )}
-                  </span>
-                  <span className="achievement-row-name min-w-0 flex-1 truncate text-[13px] leading-[18px]" title={localized(item.name)}>{localized(item.name)}</span>
-                  <span className="achievement-row-points shrink-0">+{item.points}</span>
+                  <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-start" aria-expanded={open === item.id} onClick={() => toggle(item.id)}>
+                    <span className="achievement-row-badge">
+                      {showArt && reward ? (
+                        <Suspense fallback={null}><RewardPreview reward={reward} size={26} animated={false} /></Suspense>
+                      ) : (
+                        <Icon size={16} aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="achievement-row-name min-w-0 flex-1 truncate text-[13px] leading-[18px]" title={localized(item.name)}>{localized(item.name)}</span>
+                    <span className="achievement-row-points shrink-0">+{item.points}</span>
+                  </button>
                 </li>
               );
             })}
@@ -251,7 +334,7 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
               </div>
             </div>
             <ul className={cn(CARDS, "p-3")} data-achievement-grid="">
-              {section.items.map((item) => <AchievementRow key={item.id} item={item} state={states.get(item.id)} unlocks={unlocks} />)}
+              {section.items.map((item) => <AchievementRow key={item.id} item={item} state={states.get(item.id)} unlocks={unlocks} open={open === item.id} onToggle={() => toggle(item.id)} />)}
             </ul>
           </section>
         );

@@ -547,16 +547,17 @@ struct DesktopMemoryPage: View {
                 DesktopText(Text("\(rows.count) of \(total)"), size: 12, line: 16, color: \.inkSecondary).monospacedDigit()
             }
             .padding(.horizontal, 20).padding(.bottom, 8)
+            // MemoryNotesList select-all: px-2.5 inside the section's px-5, a 13 pt box, centered
             HStack(spacing: 10) {
                 Button {
                     checked = checked.count == rows.count ? [] : Set(rows.map(\.id))
                 } label: {
-                    DesktopNoteCheckbox(on: !rows.isEmpty && checked.count == rows.count).frame(width: 24, height: 24)
+                    DesktopNoteCheckbox(on: !rows.isEmpty && checked.count == rows.count)
                 }
                 .buttonStyle(.plain)
                 DesktopText(Text("\(rows.count) notes · tap to open"), size: 12, line: 16, color: \.inkSecondary)
             }
-            .padding(.horizontal, 20).padding(.vertical, 4)
+            .padding(.horizontal, 30).padding(.vertical, 6)
             Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1)
             if loading {
                 ProgressView().frame(maxWidth: .infinity).padding(24)
@@ -577,7 +578,8 @@ struct DesktopMemoryPage: View {
                 Button {
                     if checked.contains(entry.id) { checked.remove(entry.id) } else { checked.insert(entry.id) }
                 } label: {
-                    DesktopNoteCheckbox(on: checked.contains(entry.id)).frame(width: 24, height: 24)
+                    // the desktop checkbox is 13 pt with mt-[3px], not a 24 pt box
+                    DesktopNoteCheckbox(on: checked.contains(entry.id)).padding(.top, 3)
                 }
                 .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 4) {
@@ -602,9 +604,9 @@ struct DesktopMemoryPage: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 20)
+            // section px-5 plus the row's px-2.5; height follows py-3, no fixed 93
+            .padding(.horizontal, 30)
             .padding(.vertical, 12)
-            .frame(minHeight: 93, alignment: .top)
             .contentShape(Rectangle())
         }
         .buttonStyle(DesktopHoverFill(radius: 0))

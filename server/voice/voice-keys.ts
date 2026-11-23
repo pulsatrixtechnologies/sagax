@@ -175,6 +175,30 @@ export function nextCandidateIndex(ordered: readonly VoiceKeyCandidate[], i: num
   return other;
 }
 
+/** What to say to the person when no credential took the call (#5179).
+ *
+ * The credential closest to them wins, as everywhere in this order
+ * (D-20261120-012): their own refusal is the one they can act on. A voice the
+ * provider does not know is never relabelled as another credential's credits,
+ * and another credential's credits are never called an unknown voice: the two
+ * refusals used to arrive in one fallback chain and the person heard one
+ * generic "the voice service did not answer" for both.
+ *
+ * `tried` is in the order the keys were tried, so its first entry is the
+ * credential closest to the person. */
+export type VoiceCallCause = "voice" | "credits" | "key" | "other";
+
+export function voiceFailureCause(tried: readonly VoiceKeyRefusal[]): VoiceCallCause {
+  if (!tried.length) return "other";
+  if (tried[0]!.failure === "voice") return "voice";
+  // behind it, a voice name is a detail of the voice settings, not the cause
+  const rest = tried.filter((entry) => entry.failure !== "voice");
+  const considered = rest.length ? rest : tried;
+  if (considered.every((entry) => entry.failure === "key")) return "key";
+  if (considered.some((entry) => entry.failure === "quota") && considered.every((entry) => entry.failure === "quota" || entry.failure === "key")) return "credits";
+  return "other";
+}
+
 /** xAI failed the request on `used`, after `tried` (the keys refused
  * before it, then itself); `final` when another key could have fixed it
  * (credits, the key itself) and none was left. */

@@ -44,6 +44,17 @@ export function noCallReason(tried: readonly { source: string; failure: string }
   return language === "fr" ? french(accountSide, apiSide) : english(accountSide, apiSide);
 }
 
+/** One plain sentence when the provider does not know the voice name that was
+ * asked for (#5179). It is never called a credit problem nor a network
+ * problem: the name is what to fix, and the voice list answers it. The prefix
+ * is the one the app passes through as written (src/lib/voice-mode/
+ * realtime-call.ts realtimeRefusalText), so the person reads these words. */
+export function voiceNameCallReason(language: NoCallLanguage): string {
+  return language === "fr"
+    ? "Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre."
+    : "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.";
+}
+
 function english(account: Side, api: Side): string {
   const left = account === "credits" ? "the connected Grok account is out of credits" : "the connected Grok account was refused";
   const right = api === "missing" ? "and there is no xAI API key"

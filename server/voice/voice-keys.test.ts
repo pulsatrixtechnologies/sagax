@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { describeVoiceKey, VOICE_KEY_REFUSAL_TTL_MS, voiceKeyAuth, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate } from "./voice-keys.ts";
+import type { GrokVoiceFailure } from "../tts/grok.ts";
+import type { VoiceKeySource } from "../../shared/voice-mode.ts";
+import { describeVoiceKey, VOICE_KEY_REFUSAL_TTL_MS, voiceFailureCause, voiceKeyAuth, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate, type VoiceKeyRefusal } from "./voice-keys.ts";
 
 // Fake keys only.
 const MINE: VoiceKeyCandidate = { key: "xai-MINEfake9Qa2Ws4Ed6Rf8", via: "speaker-key", source: "voice-key", last4: "6Rf8", payerPrincipalId: "p-ada" };
@@ -144,5 +146,25 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
   it("presents a connected Grok account through the CLI voice host, every other source as an API key", () => {
     expect(voiceKeyAuth({ source: "grok-account" })).toBe("grok-account");
     for (const source of ["voice-key", "perspicax-key", "org-key", "server"]) expect(voiceKeyAuth({ source })).toBe("api-key");
+  });
+
+  // #5179: a refused voice name and a key out of credits are two different
+  // causes, and the one closest to the person is the one they hear.
+  it("names the cause of a call that no credential took, an unknown voice never hidden behind credits", () => {
+    const refused = (source: VoiceKeySource, last4: string, failure: GrokVoiceFailure): VoiceKeyRefusal => ({ source, last4, failure });
+    // the credential closest to the person refused the voice name; the
+    // organization's key behind it is out of credits: the voice is the cause
+    expect(voiceFailureCause([refused("grok-account", "4JGQ", "voice"), refused("org-key", "t6Yb", "quota")])).toBe("voice");
+    // only credits, on every credential
+    expect(voiceFailureCause([refused("voice-key", "6Rf8", "quota"), refused("org-key", "t6Yb", "quota")])).toBe("credits");
+    // a refused key and dry credits together: credits, the thing to fix first
+    expect(voiceFailureCause([refused("voice-key", "6Rf8", "key"), refused("org-key", "t6Yb", "quota")])).toBe("credits");
+    expect(voiceFailureCause([refused("voice-key", "6Rf8", "key")])).toBe("key");
+    // the provider itself failed
+    expect(voiceFailureCause([refused("org-key", "t6Yb", "down")])).toBe("other");
+    expect(voiceFailureCause([])).toBe("other");
+    // their own key dry, and a name the organization's key does not know:
+    // the closest credential is theirs, so credits are the cause
+    expect(voiceFailureCause([refused("grok-account", "4JGQ", "quota"), refused("org-key", "t6Yb", "voice")])).toBe("credits");
   });
 });

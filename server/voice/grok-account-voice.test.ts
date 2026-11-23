@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { noCallReason, soloGrokVoiceToken, voiceSentenceLanguage } from "./grok-account-voice.ts";
+import { noCallReason, soloGrokVoiceToken, voiceNameCallReason, voiceSentenceLanguage } from "./grok-account-voice.ts";
 
 const TRIED = (source: string, failure: string) => ({ source, failure });
 
@@ -24,6 +24,19 @@ describe("no call when neither side can pay", () => {
     expect(voiceSentenceLanguage("fr-CA", "en")).toBe("fr");
     expect(voiceSentenceLanguage(null, "fr")).toBe("fr");
     expect(voiceSentenceLanguage(null, "auto")).toBe("en");
+  });
+});
+
+// #5179: the provider refused the voice name itself. The person hears the
+// voice, never "the voice service did not answer", in their own language.
+describe("a voice the provider does not know", () => {
+  it("says the voice name, not the network, in the interface language", () => {
+    expect(voiceNameCallReason("en")).toBe(
+      "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.",
+    );
+    expect(voiceNameCallReason("fr")).toBe(
+      "Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.",
+    );
   });
 });
 

@@ -86,6 +86,12 @@ export function providerConfigured(cfg: AppConfig): boolean {
   return Boolean(elevenLabs(cfg));
 }
 
+/** An empty voice name is a complete choice on Grok: `fallbackVoiceId`
+ * fills xAI's built-in voice so speech still goes out with a name (#5179).
+ * A realtime call whose name the provider refuses is asked again with no
+ * name (server/voice/voice-mode.ts). The other providers have no fixed
+ * default: theirs is one of the voices of that account, which only the
+ * provider's list knows, so a name stays needed. */
 export function voiceConfigured(cfg: AppConfig): boolean {
   const provider = voiceProvider(cfg);
   if (provider === "xai") return Boolean(grokVoiceKey(cfg) && fallbackVoiceId("xai", cfg.tts?.voice));

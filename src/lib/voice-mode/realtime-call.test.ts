@@ -100,6 +100,16 @@ describe("realtime call drop reasons", () => {
     expect(realtimeRefusalText("realtime_key_refused", "xAI rejected the key.")).toBe("The realtime voice key was refused. Fix it in Settings > Voice.");
   });
 
+  // #5179: a voice the provider does not know is its own cause: the words the
+  // server wrote (in the person's language) are kept, and the fallback never
+  // says "the voice service did not answer".
+  it("keeps the words of a voice the provider does not know", () => {
+    const french = "Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.";
+    expect(realtimeRefusalText("realtime_voice_unknown", french)).toBe(french);
+    expect(realtimeRefusalText("realtime_voice_unknown", "The call could not start."))
+      .toBe("No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.");
+  });
+
   it("a call that went on over another key says which key was refused and why, as the other voice sockets do", () => {
     const told: VoiceKeyEvent[] = [];
     const off = onVoiceKeyEvent((event) => told.push(event));

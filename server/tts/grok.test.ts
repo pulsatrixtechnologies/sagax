@@ -65,11 +65,13 @@ describe("Grok voice", () => {
     expect(seen).toHaveLength(0);
     expect(describeVoice(config)).toEqual({ configured: true, ready: true, provider: "xai", voice: "ara", baseUrl: "", model: "", keys: { elevenlabs: false, fish: false } });
     expect(JSON.stringify(describeVoice(config))).not.toContain("fixture-voice-key");
+    // #5179: an organization server had `tts.voice` empty. On Grok that is a
+    // complete choice: the built-in voice is sent, so the installation speaks
+    // instead of looking unable to.
     const noVoice: AppConfig = { xai: config.xai, tts: { provider: "xai" } };
-    // #5179: an empty tts.voice falls back to a valid voice.
     expect(voiceReady(noVoice)).toBe(true);
     expect(voiceReady(noVoice, "eve")).toBe(true);
-    await speak(noVoice, "hi");
+    expect((await speak(noVoice, "hi")).mime).toBe("audio/mpeg");
     expect(JSON.parse(seen.at(-1)?.body ?? "{}").voice_id).toBe("ara");
   });
 

@@ -131,14 +131,20 @@ describe("bot chat header, like the reference app (#2141)", () => {
       name: "Pepper",
       label: "Research",
       panelOpen: false,
+      plain: true,
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
       ...props,
     }));
   }
 
-  it("shows only the name pill: no sharing pill, no gear (the owner 2026-11-06)", () => {
+  it("shows the name as a plain title: no pill fill, no sharing pill, no gear (#4536)", () => {
     const html = header();
+    expect(html).toContain("data-chat-title");
+    expect(html).toContain("bg-transparent");
+    expect(html).not.toContain("rounded-full");
+    expect(html).not.toMatch(/(?:^|\s)bg-circle(?:\s|")/);
+    expect(html).not.toContain("border-circle-ring");
     expect(html).toContain("data-bot-header-pill");
     expect(html).not.toContain("data-bot-header-audience");
     expect(html).not.toContain("data-bot-header-gear");

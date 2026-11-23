@@ -68,6 +68,14 @@ describe("browser tool shaping", () => {
     expect(shapeBrowserToolResult({ error: "x" })).toEqual({ error: "x" });
   });
 
+  it("tells the bot how to install a missing Chrome library on Linux", () => {
+    const shaped = shapeBrowserToolResult({
+      isError: true,
+      content: [{ type: "text", text: "Chrome exited early (exit code: 127)\nerror while loading shared libraries: libnss3.so: cannot open shared object file" }],
+    }) as { content: Array<{ text: string }> };
+    expect(shaped.content.map((part) => part.text).join("\n")).toContain("browser install --with-deps");
+  });
+
   it("cuts oversized text to the budget and says how to narrow the next call", () => {
     const text = "line of accessibility tree\n".repeat(4_000);
     const shaped = shapeBrowserToolResult({ content: [{ type: "text", text }], structuredContent: {} }, { toolName: "agent_browser_snapshot" }) as { content: Array<{ text: string }> };

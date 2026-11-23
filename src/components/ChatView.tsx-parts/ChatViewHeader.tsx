@@ -76,8 +76,10 @@ export function ChatViewHeader({
       {/* Header */}
       {side ? (typeof side.header === "function" ? side.header(side.panel ? botPill : null) : side.header) : <ChatHeaderBar
         {...(headerDragProps as HTMLAttributes<HTMLDivElement>)}
-        // Every chat view floats this same bar (ChatHeaderBar): no band, the
-        // transcript scrolls under the pill and ChatEdgeFade softens it.
+        align="start"
+        // The bot's name is a plain title at the top left of this bar (#4536).
+        // The transcript keeps its room under the bar, and the bar's ground
+        // hides whatever scrolls there.
         // @container/chathead lets the chips on the right fold to icon
         // bubbles when the column is narrow. Pulsatrix Light makes it
         // `relative`.

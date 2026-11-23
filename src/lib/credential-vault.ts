@@ -3,7 +3,9 @@
 // here ever holds a value the server sent: the server never sends one, only
 // booleans that say one is saved. Values typed here go to the server once.
 import { api } from "@/state/store";
-import { bindingUrl, vaultDomainMatches, vaultSiteOf, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault";
+import { bindingUrl, onePasswordCanAdd, vaultDomainMatches, vaultSiteOf, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault";
+
+export { onePasswordCanAdd };
 import type { OrderTracking } from "../../shared/order-tracking";
 import type { PurchaseFlightLeg, PurchaseItem } from "../../shared/payment-vault";
 import type { PaymentsSettings, PaymentMethodListing, PaymentMethodRef, BotPaymentAllowance } from "../../shared/payments-settings";

@@ -3,18 +3,21 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CHAT_EDGE_FADE_PX, ChatEdgeFade } from "./ChatEdgeFade";
+import { ChatHeaderBar } from "./ChatHeaderBar";
 
 // the owner 2026-11-06: the transcript fades out under the header pill and above the
 // composer in every chat (bot, group, person), on the chat's own ground.
 describe("ChatEdgeFade", () => {
-  it("veils the transcript behind the floating header, never an opaque band or a click", () => {
+  it("hides what has scrolled under the header and fades only past the band (#5137)", () => {
     const html = renderToStaticMarkup(createElement(ChatEdgeFade, { edge: "top" }));
     expect(html).toContain('data-chat-edge-fade="top"');
     expect(html).toContain("pointer-events-none");
     expect(html).toContain("top-0");
     expect(html).toContain("-z-10");
-    expect(html).toContain("var(--color-app)");
-    expect(html).toContain("transparent");
+    // Solid through the header, then a short fade. A half-transparent veil
+    // left buttons looking clickable while the header took the click.
+    expect(html).toContain(`var(--color-app) calc(100% - ${CHAT_EDGE_FADE_PX.top}px), transparent`);
+    expect(html).not.toContain("55%");
     expect(CHAT_EDGE_FADE_PX.top).toBeGreaterThanOrEqual(16);
     expect(CHAT_EDGE_FADE_PX.top).toBeLessThanOrEqual(32);
   });
@@ -52,5 +55,18 @@ describe("ChatEdgeFade", () => {
     expect(css).toMatch(/\[data-skin="pulsatrix-light"\] \.content-topbar > \[data-chat-edge-fade="top"\] \{\s*display: none;/);
     // The phone drawer button over that band takes the band's ink.
     expect(css).toMatch(/\[data-skin="pulsatrix-light"\] \.app-shell-row:has\(\.content-topbar\) > \[data-drawer-button\] \{\s*color: var\(--color-sidebar-ink-secondary\);/);
+  });
+
+  it("puts the bot conversation title at the left of the bar, on the chat ground (#4536)", () => {
+    const html = renderToStaticMarkup(createElement(ChatHeaderBar, { align: "start", center: "Ada" }, "controls"));
+    expect(html).toContain('data-chat-header-align="start"');
+    expect(html).toContain("bg-app");
+    expect(html).toContain("mr-auto");
+    const center = /data-chat-header-align="start" class="([^"]*)"/.exec(html)?.[1] ?? "";
+    expect(center).not.toContain("inset-0");
+    expect(center).not.toContain("m-auto");
+    const centered = renderToStaticMarkup(createElement(ChatHeaderBar, { center: "Ada" }));
+    expect(centered).toContain("inset-0");
+    expect(centered).toContain("m-auto");
   });
 });

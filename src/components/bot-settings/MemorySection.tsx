@@ -197,8 +197,8 @@ export function MemoryEditorDialog({
           maxHeight="none"
           dataField="memory"
           value={editing.text}
-          readOnly={editing.readOnly}
-          autoFocus={!editing.readOnly}
+          readOnly={editing.readOnly || saving}
+          autoFocus={!editing.readOnly && !saving}
           placeholder={editing.path === MEMORY_INDEX ? t("botPanel.memory.indexPlaceholder") : t("botPanel.memory.write")}
           ariaLabel={editing.path === MEMORY_INDEX ? t("botPanel.memory.aria") : t("botPanel.memory.fileAria", { path: editing.path })}
           onChange={onChange}
@@ -276,16 +276,30 @@ export function LendingReviewNotice({ changed, stale, busy, onReviewed, plain = 
   );
 }
 
+/** A second Reload keeps the first kept draft too. */
+export function keptMemoryDraft(kept: string | null, text: string): string {
+  return kept === null || kept === text ? text : `${kept}\n\n${text}`;
+}
+
+/** A save that finishes after the person moved on must not paint that bot's notes. */
+export function memorySaveStillHere(startedBotId: string, currentBotId: string, editingPath: string | null, savedPath: string): boolean {
+  return startedBotId === currentBotId && editingPath === savedPath;
+}
+
 export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; active?: boolean; onToggle: (enabled: boolean) => void }) {
   const confirm = useConfirm();
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
   const [journal, setJournal] = useState<MemoryJournalRow[] | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const editingPathRef = useRef<string | null>(null);
+  editingPathRef.current = editing?.path ?? null;
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const botIdRef = useRef(bot.id);
+  botIdRef.current = bot.id;
   const [reverting, setReverting] = useState<string | null>(null);
   const [newTopic, setNewTopic] = useState("");
   const [upkeep, setUpkeep] = useState<UpkeepStatus | null>(null);
@@ -353,17 +367,21 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
 
   const save = async (expectedHash: string | undefined) => {
     if (!editing) return;
+    const startedBotId = bot.id;
+    const path = editing.path;
+    const text = editing.text;
     setSaving(true);
     setError(null);
     try {
-      const result = await saveMemoryDoc(bot.id, editing.path, editing.text, expectedHash);
+      const result = await saveMemoryDoc(startedBotId, path, text, expectedHash);
+      if (!memorySaveStillHere(startedBotId, botIdRef.current, editingPathRef.current, path)) return;
       if (!result.ok) {
-        setConflict({ path: editing.path, current: result.current, currentHash: result.currentHash });
+        setConflict({ path, current: result.current, currentHash: result.currentHash });
         return;
       }
       setConflict(null);
       setSavedDraft(null);
-      setEditing({ ...editing, text: result.doc.text, hash: result.doc.hash, dirty: false });
+      setEditing({ ...editing, path, text: result.doc.text, hash: result.doc.hash, dirty: false });
       setOverview(result.overview);
       setJournal(await fetchMemoryJournal(bot.id));
     } catch (e) {
@@ -378,7 +396,7 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
    * bot's version. */
   const reloadFromConflict = () => {
     if (!conflict || !editing) return;
-    setSavedDraft(editing.text);
+    setSavedDraft((kept) => keptMemoryDraft(kept, editing.text));
     setEditing({ ...editing, text: conflict.current, hash: conflict.currentHash, dirty: false });
     setConflict(null);
   };

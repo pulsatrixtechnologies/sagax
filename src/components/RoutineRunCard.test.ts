@@ -66,7 +66,8 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain("Board state");
     // the brief: the closing line, two lines at most
-    expect(markup).toMatch(/data-routine-run-brief[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*>3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight.</);
+    // #4787: the outcome is one line on the row, not a paragraph under the chip
+    expect(markup).toMatch(/data-routine-run-brief[^>]*class="[^"]*line-clamp-1[^"]*"[^>]*>3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight.</);
     expect(markup).toMatch(/data-routine-run-name[^>]*>Morning brief</);
     // a finished result without problems has no state word
     expect(markup).not.toContain("data-routine-run-status");
@@ -295,26 +296,26 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(html).not.toContain("{");
   });
 
-  it("the teammates it asked are the quiet Asked line, named without a thread link when threads are hidden", () => {
+  it("folds the teammates a result asked into the row meta, not an Asked line under it (#4787)", () => {
     const handoff = draw({ message: message("completed", { summary: "Sent.", handedTo: [{ botId: "bot-b", threadId: "bot-b-work", name: "Bot B", status: "running" }] }) });
-    expect(handoff).toContain('data-testid="delegation-line"');
-    expect(handoff).toContain("Bot B");
+    expect(handoff).toContain("data-routine-run-meta");
     expect(handoff).toContain("Asking");
+    expect(handoff).toContain("Bot B");
+    expect(handoff).not.toContain('data-testid="delegation-line"');
     expect(handoff).not.toContain("data-run-teammate-thread");
-    const quiet = draw({ message: message("nothing_to_report", { handedTo: [{ botId: "bot-b", threadId: "bot-b-work", name: "Bot B", status: "completed" }] }), onOpen: () => {}, onOpenThread: () => {} });
+    const quiet = draw({ message: message("running", { handedTo: [{ botId: "bot-b", threadId: "bot-b-work", name: "Bot B", status: "completed" }] }), onOpen: () => {}, onOpenThread: () => {} });
     expect(quiet).toContain('data-run-teammate-thread="bot-b-work"');
     expect(quiet.match(/data-routine-run-card/g)).toHaveLength(1);
   });
 
-  it("the Asked line sits flush with the card's other lines, never centered, also once its names wrap", () => {
+  it("keeps several teammates in that same meta, not a centered line under the card (#4787)", () => {
     const handedTo = ["Bot B", "Bot C", "Bot D", "Bot E", "Bot F"].map((name, index) => ({ botId: `bot-${index}`, threadId: `work-${index}`, name, status: "completed" as const }));
     const html = draw({ message: message("completed", { summary: "Reviewed.", handedTo }) });
-    const row = /<div class="([^"]*)" data-testid="delegation-line"/.exec(html)?.[1] ?? "";
-    expect(row).toContain("justify-start");
-    expect(row).not.toContain("justify-center");
-    const line = new RegExp('data-testid="delegation-line"[^>]*><div class="([^"]*)"').exec(html)?.[1] ?? "";
-    expect(line).toContain("px-0");
-    expect(line).not.toContain("justify-center");
+    expect(html).not.toContain('data-testid="delegation-line"');
+    expect(html).toContain("Asked Bot B, Bot C, Bot D, Bot E, Bot F");
+    const meta = /data-routine-run-meta[^>]*class="([^"]*)"/.exec(html)?.[1] ?? "";
+    expect(meta).toContain("truncate");
+    expect(html.indexOf("data-routine-run-meta")).toBeLessThan(html.indexOf("<time"));
   });
 
   it("keeps a concise text fallback visible for an incomplete or newer payload", () => {
@@ -358,24 +359,20 @@ describe("RoutineRunCard (#4234): the reference's line, the result under it, the
     expect(markup).toContain("data-routine-run-widget");
   });
 
-  it("a run with plain text: the reference's line (the glyph, the name and the time, opening the run), its words under the name, no band", () => {
+  it("a result is one row: glyph in a square, name, one-line outcome, time at the right, chevron (#4787)", () => {
     const markup = draw({ message: message("completed", { summary: "All 12 backups completed tonight." }), onOpen: vi.fn() });
-    // the reference's system event: 24px tall, 12px type on a 16px line
     expect(markup).toMatch(/data-routine-run-line[^>]*class="[^"]*min-h-6[^"]*text-\[12px\] leading-4/);
-    // its chip: 24px (4px above and below a 16px line), 4px before the
-    // glyph, 6px after, 2px between
-    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*class="[^"]*py-1 ps-1 pe-1\.5[^"]*"/);
-    expect(markup).toMatch(/data-routine-run-first-line[^>]*class="flex h-4 min-w-0 max-w-full items-center gap-0\.5"/);
+    expect(markup).toMatch(/data-routine-run-glyph=""[^>]*class="[^"]*size-6[^"]*rounded-md[^"]*bg-inset/);
     expect(markup).toContain("lucide-clock");
-    // the words start where the name does (4px + 12px glyph + 2px)
-    expect(markup).toMatch(/data-routine-run-brief[^>]*class="ps-\[18px\] line-clamp-2 text-\[13px\] leading-\[18px\]/);
-    // #4275: one way to the details, the chip with its chevron; no second entry
+    expect(markup).toMatch(/data-routine-run-brief[^>]*class="[^"]*line-clamp-1[^"]*"[^>]*>All 12 backups completed tonight.</);
+    expect(markup).not.toMatch(/data-routine-run-brief[^>]*class="[^"]*ps-\[18px\]/);
     expect(markup.match(/data-routine-run-open/g)).toHaveLength(1);
     expect(markup).not.toContain("data-routine-run-details");
     expect(markup).not.toContain("data-ask-card");
-    // the time sits on the line, right after the name
-    const line = markup.slice(markup.indexOf("data-routine-run-line"), markup.indexOf("data-routine-run-brief"));
-    expect(line).toContain("<time");
+    const row = markup.slice(markup.indexOf("data-routine-run-first-line"), markup.indexOf("</button>"));
+    expect(row.indexOf("data-routine-run-name")).toBeLessThan(row.indexOf("data-routine-run-brief"));
+    expect(row.indexOf("data-routine-run-brief")).toBeLessThan(row.indexOf("<time"));
+    expect(row).toMatch(/<time[^>]*class="[^"]*ms-auto|class="[^"]*ms-auto[^"]*"[^>]*>[^<]*<time|ms-auto/);
   });
 
   it("a run with a question for the person: its items stay under the row, with its words", () => {
@@ -525,8 +522,12 @@ describe("RoutineRunCard: one way to a run's details on every row (#4275)", () =
   const firstLine = (markup: string) => {
     const open = opener(markup);
     const start = open.indexOf("data-routine-run-first-line");
+    if (start < 0) return "";
+    // #4787: a result keeps its outcome on this line, so the line runs
+    // through the chevron. Other rows still stop before the sentence under them.
+    if (open.indexOf("data-routine-run-glyph") > start) return open.slice(start);
     const brief = open.indexOf("data-routine-run-brief");
-    return start < 0 ? "" : open.slice(start, brief < 0 ? undefined : brief);
+    return open.slice(start, brief < 0 ? undefined : brief);
   };
   const classes = (markup: string) => /<button[^>]*data-routine-run-open[^>]*class="([^"]*)"/.exec(markup)?.[1] ?? "";
 

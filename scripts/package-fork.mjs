@@ -45,6 +45,8 @@ if (target === "mac") {
   if (macIdentity) {
     args.push(`-c.mac.identity=${macIdentity}`);
     // A certificate hash (two same-named identities): sign by hash.
+    // A name keeps electron-builder.yml mac.sign (scripts/mac-sign.cjs).
+    // Both hooks skip data files.
     if (/^[0-9A-F]{40}$/i.test(macIdentity)) args.push("-c.mac.sign=./scripts/mac-sign-by-hash.cjs");
   }
   else args.push("-c.mac.identity=null", "-c.mac.hardenedRuntime=false", "-c.dmg.sign=false");

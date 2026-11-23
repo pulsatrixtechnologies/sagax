@@ -16,6 +16,25 @@ export type VaultLoginTarget = typeof VAULT_LOGIN_TARGET;
 export const VAULT_ITEM_KINDS = ["login", "apiKey", "note", "card", "address", "contact"] as const;
 export type VaultItemKind = (typeof VAULT_ITEM_KINDS)[number];
 
+const ONE_PASSWORD_NOTES = new Set(["SECURE_NOTE", "Secure Note"]);
+const ONE_PASSWORD_KEYS = new Set(["API_CREDENTIAL", "API Credential", "PASSWORD", "Password"]);
+const ONE_PASSWORD_LOGINS = new Set(["LOGIN", "Login"]);
+
+/** How a 1Password item is saved. A login with a website stays a login.
+ * A login with no website, an API credential, a password item, or a secure
+ * note is a secret the bot can use without a site. */
+export function onePasswordImportKind(category: string, domains: readonly string[]): "login" | "apiKey" | "note" {
+  if (ONE_PASSWORD_NOTES.has(category)) return "note";
+  if (ONE_PASSWORD_KEYS.has(category)) return "apiKey";
+  if (ONE_PASSWORD_LOGINS.has(category) && domains.length === 0) return "apiKey";
+  return "login";
+}
+
+/** A site login needs a website. A secret item can be added without one. */
+export function onePasswordCanAdd(item: { category: string; domains: readonly string[] }): boolean {
+  return item.domains.length > 0 || onePasswordImportKind(item.category, item.domains) !== "login";
+}
+
 /** A field the browser runtime can fill. Card, address and contact fields
  * are typed only after a purchase approval (shared/payment-vault.ts). */
 export const VAULT_FILL_FIELDS = [

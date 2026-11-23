@@ -28,6 +28,13 @@ describe("prices", () => {
     expect(billableFor({ driverKind: "codex", model: "gpt-5", input: 10, cachedInput: 50, output: 0 }, prices)).toBeCloseTo(10 * 2 / 1_000_000, 12);
     expect(billableFor({ driverKind: "x", model: "y", input: 10, output: 10 }, {})).toBeNull();
   });
+
+  it("never reads Object.prototype as a price", () => {
+    for (const key of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
+      expect(priceFor({ driverKind: "openai", model: key }, {})).toBeNull();
+    }
+    expect(billableFor({ driverKind: "openai", model: "toString", input: 100, output: 10 }, {})).toBeNull();
+  });
 });
 
 describe("spend against a monthly cap", () => {

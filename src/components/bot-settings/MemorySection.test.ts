@@ -10,7 +10,7 @@ vi.mock("../DesktopCapabilities", () => ({
   useMacInsetChrome: () => ({ macInset: false, browser: false }),
 }));
 
-const { MemoryToggleCard, ConflictNotice, LendingReviewNotice, MemoryEditorDialog, MemoryFileRows, MemoryGauge, MemoryJournalList, MemoryUpkeepCard } = await import("./MemorySection");
+const { MemoryToggleCard, ConflictNotice, LendingReviewNotice, MemoryEditorDialog, MemoryFileRows, MemoryGauge, MemoryJournalList, MemoryUpkeepCard, keptMemoryDraft, memorySaveStillHere } = await import("./MemorySection");
 
 // renderToStaticMarkup HTML-escapes quotes and apostrophes; decode before
 // comparing against plain-text fixtures.
@@ -28,6 +28,20 @@ const index = (overrides: Partial<MemoryCapacity> = {}): MemoryCapacity => ({
   truncated: false,
   hash: "h",
   ...overrides,
+});
+
+describe("memory reload", () => {
+  it("keeps every earlier draft when reload is needed twice", () => {
+    expect(keptMemoryDraft(null, "First draft.")).toBe("First draft.");
+    expect(keptMemoryDraft("First draft.", "First draft.")).toBe("First draft.");
+    expect(keptMemoryDraft("First draft.", "Second draft.")).toBe("First draft.\n\nSecond draft.");
+  });
+
+  it("ignores a save that finishes after the person moved to another bot", () => {
+    expect(memorySaveStillHere("ada", "ada", "MEMORY.md", "MEMORY.md")).toBe(true);
+    expect(memorySaveStillHere("ada", "nimbus", "MEMORY.md", "MEMORY.md")).toBe(false);
+    expect(memorySaveStillHere("ada", "ada", null, "MEMORY.md")).toBe(false);
+  });
 });
 
 describe("MemoryGauge", () => {

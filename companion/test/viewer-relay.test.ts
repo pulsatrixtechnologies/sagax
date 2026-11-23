@@ -138,11 +138,28 @@ describe("VPS companion viewer relay", () => {
     });
     // POST is refused by method, but only after the session is found (404 otherwise).
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(asked[0]).toBe("device-1/bot-1/phone-lease-0123456789");
+    // No open socket: the lease is not polled.
+    expect(asked).toEqual([]);
     expect(relay.isViewerPath(viewerPath)).toBe(true);
 
     owned = false;
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    const ended: string[] = [];
+    const socket = {
+      destroyed: false,
+      on() { return socket; },
+      once() { return socket; },
+      off() { return socket; },
+      pause() { return socket; },
+      destroy() { socket.destroyed = true; },
+      end(body: string) { ended.push(body); },
+    };
+    relay.handleUpgrade({
+      url: viewerPath, method: "GET",
+      headers: { upgrade: "websocket", connection: "Upgrade", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==", "sec-websocket-version": "13" },
+    } as never, socket as never, Buffer.alloc(0), device);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(asked[0]).toBe("device-1/bot-1/phone-lease-0123456789");
+    expect(ended.join("")).toContain("viewer session not found");
     // The session is gone: even a well-formed request for it is not found.
     expect(await status(viewerPath)).toBe(404);
   });

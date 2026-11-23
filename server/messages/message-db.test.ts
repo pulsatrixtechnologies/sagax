@@ -210,6 +210,14 @@ describe("message-db", () => {
     expect(commandReceipt("digest.append", "t50:turn-1")?.result).toEqual({ text: "other thread" });
   });
 
+  it("finds a Chinese word inside a sentence", () => {
+    insertMessage("zh-a", msg("zh1", "周三下午三点要去社区图书馆还书。"));
+    const hits = recallMessages("图书馆", ["zh-a"]);
+    expect(hits.map((hit) => hit.messageId)).toEqual(["zh1"]);
+    expect(hits[0]?.snippet).toContain("图书馆");
+    expect(hits[0]?.snippet).not.toContain("\u200b");
+  });
+
   it("names an outside app as the author of a webhook line in recall and in a read (port of OpenMausBot #3160)", () => {
     insertMessage("hook-a", { ...msg("w1", "Deploy finished on prod", { role: "bot" }), webhookPost: true } as never);
     insertMessage("hook-a", msg("w2", "Deploy finished, I checked it", { role: "bot" }));

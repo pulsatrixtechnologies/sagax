@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Group } from "@/state/store";
 import type { WebhookTrigger } from "@/lib/webhooks";
 import type { Routine } from "../../../shared/routines";
+import { EditorView } from "@codemirror/view";
 import { blurMarkdown, markdownEditorIn, markdownText, typeMarkdown } from "./markdown-editor-test-utils";
 import { GROUP_PANEL_HIDDEN_TABS } from "@/lib/group-panel";
 
@@ -141,6 +142,19 @@ describe("markdown fields", () => {
     const editor = await markdownEditorIn(document.body, "memory");
     expect(editor.getAttribute("contenteditable")).toBe("true");
     expect(document.body.querySelector<HTMLButtonElement>('[data-md-tool="bold"]')!.disabled).toBe(true);
+  });
+
+  it("locks MEMORY.md while a save is in flight", async () => {
+    const onChange = vi.fn();
+    const noop = vi.fn();
+    render(createElement(MemoryEditorDialog, {
+      editing: { path: "MEMORY.md", text: "# Memory\n\n- Ada leads", hash: "h", dirty: true, readOnly: false },
+      botName: "Scout", conflict: null, saving: true, savedDraft: null,
+      onChange, onSave: noop, onDiscard: noop, onClose: noop, onReload: noop, onOverwrite: noop, onDismissDraft: noop, onOpenIndex: noop,
+    }));
+    const editor = await markdownEditorIn(document.body, "memory");
+    expect(document.body.querySelector<HTMLButtonElement>('[data-md-tool="bold"]')!.disabled).toBe(true);
+    expect(EditorView.findFromDOM(editor)!.state.readOnly).toBe(true);
   });
 
   it("SKILL.md instructions: loads the body and saves through PUT", async () => {

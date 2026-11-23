@@ -125,6 +125,8 @@ export type ClaudeSession = {
    * began the turn. The acceptance boundary for --resume: before it,
    * nothing was submitted and the turn has caused nothing. */
   sawInit: boolean;
+  /** Why the CLI refused `--resume` with an error result, for the log line. */
+  resumeRefusal?: string;
   /** The last turn ended in failure: the CLI may have refused its
    * message before keeping it, so what the conversation holds of the
    * volatile half is not known (heldVolatile). */

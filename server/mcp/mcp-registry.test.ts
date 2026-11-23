@@ -243,6 +243,16 @@ describe("botAddedMcpServerEnabled (#1098)", () => {
 });
 
 describe("parseMcpServersImport", () => {
+  it("does not leave a generated name ending in a hyphen", () => {
+    const raw = `${"a".repeat(31)}-bx`;
+    const parsed = parseMcpServersImport(JSON.stringify({ mcpServers: { [raw]: { command: "echo" } } }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const [name] = Object.keys(parsed.servers);
+    expect(name).toBe("a".repeat(31));
+    expect(name?.endsWith("-")).toBe(false);
+  });
+
   // The block every other agent tool shares: Claude Code, Cursor and Claude
   // Desktop all write {"mcpServers": {name: {command, args, env}}}. Pasting
   // it here should just work, with the same rules as the form.

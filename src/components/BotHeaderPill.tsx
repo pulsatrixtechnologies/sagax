@@ -168,12 +168,14 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar, group 
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
  */
-export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
+export function BotChatHeader({ name, label, panelOpen, onToggle, avatar, plain = false }: {
   name: string;
   label?: string;
   panelOpen: boolean;
   onToggle: () => void;
   avatar: ReactNode;
+  /** The conversation title: no pill fill. A coding window keeps the pill. */
+  plain?: boolean;
 }) {
   return (
     <div data-bot-chat-header="" className="flex min-w-0 items-center gap-2">
@@ -182,7 +184,13 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
         onClick={onToggle}
         data-chat-pill=""
         data-bot-header-pill=""
-        className={cn(CHAT_PILL_CLASS, CHAT_PILL_HOVER)}
+        data-chat-title={plain ? "" : undefined}
+        className={cn(
+          plain
+            ? "group/pill flex h-10 min-w-0 max-w-[420px] items-center gap-2 bg-transparent"
+            : CHAT_PILL_CLASS,
+          CHAT_PILL_HOVER,
+        )}
         title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
         aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
         aria-expanded={panelOpen}

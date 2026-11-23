@@ -42,15 +42,17 @@ export function chatColumnMaxPx(width: ChatWidth): number | null {
 
 /** Composer dock gutter: mirrors the transcript column (its px-4 pane) so
  * the field and a card pinned over it line up with the cards of the chat:
- * one card width at every size (#3581). */
+ * one card width at every size (#3581). pb-12 (48px) keeps a click in the
+ * field clear of an auto-hidden Dock or taskbar (#5158). The class is a
+ * full literal so Tailwind keeps it. */
 export function chatComposerShellClass(width: ChatWidth = "reading"): string {
   switch (width) {
     case "wide":
-      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-1280px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-1280px)/2))] pb-12";
     case "full":
-      return "pointer-events-none relative overflow-x-clip px-4 pb-4";
+      return "pointer-events-none relative overflow-x-clip px-4 pb-12";
     default:
-      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-12";
   }
 }
 

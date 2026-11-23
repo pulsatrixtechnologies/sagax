@@ -613,7 +613,7 @@ struct MarkdownText: View {
     /// hair of room on both sides. The tap opens that record's card.
     private func styleRecordChips(_ attributed: inout AttributedString) {
         let chips = attributed.runs.compactMap { run -> Range<AttributedString.Index>? in
-            guard let link = run.link, RecordLinks.parse(link) != nil else { return nil }
+            guard let link = run.link, RecordLinks.parse(link.absoluteString) != nil else { return nil }
             return run.range
         }
         for range in chips.reversed() {

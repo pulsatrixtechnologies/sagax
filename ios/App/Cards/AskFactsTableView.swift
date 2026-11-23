@@ -10,6 +10,7 @@ struct AskFactsTableView: View {
     let colors: QuestionSheetColors
     let facts: [AskFact]
     @EnvironmentObject private var session: Session
+    @Environment(\.recordAsk) private var recordAsk
     @State private var sheet: RecordSheetItem?
 
     var body: some View {
@@ -33,6 +34,7 @@ struct AskFactsTableView: View {
             .sheet(item: $sheet) { item in
                 RecordCardSheet(start: item)
                     .environmentObject(session)
+                    .environment(\.recordAsk, recordAsk)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }

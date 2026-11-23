@@ -42,10 +42,17 @@ final class RecordCardUITests: XCTestCase {
         app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "BILL-20417")).firstMatch
     }
 
+    /// The chip is the link itself (the same tap RichContentUITests uses), not a point in the text.
     @MainActor
-    private func tapFirstChip(_ message: XCUIElement) {
-        // the first chip starts the text: a point inside its first letters, on the first line
-        message.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 30, dy: 12)).tap()
+    private func chipLink(_ app: XCUIApplication) -> XCUIElement {
+        app.links["BILL-20417"].firstMatch
+    }
+
+    @MainActor
+    private func tapFirstChip(_ app: XCUIApplication) {
+        let link = chipLink(app)
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "the bill chip is a link")
+        link.tap()
     }
 
     @MainActor
@@ -62,7 +69,7 @@ final class RecordCardUITests: XCTestCase {
         let message = firstChip(app)
         XCTAssertTrue(message.waitForExistence(timeout: 10), "the bot's text with the bill's chip")
         record("Chat with record chips", app)
-        tapFirstChip(message)
+        tapFirstChip(app)
         let title = app.staticTexts["record-card-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertEqual(title.label, "Acme Fabrication")
@@ -94,7 +101,7 @@ final class RecordCardUITests: XCTestCase {
         let message = firstChip(app)
         XCTAssertTrue(message.waitForExistence(timeout: 15))
         record("1-chat", app)
-        tapFirstChip(message)
+        tapFirstChip(app)
         sleep(2)
         record("1b-after-tap", app)
         XCTAssertTrue(app.staticTexts["record-card-title"].waitForExistence(timeout: 10))
@@ -113,12 +120,29 @@ final class RecordCardUITests: XCTestCase {
         record("4-contract-pushed", app)
     }
 
+    /// Ask puts the record's link at the end of the composer, as on the desktop.
+    @MainActor
+    func testAskWritesTheRecordLinkIntoTheComposer() {
+        let app = launch()
+        XCTAssertTrue(firstChip(app).waitForExistence(timeout: 10))
+        tapFirstChip(app)
+        let ask = app.buttons["record-card-ask"]
+        XCTAssertTrue(ask.waitForExistence(timeout: 10))
+        ask.tap()
+        let field = app.textFields["message-input"]
+        let box = app.textViews["message-input"]
+        let shown = field.waitForExistence(timeout: 5) ? field : box
+        XCTAssertTrue(shown.waitForExistence(timeout: 5), "the composer is back")
+        let value = (shown.value as? String) ?? ""
+        XCTAssertTrue(value.contains("sagax://record/nimbus_desk/bill/88213"), value)
+    }
+
     @MainActor
     func testACardInFrenchSpeaksFrench() {
         let app = launch("fr")
         let message = firstChip(app)
         XCTAssertTrue(message.waitForExistence(timeout: 10))
-        tapFirstChip(message)
+        tapFirstChip(app)
         XCTAssertTrue(app.staticTexts["record-card-title"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Entente"].exists || app.buttons["record-ref-contract-412"].exists)
         record("Facture", app)

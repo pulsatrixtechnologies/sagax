@@ -16,6 +16,19 @@ import SwiftUI
 import UIKit
 import CompanionCore
 
+private struct RecordAskKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// Puts a record's markdown link into the chat composer (desktop "Ask").
+    /// Nil when this card has no composer to write to.
+    var recordAsk: ((String) -> Void)? {
+        get { self[RecordAskKey.self] }
+        set { self[RecordAskKey.self] = newValue }
+    }
+}
+
 /// What a chip tap opens: the record and the words the chip wore.
 struct RecordSheetItem: Identifiable, Equatable {
     let id = UUID()
@@ -28,6 +41,7 @@ struct RecordCardSheet: View {
     @Environment(\.themePalette) private var themePalette
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
+    @Environment(\.recordAsk) private var recordAsk
     @EnvironmentObject private var session: Session
 
     let start: RecordSheetItem
@@ -434,6 +448,18 @@ struct RecordCardSheet: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("record-card-open")
+                separator
+            }
+            if recordAsk != nil {
+                Button {
+                    let words = shown.label.flatMap { $0.isEmpty ? nil : $0 } ?? card.number
+                    recordAsk?(RecordLinks.markdown(label: words, ref: card.ref))
+                    dismiss()
+                } label: {
+                    actionRow(icon: "text.bubble", Text("Ask"), primary: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("record-card-ask")
                 separator
             }
             Button {

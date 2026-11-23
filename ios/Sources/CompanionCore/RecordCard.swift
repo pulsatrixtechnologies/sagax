@@ -67,6 +67,37 @@ public enum RecordLinks {
         parse(url.absoluteString)
     }
 
+    /// `encodeURIComponent`: the characters a record href leaves alone.
+    private static let hrefAllowed: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "-_.!~*'()")
+        return set
+    }()
+
+    private static func hrefPart(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: hrefAllowed) ?? value
+    }
+
+    /// The href of a record link (`recordLink`).
+    public static func link(_ ref: RecordRef) -> String {
+        prefix + [hrefPart(ref.product), hrefPart(ref.kind), hrefPart(ref.id)].joined(separator: "/")
+    }
+
+    /// Link text as Markdown reads it: one line, brackets and backslashes escaped.
+    public static func linkText(_ label: String) -> String {
+        let flat = label.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return flat
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "[", with: "\\[")
+            .replacingOccurrences(of: "]", with: "\\]")
+    }
+
+    /// `[label](sagax://record/...)` (`recordMarkdown`).
+    public static func markdown(label: String, ref: RecordRef) -> String {
+        "[\(linkText(label))](\(link(ref)))"
+    }
+
     private static let link = try! NSRegularExpression(pattern: #"\[((?:\\.|[^\]\\\n])*)\]\(\s*(sagax://record/[^)\s]*)[^)]*\)"#, options: [.caseInsensitive])
     private static let bare = try! NSRegularExpression(pattern: #"<?sagax://record/[^\s"'<>)\]]*>?"#, options: [.caseInsensitive])
 

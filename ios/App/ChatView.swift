@@ -382,6 +382,7 @@ struct ChatView: View {
         .sheet(item: $recordSheet) { item in
             RecordCardSheet(start: item)
                 .environmentObject(session)
+                .environment(\.recordAsk, { askAboutRecord($0) })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -929,6 +930,7 @@ struct ChatView: View {
                     .frame(maxWidth: desktopChat == nil ? CompanionLayout.chatWidth : DesktopShellRules.chatColumn + 40, alignment: .leading)
                     .frame(maxWidth: .infinity)
                     .environment(\.messageActions, messageActionContext)
+                    .environment(\.recordAsk, { askAboutRecord($0) })
                     .environment(\.citeIntoComposer, citeIntoComposer)
                     .environment(\.youtubeSendToBot, youtubeSendToBot)
                     .environment(\.conversationGallery, conversationGallery)
@@ -1234,6 +1236,14 @@ struct ChatView: View {
     func takePrefill() {
         guard let text = ComposerPrefill.shared.take(threadId: threadId) else { return }
         draft = BotTodoList.merge(draft: text, into: draft)
+        composerFocused = true
+    }
+
+    /// Desktop "Ask": the record's link goes on the end of this chat's draft.
+    func askAboutRecord(_ markdown: String) {
+        let addition = markdown.hasSuffix(" ") ? markdown : markdown + " "
+        let current = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = current.isEmpty ? addition : "\(draft)\n\n\(addition)"
         composerFocused = true
     }
 

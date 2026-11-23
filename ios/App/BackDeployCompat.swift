@@ -36,12 +36,14 @@ private struct OnValueChange<V: Equatable>: ViewModifier {
     /// One `onChange` on every OS, never a branch around `content`.
     ///
     /// A body that branches makes its result a dynamic list, so the next
-    /// modifier in the chain wraps it again: the chat screen chains this helper
-    /// 33 times above the transcript (36 observer calls in ChatView.swift, the
-    /// other three `onValueChangePair`; ios/TESTING.md) and every branch was
-    /// one more stack for the main thread to walk when the chat was pushed, on
-    /// top of the layouts SwiftUI already nests down to a row. The iPhone's
-    /// main thread has 1 MB
+    /// modifier in the chain wraps it again: ChatView calls this helper
+    /// 33 times (36 observer calls in ChatView.swift, the other three
+    /// `onValueChangePair`; ios/TESTING.md). Those calls sit on a clear
+    /// sibling (`observeBeside`), not in the layout chain above a transcript
+    /// row (#5169). While they were chained above the transcript, every
+    /// branch was one more stack for the main thread to walk when the chat
+    /// was pushed, on top of the layouts SwiftUI already nests down to a
+    /// row. The iPhone's main thread has 1 MB
     /// and TestFlight 0.8.71, 0.8.153 and 0.8.167 overflowed it the instant a
     /// chat opened (#5159).
     ///

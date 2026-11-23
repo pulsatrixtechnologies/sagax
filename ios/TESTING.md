@@ -71,7 +71,7 @@ before suspecting the model: re-capture with
 `node scripts/capture/companion-fixtures.mjs` from the repo root and read the
 diff.
 
-**The main thread's stack when a chat opens (#3108, #4767, #5159).** 0.8.71,
+**The main thread's stack when a chat opens (#3108, #4767, #5159, #5169).** 0.8.71,
 0.8.153 and 0.8.167 crashed the instant a chat opened: "Thread stack size
 exceeded due to excessive recursion" on the main thread, whose stack is 1 MB
 on a phone. Our own frames were a few percent of it; the rest was SwiftUI's
@@ -79,9 +79,12 @@ layout recursion, as deep as the layouts nested above the transcript. Every
 modifier whose body branches (`@ViewBuilder` with `if #available`, `if` or
 `switch` around `content` or `self`) nests one more stack, and the chat screen
 chained `.onValueChange` 33 times above the transcript, branched. It is one
-`onChange` on every OS now, and a bot's widget tree is drawn within
-`ChatWidgetNode.maxDepth` so a card's shape stops adding levels too. Three
-checks hold it:
+`onChange` on every OS now. Those 33 calls, and the three `onValueChangePair`
+beside them, sit on a clear sibling of the screen (`observeBeside` in
+`ChatView.swift`), so they are not layout levels above a row. A bot's widget
+tree is drawn within `ChatWidgetNode.maxDepth` so a card's shape stops adding
+levels too. The nine tenths budget below is unchanged until a new measure
+of `rowBodyDepthBytes` says the margin grew. Three checks hold it:
 
 - every PR: `scripts/testing/ios-modifier-chain.guard.test.ts` (a guard test,
   no Xcode): `onValueChange` stays one modifier type on every OS, a new

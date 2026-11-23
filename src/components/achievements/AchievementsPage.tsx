@@ -161,7 +161,7 @@ function AchievementRow({ item, state, unlocks, open, onToggle }: {
   onToggle: () => void;
 }) {
   const unlocked = Boolean(state?.unlockedAt);
-  const secret = item.hidden && !unlocked;
+  const secret = item.hidden === true && !unlocked;
   const tier = rarityForPoints(item.points);
   const Icon = secret ? Lock : achievementIcon(item.icon);
   const mastery = item.category === "mastery";

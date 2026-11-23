@@ -101,10 +101,10 @@ struct QuestionCardView: View {
             colors: colors,
             title: single ? current.question : named,
             meta: single ? nil : String(localized: "\(answeredCount) of \(questions.count)"),
-            markdownTitle: single,
             // #3471: the one quiet × skips it, never a refusal
             onDismiss: WaitingCardSkip.waits(card) && !answering ? { skip() } : nil,
-            dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
+            dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)",
+            markdownTitle: single
         ) {
             if card.questionRequest?.origin == "output" {
                 Text("Agent-composed question")

@@ -34,7 +34,7 @@ extension ChatView {
 
     func openLink(_ url: URL, from message: Message) -> OpenURLAction.Result {
         // #4572: a record chip opens that record's card in a sheet, in this chat
-        if let ref = RecordLinks.parse(url) {
+        if let ref = RecordLinks.parse(url.absoluteString) {
             recordSheet = RecordSheetItem(ref: ref, label: RecordLinks.label(of: url.absoluteString, in: message.recordText))
             return .handled
         }

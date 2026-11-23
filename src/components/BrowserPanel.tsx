@@ -13,6 +13,7 @@ import { ComputerScreen, type ScreenAction } from "./computer/ComputerScreen";
 import { SandboxDesktopModal } from "./computer/SandboxDesktopModal";
 import type { TeachStep } from "../../shared/teach-recording";
 import { usePageVisible } from "@/lib/page-visible";
+import { BROWSER_STANDARD_VIEWPORT, setPanelStageReport } from "@/lib/browser-panel-viewport";
 import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useAnchoredDismissRoot } from "./AnchoredPopover";
@@ -409,6 +410,12 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     });
     return () => describerFor.current?.(null);
   }, [action]);
+  const requestViewport = useCallback((size: { width: number; height: number } | null) => {
+    const next = size ?? BROWSER_STANDARD_VIEWPORT;
+    if (!viewer.current) return;
+    void action({ type: "viewport", width: next.width, height: next.height }).catch(() => {});
+  }, [action]);
+  setPanelStageReport(requestViewport);
   return <LiveBrowserView
     bot={bot}
     allowed={allowed}

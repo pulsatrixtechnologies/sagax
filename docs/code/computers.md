@@ -1218,7 +1218,10 @@ the chat that shows the selected bot's live screen; its open state is a module
 store (`src/lib/screen-panel.ts`) toggled by Cmd+Shift+B (Ctrl+Shift+B
 elsewhere, `appShortcutFor` "toggle-screen-panel", useShellNavigation). The
 browser tab hosts `LiveBrowser` unchanged through `BrowserPanel live`, so take
-control, give back and typing are the takeover's. Width: own key, 360 to 960.
+control, give back and typing are the takeover's. The headless page follows
+the stage (`panelBrowserViewport`, action `viewport`): a tall narrow panel is
+a tall narrow page, not a 1280x720 picture letterboxed in the middle (#5021).
+My Chrome and a headed window keep the size the person set. Width: own key, 360 to 960.
 Esc or the round X closes it. Mark up (the pen button, `ScreenMarks.tsx`, `src/lib/screen-marks.ts`): highlight, arrow, circle and freehand over the frame in frame coordinates, plus a note; Send makes one message (the frame with the marks as a PNG, the element under each mark from the browser live action `describe`, the note) through the ordinary send, `busyMode` steer while the bot works. A later lot adds the VM and remote tabs.
 Tests: `src/components/ScreenPanel.dom.test.ts`, `src/lib/screen-panel.test.ts`,
 `src/lib/keyboard-shortcuts.test.ts`, `src/lib/screen-marks.test.ts`, `src/components/ScreenMarks.dom.test.ts`, `server/browser/browser-live.test.ts`. Capture: `scripts/capture/screen-panel.mjs`.

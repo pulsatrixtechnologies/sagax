@@ -10,7 +10,7 @@ export interface BotAvatarGenerateRouteDeps {
   store: Pick<Store, "bot" | "patchBot">;
   ownerOrAdminOf: (auth: RequestAuth, bot: BotRecord) => boolean;
   requesterPrincipal: (auth: RequestAuth) => string | null;
-  orgAvatarImageConfig: (principalId: string | null) => Parameters<typeof generateAvatarImage>[0] | null;
+  orgAvatarImageConfig: (principalId: string | null) => Promise<Parameters<typeof generateAvatarImage>[0] | null>;
   orgXaiRefusal: (kind: "image") => Record<string, unknown>;
   wireBot: (bot: BotRecord) => WireBot;
   broadcast: (frame: { kind: "bot"; bot: WireBot }) => void;
@@ -37,7 +37,7 @@ export function createBotAvatarGenerateRoutes(deps: BotAvatarGenerateRouteDeps):
       // request owns before the first await so a late result cannot win.
       const initialAvatar = snapshotAvatarGenerationState(existing);
       // 2026-10-16: on the organization's xAI key only for the person asking.
-      const imageCfg = orgAvatarImageConfig(requesterPrincipal(auth));
+      const imageCfg = await orgAvatarImageConfig(requesterPrincipal(auth));
       if (!imageCfg) {
         json(res, 403, orgXaiRefusal("image"));
         return;

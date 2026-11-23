@@ -26,7 +26,7 @@ const bot = { id: "osprey", name: "Osprey", threadId: "thread-1", avatarCrop: "c
 
 function avatarDeps(): BotAvatarGenerateRouteDeps {
   return { store: { bot: vi.fn(() => bot), patchBot: vi.fn(() => bot) }, ownerOrAdminOf: () => true,
-    requesterPrincipal: () => "pr_osprey", orgAvatarImageConfig: () => ({}), orgXaiRefusal: () => ({ error: "unavailable" }),
+    requesterPrincipal: () => "pr_osprey", orgAvatarImageConfig: async () => ({}), orgXaiRefusal: () => ({ error: "unavailable" }),
     wireBot: vi.fn(), broadcast: vi.fn() };
 }
 function observabilityDeps(): BotObservabilityRouteDeps {

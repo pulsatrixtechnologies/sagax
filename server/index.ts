@@ -23997,13 +23997,27 @@ function turnMediaPrincipal(threadId: string): string | null {
   if (turnRoutineLineage.has(threadId)) return turnRoutinePayers.get(threadId)?.trim().toLowerCase() || null;
   return turnSpeakerPrincipals.get(threadId)?.trim().toLowerCase() || null;
 }
+/** The person's own connected Grok account token for an image aspect
+ * (#5223): solo is this computer's sign-in, an organization is this person's
+ * live sign-in. The token is never logged, never in a response. */
+async function imageAccountTokenFor(principalId: string | null | undefined): Promise<string | undefined> {
+  if (IDENTITY.kind === "perspicax") {
+    if (!principalId) return undefined;
+    const access = await grokLiveAccessOf(principalId);
+    return access.ok ? access.accessToken : undefined;
+  }
+  return soloGrokVoiceToken();
+}
 /** The image settings an avatar generation for this person may use, or
- * null when the provider is xAI on the organization's key and it was not
- * given to them. The key is left out whenever it is not theirs to use. */
-function orgAvatarImageConfig(principalId: string | null): { imageGen?: AppConfig["imageGen"]; xai?: { key?: string } } | null {
+ * null when the provider is xAI and neither the organization's key was given
+ * to them nor do they have a connected Grok account. The key is left out
+ * whenever it is not theirs to use; their own account is added when present
+ * (#5223, an account beats the organization's key). */
+async function orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: AppConfig["imageGen"]; xai?: { key?: string }; xaiAccount?: string } | null> {
   const given = orgXaiMediaGiven("image", principalId);
-  if (!given && avatarImageStatus(cfg).provider === "xai") return null;
-  return { imageGen: cfg.imageGen, ...(given ? { xai: cfg.xai } : {}) };
+  const account = await imageAccountTokenFor(principalId);
+  if (!given && !account && avatarImageStatus(cfg).provider === "xai") return null;
+  return { imageGen: cfg.imageGen, ...(given ? { xai: cfg.xai } : {}), ...(account ? { xaiAccount: account } : {}) };
 }
 /** A config status as this viewer sees it: the xAI voice and images are not
  * configured for a member the organization did not give them to. */
@@ -24726,6 +24740,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         organization: IDENTITY.kind === "perspicax",
         personal: (provider) => owner ? providerAccounts.resolve(owner, provider) : Promise.resolve({ ok: false as const, error: "no_key" as const }),
         solo: (provider) => providerAccounts.key(undefined, provider),
+        // The person's own connected Grok account, before any key (#5223,
+        // order D-20261120-012). Solo is this computer's sign-in, an
+        // organization is this person's live sign-in. The token is never logged.
+        account: () => imageAccountTokenFor(principalId),
         imageGen: cfg.imageGen,
         organizationXaiAllowed: () => orgXaiMediaGiven("image", principalId),
         organizationXaiKey: () => cfg.xai?.key,

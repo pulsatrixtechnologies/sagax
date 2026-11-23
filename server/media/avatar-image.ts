@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
+import {
+  imageRefusalCause,
+  XAI_ACCOUNT_HEADER_NAME,
+  XAI_ACCOUNT_HEADER_VALUE,
+  XAI_ACCOUNT_IMAGE_BASE,
+} from "./chat-image.ts";
 import { BOT_AVATAR_MAX_BYTES } from "../org/org-admin-look.ts";
 import type { BotRecord } from "../store.ts";
 
@@ -35,6 +41,9 @@ type AvatarGenerationState = Pick<BotRecord, "avatarUrl" | "avatarCrop">;
 interface AvatarImageConfig {
   imageGen?: ImageGenerationConfig;
   xai?: { key?: string };
+  /** The person's own connected Grok account token (#5223). On an xAI avatar
+   * it beats the organization's key, on the CLI host, no key needed. */
+  xaiAccount?: string;
 }
 
 /** Public settings describe availability without returning provider secrets. */
@@ -151,21 +160,28 @@ export async function generateAvatarImage(
   if (refused) throw Object.assign(new Error(refused), { status: 400 });
   const settings = avatarImageStatus(cfg);
   const { provider, model } = settings;
-  if (!settings.configured) {
+  // A connected Grok account beats the organization's xAI key (#5223, order
+  // D-20261120-012): it reaches the image API on the CLI host, no key needed.
+  const accountToken = cfg.xaiAccount?.trim();
+  const account = provider === "xai" && Boolean(accountToken);
+  if (!settings.configured && !account) {
     const message = provider === "openai" ? "Add an OpenAI image API key first"
-      : provider === "xai" ? "Add an xAI API key first"
+      : provider === "xai" ? "Connect your Grok account or add an xAI API key first"
         : "Set a valid custom image API URL and model first";
-    throw Object.assign(new Error(message), { status: 409 });
+    throw Object.assign(new Error(message), { status: 409, code: "no_provider" });
   }
 
-  const apiKey = (provider === "openai" ? cfg.imageGen?.key
-    : provider === "xai" ? cfg.xai?.key : cfg.imageGen?.customApiKey)?.trim();
+  const apiKey = (account ? accountToken
+    : provider === "openai" ? cfg.imageGen?.key
+      : provider === "xai" ? cfg.xai?.key : cfg.imageGen?.customApiKey)?.trim();
   const providerName = provider === "openai" ? "OpenAI" : provider === "xai" ? "xAI" : "Custom";
-  const url = provider === "openai" ? "https://api.openai.com/v1/images/generations"
-    : provider === "xai" ? "https://api.x.ai/v1/images/generations"
-      : `${settings.customUrl}/images/generations`;
+  const url = account ? `${XAI_ACCOUNT_IMAGE_BASE}/images/generations`
+    : provider === "openai" ? "https://api.openai.com/v1/images/generations"
+      : provider === "xai" ? "https://api.x.ai/v1/images/generations"
+        : `${settings.customUrl}/images/generations`;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+  if (account) headers[XAI_ACCOUNT_HEADER_NAME] = XAI_ACCOUNT_HEADER_VALUE;
   const body = {
     model,
     prompt: avatarGenerationPrompt(bot, direction),
@@ -206,9 +222,19 @@ export async function generateAvatarImage(
   }
   if (!response.ok) {
     // Upstream errors can repeat authorization headers, signed URLs, or other
-    // secrets. Return only the provider and HTTP status, never its raw body.
-    const message = `${providerName} image generation failed (HTTP ${response.status})`;
-    throw Object.assign(new Error(message), { status: response.status === 401 ? 401 : 502 });
+    // secrets. The body is read only to sort the cause, never sent back: spent
+    // credits on an account is credits, never a missing key nor a network
+    // outage (#5223, expected 4).
+    const cause = imageRefusalCause(response.status, text);
+    const message = cause === "credits"
+      ? `${providerName} is out of credits for image generation. Add credits, then ask again.`
+      : cause === "key" && account
+        ? `${providerName} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
+        : `${providerName} image generation failed (HTTP ${response.status})`;
+    // The status stays coarse (a refused credential 401, any other provider
+    // failure 502); the `code` carries the cause. Spent credits is never the
+    // network nor a missing key (#5223, expected 4).
+    throw Object.assign(new Error(message), { status: cause === "key" ? 401 : 502, code: cause });
   }
 
   let parsedJson: unknown;

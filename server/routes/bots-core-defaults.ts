@@ -86,7 +86,7 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
       const checked = avatarGenerationRequestSchema.safeParse({ prompt: body.prompt });
       if (!checked.success) return json(res, 400, { error: checked.error.message });
       const { prompt } = checked.data;
-      const imageCfg = orgAvatarImageConfig(requesterPrincipal(auth));
+      const imageCfg = await orgAvatarImageConfig(requesterPrincipal(auth));
       if (!imageCfg) return json(res, 403, orgXaiRefusal("image"));
       const generated = await generateAvatarImage(imageCfg as never, {
         name: profile.patch.name ?? "", title: profile.patch.title ?? "", description: profile.patch.description ?? "",

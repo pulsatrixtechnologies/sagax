@@ -14,13 +14,30 @@ export const CHAT_IMAGE_TIMEOUT_MS = 90_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 30 * 1024 * 1024;
 export const XAI_IMAGE_MODEL = "grok-imagine-image-2.0";
 export const OPENAI_IMAGE_MODEL = "gpt-image-2";
+/** How a connected Grok account reaches the image API (the vendor accepts it
+ * on the CLI host, probe 2026-11-23, #5223): the same image body, the CLI
+ * proxy host, one extra token-auth header. An API key stays on console.x.ai.
+ * Shared with the avatar route (avatar-image.ts) so the account host is said
+ * once. */
+export const XAI_ACCOUNT_IMAGE_BASE = "https://cli-chat-proxy.grok.com/v1";
+export const XAI_ACCOUNT_HEADER_NAME = "x-xai-token-auth";
+export const XAI_ACCOUNT_HEADER_VALUE = "xai-grok-cli";
 export const NO_IMAGE_PROVIDER =
-  "No image provider is connected. Connect xAI (Grok Imagine) or OpenAI in Settings > Providers, then ask again.";
+  "No image provider is connected. Connect your Grok account or an xAI (Grok Imagine) or OpenAI key in Settings > Providers, then ask again.";
+
+/** Why an image generation could not happen, computed server-side from what
+ * the provider answered. Never a hard-coded "configure a key": a connected
+ * account out of credits is credits, not a missing key nor the network
+ * (#5223, expected 4 and 5). */
+export type ChatImageCause = "credits" | "key" | "network" | "error";
 
 export type ChatImageProvider = "xai" | "openai" | "custom";
 export interface ChatImageCredential {
   provider: ChatImageProvider;
+  /** A secret, never shown. An API key on console.x.ai, or an account token on the CLI host. */
   key?: string;
+  /** `account`: a connected Grok account (CLI host, token-auth header). Absent or `key`: an API key. */
+  auth?: "key" | "account";
   baseUrl: string;
   model: string;
 }
@@ -34,7 +51,11 @@ export interface ChatImageResult { bytes: Buffer; mime: "image/png" | "image/jpe
 
 export class ChatImageError extends Error {
   readonly status: number;
-  constructor(message: string, status = 502) { super(message); this.status = status; }
+  /** What the person can act on, decided from the provider's answer. */
+  readonly cause: ChatImageCause;
+  constructor(message: string, status = 502, cause: ChatImageCause = "error") {
+    super(message); this.status = status; this.cause = cause;
+  }
 }
 
 export const chatImageRequestSchema = z.object({
@@ -44,20 +65,34 @@ export const chatImageRequestSchema = z.object({
   aspect_ratio: z.enum(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]).optional(),
 });
 
-const xai = (key: string): ChatImageCredential => ({ provider: "xai", key, baseUrl: "https://api.x.ai/v1", model: XAI_IMAGE_MODEL });
-const openai = (key: string): ChatImageCredential => ({ provider: "openai", key, baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL });
+const xai = (key: string): ChatImageCredential => ({ provider: "xai", auth: "key", key, baseUrl: "https://api.x.ai/v1", model: XAI_IMAGE_MODEL });
+const xaiAccount = (token: string): ChatImageCredential => ({ provider: "xai", auth: "account", key: token, baseUrl: XAI_ACCOUNT_IMAGE_BASE, model: XAI_IMAGE_MODEL });
+const openai = (key: string): ChatImageCredential => ({ provider: "openai", auth: "key", key, baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL });
 
 /** The provider this person's image goes to, or null when none is
- * connected. Solo: the keys of this computer. Organization: the person's own
- * keys first, the shared keys only as the organization allows. */
+ * connected. Solo: this computer's connected Grok account, then its keys.
+ * Organization: the person's own connected Grok account first, then their own
+ * keys, the shared keys only as the organization allows. The order is decided
+ * [D-20261120-012, M-20261122-023]: an account beats a key at each level, the
+ * organization's account is the next lot (#5200). #5223: the connected Grok
+ * account is a real form, not only keys. */
 export async function chatImageCredential(input: {
   organization: boolean;
   personal(provider: "xai" | "openai"): Promise<ProviderKeyResult>;
   solo(provider: "xai" | "openai"): Promise<string | undefined>;
+  /** The person's own connected Grok account token, or undefined. xAI only:
+   * it reaches the image API on the CLI host, on no OpenAI provider. */
+  account?(): Promise<string | undefined>;
   imageGen?: ImageGenerationConfig;
   organizationXaiAllowed(): boolean;
   organizationXaiKey(): string | undefined;
 }): Promise<ChatImageCredential | null> {
+  // The connected Grok account beats every key at this level, solo and
+  // organization alike. An account with no credit still reaches the vendor
+  // and answers there, so it is not skipped for a key (the cause comes back
+  // from the response, expected 4).
+  const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
+  if (account) return xaiAccount(account);
   for (const provider of ["xai", "openai"] as const) {
     if (input.organization) {
       const personal = await input.personal(provider).catch(() => null);
@@ -97,8 +132,10 @@ export async function renderChatImage(
   const name = NAMES[credential.provider];
   const edit = Boolean(input.image);
   const url = `${credential.baseUrl}/images/${edit ? "edits" : "generations"}`;
+  const account = credential.auth === "account";
   const headers: Record<string, string> = {};
   if (credential.key) headers.authorization = `Bearer ${credential.key}`;
+  if (account) headers[XAI_ACCOUNT_HEADER_NAME] = XAI_ACCOUNT_HEADER_VALUE;
   let body: string | FormData;
   if (credential.provider === "xai") {
     headers["content-type"] = "application/json";
@@ -128,21 +165,35 @@ export async function renderChatImage(
   try {
     response = await fetchImpl(url, { method: "POST", headers, body, redirect: "error", signal });
   } catch (error) {
+    // Only a real connection failure or timeout is the network. A provider
+    // that answered is handled below, so spent credits are never read as a
+    // network outage (#5223, expected 4).
     const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError");
-    throw new ChatImageError(timedOut ? `${name} image ${edit ? "editing" : "generation"} timed out` : `Could not reach ${name} image ${edit ? "editing" : "generation"}`);
+    throw new ChatImageError(timedOut ? `${name} image ${edit ? "editing" : "generation"} timed out` : `Could not reach ${name} image ${edit ? "editing" : "generation"}`, 502, "network");
   }
   let text: string;
   try { text = await boundedText(response); }
   catch (error) {
-    if (signal.aborted) throw new ChatImageError(`${name} image ${edit ? "editing" : "generation"} timed out`);
+    if (signal.aborted) throw new ChatImageError(`${name} image ${edit ? "editing" : "generation"} timed out`, 502, "network");
     throw error;
   }
-  // Provider error bodies can echo headers or signed URLs: status only.
+  // Provider error bodies can echo headers or signed URLs: the body is read
+  // only to sort the cause, never sent back. The cause says what the person
+  // can act on (credits, a refused credential, the network), never a generic
+  // "configure a key" when an account served (#5223, expected 4 and 5).
   if (!response.ok) {
-    throw new ChatImageError(
-      response.status === 401 || response.status === 403 ? `${name} refused the API key (HTTP ${response.status}). Reconnect it in Settings > Providers.`
-        : `${name} image ${edit ? "editing" : "generation"} failed (HTTP ${response.status})`,
-      response.status === 401 || response.status === 403 ? 401 : 502);
+    const cause = imageRefusalCause(response.status, text);
+    const message = cause === "credits"
+      ? `${name} is out of credits for image generation. Add credits, then ask again.`
+      : cause === "key"
+        ? (account
+          ? `${name} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
+          : `${name} refused the API key (HTTP ${response.status}). Reconnect it in Settings > Providers.`)
+        : `${name} image ${edit ? "editing" : "generation"} failed (HTTP ${response.status})`;
+    // The status stays coarse (a refused credential is 401, any other provider
+    // failure 502); the `cause` carries what the person can act on. A refusal
+    // that is spent credits is never reported as a network outage.
+    throw new ChatImageError(message, cause === "key" ? 401 : 502, cause);
   }
   let parsed: z.infer<typeof responseSchema>;
   try { parsed = responseSchema.parse(JSON.parse(text)); }
@@ -157,6 +208,18 @@ export async function renderChatImage(
   } catch {
     throw new ChatImageError(`${name} returned invalid image data; expected PNG, JPEG or WebP`);
   }
+}
+
+/** Sort a provider's refusal into what the person can act on, read only from
+ * the status and the error body (never echoed). Credits win over a generic
+ * failure and over the network, as a 503 body that says out_of_credits is
+ * spent credits, not an outage (#5223, expected 4; the same reading the voice
+ * route makes in tts/grok.ts). Shared with the avatar route. */
+export function imageRefusalCause(status: number, body: string): ChatImageCause {
+  const said = body.slice(0, 2_048).toLowerCase();
+  if (status === 402 || /out_of_credits|insufficient_quota|spending limit|needs credits|no credits|exceeded your (?:current )?quota/i.test(said)) return "credits";
+  if (status === 401 || status === 403 || /incorrect api key|invalid api key|invalid or expired credentials|unauthenticated|permission/i.test(said)) return "key";
+  return "error";
 }
 
 function openAiSize(aspect?: string): string {

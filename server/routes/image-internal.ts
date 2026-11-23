@@ -50,15 +50,21 @@ export function createImageInternalRoutes(deps: ImageInternalDeps): InternalRout
       const saved = saveImage(result.bytes, result.mime, undefined, owner);
       const ext = saved.mime === "image/png" ? "png" : saved.mime === "image/webp" ? "webp" : "jpg";
       deps.append(capability, { kind: "image", path: saved.path, mime: saved.mime, name: `${source ? "Edited" : "Generated"} image.${ext}` });
+      const via = credential.auth === "account"
+        ? "your connected Grok account (Grok Imagine)"
+        : credential.provider === "xai" ? "xAI Grok Imagine" : credential.provider === "openai" ? "OpenAI" : "the configured image API";
       return json(res, 200, {
         ok: true,
-        text: `${source ? "Edited" : "Generated"} the image with ${credential.provider === "xai" ? "xAI Grok Imagine" : credential.provider === "openai" ? "OpenAI" : "the configured image API"}; it is already shown in the chat. Do not attach or describe it again: one short line at most.`,
+        text: `${source ? "Edited" : "Generated"} the image with ${via}; it is already shown in the chat. Do not attach or describe it again: one short line at most.`,
         mode: source ? "edit" : "generate",
         provider: credential.provider,
         ms: now() - started,
       });
     } catch (error) {
-      if (error instanceof ChatImageError) return json(res, error.status, { error: error.message });
+      // The cause (credits, a refused credential, the network) is computed
+      // server-side; it is sent as a code so the person is not told to
+      // "configure a key" when an account served but is out of credits (#5223).
+      if (error instanceof ChatImageError) return json(res, error.status, { error: error.message, code: error.cause });
       const status = (error as { status?: number })?.status;
       return json(res, typeof status === "number" && status >= 400 && status < 600 ? status : 502, { error: "The image could not be saved in the chat." });
     }

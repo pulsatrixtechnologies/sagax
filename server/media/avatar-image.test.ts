@@ -86,6 +86,28 @@ describe("avatar image generation", () => {
     });
   });
 
+  it("generates on the person's Grok account with no xAI key, on the CLI host, no key message (#5223)", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => imageResponse(JPEG));
+    // provider xai, no xai key at all, only the person's connected account
+    const cfg = { imageGen: { provider: "xai" as const }, xaiAccount: "acct-token" };
+
+    await expect(generateAvatarImage(cfg, BOT, "owl", fetchMock)).resolves.toEqual({ bytes: JPEG, mime: "image/jpeg" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://cli-chat-proxy.grok.com/v1/images/generations");
+    expect(init?.headers).toMatchObject({ authorization: "Bearer acct-token", "x-xai-token-auth": "xai-grok-cli" });
+  });
+
+  it("the connected Grok account beats the organization's xAI key (#5223)", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
+    const cfg = { ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "xai" as const }, xaiAccount: "acct-token" };
+
+    await generateAvatarImage(cfg, BOT, "owl", fetchMock);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://cli-chat-proxy.grok.com/v1/images/generations");
+    expect(init?.headers).toMatchObject({ authorization: "Bearer acct-token" });
+    expect(JSON.stringify(init)).not.toContain("xai-secret");
+  });
+
   it("uses only the custom key and model at a normalized gateway image endpoint", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
     const cfg = {

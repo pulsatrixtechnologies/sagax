@@ -40,7 +40,24 @@ describe("chatImageCredential (#2954)", () => {
 
   it("answers null with nothing connected, and the message says what to do", async () => {
     expect(await chatImageCredential(base)).toBeNull();
-    expect(NO_IMAGE_PROVIDER).toMatch(/Settings > Providers/);
+    expect(NO_IMAGE_PROVIDER).toMatch(/Grok account/);
+  });
+
+  it("a connected Grok account beats every key, solo and organization (#5223)", async () => {
+    const account = async (): Promise<string | undefined> => "acct-token";
+    // solo: account first, even with a solo xAI key present
+    const solo = await chatImageCredential({ ...base, account, solo: async (p) => p === "xai" ? "xk" : undefined });
+    expect(solo).toMatchObject({ provider: "xai", auth: "account", key: "acct-token", baseUrl: "https://cli-chat-proxy.grok.com/v1" });
+    // organization: account before the person's own key and before the shared key
+    const org = await chatImageCredential({
+      ...base, organization: true, account,
+      personal: async () => ({ ok: true, key: "mine", fingerprint: "f" } as never),
+      organizationXaiAllowed: () => true, organizationXaiKey: () => "shared",
+    });
+    expect(org).toMatchObject({ auth: "account", key: "acct-token" });
+    // no account falls back to the keys exactly as before
+    const keyed = await chatImageCredential({ ...base, account: async () => undefined, solo: async (p) => p === "xai" ? "xk" : undefined });
+    expect(keyed).toMatchObject({ provider: "xai", auth: "key", key: "xk", baseUrl: "https://api.x.ai/v1" });
   });
 });
 
@@ -88,5 +105,34 @@ describe("renderChatImage (#2954)", () => {
     const started = performance.now();
     await renderChatImage({ provider: "xai", key: "k", baseUrl: "https://api.x.ai/v1", model: XAI_IMAGE_MODEL }, { prompt: "x", image }, fetchImpl);
     expect(performance.now() - started).toBeLessThan(30_000);
+  });
+
+  it("generates on the account through the CLI host with its token header, no key (#5223)", async () => {
+    const { calls, fetchImpl } = recorder();
+    const accountCred = { provider: "xai" as const, auth: "account" as const, key: "acct-token", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: XAI_IMAGE_MODEL };
+    const out = await renderChatImage(accountCred, { prompt: "an owl" }, fetchImpl);
+    expect(out.mime).toBe("image/png");
+    expect(calls[0]!.url).toBe("https://cli-chat-proxy.grok.com/v1/images/generations");
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer acct-token");
+    expect(headers["x-xai-token-auth"]).toBe("xai-grok-cli");
+  });
+
+  it("reads spent credits as credits, never as a missing key or the network (#5223)", async () => {
+    const { fetchImpl } = recorder(() => new Response(JSON.stringify({ code: "payment_required", error: "out_of_credits" }), { status: 402 }));
+    const error = await renderChatImage({ provider: "xai", auth: "account", key: "t", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: XAI_IMAGE_MODEL }, { prompt: "x" }, fetchImpl).catch((e) => e);
+    expect(error).toBeInstanceOf(ChatImageError);
+    expect(error.cause).toBe("credits");
+    expect(error.message).toMatch(/out of credits/);
+    expect(error.message).not.toMatch(/key|reach/i);
+  });
+
+  it("a refused account says the account was refused, not an API key, never the body (#5223)", async () => {
+    const { fetchImpl } = recorder(() => new Response('{"error":"Invalid or expired credentials"}', { status: 401 }));
+    const error = await renderChatImage({ provider: "xai", auth: "account", key: "t", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: XAI_IMAGE_MODEL }, { prompt: "x" }, fetchImpl).catch((e) => e);
+    expect(error).toBeInstanceOf(ChatImageError);
+    expect(error.cause).toBe("key");
+    expect(error.message).toMatch(/Grok account/);
+    expect(error.message).not.toMatch(/expired credentials|secret/i);
   });
 });

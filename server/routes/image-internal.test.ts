@@ -56,8 +56,32 @@ describe("POST /api/internal/image (#2954)", () => {
     const out = await call({ prompt: "x" }, { credential: async () => null });
     expect(out.status).toBe(409);
     expect(out.payload).toMatchObject({ code: "no_provider" });
-    expect(String(out.payload.error)).toMatch(/Connect xAI .* or OpenAI in Settings > Providers/);
+    expect(String(out.payload.error)).toMatch(/Grok account/);
     expect(out.fetchCalls).toEqual([]);
+  });
+
+  it("generates on the person's Grok account with no key at all, on the CLI host (#5223)", async () => {
+    const account = { provider: "xai", auth: "account", key: "acct", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: "m" };
+    const out = await call({ prompt: "an owl", use_attached_image: false }, { credential: async () => account as never });
+    expect(out.status).toBe(200);
+    expect(out.payload).toMatchObject({ ok: true, mode: "generate", provider: "xai" });
+    expect(out.fetchCalls).toEqual(["https://cli-chat-proxy.grok.com/v1/images/generations"]);
+    expect(String(out.payload.text)).toMatch(/your connected Grok account/);
+  });
+
+  it("a credits refusal reaches the person as credits, not a missing key (#5223)", async () => {
+    const account = { provider: "xai", auth: "account", key: "acct", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: "m" };
+    const out = await call(
+      { prompt: "an owl", use_attached_image: false },
+      {
+        credential: async () => account as never,
+        fetch: (async () => new Response('{"error":"out_of_credits"}', { status: 402 })) as unknown as typeof fetch,
+      },
+    );
+    expect(out.status).toBe(502);
+    expect(out.payload).toMatchObject({ code: "credits" });
+    expect(String(out.payload.error)).toMatch(/out of credits/);
+    expect(String(out.payload.error)).not.toMatch(/Settings > Providers|configure a key|reach/i);
   });
 
   it("refuses an empty prompt", async () => {

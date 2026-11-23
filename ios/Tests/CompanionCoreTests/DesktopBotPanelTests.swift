@@ -115,10 +115,11 @@ final class DesktopBotPanelTests: XCTestCase {
         let plain = try config("{}")
         let boat = try config(#"{"features":{"boatComputer":true}}"#)
         let home = try config(#"{"cloudHome":true}"#)
-        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: false), [.auto, .local])
-        XCTAssertEqual(DesktopWorksOnRules.choices(config: boat, organization: false), [.auto, .local, .cloud])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: false), [.auto, .local, .vm])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: boat, organization: false), [.auto, .local, .vm, .cloud])
         XCTAssertEqual(DesktopWorksOnRules.choices(config: home, organization: false), [.auto, .cloud])
-        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: true), [.auto, .local, .cloud])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: true), [.auto, .local, .vm, .cloud])
+        XCTAssertEqual(DesktopWorksOnRules.selected(.vm), .vm)
         for (cfg, organization) in [(plain, false), (boat, false), (home, false), (plain, true)] {
             XCTAssertFalse(DesktopWorksOnRules.choices(config: cfg, organization: organization).contains(.off))
         }

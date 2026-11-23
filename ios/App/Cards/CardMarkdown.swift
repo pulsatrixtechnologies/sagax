@@ -11,11 +11,11 @@ struct CardMarkdown: View {
     @State private var sheet: RecordSheetItem?
 
     var body: some View {
-        MarkdownText(source: source) { url in
-            guard let ref = RecordLinks.parse(url) else { return .systemAction(url) }
+        MarkdownText(source: source, openLink: { (url: URL) in
+            guard let ref = RecordLinks.parse(url.absoluteString) else { return .systemAction(url) }
             sheet = RecordSheetItem(ref: ref, label: RecordLinks.label(of: url.absoluteString, in: source))
             return .handled
-        }
+        })
         .fixedSize(horizontal: false, vertical: true)
         .sheet(item: $sheet) { item in
             RecordCardSheet(start: item)

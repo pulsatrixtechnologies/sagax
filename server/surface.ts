@@ -17,13 +17,13 @@ export type { Surface, PlaceSource };
 /** The bot's "Works on" setting; undefined = Auto. */
 export type Destination = Surface | "off" | undefined;
 
-/** This computer and the cloud computer stay choosable (the dev panel and
- * Works on write the same `computer` field). Off is not a place: it is the
- * restriction that gives the bot no screen at all, so it stays. A Local VM,
- * the browser, or anything else still reads as Auto (undefined): the bot
- * picks those per task. */
-export function autoOnlyDestination(value: unknown): "off" | "local" | "cloud" | undefined {
-  if (value === "off" || value === "local" || value === "cloud") return value;
+/** This computer, the Local VM and the cloud computer stay choosable (the
+ * computer picker and Works on write the same `computer` field). Off is not
+ * a place: it is the restriction that gives the bot no screen at all, so it
+ * stays. The browser, or anything else, still reads as Auto (undefined): the
+ * bot picks the browser per task. */
+export function autoOnlyDestination(value: unknown): "off" | "local" | "cloud" | "vm" | undefined {
+  if (value === "off" || value === "local" || value === "cloud" || value === "vm") return value;
   return undefined;
 }
 

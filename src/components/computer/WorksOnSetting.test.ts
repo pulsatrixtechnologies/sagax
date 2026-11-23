@@ -40,10 +40,10 @@ function control(organization: boolean, value: WorksOnMode = null) {
   return renderToStaticMarkup(createElement(WorksOnControl, { value, organization, onChange: () => {} }));
 }
 
-describe("Works on: Auto, this computer or the cloud computer, never Off", () => {
-  it("offers this computer and the cloud computer on a solo or an organization server", () => {
-    expect(labels(control(false))).toEqual(["Auto", "This computer", "Cloud computer"]);
-    expect(labels(control(true))).toEqual(["Auto · picks per task", "This computer", "Cloud (server environment)"]);
+describe("Works on: Auto, this computer, Local VM or the cloud computer, never Off", () => {
+  it("offers this computer, Local VM and the cloud computer on a solo or an organization server", () => {
+    expect(labels(control(false))).toEqual(["Auto", "This computer", "Local VM", "Cloud computer"]);
+    expect(labels(control(true))).toEqual(["Auto · picks per task", "This computer", "Local VM", "Cloud (server environment)"]);
   });
 
   it("says the bot picks the place for each task, and never offers Off", () => {
@@ -53,14 +53,30 @@ describe("Works on: Auto, this computer or the cloud computer, never Off", () =>
     expect(worksOnTip(null)).toMatch(/^Picks the place for each task among the available ones\. Never a place you or your organization did not allow/);
   });
 
-  it("keeps this computer and the cloud computer, and reads a Local VM or the browser as Auto", () => {
+  it("keeps this computer, the Local VM and the cloud computer, and reads the browser as Auto", () => {
     expect(worksOnMode(undefined)).toBeNull();
     expect(worksOnMode("local")).toBe("local");
+    expect(worksOnMode("vm")).toBe("vm");
     expect(worksOnMode("cloud")).toBe("cloud");
-    for (const place of ["vm", "browser"] as const) expect(worksOnMode(place)).toBeNull();
+    expect(worksOnMode("browser")).toBeNull();
     expect(worksOnMode("off")).toBeNull();
     expect(control(false, worksOnMode("local"))).toMatch(/aria-checked="true"[^>]*data-works-on-choice="local"/);
+    expect(control(false, worksOnMode("vm"))).toMatch(/aria-checked="true"[^>]*data-works-on-choice="vm"/);
     expect(control(false, worksOnMode("off"))).toMatch(/aria-checked="true"[^>]*data-works-on-choice="auto"/);
+  });
+
+  it("hides Local VM on a cloud home and disables it with the reason when it cannot be used", () => {
+    const hidden = renderToStaticMarkup(createElement(WorksOnControl, {
+      value: null, organization: false, onChange: () => {}, vm: { shown: false, selectable: false, reason: null },
+    }));
+    expect(hidden).not.toContain('data-works-on-choice="vm"');
+    const blocked = renderToStaticMarkup(createElement(WorksOnControl, {
+      value: null, organization: true, onChange: () => {},
+      vm: { shown: true, selectable: false, reason: "Your computer is not connected. Open the Sagax app on it to use its Local VM." },
+    }));
+    expect(blocked).toMatch(/data-works-on-choice="vm"[^>]*disabled/);
+    expect(blocked).toContain('data-works-on-vm-reason');
+    expect(blocked).toMatch(/not connected/i);
   });
 
   it("hides the control from an organization member who cannot save where the bot works", () => {
@@ -86,7 +102,7 @@ describe("Works on, on the profile page (plain surface)", () => {
   it("labels its card and keeps every place, the hint and the selection", () => {
     const markup = plain("local");
     expect(markup).toContain(">Workspace<");
-    expect(labels(markup)).toEqual(["Auto", "This computer", "Cloud computer"]);
+    expect(labels(markup)).toEqual(["Auto", "This computer", "Local VM", "Cloud computer"]);
     expect(markup).toMatch(/<p id="works-on-setting-hint"[^>]*>The bot picks where each task runs/);
     expect(markup).toMatch(/role="radiogroup"[^>]*class="[^"]*bg-control/);
     expect(markup).toMatch(/aria-checked="true"[^>]*data-works-on-choice="local"/);

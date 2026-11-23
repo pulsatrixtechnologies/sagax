@@ -1,5 +1,5 @@
-// This computer and the cloud computer stay (the dev panel writes them).
-// A Local VM, the browser, and every conversation pin still go back to Auto.
+// This computer, the Local VM and the cloud computer stay (the picker writes them).
+// The browser, and every conversation pin, still go back to Auto.
 // Off is gone from every menu: the start sweep puts a saved
 // Off back on Auto.
 // Levels are never touched (#1098): the one-time move to Ask is not replayed.
@@ -11,11 +11,13 @@ import { Store } from "../store.ts";
 import { autoOnlyDestination } from "../surface.ts";
 
 describe("a Works on from a request", () => {
-  it("keeps this computer, the cloud computer and an API caller's Off, and reads the rest as Auto", () => {
+  it("keeps this computer, the Local VM, the cloud computer and an API caller's Off, and reads the browser as Auto", () => {
     expect(autoOnlyDestination("local")).toBe("local");
     expect(autoOnlyDestination("cloud")).toBe("cloud");
     expect(autoOnlyDestination("off")).toBe("off");
-    for (const place of ["vm", "browser", "auto", null, undefined, 42]) expect(autoOnlyDestination(place)).toBeUndefined();
+    // A chosen Local VM is a place of its own. The browser still reads as Auto.
+    expect(autoOnlyDestination("vm")).toBe("vm");
+    for (const place of ["browser", "auto", null, undefined, 42]) expect(autoOnlyDestination(place)).toBeUndefined();
   });
 });
 
@@ -29,9 +31,11 @@ describe("the start sweep", () => {
     const local = store.createBot({}, { seedMessages: false });
     const off = store.createBot({}, { seedMessages: false });
     const auto = store.createBot({}, { seedMessages: false });
+    const vm = store.createBot({}, { seedMessages: false });
     store.patchBot(cloud.id, { computer: "cloud", approvalMode: "ask" });
     store.patchTask(cloud.id, cloud.threadId, { approvalMode: "ask" });
     store.patchBot(local.id, { computer: "local" });
+    store.patchBot(vm.id, { computer: "vm" });
     store.patchBot(off.id, { computer: "off" });
     const second = store.createTask(auto.id, "Pinned by a person", false)!;
     store.patchTask(auto.id, second.threadId, { surface: "vm", surfaceSource: "user" });
@@ -43,6 +47,7 @@ describe("the start sweep", () => {
     const reloaded = new Store(newBotDefault);
     expect(reloaded.bot(cloud.id)?.computer).toBe("cloud");
     expect(reloaded.bot(local.id)?.computer).toBe("local");
+    expect(reloaded.bot(vm.id)?.computer).toBe("vm");
     expect(reloaded.bot(cloud.id)?.approvalMode).toBe("ask");
     // Off is no longer a choice: the bot is back on Auto, its card shows again.
     expect(reloaded.bot(off.id)?.computer).toBeUndefined();

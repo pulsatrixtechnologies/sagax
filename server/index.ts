@@ -9325,19 +9325,18 @@ const customDomainVerifier = createCustomDomainVerifier({ environmentId: ENVIRON
 // as a plain cache key).
 const emailOtp = new EmailOtpStore();
 const mailResolved = () => resolveMailSettings({ file: cfg.mail, env: process.env });
-// SAGAX_TEST_FIXED_WORKSPACE=1 (test/e2e seam only): Workspace is always
-// Auto (2026-10-18), so a Works on or a conversation pin naming a place
-// reads as Auto and the start sweep moves saved ones back to Auto. The
-// dispatch still knows fixed places (Off, team-backup's quarantine), and the
-// suites that drive it through the HTTP API keep them with this seam. Same
-// markers as the mail seam, and never in production.
+// SAGAX_TEST_FIXED_WORKSPACE=1 (test/e2e seam only): without it, a browser
+// on Works on reads as Auto and the start sweep moves a saved browser back
+// to Auto. This computer, the Local VM and the cloud computer stay. The
+// seam keeps every place a suite wrote, the browser included. Same markers
+// as the mail seam, and never in production.
 const FIXED_WORKSPACE_SEAM = process.env.SAGAX_TEST_FIXED_WORKSPACE === "1" &&
   process.env.NODE_ENV !== "production" && Boolean(process.env.VITEST || process.env.SAGAX_TEST_SEAMS === "1");
 if (process.env.SAGAX_TEST_FIXED_WORKSPACE === "1" && !FIXED_WORKSPACE_SEAM) {
   console.warn("SAGAX_TEST_FIXED_WORKSPACE is set but ignored (needs VITEST or SAGAX_TEST_SEAMS=1, and NODE_ENV other than production)");
 }
-/** A Works on from a request: Off, this computer, or the cloud computer.
- * Anything else is Auto (undefined), except under the test seam above. */
+/** A Works on from a request: Off, this computer, the Local VM, or the cloud
+ * computer. The browser is Auto (undefined), except under the test seam above. */
 const requestedWorksOn = (value: unknown): "off" | "local" | "cloud" | "vm" | "browser" | undefined => {
   if (!FIXED_WORKSPACE_SEAM) return autoOnlyDestination(value);
   if (value === "off" || value === "local" || value === "cloud" || value === "vm" || value === "browser") return value;

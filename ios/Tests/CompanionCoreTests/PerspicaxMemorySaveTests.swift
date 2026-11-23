@@ -48,7 +48,7 @@ private final class PerspicaxSaveStub: URLProtocol {
 final class PerspicaxMemorySaveTests: XCTestCase {
     private var session: URLSession!
     private var client: CompanionClient!
-    private let hash = String(repeating: "cd", count: 32)
+    private let contentHash = String(repeating: "cd", count: 32)
 
     override func setUp() {
         super.setUp()
@@ -74,17 +74,17 @@ final class PerspicaxMemorySaveTests: XCTestCase {
 
     func testSaveSendsTheHashAsBaseVersion() async throws {
         PerspicaxSaveStub.responseBody = Data("""
-        {"id":"n1","title":"Hello","body":"Next","version":"\(hash)"}
+        {"id":"n1","title":"Hello","body":"Next","version":"\(contentHash)"}
         """.utf8)
         let result = try await client.savePerspicaxMemoryEntry(
-            scope: "me", id: "n1", title: "Hello", body: "Next", tags: ["a"], baseVersion: hash
+            scope: "me", id: "n1", title: "Hello", body: "Next", tags: ["a"], baseVersion: contentHash
         )
         guard case let .saved(entry) = result else {
             return XCTFail("expected a saved note")
         }
-        XCTAssertEqual(entry.version, hash)
+        XCTAssertEqual(entry.version, contentHash)
         let body = try XCTUnwrap(jsonBody())
-        XCTAssertEqual(body["base_version"] as? String, hash)
+        XCTAssertEqual(body["base_version"] as? String, contentHash)
         XCTAssertEqual(body["scope"] as? String, "me")
         XCTAssertEqual(body["id"] as? String, "n1")
     }
@@ -107,7 +107,7 @@ final class PerspicaxMemorySaveTests: XCTestCase {
         {"code":"memory_conflict","details":{"version":"\(current)"}}
         """.utf8)
         let result = try await client.savePerspicaxMemoryEntry(
-            scope: "me", id: "n1", title: "Hello", body: "Stale", tags: [], baseVersion: hash
+            scope: "me", id: "n1", title: "Hello", body: "Stale", tags: [], baseVersion: contentHash
         )
         guard case let .conflict(version) = result else {
             return XCTFail("expected a conflict")
@@ -136,7 +136,7 @@ final class PerspicaxMemorySaveTests: XCTestCase {
         """.utf8)
         do {
             _ = try await client.savePerspicaxMemoryEntry(
-                scope: "me", id: "n1", title: "Hello", body: "Next", tags: [], baseVersion: hash
+                scope: "me", id: "n1", title: "Hello", body: "Next", tags: [], baseVersion: contentHash
             )
             XCTFail("expected the sign-in refusal")
         } catch let APIError.status(code, message) {

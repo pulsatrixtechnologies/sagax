@@ -3994,9 +3994,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return this.patchTask(botId, threadId, { link: url, linkAuto: true });
   }
 
-  /** A Local VM or the browser on Works on goes back to Auto, and every
-   * conversation pin goes, whoever set it. This computer and the cloud
-   * computer stay. Off stays: it withholds
+  /** The browser on Works on goes back to Auto, and every conversation pin
+   * goes, whoever set it. This computer, the Local VM and the cloud computer
+   * stay. Off stays: it withholds
    * every screen, and lifting it would widen what the bot may reach.
    * Levels are never touched (#1098, 2026-10-27): the one-time move of
    * 2026-10-18 that put a bot or a conversation kept off this computer back

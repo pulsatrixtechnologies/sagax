@@ -154,12 +154,12 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       typeof body.computer === "string" &&
       ["auto", "cloud", "vm", "local", "browser", "off"].includes(body.computer)
     ) {
-      // This computer and the cloud computer are saved. A Local VM or
-      // the browser still reads as Auto, without an error. Off stays.
+      // This computer, the Local VM and the cloud computer are saved. The
+      // browser still reads as Auto, without an error. Off stays.
       requestedComputer = body.computer === "auto" ? undefined : env.requestedWorksOn(body.computer);
       patch.computer = requestedComputer;
     } else {
-      env.json(env.res, 400, { error: "computer must be null, auto, local, cloud, or off" });
+      env.json(env.res, 400, { error: "computer must be null, auto, local, vm, cloud, or off" });
       return true;
     }
   }

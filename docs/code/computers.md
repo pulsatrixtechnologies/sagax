@@ -207,18 +207,24 @@ for a bot or a conversation any more:
 
 - No Workspace row in the composer's + menu (and no "/setup" hint beside
   "Set up this bot"; typing /setup still works), no place chip on iPad, and
-  Works on (bot editor's Workspace page, iPad and iPhone) offers Auto and
-  Off only. The bot picks per task among the places available to it
+  Works on (bot editor's Workspace page, the Computer menu, iPad and iPhone)
+  offers Auto, This computer, Local VM and Cloud, each where that place
+  exists. Local VM is hidden on a cloud home. It stays in the list, not
+  selectable, with the reason, only when the computer is not connected, the
+  desktop did not register a Local VM, the model cannot use one, or the
+  organization does not allow it. The bot on Auto still picks per task
   (`computer_select`, `select_computer`, start_thread `workspace`).
 - Off stays: it withholds every computer and the browser, and team-backup's
   quarantine writes it. Lifting it would widen what a bot may reach.
-- The server reads a requested place as Auto, without an error
+- The server keeps This computer, the Local VM and the cloud computer
   (`autoOnlyDestination`, `server/surface.ts`): `PATCH /api/bots/:id`
-  `computer` (null, "auto" and "off" too), `POST /api/bots` settings, a bot
-  zip import, and `PATCH .../tasks/:threadId` `surface` (validated, never
-  stored). The engine-removal move writes no place.
-- At start, `Store.retireFixedWorkspaces` moves a saved fixed Works on and
-  every conversation pin back to Auto, Off kept, idempotent (log line
+  `computer`, `POST /api/bots` settings and a bot zip import. The browser
+  still reads as Auto, without an error. A conversation pin
+  (`PATCH .../tasks/:threadId` `surface`) is validated and never stored.
+  The engine-removal move writes no place.
+- At start, `Store.retireFixedWorkspaces` moves a saved browser and every
+  conversation pin back to Auto. This computer, the Local VM, the cloud
+  computer and Off stay. Idempotent (log line
   "Workspace: N bot(s) and M conversation(s) back on Auto"). A bot or a
   conversation that was kept off this computer (Cloud, Local VM, Browser,
   by Works on or by a person's or legacy pin) may reach it on Auto, so it
@@ -824,8 +830,14 @@ opens the VM workspace) or a shell-only host. Closing the window leaves the
 panel on Activity. A desktop paired to another host keeps its own computer
 panel (`remote-desktop-panel.tsx`). Test: `src/components/teach-task.dom.test.ts`.
 
-The Computer section's "..." menu holds only the Works on choices and the
-marked hosts, and is hidden for a viewer who may not change them. There is no
+The Computer section's "..." menu holds the Works on choices (Auto, This
+computer, Local VM, Cloud) and the marked hosts, and is hidden for a viewer
+who may not change them. Local VM is listed when a connected computer
+registered one, or on a solo server (its own Local VM). It stays in the
+list, not selectable, with the reason, when the computer is not connected,
+the desktop did not register a Local VM, the model cannot use one, or the
+organization does not allow it. A cloud home has no Local VM, so the row is
+absent. Choosing it saves `computer: "vm"` (`autoOnlyDestination`). There is no
 Computer details window any more (owner decision 2026-11-17): the old
 `ComputerPanel` and its parts are gone. Test:
 `src/components/bot-settings/ComputerCard.test.ts`.

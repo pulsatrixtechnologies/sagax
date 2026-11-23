@@ -1,5 +1,5 @@
-// This computer and the cloud computer are saved through the HTTP API.
-// A Local VM or the browser still arrives as Auto. Off stays a restriction.
+// This computer, the Local VM and the cloud computer are saved through the
+// HTTP API. The browser still arrives as Auto. Off stays a restriction.
 // A conversation is still not pinned to a place.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -21,19 +21,17 @@ describe("Workspace is always Auto over HTTP", () => {
   }, 60_000);
   afterAll(async () => { await session?.close(); });
 
-  it("saves this computer and the cloud computer, reads the rest as Auto, and keeps Off", async () => {
+  it("saves this computer, the Local VM and the cloud computer, reads the browser as Auto, and keeps Off", async () => {
     const bot = (await api("POST", "/api/bots")).body.bot;
-    for (const place of ["local", "cloud"] as const) {
+    for (const place of ["local", "cloud", "vm"] as const) {
       // Auto on this computer still needs the warning the desktop sends.
       const patched = await api("PATCH", `/api/bots/${bot.id}`, { computer: place, ...(place === "local" ? { acknowledgeLocalAuto: true } : {}) });
       expect(patched.status, place).toBe(200);
       expect(patched.body.bot.computer, place).toBe(place);
     }
-    for (const place of ["vm", "browser"]) {
-      const patched = await api("PATCH", `/api/bots/${bot.id}`, { computer: place });
-      expect(patched.status, place).toBe(200);
-      expect(patched.body.bot, place).not.toHaveProperty("computer");
-    }
+    const browser = await api("PATCH", `/api/bots/${bot.id}`, { computer: "browser" });
+    expect(browser.status).toBe(200);
+    expect(browser.body.bot).not.toHaveProperty("computer");
     const off = await api("PATCH", `/api/bots/${bot.id}`, { computer: "off" });
     expect(off.status).toBe(200);
     expect(off.body.bot.computer).toBe("off");
@@ -53,6 +51,9 @@ describe("Workspace is always Auto over HTTP", () => {
     const browser = await api("POST", "/api/bots", { settings: { computer: "browser" } });
     expect(browser.status).toBe(201);
     expect(browser.body.bot).not.toHaveProperty("computer");
+    const vm = await api("POST", "/api/bots", { settings: { computer: "vm" } });
+    expect(vm.status).toBe(201);
+    expect(vm.body.bot.computer).toBe("vm");
     const off = await api("POST", "/api/bots", { settings: { computer: "off" } });
     expect(off.status).toBe(201);
     expect(off.body.bot.computer).toBe("off");

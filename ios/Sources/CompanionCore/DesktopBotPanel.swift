@@ -684,16 +684,17 @@ public enum DesktopWorksOnRules {
     }
 
     /// The choices, in the desktop's order (`WORKS_ON_MODES`): Auto, this
-    /// computer and the cloud computer, each where the server offers it.
-    /// Never Off: it hid the Computer card.
+    /// computer, Local VM and the cloud computer, each where the server
+    /// offers it. A cloud home has no Local VM. Never Off: it hid the
+    /// Computer card.
     public static func choices(config: ConfigStatus?, organization: Bool) -> [DesktopWorksOn] {
-        [.auto, .local, .cloud].filter { offered($0, config: config, organization: organization) }
+        [.auto, .local, .vm, .cloud].filter { offered($0, config: config, organization: organization) }
     }
 
-    /// The choice that shows selected: this computer or the cloud computer
-    /// when saved, Auto for anything else.
+    /// The choice that shows selected: this computer, Local VM or the cloud
+    /// computer when saved, Auto for anything else.
     public static func selected(_ place: DesktopWorksOn) -> DesktopWorksOn {
-        place == .local || place == .cloud ? place : .auto
+        place == .local || place == .cloud || place == .vm ? place : .auto
     }
 
     /// The server has a browser engine (`browserAvailable`).

@@ -1,7 +1,8 @@
 // The iPad's desktop shell says what the desktop says: every label listed in
 // ios/parity/desktop-wording.json carries, in ios/App/Localizable.xcstrings,
 // the desktop catalog's own words in English and French (2026-11-03, iPad
-// 1:1 audit). A desktop rewording then fails here until the iPad follows.
+// 1:1 audit). A locale that dropped a key shows the English, as t() does.
+// A desktop rewording then fails here until the iPad follows.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -22,10 +23,16 @@ describe("iPad desktop shell wording", () => {
       const entry = catalog.strings[key];
       expect(entry, `${key} is in Localizable.xcstrings`).toBeDefined();
       for (const lang of ["en", "fr"] as const) {
-        const want = desktop[lang]![desktopKey];
-        expect(want, `${desktopKey} in src/locales/${lang}.json`).toBeTypeOf("string");
-        // English falls back to the key itself when the catalog has no en entry
-        const got = entry?.localizations?.[lang]?.stringUnit?.value ?? (lang === "en" ? key : undefined);
+        // A locale pack that dropped the key shows English, the same fallback as t().
+        const translated = desktop[lang]![desktopKey];
+        const want = translated ?? desktop.en![desktopKey];
+        expect(desktop.en![desktopKey], `${desktopKey} in src/locales/en.json`).toBeTypeOf("string");
+        const explicit = entry?.localizations?.[lang]?.stringUnit?.value;
+        const english = entry?.localizations?.en?.stringUnit?.value ?? key;
+        // English with no catalog entry is the key. A dropped locale with no
+        // iPad translation is that English. A locale that still has the key
+        // must carry its own translation.
+        const got = explicit ?? (translated === undefined ? english : (lang === "en" ? key : undefined));
         expect(got, `${key} (${lang})`).toBe(placeholders(want!));
       }
     });

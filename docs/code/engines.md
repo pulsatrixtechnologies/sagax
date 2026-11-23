@@ -126,6 +126,21 @@ never a row or a banner in the chat. Tests: `account-strategy.test.ts`,
 `limit-failover-host.test.ts` ("the account strategy before a turn"),
 `model-switches.test.ts`, `shared/account-switch.test.ts`.
 
+Learned routing sits on that pick (`server/usage/learned-routing.ts`). It is
+each person's own switch, `learnedRouting` on GET/PUT `/api/me/models`
+(person settings, the installation's config when solo), off until they turn
+it on. There is no server environment variable for it. When it is on and the
+record is deep enough, a contextual Thompson sampler may move the turn to
+another account inside the planner's safe set. It never changes the model
+the person chose. An unconfirmed paid key stays out, and a turn that acts as
+someone stays on the credentials that consent lists. A settled turn calls
+`record` (latency to the first token, tokens per second, an error, a rate
+limit). The process passes its data directory, and the counts are
+`usage/learned-routing.json`: counts only, never a prompt and never a key.
+A stop is not recorded. Tests: `learned-routing.test.ts`,
+`learned-routing-wire.test.ts`, `account-switch-host.test.ts`,
+`turn-completed.test.ts`.
+
 ## One credential decision (#5180)
 
 `shared/credential-resolver.ts` is the policy on top of the order each

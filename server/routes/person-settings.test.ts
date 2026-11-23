@@ -57,4 +57,13 @@ describe("a person's own Experimental settings (#1098)", () => {
     expect(personalProfilePartition("alex", "mine-a")).not.toBe(personalProfilePartition("sam", "mine-a"));
     expect((await setup(null).call("GET")).status).toBe(404);
   });
+
+  it("stores learned routing for the person who turned it on", () => {
+    const { store } = setup();
+    expect(store.get("alex").learnedRouting).toBeUndefined();
+    expect(store.setLearnedRouting("alex", true).learnedRouting).toBe(true);
+    expect(store.get("sam").learnedRouting).toBeUndefined();
+    expect(store.setLearnedRouting("alex", false).learnedRouting).toBeUndefined();
+    expect(store.get("alex").learnedRouting).toBeUndefined();
+  });
 });

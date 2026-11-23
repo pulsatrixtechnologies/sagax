@@ -41669,6 +41669,28 @@
         }
       }
     },
+    "The decision model is off, so plain messages go to %@; @mentions override this": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decision model is off, so plain messages go to %@; @mentions override this"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle de décision est désactivé, donc les messages ordinaires vont à %@ ; les @mentions ont priorité"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jev está desligado, então mensagens simples vão para %@; @menções têm prioridade"
+          }
+        }
+      }
+    },
     "Jev is off, so plain messages go to %@; @mentions override this": {
       "localizations": {
         "en": {
@@ -41713,6 +41735,28 @@
         }
       }
     },
+    "The decision model picks who answers each plain message; @mentions override this": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decision model picks who answers each plain message; @mentions override this"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle de décision choisit qui répond à chaque message ordinaire ; les @mentions ont priorité"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jev escolhe quem responde a cada mensagem simples; @menções têm prioridade"
+          }
+        }
+      }
+    },
     "Jev picks who answers each plain message; @mentions override this": {
       "localizations": {
         "en": {
@@ -41731,6 +41775,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jev escolhe quem responde a cada mensagem simples; @menções têm prioridade"
+          }
+        }
+      }
+    },
+    "The decision model picks who responds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decision model picks who responds"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle de décision choisit qui répond"
           }
         }
       }

@@ -96,6 +96,7 @@
   "achievements.toNext": "{points} to the next level",
   "achievements.toast.dismiss": "Dismiss",
   "achievements.toast.kicker": "Achievement unlocked",
+  "achievements.toast.open": "See achievement",
   "achievements.toast.title": "Achievement unlocked (+{points})",
   "achievements.unavailable": "This server does not keep achievements yet.",
   "achievements.unlockBy": "Unlock: {name}",

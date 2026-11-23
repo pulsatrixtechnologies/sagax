@@ -95,6 +95,7 @@
   "achievements.toNext": "{points} avant le prochain niveau",
   "achievements.toast.dismiss": "Fermer",
   "achievements.toast.kicker": "Succès débloqué",
+  "achievements.toast.open": "Voir le succès",
   "achievements.toast.title": "Succès débloqué (+{points})",
   "achievements.unavailable": "Ce serveur ne garde pas encore les succès.",
   "achievements.unlockBy": "Pour débloquer : {name}",

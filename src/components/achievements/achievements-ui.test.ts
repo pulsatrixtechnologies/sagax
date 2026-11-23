@@ -153,6 +153,9 @@ describe("unlock toast", () => {
     expect(html).toContain("Skin unlocked: Galaxy (Owl)");
     expect(html).toContain('data-tier="legendary"');
     expect(html).toContain('role="status"');
+    expect(html).toContain('data-achievement-open="month-streak"');
+    expect(html).toContain("See achievement");
+    expect(html).toContain("cursor-pointer");
     expect(html).toContain('aria-live="polite"');
     setLocale("fr");
     const fr = renderToStaticMarkup(createElement(AchievementToast, { id: "trombi-summoned", leaving: false, onDismiss: () => {} }));
@@ -299,6 +302,19 @@ describe("achievements page body", () => {
     const pinch = slice(html, 'data-achievement="first-pinch"');
     expect(pinch).not.toContain("proud");
     expect(pinch).not.toContain("Look unlocked");
+  });
+});
+
+describe("an unlock opens its card (#5069)", () => {
+  it("the page shows that achievement's detail when the open names it", () => {
+    resetAchievementsForTests({ status: "ready", snapshot: snapshot() });
+    fixture.state = {
+      ...fixture.state,
+      achievementsFocus: { category: "onboarding", nonce: 3, achievementId: "hello-bot" },
+    };
+    const html = renderToStaticMarkup(createElement(AchievementsScreen));
+    expect(html).toContain('data-achievement-detail="hello-bot"');
+    expect(html).toContain("Create your first bot.");
   });
 });
 

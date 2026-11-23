@@ -1378,7 +1378,7 @@ export interface AppState {
    * src/components/achievements/AchievementsScreen.tsx): the category a link
    * names, "all" otherwise. `nonce` changes on every open, so a second link
    * to another category re-selects it on a page already showing. */
-  achievementsFocus: { category: AchievementsCategory; nonce: number };
+  achievementsFocus: { category: AchievementsCategory; nonce: number; achievementId?: string };
   /** Legacy flag for Browse Bots' own window. 2026-10-29 / lot 5: every
    * openBotCatalog opens Connect apps' Bots tab (activeView "apps"); this
    * stays false. Kept so older callers and tests still type-check. */
@@ -1615,7 +1615,7 @@ export type Action =
   | { type: "showApprovals" }
   | { type: "showRemoteSessions" }
   /** The Achievements page, on `category` when a link names one. */
-  | { type: "showAchievements"; category?: AchievementsCategory }
+  | { type: "showAchievements"; category?: AchievementsCategory; achievementId?: string }
   /** Archived bots centred window (restored after UX lot 5). */
   | { type: "showArchivedBots" }
   | { type: "closeArchivedBots" }

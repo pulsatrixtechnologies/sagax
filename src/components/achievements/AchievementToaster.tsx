@@ -14,7 +14,7 @@ import { achievementsState, displayReward, flushAchievementEvents, loadAchieveme
 import { grokAccountLinked, setGrokAccountLinked } from "@/lib/grok-account";
 import { useMyEngines } from "@/lib/perspicax-org";
 import { readRetroUnlocked } from "@/lib/retro98";
-import { useStore } from "@/state/store";
+import { useStore, type AchievementsCategory } from "@/state/store";
 import { notificationSoundsEnabled } from "@/lib/notification-preferences";
 import { t } from "@/lib/i18n";
 import { achievementIcon } from "./icons";
@@ -75,7 +75,14 @@ function nativeNotification(id: string): boolean {
   }
 }
 
-export function AchievementToast({ id, leaving, onDismiss }: { id: string; leaving: boolean; onDismiss: () => void }) {
+/** The page open a toast asks for: that achievement, on its own category. */
+export function achievementToastOpen(id: string): { type: "showAchievements"; category: AchievementsCategory; achievementId: string } | null {
+  const item = ACHIEVEMENTS.find((candidate) => candidate.id === id);
+  if (!item) return null;
+  return { type: "showAchievements", category: item.category, achievementId: item.id };
+}
+
+export function AchievementToast({ id, leaving, onDismiss, onOpen }: { id: string; leaving: boolean; onDismiss: () => void; onOpen?: () => void }) {
   const item = ACHIEVEMENTS.find((candidate) => candidate.id === id);
   if (!item) return null;
   const tier = rarityForPoints(item.points);
@@ -84,25 +91,27 @@ export function AchievementToast({ id, leaving, onDismiss }: { id: string; leavi
   const line = reward ? displayReward(reward, achievementsState().unlocks, { revealing: true }) : null;
   return (
     <div className="achievement-toast" data-tier={tier} data-leaving={leaving ? "" : undefined} data-achievement-toast={id} role="status" aria-live="polite">
-      <span className="achievement-toast-badge" aria-hidden="true">
-        <Icon size={20} strokeWidth={2.2} />
-      </span>
-      <span className="achievement-toast-text">
-        <span className="achievement-toast-kicker">
-          <Trophy size={11} aria-hidden="true" />
-          {t("achievements.toast.kicker")}
-          <span className="achievement-toast-points">+{item.points}</span>
+      <button type="button" className="achievement-toast-open cursor-pointer" data-achievement-open={id} title={t("achievements.toast.open")} onClick={onOpen}>
+        <span className="achievement-toast-badge" aria-hidden="true">
+          <Icon size={20} strokeWidth={2.2} />
         </span>
-        <span className="achievement-toast-name">{localized(item.name)}</span>
-        {line && <span className="achievement-toast-reward">{line}</span>}
-      </span>
-      {line && reward && (reward.kind === "skin" || reward.kind === "character") && (
-        <span className="achievement-toast-preview" aria-hidden="true">
-          <Suspense fallback={null}>
-            <RewardPreview reward={reward} size={34} />
-          </Suspense>
+        <span className="achievement-toast-text">
+          <span className="achievement-toast-kicker">
+            <Trophy size={11} aria-hidden="true" />
+            {t("achievements.toast.kicker")}
+            <span className="achievement-toast-points">+{item.points}</span>
+          </span>
+          <span className="achievement-toast-name">{localized(item.name)}</span>
+          {line && <span className="achievement-toast-reward">{line}</span>}
         </span>
-      )}
+        {line && reward && (reward.kind === "skin" || reward.kind === "character") && (
+          <span className="achievement-toast-preview" aria-hidden="true">
+            <Suspense fallback={null}>
+              <RewardPreview reward={reward} size={34} />
+            </Suspense>
+          </span>
+        )}
+      </button>
       <button type="button" className="achievement-toast-close" aria-label={t("achievements.toast.dismiss")} onClick={onDismiss}>
         <X size={12} />
       </button>
@@ -135,7 +144,7 @@ function useAchievementsBoot(person: string): void {
 }
 
 export function AchievementToaster() {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const engines = useMyEngines();
   const person = state.config?.viewer?.principalId ?? state.config?.profile?.email ?? "";
   useAchievementsBoot(person);
@@ -198,7 +207,11 @@ export function AchievementToaster() {
   if (queue.current === null) return null;
   return (
     <div className="achievement-toaster" data-achievement-toaster="">
-      <AchievementToast key={queue.current} id={queue.current} leaving={leaving} onDismiss={() => achievementToasts.dismiss()} />
+      <AchievementToast key={queue.current} id={queue.current} leaving={leaving} onDismiss={() => achievementToasts.dismiss()} onOpen={() => {
+        const action = achievementToastOpen(queue.current ?? "");
+        if (action) dispatch(action);
+        achievementToasts.dismiss();
+      }} />
     </div>
   );
 }

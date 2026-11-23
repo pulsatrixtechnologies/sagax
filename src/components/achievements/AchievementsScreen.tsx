@@ -44,6 +44,7 @@ export function AchievementsScreen({ initialCategory }: { initialCategory?: Achi
   const [status, setStatus] = useState<AchievementStatusFilter>("all");
   const [reward, setReward] = useState<AchievementRewardFilter>("all");
   const [search, setSearch] = useState("");
+  const [openId, setOpenId] = useState<string | null>(focus.achievementId ?? null);
   const mainRef = useRef<HTMLElement>(null);
   const filtersRef = useRef<HTMLDetailsElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -55,7 +56,16 @@ export function AchievementsScreen({ initialCategory }: { initialCategory?: Achi
     if (seen.current === focus.nonce) return;
     seen.current = focus.nonce;
     if (focus.category === "settings") setSettingsOpen(true);
-    else { setCategory(focus.category); setSettingsOpen(false); }
+    else {
+      setCategory(focus.category);
+      setSettingsOpen(false);
+      if (focus.achievementId) {
+        setStatus("all");
+        setReward("all");
+        setSearch("");
+        setOpenId(focus.achievementId);
+      }
+    }
   }, [focus]);
 
   // The page takes focus so Escape and Cmd/Ctrl+[ work at once; Tab then
@@ -141,7 +151,7 @@ export function AchievementsScreen({ initialCategory }: { initialCategory?: Achi
         </>}
       />
       <PageBody data-achievements-pane="">
-        <AchievementsPage category={category} status={status} reward={reward} search={search} />
+        <AchievementsPage category={category} status={status} reward={reward} search={search} openId={openId} onOpenChange={setOpenId} />
       </PageBody>
       {settingsOpen && <AchievementSettingsDialog onClose={() => { setSettingsOpen(false); mainRef.current?.focus({ preventScroll: true }); }} />}
     </main>

@@ -22,6 +22,17 @@ describe("Achievements page state", () => {
     expect(reducer(second, { type: "showAchievements" }).achievementsFocus.category).toBe("all");
   });
 
+  it("opens on one achievement, and a plain open does not keep that card (#5069)", () => {
+    const opened = reducer(initialState, { type: "showAchievements", category: "mastery", achievementId: "not-so-fast" });
+    expect(opened.activeView).toBe("achievements");
+    expect(opened.achievementsFocus.category).toBe("mastery");
+    expect(opened.achievementsFocus.achievementId).toBe("not-so-fast");
+    const again = reducer(opened, { type: "showAchievements" });
+    expect(again.achievementsFocus.category).toBe("all");
+    expect(again.achievementsFocus.achievementId).toBeUndefined();
+    expect(again.achievementsFocus.nonce).toBeGreaterThan(opened.achievementsFocus.nonce);
+  });
+
   it("leaves for another screen or back to the chat", () => {
     const opened = reducer(initialState, { type: "showAchievements" });
     expect(reducer(opened, { type: "showChat" }).activeView).toBe("chat");

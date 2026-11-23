@@ -39,7 +39,8 @@ struct DesktopCapabilitiesModal: View {
     }
 
     var body: some View {
-        DesktopModalFrame(width: 900, background: \.app, close: close) {
+        // PluginsPanel: CATEGORY_MODAL.frame is bg-app, then PLUGINS.frame is bg-inset.
+        DesktopModalFrame(width: 900, background: \.inset, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     DesktopText(Text("Connect Apps"), size: 17, weight: .semibold, line: 24, tracking: -0.136)

@@ -294,8 +294,8 @@ struct ConnectAppsPage: View {
     var body: some View {
         NavigationStack(path: $path) {
             ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot, close: close, push: open)
-                // the desktop window's body: the app's colour, not the stack's black
-                .background { if embedded { desktopTheme.app.ignoresSafeArea() } }
+                // the desktop window's body: the plugins frame is inset, not the stack's black
+                .background { if embedded { desktopTheme.inset.ignoresSafeArea() } }
                 .navigationTitle(String(localized: "Connect apps"))
                 .navigationBarTitleDisplayMode(.inline)
                 // the window has its title; the phone draws the reference's bar
@@ -516,8 +516,9 @@ struct ConnectAppRow: View {
                     Text(verbatim: item.description)
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        // PLUGINS.rowSub: two lines, whole words
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -540,11 +541,10 @@ struct ConnectAppRow: View {
                     .foregroundStyle(item.status == .connected ? theme.accent : theme.inkSecondary)
             }
         }
-        // a cell of the desktop's two-column grid (CATEGORY_MODAL.grid): the
-        // description truncates and the action sits beside it
-        // PluginRow: rounded-2xl p-2.5 in a 414 pt cell
-        .padding(10)
-        .frame(maxWidth: 414, alignment: .leading)
+        // PluginRow is py-3 inside PLUGINS.grid (px-3). The row fills its
+        // column instead of stopping at a fixed 414 pt cell.
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -824,9 +824,14 @@ struct ConnectAppsMain: View {
 
     private func sectionTitle(_ title: String) -> some View {
         Text(verbatim: title)
-            .font(desktop ? theme.font(14, .semibold) : nil)
+            // PLUGINS.sectionTitle (14 medium, 6 under, 12 in) under the
+            // installed sections' 30 pt gap (mt-[30px]).
+            .font(desktop ? theme.font(14, .medium) : nil)
             .foregroundStyle(desktop ? theme.ink : Theme.textSecondary)
             .textCase(nil)
+            .padding(.top, desktop ? 30 : 0)
+            .padding(.bottom, desktop ? 6 : 0)
+            .padding(.leading, desktop ? 12 : 0)
     }
 
     // MARK: The one search
@@ -2013,7 +2018,7 @@ struct CapabilitiesList<Content: View>: View {
                 .padding(.horizontal, 32)
                 .padding(.bottom, 28)
             }
-            .background(theme.app)
+            .background(theme.inset)
         } else {
             ThemedList(content: content)
         }

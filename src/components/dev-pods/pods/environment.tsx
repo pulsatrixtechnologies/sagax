@@ -113,7 +113,7 @@ async function saveFolder(bot: Bot, cwd: string | null): Promise<void> {
 }
 
 /** The places a person picks here, on the bot's own Works on setting. */
-const PLACE_CHOICES = ["cloud", "local"] as const;
+const PLACE_CHOICES = ["cloud", "local", "vm"] as const;
 
 function PlaceIcon({ place }: { place: EffectivePlace }) {
   const Icon = place === "cloud" ? Cloud : Monitor;
@@ -128,7 +128,7 @@ function EnvironmentBody({ data, ctx }: { data: EnvironmentData; ctx: DevPodCont
   const organization = usePerspicaxOrg() !== null;
   const close = useCallback(() => setMenu(null), []);
   const toggle = (which: "place" | "folder" | "branch") => () => setMenu((current) => (current === which ? null : which));
-  const savePlace = (place: "local" | "cloud", acknowledged = false) => {
+  const savePlace = (place: "local" | "cloud" | "vm", acknowledged = false) => {
     if (ctx.bot.computer === place) return;
     if (place === "local" && !acknowledged && approvalModeFor(ctx.bot) === "auto") {
       setPlaceWarning(true);

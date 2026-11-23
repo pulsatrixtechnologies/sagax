@@ -99,14 +99,52 @@ describe("computerSelectValue / options / title", () => {
     expect(computerSelectValue(null)).toBe("auto");
     expect(computerSelectValue("cloud")).toBe("cloud");
     expect(computerSelectValue("local")).toBe("local");
+    expect(computerSelectValue("vm")).toBe("vm");
     // Off is gone; a saved Off reads as Auto.
     expect(computerSelectValue("off")).toBe("auto");
   });
 
-  it("lists Auto, This computer and Cloud, never Off, when the bridge has no named PCs", () => {
+  it("lists Auto, This computer, Local VM and Cloud, never Off, on a solo server", () => {
     const options = computerSelectOptions(null, false);
-    expect(options.map((option) => option.value)).toEqual(["auto", "local", "cloud"]);
+    expect(options.map((option) => option.value)).toEqual(["auto", "local", "vm", "cloud"]);
+    expect(options.find((option) => option.value === "vm")?.disabled).toBe(false);
     expect(computerSelectOptions(null, true).map((option) => option.value)).not.toContain("off");
+  });
+
+  it("offers Local VM when a connected computer registered one, and it can be chosen", () => {
+    const bridge = {
+      connected: true,
+      tunnel: false,
+      workplace: { place: "computer", network: "all" },
+      activity: [],
+      desktops: [{
+        id: "desk-1",
+        name: "Studio Mac",
+        platform: "darwin",
+        online: true,
+        busy: false,
+        lastSeenAt: Date.now(),
+        capabilities: { localVm: true },
+      }],
+    } as DesktopBridgeStatus;
+    const options = computerSelectOptions(bridge, true);
+    expect(options.map((option) => option.value)).toEqual(["auto", "local", "vm", "cloud"]);
+    const vm = options.find((option) => option.value === "vm");
+    expect(vm).toMatchObject({ label: "Local VM", disabled: false });
+    expect(vm?.detail.length).toBeGreaterThan(0);
+  });
+
+  it("keeps Local VM visible but not selectable, with the reason, when the computer is not connected", () => {
+    const bridge = {
+      connected: false,
+      tunnel: false,
+      workplace: { place: "server", network: "all" },
+      activity: [],
+      desktops: [],
+    } as DesktopBridgeStatus;
+    const vm = computerSelectOptions(bridge, true).find((option) => option.value === "vm");
+    expect(vm?.disabled).toBe(true);
+    expect(vm?.detail).toMatch(/not connected/i);
   });
 
   it("names a connected local PC when the bridge lists one", () => {
@@ -166,6 +204,38 @@ describe("ComputerCard", () => {
     expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
   });
 
+  it("selects Local VM from the menu when this computer registered one", () => {
+    env.org = { id: "org-1" };
+    env.bridge = {
+      connected: true,
+      tunnel: false,
+      workplace: { place: "computer", network: "all" },
+      activity: [],
+      desktops: [{ id: "desk-1", name: "Studio Mac", platform: "darwin", online: true, busy: false, lastSeenAt: Date.now(), capabilities: { localVm: true } }],
+    };
+    const onPatch = vi.fn();
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
+    act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+    const vm = document.querySelector<HTMLButtonElement>('[data-computer-card-option="vm"]')!;
+    expect(vm.disabled).toBe(false);
+    expect(vm.textContent).toContain("Local VM");
+    act(() => vm.click());
+    expect(onPatch).toHaveBeenCalledWith({ computer: "vm" });
+  });
+
+  it("leaves a disconnected Local VM in the menu, disabled, and does not select it", () => {
+    env.org = { id: "org-1" };
+    env.bridge = { connected: false, tunnel: false, workplace: { place: "server", network: "all" }, activity: [], desktops: [] };
+    const onPatch = vi.fn();
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
+    act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+    const vm = document.querySelector<HTMLButtonElement>('[data-computer-card-option="vm"]')!;
+    expect(vm.disabled).toBe(true);
+    expect(vm.textContent).toMatch(/not connected/i);
+    act(() => vm.click());
+    expect(onPatch).not.toHaveBeenCalled();
+  });
+
   it("draws every menu row the same: a leading mark, the name, a grey line and the check slot", () => {
     env.org = { id: "org-1" };
     env.bridge = {
@@ -180,7 +250,7 @@ describe("ComputerCard", () => {
     act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
     const rows = [...document.querySelectorAll<HTMLElement>('[data-computer-card-menu] [role="menuitemradio"]')];
     expect(rows.map((row) => row.getAttribute("data-computer-card-option") ?? `host:${row.getAttribute("data-computer-card-host")}`))
-      .toEqual(["auto", "local", "cloud", "host:online"]);
+      .toEqual(["auto", "local", "vm", "cloud", "host:online"]);
     for (const row of rows) {
       expect(row.className).toBe(rows[0]!.className);
       // lead mark, name over grey line, then the check (or its empty slot)
@@ -196,6 +266,8 @@ describe("ComputerCard", () => {
     expect(text("auto", "detail")).toBe("Picks per task");
     expect(text("local", "name")).toBe("Studio Mac");
     expect(text("local", "detail")).toBe("macOS \u00b7 This computer");
+    expect(text("vm", "name")).toBe("Local VM");
+    expect(text("vm", "detail")).toBe("The Local VM on this computer");
     expect(text("cloud", "detail")).toBe("Server environment");
     expect(document.querySelector('[data-computer-card-option="local"]')!.getAttribute("aria-checked")).toBe("true");
     expect(document.querySelector('[data-computer-card-host] [data-computer-menu-detail]')!.textContent).toBe("Linux");
@@ -240,14 +312,15 @@ describe("ComputerCard", () => {
     expect(document.activeElement?.getAttribute("data-computer-card-option")).toBe("auto");
   });
 
-  it("lists no cloud computer (nor Auto) when this person has none, solo; an organization always has one", () => {
-    expect(computerSelectOptions(null, false, false).map((o) => o.value)).toEqual(["local"]);
-    expect(computerSelectOptions(null, true, true).map((o) => o.value)).toEqual(["auto", "local", "cloud"]);
+  it("lists no cloud computer when this person has none, solo; an organization always has one", () => {
+    // Solo still has This computer and its Local VM, so Auto stays.
+    expect(computerSelectOptions(null, false, false).map((o) => o.value)).toEqual(["auto", "local", "vm"]);
+    expect(computerSelectOptions(null, true, true).map((o) => o.value)).toEqual(["auto", "local", "vm", "cloud"]);
     storeConfig.value = {};
     try {
       act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
       act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
-      expect([...document.querySelectorAll("[data-computer-card-option]")].map((n) => n.getAttribute("data-computer-card-option"))).toEqual(["local"]);
+      expect([...document.querySelectorAll("[data-computer-card-option]")].map((n) => n.getAttribute("data-computer-card-option"))).toEqual(["auto", "local", "vm"]);
     } finally {
       storeConfig.value = { features: { boatComputer: true } };
     }

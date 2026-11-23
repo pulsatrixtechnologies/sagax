@@ -406,6 +406,10 @@
             ],
             "description": "standing (default): the one work thread this conversation has with each teammate. new: open a new thread on the teammate for this, its own history and run; its result still returns here."
           },
+          "thread_id": {
+            "type": "string",
+            "description": "A report-back thread you opened from this conversation. With bot_ids naming only yourself, steers that thread or sends it a follow-up."
+          },
           "reply": {
             "type": "string",
             "enum": [

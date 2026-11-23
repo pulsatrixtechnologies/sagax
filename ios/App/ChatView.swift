@@ -925,7 +925,8 @@ struct ChatView: View {
                                 proxy.scrollTo(Self.bottomId, anchor: .bottom)
                             }
                     }
-                    .padding(.horizontal, desktopChat == nil ? Theme.Chat.bubbleLeading : 20)
+                    // the desktop gutter is px-4 (16), the same as the phone's bubbleLeading
+                    .padding(.horizontal, Theme.Chat.bubbleLeading)
                     .padding(.top, desktopChat == nil ? 12 : 56 - Self.topBarHeight)
                     .frame(maxWidth: desktopChat == nil ? CompanionLayout.chatWidth : DesktopShellRules.chatColumn + 40, alignment: .leading)
                     .frame(maxWidth: .infinity)

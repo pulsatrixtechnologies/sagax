@@ -39,8 +39,17 @@ export const OLDER_PREVIEW = 5;
  * older), each newest first. Today is the calendar day in the person's time
  * zone; "this week" is the rest of the last 7 days. */
 
+function libraryLabel(item: LibraryItem): string {
+  switch (item.kind) {
+    case "file": return item.file.name;
+    case "artifact": return item.artifact.title;
+    case "page": return item.page.title;
+  }
+}
+
 export function groupLibraryItems(items: readonly LibraryItem[], now: number): LibraryGroups {
-  const newest = (a: LibraryItem, b: LibraryItem) => b.at - a.at || a.key.localeCompare(b.key);
+  // Same timestamp: the visible name, then the key. A per-run id must not reorder the list.
+  const newest = (a: LibraryItem, b: LibraryItem) => b.at - a.at || libraryLabel(a).localeCompare(libraryLabel(b)) || a.key.localeCompare(b.key);
   const sorted = [...items].sort(newest);
   const pinned = sorted.filter((item) => item.pinned);
   const rest = sorted.filter((item) => !item.pinned);

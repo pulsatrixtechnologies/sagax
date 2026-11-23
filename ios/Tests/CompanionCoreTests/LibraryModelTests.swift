@@ -51,6 +51,13 @@ final class LibraryModelTests: XCTestCase {
         XCTAssertEqual(groups.older, [])
     }
 
+    func testFilesThatShareATimestampSortByNameNotById() {
+        let alpha = ThreadFile(id: "zzz", source: .written, name: "Alpha.md", at: now)
+        let zulu = ThreadFile(id: "aaa", source: .written, name: "Zulu.md", at: now)
+        let groups = LibraryRules.groups(files: [alpha, zulu], artifacts: [], now: now, calendar: utc)
+        XCTAssertEqual(groups.today.map(\.orderName), ["Alpha.md", "Zulu.md"])
+    }
+
     func testTheSevenDayEdgeIsOlderAndNothingIsEmpty() {
         let groups = LibraryRules.groups(files: [file("edge", daysAgo: 7), file("in", daysAgo: 6.99)], artifacts: [], now: now, calendar: utc)
         XCTAssertEqual(groups.thisWeek.map(\.id), ["file:in"])

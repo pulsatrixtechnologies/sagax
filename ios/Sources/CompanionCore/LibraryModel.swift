@@ -98,6 +98,15 @@ public enum LibraryEntry: Identifiable, Hashable, Sendable {
         }
     }
 
+    /// The visible name, so two files from one moment stay in name order.
+    public var orderName: String {
+        switch self {
+        case let .file(file): file.name
+        case let .artifact(artifact): artifact.title
+        case let .page(page): page.title
+        }
+    }
+
     /// Milliseconds: a file's message time, an artifact's last change.
     public var at: Double {
         switch self {
@@ -190,7 +199,10 @@ public enum LibraryRules {
         let pageEntries: [LibraryEntry] = pages.map(LibraryEntry.page)
         let all: [LibraryEntry] = fileEntries + artifactEntries + pageEntries
         let entries: [LibraryEntry] = all.sorted { (a: LibraryEntry, b: LibraryEntry) -> Bool in
-            a.at != b.at ? a.at > b.at : a.id < b.id
+            if a.at != b.at { return a.at > b.at }
+            let name = a.orderName.localizedStandardCompare(b.orderName)
+            if name != .orderedSame { return name == .orderedAscending }
+            return a.id < b.id
         }
         let rest = entries.filter { !$0.pinned }
         return LibraryGroups(

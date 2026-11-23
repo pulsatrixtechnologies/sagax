@@ -42,6 +42,12 @@ describe("library grouping", () => {
     expect(groupLibraryItems(libraryItems(null, null), now)).toEqual({ pinned: [], periods: [] });
   });
 
+  it("orders files that share a timestamp by name, not by id", () => {
+    const items = libraryItems([file("zzz", "Alpha.md", 0), file("aaa", "Zulu.md", 0)], []);
+    const groups = groupLibraryItems(items, now);
+    expect(groups.periods[0]!.items.map((item) => item.kind === "file" ? item.file.name : "")).toEqual(["Alpha.md", "Zulu.md"]);
+  });
+
   it("the seven day edge belongs to older", () => {
     const groups = groupLibraryItems(libraryItems([file("a".repeat(24), "edge.md", 7), file("b".repeat(24), "inside.md", 6.99)], []), now);
     expect(groups.periods.map((period) => [period.id, period.items.length])).toEqual([["thisWeek", 1], ["older", 1]]);

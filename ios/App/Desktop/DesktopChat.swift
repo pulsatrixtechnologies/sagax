@@ -109,7 +109,7 @@ struct DesktopChatColumn: View {
     }
 
     private func chatStack(width: CGFloat, totalWidth: CGFloat) -> some View {
-        // the transcript column: px-5 inside the content, at most 960. The
+        // the transcript column: px-4 inside the content, at most 960. The
         // bot's ongoing activities are in the panel's Details (#483), not
         // in a rail beside the chat.
         let column = min(DesktopShellRules.chatColumn, width - 40)
@@ -307,7 +307,7 @@ extension ChatView {
                 }
             }
         }
-        // the dock is `px-4` (the transcript `px-5`), both at most 960
+        // the dock is `px-4` (the transcript `px-4`), both at most 960
         .frame(maxWidth: DesktopShellRules.chatColumn)
         .padding(.horizontal, 16)
         .padding(.bottom, 16)

@@ -38,6 +38,9 @@ it("reaps the MCP process even if it ignores graceful shutdown", () => withMcp(`
     process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }) + "\\n");
   });
 `, async (run, dir) => {
+  const planPath = join(dir, "plan.json");
+  const plans = JSON.parse(readFileSync(planPath, "utf8"));
+  writeFileSync(planPath, JSON.stringify({ ...plans, stopGraceMs: 1_000 }));
   await expect(run()).resolves.toBe("Completed fixture");
   const pid = Number(readFileSync(join(dir, "pid"), "utf8"));
   expect(() => process.kill(pid, 0)).toThrow();

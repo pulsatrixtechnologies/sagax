@@ -47,7 +47,10 @@ const render = (props: Parameters<typeof SidebarProfileMenu>[0] = {}) => {
   act(() => root.render(createElement(SidebarProfileMenu, props)));
 };
 const dot = () => container.querySelector<HTMLButtonElement>("[data-avatar-approvals]");
-const menuButton = () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+// The wide foot keeps the account menu docked above the name (the switch
+// is on by default). That button has no aria-haspopup. The closed menu,
+// on the wide row and the rail, still does.
+const accountButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="Sample Person"]')!;
 const opensApprovals = () => fixture.dispatch.mock.calls.filter(([action]) => action.type === "showApprovals").length;
 
 describe("the avatar's approvals dot", () => {
@@ -72,16 +75,22 @@ describe("the avatar's approvals dot", () => {
       expect(button.tagName).toBe("BUTTON");
       expect(button.getAttribute("type")).toBe("button");
       expect(button.getAttribute("aria-label")).toBe("Open approvals, 2 pending");
-      expect(button.closest('button[aria-haspopup="menu"]')).toBeNull();
-      expect(menuButton().contains(button)).toBe(false);
+      expect(button.closest("button[aria-label=\"Sample Person\"]")).toBeNull();
+      expect(accountButton().contains(button)).toBe(false);
     });
 
     it(`opens Approvals on a click, not the account menu, in ${variant}`, () => {
       render(props);
+      // A docked menu (the foot's pill, switch on) is already in the page.
+      // The click must leave it as it was, and must not open one that was closed.
+      const menus = () => container.querySelectorAll('[role="menu"]').length;
+      const before = menus();
+      const expanded = accountButton().getAttribute("aria-expanded");
       act(() => dot()!.click());
       expect(opensApprovals()).toBe(1);
-      expect(menuButton().getAttribute("aria-expanded")).toBe("false");
-      expect(container.querySelector('[role="menu"]')).toBeNull();
+      expect(accountButton().getAttribute("aria-expanded")).toBe(expanded);
+      expect(menus()).toBe(before);
+      if (variant !== "the foot's pill") expect(container.querySelector('[role="menu"]')).toBeNull();
     });
   }
 
@@ -100,7 +109,7 @@ describe("the avatar's approvals dot", () => {
       });
       expect(document.activeElement).toBe(button);
       expect(opensApprovals()).toBe(1);
-      expect(menuButton().getAttribute("aria-expanded")).toBe("false");
+      expect(accountButton().getAttribute("aria-expanded")).toBe("false");
       expect(container.querySelector('[role="menu"]')).toBeNull();
     });
   }
@@ -115,12 +124,12 @@ describe("sidebar trophy", () => {
     } });
     render();
     const trophy = container.querySelector<HTMLButtonElement>("button[data-gamertag]")!;
-    expect(menuButton().contains(trophy)).toBe(false);
+    expect(accountButton().contains(trophy)).toBe(false);
     expect(trophy.getAttribute("aria-label")).toContain("Open achievements");
     trophy.focus();
     expect(document.activeElement).toBe(trophy);
     act(() => trophy.click());
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showAchievements" });
-    expect(menuButton().getAttribute("aria-expanded")).toBe("false");
+    expect(accountButton().getAttribute("aria-expanded")).toBe("false");
   });
 });

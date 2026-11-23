@@ -281,7 +281,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(log).toContain(`[omb-turn] bot=${shared.id}`);
     // the thread says what paid, without the key
     const digest = await waitFor(async () => (await botsOf(bob)).find((b) => b.id === shared.id)?.messages.find((m) => m.kind === "digest" && (m as { digest?: { access?: unknown } }).digest?.access) ?? null, 15_000);
-    expect((digest as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "org-key", payer: "organization" });
+    expect((digest as unknown as { digest: { access: unknown } }).digest.access).toEqual({ via: "org-key", payer: "organization", form: "org-key" });
     expect(JSON.stringify(digest)).not.toContain(ORG_KEY);
 
     expect((await botsOf(dave)).map((b) => b.id)).not.toContain(shared.id);

@@ -96,17 +96,15 @@ function level(samples: Float32Array): number {
   return Math.sqrt(sum / Math.max(1, samples.length));
 }
 
-/** The words a server refusal of the call carries, for the pill. A sentence
- * that already says why no call was placed is kept as the server wrote it
- * (English or French). */
-export function realtimeRefusalText(code: string | undefined, fallback: string): string {
-  if (/^(?:No call was placed:|Aucun appel :)/.test(fallback)) return fallback;
-  if (code === "realtime_key_refused") return "The realtime voice key was refused. Fix it in Settings > Voice.";
-  if (code === "realtime_not_configured") return "No realtime voice is set up. Add an xAI key in Settings > Voice.";
-  if (code === "realtime_unreachable") return "The realtime voice service did not answer. Call again in a moment.";
-  // #5179: the server named the voice it could not find, in the person's
-  // language, with the words to act on: never rewrite it as a network failure
-  if (code === "realtime_voice_unknown") return "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.";
+/** The words a server refusal of the call carries, for the pill. The server
+ * writes this sentence in the person's own language (server/voice/voice-mode.ts
+ * picks it from the locale and sends it as the refusal's own words,
+ * server/voice/grok-account-voice.ts voiceNameCallReason and noCallReason): a
+ * refused voice name, a refused key, an unreachable service. The client knows
+ * nothing of the person's language, so it never rewrites that sentence: doing
+ * so dropped English on a French person for every code (#5220). The server is
+ * the single source of these words. */
+export function realtimeRefusalText(fallback: string): string {
   return fallback;
 }
 
@@ -266,7 +264,7 @@ export class RealtimeVoiceCall {
       if (this.socket !== socket || this.closed || this.refused) return;
       const { code, reason } = event as CloseEvent;
       if (reason === "realtime_key_refused" || reason === "realtime_not_configured" || reason === "realtime_unreachable" || reason === "realtime_voice_unknown") {
-        this.emit("note", realtimeRefusalText(reason, REALTIME_DROP_TEXT.server), reason);
+        this.emit("note", realtimeRefusalText(REALTIME_DROP_TEXT.server), reason);
         this.set({ phase: "ended" });
         return;
       }
@@ -356,7 +354,7 @@ export class RealtimeVoiceCall {
       case "refused": {
         // said plainly, never another way of speaking: no realtime voice, no call
         const code = typeof frame.code === "string" ? frame.code : undefined;
-        this.emit("note", realtimeRefusalText(code, typeof frame.error === "string" ? frame.error : "The call could not start."), code);
+        this.emit("note", realtimeRefusalText(typeof frame.error === "string" ? frame.error : REALTIME_DROP_TEXT.server), code);
         this.refused = true;
         this.set({ phase: "ended" });
         return;

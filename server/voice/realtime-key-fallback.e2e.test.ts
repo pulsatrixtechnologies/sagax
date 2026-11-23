@@ -55,6 +55,9 @@ let xaiSockets: WebSocketServer;
 let realtimeUrl = "";
 let server: Server;
 let origin = "";
+/** the organization's key, mutable so one test can run an installation with
+ * no key of its own (`realtime_not_configured`, #5222) */
+let orgKey = ORG_KEY;
 let clock = 1_000_000;
 const usage: VoiceUsage[] = [];
 const log: string[] = [];
@@ -106,7 +109,7 @@ beforeAll(async () => {
     organization: true,
     speaker: (auth) => (auth.kind === "session" && auth.session.principalId ? { principalId: auth.session.principalId, sub: `sub-${auth.session.principalId.slice(2)}` } : { principalId: "" }),
     target: (_auth, botId, threadId) => ({ botId, botName: "Quasar", threadId: threadId ?? "t-1", ownerPrincipalId: "p-ada" }),
-    serverKey: () => ORG_KEY,
+    serverKey: () => orgKey,
     hasOwnKey: () => true,
     resolveOwnKey: async (sub) => (own[sub] ? { ok: true, key: own[sub]!, fingerprint: "fp" } : { ok: false, error: "no_key" }),
     serverKeyAllowed: () => true,
@@ -145,6 +148,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
+  orgKey = ORG_KEY;
   for (const key of Object.keys(answers)) delete answers[key];
   asked.length = 0;
   usage.length = 0;
@@ -163,9 +167,11 @@ async function until<T>(what: string, check: () => T | undefined | null | false,
   }
 }
 
-/** One call of `person` to the bot: the frame that opened or refused it, then a hang-up. */
-async function placeCall(person: string, voice?: string): Promise<Record<string, any>> {
-  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=fr&threadId=t-1${voice ? `&voice=${voice}` : ""}`, { headers: { origin, "x-test-person": person } });
+/** One call of `person` to the bot: the frame that opened or refused it, then a hang-up.
+ * `language` is the call's language; the refusal sentence follows the person's
+ * interface language, which this harness drives with it (#5222). */
+async function placeCall(person: string, voice?: string, language = "fr"): Promise<Record<string, any>> {
+  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=${language}&threadId=t-1${voice ? `&voice=${voice}` : ""}`, { headers: { origin, "x-test-person": person } });
   const frames: Array<Record<string, any>> = [];
   ws.on("message", (data, binary) => { if (!binary) frames.push(JSON.parse(String(data)) as Record<string, any>); });
   await new Promise<void>((resolve, reject) => { ws.once("open", () => resolve()); ws.once("error", reject); });
@@ -360,5 +366,79 @@ describe("a voice the provider does not know", () => {
     expect(call.error).not.toContain("ne connaît pas cette voix");
     // no second attempt: the name was never the problem
     expect(asked).toEqual([BEN_KEY, ORG_KEY]);
+  });
+});
+
+// #5222: the reasons the server computes reach the person inside the refused
+// frame, written in the person's own language, and each one says where to go
+// and what to do. These are the paths where no connected Grok account was
+// tried, so `noCallReason` stays quiet and the server writes the sentence.
+describe("a refusal the person reads in their own language, end to end", () => {
+  it("an organization out of credits is an administrator's business, said in French", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[ORG_KEY] = 402;
+    const call = await placeCall("p-cara");
+    expect(call.type).toBe("refused");
+    expect(call.code).toBe("realtime_key_refused");
+    expect(call.error).toBe(
+      "Aucun appel : la clé xAI de ton organisation n'a plus de crédits. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans Réglages > Fournisseurs > Voix, puis rappeler.",
+    );
+    // credits are never dressed up as the voice or the network
+    expect(call.error).not.toMatch(/ne répond pas|réseau|ne connaît pas cette voix/i);
+    expect(call.tried).toEqual([{ source: "org-key", last4: ORG_KEY.slice(-4), failure: "quota" }]);
+  });
+
+  it("the same organization, for an English person, in English", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[ORG_KEY] = 402;
+    const call = await placeCall("p-cara", undefined, "en");
+    expect(call.code).toBe("realtime_key_refused");
+    expect(call.error).toBe(
+      "No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in Settings > Providers > Voice, then call back.",
+    );
+  });
+
+  it("a member whose own key and the organization's key are both dry is sent to their own page, and told who fixes the other", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[BEN_KEY] = 402;
+    answers[ORG_KEY] = 402;
+    const call = await placeCall("p-ben");
+    expect(call.code).toBe("realtime_key_refused");
+    expect(call.error).toBe(
+      "Aucun appel : ta clé xAI dans Perspicax n'a plus de crédits, et la clé xAI de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle. Pour la clé que tu as reçue, demande à un administrateur de ton organisation.",
+    );
+    expect(asked).toEqual([BEN_KEY, ORG_KEY]);
+  });
+
+  it("an xAI that never answers says to retry, not to reconfigure, in French", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[ORG_KEY] = 503;
+    const call = await placeCall("p-cara");
+    expect(call.code).toBe("realtime_unreachable");
+    expect(call.error).toBe("Aucun appel : la voix en direct ne répond pas. Réessaie l'appel dans un moment; si ça dure, xAI est en panne.");
+    // an outage says nothing about credits
+    expect(call.error).not.toMatch(/crédits|crédit/i);
+  });
+
+  it("a person with nothing set up is told what to add and on which page, in French", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    orgKey = "";
+    const call = await placeCall("p-cara");
+    expect(call.code).toBe("realtime_not_configured");
+    expect(call.error).toBe(
+      "Aucun appel : aucune voix en direct n'est prête pour toi. Ajoute une clé xAI dans Réglages > Fournisseurs > Voix, puis rappelle.",
+    );
+    // nothing was asked of the provider: the call never left the server
+    expect(asked).toEqual([]);
+  });
+
+  it("the same missing setup, for an English person, in English", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    orgKey = "";
+    const call = await placeCall("p-cara", undefined, "en");
+    expect(call.code).toBe("realtime_not_configured");
+    expect(call.error).toBe(
+      "No call was placed: no live voice is set up for you. Add an xAI key in Settings > Providers > Voice, then call back.",
+    );
   });
 });

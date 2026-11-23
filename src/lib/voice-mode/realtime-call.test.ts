@@ -1,10 +1,14 @@
 // Why a realtime call dropped, in plain words (0.8.29: every refused call
 // socket said only "The call dropped. Try again.").
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { setLocale } from "@/lib/i18n";
+import en from "@/locales/en.json";
+import fr from "@/locales/fr.json";
 
 import { onVoiceKeyEvent, type VoiceKeyEvent } from "./api";
 import { voiceKeyFallbackNote } from "./failure";
-import { REALTIME_DROP_TEXT, RealtimeVoiceCall, realtimeDrop, realtimeRefusalText, realtimeStatusUrl } from "./realtime-call";
+import { REALTIME_DROP_KEYS, RealtimeVoiceCall, realtimeDrop, realtimeDropText, realtimeRefusalText, realtimeStatusUrl } from "./realtime-call";
 
 class FakeSocket {
   readyState = 0;
@@ -34,6 +38,8 @@ function call(probe?: (url: string) => Promise<number | "offline">) {
   return { engine, notes, frame, close };
 }
 
+afterEach(() => setLocale("en"));
+
 describe("realtime call drop reasons", () => {
   it("maps the server's reason, a close code, or the status route's answer", () => {
     expect(realtimeDrop({ ended: "key", ready: true })).toBe("key");
@@ -60,14 +66,14 @@ describe("realtime call drop reasons", () => {
     const { notes, close } = call(async (url) => { asked.push(url); return 200; });
     await close(1006);
     expect(asked).toEqual(["https://bot.example.test/api/bots/b-1/voice/status"]);
-    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.server, code: "dropped_server" }]);
+    expect(notes).toEqual([{ text: realtimeDropText("server"), code: "dropped_server" }]);
     expect(notes[0]!.text).not.toMatch(/call dropped/i);
   });
 
   it("a refused sign-in says so", async () => {
     const { notes, close } = call(async () => 401);
     await close(1006);
-    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.auth, code: "dropped_auth" }]);
+    expect(notes).toEqual([{ text: realtimeDropText("auth"), code: "dropped_auth" }]);
   });
 
   it("no network says so", async () => {
@@ -82,14 +88,14 @@ describe("realtime call drop reasons", () => {
     frame({ type: "ready", sampleRate: 24_000 });
     await close(1006);
     expect(asked).toBe(0);
-    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.network, code: "dropped_network" }]);
+    expect(notes).toEqual([{ text: realtimeDropText("network"), code: "dropped_network" }]);
   });
 
   it("the voice refusing the key mid call says to fix the key", () => {
     const { notes, frame } = call();
     frame({ type: "ready", sampleRate: 24_000 });
     frame({ type: "ended", by: "upstream", reason: "key" });
-    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.key, code: "dropped_key" }]);
+    expect(notes).toEqual([{ text: realtimeDropText("key"), code: "dropped_key" }]);
   });
 
   // #5220: when the refusal only reaches the client as the socket closing on a
@@ -101,7 +107,7 @@ describe("realtime call drop reasons", () => {
   it("a socket that closed on a refusal code invents no client text of its own", async () => {
     const { notes, close } = call();
     await close(4000, "realtime_voice_unknown");
-    expect(notes).toEqual([{ text: REALTIME_DROP_TEXT.server, code: "realtime_voice_unknown" }]);
+    expect(notes).toEqual([{ text: realtimeDropText("server"), code: "realtime_voice_unknown" }]);
     expect(notes[0]!.text).not.toMatch(/does not know that voice|ne connaît pas cette voix/i);
   });
 
@@ -142,6 +148,40 @@ describe("realtime call drop reasons", () => {
       .toBe("Le service de voix n'a pas répondu. Rappelez dans un instant.");
     expect(realtimeRefusalText("No realtime voice is set up. Add an xAI key in Settings > Voice."))
       .toBe("No realtime voice is set up. Add an xAI key in Settings > Voice.");
+  });
+
+  // #5222: the four close lines are the only voice failure text the client
+  // writes. They come out of the catalog, so they read in the person's
+  // language like everything else, and no French line carries an English menu
+  // path. Read as the person sees them: the emitted note.
+  it("each close line reads in French and in English, from the catalog", async () => {
+    for (const drop of ["auth", "key", "network", "server"] as const) {
+      const key = REALTIME_DROP_KEYS[drop];
+      expect(en, key).toHaveProperty(key);
+      expect(fr, key).toHaveProperty(key);
+      expect(realtimeDropText(drop)).toBe(en[key as keyof typeof en]);
+      setLocale("fr");
+      const said = realtimeDropText(drop);
+      expect(said).toBe(fr[key as keyof typeof fr]);
+      // no English menu path inside the French sentence
+      expect(said, key).not.toMatch(/Settings|Providers|Voice|Models/i);
+      setLocale("en");
+    }
+  });
+
+  it("a French person whose socket fell reads the French close line", async () => {
+    setLocale("fr");
+    const { notes, close } = call(async () => "offline");
+    await close(1006);
+    expect(notes).toEqual([{ text: fr["voiceMode.drop.network" as keyof typeof fr] as string, code: "dropped_network" }]);
+    expect(notes[0]!.text).not.toMatch(/connection|network/i);
+  });
+
+  it("a French person whose server never opened the call reads the French server line", async () => {
+    setLocale("fr");
+    const { notes, close } = call(async () => 200);
+    await close(1006);
+    expect(notes[0]).toEqual({ text: fr["voiceMode.drop.server" as keyof typeof fr] as string, code: "dropped_server" });
   });
 
   it("a call that went on over another key says which key was refused and why, as the other voice sockets do", () => {

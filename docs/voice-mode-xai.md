@@ -43,10 +43,18 @@ Now (`server/voice/realtime-call.ts`, `server/voice/realtime-call-host.ts`, the 
   joins it instead of running twice.
 - No realtime voice: no call. The status says `realtime: true` only when an
   xAI key serves the speaker; without it the call button says so and opens
-  the voice settings. A key xAI refuses reaches the page in words
-  (`{"type":"refused","code":"realtime_key_refused"}`: "The realtime voice
-  key was refused. Fix it in Settings > Voice."), never a fallback to text
-  to speech. The older macOS dictation call is gone. Text to speech stays
+  the voice settings. A refusal reaches the page in words, in the person's
+  own language (`{"type":"refused","code":...,"error":...}`), never a fallback
+  to text to speech. Those words are the server's, computed per code and per
+  credential (`server/voice/grok-account-voice.ts`): a key of the person's own
+  sends them to the page where that key lives ("No call was placed: your voice
+  key is out of credits. Add credits to that xAI account, or change the key in
+  Settings > Providers > Voice, then call back."), a dry organization account
+  is an administrator's business rather than a member's reconfiguration, an
+  unknown voice is a voice list to refresh, and an outage is a retry. The
+  client renders those words as they arrive and writes lines of its own only
+  for the four closes the server said nothing about (`voiceMode.drop.*`, in the
+  app's catalog). The older macOS dictation call is gone. Text to speech stays
   for reading a message aloud.
 - Logs are counters and milliseconds only (`[voice-realtime] call ended ...
   firstAudioP50=...`). Usage is booked as `grok-realtime` (seconds of audio,

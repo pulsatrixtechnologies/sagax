@@ -5,9 +5,7 @@
       "file": "server/context/delta-context.e2e.test.ts",
       "test": "never offers again a steered message the engine said it took in",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -17,9 +15,7 @@
       "file": "server/context/delta-context.e2e.test.ts",
       "test": "runs each teammate turn a restart cut again once, in place, and resumes the Chief told so (SIGTERM)",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -30,8 +26,7 @@
       "test": "runs each teammate turn a restart cut again once, in place, and resumes the Chief told so (SIGKILL)",
       "platforms": [
         "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "ubuntu-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -41,9 +36,7 @@
       "file": "server/voice-call-latency.e2e.test.ts",
       "test": "keeps one engine process for a whole call, its tools working on every turn",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -53,9 +46,7 @@
       "file": "server/voice-call-latency.e2e.test.ts",
       "test": "starts the engine when the call is accepted, and a hangup before any turn closes it",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -65,9 +56,7 @@
       "file": "server/voice-call-latency.e2e.test.ts",
       "test": "Grok: warms at call start, then every call turn is a bare prompt whose tools use the current token",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -77,9 +66,7 @@
       "file": "src/locales/server-tutoiement-fr.test.ts",
       "test": "fr: French written by the server and shared code uses tu, never vous / votre / vos nor a verb in -ez",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -101,9 +88,7 @@
       "file": "src/components/browser-install-opt-in.test.ts",
       "test": "browser installation opt-in > keeps both opt-ins unavailable when the server cannot install the engine",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -113,9 +98,7 @@
       "file": "src/components/lazy-screens.test.ts",
       "test": "launch bundle > leaves the on-request screens out of it",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -125,9 +108,7 @@
       "file": "server/peers/incidents.e2e.test.ts",
       "test": "queues reports that find the Chief's incidents thread busy, answers them together, and runs each without a computer it cannot have",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -137,9 +118,7 @@
       "file": "server/peers/incidents.e2e.test.ts",
       "test": "keeps the team computer for a report turn, and answers without it once it is missing",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -173,9 +152,7 @@
       "file": "shared/misuse-guardrails.test.ts",
       "test": "what a person reads > names one reason per category, never the whole list, and says what to do instead",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -209,9 +186,7 @@
       "file": "server/room-context.e2e.test.ts",
       "test": "shows a bot's room context, compacts on request, and compacts before a turn above the threshold",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -221,9 +196,7 @@
       "file": "src/lib/no-visible-ids.test.ts",
       "test": "no UUID on screen > the bot email address row and the trigger's address line show the address, never the bot's id (B21)",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -257,9 +230,7 @@
       "file": "src/components/StoreSubscriptions.renders.dom.test.ts",
       "test": "isolates the desktop from background reply, routine and activity frames",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -269,8 +240,7 @@
       "file": "server/org/org-member-api.e2e.test.ts",
       "test": "Perspicax AI clients: the Sagax member API > M6: a streamed send stops at a card; the AI client answers it as the person; the watch ends with the summary",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -361,9 +331,7 @@
       "file": "server/memory/memory-room-prompt.e2e.test.ts",
       "test": "gives a room turn the memory_update guidance, not the file-tools one",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -373,9 +341,7 @@
       "file": "server/turns/steer-queue.test.ts",
       "test": "steer-queue e2e (fake ACP fleet) > drains exactly once after completion precedes the dispatch acknowledgment",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -385,9 +351,7 @@
       "file": "server/turns/steer-queue.test.ts",
       "test": "steer-queue e2e (fake ACP fleet) > retains a replacement receipt through stale completion and settles its own completion before ACK",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -397,9 +361,7 @@
       "file": "server/turns/steer-queue.test.ts",
       "test": "steer-queue e2e (fake ACP fleet) > queues sends while busy and drains them into exactly one attended turn",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -409,9 +371,7 @@
       "file": "server/turns/steer-queue.test.ts",
       "test": "steer-queue e2e (fake ACP fleet) > drains the queue after an interrupt — stop-then-steer",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -421,9 +381,7 @@
       "file": "server/turns/steer-queue.test.ts",
       "test": "steer-queue e2e (fake ACP fleet) > queues a person's 1:1 message behind the bot's room turn instead of bouncing it",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -448,29 +406,6 @@
         "macos-latest",
         "ubuntu-latest",
         "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/shared-helper-unique.guard.test.ts",
-      "test": "shared helpers stay unique (#1382) > canonicalJson is exported as a function only from its home(s)",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/org/org-routines.e2e.test.ts",
-      "test": "Perspicax organization, slice 6: routines in their person's name > bob's routine on alice's bot runs as bob, on alice's key, then pauses no_right",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -631,9 +566,7 @@
       "file": "src/components/RoutineEditorSheet.dom.test.ts",
       "test": "the routine panel, view mode > opens read-only like the reference app: < name ×, Instruction as text, When to run with its icon and rows, [Pause] [Edit] [trash]",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -643,9 +576,7 @@
       "file": "src/components/RoutineEditorSheet.dom.test.ts",
       "test": "the routine panel, edit mode > shows only the essentials: name, prompt, one When to run row; Advanced folded with its summary",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -655,8 +586,7 @@
       "file": "server/org/org-mcp.e2e.test.ts",
       "test": "Perspicax organization, slice 5: MCP for the person who speaks > scenario E: bob's turn reaches Perspicax as bob, named Pulsa Bot (<bot id>); his tokens are revoked after it",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -723,114 +653,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > keeps solo direct informed once, then dispatches only after the slot is free",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > keeps solo room informed once, then dispatches only after the slot is free",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > keeps the private source's actual owner informed once, then dispatches only after the slot is free",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes another person's card in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes revoked read access in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes a shared room's audience in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes a confidential card thread in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes a confidential solo direct thread in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/waits/queued-behind-person.test.ts",
-      "test": "runtime admission queued behind a person's card > never exposes a confidential solo thread from a room in a receipt or requester context",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/provider-key-flow.test.ts",
       "test": "saving and replacing a workspace key reaches an existing bot's next request without leaking keys",
       "platforms": [
@@ -844,8 +666,7 @@
       "file": "server/provider-key-flow.test.ts",
       "test": "switching the workspace endpoint moves discovery and existing chats without changing a private connection",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -855,8 +676,7 @@
       "file": "server/session-credentials.e2e.test.ts",
       "test": "keeps a thread's Claude process and ACP session across turns on Auto with this computer mounted",
       "platforms": [
-        "macos-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -891,8 +711,7 @@
       "test": "every shape holds together and keeps its face > through every move, at five moments, the body stays one whole outline with its two eyes, and comes back to rest",
       "platforms": [
         "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "ubuntu-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -925,9 +744,7 @@
       "file": "server/voice/voice-fast-turn.e2e.test.ts",
       "test": "runs a call on the fast model from a short context in one warm session, and the conversation keeps its own",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -995,9 +812,7 @@
       "file": "server/remote-support/remote-support-local.test.ts",
       "test": "remote support on this computer > encodes the fast process: standard by default, three calls, script in the first reply, no jpg",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1007,9 +822,7 @@
       "file": "server/sandbox/sandbox-k8s-wake.test.ts",
       "test": "the cluster wake > posts once for many concurrent calls, which all wait on the same wake",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1019,9 +832,7 @@
       "file": "server/vault/credential-vault.e2e.test.ts",
       "test": "asks for a login with a card, grants it once, resumes the bot with a handle and never echoes the value",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1031,9 +842,7 @@
       "file": "src/components/bot-catalog/bot-catalog.test.ts",
       "test": "the detail pane > formats routine schedules in the person's language, never raw cron or UTC",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1043,9 +852,7 @@
       "file": "server/pages/published-pages.test.ts",
       "test": "a reading link in its person's look > the bar and the frame wear the person's tokens, light and dark by the reader's system",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1103,9 +910,7 @@
       "file": "src/components/bot-settings/ProposalStatus.test.ts",
       "test": "Edit Profile boundary markers in sections > a member manages their own bot's fields, the level without a lock (#1107, one approval level)",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1137,9 +942,7 @@
       "file": "server/comms.test.ts",
       "test": "routine comms on the job runtime > reports a delegated turn cut by provider reload as interrupted rather than silently completed",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1149,9 +952,7 @@
       "file": "server/comms.test.ts",
       "test": "routine comms on the job runtime > returns a teammate's 64-step cap to its requester without an unattended Continue thread",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1161,9 +962,7 @@
       "file": "server/comms.test.ts",
       "test": "routine comms on the job runtime > returns a teammate provider's actual failure words to its requester",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1173,8 +972,7 @@
       "file": "server/mcp-restart.e2e.test.ts",
       "test": "restart keeps the key and replaces the warm process, and so does turning the server off and on",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1207,9 +1005,7 @@
       "file": "server/threads/thread-prewarm.e2e.test.ts",
       "test": "warms the conversation, the first message reuses that process, and an unused warm is closed",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1219,9 +1015,7 @@
       "file": "src/components/skin-fx/skin-fx.test.ts",
       "test": "the Appearance gallery's layout > sets the preview band full width above the tabs, one grid under them, stacked in a narrow pane",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1231,9 +1025,7 @@
       "file": "server/long-running-chief.e2e.test.ts",
       "test": "carries a consult-and-implement job over several teammate turns, through a step cap, to one final answer",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1243,9 +1035,7 @@
       "file": "server/long-running-chief.e2e.test.ts",
       "test": "wakes the Chief after a restart cuts its teammates mid-job, and it reports (SIGTERM)",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1255,9 +1045,7 @@
       "file": "server/long-running-chief.e2e.test.ts",
       "test": "wakes the Chief after a restart cuts its teammates mid-job, and it reports (SIGKILL)",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1267,9 +1055,7 @@
       "file": "server/long-running-chief.e2e.test.ts",
       "test": "keeps a job running through a provider settings save that changes nothing",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1279,8 +1065,7 @@
       "file": "server/mistral-key-flow.test.ts",
       "test": "Mistral keys persist, rotate, clear and reach real HTTP turns without leaking into public state",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1416,8 +1201,7 @@
       "file": "server/steer-e2e.test.ts",
       "test": "mid-turn steering e2e > keeps two queued attachment messages as two native images in one follow-up turn",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1427,8 +1211,7 @@
       "file": "server/steer-e2e.test.ts",
       "test": "mid-turn steering e2e > an attachment sent during a Claude turn is steered into it as native images",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1438,8 +1221,7 @@
       "file": "server/steer-e2e.test.ts",
       "test": "mid-turn steering e2e > a queued room attachment refuses the fold and waits for a real turn",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1449,8 +1231,7 @@
       "file": "server/steer-e2e.test.ts",
       "test": "mid-turn steering e2e > a room steer folds a queued attachment into the running Claude turn as native images",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1460,8 +1241,7 @@
       "file": "server/steer-e2e.test.ts",
       "test": "mid-turn steering e2e > the queue steer endpoint keeps a codex attachment queued and says why",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1471,9 +1251,7 @@
       "file": "server/engines/claude-account-api.test.ts",
       "test": "Claude account HTTP API > keeps per-bot account selections separate and protects directories referenced by bots or past tasks",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1483,9 +1261,7 @@
       "file": "server/engines/claude-account-api.test.ts",
       "test": "Claude account HTTP API > rejects busy-account edits while sibling changes preserve the running process and later SSE events",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1496,28 +1272,6 @@
       "test": "px-cache-gc > empties the other environments' targets, least recently used first, before the current one",
       "platforms": [
         "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/create-bot-any-bot.e2e.test.ts",
-      "test": "a bot that is not the Primary Bot creates a bot for its person, and a bot-made bot or a confidential thread cannot",
-      "platforms": [
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/runtime-roots.e2e.test.ts",
-      "test": "T10 parks a teammate's turn on its credential card, tells the Chief at once, and the key answers the teammate",
-      "platforms": [
-        "ubuntu-latest",
-        "windows-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -1673,16 +1427,6 @@
     {
       "file": "server/routines/routine-cited-paths.test.ts",
       "test": "cited paths of a routine's instructions (#1996) > reports only the missing ones, a ~/ path resolved under home, as warnings",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/shared-helper-unique.guard.test.ts",
-      "test": "parseOrgLibraryCatalog electron copy matches shared > generated electron/org-library-catalog.mjs equals the strip of shared/",
       "platforms": [
         "windows-latest"
       ],
@@ -2013,16 +1757,6 @@
     {
       "file": "server/models/model-image.test.ts",
       "test": "model image fit > puts the copy of a picture in a subfolder beside it",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/rules/custom-rules-model.e2e.test.ts",
-      "test": "judges a card against the person's free rules: allow answers it with the reason, deny refuses it, unsure leaves it",
       "platforms": [
         "windows-latest"
       ],
@@ -2582,16 +2316,6 @@
     },
     {
       "file": "server/server-writes.test.ts",
-      "test": "bots.json saves > are compact, and skip an unchanged save without reading the file back",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/server-writes.test.ts",
       "test": "bots.json saves > land once per batch, and the file holds every change when the batch returns",
       "platforms": [
         "windows-latest"
@@ -2621,16 +2345,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/server-writes.test.ts",
-      "test": "routines.json saves > write a manual run through its turn, and a restart after any step reads what that step saved",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/tailcat-bin.test.ts",
       "test": "resolveTailcatBinary > prefers the shipped binary over Homebrew, and Homebrew when the app did not ship one",
       "platforms": [
@@ -2652,57 +2366,7 @@
     },
     {
       "file": "scripts/testing/known-failures.test.ts",
-      "test": "the command line > fails a run with an unlisted failure, names it, and writes the shrunk list",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/known-failures.test.ts",
       "test": "the command line > keeps a listed test that passed in a run on Linux only, since it may still fail on Windows or macOS",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/known-failures.test.ts",
-      "test": "the command line > is green when every failure is listed, and red when a shard sent no results",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/known-failures.test.ts",
-      "test": "the command line > fills the list from a run in seed mode and stays green",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/known-failures.test.ts",
-      "test": "the command line > extracts a shard's results from a vitest JSON report",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/known-failures.test.ts",
-      "test": "the command line > checks against a git revision that the list only shrank",
       "platforms": [
         "windows-latest"
       ],

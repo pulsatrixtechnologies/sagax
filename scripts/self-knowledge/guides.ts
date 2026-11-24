@@ -32,6 +32,14 @@ export const SETTING_NOTES: Record<string, { text?: string; access?: string }> =
 
 export const GUIDES: Guide[] = [
   {
+    id: "bot-setup-command",
+    title: "Set up a bot with /setup",
+    where: "Bot conversation > Composer > Commands > Sagax",
+    keywords: "/setup interview configure bot configurer entrevue configuration",
+    text: "In a bot conversation, send /setup on its own or add the job after it. The bot asks about the work, schedule, accounts and working folder, then proposes the configuration using its available tools. You can run it again to change an existing bot. The command menu offers it for bots whose engine supports agent tools.",
+    refs: ["file:server/setup-mode.ts", "file:src/components/Composer.tsx-parts/useComposerCommands.ts"],
+  },
+  {
     id: "settings-by-bot",
     title: "Change any setting through a bot",
     where: "bot tool sagax_settings; the same settings on screen (bot editor, Automations, Settings)",

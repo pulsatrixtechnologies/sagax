@@ -5,7 +5,7 @@ import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.
 
 it("dispatches setup and canonical standing instructions through the real isolated app", async () => {
   // 062d7c42e continues tool-only endings; inspect this requested turn, not a follow-up.
-  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]" });
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]", SAGAX_TURN_CLOCK: "on" });
   const env = { SAGAX_URL: fixture.info.url };
   const api = async (method: string, path: string, body?: unknown) => {
     const response = await fetch(`${fixture.info.url}${path}`, {
@@ -23,10 +23,16 @@ it("dispatches setup and canonical standing instructions through the real isolat
       await runControlOmb(["wait", "--bot", bot.id, "--timeout", "30"], { env });
       return JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
     };
+    await api("PUT", "/api/settings/bot", { timeZone: "America/Toronto" });
     const setup = await turn("/setup Help me track garden watering");
+    expect(JSON.stringify(setup.prompt)).toContain("[Current time:");
     expect(setup.systemPrompt).toContain("The user explicitly asked you to set yourself up");
     expect(setup.systemPrompt).toContain("propose_profile");
     expect(JSON.stringify(setup.prompt)).toContain("Set yourself up for this job: Help me track garden watering");
+
+    const bare = await turn("/setup");
+    expect(JSON.stringify(bare.prompt)).toContain("Set yourself up. Ask me what you need to know");
+    expect(JSON.stringify(bare.prompt)).toContain("[Current time:");
 
     await api("PATCH", `/api/bots/${bot.id}`, { description: "Garden helper", soul: "Only water the fixture garden after approval." });
     writeFileSync(join(fixture.info.dataDir, "bots", bot.id, "SOUL.md"), "UNAPPROVED MIRROR INSTRUCTIONS");
@@ -42,6 +48,7 @@ it("dispatches setup and canonical standing instructions through the real isolat
     ]));
     const messages = await runControlOmb(["messages", "--bot", bot.id, "--limit", "10"], { env });
     expect(JSON.stringify(messages)).toContain("hello from fake claude");
+    expect(JSON.stringify(messages)).toContain('"/setup"');
   } finally {
     await fixture.close();
   }

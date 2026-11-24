@@ -46,6 +46,9 @@ export function createPrepareAdmitStartTurn(
     engineAccessNotice,
     engineDisplayName,
     explainPick,
+    expandSetupTurnText,
+    setupModeActive,
+    peerHopTurn,
     extractTurnImages,
     generateThreadTitle,
     botTitleEngine,
@@ -141,9 +144,21 @@ export function createPrepareAdmitStartTurn(
     // checks above. From here to the dispatch claim nothing yields again.
     assertTurnAdmission(state.botId, state.threadId);
   }
-  state.providerText = promptWithDataContext(usesNativeImageInput ? state.resolvedImages.text : state.text, state.opts?.dataContext);
-  state.turnImages = usesNativeImageInput ? state.resolvedImages.images : [];
   state.commsDepth = state.opts?.commsDepth ?? 0;
+  // 2026-10-28: every turn of an engine that mounts the agents server gets
+  // it; a teammate one hop away gets it without the peer tools (peerHop).
+  // The person-facing parts (setup, skill authoring, the computer choice,
+  // the team roster) stay with the turns that may reach a peer.
+  state.peerHop = peerHopTurn(state.commsDepth, state.coordinated);
+  state.agentsMounted = state.instance.adapter.capabilities.agentsMcp === true;
+  state.peerToolsMounted = state.agentsMounted && !state.peerHop;
+
+  // Parse the person's command before the clock, page context or workplace
+  // notes wrap it. The transcript keeps the submitted text.
+  const inputText = usesNativeImageInput ? state.resolvedImages.text : state.text;
+  state.setupMode = state.peerToolsMounted && setupModeActive({ text: inputText });
+  state.providerText = promptWithDataContext(state.setupMode ? expandSetupTurnText(inputText) : inputText, state.opts?.dataContext);
+  state.turnImages = usesNativeImageInput ? state.resolvedImages.images : [];
   // Classify the turn where the peer paths' depth actually arrives: by the
   // time it settles, the fold has only a thread id to go on.
   if (state.commsDepth > 0) markInternalTurn(state.threadId);

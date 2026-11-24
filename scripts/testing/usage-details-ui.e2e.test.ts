@@ -40,7 +40,9 @@ if (!enabled) console.log("skipping usage details UI: set SAGAX_UI_E2E=1 to inst
     })()`);
     await expect.poll(async () => (await read()).result?.card, { timeout: 15_000 }).toContain("10 uncached input · 2 cached input · 5 output");
     const chip = (await read()).result;
-    expect(chip.text).toContain("$0.01");
+    // #5224: the header shows the conversation in tokens, never a dollar figure
+    expect(chip.text).not.toContain("$");
+    expect(chip.label).toContain("10 uncached");
     expect(chip.card).toContain("Last message");
     expect(chip.card).not.toContain("17 read");
     expect(chip.card).not.toContain("15 new");

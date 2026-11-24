@@ -1983,6 +1983,10 @@ Rules that hold at every width:
   medium, no pill fill or ring), on the bar's own ground so it does not sit
   over the messages. A group, a split pane, a coding chat and a bot-to-bot
   window keep the pill either way.
+- Header usage chip: the conversation's size in tokens ("38k uncached"),
+  never a dollar figure, for everyone (owner, D-20261124-014). The exact
+  cost lives in Settings > Usage and in the bot's Activity > Usage (#5224;
+  tokens in place of the amount is an agent's choice).
 - Reading column: the transcript, the cards and the composer share one
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the

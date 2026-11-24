@@ -1,15 +1,17 @@
-// The conversation's cost in the chat header, and the last turn's own
-// figures in the card the header e2e reads. Retro 98 hides the chip; the
-// status bar there shows the same total.
+// The conversation's size in the chat header, in tokens, and the last
+// turn's own figures in the card the header e2e reads. Never a dollar
+// figure (#5224): the exact cost lives in Settings > Usage and in the bot's
+// Activity > Usage. Retro 98 hides the chip; its status bar keeps its own
+// spend pane.
 import type { TaskUsage } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { lastTurnDetail, usageChip, usageDetail } from "@/lib/usage";
+import { lastTurnDetail, usageDetail, usageTokensChip } from "@/lib/usage";
 
 export function UsageChip({ usage }: { usage?: TaskUsage }) {
   if (!usage) return null;
-  const label = usageChip(usage);
+  const label = usageTokensChip(usage);
   if (!label) return null;
-  const last = lastTurnDetail(usage);
+  const last = lastTurnDetail(usage, { cost: false });
   return (
     <button
       type="button"

@@ -138,6 +138,16 @@ describe("All models", () => {
     expect(host.querySelector<HTMLElement>('[data-model-cascade-provider="xai"]')!.querySelector("svg.text-popover-accent")).toBeNull();
   });
 
+  it("a thread's \"use the bot's model\" row stays at the top of All models, as it was at the top of Manual", () => {
+    const withFollow = sections();
+    withFollow[0]!.rows.push({ key: "follow", kind: "follow", label: "Use Wren's model", detail: "Claude · opus", current: false });
+    const given = render({ sections: withFollow, autoOn: false, modes: { current: null, onPick: vi.fn() } });
+    click('[data-mode-row="all"]');
+    expect(panel()).toBe("providers");
+    click('[data-follow-bot-model="true"]');
+    expect(given.onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: "follow" }));
+  });
+
   it("with nothing usable the provider panel says so instead of drawing an empty list", () => {
     render({ sections: [sections()[0]!, { key: "openai", label: "OpenAI", rows: [], accounts: [{ instanceId: "codex", label: "ada@example.com", state: "Signed out" }] }] });
     click('[data-mode-row="all"]');

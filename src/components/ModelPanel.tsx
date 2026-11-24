@@ -216,7 +216,9 @@ export function ModelPanel(props: ModelPanelProps) {
   // every row is one line, the same height: the name and its markers at the left,
   // what the app knows (context size, origin, a warning) muted at the right;
   // M-20261119-015: a row that names its account takes that second line
-  const rovingRows = modes ? [...cascadeFavorites, ...listedRows] : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
+  // a thread's "use the bot's model" row leads All models, as it led the Manual list
+  const cascadeLead = modes && at.panel === "providers" ? lead : [];
+  const rovingRows = modes ? [...cascadeLead, ...cascadeFavorites, ...listedRows] : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
   const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
   const rovingFirst = rovingRows[0];
   const modelRow = (row: ModelMenuRow, group?: string) => {
@@ -420,6 +422,7 @@ export function ModelPanel(props: ModelPanelProps) {
           })
         ) : modes && at.panel === "providers" ? (
           <>
+            {cascadeLead.map((row) => modelRow(row))}
             {cascadeFavorites.length > 0 && (
               <div data-model-cascade-favorites="">
                 <div className={GROUP_HEADING}>{t("model.favorites")}</div>
@@ -432,7 +435,7 @@ export function ModelPanel(props: ModelPanelProps) {
               return (
                 <div key={provider.id} className={PANEL_ROW}>
                   <button type="button" aria-haspopup="menu" data-model-panel-row={`provider:${provider.id}`} data-model-cascade-provider={provider.id}
-                    tabIndex={on || (!cascadeCurrent && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
+                    tabIndex={on || (!cascadeCurrent && !cascadeLead.length && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
                     onMouseDown={(event) => event.preventDefault()}
                     onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(openProvider(provider)); } }}
                     onClick={() => go(openProvider(provider))}

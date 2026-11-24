@@ -160,10 +160,37 @@ describe("group chat bubbles", () => {
       ], memberConfig);
       const stamps = [...markup.matchAll(/data-testid="transcript-date"[^>]*>([^<]+)</g)].map((match) => match[1]);
       expect(stamps).toEqual([`Today ${formatTime(t0)}`, `Today ${formatTime(later)}`]);
-      expect(markup).toContain("self-end pb-1 text-[11px] tabular-nums");
+      // the hover time, on one line (#5230: it used to wrap, or leave the row)
+      expect(markup).toMatch(/<span data-room-time="" class="[^"]*whitespace-nowrap[^"]*text-\[11px\][^"]*tabular-nums[^"]*">/);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps a line's time inside the room the bubble leaves for its actions (#5230)", () => {
+    // The bubble's cap leaves 82px for the actions. The time used to be one
+    // more item of the row, after them: beside a bubble at its cap (a wide
+    // table that cannot shrink) it left the column, under the right panel.
+    // It sits under the actions now, as in a bot's own conversation.
+    const markup = render([
+      person("a", { name: "Owner", id: Owner }, "mine", t0),
+      person("b", { name: "Sam", id: SAM }, "theirs", t0 + min),
+      bot("c", "maya", "reply", t0 + 2 * min),
+    ], memberConfig);
+    const bars = [...markup.matchAll(/<div data-room-message-bar="(user|bot)" class="([^"]*)">/g)].map((match) => ({ side: match[1], cls: match[2] }));
+    expect(bars.map((bar) => bar.side)).toEqual(["user", "bot", "bot"]);
+    for (const bar of bars) {
+      expect(bar.cls).toContain("shrink-0");
+      expect(bar.cls).toContain("flex-col");
+    }
+    // one time per line, each inside its bar, never a direct item of the row
+    expect(markup.match(/data-room-time=""/g)).toHaveLength(3);
+    for (const piece of markup.split("data-room-message-bar=").slice(1)) {
+      expect(piece.indexOf('data-testid="message-actions"')).toBeGreaterThan(-1);
+      expect(piece.indexOf('data-room-time=""')).toBeGreaterThan(piece.indexOf('data-testid="message-actions"'));
+    }
+    expect(bars).toHaveLength(markup.match(/data-room-time=""/g)!.length);
+    expect(markup).toContain(`>${formatTime(t0 + 2 * min)}</span>`);
   });
 
   it("collapses a pair channel into one Go to conversation chip", () => {

@@ -1210,6 +1210,15 @@ export class PerspicaxDirectory {
     return { ok: true, status: response.status, body: parsed };
   }
 
+  /** The payer may withdraw consent between two runs. Read it from the linked server each time. */
+  async personalActAsConsent(subjectToken: string): Promise<boolean> {
+    const reply = await this.linkJson("GET", "/api/v1/pulsabot/people/me/act-as-consent", undefined, {
+      subjectToken, timeoutMs: 5_000, maxBytes: 2_048,
+    });
+    const body = reply.ok ? reply.body : null;
+    return typeof body === "object" && body !== null && "personal_credential" in body && body.personal_credential === true;
+  }
+
   linkPutJson(path: string, body: unknown, limits: { timeoutMs: number; maxBytes: number; subjectToken: string }): Promise<LinkPostResult> {
     return this.linkJson("PUT", path, body, limits);
   }

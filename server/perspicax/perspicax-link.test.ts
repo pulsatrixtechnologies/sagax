@@ -822,6 +822,25 @@ describe("Capabilities lot 4: the organization's declarations in the directory",
     expect(h.sync.capabilityMarketplacePolicy()).toBeUndefined();
   });
 
+  it("reads current personal act-as consent with the payer's subject and fails closed", async () => {
+    const h = harness(directoryOf([person("BOB")]));
+    await h.sync.refresh();
+    for (const [status, body, allowed] of [
+      [200, { personal_credential: true }, true],
+      [200, { personal_credential: false }, false],
+      [200, { personal_credential: "true" }, false],
+      [403, { personal_credential: true }, false],
+      [404, {}, false],
+    ] as const) {
+      h.queue.push({ status, body });
+      expect(await h.sync.personalActAsConsent("payer-fixture")).toBe(allowed);
+      expect(h.requests.at(-1)).toMatchObject({
+        url: "http://perspicax:8787/api/v1/pulsabot/people/me/act-as-consent",
+        headers: { authorization: `Bearer ${TOKEN_A}`, "x-perspicax-subject-token": "payer-fixture" },
+      });
+    }
+  });
+
   it("linkJson carries the link token and the person's sign-in token, and keeps a subject refusal's code", async () => {
     const h = harness(directoryOf([person("BOB")]));
     await h.sync.refresh();

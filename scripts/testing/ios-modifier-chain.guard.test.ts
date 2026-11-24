@@ -16,7 +16,7 @@
 // measure is ios/UITests/ChatOpenStackUITests.swift. Listed in GUARD_TESTS
 // (scripts/verify/release/guard-tests.mjs), so every PR runs it.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -206,7 +206,7 @@ function swiftFiles(dir: string, out: string[] = []): string[] {
 }
 
 const files = SOURCES.flatMap((dir) => swiftFiles(join(root, dir))).map((path) => ({
-  file: relative(root, path),
+  file: relative(root, path).split(sep).join("/"),
   source: readFileSync(path, "utf8"),
 }));
 const found = files.flatMap(({ file, source }) => conditionalHelpers(file, source));

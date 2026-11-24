@@ -39,7 +39,7 @@ export function LocalModelSharing({ directory, viewerId, value, onChange }: {
         <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={200}
           placeholder={t("pages.share.add")} aria-label={t("pages.share.add")} className={cn(FIELD, "w-full text-[13px]")} />
         {query.trim() && (
-          <ul role="listbox" aria-label={t("pages.share.add")} className="absolute inset-x-0 top-full z-[1] mt-1 max-h-64 overflow-y-auto rounded-xl border border-hairline/50 bg-elevated p-1 shadow-xl">
+          <ul role="listbox" aria-label={t("pages.share.add")} className="absolute inset-x-0 top-full z-[1] mt-1 max-h-64 overflow-y-auto rounded-lg border-[0.5px] border-border bg-elevated p-1 shadow-xl">
             {personCandidates.map((person) => (
               <li key={person.principalId}>
                 <button type="button" role="option" aria-selected="false" onClick={() => set({ kind: "person", id: person.principalId }, true)}

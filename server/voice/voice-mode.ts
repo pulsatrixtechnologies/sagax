@@ -81,7 +81,10 @@ import { speakableDelta } from "../tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
 import { paidApiKey, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
-import { noCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage } from "./grok-account-voice.ts";
+import {
+  noCallReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
+  realtimeUnreachableCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage,
+} from "./grok-account-voice.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
 import { RealtimeCallBridge, REALTIME_SAMPLE_RATE, type RealtimeBot, type RealtimeHistoryLine, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
 import { firstAudioNotice, parseVoiceAudioTiming, providerFallbackNotice, streamedTranscriptNotice, uploadedTranscriptNotice, type VoiceAudioTiming } from "./voice-timing.ts";
@@ -421,7 +424,7 @@ export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Pro
 }
 
 const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
-  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers > Voice.",
+  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers.",
   server_engine_not_allowed: "Your organization has not given you its xAI voice. Add your own xAI key, or ask an admin.",
   payer_disabled: "Your access is turned off in your organization.",
   perspicax_unreachable: "Perspicax could not be reached to read your xAI key. Try again in a moment.",
@@ -661,6 +664,11 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   const language = url.searchParams.get("language") ?? "auto";
   if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
   const voice = url.searchParams.get("voice") ?? undefined;
+  // which language every refusal sentence of this call is written in: the
+  // app's own language (`locale=`) decides alone when the client sends it;
+  // otherwise the browser's language, then the voice language (#5222: the
+  // person reads a refusal in the language they read the app in)
+  const words = voiceSentenceLanguage(acceptLanguage(req), language, url.searchParams.get("locale"));
   const { socket } = upgrade;
   upgrade.release();
   const head = upgrade.head;
@@ -678,9 +686,9 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
     page.sendText(JSON.stringify({ type: "refused", code, error: message, ...extra }));
     page.close(4000);
   };
-  if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
+  if (!deps.realtime) return refuse("realtime_unavailable", realtimeNotOnServerCallReason(words));
   if (blocked) return refuse("spend_cap", blocked);
-  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Providers > Voice.");
+  if (!keys.length) return refuse("realtime_not_configured", realtimeNotConfiguredCallReason(words));
   const callId = randomUUID();
   const link = deps.realtime.session(target, auth, callId);
   const tried: VoiceKeyRefusal[] = [];
@@ -759,15 +767,16 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   // that belongs to the credential closest to the person, and an unknown voice
   // is never dressed up as credits or as a network (#5179, #5180).
   const cause = voiceFailureCause(tried);
-  const words = voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language);
   if (cause === "voice") {
     refuse("realtime_voice_unknown", voiceNameCallReason(words), { tried, ...(voiceReset ? { voiceReset } : {}) });
     return;
   }
   const keyRefused = cause === "key" || cause === "credits";
-  const plain = keyRefused ? noCallReason(tried, words) : null;
+  // a connected Grok account was tried: its own sentence; otherwise the key
+  // that failed is named with what to do about it, in the person's language
+  const plain = keyRefused ? (noCallReason(tried, words) ?? realtimeKeyRefusedCallReason(tried, words)) : null;
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
-    plain ?? (keyRefused ? "The realtime voice key was refused. Fix it in Settings > Providers > Voice." : "The realtime voice is not reachable. Try the call again."),
+    plain ?? realtimeUnreachableCallReason(words),
     { tried });
 }
 

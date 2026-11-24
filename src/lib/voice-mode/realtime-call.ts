@@ -11,6 +11,7 @@
 //
 // The public surface is the one the call pill and the mascot use
 // (CallControls in live-call-store.ts).
+import { t } from "@/lib/i18n";
 import { noteVoiceKeyFrame } from "./api";
 import { EchoGuard } from "./echo";
 import { INITIAL_CALL, type CallState } from "./call-machine";
@@ -112,12 +113,25 @@ export function realtimeRefusalText(fallback: string): string {
  * the voice refused the key, the network, or a server error. */
 export type RealtimeDrop = "auth" | "key" | "network" | "server";
 
-export const REALTIME_DROP_TEXT: Record<RealtimeDrop, string> = {
-  auth: "The server refused the call: your sign-in was not accepted. Sign in again, then call back.",
-  key: "The realtime voice key was refused. Fix it in Settings > Voice.",
-  network: "The connection dropped. Check the network, then call again.",
-  server: "The server could not open the call. Try again in a moment; if it keeps failing, the server needs an update.",
+/** The catalog key of each drop line (#5222). These four lines are the only
+ * voice failure text the client writes itself, and only for the closes the
+ * server said nothing about: it names the catalog key and `t` renders it, so a
+ * French person never reads English here either. Nothing invents a sentence
+ * about the voice on the client (`realtimeRefusalText` passes the server's own
+ * words through, and `voiceErrorNote` keeps that rule for the other voice
+ * lines). */
+export const REALTIME_DROP_KEYS: Record<RealtimeDrop, `voiceMode.drop.${RealtimeDrop}`> = {
+  auth: "voiceMode.drop.auth",
+  key: "voiceMode.drop.key",
+  network: "voiceMode.drop.network",
+  server: "voiceMode.drop.server",
 };
+
+/** A drop line in the language the app is showing, read when the pill shows
+ * it (never at import time, so a language change is picked up). */
+export function realtimeDropText(drop: RealtimeDrop): string {
+  return t(REALTIME_DROP_KEYS[drop]);
+}
 
 /** A closed call socket as a drop reason. `ended` is the server's own
  * reason (its "ended" frame, by the voice); otherwise the close code, and
@@ -264,7 +278,7 @@ export class RealtimeVoiceCall {
       if (this.socket !== socket || this.closed || this.refused) return;
       const { code, reason } = event as CloseEvent;
       if (reason === "realtime_key_refused" || reason === "realtime_not_configured" || reason === "realtime_unreachable" || reason === "realtime_voice_unknown") {
-        this.emit("note", realtimeRefusalText(REALTIME_DROP_TEXT.server), reason);
+        this.emit("note", realtimeRefusalText(realtimeDropText("server")), reason);
         this.set({ phase: "ended" });
         return;
       }
@@ -274,7 +288,8 @@ export class RealtimeVoiceCall {
   }
 
   /** The socket closed without a word from the server: say why in plain
-   * words (realtimeDrop), never only "the call dropped". */
+   * words (realtimeDrop), in the language the app is showing (#5222), never
+   * only "the call dropped". */
   private async dropped(code: number | undefined): Promise<void> {
     const ready = this.ready;
     const known = realtimeDrop({ code, ready, ended: this.endedReason });
@@ -284,7 +299,7 @@ export class RealtimeVoiceCall {
       const statusUrl = realtimeStatusUrl(this.o.url);
       if (statusUrl) drop = realtimeDrop({ code, ready, status: await (this.o.probe ?? probeStatus)(statusUrl) });
     }
-    this.emit("note", REALTIME_DROP_TEXT[drop], `dropped_${drop}`);
+    this.emit("note", realtimeDropText(drop), `dropped_${drop}`);
     this.set({ phase: "ended" });
   }
 
@@ -354,7 +369,7 @@ export class RealtimeVoiceCall {
       case "refused": {
         // said plainly, never another way of speaking: no realtime voice, no call
         const code = typeof frame.code === "string" ? frame.code : undefined;
-        this.emit("note", realtimeRefusalText(typeof frame.error === "string" ? frame.error : REALTIME_DROP_TEXT.server), code);
+        this.emit("note", realtimeRefusalText(typeof frame.error === "string" ? frame.error : realtimeDropText("server")), code);
         this.refused = true;
         this.set({ phase: "ended" });
         return;
@@ -363,7 +378,7 @@ export class RealtimeVoiceCall {
         // the voice ended the call on its side: say why before hanging up
         if (frame.by === "upstream") {
           this.endedReason = frame.reason;
-          this.emit("note", REALTIME_DROP_TEXT[realtimeDrop({ ended: frame.reason, ready: this.ready })], `dropped_${realtimeDrop({ ended: frame.reason, ready: this.ready })}`);
+          this.emit("note", realtimeDropText(realtimeDrop({ ended: frame.reason, ready: this.ready })), `dropped_${realtimeDrop({ ended: frame.reason, ready: this.ready })}`);
         }
         this.emit("ended", String(frame.by ?? ""));
         this.hangUp();

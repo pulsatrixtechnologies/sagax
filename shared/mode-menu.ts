@@ -72,7 +72,7 @@ export function reasoningRow(input: ReasoningInput): ReasoningRow {
   const levels = [...input.levels];
   if (levels.length === 0) return { shown: false, disabled: true, choices: [] };
   const chosen = input.value !== undefined && levels.includes(input.value) ? input.value : undefined;
-  const fallback = input.modelDefault !== undefined && levels.includes(input.modelDefault) ? input.modelDefault : undefined;
+  const fallback = input.mode !== "auto" && input.modelDefault !== undefined && levels.includes(input.modelDefault) ? input.modelDefault : undefined;
   return { shown: true, disabled: false, value: chosen ?? fallback, choices: fallback ? levels : [null, ...levels] };
 }
 

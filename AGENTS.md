@@ -54,6 +54,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Design
 
 - Every UI change reads `docs/design/ux-reference-grokbot-cursor.md` (section 8 holds the appearance rules per surface) and passes the UX gate there, with headless before and after captures beside the conforming neighbour page (2026-11-07).
+- The composer mode menu follows `docs/model-modes.md`. Under Auto, Reasoning displays Auto until the person chooses a level.
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).
 - A surface that was a window stays a window, and a page stays a page, unless the owner asks (2026-11-02).
 - Never hard-code a colour in a component; fix a failing contrast pair in the skin, never in the `.tsx` (2026-10-08).

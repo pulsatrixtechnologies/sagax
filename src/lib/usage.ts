@@ -169,19 +169,26 @@ export function contextDetail(u: TaskUsage): string | null {
 
 /** The latest turn, with the same separate counts as the thread total,
  * and its own dollars when the provider reported a cost. */
-export function lastTurnDetail(u: TaskUsage): string | null {
+export function lastTurnDetail(u: TaskUsage, options?: { cost?: boolean }): string | null {
   const last = u.lastTurn;
   if (!last || !hasFiniteCost(last.input)) return null;
-  const cost = hasFiniteCost(last.costUsd) ? ` · ${formatUsd(last.costUsd)}` : "";
+  const cost = options?.cost !== false && hasFiniteCost(last.costUsd) ? ` · ${formatUsd(last.costUsd)}` : "";
   return t("chat.usage.lastTurnSplit", { detail: `${usageDetail(last)}${cost}` });
+}
+
+/** The conversation's size in tokens, input only, never a price: what the
+ * chat header shows (#5224). Output stays in the tooltip. */
+export function usageTokensChip(u: TaskUsage): string {
+  if (u.turns === 0 && u.input + u.output === 0) return "";
+  if (cachedKnown(u)) return t("chat.usage.uncachedShort", { tokens: formatTokens(uncachedInput(u)) });
+  return t("chat.usage.inputShort", { tokens: formatTokens(u.input) });
 }
 
 /** Cost when reported; otherwise input only. Output stays in the tooltip. */
 export function usageChip(u: TaskUsage): string {
   if (u.turns === 0 && u.input + u.output === 0) return "";
   if (hasFiniteCost(u.costUsd)) return formatUsd(u.costUsd);
-  if (cachedKnown(u)) return t("chat.usage.uncachedShort", { tokens: formatTokens(uncachedInput(u)) });
-  return t("chat.usage.inputShort", { tokens: formatTokens(u.input) });
+  return usageTokensChip(u);
 }
 
 /** How to caption a cost figure given how the engine is billed. */

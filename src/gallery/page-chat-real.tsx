@@ -6,6 +6,7 @@
  * &ask=1 ends on the person's message, so a busy bot shows its working line;
  * &wait=1 adds the "finishing another conversation" wait chip after it
  * (tool details on), which the working line names instead of a row.
+ * &usage=1 gives the conversation a priced usage (the header's chip, #5224).
  * The script drives it like a person: open the card, Show conversation,
  * send, Back to chat. window.__pageChatReal reports what it saw;
  * window.__pageChatReal.publish() lands the bot's next version and ends its
@@ -101,7 +102,9 @@ const scout: Bot = {
   id: "scout", threadId: "scout-thread", name: "Scout", title: "", description: "", color: "green",
   notifications: true, unread: false, busy: params.get("busy") === "1", messages, activeLeafId: messages.at(-1)?.id,
   modelSelection: { instanceId: "gallery", model: "m" },
-  tasks: [{ threadId: "scout-thread", title: fr ? "Rapport mensuel" : "Monthly report", createdAt: at, busy: params.get("ask") === "1", activity: params.get("ask") === "1" ? "working" : "idle", turnStartedAt: Date.now() - 25_000, unread: false, modelSelection: { instanceId: "gallery", model: "m" }, approvalMode: "ask" }],
+  tasks: [{ threadId: "scout-thread", title: fr ? "Rapport mensuel" : "Monthly report", createdAt: at, busy: params.get("ask") === "1", activity: params.get("ask") === "1" ? "working" : "idle", turnStartedAt: Date.now() - 25_000, unread: false, modelSelection: { instanceId: "gallery", model: "m" }, approvalMode: "ask",
+    // &usage=1 (#5224): a priced conversation, for the header's usage chip
+    ...(params.get("usage") === "1" ? { usage: { input: 52_000, output: 4_100, cachedInput: 14_000, costUsd: 2.53, turns: 9, lastTurn: { input: 6_200, output: 480, cachedInput: 5_000, costUsd: 0.31 } } } : {}) }],
   ...(params.get("ask") === "1" ? { activity: "working", turnStartedAt: Date.now() - 25_000 } : {}),
 } as Bot;
 const start: AppState = {

@@ -456,21 +456,19 @@ struct DesktopSidebarRow: View {
                     .frame(width: size, height: size)
             }
         }
-        // #985: a bot shared with the viewer wears its sharer's face at the
-        // bottom right, and its activity dot moves to the top right
         .overlay(alignment: .bottomTrailing) {
             if let sharer {
                 SharerBadge(sharer: sharer, avatarSize: size, ring: theme.sidebar)
             }
         }
-        .overlay(alignment: sharer == nil ? .bottomTrailing : .topTrailing) {
+        .overlay(alignment: isRoom ? .bottomTrailing : .bottomLeading) {
             if status != .idle {
                 // presence dot: green while working, amber while waiting
                 Circle()
                     .fill(status == .working ? theme.success : theme.warning)
                     .frame(width: density == .icons ? 12 : 10, height: density == .icons ? 12 : 10)
                     .overlay(Circle().strokeBorder(theme.sidebar, lineWidth: 2))
-                    .offset(x: 2, y: sharer == nil ? 2 : -2)
+                    .offset(x: isRoom ? 2 : -2, y: 2)
             }
         }
     }

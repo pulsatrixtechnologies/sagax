@@ -9,6 +9,7 @@ import XCTest
 final class RecordCardUITests: XCTestCase {
     @MainActor
     private func launch(_ language: String = "en") -> XCUIApplication {
+        if UIDevice.current.userInterfaceIdiom == .pad { return launchOnIPad(language) }
         // RECORD_CARD_ARGS: more launch arguments for a capture ("-paritySkin system" wears the simulator's appearance)
         if ProcessInfo.processInfo.environment["RECORD_CARD_LANDSCAPE"] == "1" { XCUIDevice.shared.orientation = .landscapeLeft }
         let more = (ProcessInfo.processInfo.environment["RECORD_CARD_ARGS"] ?? "").split(separator: " ").map(String.init)
@@ -30,8 +31,11 @@ final class RecordCardUITests: XCTestCase {
             "-companion.onboarding.welcomeSeen", "YES", "-companion.onboarding.notificationsSeen", "YES",
         ] + more
         app.launch()
-        let row = ThreadPreview.row(app)
-        if row.waitForExistence(timeout: 10) { row.tap() }
+        if !firstChip(app).waitForExistence(timeout: 3) {
+            let row = app.buttons["desktop-row.preview-pepper"].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10), "Pepper in the iPad sidebar")
+            row.tap()
+        }
         record("0-launch", app)
         return app
     }
@@ -97,7 +101,7 @@ final class RecordCardUITests: XCTestCase {
     func testCaptures() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["RECORD_CARD_CAPTURE"] == "1", "captures only")
         let language = ProcessInfo.processInfo.environment["RECORD_CARD_LANGUAGE"] ?? "en"
-        let app = ProcessInfo.processInfo.environment["RECORD_CARD_IPAD"] == "1" ? launchOnIPad(language) : launch(language)
+        let app = launch(language)
         let message = firstChip(app)
         XCTAssertTrue(message.waitForExistence(timeout: 15))
         record("1-chat", app)

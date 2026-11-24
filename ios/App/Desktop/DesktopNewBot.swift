@@ -122,10 +122,12 @@ struct DesktopNewBotModal: View {
             ShapeMascotView(shape: shape, skin: .plain, color: color, size: 120)
                 .frame(width: 120, height: 120)
                 .accessibilityLabel(Text(verbatim: name.trimmingCharacters(in: .whitespaces).isEmpty ? String(localized: "New bot") : name))
-            TextField(text: $name, prompt: Text("Name your bot").foregroundColor(theme.inkTertiary)) { Text("Name your bot") }
+            // QuickCreate: the prompt is ink-tertiary, the typed name is ink,
+            // and the accessible label is the short "Name", not the prompt.
+            TextField(text: $name, prompt: Text("Name your bot").foregroundColor(theme.inkTertiary)) { Text("Name") }
                 .font(theme.font(16, .medium))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(theme.ink)
+                .foregroundColor(theme.ink)
                 .focused($nameFocused)
                 .submitLabel(.done)
                 .onSubmit(create)

@@ -26,6 +26,18 @@ import ImageIO
 import UIKit
 import AVFoundation
 
+private extension View {
+    /// Observers sit on a clear sibling, so they are not layout levels
+    /// between the window and a transcript row (#5169).
+    func observeBeside<Observers: View>(@ViewBuilder _ observers: () -> Observers) -> some View {
+        background {
+            observers()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 struct ChatView: View {
     @Environment(\.themePalette) var themePalette
     let chat: Chat
@@ -370,6 +382,7 @@ struct ChatView: View {
         .sheet(item: $recordSheet) { item in
             RecordCardSheet(start: item)
                 .environmentObject(session)
+                .environment(\.recordAsk, { askAboutRecord($0) })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -449,21 +462,6 @@ struct ChatView: View {
             }
             .ignoresSafeArea()
         }
-        .onValueChange(of: selectedPhotos) { items in
-            guard !items.isEmpty else { return }
-            Task { await importPhotos(items) }
-        }
-        .onValueChange(of: session.recoveredAttachmentSends) { delivered in
-            let settled = attachments.contains { delivered.contains($0.id) }
-            attachments.removeAll { delivered.contains($0.id) }
-            if settled, attachments.isEmpty, session.recoveredAttachmentDraftTexts[threadId] == draft { draft = "" }
-        }
-        .onValueChange(of: draft) { text in
-            if !attachments.isEmpty { session.rememberAttachmentDraftText(text, threadId: threadId) }
-        }
-        .onValueChange(of: attachments.map(\.id)) { _ in
-            session.keepAttachmentDraft(attachments, threadId: threadId, text: draft)
-        }
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [.content],
@@ -478,7 +476,25 @@ struct ChatView: View {
         .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil, enabled: devPodsEnabled || showingDevPods) {
             devPodsContent
         })
-        .onValueChange(of: devPodsSignature, initial: true) { _ in evaluateDevPods() }
+        .observeBeside {
+            Color.clear
+                .onValueChange(of: selectedPhotos) { items in
+                    guard !items.isEmpty else { return }
+                    Task { await importPhotos(items) }
+                }
+                .onValueChange(of: session.recoveredAttachmentSends) { delivered in
+                    let settled = attachments.contains { delivered.contains($0.id) }
+                    attachments.removeAll { delivered.contains($0.id) }
+                    if settled, attachments.isEmpty, session.recoveredAttachmentDraftTexts[threadId] == draft { draft = "" }
+                }
+                .onValueChange(of: draft) { text in
+                    if !attachments.isEmpty { session.rememberAttachmentDraftText(text, threadId: threadId) }
+                }
+                .onValueChange(of: attachments.map(\.id)) { _ in
+                    session.keepAttachmentDraft(attachments, threadId: threadId, text: draft)
+                }
+                .onValueChange(of: devPodsSignature, initial: true) { _ in evaluateDevPods() }
+        }
     }
 
     var screen: some View {
@@ -486,66 +502,69 @@ struct ChatView: View {
         // Release (-O, whole module) compiler abort with "non-terminating type
         // substitution" in ChatView.body (0.5.22, after #763).
         AnyView(screenLifecycle)
-        .onValueChange(of: showingComputer) { shown in
-            if shown { dictation.stop() }
-        }
-        .onValueChange(of: showingTasks) { shown in
-            if shown { dictation.stop() }
-        }
-        // Show threads turned off here or on another device (`preferences`
-        // frame): the open thread list goes at once, no relaunch.
-        .onValueChange(of: threadPrefs.threads.allows(.threadList)) { allowed in
-            if !allowed { showingTasks = false }
-        }
-        .onValueChange(of: showingRoomInfo) { shown in
-            if shown { dictation.stop() }
-        }
-        // a draft another screen prepared for this thread, unsent (Tasks "Answer")
-        .onReceive(ComposerPrefill.shared.$pending) { pending in
-            if pending[threadId] != nil { takePrefill() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .approvalEditRule)) { note in
-            // Edit rule: the bot's panel, where Access holds its Allow rules
-            guard case let .bot(bot) = current, (note.object as? String).map({ $0 == bot.id }) ?? true else { return }
-            panelSection = .access
-            showingPanel = true
-        }
-        .onValueChange(of: session.pendingPanelDoor) { door in
-            takePendingPanelDoor(door)
-        }
         .task {
             takePendingPanelDoor(session.pendingPanelDoor)
         }
-        .onValueChange(of: showingPanel) { shown in
-            if shown { dictation.stop() } else { panelSection = nil }
-        }
-        .onValueChange(of: call.active) { onCall in
-            if onCall {
-                dictation.stop()
-                voiceNote.cancel()
-            }
-        }
-        .onValueChange(of: showingPlus) { shown in
-            if shown { dictation.stop() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { note in
-            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey]
-            let value = (raw as? NSNumber)?.uintValue ?? (raw as? UInt)
-            if value == AVAudioSession.InterruptionType.began.rawValue {
-                dictation.stop()
-                voiceNote.cancel()
-            }
-        }
-        .onValueChange(of: dictation.transcript) { spoken in
-            // Always join against the text frozen at capture start. A newer
-            // partial then replaces the older partial instead of duplicating it.
-            draft = Dictation.draft(base: dictation.base, transcript: spoken)
-        }
-        .onValueChange(of: dictation.isListening) { listening in
-            if listening { composerFocused = false }
-        }
-        .onValueChange(of: threadId) { _ in voiceNote.cancel() }
         .onAppear { voiceNote.onCapped = { sendVoiceNote() } }
+        .observeBeside {
+            Color.clear
+                .onValueChange(of: showingComputer) { shown in
+                    if shown { dictation.stop() }
+                }
+                .onValueChange(of: showingTasks) { shown in
+                    if shown { dictation.stop() }
+                }
+                // Show threads turned off here or on another device (`preferences`
+                // frame): the open thread list goes at once, no relaunch.
+                .onValueChange(of: threadPrefs.threads.allows(.threadList)) { allowed in
+                    if !allowed { showingTasks = false }
+                }
+                .onValueChange(of: showingRoomInfo) { shown in
+                    if shown { dictation.stop() }
+                }
+                // a draft another screen prepared for this thread, unsent (Tasks "Answer")
+                .onReceive(ComposerPrefill.shared.$pending) { pending in
+                    if pending[threadId] != nil { takePrefill() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .approvalEditRule)) { note in
+                    // Edit rule: the bot's panel, where Access holds its Allow rules
+                    guard case let .bot(bot) = current, (note.object as? String).map({ $0 == bot.id }) ?? true else { return }
+                    panelSection = .access
+                    showingPanel = true
+                }
+                .onValueChange(of: session.pendingPanelDoor) { door in
+                    takePendingPanelDoor(door)
+                }
+                .onValueChange(of: showingPanel) { shown in
+                    if shown { dictation.stop() } else { panelSection = nil }
+                }
+                .onValueChange(of: call.active) { onCall in
+                    if onCall {
+                        dictation.stop()
+                        voiceNote.cancel()
+                    }
+                }
+                .onValueChange(of: showingPlus) { shown in
+                    if shown { dictation.stop() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { note in
+                    let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey]
+                    let value = (raw as? NSNumber)?.uintValue ?? (raw as? UInt)
+                    if value == AVAudioSession.InterruptionType.began.rawValue {
+                        dictation.stop()
+                        voiceNote.cancel()
+                    }
+                }
+                .onValueChange(of: dictation.transcript) { spoken in
+                    // Always join against the text frozen at capture start. A newer
+                    // partial then replaces the older partial instead of duplicating it.
+                    draft = Dictation.draft(base: dictation.base, transcript: spoken)
+                }
+                .onValueChange(of: dictation.isListening) { listening in
+                    if listening { composerFocused = false }
+                }
+                .onValueChange(of: threadId) { _ in voiceNote.cancel() }
+        }
     }
 
     /// The arrival plus what follows the person in and out of the chat
@@ -573,34 +592,12 @@ struct ChatView: View {
                 if !isPresented, call.isOnCall(chat) { call.end() }
             }
         }
-        .onValueChange(of: scenePhase) { phase in
-            if phase != .active {
-                dictation.stop()
-                voiceNote.cancel()
-            }
-            // Back in the app while blocked: ask again, the cause may be fixed.
-            if phase == .active, activeSendBlock != nil { sendBlockTick += 1 }
-            // Fresh topic on return: away while the app is in the background;
-            // back after the threshold, a fresh topic over the topic at rest.
-            if case let .bot(bot) = current {
-                if phase == .background { session.noteLeftBot(bot.id) }
-                if phase == .active, session.freshTopicLeftAt(bot.id) != nil {
-                    session.landOnBot(current, force: true)
-                    session.noteBackAtBot(bot.id)
-                }
-            }
-        }
         // Can this bot answer the person now? Asked on opening, on a bot,
         // thread or model change, then every 15 s while it cannot.
         .task(id: sendBlockTaskKey) { await runSendStateChecks() }
         // #3415, #3471: what waits for the person, from the server's one
         // list, read on opening; live frames read it again after
         .task(id: current.conversationID) { await session.loadWaiting(for: current) }
-        // A turn ended: ask again, it may have been refused before any
-        // prompt went out (#2013), or it cleared a refusal.
-        .onValueChange(of: current.busy) { busy in
-            if !busy { sendBlockTick += 1 }
-        }
         .sheet(isPresented: $choosingEngineForLimit) {
             if case let .bot(bot) = current {
                 NavigationStack { ModelMenuSheet(bot: bot, close: { choosingEngineForLimit = false }) }
@@ -610,28 +607,53 @@ struct ChatView: View {
             SettingsView(close: { showingEngineSettings = false })
                 .background(Theme.bg.ignoresSafeArea())
         }
-        .onValueChange(of: topicUnderFreshAlive) { alive in
-            // the topic under a fresh one came alive (a turn, an approval, an
-            // answer): it is shown, never hidden behind the fresh topic
-            if alive, case let .bot(bot) = current { session.showTopicUnderFresh(bot.id) }
-        }
-        .onValueChange(of: startedTopic) { started in
-            // the first message of a fresh topic made it: this chat moves there
-            guard let started, case let .bot(bot) = current else { return }
-            session.consumeStartedTopic(bot.id)
-            selectedThreadId = started
-        }
-        .onValueChange(of: streamReadBackKey) { _ in drawFirstEarlierTopic() }
-        .onValueChange(of: gateSignalsKey) { _ in
-            if case let .bot(bot) = current, !threadPrefs.showThreads { takeGateSignals(bot.id) }
-        }
-        .onValueChange(of: pendingCitationsKey) { _ in takePendingCitations() }
-        .onValueChange(of: threadSwitch) { request in
-            // Go to message on a link of another conversation of this bot:
-            // this screen switches there, as a thread chip does
-            guard let request, case let .bot(bot) = current else { return }
-            session.threadSwitches[bot.id] = nil
-            selectedThreadId = request.threadId
+        .observeBeside {
+            Color.clear
+                .onValueChange(of: scenePhase) { phase in
+                    if phase != .active {
+                        dictation.stop()
+                        voiceNote.cancel()
+                    }
+                    // Back in the app while blocked: ask again, the cause may be fixed.
+                    if phase == .active, activeSendBlock != nil { sendBlockTick += 1 }
+                    // Fresh topic on return: away while the app is in the background;
+                    // back after the threshold, a fresh topic over the topic at rest.
+                    if case let .bot(bot) = current {
+                        if phase == .background { session.noteLeftBot(bot.id) }
+                        if phase == .active, session.freshTopicLeftAt(bot.id) != nil {
+                            session.landOnBot(current, force: true)
+                            session.noteBackAtBot(bot.id)
+                        }
+                    }
+                }
+                // A turn ended: ask again, it may have been refused before any
+                // prompt went out (#2013), or it cleared a refusal.
+                .onValueChange(of: current.busy) { busy in
+                    if !busy { sendBlockTick += 1 }
+                }
+                .onValueChange(of: topicUnderFreshAlive) { alive in
+                    // the topic under a fresh one came alive (a turn, an approval, an
+                    // answer): it is shown, never hidden behind the fresh topic
+                    if alive, case let .bot(bot) = current { session.showTopicUnderFresh(bot.id) }
+                }
+                .onValueChange(of: startedTopic) { started in
+                    // the first message of a fresh topic made it: this chat moves there
+                    guard let started, case let .bot(bot) = current else { return }
+                    session.consumeStartedTopic(bot.id)
+                    selectedThreadId = started
+                }
+                .onValueChange(of: streamReadBackKey) { _ in drawFirstEarlierTopic() }
+                .onValueChange(of: gateSignalsKey) { _ in
+                    if case let .bot(bot) = current, !threadPrefs.showThreads { takeGateSignals(bot.id) }
+                }
+                .onValueChange(of: pendingCitationsKey) { _ in takePendingCitations() }
+                .onValueChange(of: threadSwitch) { request in
+                    // Go to message on a link of another conversation of this bot:
+                    // this screen switches there, as a thread chip does
+                    guard let request, case let .bot(bot) = current else { return }
+                    session.threadSwitches[bot.id] = nil
+                    selectedThreadId = request.threadId
+                }
         }
     }
 
@@ -693,65 +715,68 @@ struct ChatView: View {
             }
 #endif
         }
-        .onValueChange(of: selectedThreadWasRemoved) { removed in
-            if removed {
-                // Removed while on screen: ask the server before leaving, so
-                // a frame that only narrowed the bot does not close the chat.
-                if openProblem == nil { Task { await confirmRemoval() } }
-            } else if openProblem != nil {
-                // the bot or its thread arrived after all (a stream frame)
-                retryOpen()
-            }
-        }
-        // A room deleted while open leaves the screen (its composer would
-        // write into nothing), and so does a conversation the person closes
-        // or hides while it is open (OpenConversation, bug 2026-10-15).
-        .onValueChange(of: openRoomWasRemoved) { removed in
-            if removed { dismiss() }
-        }
-        .onValueChangePair(of: sidebarPrefs.prefs.hidden) { previous, next in
-            if OpenConversation.newlyHidden(chat, previous: previous, next: next) { dismiss() }
-        }
-        .onValueChange(of: session.state.hasLoadedPage(forThread: threadId)) { loaded in
-            let requestedThread = threadId
-            if !loaded { Task { await session.loadThreadIfNeeded(requestedThread) } }
-        }
-        .onValueChange(of: current.unread) { unread in
-            // A message can arrive while this chat is already on screen. The
-            // initial task above will not run again, so clear that new unread
-            // bit here rather than leaving a badge on an open conversation.
-            let readChat = current
-            if unread { Task { await session.markRead(readChat) } }
-        }
-        .onValueChangePair(of: threadId) { previous, next in
-            earlierTopicsShown = 0
-            pendingTopicReveal = nil
-            dictation.stop()
-            session.keepAttachmentDraft(attachments, threadId: previous, text: draft)
-            threadDrafts[previous] = ComposerSnapshot(text: draft, attachments: attachments, error: attachmentError, replyTo: replyTo)
-            let restored = threadDrafts.removeValue(forKey: next) ?? ComposerSnapshot()
-            // another thread's draft coming back is not a paste
-            power.pasteCheckSuppressed = restored.text != draft
-            draft = restored.text
-            attachments = restored.attachments.isEmpty ? session.pendingAttachmentDraft(threadId: next) : restored.attachments
-            if draft.isEmpty, !attachments.isEmpty { draft = session.pendingAttachmentDraftText(threadId: next) ?? "" }
-            attachmentError = restored.error
-            replyTo = restored.replyTo
-            // a draft prepared for the thread now shown (Tasks "Answer")
-            takePrefill()
-            selectedPhotos = []
-            power.commandMenuForced = false
-            showingPlus = false
-            finder.close()
-            follow.resume()
-            // The local task picker changed threads. A download
-            // started in the previous task must not open a sheet (or surface
-            // its error) in the new one when the network reply arrives late.
-            resetFilePreview()
-            cancelThreadOpen()
-        }
-        .onValueChange(of: session.connection?.id) { _ in
-            cancelThreadOpen()
+        .observeBeside {
+            Color.clear
+                .onValueChange(of: selectedThreadWasRemoved) { removed in
+                    if removed {
+                        // Removed while on screen: ask the server before leaving, so
+                        // a frame that only narrowed the bot does not close the chat.
+                        if openProblem == nil { Task { await confirmRemoval() } }
+                    } else if openProblem != nil {
+                        // the bot or its thread arrived after all (a stream frame)
+                        retryOpen()
+                    }
+                }
+                // A room deleted while open leaves the screen (its composer would
+                // write into nothing), and so does a conversation the person closes
+                // or hides while it is open (OpenConversation, bug 2026-10-15).
+                .onValueChange(of: openRoomWasRemoved) { removed in
+                    if removed { dismiss() }
+                }
+                .onValueChangePair(of: sidebarPrefs.prefs.hidden) { previous, next in
+                    if OpenConversation.newlyHidden(chat, previous: previous, next: next) { dismiss() }
+                }
+                .onValueChange(of: session.state.hasLoadedPage(forThread: threadId)) { loaded in
+                    let requestedThread = threadId
+                    if !loaded { Task { await session.loadThreadIfNeeded(requestedThread) } }
+                }
+                .onValueChange(of: current.unread) { unread in
+                    // A message can arrive while this chat is already on screen. The
+                    // initial task above will not run again, so clear that new unread
+                    // bit here rather than leaving a badge on an open conversation.
+                    let readChat = current
+                    if unread { Task { await session.markRead(readChat) } }
+                }
+                .onValueChangePair(of: threadId) { previous, next in
+                    earlierTopicsShown = 0
+                    pendingTopicReveal = nil
+                    dictation.stop()
+                    session.keepAttachmentDraft(attachments, threadId: previous, text: draft)
+                    threadDrafts[previous] = ComposerSnapshot(text: draft, attachments: attachments, error: attachmentError, replyTo: replyTo)
+                    let restored = threadDrafts.removeValue(forKey: next) ?? ComposerSnapshot()
+                    // another thread's draft coming back is not a paste
+                    power.pasteCheckSuppressed = restored.text != draft
+                    draft = restored.text
+                    attachments = restored.attachments.isEmpty ? session.pendingAttachmentDraft(threadId: next) : restored.attachments
+                    if draft.isEmpty, !attachments.isEmpty { draft = session.pendingAttachmentDraftText(threadId: next) ?? "" }
+                    attachmentError = restored.error
+                    replyTo = restored.replyTo
+                    // a draft prepared for the thread now shown (Tasks "Answer")
+                    takePrefill()
+                    selectedPhotos = []
+                    power.commandMenuForced = false
+                    showingPlus = false
+                    finder.close()
+                    follow.resume()
+                    // The local task picker changed threads. A download
+                    // started in the previous task must not open a sheet (or surface
+                    // its error) in the new one when the network reply arrives late.
+                    resetFilePreview()
+                    cancelThreadOpen()
+                }
+                .onValueChange(of: session.connection?.id) { _ in
+                    cancelThreadOpen()
+                }
         }
     }
 
@@ -900,11 +925,13 @@ struct ChatView: View {
                                 proxy.scrollTo(Self.bottomId, anchor: .bottom)
                             }
                     }
-                    .padding(.horizontal, desktopChat == nil ? Theme.Chat.bubbleLeading : 20)
+                    // the desktop gutter is px-4 (16), the same as the phone's bubbleLeading
+                    .padding(.horizontal, Theme.Chat.bubbleLeading)
                     .padding(.top, desktopChat == nil ? 12 : 56 - Self.topBarHeight)
                     .frame(maxWidth: desktopChat == nil ? CompanionLayout.chatWidth : DesktopShellRules.chatColumn + 40, alignment: .leading)
                     .frame(maxWidth: .infinity)
                     .environment(\.messageActions, messageActionContext)
+                    .environment(\.recordAsk, { askAboutRecord($0) })
                     .environment(\.citeIntoComposer, citeIntoComposer)
                     .environment(\.youtubeSendToBot, youtubeSendToBot)
                     .environment(\.conversationGallery, conversationGallery)
@@ -1058,13 +1085,16 @@ struct ChatView: View {
                 // `initial: true` is what opens the chat on the newest
                 // message where `scrollAnchorCompat` cannot (iOS 16). On 17 the
                 // anchor has already put us there and this is a no-op.
-                .onValueChange(of: transcript.last?.id, initial: true) { _ in
-                    guard let last = transcript.last else { return }
-                    // Reading scrollback is not interrupted (MS14); your own
-                    // send takes you back to the end.
-                    if last.role == .user { follow.resume() }
-                    guard follow.following, !FormCardStore.shared.isEditing else { return }
-                    withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                // Beside the scroll, not another level above each row (#5169).
+                .observeBeside {
+                    Color.clear.onValueChange(of: transcript.last?.id, initial: true) { _ in
+                        guard let last = transcript.last else { return }
+                        // Reading scrollback is not interrupted (MS14); your own
+                        // send takes you back to the end.
+                        if last.role == .user { follow.resume() }
+                        guard follow.following, !FormCardStore.shared.isEditing else { return }
+                        withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                    }
                 }
                 // Long markdown replies finish laying out after the first
                 // pass; settle on the newest message once they have, unless a
@@ -1168,8 +1198,10 @@ struct ChatView: View {
         .ignoresSafeArea(.container, edges: .bottom)
         .background(chatBackground)
         .overlay(alignment: .bottom) { plusSheet }
-        .onValueChange(of: callPillShown) { shown in
-            if !shown { callPanel = nil }
+        .observeBeside {
+            Color.clear.onValueChange(of: callPillShown) { shown in
+                if !shown { callPanel = nil }
+            }
         }
 #if DEBUG
         .overlay(alignment: .bottomLeading) {
@@ -1205,6 +1237,14 @@ struct ChatView: View {
     func takePrefill() {
         guard let text = ComposerPrefill.shared.take(threadId: threadId) else { return }
         draft = BotTodoList.merge(draft: text, into: draft)
+        composerFocused = true
+    }
+
+    /// Desktop "Ask": the record's link goes on the end of this chat's draft.
+    func askAboutRecord(_ markdown: String) {
+        let addition = markdown.hasSuffix(" ") ? markdown : markdown + " "
+        let current = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = current.isEmpty ? addition : "\(draft)\n\n\(addition)"
         composerFocused = true
     }
 
@@ -1504,11 +1544,14 @@ private struct OpenBotAccent: ViewModifier {
                 ThemeStore.shared.setOpenBot(color)
                 RetroOpenBot.shared.set(name)
             }
-            .onValueChange(of: color) { ThemeStore.shared.setOpenBot($0) }
-            .onValueChange(of: name) { RetroOpenBot.shared.set($0) }
             .onDisappear {
                 if let color { ThemeStore.shared.setOpenBot(nil, leaving: color) }
                 RetroOpenBot.shared.clear(name)
+            }
+            .observeBeside {
+                Color.clear
+                    .onValueChange(of: color) { ThemeStore.shared.setOpenBot($0) }
+                    .onValueChange(of: name) { RetroOpenBot.shared.set($0) }
             }
     }
 }

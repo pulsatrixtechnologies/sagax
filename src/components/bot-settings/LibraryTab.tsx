@@ -218,7 +218,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   // others shared) have a section of their own
   const isShared = (page: PublishedPageSummary) => page.botShared === true || page.sharedBy !== undefined;
   const items = libraryItems(files, list.artifacts, pages ? pages.filter((page) => !isShared(page)) : pages);
-  const sharedItems = (pages ?? []).filter(isShared).sort((a, b) => b.updatedAt - a.updatedAt)
+  const sharedItems = (pages ?? []).filter(isShared).sort((a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))
     .map((page): LibraryItem => ({ kind: "page", key: `page:${page.id}`, at: page.updatedAt, pinned: false, page }));
   const policy = usePagesPolicy();
   const [deletingPage, setDeletingPage] = useState<PublishedPageSummary | null>(null);
@@ -231,7 +231,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   const groups = groupLibraryItems(items, now ?? Date.now());
   const shownNote = note ?? status;
   // Pictures open in one viewer that steps through them, newest first.
-  const pictures = (files ?? []).filter((file) => file.available && classifyFile(file) === "image").sort((a, b) => b.at - a.at);
+  const pictures = (files ?? []).filter((file) => file.available && classifyFile(file) === "image").sort((a, b) => b.at - a.at || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   const previews = pictures.map((file) => ({
     src: threadFileUrl(at(file), file.id, true),
     name: file.name,

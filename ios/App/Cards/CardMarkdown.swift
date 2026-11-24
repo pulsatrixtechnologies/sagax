@@ -8,6 +8,7 @@ import SwiftUI
 struct CardMarkdown: View {
     let source: String
     @EnvironmentObject private var session: Session
+    @Environment(\.recordAsk) private var recordAsk
     @State private var sheet: RecordSheetItem?
 
     var body: some View {
@@ -20,6 +21,7 @@ struct CardMarkdown: View {
         .sheet(item: $sheet) { item in
             RecordCardSheet(start: item)
                 .environmentObject(session)
+                .environment(\.recordAsk, recordAsk)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }

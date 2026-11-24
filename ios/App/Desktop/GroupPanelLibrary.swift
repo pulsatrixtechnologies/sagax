@@ -273,7 +273,7 @@ struct GroupPanelLibrary: View {
         if let all = try? await client.publishedPages() {
             library.pages = all
                 .filter { threads.contains($0.threadId) }
-                .sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id < $1.id }
+                .sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : ($0.title != $1.title ? $0.title < $1.title : $0.id < $1.id) }
         }
         pagesPolicy = await client.pagesPolicy()
     }

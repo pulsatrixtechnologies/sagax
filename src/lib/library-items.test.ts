@@ -17,7 +17,8 @@ describe("library grouping", () => {
   it("mixes files and artifacts, splits this week from older, newest first", () => {
     const items = libraryItems(
       [file("a".repeat(24), "plan.md", 1), file("b".repeat(24), "export.zip", 3), file("c".repeat(24), "old.md", 12)],
-      [artifact("art_0000001", "Dispatch email preview", 20), artifact("art_0000002", "Queue", 0.5)],
+      // 18 hours ago stays in this week in every time zone. 12 hours before noon UTC is local midnight, which is today.
+      [artifact("art_0000001", "Dispatch email preview", 20), artifact("art_0000002", "Queue", 0.75)],
     );
     const groups = groupLibraryItems(items, now);
     expect(groups.pinned).toEqual([]);
@@ -40,6 +41,12 @@ describe("library grouping", () => {
   it("drops a period with nothing in it, and an empty library has no groups", () => {
     expect(groupLibraryItems(libraryItems([file("a".repeat(24), "old.md", 9)], []), now).periods.map((period) => period.id)).toEqual(["older"]);
     expect(groupLibraryItems(libraryItems(null, null), now)).toEqual({ pinned: [], periods: [] });
+  });
+
+  it("orders files that share a timestamp by name, not by id", () => {
+    const items = libraryItems([file("zzz", "Alpha.md", 0), file("aaa", "Zulu.md", 0)], []);
+    const groups = groupLibraryItems(items, now);
+    expect(groups.periods[0]!.items.map((item) => item.kind === "file" ? item.file.name : "")).toEqual(["Alpha.md", "Zulu.md"]);
   });
 
   it("the seven day edge belongs to older", () => {

@@ -71,6 +71,14 @@ final class RecordCardTests: XCTestCase {
         }
     }
 
+    func testMarkdownMatchesTheDesktopLink() {
+        let ref = RecordRef(product: "nimbus_desk", kind: "bill", id: "88213")
+        XCTAssertEqual(RecordLinks.link(ref), "sagax://record/nimbus_desk/bill/88213")
+        XCTAssertEqual(RecordLinks.markdown(label: "BILL-20417", ref: ref), "[BILL-20417](sagax://record/nimbus_desk/bill/88213)")
+        XCTAssertEqual(RecordLinks.markdown(label: "  A [note]  ", ref: ref), "[A \\[note\\]](sagax://record/nimbus_desk/bill/88213)")
+        XCTAssertEqual(RecordLinks.parse(RecordLinks.link(ref)), ref)
+    }
+
     func testChipTextIsTheLinkedCopyOnlyWhileItIsTheSameMessage() {
         let linked = "Voir [BILL-1](sagax://record/nimbus_desk/bill/1)."
         XCTAssertEqual(RecordLinks.chipText(text: "Voir BILL-1.", recordText: linked), linked)

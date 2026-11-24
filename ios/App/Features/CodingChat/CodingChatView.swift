@@ -615,8 +615,8 @@ private struct CodingChatRowView: View {
     }
 }
 
-/// `ToolLine.tsx`: `● Name(arg)` with the duration at the right, then
-/// `⎿ first lines` and `… +N lines` (tap to open the whole result).
+/// `ToolLine.tsx` draws a `StepRow`: quiet 13 pt words, the target paler,
+/// the duration at the right. No bullet. The opened lines stay under it.
 struct CodingToolLineView: View {
     let line: CodingToolLine
     let running: Bool
@@ -627,23 +627,14 @@ struct CodingToolLineView: View {
     let expanded: String?
     @State private var open = false
 
-    private var dot: Color {
-        if running { return Theme.textTertiary }
-        return ok == false ? Theme.danger : Theme.success
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(verbatim: "\u{25CF}").font(.system(size: 9)).foregroundStyle(dot)
-                (Text(verbatim: line.name).font(Theme.font(13, .semibold)).foregroundColor(Theme.textPrimary)
-                    + Text(verbatim: "(\(line.arg))").font(Theme.Font.code).foregroundColor(Theme.textSecondary))
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                if let duration {
-                    Text(verbatim: duration).font(Theme.Font.label).foregroundStyle(Theme.textTertiary).monospacedDigit()
-                }
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            StepLineLabel(
+                label: line.name,
+                target: line.arg.isEmpty ? nil : line.arg,
+                phase: running ? .running : (ok == false ? .failed : .done),
+                duration: duration
+            )
             .accessibilityIdentifier("coding-tool-line")
             ForEach(Array(result.enumerated()), id: \.offset) { index, text in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

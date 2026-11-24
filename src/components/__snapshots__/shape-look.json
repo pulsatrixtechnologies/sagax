@@ -38,15 +38,15 @@
  "sprout": {"engine":"sprout","box":[0,0,82.6,90],"size":[82.6,90],"commands":25,"subpaths":5,"outline":"807e9aa88d1617ce","eyes":[50,71,16,1.1]},
  "tin": {"engine":"tin","box":[28.9,12,71.1,88],"size":[42.2,76],"commands":10,"subpaths":1,"outline":"98d2b4407fd6d870","eyes":[45.8,47.5,14.4,1.2]},
  "tome": {"engine":"book","box":[8,23.5,92,84],"size":[84,60.5],"commands":17,"subpaths":1,"outline":"277eb73a562f5be8","eyes":[50,51,18,1.1]},
- "ship": {"engine":"rocket","box":[14,8.9,86,92],"size":[72,83.1],"commands":23,"subpaths":3,"outline":"7a7baf75cf12a1b9","eyes":[50,46,15,1.1]},
+ "ship": {"engine":"rocket","box":[13,8.9,87,91],"size":[74,82.1],"commands":27,"subpaths":4,"outline":"a5386fe9ac9774b6","eyes":[50,46,15,1.1]},
  "brain": {"engine":"brain","box":[11.9,16.4,89.8,81.8],"size":[77.9,65.4],"commands":17,"subpaths":1,"outline":"45d7c19280253893","eyes":[50,45,17,1.2]},
  "bull": {"engine":"bull","box":[9,9.2,91,84],"size":[82,74.8],"commands":33,"subpaths":5,"outline":"8238129479fbc600","eyes":[50,52,17,1.2]},
  "bunny": {"engine":"bunny","box":[20,11.4,80,86],"size":[60,74.6],"commands":16,"subpaths":3,"outline":"a0429832c1fa774f","eyes":[50,62,17,1.2]},
  "camera": {"engine":"camera","box":[9,20,91,80],"size":[82,60],"commands":22,"subpaths":1,"outline":"95439c4da2ec0eac","eyes":[50,54,17,1.1]},
  "magnifier": {"engine":"magnifier","box":[0,0,87.7,76.4],"size":[87.7,76.4],"commands":11,"subpaths":1,"outline":"42a8b222e130e306","eyes":[41,40,17,1.2]},
  "paint-brush": {"engine":"paint-brush","box":[20.8,8.5,83.6,85.4],"size":[62.8,76.9],"commands":26,"subpaths":3,"outline":"ef8c2c96006cb730","eyes":[44,59,16,1.1]},
- "palette": {"engine":"palette","box":[0,0,90,84],"size":[90,84],"commands":13,"subpaths":2,"outline":"8aacf78597f04ead","eyes":[58,46,17,1.2]},
- "witch-hat": {"engine":"witch-hat","box":[0.9,7.3,92,87],"size":[91.1,79.7],"commands":23,"subpaths":3,"outline":"0589b1123cd260fb","eyes":[50,54,15,1.1]},
+ "palette": {"engine":"palette","box":[0,0,90,84],"size":[90,84],"commands":13,"subpaths":2,"outline":"483a832221ac9306","eyes":[58,46,17,1.2]},
+ "witch-hat": {"engine":"witch-hat","box":[0.9,7.3,92,87],"size":[91.1,79.7],"commands":24,"subpaths":3,"outline":"733fb07a4378be7c","eyes":[50,54,15,1.1]},
  "barbell": {"engine":"barbell","box":[0,0,92,83],"size":[92,83],"commands":42,"subpaths":7,"outline":"bc4cfede5fc6a08c","eyes":[50,50,15,1.1]},
  "watering-can": {"engine":"watering-can","box":[0,0,88,91.3],"size":[88,91.3],"commands":29,"subpaths":5,"outline":"254e23b1c0e0b6e2","eyes":[47,61,16,1.2]}
 }

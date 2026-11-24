@@ -15,7 +15,7 @@
 // bodies are our own, baked from shared/mascot-geometry.json into
 // shared/shape-avatars.json by scripts/bake-engine-shapes.mjs. The gallery's
 // other avatars are shapes of their own in the picker (GALLERY_SHAPES).
-import { avatarFrame, getExample, validateAvatar, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
+import { avatarFrame, getExample, validateAvatar, type AvatarDefinition, type AvatarFrame, type AvatarMotion, type AvatarMotionBlend, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import baked from "../../shared/shape-avatars.json" with { type: "json" };
 import type { MascotShape } from "../../shared/mascot-look.ts";
 import { isEngineAvatarDef, type EngineAvatarDef } from "../../shared/engine-avatar-def.ts";
@@ -148,6 +148,55 @@ export function engineMood(mood: ShapeMood): AvatarMotion {
   return "idle";
 }
 
+/**
+ * The pose a shape holds at work, as the engine drew its `thinking` until
+ * 0.2: the body turned a little, tipped up and rolled, the eyes up and away
+ * under two different lids. Since 0.3 the engine's `thinking` replaces the
+ * body with three dots; the app keeps the bot's own body at work (its look
+ * changes only with the owner's word, shape-object-look.regression.test.ts),
+ * so this pose is asked of the engine's `idle` instead.
+ */
+const AT_WORK = { yaw: 0.12, pitch: 0.08, gazeX: 0.55, gazeY: -0.8, lids: [0.22, 0.32] as const };
+/** The engine's own figures a look target goes through (its motion.ts: LOOK_YAW, LOOK_PITCH, LOOK_EYES, BASE_YAW, BASE_PITCH). */
+const LOOK = { yaw: 0.32, pitch: 0.18, eyes: 0.7, baseYaw: -0.3, basePitch: 0.2 };
+
+/** A pill eye under a lid, as the engine squints one (its eyeStates): shorter, never under 0.55 of its width, a little lower. */
+function underLid(mark: EyeMark, lid: number): EyeMark {
+  if (mark.shape !== "pill") return mark;
+  const height = Math.max(mark.height * (1 - lid * 0.4), mark.width * 0.55);
+  const middle = mark.y + mark.height / 2 + (mark.height - height) * 0.18;
+  return { shape: "pill", x: mark.x, y: middle - height / 2, width: mark.width, height, radius: Math.min(mark.width, height) / 2 };
+}
+
+export interface EngineFrameOptions {
+  time?: number;
+  gaze?: { x: number; y: number; weight?: number };
+  motionBlend?: AvatarMotionBlend;
+  reducedMotion: boolean;
+  depth?: number;
+}
+
+/**
+ * One frame of a body in one of the app's three engine moods. `idle` and
+ * `happy` are the engine's own; `thinking` is the at-work pose above, with
+ * the roll and the lift of the engine's `thinking` (its root motion, which
+ * 0.3 kept) over the body it no longer draws there.
+ */
+export function engineFrame(def: AvatarDefinition, mood: AvatarMotion, options: EngineFrameOptions): AvatarFrame {
+  const depth = options.depth === undefined ? {} : { depth: options.depth };
+  if (mood !== "thinking") return avatarFrame(def, { motion: mood, time: options.time, gaze: options.gaze, motionBlend: options.motionBlend, reducedMotion: options.reducedMotion, ...depth });
+  // at rest the eyes take the whole look and the body stays; live, the engine gives the eyes a share and turns the body toward
+  // the target, so the target is set further out and the view takes that turn back: the pose is the same either way
+  const still = options.reducedMotion;
+  const gaze = still ? { x: AT_WORK.gazeX, y: AT_WORK.gazeY } : { x: AT_WORK.gazeX / LOOK.eyes, y: -1 };
+  const view = still
+    ? { yaw: AT_WORK.yaw, pitch: AT_WORK.pitch }
+    : { yaw: AT_WORK.yaw - (gaze.x * LOOK.yaw - LOOK.baseYaw), pitch: AT_WORK.pitch - (-gaze.y * LOOK.pitch - LOOK.basePitch / 2) };
+  const body = avatarFrame(def, { state: "idle", mood: "neutral", view, gaze, time: options.time, reducedMotion: still, ...depth });
+  const { root } = avatarFrame(def, { state: "thinking", time: options.time, reducedMotion: still, ...depth });
+  return { ...body, root, shapes: body.shapes.map((shape) => (shape.kind === "eye" ? { ...shape, mark: underLid(shape.mark, AT_WORK.lids[shape.key === "eye-0" ? 0 : 1]) } : shape)) };
+}
+
 /** One cross-section path of a still: its id in the frame, its outline, its fill rule, the area of its box (the largest is the face a skin paints). */
 export type StillPath = [id: string, d: string, evenOdd: boolean, area: number];
 
@@ -182,8 +231,11 @@ const r2 = (n: number) => Math.round(n * 100) / 100 || 0;
 const r4 = (n: number) => Math.round(n * 10000) / 10000 || 0;
 /** A matrix as the engine writes it (four places for the linear part, two for the shift). */
 const roundMatrix = (m: Matrix): Matrix => m.map((v, i) => (i < 4 ? r4(v) : r2(v))) as Matrix;
-const roundMark = (mark: EyeMark): EyeMark =>
-  mark.shape === "arc" ? { ...mark, strokeWidth: r2(mark.strokeWidth) } : { shape: "pill", x: r2(mark.x), y: r2(mark.y), width: r2(mark.width), height: r2(mark.height), radius: r2(mark.radius) };
+const roundMark = (mark: EyeMark): EyeMark => {
+  // an eye between two shapes is an outline of its own (the engine's morph, 0.3): kept as it is
+  if (mark.shape === "path") return mark;
+  return mark.shape === "arc" ? { ...mark, strokeWidth: r2(mark.strokeWidth) } : { shape: "pill", x: r2(mark.x), y: r2(mark.y), width: r2(mark.width), height: r2(mark.height), radius: r2(mark.radius) };
+};
 
 /**
  * A definition's still in every mood, at rest (reduced motion: no breath, no
@@ -196,11 +248,12 @@ export function bakeStill(def: AvatarDefinition, depth?: number): StillFile {
   const p: StillFile["p"] = [];
   const m = {} as StillFile["m"];
   for (const motion of MOODS) {
-    const frame = avatarFrame(def, { motion, reducedMotion: true, ...(depth === undefined ? {} : { depth }) });
+    const frame = engineFrame(def, motion, { reducedMotion: true, depth });
     const byId = new Map(frame.paths.map((path) => [path.id, path]));
     m[motion] = {
       r: roundMatrix(frame.root),
-      s: frame.shapes.map((shape) => {
+      // the engine's ribbons (its working and done states) are no part of a still
+      s: frame.shapes.filter((shape) => shape.kind !== "ribbon").map((shape) => {
         if (shape.kind === "eye") return [roundMark(shape.mark), ...roundMatrix(shape.matrix)];
         let at = index.get(shape.path);
         if (at === undefined) {
@@ -255,8 +308,9 @@ export function runtimeStill(def: AvatarDefinition, depth?: number): BakedStill 
 const f2 = (n: number) => String(r2(n));
 const matrixAttr = (m: Matrix) => `matrix(${m.join(" ")})`;
 
-/** One eye of a frame as SVG, in its face plane (the engine's pill or happy arc). */
+/** One eye of a frame as SVG, in its face plane (the engine's pill, its happy arc, or the outline between two shapes). */
 export function eyeMarkup(mark: EyeMark, ink: string): string {
+  if (mark.shape === "path") return `<path d="${mark.d}" fill="${ink}"/>`;
   if (mark.shape === "arc") return `<path d="${mark.d}" fill="none" stroke="${ink}" stroke-width="${f2(mark.strokeWidth)}" stroke-linecap="round"/>`;
   return `<rect x="${f2(mark.x)}" y="${f2(mark.y)}" width="${f2(mark.width)}" height="${f2(mark.height)}" rx="${f2(mark.radius)}" fill="${ink}"/>`;
 }
@@ -270,6 +324,8 @@ export function pathsMarkup(paths: readonly StillPath[], prefix = ""): string {
 export function shapesMarkup(shapes: readonly FrameShape[], ink: string, prefix = ""): string {
   let out = "";
   for (const shape of shapes) {
+    // the engine's ribbons belong to states the app does not ask for
+    if (shape.kind === "ribbon") continue;
     out += shape.kind === "slice" ? `<use href="#${prefix}${shape.path}" transform="${matrixAttr(shape.matrix)}"/>` : `<g transform="${matrixAttr(shape.matrix)}">${eyeMarkup(shape.mark, ink)}</g>`;
   }
   return out;

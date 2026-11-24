@@ -219,6 +219,19 @@ describe("Cline ACP driver", () => {
     expect(done).toMatchObject({ stopReason: "cancelled" });
   });
 
+  it("serves a session's model list and keeps the configured fallback", async () => {
+    const { instance, recorder } = await create();
+    vi.stubEnv("FAKE_ACP_SESSION_MODELS", "fixture-model|Fixture,second|Second");
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "cline-model-list", text: "hello" });
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(instance.models.options.map((option) => option.id)).toEqual(["cline-default", "fixture-model", "second"]);
+    expect((await instance.modelsForAccess!({ via: "speaker-key", identity: "other" })).options).toEqual(ClineAgentDriver.models.options);
+    const selected = await instance.adapter.sendTurn({ threadId: "cline-model-list", text: "again", model: "second" });
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === selected.turnId);
+    const calls = JSON.parse(readFileSync(join(scratch, "launch.json.config.json"), "utf8"));
+    expect(calls).toContainEqual({ method: "session/set_model", params: { sessionId: expect.any(String), modelId: "second" } });
+  });
+
   it("reports a missing CLI as unavailable", async () => {
     instance = await ClineAgentDriver.create({
       instanceId: "cline-missing", displayName: "Cline", enabled: true, environment: {},

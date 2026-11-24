@@ -4,14 +4,12 @@ import { mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync 
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import type { ModelCatalog, TurnAccessInput } from "../../contracts.ts";
 import { resolveCli } from "../../procs.ts";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./core.ts";
-import type { ModelCatalog } from "../../contracts.ts";
+import { clineFallbackCatalog, clineCatalogFromSession, clineTurnModel } from "./cline-models.ts";
 
-const MODELS: ModelCatalog = {
-  default: "cline-default",
-  options: [{ id: "cline-default", label: "Cline default (configured)" }],
-};
+const MODELS = clineFallbackCatalog();
 
 type ClineSettings = { provider: string; model?: string; apiKey?: string; auth?: { accessToken?: string; apiKey?: string } };
 
@@ -94,20 +92,7 @@ const SUPPORT: AcpSupport = {
       (saved.auth?.accessToken?.trim() || saved.apiKey?.trim() || saved.auth?.apiKey?.trim()));
   },
   requireAuthenticationBeforeSpawn: true,
-  resolveTurnModel(model, env) {
-    if (model && model !== "cline-default") {
-      throw new Error("Select Cline default (configured). Change Cline's provider or model with cline auth in a terminal.");
-    }
-    return env.CLINE_MODEL?.trim();
-  },
-  async configureSession({ request, sessionId, env, currentModelId }) {
-    // Cline's session/new falls back when a saved custom model is absent
-    // from its built-in catalog. Pin the actual saved id before prompting.
-    const model = env.CLINE_MODEL?.trim();
-    if (model && model !== currentModelId) {
-      await request("session/set_model", { sessionId, modelId: model });
-    }
-  },
+
 };
 
 export const ClineAgentDriver = {
@@ -121,8 +106,16 @@ export const ClineAgentDriver = {
       try { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* OS temp cleanup after a locked child exits */ }
     };
     try {
+      const catalogs = new Map<string | undefined, ModelCatalog>();
       const driver = createAcpDriver({
         ...SUPPORT,
+        async configureSession({ request, sessionId, env, turn, sessionModels, currentModelId }) {
+          const account = turn.access?.identity;
+          const offered = clineCatalogFromSession(sessionModels);
+          if (offered) catalogs.set(account, offered);
+          const model = clineTurnModel(turn.model, env.CLINE_MODEL, catalogs.get(account) ?? MODELS);
+          if (model && model !== currentModelId) await request("session/set_model", { sessionId, modelId: model });
+        },
         applyTurnEnv(env, { threadId, mcpServers }) {
           const path = join(directory, `${createHash("sha256").update(threadId).digest("hex")}.json`);
           const mcp = Object.fromEntries(mcpServers.map(({ name, command, args, env: serverEnv }) => [name, {
@@ -140,6 +133,11 @@ export const ClineAgentDriver = {
         },
       });
       const instance = await driver.create(input);
+      Object.defineProperty(instance, "models", { enumerable: true, get: () => catalogs.get(undefined) ?? MODELS });
+      Object.defineProperty(instance, "modelsForAccess", {
+        enumerable: true,
+        value: async (access: TurnAccessInput) => catalogs.get(access.identity) ?? MODELS,
+      });
       const dispose = instance.dispose;
       instance.dispose = async () => {
         try { await dispose(); } finally { cleanup(); }

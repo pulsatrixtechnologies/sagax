@@ -366,6 +366,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 | Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
+| Conversation header (pill: the bot's name in a centred pill, the default; title: a plain title at the top left) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.conversationHeader` | simple |
 
 ### Notifications et confidentialité
 

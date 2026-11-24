@@ -12,6 +12,7 @@ import { showWorkingDots } from "@/lib/turn-tail";
 import { lastNonReceipt } from "@/lib/receipts";
 import { liveActivityPhrases } from "@/lib/live-activity";
 import { useOnCall } from "@/lib/call";
+import { useConversationHeader } from "@/lib/conversation-header";
 import { pendingApprovals } from "../PendingApproval";
 import { latestFailure, latestReply, type TranscriptSnapshot } from "@/lib/transcript-announcer";
 import { splitTranscriptCitations } from "@/lib/citations";
@@ -102,6 +103,7 @@ export function useChatViewPresence({
   // the reply was drawn as it was written (LiveReply): it settles in place
   // On a call the words are spoken, not typed out (same as iOS ChatLiveTail).
   const onCall = useOnCall() === bot.id;
+  const conversationHeader = useConversationHeader();
   const liveShown = useRef(false);
   const [popping, setPopping] = useState<string | null>(null);
   const poppingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -200,11 +202,12 @@ export function useChatViewPresence({
       }
     />
   );
-  // The main chat's header, like Grok Bot (#2141): the name pill only, which
-  // toggles the bot panel. No sharing pill, no gear (JC 2026-11-06).
+  // The main chat's header, like Grok Bot (#2141): the name only, which
+  // toggles the bot panel; a centred pill, or a plain title at the top left
+  // when the person chose it (Settings > Appearance > Conversation, #4536). No sharing pill, no gear (JC 2026-11-06).
   const chatHeader = side ? null : (
     <BotChatHeader
-      plain
+      plain={conversationHeader === "title"}
       name={bot.name}
       label={(bot.title ?? "")}
       panelOpen={pillPanelOpen}

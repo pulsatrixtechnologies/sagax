@@ -1974,11 +1974,15 @@ Rules that hold at every width:
   update in progress (downloading, staged, installing), the routines count,
   the apps grid, then the avatar; a downloaded update is not there (it is the
   account menu's first row, and the avatar's dot).
-- Header: the bot conversation's name is a plain title at the top left
-  (avatar, then "Name · Title" on one line, 14/20 medium, no pill fill or
-  ring), on the bar's own ground so it does not sit over the messages
-  (#4536). A group, a split pane, a coding chat and a bot-to-bot window keep
-  the 40px pill (mascot 24px, the title cut first; #4163).
+- Header: the bot conversation names its bot the way the person chose in
+  Settings > Appearance > Conversation, "Conversation header" (owner,
+  2026-11-23: both looks are fine, it is a setting; #4536). "Centered pill",
+  the default: the 40px pill (mascot 24px, the title cut first; #4163),
+  centred on the column, floating over the transcript's top. "Title at the
+  top left": a plain title (avatar, then "Name · Title" on one line, 14/20
+  medium, no pill fill or ring), on the bar's own ground so it does not sit
+  over the messages. A group, a split pane, a coding chat and a bot-to-bot
+  window keep the pill either way.
 - Reading column: the transcript, the cards and the composer share one
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the

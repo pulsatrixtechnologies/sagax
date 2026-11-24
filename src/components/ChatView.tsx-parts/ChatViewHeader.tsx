@@ -9,6 +9,7 @@ import { CallOverlay } from "../CallView";
 import { ExportTranscriptMenu } from "../ExportTranscriptMenu";
 import { TaskPicker } from "../TaskPicker";
 import { LiveCallChip } from "../LiveCallPill";
+import { useConversationHeader } from "@/lib/conversation-header";
 import { useStoreSelector } from "@/state/store-selector";
 import { openBotThread, startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
@@ -65,6 +66,7 @@ export function ChatViewHeader({
   dataItem: unknown;
 }) {
   const bots = useStoreSelector((current) => current.bots);
+  const conversationHeader = useConversationHeader();
   return (
     <>
       {/* The older call mode covers the thread while the bot is on the line;
@@ -76,10 +78,11 @@ export function ChatViewHeader({
       {/* Header */}
       {side ? (typeof side.header === "function" ? side.header(side.panel ? botPill : null) : side.header) : <ChatHeaderBar
         {...(headerDragProps as HTMLAttributes<HTMLDivElement>)}
-        align="start"
-        // The bot's name is a plain title at the top left of this bar (#4536).
-        // The transcript keeps its room under the bar, and the bar's ground
-        // hides whatever scrolls there.
+        // The person's choice (Settings > Appearance > Conversation, #4536):
+        // the centred pill (the default), or a plain title at the top left of
+        // this bar, on the bar's own ground, which hides whatever scrolls
+        // there. The transcript keeps its room under the bar either way.
+        align={conversationHeader === "title" ? "start" : "center"}
         // @container/chathead lets the chips on the right fold to icon
         // bubbles when the column is narrow. Pulsatrix Light makes it
         // `relative`.

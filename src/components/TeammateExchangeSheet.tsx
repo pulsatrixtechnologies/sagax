@@ -5,13 +5,16 @@
 // second chat with its own X and "Message <bot>" composer: the person
 // reads a conversation between two bots, they do not take part in it.
 // The thread stays live (useSideTranscript), so a teammate still at work
-// keeps adding lines.
+// keeps adding lines. While that thread's turn runs, the footer row offers
+// Stop (#5233): it stops that turn only, never the bot's other work.
 import type { ReactNode } from "react";
-import type { Bot } from "@/state/store";
+import { useStoreOptional, type Bot } from "@/state/store";
+import { t } from "@/lib/i18n";
 import { useSideTranscript } from "@/lib/use-side-transcript";
 import type { ExchangeRun } from "@/lib/bot-exchange";
 import { ExchangeSheet } from "./BotExchangeChip";
 import { creditedLines } from "./BotConversations";
+import { PILL } from "./SettingsPrimitives";
 
 export default function TeammateExchangeSheet({ owner, teammate, threadId, task, bots, footer, onClose }: {
   /** The bot that handed the work: it wrote the user-role lines. */
@@ -37,13 +40,28 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
     party: teammate,
     ends: owner ? [{ id: owner.id, name: owner.name, color: owner.color }, teammate] : [teammate],
   };
+  // The teammate's own thread, live from the store: Stop shows only while
+  // this thread's turn runs, and only where the app can send the stop.
+  const store = useStoreOptional();
+  const thread = store?.state.bots.find((bot) => bot.id === teammate.id)?.tasks?.find((item) => item.threadId === threadId);
+  const running = Boolean(thread && (thread.busy || thread.activity === "working"));
+  const stop = store && running ? (
+    <button
+      type="button"
+      data-testid="bot-exchange-stop"
+      className={PILL}
+      onClick={() => store.dispatch({ type: "interrupt", botId: teammate.id, threadId })}
+    >
+      {t("chat.stop")}
+    </button>
+  ) : null;
   return (
     <ExchangeSheet
       run={run}
       bots={bots}
       loadError={transcript.failed && transcript.messages.length === 0}
       subject={task}
-      footer={footer}
+      footer={stop || footer ? <>{stop}{footer}</> : undefined}
       onClose={onClose}
     />
   );

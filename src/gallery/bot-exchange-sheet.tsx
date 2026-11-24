@@ -6,10 +6,12 @@
  * subject=long|short|first: the subject under the pill, #4043: a page of
  * text, one short line, or the first line's own text; tools=1: Settings >
  * Tool calls on, #4171: the steps between the lines show only then, a failed
- * hand-off to a teammate shows either way). */
+ * hand-off to a teammate shows either way; working=1, #5233: the teammate's
+ * work from the Teammates card while its turn runs, with Stop in the row). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, ExchangeSheet, useExchangeColumn } from "../components/BotExchangeChip";
+import TeammateExchangeSheet from "../components/TeammateExchangeSheet";
 import type { ExchangeRun } from "../lib/bot-exchange";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -77,8 +79,27 @@ const run: ExchangeRun = {
 const routine = params.get("routine") === "1";
 const tools = params.get("tools") === "1";
 // The person's setting comes from the store, as in the app.
+// working=1 (#5233): Pixel's work thread is still running; its lines come
+// from the thread's messages, answered here.
+const working = params.get("working") === "1";
+const workThread = "pixel-work";
+if (working) {
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input instanceof Request ? input.url : input), location.href).pathname;
+    if (path === `/api/threads/${workThread}/messages`) {
+      return new Response(JSON.stringify({ messages: run.messages.map(({ from: _from, ...line }) => line), hasMore: false }), { headers: { "content-type": "application/json" } });
+    }
+    if (path.startsWith("/api/")) return new Response(JSON.stringify({}), { headers: { "content-type": "application/json" } });
+    return realFetch(input, init);
+  }) as typeof window.fetch;
+}
+const liveBots = working
+  ? bots.map((bot) => (bot.id === "pixel" ? { ...bot, tasks: [{ threadId: workThread, title: "Weekly report", createdAt: Date.now(), busy: true, activity: "working" }] } as unknown as Bot : bot))
+  : [];
+
 const store = {
-  state: { ...initialState, config: { features: { showToolCalls: tools } } as AppState["config"] },
+  state: { ...initialState, bots: liveBots, config: { features: { showToolCalls: tools } } as AppState["config"] },
   dispatch: () => {},
   flushBotPatches: () => {},
   refreshInstances: async () => {},
@@ -92,7 +113,9 @@ function Gallery() {
     <div className="h-screen bg-app text-ink" data-gallery="">
       <div ref={column.ref} className="relative h-full">
         <ExchangeColumnProvider node={column.node}>
-          {column.node && (routine
+          {column.node && (working
+            ? <TeammateExchangeSheet owner={bots[0]} teammate={{ id: "pixel", name: "Pixel", color: "orange" }} threadId={workThread} task={subject} bots={bots} onClose={() => {}} />
+            : routine
             ? <ExchangeSheet
                 chrome="window"
                 run={{ ...run, ends: [{ id: "nova", name: "Nova" }] }}

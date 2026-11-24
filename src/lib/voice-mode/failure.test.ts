@@ -161,7 +161,7 @@ describe("the key a voice failure is about (2026-10-28)", () => {
     const quota = new VoiceProviderError("needs credits", "quota", 502, { key: { source: "voice-key", last4: "Wez8" } });
     const shown = voiceErrorNote("speech-failed", "quota", quota, translate);
     expect(shown).toMatchObject({ key: "voiceMode.provider.quota.named", retry: false, clearsOnVoice: true });
-    expect(t(shown.key, shown.params)).toBe("xAI has no credits left for your voice key ···Wez8. Add credits to that xAI account, or change the key in Settings > Models and voice > My voice keys. The answers stay in the chat.");
+    expect(t(shown.key, shown.params)).toBe("xAI has no credits left for your voice key ···Wez8. Add credits to that xAI account, or change the key in Settings > Providers. The answers stay in the chat.");
     const rejected = new VoiceProviderError("rejected", "key", 502, { key: { source: "perspicax-key", last4: "c0Je" } });
     expect(t(voiceErrorNote("transcribe-failed", "key", rejected, translate).key, voiceErrorNote("transcribe-failed", "key", rejected, translate).params))
       .toBe("xAI rejected your xAI key in Perspicax ···c0Je: invalid, revoked, or without voice permission. Add credits to that xAI account, or change the key in Perspicax (Providers > Grok). The answers stay in the chat.");

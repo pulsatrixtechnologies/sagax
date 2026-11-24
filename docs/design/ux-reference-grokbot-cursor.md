@@ -2247,6 +2247,11 @@ shares nothing (2026-10-02). Keep these rules, covered by
   people sit in the automatic People section (`builtin:people`), next to
   Unassigned's bots and groups. Personal sections stay free to mix a bot,
   a group and a person. Off mixes people back into Unassigned (#1661).
+- The automatic Bot threads section (`builtin:bot-chats`, the conversations
+  between two bots) shows only when Settings > Appearance > Sidebar "Show
+  Bot threads" is on (`sagax.sidebarBotThreads.v1`). It is off by default
+  for everyone (owner, 2026-11-23, #5239). Off hides the section only: the
+  threads are neither deleted nor changed.
 - Server: bots take no access from a section. At boot each legacy shared
   section became bot grants once (`sectionShareGrants`, marker
   `botSharesMigratedAt` in `section-channels.json`); the records stay and

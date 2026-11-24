@@ -33,11 +33,12 @@ public enum SidebarPrefKey {
     public static let sectionOrder = "openmausbot.sidebarSectionOrder.v1"
     /// "1" shows thread lists and controls (thread-preferences.ts).
     public static let showThreads = "omb-show-threads"
+    public static let showBotThreads = "sagax.sidebarBotThreads.v1"
     /// The person's own order of each team's bots on the Team map, by
     /// section key (TeamCanvas.tsx on an organization server; `TeamMap.parseOrders`).
     public static let teamBotOrder = "sagax.teamCanvasBotOrder.v1"
 
-    public static let all = [personalSections, hidden, collapsedSections, sectionOrder, showThreads, teamBotOrder]
+    public static let all = [personalSections, hidden, collapsedSections, sectionOrder, showThreads, showBotThreads, teamBotOrder]
 }
 
 /// One value must fit one preference (shared/user-preferences.ts).
@@ -554,6 +555,12 @@ public struct SidebarPrefs: Hashable, Sendable {
         values[SidebarPrefKey.sectionOrder] = SidebarSectionID.serializeList(ids)
     }
 
+    public var showBotThreads: Bool { values[SidebarPrefKey.showBotThreads] == "on" }
+
+    public mutating func setShowBotThreads(_ on: Bool) {
+        values[SidebarPrefKey.showBotThreads] = on ? "on" : "off"
+    }
+
     public mutating func setShowThreads(_ on: Bool) {
         values[SidebarPrefKey.showThreads] = on ? "1" : "0"
     }
@@ -659,7 +666,7 @@ extension CompanionState {
         let channels = shownRooms.filter { $0.dm != true }
         let sectionedRooms = channels.filter { name($0.section) != nil }
         let unsectionedRooms = channels.filter { name($0.section) == nil }
-        let botChats = shownRooms.filter { $0.dm == true }
+        let botChats = prefs.showBotThreads ? shownRooms.filter { $0.dm == true } : []
 
         var names: [String] = []
         for raw in (personal?.names ?? sectionOrder) + sectionBots.map(\.section) + sectionChiefs.map(\.section) + sectionedRooms.map(\.section) {

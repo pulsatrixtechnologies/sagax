@@ -26,8 +26,8 @@ struct SidebarAppearanceSettings: View {
 
     var body: some View {
         let rows = session.state.sidebarHiddenRows(prefs.prefs.hidden)
+        SettingsSectionLabel(text: "Sidebar")
         if UIDevice.current.userInterfaceIdiom == .pad {
-            SettingsSectionLabel(text: "Sidebar")
             SettingsCard {
                 densityRow("Comfortable", .comfortable, subtitle: "Avatars, titles and the last message.")
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
@@ -45,6 +45,16 @@ struct SidebarAppearanceSettings: View {
                     )
                 }
             }
+        }
+        SettingsCard {
+            SettingsRow(
+                title: "Show Bot threads",
+                accessory: .toggle(Binding(
+                    get: { prefs.prefs.showBotThreads },
+                    set: { on in prefs.update(session) { $0.setShowBotThreads(on) } }
+                )),
+                identifier: "settings.showBotThreads"
+            )
         }
         SettingsSectionLabel(text: "Threads")
         SettingsCard {

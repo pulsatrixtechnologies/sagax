@@ -4,7 +4,7 @@
  * critique lines, the merge on agreement), after it, and the real Thoughts
  * panel in the right-hand detail panel. Synthetic data, demo accounts only.
  * Not shipped in the app.
- * ?skin=<id>&lang=<code>&case=propose|critique|merged|done|panel&auto=risky */
+ * ?skin=<id>&lang=<code>&case=propose|critique|merged|done|panel|refused|refused-panel&auto=risky */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -90,6 +90,22 @@ function lineFor(): HeavyTeamLine {
       leader: { ...leader, steps: [...planned, { kind: "agreed", at: START + 14_000, round: 2 }, { kind: "writing", at: START + 14_000 }] },
     };
   }
+  if (which === "refused" || which === "refused-panel") {
+    // M-20261123-040: an aggregator seat refused (HTTP 403), its expert went on on the next seat
+    return {
+      phase: "done", startedAt: START, thoughtEndedAt: START + 26_000, updatedAt: START + 31_000, maxRounds: 5, outcome: "agreed",
+      rounds: [{ n: 1, kind: "propose", startedAt: START + 2_000, endedAt: START + 14_000 }, { n: 2, kind: "critique", startedAt: START + 14_000, endedAt: START + 26_000, agreed: true }],
+      agents: SEATS.slice(0, 3).map((_, index) => expert(index, {
+        status: "done", agrees: true, messages: [PROPOSALS[index]!, CRITIQUES[index]!], endedAt: START + 26_000,
+        engineLabel: "OpenRouter", modelLabel: "Nemotron 3 Ultra",
+      })),
+      refusals: [{
+        n: 2, persona: "Security", engineLabel: "OpenRouter", modelLabel: "Qwen3-Coder", cause: "access", status: 403,
+        detail: "This model is not available on your plan", replacedBy: { engineLabel: "OpenRouter", modelLabel: "Nemotron 3 Ultra" },
+      }],
+      leader: { engineLabel: "OpenRouter", modelLabel: "Nemotron 3 Ultra", steps: [...planned, { kind: "agreed", at: START + 26_000, round: 2 }, { kind: "writing", at: START + 26_000 }] },
+    };
+  }
   // done (and the panel): no agreement after 5 rounds, the leader decided
   return {
     phase: "done", startedAt: START, thoughtEndedAt: START + 26_000, updatedAt: START + 31_000, maxRounds: 5, outcome: "decided",
@@ -101,7 +117,7 @@ function lineFor(): HeavyTeamLine {
 }
 
 const row: Message = { id: "run", at: START, role: "bot", kind: "activity", tool: { name: "Team of Experts", ok: true, team: lineFor() } } as Message;
-const showPanel = which === "panel";
+const showPanel = which === "panel" || which === "refused-panel";
 if (showPanel) openThoughts("run");
 
 const userBubble = (text: string) => (

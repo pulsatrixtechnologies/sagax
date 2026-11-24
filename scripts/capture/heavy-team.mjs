@@ -27,6 +27,9 @@ const shots = [
   { name: "heavy-merged", query: "case=merged", header: "Thought for 14s" },
   { name: "heavy-done-decided", query: "case=done", header: "Thought for 26s" },
   { name: "heavy-panel-decided", query: "case=panel", header: "Thought for 26s", panel: true, open: [2] },
+  // M-20261123-040: a seat that refused (HTTP 403), in French: the row, then the panel
+  { name: "heavy-refused-fr", query: "case=refused", lang: "fr" },
+  { name: "heavy-refused-panel-fr", query: "case=refused-panel", lang: "fr", panel: true },
 ];
 
 async function waitForServer(url, ms = 120_000) {
@@ -61,10 +64,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 760 }, deviceScaleFactor: 2 });
   for (const { id, label } of skins) {
     for (const shot of shots) {
-      await page.goto(`${base}?lang=en&skin=${id}&${shot.query}`, { waitUntil: "networkidle" });
+      await page.goto(`${base}?lang=${shot.lang ?? "en"}&skin=${id}&${shot.query}`, { waitUntil: "networkidle" });
       await page.waitForSelector("[data-heavy-header]");
       const header = await page.textContent("[data-heavy-header]");
-      if (header !== shot.header) throw new Error(`${shot.name} (${label}): header reads "${header}", expected "${shot.header}"`);
+      if (shot.header && header !== shot.header) throw new Error(`${shot.name} (${label}): header reads "${header}", expected "${shot.header}"`);
       if (shot.panel) {
         await page.waitForSelector("[data-thoughts-panel]");
         for (const n of shot.open ?? []) await page.click(`[data-thoughts-agent="${n}"] button`);

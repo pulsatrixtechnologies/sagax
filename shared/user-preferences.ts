@@ -76,6 +76,9 @@ export const USER_PREFERENCE_KEYS = [
   // Settings > Appearance > Sidebar: the account menu kept open above the name in
   // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is on (#5016).
   "sagax.accountMenuAbove.v1",
+  // Settings > Appearance > Sidebar: show the Bot threads section, "on" |
+  // "off"; absent is off (src/lib/sidebar-bot-threads.ts, #5239)
+  "sagax.sidebarBotThreads.v1",
   // Settings > Appearance > Sidebar: the Primary Bot as a large tile or a regular
   // row (src/lib/primary-bot-style.ts, #4588). "tile" | "row"; absent is tile.
   "sagax.primaryBotStyle.v1",
@@ -110,6 +113,10 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.botReplyBubbles.v1",
   // Settings > Appearance > Conversation: reading (960), wide (1280) or full (#2004)
   "sagax.chatWidth.v1",
+  // Settings > Appearance > Conversation: the space under the composer,
+  // small (16px), standard (48px, absent) or large (80px)
+  // (src/lib/composer-bottom-space.ts, #5238)
+  "sagax.composerBottomSpace.v1",
   // single stream: hours away or quiet before a return opens a fresh topic
   // (shared/fresh-topic.ts; "0" never)
   "sagax.freshTopicAfter.v1",

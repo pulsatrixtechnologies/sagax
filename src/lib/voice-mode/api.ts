@@ -6,6 +6,7 @@ import type { VoiceKeyInfo, VoiceModeRefusalCause, VoiceModeSettings, VoiceModeS
 import { encodeProviderVoices, isVoiceTtsProvider, VOICE_TTS_PROVIDERS, type VoiceProviderId, type VoiceTtsProvider, type VoiceTtsChoice, type VoiceSttChoice } from "../../../shared/voice-providers";
 import { readVoiceModeSettings, voiceSettingsForBot } from "./settings";
 import { readableError } from "../plain-error";
+import { activeLocale } from "../i18n";
 
 /** What a voice request says about who speaks (2026-10-29): the providers
  * this bot speaks and hears with for this person, and a voice for each.
@@ -415,6 +416,23 @@ export function voiceLocale(): string | undefined {
   }
 }
 
+/** The language the app shows text in, chosen in Settings (not the OS locale).
+ * Distinct from voiceLocale on purpose (#5222): the two notions must stay
+ * apart. voiceLocale is the OS locale, used to ask xAI for the right SPOKEN
+ * language when the voice language is "auto"; it must not decide the language
+ * of a written refusal. A live call sends this as its `locale`, so the server
+ * writes its refusal sentence in the language the person reads the app in, the
+ * same language the client's own drop lines come from (`t`, src/lib/i18n). A
+ * person who set the app to French on an English machine reads a French close
+ * line and a French reason, never one of each. */
+export function voiceTextLocale(): string | undefined {
+  try {
+    return activeLocale() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function sttQuery(language: string, threadId: string | undefined, locale: string | undefined, botId?: string): URLSearchParams {
   const stt = voiceSettingsForBot(readVoiceModeSettings(), botId).stt;
   return new URLSearchParams({ language, ...(language === "auto" && locale ? { locale } : {}), ...(threadId ? { threadId } : {}), stt });
@@ -546,8 +564,11 @@ export function voiceModeSpeechUrl(botId: string, settings: VoiceModeSettings, t
   return `${origin.replace(/^http/, "ws")}${base(botId)}/speech?${query}`;
 }
 
-/** A call's realtime voice socket (GET /voice/realtime, server/voice/realtime-call.ts). */
-export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin, locale = voiceLocale()): string {
+/** A call's realtime voice socket (GET /voice/realtime, server/voice/realtime-call.ts).
+ * `language` is the SPOKEN language; `locale` is the language the server writes
+ * its refusal sentence in, so the person reads a refusal in the language they
+ * read the app in, not the OS language (#5222). */
+export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin, locale = voiceTextLocale()): string {
   const view = voiceSettingsForBot(settings, botId);
   const query = new URLSearchParams({ language: view.language, ...(view.voice ? { voice: view.voice } : {}), ...(locale ? { locale } : {}), ...(threadId ? { threadId } : {}) });
   return `${origin.replace(/^http/, "ws")}${base(botId)}/realtime?${query}`;

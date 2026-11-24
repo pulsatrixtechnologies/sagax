@@ -43,6 +43,10 @@ function roomPin(group: Group, message: Message, dispatch: ReturnType<typeof use
   };
 }
 
+/** A room line's actions with its time under them: one column that never
+ * shrinks, beside the bubble (#5230). */
+const ROOM_MESSAGE_BAR = "flex shrink-0 flex-col gap-0.5 self-end";
+
 export const NO_PEOPLE: ReadonlyMap<string, OrgDirectoryPerson> = new Map();
 
 /** Same limits as a 1:1 user bubble (ChatView). */
@@ -205,6 +209,15 @@ export function RoomTextMessage({
       </div>
     );
   }
+  // The line's time, shown on hover. It sits under the actions, inside the
+  // 82px the bubble's cap leaves for them (as MessageBar does in a bot's own
+  // conversation): as one more item of the row it had no room beside a
+  // bubble at its cap, and left the column under the right panel (#5230).
+  const time = (
+    <span data-room-time="" className="select-none whitespace-nowrap px-1 text-[11px] leading-4 tabular-nums text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100">
+      {formatTime(m.at)}
+    </span>
+  );
   return (
     <div
       ref={lineRef}
@@ -215,7 +228,10 @@ export function RoomTextMessage({
     >
       <div className={cn("relative flex w-full items-end gap-1.5", mine ? "justify-end" : "justify-start")}>
         {mine && (
-          <MessageActions side="user" menu={userMessageMenu({ pin })} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
+          <div data-room-message-bar="user" className={cn(ROOM_MESSAGE_BAR, "items-end")}>
+            <MessageActions side="user" menu={userMessageMenu({ pin })} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
+            {time}
+          </div>
         )}
         <div
           data-chat-bubble
@@ -334,31 +350,34 @@ export function RoomTextMessage({
           )}
         </div>
         {!mine && user && (
-          <MessageActions side="bot" forceOpen={reporting} menu={personMenu} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
+          <div data-room-message-bar="bot" className={cn(ROOM_MESSAGE_BAR, "items-start")}>
+            <MessageActions side="bot" forceOpen={reporting} menu={personMenu} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
+            {time}
+          </div>
         )}
         {!user && (
-          <MessageActions
-            side="bot"
-            forceOpen={viewRaw || speaking}
-            menu={botMenu}
-            onReply={() => onReply(m)}
-            copy={botText || undefined}
-            requestId={requestId}
-            react={react}
-            persistent={
-              // a state the person turned on keeps its switch in view
-              <>
-                {botText && viewRaw && <RawToggleAction active onToggle={() => setViewRaw(false)} className={messageActionClass} />}
-                {botText && speaking && (
-                  <SpeakButton text={botText} botId={speakerBot?.id} messageId={m.id} voiceId={speakerBot?.voice} tts={tts} localVoice={localVoice} className={cn(messageActionClass, "text-accent")} />
-                )}
-              </>
-            }
-          />
+          <div data-room-message-bar="bot" className={cn(ROOM_MESSAGE_BAR, "items-start")}>
+            <MessageActions
+              side="bot"
+              forceOpen={viewRaw || speaking}
+              menu={botMenu}
+              onReply={() => onReply(m)}
+              copy={botText || undefined}
+              requestId={requestId}
+              react={react}
+              persistent={
+                // a state the person turned on keeps its switch in view
+                <>
+                  {botText && viewRaw && <RawToggleAction active onToggle={() => setViewRaw(false)} className={messageActionClass} />}
+                  {botText && speaking && (
+                    <SpeakButton text={botText} botId={speakerBot?.id} messageId={m.id} voiceId={speakerBot?.voice} tts={tts} localVoice={localVoice} className={cn(messageActionClass, "text-accent")} />
+                  )}
+                </>
+              }
+            />
+            {time}
+          </div>
         )}
-        <span className="self-end pb-1 text-[11px] tabular-nums text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100">
-          {formatTime(m.at)}
-        </span>
       </div>
       <ReactionChips reactions={m.reactions} selfIds={reactionSelf} bots={members} end={mine} onToggle={(emoji) => toggleReactionOn(m.id, emoji)} />
       {!user && m.routedBy && <RoutedByLine routedBy={m.routedBy} />}

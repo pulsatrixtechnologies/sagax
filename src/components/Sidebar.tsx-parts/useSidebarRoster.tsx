@@ -16,6 +16,7 @@ import {
   userSectionId,
 } from "@/lib/sidebar-layout";
 import { buildTeamMapSections } from "@/lib/team-map";
+import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import type { SidebarMenuItem } from "../SidebarPopoverMenu";
 import { GENERAL_SECTION_ID } from "./helpers";
@@ -46,6 +47,8 @@ export function useSidebarRoster({
   onShowArchived: () => void;
 }) {
   const peopleApart = useSidebarPeopleApart();
+  // Settings > Appearance > Sidebar, "Show Bot threads": off by default (#5239)
+  const botThreads = useSidebarBotThreads();
   const sectionParents = useSectionParents();
   const q: string = "";
   const viewerId = orgViewerId(state);
@@ -78,7 +81,7 @@ export function useSidebarRoster({
     sectionChiefs,
     sectionedBots,
   } = partitionSidebarBots(teamBots, orgMode ? { viewerId } : undefined);
-  const { botChats, peopleDms, sectionedRooms, unsectionedRooms } = partitionSidebarGroups(visibleGroups, { peopleApart });
+  const { botChats, peopleDms, sectionedRooms, unsectionedRooms } = partitionSidebarGroups(visibleGroups, { peopleApart, botThreads });
 
   // User sections keep first-appearance order. The saved layout keeps an
   // empty section's former slot so it returns there when content comes back.

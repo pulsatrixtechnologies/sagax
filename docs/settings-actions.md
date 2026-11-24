@@ -352,6 +352,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
 | Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > Permissions > Privacy | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
 | Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
+| Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.sidebarBotThreads` | simple |
 | Primary Bot in the sidebar (tile, the large tile; row, a regular row) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.primaryBotStyle` | simple |
 | Routines badge | Settings > General > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
 | Sidebar density | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |
@@ -364,6 +365,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.botBubbleAccent` | simple |
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
+| Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
 
 ### Notifications et confidentialité
 

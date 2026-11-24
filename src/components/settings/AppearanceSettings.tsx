@@ -28,8 +28,10 @@ import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, ty
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
+import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
+import { sidebarBotThreads, useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
 import { contrastChoice, CONTRAST_CHOICES, MOTION_CHOICES, motionChoice, TEXT_SIZE_CHOICES, textSizeChoice } from "@/lib/accessibility-preferences";
@@ -165,6 +167,29 @@ function ChatWidthRow() {
               : option === "full"
                 ? "settings.chatWidth.full"
                 : "settings.chatWidth.reading",
+          ),
+        }))}
+      />
+    </CompactRow>
+  );
+}
+
+function ComposerBottomSpaceRow() {
+  const space = useComposerBottomSpace();
+  return (
+    <CompactRow label={t("settings.composerBottomSpace.title")} rowId="composerBottomSpace">
+      <PillSelect<ComposerBottomSpace>
+        value={space}
+        ariaLabel={t("settings.composerBottomSpace.chooseAria")}
+        onChange={(next) => setComposerBottomSpace(parseComposerBottomSpace(next))}
+        options={COMPOSER_BOTTOM_SPACES.map((option) => ({
+          value: option,
+          label: t(
+            option === "small"
+              ? "settings.composerBottomSpace.small"
+              : option === "large"
+                ? "settings.composerBottomSpace.large"
+                : "settings.composerBottomSpace.standard",
           ),
         }))}
       />
@@ -539,6 +564,7 @@ export function AppearanceSettings() {
   const suggestions = useShowSuggestions();
   const allHistory = useShowAllHistory();
   const permissions = useShowPermissions();
+  const botThreads = useSidebarBotThreads();
   const streamReplies = useStreamReplies();
   const replyBubbles = botReplyBubbles.use() === "on";
   const bubbleAccent = botBubbleAccent.use() === "1";
@@ -553,6 +579,7 @@ export function AppearanceSettings() {
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
         <ChatWidthRow />
+        <ComposerBottomSpaceRow />
         <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <SwitchLine label={t("settings.botBubbleAccent.title")} checked={bubbleAccent} onChange={(on) => botBubbleAccent.set(on ? "1" : "0")} rowId="botBubbleAccent" />
         <ThreadsViewRow />
@@ -566,6 +593,7 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.accountMenuAbove.title")} ariaLabel={t("settings.accountMenuAbove.show")} checked={menuAbove} onChange={(on) => accountMenuAbove.set(on ? "on" : "off")} rowId="accountMenuAbove" />
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
+        <SwitchLine label={t("settings.sidebarBotThreads.title")} ariaLabel={t("settings.sidebarBotThreads.show")} checked={botThreads} onChange={(on) => sidebarBotThreads.set(on ? "on" : "off")} rowId="sidebarBotThreads" />
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
         <SidebarHiddenFold />
       </SettingsGroup>

@@ -138,6 +138,9 @@ describe("bot-to-bot asks in the chat (#3289)", () => {
     expect(plain(markup)).not.toContain("Asked");
   });
 
+  // #4787 (the owner, 2026-11-18: "teammates asked folded in the meta"): a
+  // routine result is one row, and the teammates it asked are said once, in
+  // that row's meta, with the Asked line's own word; no line under the row.
   it("draws a routine run's teammates as the Asked line, never a Teammates card", () => {
     const run = {
       id: "run", role: "bot", kind: "routine.run", at: at + 50_000, text: "",
@@ -147,9 +150,11 @@ describe("bot-to-bot asks in the chat (#3289)", () => {
       },
     } as unknown as Message;
     const markup = render("scout", [text("u", "user", "Run it.", 0), run]);
-    expect(count(markup, 'data-testid="delegation-line"')).toBe(1);
+    expect(count(markup, "data-routine-run-meta")).toBe(1);
+    expect(count(markup, 'data-testid="delegation-line"')).toBe(0);
     expect(markup).not.toContain("data-delegation-provenance");
-    expect(plain(markup)).toContain("Asked Wren and Marlin");
+    expect(plain(markup)).toContain("Asked Wren, Marlin");
+    expect(count(plain(markup), "Asked")).toBe(1);
     expect(plain(markup)).not.toContain("Teammates");
   });
 

@@ -17,6 +17,7 @@ import { createAndroidDeviceController } from "./android-device.mjs";
 import { finishSpeech, startSpeech, stopSpeech } from "./speech.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
 import { captureScreenThumbnail } from "./screen-thumbnail.mjs";
+import { hasContextMenu, imageMenuItems, textMenuTarget } from "./image-menu-items.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import { blockPageFrameNavigation } from "./page-frame-guard.mjs";
 import { installPageFrameWatch } from "./page-frames.mjs";
@@ -3664,8 +3665,8 @@ async function forgetEnvironment(id, purge = false) {
 }
 
 /**
- * Displays the native context menu for editable fields, links, and selections,
- * enabling paste if text or a clipboard image is available.
+ * Displays the native context menu for editable fields, links, selections and
+ * images (Copy Image), enabling paste if text or a clipboard image is available.
  *
  * @param {Electron.BrowserWindow} win - Target browser window.
  * @param {Electron.ContextMenuParams} params - Context menu parameters from Electron.
@@ -3674,8 +3675,11 @@ async function forgetEnvironment(id, purge = false) {
 async function showContextMenu(win, params, contents = win.webContents) {
   // nothing actionable here — no menu at all, rather than a wall of
   // disabled items
-  if (!params.isEditable && !params.linkURL && !params.misspelledWord && !params.selectionText) return;
+  if (!hasContextMenu(params)) return;
   const menuItems = [];
+  // an image in a conversation: Copy Image (#5226)
+  const imageItems = imageMenuItems(params, contents);
+  if (imageItems.length) menuItems.push(...imageItems, { type: "separator" });
   if (params.misspelledWord) {
     for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
       menuItems.push({
@@ -3691,17 +3695,23 @@ async function showContextMenu(win, params, contents = win.webContents) {
       { type: "separator" },
     );
   }
-  menuItems.push(
-    { label: "Undo", role: "undo", enabled: params.editFlags.canUndo },
-    { label: "Redo", role: "redo", enabled: params.editFlags.canRedo },
-    { type: "separator" },
-    { label: "Cut", role: "cut", enabled: params.editFlags.canCut },
-    { label: "Copy", role: "copy", enabled: params.editFlags.canCopy },
-    await pasteMenuItem(params, clipboard, contents),
-    { label: "Paste and Match Style", role: "pasteAndMatchStyle", enabled: params.editFlags.canPaste },
-    { type: "separator" },
-    { label: "Select All", role: "selectAll", enabled: params.editFlags.canSelectAll },
-  );
+  // the text entries only where there is text to act on: an image alone
+  // gets its own entries, not a wall of disabled ones
+  if (textMenuTarget(params)) {
+    menuItems.push(
+      { label: "Undo", role: "undo", enabled: params.editFlags.canUndo },
+      { label: "Redo", role: "redo", enabled: params.editFlags.canRedo },
+      { type: "separator" },
+      { label: "Cut", role: "cut", enabled: params.editFlags.canCut },
+      { label: "Copy", role: "copy", enabled: params.editFlags.canCopy },
+      await pasteMenuItem(params, clipboard, contents),
+      { label: "Paste and Match Style", role: "pasteAndMatchStyle", enabled: params.editFlags.canPaste },
+      { type: "separator" },
+      { label: "Select All", role: "selectAll", enabled: params.editFlags.canSelectAll },
+    );
+  } else if (menuItems.at(-1)?.type === "separator") {
+    menuItems.pop();
+  }
   if (win.isDestroyed()) return;
   Menu.buildFromTemplate(menuItems).popup({ window: win, frame: params.frame });
 }

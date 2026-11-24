@@ -904,6 +904,7 @@ pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This r
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
 pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > Permissions > Privacy");
 pref("appearance.accountMenuAbove", "appearance", "sagax.accountMenuAbove.v1", "enum:on|off", "Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.sidebarBotThreads", "appearance", "sagax.sidebarBotThreads.v1", "enum:on|off", "Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.primaryBotStyle", "appearance", "sagax.primaryBotStyle.v1", "enum:tile|row", "Primary Bot in the sidebar (tile, the large tile; row, a regular row)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > General > Appearance");
 pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > General > Appearance");
@@ -917,6 +918,7 @@ pref("appearance.botReplyBubbles", "appearance", "sagax.botReplyBubbles.v1", "en
 pref("appearance.botBubbleAccent", "appearance", "sagax.botBubble.v1", "enum:1|0", "Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice)", "Settings > General > Appearance > More appearance > Conversation");
 pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > General > Appearance > More appearance > Conversation");
 pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.composerBottomSpace", "appearance", "sagax.composerBottomSpace.v1", "enum:small|standard|large", "Space under the composer (small 16px; standard 48px, the default; large 80px)", "Settings > General > Appearance > More appearance > Conversation");
 pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > General > Notifications");
 pref("notifications.soundChoice", "notifications", "sagax.notificationSound.v1", "enum:system|tick|double-tick|chime-a|chime-b|blip", "Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip)", "Settings > General > Notifications");
 pref("notifications.persistent", "notifications", "omb-notification-persistent", "boolean", "Persistent notifications", "Settings > General > Notifications");

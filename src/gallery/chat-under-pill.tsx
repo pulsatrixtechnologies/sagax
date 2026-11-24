@@ -37,6 +37,18 @@ const roomMessages = Array.from({ length: 12 }, (_, i) => [
   { id: `u${i}`, role: "user", kind: "text", text: `Question ${i + 1} : où en est le suivi des billets ouverts cette semaine ?`, at: at + i * 120_000 },
   { id: `b${i}`, role: "bot", kind: "text", from: { botId: i % 2 ? "atlas" : "support", name: i % 2 ? "Atlas" : "Ada Support" }, text: `Réponse ${i + 1} : ${i + 3} billets restent ouverts, dont un en attente du client. Le reste est planifié pour demain matin.`, at: at + i * 120_000 + 60_000 },
 ]).flat();
+// &wide=1 (#5230): a person's line and a bot's reply long enough to reach
+// the bubble's cap, so the row has no room to spare beside the bubble
+if (params.get("wide") === "1") {
+  const long = "Voici le détail complet du suivi des billets ouverts cette semaine, avec les priorités, les clients touchés et les prochaines étapes prévues pour demain matin. ";
+  roomMessages.push(
+    { id: "uw", role: "user", kind: "text", text: long.repeat(2), at: at + 13 * 120_000 },
+    { id: "bw", role: "bot", kind: "text", from: { botId: "atlas", name: "Atlas" }, text: long.repeat(4), at: at + 13 * 120_000 + 60_000 },
+    // a block that does not shrink (a wide table), from the other bot
+    { id: "bt", role: "bot", kind: "text", from: { botId: "support", name: "Ada Support" }, at: at + 13 * 120_000 + 90_000,
+      text: "| Billet | Client | Priorité | Responsable | Échéance | État | Prochaine étape |\n|---|---|---|---|---|---|---|\n" + Array.from({ length: 3 }, (_, n) => `| SR-10${n} | Client synthétique ${n + 1} | Haute | Technicienne ${n + 1} | 2026-11-2${n} | En attente du client | Rappeler demain matin |`).join("\n") },
+  );
+}
 const group = {
   id: "ops", threadId: "t-ops", name: longName ? "Ada Lovelace, Bob Martin, Cléo Tremblay et Atlas" : "Opérations", bulletin: "Chacun répond à son tour.", unread: false, createdAt: Date.now(),
   memberIds: ["support", "atlas"], humanIds: owner ? ["pr_me", "pr_ada"] : ["pr_ada", "pr_me"], ownerId: owner ? "pr_me" : "pr_ada",

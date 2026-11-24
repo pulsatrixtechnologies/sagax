@@ -20,6 +20,7 @@ import { useDataWindowItem } from "./DataWindowButton";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
+import { useDockedPanelEntrance } from "@/lib/docked-panel-entrance";
 import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
@@ -66,6 +67,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   overlay?: boolean;
 }) {
   const advanced = useAdvancedMode();
+  const entrance = useDockedPanelEntrance("bot-panel");
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, computerWindowView: current.computerWindowView, signInFocus: current.signInFocus, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat, connected: current.connected }), shallowEqual);
   const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
@@ -266,7 +268,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
         tabIndex={-1}
         style={{ width: dockedPanel.width }}
         data-panel-bot={bot.id}
-        className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-[var(--bot-panel-bg)] outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
+        // the opening slide, never replayed when the open panel changes bot (#5228)
+        className={cn(entrance && "animate-panel-in", "app-docked-panel relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-pane-edge bg-[var(--bot-panel-bg)] outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!")}
       >
         <DockedPanelResizeHandle label="Resize settings" panel={dockedPanel} />
         {(macInset || browser) && <div className="content-topbar-strip" />}

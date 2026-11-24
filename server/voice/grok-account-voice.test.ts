@@ -197,6 +197,16 @@ describe("every refusal reason the server computes is said in the person's langu
     );
   });
 
+  it("a key of the person's own, then the organization's account and key in two states: one list, a single \"et\"", () => {
+    const rows = [TRIED("voice-key", "key"), TRIED("org-account", "key"), TRIED("org-key", "quota")];
+    expect(realtimeKeyRefusedCallReason(rows, "fr")).toContain(
+      "Aucun appel : ta clé vocale a été refusée, le compte Grok de ton organisation a été refusé, et la clé xAI de ton organisation n'a plus de crédits. ",
+    );
+    expect(realtimeKeyRefusedCallReason(rows, "en")).toContain(
+      "No call was placed: your voice key was refused, your organization's Grok account was refused, and your organization's xAI key is out of credits. ",
+    );
+  });
+
   it("the person's account tried, then the organization's: the second half names that account, never an API key", () => {
     expect(noCallReason([TRIED("grok-account", "quota"), TRIED("org-account", "quota")], "fr"))
       .toBe("Aucun appel : le compte Grok connecté n'a plus de crédit, le compte Grok de ton organisation n'a plus de crédit, et il n'y a pas de clé API xAI.");

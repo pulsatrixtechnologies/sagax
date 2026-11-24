@@ -206,12 +206,22 @@ function refusedWords(out: boolean, many: boolean, language: NoCallLanguage, mas
 /** What happened to what the organization gives, each credential with its own
  * state: its account and its key can both be tried, and one can be refused
  * while the other is out of credits. */
-function givenStates(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string {
+function givenStateList(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string[] {
   const states = [...new Set(given.map((row) => row.failure === "quota"))];
   return states.map((out) => {
     const rows = given.filter((row) => (row.failure === "quota") === out);
     return `${credentialNames(rows, GIVEN_KEY_NAME, language)} ${refusedWords(out, rows.length > 1, language, rows.some((row) => MASCULINE_SOURCES.has(row.source)))}`;
-  }).join(language === "fr" ? ", et " : ", and ");
+  });
+}
+
+/** Clauses in one list with a single closing "et" / "and": never "a, et b, et c". */
+function clauseList(clauses: readonly string[], language: NoCallLanguage): string {
+  const and = language === "fr" ? ", et " : ", and ";
+  return clauses.length > 2 ? `${clauses.slice(0, -1).join(", ")}${and}${clauses[clauses.length - 1]}` : clauses.join(and);
+}
+
+function givenStates(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string {
+  return clauseList(givenStateList(given, language), language);
 }
 
 /** One plain sentence for `realtime_key_refused` when no connected Grok
@@ -230,12 +240,13 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
   const givenKey = given.some((row) => row.source !== "org-account");
   if (own.length && given.length) {
     const left = `${credentialNames(own, OWN_KEY_NAME, language)} ${refusedWords(dryOf(own), own.length > 1, language)}`;
-    const right = givenStates(given, language);
     if (givenAccount) {
+      const all = clauseList([left, ...givenStateList(given, language)], language);
       return language === "fr"
-        ? `Aucun appel : ${left}, et ${right}. ${ownAction(own, "fr")} Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`
-        : `No call was placed: ${left}, and ${right}. ${ownAction(own, "en")} For what your organization provides, ask one of its administrators.`;
+        ? `Aucun appel : ${all}. ${ownAction(own, "fr")} Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`
+        : `No call was placed: ${all}. ${ownAction(own, "en")} For what your organization provides, ask one of its administrators.`;
     }
+    const right = givenStates(given, language);
     return language === "fr"
       ? `Aucun appel : ${left}, et ${right}. ${ownAction(own, "fr")} Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`
       : `No call was placed: ${left}, and ${right}. ${ownAction(own, "en")} A key you were given is for an administrator of your organization.`;

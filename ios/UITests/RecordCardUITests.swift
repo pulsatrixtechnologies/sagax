@@ -135,6 +135,7 @@ final class RecordCardUITests: XCTestCase {
         XCTAssertTrue(shown.waitForExistence(timeout: 5), "the composer is back")
         let value = (shown.value as? String) ?? ""
         XCTAssertTrue(value.contains("sagax://record/nimbus_desk/bill/88213"), value)
+        record("Ask with the record link in the composer", app)
     }
 
     @MainActor

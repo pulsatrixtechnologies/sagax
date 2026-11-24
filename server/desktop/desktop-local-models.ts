@@ -29,6 +29,12 @@ export const DESKTOP_MODEL_WRONG_ENGINE = "This engine cannot run a model from y
 export const DESKTOP_MODEL_NO_ANTHROPIC = "This local server did not answer the Anthropic protocol (/v1/messages) at its last check, so Claude Code cannot use it. If it is busy, try again in a moment; otherwise pick this model on an engine that takes an OpenAI-compatible endpoint.";
 /** The proxy's answer to a request outside its allowlist. The engine shows it
  * as is ("API Error: 400 ..."), so it says what happened and what to do. */
+/** M-20261123-040: the computer's own server did not finish its answer in the time the bridge gives one request. */
+export const DESKTOP_MODEL_TIMED_OUT = "The local model on your computer did not finish its answer in 10 minutes, so this request was stopped. Ask for a shorter answer, lower the reasoning effort, or try again.";
+/** One chat completion's time on the person's computer: the desktop bridge's own ceiling (electron/local-models.mjs). */
+const COMPLETION_SECONDS = 600;
+const MAX_RECIPIENTS = 200;
+const RECIPIENT_ID = /^[^\s\p{Cc}]{1,120}$/u;
 export const DESKTOP_MODEL_TOO_LARGE = "This request is too large to send to the local model on your computer (1 MB at most). Start a new conversation or compact this one, then try again.";
 export const DESKTOP_MODEL_REFUSED = "Sagax did not forward this request to the local model on your computer: the engine asked for an address Sagax does not allow. Update Sagax on your computer and on the organization server, then try again.";
 const INVALID_BASE = "Use http://127.0.0.1 or http://localhost, and a path ending in /v1.";
@@ -36,9 +42,18 @@ const REQUEST_CAP = 1_000_000;
 const RESPONSE_CAP = 1_500_000;
 const MODEL_ID = /^[\w][\w./:+-]*$/;
 
+/** D-20261123-023: the people and teams a person shares their computer's
+ * models with, beside (or instead of) the whole organization (`share`). */
+export interface LocalModelRecipients {
+  people: string[];
+  teams: string[];
+}
+
 interface PersonSettings {
   expose: boolean;
+  /** Shared with the whole organization. */
   share: boolean;
+  shareWith: LocalModelRecipients;
   endpoints: LoopbackEndpoint[];
 }
 
@@ -61,6 +76,7 @@ interface BridgeClient {
 export interface DesktopLocalModelView {
   expose: boolean;
   share: boolean;
+  shareWith: LocalModelRecipients;
   endpoints: LoopbackEndpoint[];
   published: PublishedEndpoint[];
   /** The desktop's last probe outcome per endpoint (Settings panel only). */
@@ -73,7 +89,28 @@ type ModelOption = { id: string; label: string; custom?: boolean; local?: boolea
 /** Own bots may use this computer's models until the person turns that off.
  * Other people never do until the person turns sharing on. */
 function defaultSettings(): PersonSettings {
-  return { expose: true, share: false, endpoints: SEED_ENDPOINTS.map((row) => ({ ...row })) };
+  return { expose: true, share: false, shareWith: { people: [], teams: [] }, endpoints: SEED_ENDPOINTS.map((row) => ({ ...row })) };
+}
+
+/** A list of person or team ids, lower-cased, without doubles. Null when malformed. */
+function parseRecipientIds(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > MAX_RECIPIENTS) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !RECIPIENT_ID.test(item.trim())) return null;
+    const id = item.trim().toLowerCase();
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+function parseRecipients(value: unknown): LocalModelRecipients | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((name) => name !== "people" && name !== "teams")) return null;
+  const people = parseRecipientIds(record.people ?? []);
+  const teams = parseRecipientIds(record.teams ?? []);
+  return people && teams ? { people, teams } : null;
 }
 
 function parseDetails(value: unknown, models: readonly string[]): PublishedEndpoint["details"] | null {
@@ -206,6 +243,7 @@ export class DesktopLocalModels {
   private file: string;
   private bridges: BridgeClient;
   private ownerName: (person: string) => string;
+  private teamsOf: (person: string) => readonly string[];
   private people = new Map<string, PersonSettings>();
   private published = new Map<string, { endpoints: PublishedEndpoint[] }>();
   // Per-endpoint probe outcomes for the Settings panel. In memory only, like
@@ -216,8 +254,9 @@ export class DesktopLocalModels {
   private port = 0;
   private loaded = false;
 
-  constructor(dataDir: string, bridges: BridgeClient, ownerName: (person: string) => string = () => "") {
+  constructor(dataDir: string, bridges: BridgeClient, ownerName: (person: string) => string = () => "", teamsOf: (person: string) => readonly string[] = () => []) {
     this.ownerName = ownerName;
+    this.teamsOf = teamsOf;
     this.file = join(dataDir, "desktop-local-models.json");
     this.bridges = bridges;
   }
@@ -262,6 +301,18 @@ export class DesktopLocalModels {
     this.hostMeta.clear();
   }
 
+  /** Whether `who` may use the models of `owner`'s computer: the owner, the
+   * whole organization when it is shared with it, a chosen person, or a
+   * member of a chosen team (D-20261123-023). */
+  private reaches(owner: string, settings: PersonSettings, who: string): boolean {
+    if (who === owner || settings.share) return true;
+    if (!who) return false;
+    if (settings.shareWith.people.includes(who)) return true;
+    if (!settings.shareWith.teams.length) return false;
+    const teams = this.teamsOf(who).map((team) => team.trim().toLowerCase());
+    return settings.shareWith.teams.some((team) => teams.includes(team));
+  }
+
   read(person: string): DesktopLocalModelView {
     this.load();
     const key = person.trim().toLowerCase();
@@ -272,6 +323,7 @@ export class DesktopLocalModels {
     return {
       expose: settings.expose,
       share: settings.share,
+      shareWith: { people: [...settings.shareWith.people], teams: [...settings.shareWith.teams] },
       endpoints: settings.endpoints.map((row) => ({ ...row })),
       published: (pub?.endpoints ?? []).filter((row) => settings.endpoints.some((endpoint) => endpoint.id === row.id)),
       probes: (probes ?? []).filter((row) => settings.endpoints.some((endpoint) => endpoint.id === row.id)).map((row) => ({ ...row })),
@@ -286,7 +338,7 @@ export class DesktopLocalModels {
     if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: INVALID_BASE };
     const record = body as Record<string, unknown>;
     for (const name of Object.keys(record)) {
-      if (name !== "expose" && name !== "share" && name !== "endpoints") return { ok: false, error: INVALID_BASE };
+      if (name !== "expose" && name !== "share" && name !== "shareWith" && name !== "endpoints") return { ok: false, error: INVALID_BASE };
     }
     const current = this.people.get(key) ?? defaultSettings();
     let expose = current.expose;
@@ -300,12 +352,19 @@ export class DesktopLocalModels {
       if (typeof record.share !== "boolean") return { ok: false, error: INVALID_BASE };
       share = record.share;
     }
+    let shareWith = current.shareWith;
+    if (record.shareWith !== undefined) {
+      const parsed = parseRecipients(record.shareWith);
+      if (!parsed) return { ok: false, error: "Choose people and teams of your organization." };
+      // sharing with oneself says nothing
+      shareWith = { people: parsed.people.filter((id) => id !== key), teams: parsed.teams };
+    }
     if (record.endpoints !== undefined) {
       const assigned = assignEndpoints(record.endpoints);
       if (!assigned.ok) return assigned;
       endpoints = assigned.endpoints;
     }
-    this.people.set(key, { expose, share, endpoints });
+    this.people.set(key, { expose, share, shareWith, endpoints });
     if (!expose) { this.published.delete(key); this.probes.delete(key); }
     this.save();
     this.syncPerson(key);
@@ -366,7 +425,7 @@ export class DesktopLocalModels {
     const out: InjectedModel[] = [];
     for (const [owner, settings] of this.people) {
       if (!settings.expose || !this.bridges.connected(owner)) continue;
-      if (who !== owner && !settings.share) continue;
+      if (!this.reaches(owner, settings, who)) continue;
       const pub = this.published.get(owner);
       if (!pub) continue;
       // The model name alone (2026-10-26). Another person's shared model adds
@@ -455,7 +514,7 @@ export class DesktopLocalModels {
     const settings = this.people.get(meta.person);
     if (!settings?.expose) return false;
     const who = person?.trim().toLowerCase() || "";
-    if (who !== meta.person && !settings.share) return false;
+    if (!this.reaches(meta.person, settings, who)) return false;
     if (!this.bridges.connected(meta.person)) return false;
     const endpoint = this.published.get(meta.person)?.endpoints.find((row) => row.id === meta.endpointId);
     return Boolean(endpoint?.models.includes(decoded.model));
@@ -539,7 +598,7 @@ export class DesktopLocalModels {
       return;
     }
     const settings = this.people.get(meta.person);
-    if (!settings?.expose || (caller !== meta.person && !settings.share)) {
+    if (!settings?.expose || !this.reaches(meta.person, settings, caller.trim().toLowerCase())) {
       res.writeHead(403, textHeaders);
       res.end(DESKTOP_MODEL_UNAVAILABLE);
       return;
@@ -578,7 +637,7 @@ export class DesktopLocalModels {
         http_method: method,
         http_path: httpPath,
         ...(method === "POST" ? { json } : {}),
-        timeout_seconds: httpPath === "/models" ? 30 : 240,
+        timeout_seconds: httpPath === "/models" ? 30 : COMPLETION_SECONDS,
       }, () => true);
     } catch {
       res.writeHead(503, textHeaders);
@@ -586,11 +645,20 @@ export class DesktopLocalModels {
       return;
     }
     const record = result && typeof result === "object"
-      ? result as { isError?: boolean; localModel?: { status?: unknown; contentType?: unknown; body?: unknown } }
+      ? result as { isError?: boolean; content?: unknown; localModel?: { status?: unknown; contentType?: unknown; body?: unknown } }
       : null;
     if (!record || record.isError || typeof record.localModel?.body !== "string") {
+      // M-20261123-040: the person reads why, in the computer's own words: an
+      // answer that ran out of time is not "the request failed".
+      const first = Array.isArray(record?.content) ? record.content[0] as { text?: unknown } | undefined : undefined;
+      const why = typeof first?.text === "string" ? first.text.replace(/[\p{Cc}]+/gu, " ").trim().slice(0, 300) : "";
+      if (/\baborted\b|\btimed? ?out\b/i.test(why)) {
+        res.writeHead(504, textHeaders);
+        res.end(DESKTOP_MODEL_TIMED_OUT);
+        return;
+      }
       res.writeHead(502, textHeaders);
-      res.end("The local model request failed.");
+      res.end(why ? `The local model request failed on your computer: ${why}` : "The local model request failed.");
       return;
     }
     if (record.localModel.body.length > RESPONSE_CAP) {
@@ -652,6 +720,8 @@ function parseStored(value: unknown): PersonSettings | null {
   const record = value as Record<string, unknown>;
   if (typeof record.expose !== "boolean" || typeof record.share !== "boolean" || !Array.isArray(record.endpoints)) return null;
   const assigned = assignEndpoints(record.endpoints);
-  if (!assigned.ok) return { expose: record.expose, share: record.share, endpoints: [] };
-  return { expose: record.expose, share: record.share, endpoints: assigned.endpoints };
+  // a share saved before the recipients existed is the whole organization's, as it was
+  const shareWith = parseRecipients(record.shareWith ?? {}) ?? { people: [], teams: [] };
+  if (!assigned.ok) return { expose: record.expose, share: record.share, shareWith, endpoints: [] };
+  return { expose: record.expose, share: record.share, shareWith, endpoints: assigned.endpoints };
 }

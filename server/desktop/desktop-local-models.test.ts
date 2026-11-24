@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { desktopModelApiKey, withDesktopModelPerson } from "./desktop-model-grant.ts";
-import { DESKTOP_MODEL_NO_ANTHROPIC, DESKTOP_MODEL_REFUSED, DESKTOP_MODEL_TOO_LARGE, DESKTOP_MODEL_UNAVAILABLE, DESKTOP_MODEL_WRONG_ENGINE, DesktopLocalModels, injectHostId } from "./desktop-local-models.ts";
+import { DESKTOP_MODEL_NO_ANTHROPIC, DESKTOP_MODEL_REFUSED, DESKTOP_MODEL_TIMED_OUT, DESKTOP_MODEL_TOO_LARGE, DESKTOP_MODEL_UNAVAILABLE, DESKTOP_MODEL_WRONG_ENGINE, DesktopLocalModels, injectHostId } from "./desktop-local-models.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import {
   applyClaudeInject,
@@ -49,7 +49,7 @@ async function start() {
       return { localModel: { status: 200, contentType: "application/json", body: "{\"ok\":true}" } };
     },
   };
-  const service = new DesktopLocalModels(dir, bridge, (person) => ({ pr_owner: "Camille Tremblay" })[person] ?? "");
+  const service = new DesktopLocalModels(dir, bridge, (person) => ({ pr_owner: "Camille Tremblay" })[person] ?? "", (person) => ({ pr_teammate: ["team_support"] })[person] ?? []);
   services.push(service);
   await service.listen();
   return { service, bridge };
@@ -126,6 +126,74 @@ describe("desktop local models", () => {
     expect(injectHostId(owner, "desk8002")).not.toBe(injectHostId(other, "desk8002"));
   });
 
+  // D-20261123-023: sharing chooses who it reaches (people, teams, or the whole organization)
+  it("shares with the chosen people and teams only, and keeps a whole-organization share as it is", async () => {
+    const { service, bridge } = await start();
+    const owner = "pr_owner";
+    bridge.online.add(owner);
+    expect(service.update(owner, { expose: true, shareWith: { people: ["PR_Friend"], teams: ["team_support"] } }).ok).toBe(true);
+    expect(service.read(owner)).toMatchObject({ share: false, shareWith: { people: ["pr_friend"], teams: ["team_support"] } });
+    expect(service.publish(owner, { endpoints: [{ id: "desk8002", label: "DwarfStar", models: ["qwen3"] }] }).ok).toBe(true);
+    const hostId = injectHostId(owner, "desk8002");
+    const modelId = encodeInjectId(hostId, "qwen3");
+    // a chosen person, and a member of a chosen team
+    for (const reached of ["pr_friend", "pr_teammate"]) {
+      expect(service.modelsFor(reached)[0]).toMatchObject({ label: "qwen3", sharedBy: "Camille Tremblay" });
+      expect(service.available(reached, modelId)).toBe(true);
+      expect((await post(service.portNumber(), hostId, grant(reached))).status).toBe(200);
+    }
+    // anyone else of the organization is not reached
+    bridge.calls.length = 0;
+    expect(service.modelsFor("pr_other")).toEqual([]);
+    expect(service.available("pr_other", modelId)).toBe(false);
+    const denied = await post(service.portNumber(), hostId, grant("pr_other"));
+    expect(denied.status).toBe(403);
+    expect(bridge.calls).toHaveLength(0);
+    // the whole organization: everyone, and the chosen people and teams are kept beside it
+    expect(service.update(owner, { share: true }).ok).toBe(true);
+    expect(service.read(owner)).toMatchObject({ share: true, shareWith: { people: ["pr_friend"], teams: ["team_support"] } });
+    expect((await post(service.portNumber(), hostId, grant("pr_other"))).status).toBe(200);
+    // removing a recipient ends their reach
+    expect(service.update(owner, { share: false, shareWith: { people: [], teams: ["team_support"] } }).ok).toBe(true);
+    expect(service.available("pr_friend", modelId)).toBe(false);
+    expect(service.available("pr_teammate", modelId)).toBe(true);
+    // a malformed list is refused whole
+    expect(service.update(owner, { shareWith: { people: "pr_friend" } }).ok).toBe(false);
+    expect(service.update(owner, { shareWith: { people: [42], teams: [] } }).ok).toBe(false);
+  });
+
+  it("a whole-organization share saved before the recipients existed stays a whole-organization share", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-desktop-models-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "desktop-local-models.json"), JSON.stringify({ people: { pr_owner: { expose: true, share: true, endpoints: [{ id: "desk8002", label: "DwarfStar", baseUrl: "http://127.0.0.1:8002/v1" }] } } }));
+    const service = new DesktopLocalModels(dir, { connected: () => true, current: () => ({ name: "Mac" }), request: async () => ({}) });
+    services.push(service);
+    await service.listen();
+    expect(service.read("pr_owner")).toMatchObject({ share: true, shareWith: { people: [], teams: [] } });
+    expect(service.publish("pr_owner", { endpoints: [{ id: "desk8002", label: "DwarfStar", models: ["qwen3"] }] }).ok).toBe(true);
+    expect(service.available("pr_anyone", encodeInjectId(injectHostId("pr_owner", "desk8002"), "qwen3"))).toBe(true);
+  });
+
+  // M-20261123-040: the owner's bridge log read "The operation was aborted" at exactly 240 s
+  it("gives a long local answer the bridge's full time, and says so when the computer did not finish", async () => {
+    const { service, bridge } = await start();
+    const owner = "pr_owner";
+    bridge.online.add(owner);
+    expect(service.update(owner, { expose: true }).ok).toBe(true);
+    expect(service.publish(owner, { endpoints: [{ id: "desk8002", label: "DwarfStar", models: ["qwen3"] }] }).ok).toBe(true);
+    const hostId = injectHostId(owner, "desk8002");
+    expect((await post(service.portNumber(), hostId, grant(owner))).status).toBe(200);
+    expect(bridge.calls[0]?.operation.timeout_seconds).toBe(600);
+    bridge.request = async () => ({ isError: true, content: [{ type: "text", text: "The operation was aborted" }] }) as never;
+    const late = await post(service.portNumber(), hostId, grant(owner));
+    expect(late.status).toBe(504);
+    expect(await late.text()).toBe(DESKTOP_MODEL_TIMED_OUT);
+    bridge.request = async () => ({ isError: true, content: [{ type: "text", text: "connect ECONNREFUSED 127.0.0.1:8002" }] }) as never;
+    const down = await post(service.portNumber(), hostId, grant(owner));
+    expect(down.status).toBe(502);
+    expect(await down.text()).toContain("ECONNREFUSED");
+  });
+
   it("round-trips a desktop inject id onto the server proxy, not the Mac address", async () => {
     const { service, bridge } = await start();
     const owner = "pr_owner";
@@ -171,7 +239,7 @@ describe("desktop local models", () => {
     const ok = await post(service.portNumber(), hostId, grant(owner), "/messages");
     expect(ok.status).toBe(200);
     expect(bridge.calls[0]?.person).toBe(owner);
-    expect(bridge.calls[0]?.operation).toMatchObject({ action: "local_model", endpoint: "desk8002", http_method: "POST", http_path: "/messages", timeout_seconds: 240 });
+    expect(bridge.calls[0]?.operation).toMatchObject({ action: "local_model", endpoint: "desk8002", http_method: "POST", http_path: "/messages", timeout_seconds: 600 });
     expect(bridge.calls[0]?.operation.url).toBeUndefined();
     expect(JSON.stringify(bridge.calls[0]?.operation)).not.toContain("8002/v1");
     // A probed-no endpoint on the same computer is refused without reaching the desktop.

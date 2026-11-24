@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { recordEvents } from "../testing/events.ts";
 import { writeFileEngineKey } from "../engines/engine-api-keys.ts";
+import { resetMinimaxModelCache } from "./minimax-models.ts";
 import { decodeMinimaxConfig, loadLocalMiniMaxConfig, MinimaxDriver } from "./minimax.ts";
 
 describe("MinimaxDriver", () => {
@@ -36,6 +37,8 @@ describe("MinimaxDriver", () => {
     else process.env.MINIMAX_BASE_URL = saved.url;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    resetMinimaxModelCache();
+    process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS = "1";
   });
 
   it("offers only current official text models", () => {
@@ -118,6 +121,25 @@ describe("MinimaxDriver", () => {
       recorder.stop();
       await instance.dispose();
     }
+  });
+
+  it("replaces the written list when a live read is allowed", async () => {
+    delete process.env.SAGAX_DISABLE_LIVE_MODEL_LISTS;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request) => {
+      if (!String(url).endsWith("/models")) return new Response("not models", { status: 404 });
+      return new Response(JSON.stringify({ object: "list", data: [{ id: "MiniMax-M3" }, { id: "MiniMax-Next" }] }), { status: 200 });
+    }));
+    const instance = await MinimaxDriver.create({
+      instanceId: "minimax-live-list",
+      displayName: "MiniMax",
+      enabled: true,
+      config: MinimaxDriver.defaultConfig(),
+      environment: { MINIMAX_API_KEY: "fixture-key" },
+    });
+    await instance.refreshModels?.();
+    expect(instance.models.options.map((option) => option.id)).toEqual(["MiniMax-M3", "MiniMax-Next"]);
+    expect(instance.models.options[0]).toMatchObject({ contextWindow: 1_000_000, custom: true });
+    await instance.dispose();
   });
 
   it("streams content and usage with the MiniMax OpenAI contract", async () => {

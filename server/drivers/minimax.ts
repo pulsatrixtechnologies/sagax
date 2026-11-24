@@ -7,9 +7,12 @@ import { z } from "zod";
 
 import type { ModelCatalog, ProviderDriver, SendTurnInput } from "../contracts.ts";
 import { DATA_DIR } from "../config.ts";
+import { reportBackgroundError } from "../background-error.ts";
 import { applyStoredEngineEnv } from "../engines/engine-api-keys.ts";
-import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { liveModelListsEnabled } from "../models/live-model-lists.ts";
 import { imageTransportAllowed } from "./chat-images.ts";
+import { fetchMinimaxCatalog } from "./minimax-models.ts";
+import { createOpenAIChatRuntime } from "./openai-chat.ts";
 
 const DRIVER_KIND = "minimax";
 const API_KEY_ENV = "MINIMAX_API_KEY";
@@ -127,9 +130,20 @@ export const MinimaxDriver: ProviderDriver<MinimaxConfig> = {
     const apiUrl = input.config.url === DEFAULT_URL && local.url !== DEFAULT_URL
       ? local.url
       : input.config.url;
-    const models = local.defaultModel && MODELS.options.some((model) => model.id === local.defaultModel)
-      ? { ...MODELS, default: local.defaultModel }
-      : MODELS;
+    const preferred = local.defaultModel && MODELS.options.some((model) => model.id === local.defaultModel)
+      ? local.defaultModel
+      : undefined;
+    let catalog = preferred ? { ...MODELS, default: preferred } : MODELS;
+    const refreshModels = async () => {
+      if (!liveModelListsEnabled()) return;
+      catalog = await fetchMinimaxCatalog({
+        apiUrl,
+        apiKey: minimaxKeyForTurn(input.environment),
+        fallback: MODELS,
+        ...(preferred ? { preferred } : {}),
+      });
+    };
+    if (liveModelListsEnabled()) void refreshModels().catch(reportBackgroundError);
 
     return createOpenAIChatRuntime({
       input,
@@ -141,7 +155,14 @@ export const MinimaxDriver: ProviderDriver<MinimaxConfig> = {
       // as the other chat engines. The MiniMax text models read no image:
       // page reads and snapshots reach them as text, never a screenshot.
       computerUse: imageTransportAllowed(apiUrl), imageInput: () => false,
-      models: () => models,
+      models: () => catalog,
+      refreshModels,
+      modelsForKey: async (apiKey) => liveModelListsEnabled() ? fetchMinimaxCatalog({
+        apiUrl,
+        apiKey,
+        fallback: MODELS,
+        ...(preferred ? { preferred } : {}),
+      }) : (preferred ? { ...MODELS, default: preferred } : MODELS),
       requestBody: (model, messages, stream) => ({
         model,
         messages,

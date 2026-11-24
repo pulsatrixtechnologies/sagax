@@ -153,6 +153,24 @@ order is `docs/credential-order.md` and is not applied. The turn records
 the form on the thread (`credentialServed`) and an audit row
 `credential.resolve` with no secret.
 
+## MiniMax and Cline model lists (2026-11-22)
+
+MiniMax documents an OpenAI-compatible `GET /v1/models` on the configured
+base (the driver base already ends in `/v1`). `server/drivers/minimax-models.ts`
+fetches it with the key the driver already resolves, caches the ids for 10
+minutes. A failed or empty read keeps the last usable list for this account,
+or the written list on a first read. Disabling live reads
+(`SAGAX_DISABLE_LIVE_MODEL_LISTS=1`) selects the written list. A known id
+keeps the context size from that written list. The key is not sent to a
+non-loopback `http` URL, and a redirect is not followed.
+
+Cline has no HTTP models endpoint. A session's ACP `models.availableModels`
+is the live list (`server/drivers/acp/cline-models.ts`). The instance keeps it
+for the account whose session reported it, and the single "Cline default (configured)" entry
+remains until then. A model id from that list may be selected. Any other
+id is still refused. Tests: `minimax-models.test.ts`, `minimax.test.ts`,
+`cline-models.test.ts`, `cline.test.ts`.
+
 ## Claude sub-agent model (#2038)
 
 Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via

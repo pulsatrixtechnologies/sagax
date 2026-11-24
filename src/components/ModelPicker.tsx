@@ -369,14 +369,15 @@ export function ModelPicker({
   const providerLabel = currentProvider(menuSections)?.section.label;
   // M-20261119-015: and the account it runs on, while the provider has several
   const accountLabel = autoOn ? undefined : currentProvider(menuSections)?.section.rows.find((row) => row.current)?.account;
-  // #4900, #5088: the chat bar's menu is the mode menu (Auto, Fast, Expert, Heavy,
-  // Manual); Manual is the model panel's list of every model. The chip names
-  // the mode, or the pinned model under Manual.
+  // #4900, #5088, M-20261123-045: the chat bar's menu is the mode menu (Auto,
+  // Fast, Expert, Heavy, Build, Reasoning, All models); All models is the
+  // cascade provider, account, model. The chip names the mode, or the model
+  // the person pinned there.
   const modeUi = modes && inComposer && !choose && !viewerLocal && !windowOnly;
   const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel, modes: modeUi });
   const modeMenu: ModelPanelProps["modes"] = modeUi ? {
     current: modeOfSelection(selection),
-    manualLabel: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
+    pinnedLabel: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
     resolutions: autoStatus?.modes,
     onPick: chooseMode,
   } : undefined;

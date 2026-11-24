@@ -1,29 +1,57 @@
-# Composer modes: Auto, Fast, Expert, Heavy, Manual (#4900, #5088)
+# Composer modes: Auto, Fast, Expert, Heavy, Build, Reasoning, All models (#4900, #5088)
 
-The chat bar's model button opens the modes, as the reference app's does
-(owner, 2026-11-19, M-20261119-077; it came back after #4936 moved it out).
-The button reads the mode's name ("Expert ⌄"), or the pinned model under
-Manual. A hovered or focused row opens a small tooltip beside the menu: what
-the mode does, then which model backs it ("Quick responses · Grok 4.7",
-"Thinks hard · Grok 4.7", "Team of Experts · GPT-6 Astra, Claude Opus 5.5").
-Auto never names a model: it reads each request. Build is gone.
+The chat bar's model button opens the mode menu. Since the owner's decision of
+2026-11-23 (M-20261123-040, M-20261123-045, M-20261123-047) it is the same
+menu, row for row, in the Sagax app and in the Perspicax console:
+
+```
+Auto / Fast / Expert / Heavy / Build
+──────────
+Reasoning        <level>  ›   (the levels of the model in use)
+──────────
+All models                ›   (provider › account › model)
+```
+
+The rows and their rules are one definition, `shared/mode-menu.ts`, which
+imports nothing; the console keeps a byte-identical copy
+(`console/src/lib/mode-menu.ts`) pinned by its hash, and each side runs the
+same cases.
+
+The button reads the mode's name ("Expert ⌄"), or the model the person pinned
+in All models. A hovered or focused mode opens a small tooltip beside the
+menu: what the mode does, then which model backs it ("Quick responses · Grok
+4.7", "Thinks hard · Grok 4.7", "Team of Experts · GPT-6 Astra, Claude Opus
+5.5", "A model made for code · Grok Code 2"). Auto never names a model: it
+reads each request.
 
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
 
-**Manual** (D-20261119-083) is the person's own model. Its row names the
-pinned model while it runs and opens every model: the starred favorites first,
-then each provider, then each of its accounts with its state ("Signed out",
-"Not responding"); a model two accounts offer is listed under each, and the
-copy under an account the menu does not lead with forces that account (as the
-Account line does). The star still adds or removes a favorite, synced across
-the person's devices. Nothing of the panel is lost (one component,
-`src/components/ModelPanel.tsx` with `modes`): Auto's Optimize sits under
-Auto, the whole reasoning levels of #5054 show under Auto and Manual (Fast,
-Expert and Heavy set their own), the Account and Runs with lines and "Manage
-models" with how many are off stay in the footer. The other places the model
-menu opens (the bot's Model row, the wizard, team settings) keep the panel's
-own short view.
+**Reasoning** is a row that shows the level in use and opens, in place, the
+levels the model in use takes (`modelEffortLevels`, so they follow the model).
+Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
+and shows the level the mode imposes. A model that takes no level has no row.
+Auto and Build run at the person's level.
+
+**All models** is the person's own model. Its row names the pinned model while
+it runs and opens a cascade of three panels, each with a back row: the
+provider, then the account, then the model. A provider with a single account
+goes straight to its models. Only what can run a turn now is listed: an
+account signed out or not responding, a model turned off and a provider left
+with nothing are absent, and no state is written in the menu. "Local" is a
+provider: the models of this computer and of the local servers, each server
+(or the person who shares it) where an account would be. A model two accounts
+offer is listed under each, and the copy under an account the menu does not
+lead with forces that account (as the Account line does). The starred
+favorites lead the provider panel and the star still adds or removes one,
+synced across the person's devices. Nothing else of the panel is lost (one
+component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
+with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no
+row of the mode menu (owner, D-20261124-002: the menu has the console's rows
+only); it is set where it already was, under Auto in the Manage models window
+and in a bot's Model cell (Settings, Providers, Models and context size). The menu no longer counts the models turned off: turning one back on
+is done in Manage models. The other places the model menu opens (the bot's
+Model row, the wizard, team settings) keep the panel's own short view.
 
 ## The rules (server/models/model-mode.ts)
 
@@ -43,17 +71,20 @@ providers against each other.
 - **Heavy**: Expert's model leads. The team is the best model of each provider
   (at most five, strongest first). With one provider, `HEAVY_SINGLE_PROVIDER_AGENTS`
   agents on its strongest model.
+- **Build**: the provider's model made for code (the `coding` tier), at no level
+  of its own: the level the person chose in Reasoning is sent where the picked
+  engine takes it.
 - A mode with no usable model is not shown. A mode with nothing to run falls back
   on Auto.
 
 ## Where it lives
 
-- `ModelSelection.mode` (`fast | expert | heavy`) rides `auto: true`, so
+- `ModelSelection.mode` (`fast | expert | heavy | build`) rides `auto: true`, so
   routines, hand-offs, recovery and call turns keep treating it as Auto.
   Absent means plain Auto; a pinned model has none. `checkedModelSelection`
   validates it; the bot or the thread stores it like a model choice
   (`switchTaskModel`), so it survives a restart. A stored value that is no
-  mode (Build) is dropped on load: the bot keeps its model and Auto.
+  mode is dropped on load: the bot keeps its model and Auto.
 - A mode's pick goes through the person's account strategy (#5031): among
   their accounts of the picked provider, the strategy says which one runs it.
 - `autoPickForTurn` picks for a typed turn and a call turn alike. A call turn

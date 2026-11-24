@@ -1,6 +1,8 @@
-// Composer modes (#4900, back by #5088): the chat bar's menu, as the
-// reference app's: Auto, Fast, Expert, Heavy, then Manual (the person's own
-// pinned model, no mode). A mode never names a model. Sagax maps it,
+// Composer modes (#4900, back by #5088; owner 2026-11-23, M-20261123-045):
+// the chat bar's menu, the same as the Perspicax console's: Auto, Fast,
+// Expert, Heavy, Build, then Reasoning, then All models (the person's own
+// pinned model, no mode). The rows and their rules are shared/mode-menu.ts,
+// the one definition for both products. A mode never names a model. Sagax maps it,
 // every turn, to the best models the person can use (their connected
 // providers and accounts, plus local models): the choosing is
 // server/models/model-mode.ts, the words are in the renderer.
@@ -10,13 +12,14 @@
 // voice call turn) keeps working, and the same persistence carries it: the
 // selection of the bot, or of a thread that picked its own.
 import type { EffortLevel, ModelSelection } from "./model-selection.ts";
+import { MENU_MODES, type MenuMode } from "./mode-menu.ts";
 
-export const MODEL_MODES = ["auto", "fast", "expert", "heavy"] as const;
-export type ModelMode = (typeof MODEL_MODES)[number];
+export const MODEL_MODES = MENU_MODES;
+export type ModelMode = MenuMode;
 
 /** The modes that pick a model by their own rule (everything but Auto). */
 export type ForcedModelMode = Exclude<ModelMode, "auto">;
-export const FORCED_MODEL_MODES: readonly ForcedModelMode[] = ["fast", "expert", "heavy"];
+export const FORCED_MODEL_MODES: readonly ForcedModelMode[] = ["fast", "expert", "heavy", "build"];
 
 export function isModelMode(value: unknown): value is ModelMode {
   return typeof value === "string" && (MODEL_MODES as readonly string[]).includes(value);
@@ -34,9 +37,10 @@ export function modeOfSelection(selection: Pick<ModelSelection, "auto" | "mode">
 
 /** The selection a mode writes: the bot's own engine and fallback model stay
  * (a client or a path that does not know modes still runs a valid model), the
- * Auto flag goes on, the mode is stored for the three that are not Auto, and
+ * Auto flag goes on, the mode is stored for the ones that are not Auto, and
  * what only a pinned model or plain Auto carries (a variant, Auto's Optimize
- * choice) goes. The effort stays: the mode sets its own while a turn runs. */
+ * choice) goes. The effort stays: Fast, Expert and Heavy set their own while
+ * a turn runs, Auto and Build run the person's. */
 export function selectionForMode(selection: ModelSelection, mode: ModelMode): ModelSelection {
   const { mode: _mode, variant: _variant, autoOptimize: _optimize, ...rest } = selection;
   return {

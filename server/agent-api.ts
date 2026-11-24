@@ -378,8 +378,17 @@ export interface AgentModelChoice {
   label: string;
   /** `enabled`: false when the person turned the model off by hand in
    * their settings (Settings > Models); it stays listed, greyed. */
-  models: Array<{ id: string; label: string; enabled?: boolean } & Partial<ModelHealth>>;
+  models: Array<{ id: string; label: string; enabled?: boolean;
+    /** M-20261123-045: the model's own provider when it is not the engine's
+     * ("local" for a model of this computer or of a local server), that
+     * server's name, and the reasoning levels this model takes. */
+    provider?: { id: string; label: string }; server?: string; effort_levels?: string[]; default_effort?: string;
+  } & Partial<ModelHealth>>;
   effort_levels?: string[];
+  /** M-20261123-045: the engine's provider and the words of its account
+   * (server/agent-model-cascade.ts), for a client's provider, account, model cascade. */
+  provider?: { id: string; label: string };
+  account?: string;
   /** True when Auto may be chosen on this engine. */
   auto?: boolean;
 }

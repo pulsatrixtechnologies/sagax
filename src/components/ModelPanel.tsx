@@ -9,13 +9,19 @@
 // takes) and a quiet footer (Runs with, Manage models). Favorites follow the
 // person, not the bot (src/lib/model-favorites.ts, GET/PUT /api/me/models).
 //
-// #5088 (owner, 2026-11-19, M-20261119-077, D-20261119-083): in the
-// composer the short view is the mode menu instead (ModeMenu.tsx): Auto (its
-// Optimize under it), Fast, Expert, Heavy, Manual. Manual opens every model,
-// the starred favorites first, then each provider and each of its accounts
-// with its state (src/lib/model-menu.ts manualProviders); the star still adds
-// or removes a favorite. Reasoning, Account, Runs with and Manage models (with
-// how many are off) stay as they are.
+// #5088, then the owner on 2026-11-23 (M-20261123-040, M-20261123-045,
+// M-20261123-047): in the composer the short view is the mode menu instead
+// (ModeMenu.tsx, the rows of shared/mode-menu.ts, the same as the Perspicax
+// console's): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
+// models (D-20261124-002: Auto's Optimize for is no row of this menu, it is
+// set in Manage models and in a bot's Model cell of Settings). Reasoning and All models open in place, a back
+// row at the top: Reasoning lists the levels of the model in use; All models
+// is a cascade, the provider, then the account (skipped when the provider has
+// one), then the model, listing only what can run a turn now
+// (src/lib/model-menu.ts modelCascade). The starred favorites lead the
+// provider panel and the star still adds or removes one. Account, Runs with
+// and Manage models stay in the footer; a model turned off is turned back on
+// in Manage models, the menu no longer counts them.
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
@@ -25,7 +31,8 @@ import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { AUTO_OPTIMIZE_VALUES, type AutoOptimize } from "../../shared/model-auto-optimize";
 import type { EffortLevel } from "../../shared/wire";
-import { filterModelSections, manualProviders, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
+import { filterModelSections, modelCascade, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
+import { currentInCascade, openProvider, panelBack, reasoningRow, settlePanel, type MenuPanel, type ReasoningRow } from "../../shared/mode-menu";
 import { ModeMenu, type ModeMenuProps } from "./ModeMenu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
 import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
@@ -47,7 +54,8 @@ export interface ModelPanelProps {
   /** Each provider's mark, by section key. */
   mark: (sectionKey: string) => ReactNode;
   autoOn: boolean;
-  /** The Optimize choice (Intelligence, Balance, Cost) while Auto is on. */
+  /** The Optimize choice (Intelligence, Balance, Cost) while Auto is on;
+   * never drawn in the mode menu (D-20261124-002). */
   optimize?: { value: AutoOptimize; onPick: (value: AutoOptimize) => void };
   effort?: {
     title: string;
@@ -68,10 +76,11 @@ export interface ModelPanelProps {
   showSettings: boolean;
   /** Which list opens: the short one (Auto, the person's favorites, "All models") or every provider's models. */
   view?: "short" | "all";
-  /** #5088: the composer's mode menu (Auto, Fast, Expert, Heavy, Manual) as
-   * the short view; "all" is then the Manual list. `manualLabel` names the
-   * pinned model while it runs. */
-  modes?: Pick<ModeMenuProps, "current" | "resolutions" | "onPick"> & { manualLabel?: string };
+  /** #5088, M-20261123-045: the composer's mode menu (Auto, Fast, Expert,
+   * Heavy, Build, Reasoning, All models) as the short view; "all" then opens
+   * on the providers of All models. `pinnedLabel` names the model the person
+   * pinned while it runs. */
+  modes?: Pick<ModeMenuProps, "current" | "resolutions" | "onPick"> & { pinnedLabel?: string };
 }
 
 /** The provider the "All models" list opens on: the one that holds the current
@@ -96,7 +105,7 @@ const SEGMENT_ON = "flex-1 bg-popover font-medium text-popover-ink shadow-[0_1px
 const SEGMENT_OFF = "text-popover-ink-secondary hover:text-popover-ink";
 // M-20261119-051: a heading starts where the rows' names start (6px of list, 8px of row)
 const HEADING = "shrink-0 px-3.5 pb-1 pt-2 text-[12px] leading-4 text-popover-ink-secondary";
-// #5088: a provider's or the favorites' heading inside the Manual list (the list's own 6px already in)
+// the favorites' heading over the providers of All models (the list's own 6px already in)
 const GROUP_HEADING = "px-2 pb-0.5 pt-2 text-[12px] leading-4 text-popover-ink-secondary";
 
 /** The right column of every row (M-20261119-051, "nothing lines up"): the
@@ -108,6 +117,9 @@ const GROUP_HEADING = "px-2 pb-0.5 pt-2 text-[12px] leading-4 text-popover-ink-s
  * check; it stays empty on every other row. */
 export const ROW_SIDE_SLOT = "flex w-5 shrink-0 items-center justify-center";
 export const ROW_ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
+// a row of the mode menu's panels (a level, a provider, an account): ModeMenu.tsx's row
+const PANEL_ROW = "group flex h-9 items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover";
+const PANEL_ROW_BUTTON = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pl-2 text-left text-[13px] text-popover-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
 
 /** Arrow keys over the radios of a group: moves the focus and picks, Home and End go to either end. */
 function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orientation: "horizontal" | "vertical" | "both") {
@@ -133,7 +145,9 @@ export function ModelPanel(props: ModelPanelProps) {
   const autoRow = top.find((row) => row.kind === "auto");
   const leadRows = top.filter((row) => row.kind === "follow" || row.kind === "keep");
   const favoriteRows = sections.find((section) => section.key === "favorites")?.rows ?? [];
-  const [all, setAll] = useState(openOn === "all");
+  const [all, setAll] = useState(openOn === "all" && !modes);
+  // the mode menu's panels: the rows, the reasoning levels, or a step of All models
+  const [panel, setPanel] = useState<MenuPanel>(() => (modes && openOn === "all" ? { panel: "providers" } : { panel: "root" }));
   const [chosen, setView] = useState<ViewKey>(() => initialPanelView(sections));
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -151,18 +165,20 @@ export function ModelPanel(props: ModelPanelProps) {
   }));
 
   const section = providers.find((candidate) => candidate.key === view);
-  // #5088: Manual lists every provider at once, grouped by account
-  const manual = Boolean(modes) && all;
-  const viewRows: ModelMenuRow[] = !all ? [] : manual ? [...favoriteRows, ...providers.flatMap((candidate) => candidate.rows)] : section?.rows ?? [];
-  const searchable = all && viewRows.length > PANEL_SEARCH_FROM;
+  // M-20261123-045: All models as a cascade, only what can run now
+  const cascade = modes ? modelCascade(providers, { local: t("model.localGroup"), thisComputer: t("model.computerProvider") }) : [];
+  const at: MenuPanel = modes ? settlePanel(panel, cascade) : { panel: "root" };
+  const atProvider = at.panel === "accounts" || at.panel === "models" ? cascade.find((candidate) => candidate.id === at.provider) : undefined;
+  const atAccount = at.panel === "models" ? atProvider?.accounts.find((candidate) => candidate.id === at.account) : undefined;
+  const cascadeCurrent = modes && modes.current === null ? currentInCascade(cascade) : undefined;
+  const cascadeFavorites = at.panel === "providers" ? favoriteRows.filter((row) => !row.unavailable) : [];
+  const viewRows: ModelMenuRow[] = modes ? (atAccount?.models.map((one) => one.data) ?? []) : !all ? [] : section?.rows ?? [];
+  const searchable = (modes ? at.panel === "models" : all) && viewRows.length > PANEL_SEARCH_FROM;
   const typed = searchable ? query.trim() : "";
-  const manualGroups = manual ? manualProviders(providers, typed) : [];
-  const manualFavorites = manual ? filterModelSections([{ key: "favorites", label: "", rows: favoriteRows }], typed).flatMap((candidate) => candidate.rows) : [];
-  const shownRows = manual ? [...manualFavorites, ...manualGroups.flatMap((group) => group.groups.flatMap((one) => one.rows))]
-    : typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
+  const shownRows = typed ? filterModelSections([{ key: view, label: "", rows: viewRows }], typed).flatMap((candidate) => candidate.rows) : viewRows;
   const lead = typed ? [] : leadRows;
   // the first rows, then "Show N more"; the model in use is never folded away, a search lists every match
-  const fold = typed ? { head: shownRows, rest: [] as ModelMenuRow[] } : foldItems(shownRows, MODELS_SHOWN, (candidate) => candidate.current);
+  const fold = typed || modes ? { head: shownRows, rest: [] as ModelMenuRow[] } : foldItems(shownRows, MODELS_SHOWN, (candidate) => candidate.current);
   const listedRows = expanded ? [...fold.head, ...fold.rest] : fold.head;
   // the short list: the favorites, then the model in use when it is not one of them (it never hides)
   const shortModels: ModelMenuRow[] = all ? [] : [
@@ -175,9 +191,9 @@ export function ModelPanel(props: ModelPanelProps) {
     const root = listRef.current?.closest<HTMLElement>("[data-model-panel]");
     const target = root?.querySelector<HTMLElement>("[data-model-panel-search]") ?? root?.querySelector<HTMLElement>('[data-model-panel-row][aria-checked="true"]') ?? root?.querySelector<HTMLElement>("[data-model-panel-row]");
     target?.focus({ preventScroll: true });
-    // once, when the panel opens
+    // when the panel opens, and at each step of the mode menu
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [at.panel, atProvider?.id, atAccount?.id]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView?.({ block: "nearest" });
   }, [view]);
@@ -192,11 +208,17 @@ export function ModelPanel(props: ModelPanelProps) {
     setQuery("");
     setExpanded(false);
   };
+  const go = (next: MenuPanel) => {
+    setPanel(next);
+    setQuery("");
+  };
 
   // every row is one line, the same height: the name and its markers at the left,
   // what the app knows (context size, origin, a warning) muted at the right;
   // M-20261119-015: a row that names its account takes that second line
-  const rovingRows = all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
+  // a thread's "use the bot's model" row leads All models, as it led the Manual list
+  const cascadeLead = modes && at.panel === "providers" ? lead : [];
+  const rovingRows = modes ? [...cascadeLead, ...cascadeFavorites, ...listedRows] : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
   const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
   const rovingFirst = rovingRows[0];
   const modelRow = (row: ModelMenuRow, group?: string) => {
@@ -274,9 +296,15 @@ export function ModelPanel(props: ModelPanelProps) {
   // the model's own default level reads as the checked one while none is chosen
   const effortValue = effort ? (effort.value && effortLevels.includes(effort.value) ? effort.value : effort.modelDefault) : undefined;
   const effortChoices: Array<EffortLevel | undefined> = effort && !effort.modelDefault ? [undefined, ...effortLevels] : [...effortLevels];
-  // #5088: Fast, Expert and Heavy set their own reasoning level each turn
-  const modeSetsEffort = Boolean(modes && modes.current !== null && modes.current !== "auto");
-  const hasReasoning = showSettings && !modeSetsEffort && (Boolean(variantRow) || effortLevels.length > 0);
+  // M-20261123-040: in the mode menu the reasoning is a row that opens the
+  // levels of the model in use; Fast, Expert and Heavy set their own each
+  // turn, so the row is greyed and shows the level they impose
+  const imposed = modes && modes.current ? modes.resolutions?.[modes.current]?.effort : undefined;
+  const levelsRow = reasoningRow({ mode: modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
+  // an engine with model variants draws its own control in the panel
+  const reasoningState: ReasoningRow = variantRow && !levelsRow.disabled ? { shown: true, disabled: false, choices: [] } : levelsRow;
+  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : variantRow ? "" : t("model.defaultTag"));
+  const hasReasoning = showSettings && !modes && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
   // M-20261119-015: the model in use is offered by several of the person's
@@ -286,7 +314,7 @@ export function ModelPanel(props: ModelPanelProps) {
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
-      {all && !manual && (
+      {all && (
         <div className="mx-1.5 mb-1 mt-0.5 flex shrink-0 flex-wrap gap-0.5 rounded-lg bg-popover-hover/60 p-0.5">
           <div role="radiogroup" aria-label={t("model.providers")} data-model-panel-segments
             onKeyDown={(event) => arrowRadios(event, "[data-model-panel-segment]", "horizontal")}
@@ -310,14 +338,21 @@ export function ModelPanel(props: ModelPanelProps) {
         </div>
       )}
 
-      {all ? (
+      {modes ? at.panel !== "root" && (
+        <button type="button" data-model-panel-back={at.panel} id={modelsId} onMouseDown={(event) => event.preventDefault()} onClick={() => go(panelBack(at, cascade))}
+          className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
+          <ChevronLeft size={13} aria-hidden="true" />
+          <span className="truncate">{at.panel === "reasoning" ? t("model.reasoning") : at.panel === "providers" ? t("model.auto.rail") : at.panel === "accounts" ? atProvider?.label : atProvider && atProvider.accounts.length > 1 ? `${atProvider.label} · ${atAccount?.label ?? ""}` : atProvider?.label}</span>
+          {at.panel === "reasoning" && !variantRow && <span className="ml-auto min-w-0 truncate pl-3">{t("model.effort.slowerHint")}</span>}
+        </button>
+      ) : all ? (
         <button type="button" data-model-panel-back id={modelsId} title={t("model.favorites")} onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(false)}
           className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
           <ChevronLeft size={13} aria-hidden="true" />
-          <span>{modes ? t("model.mode.manual.name") : t("model.auto.rail")}</span>
+          <span>{t("model.auto.rail")}</span>
         </button>
       ) : (
-        <div className={HEADING} id={modelsId}>{modes ? t("model.mode.menu") : t("model.settings.model")}</div>
+        <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>
       )}
       {searchable && (
         <label className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 border-b border-popover-hairline px-2 py-1.5">
@@ -342,9 +377,16 @@ export function ModelPanel(props: ModelPanelProps) {
             className="w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none" />
         </label>
       )}
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1", manual ? "max-h-[min(400px,52dvh)]" : "max-h-[min(264px,36dvh)]")} data-model-panel-scroll>
-      <div ref={listRef} role="radiogroup" aria-labelledby={modelsId} data-model-panel-list
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1", modes ? "max-h-[min(400px,52dvh)]" : "max-h-[min(264px,36dvh)]", modes && at.panel === "root" && "pt-0.5")} data-model-panel-scroll>
+      <div ref={listRef} role="radiogroup" aria-labelledby={modes && at.panel === "root" ? undefined : modelsId} aria-label={modes && at.panel === "root" ? t("model.mode.menu") : undefined} data-model-panel-list data-mode-panel={modes ? at.panel : undefined}
         onKeyDown={(event) => {
+          // the left arrow steps back out of a panel of the mode menu
+          if (modes && at.panel !== "root" && event.key === "ArrowLeft" && !(event.target instanceof HTMLInputElement)) {
+            event.preventDefault();
+            event.stopPropagation();
+            go(panelBack(at, cascade));
+            return;
+          }
           if (event.key === "ArrowUp" && searchable && document.activeElement === listRef.current?.querySelector("[data-model-panel-row]")) {
             event.preventDefault();
             event.stopPropagation();
@@ -354,10 +396,84 @@ export function ModelPanel(props: ModelPanelProps) {
           arrowRadios(event, "[data-model-panel-row]", "vertical");
         }}
         className="shrink-0">
-        {!all && modes ? (
+        {modes && at.panel === "root" ? (
           <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
-            manual={{ label: modes.manualLabel, onOpen: () => showAll(true) }}
-            autoSetting={optimize ? optimizeRow(optimize) : undefined} />
+            reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, onOpen: () => go({ panel: "reasoning" }) } : undefined}
+            allModels={{ label: modes.pinnedLabel, onOpen: () => go({ panel: "providers" }) }} />
+        ) : modes && at.panel === "reasoning" ? (
+          variantRow ? <div className="px-2 py-1.5">{variantRow}</div> : effort && reasoningState.choices.map((level) => {
+            const on = (level ?? undefined) === reasoningState.value;
+            return (
+              <div key={level ?? "default"} className={PANEL_ROW}>
+                <button type="button" role="radio" aria-checked={on} disabled={disabled}
+                  data-model-panel-row={`effort:${level ?? "default"}`} data-model-effort-choice={level ?? "default"}
+                  title={level === null ? t("model.effort.defaultTitle") : isUltracodeEffort(level as EffortLevel) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level as EffortLevel) })}
+                  tabIndex={on || (reasoningState.value === undefined && level === reasoningState.choices[0]) ? 0 : -1}
+                  onMouseDown={(event) => event.preventDefault()}
+                  // the model's own default level is picked as "no level sent"
+                  onClick={() => { effort.onPick(level === null || level === effort.modelDefault ? undefined : level as EffortLevel); go({ panel: "root" }); }}
+                  className={PANEL_ROW_BUTTON}>
+                  <span className={cn("min-w-0 flex-1 truncate", level !== null && isUltracodeEffort(level as EffortLevel) && "ultracode-effort-option")}>{level === null ? t("model.defaultTag") : effortLabel(level as EffortLevel)}</span>
+                  <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+                  <span aria-hidden="true" className={ROW_ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+                </button>
+              </div>
+            );
+          })
+        ) : modes && at.panel === "providers" ? (
+          <>
+            {cascadeLead.map((row) => modelRow(row))}
+            {cascadeFavorites.length > 0 && (
+              <div data-model-cascade-favorites="">
+                <div className={GROUP_HEADING}>{t("model.favorites")}</div>
+                {cascadeFavorites.map((row) => modelRow(row, "favorites"))}
+                <div role="separator" className="mx-2 my-1 border-t border-popover-hairline" />
+              </div>
+            )}
+            {cascade.map((provider) => {
+              const on = cascadeCurrent?.provider.id === provider.id;
+              return (
+                <div key={provider.id} className={PANEL_ROW}>
+                  <button type="button" aria-haspopup="menu" data-model-panel-row={`provider:${provider.id}`} data-model-cascade-provider={provider.id}
+                    tabIndex={on || (!cascadeCurrent && !cascadeLead.length && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(openProvider(provider)); } }}
+                    onClick={() => go(openProvider(provider))}
+                    className={PANEL_ROW_BUTTON}>
+                    <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{mark(provider.id === "local" ? "computer" : provider.id)}</span>
+                    <span className="min-w-0 flex-1 truncate">{provider.label}</span>
+                    <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+                    <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+                  </button>
+                </div>
+              );
+            })}
+            {cascade.length === 0 && <p data-model-cascade-empty="" className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.cascade.none")}</p>}
+          </>
+        ) : modes && at.panel === "accounts" ? (
+          atProvider?.accounts.map((account) => {
+            const on = cascadeCurrent?.provider.id === atProvider.id && cascadeCurrent.account.id === account.id;
+            const open = (): MenuPanel => ({ panel: "models", provider: atProvider.id, account: account.id });
+            return (
+              <div key={account.id} className={PANEL_ROW}>
+                <button type="button" aria-haspopup="menu" data-model-panel-row={`account:${account.id}`} data-model-cascade-account=""
+                  tabIndex={on || (cascadeCurrent?.provider.id !== atProvider.id && account === atProvider.accounts[0]) ? 0 : -1}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(open()); } }}
+                  onClick={() => go(open())}
+                  className={PANEL_ROW_BUTTON}>
+                  <span className="min-w-0 flex-1 truncate">{account.label}</span>
+                  <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+                  <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+                </button>
+              </div>
+            );
+          })
+        ) : modes ? (
+          <>
+            {listedRows.map((row) => modelRow(row, `${atProvider?.id}:${atAccount?.id}`))}
+            {shownRows.length === 0 && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
+          </>
         ) : !all ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
@@ -370,51 +486,6 @@ export function ModelPanel(props: ModelPanelProps) {
                 <span className="min-w-0 flex-1 truncate">{t("model.auto.rail")}</span>
                 <span aria-hidden="true" className={ROW_SIDE_SLOT} />
                 <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-              </button>
-            )}
-          </>
-        ) : manual ? (
-          <>
-            {lead.map((row) => modelRow(row))}
-            {manualFavorites.length > 0 && (
-              <div data-model-manual-group="favorites">
-                <div className={GROUP_HEADING}>{t("model.favorites")}</div>
-                {manualFavorites.map((row) => modelRow(row, "favorites"))}
-              </div>
-            )}
-            {manualGroups.map(({ section: provider, groups }) => {
-              // every model shows: the list scrolls and searches past eight rows
-              return (
-                <div key={provider.key} data-model-manual-provider={provider.key}>
-                  <div className={cn(GROUP_HEADING, "flex items-center gap-1.5")}>
-                    <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{mark(provider.key)}</span>
-                    <span className="truncate text-popover-ink">{provider.label}</span>
-                    {provider.note && <span className="truncate">· {provider.note}</span>}
-                  </div>
-                  {groups.map((group, index) => {
-                    const listed = group.rows;
-                    // a signed-out account keeps its heading and its state, with no model under it
-                    if (!listed.length && !group.account?.state) return null;
-                    return (
-                      <div key={group.account?.instanceId ?? `rest-${index}`} data-model-manual-account={group.account?.instanceId ?? ""}>
-                        {group.account && (
-                          <div data-model-account-heading className="flex h-6 min-w-0 items-center gap-1 px-2 text-[11.5px] text-popover-ink-secondary">
-                            <span className="truncate">{group.account.label}</span>
-                            {group.account.state && <span data-model-account-state className="shrink-0 text-popover-accent">· {group.account.state}</span>}
-                          </div>
-                        )}
-                        {listed.map((row) => modelRow(row, `${provider.key}:${group.account?.instanceId ?? index}`))}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-            {shownRows.length === 0 && !(typed && custom) && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
-            {typed && custom && (
-              <button type="button" data-model-panel-custom onMouseDown={(event) => event.preventDefault()} onClick={() => custom.onPick(typed)}
-                className="flex min-h-9 w-full items-center rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus">
-                {custom.label(typed)}
               </button>
             )}
           </>
@@ -432,7 +503,7 @@ export function ModelPanel(props: ModelPanelProps) {
           </>
         )}
       </div>
-      {all && !manual && fold.rest.length > 0 && (
+      {all && fold.rest.length > 0 && (
         <button type="button" data-model-panel-fold={expanded ? "less" : "more"} aria-expanded={expanded}
           onMouseDown={(event) => event.preventDefault()} onClick={() => setExpanded((open) => !open)} className={cn(SHOW_MORE_ROW, "text-popover-ink-secondary hover:text-popover-ink")}>
           {expanded ? t("fold.showLess") : foldMoreLabel(fold.rest.length)}
@@ -537,7 +608,8 @@ export function ModelPanel(props: ModelPanelProps) {
                 <button type="button" data-model-manage onClick={manage.onManage}
                   className="flex min-h-7 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus">
                   <span>{t("model.manage")}</span>
-                  {manage.turnedOff > 0 && <span data-model-manage-off>{t(manage.turnedOff === 1 ? "model.manageOffOne" : "model.manageOff", { count: manage.turnedOff })}</span>}
+                  {/* M-20261123-047: the mode menu no longer counts what is off; Manage models turns a model back on */}
+                  {!modes && manage.turnedOff > 0 && <span data-model-manage-off>{t(manage.turnedOff === 1 ? "model.manageOffOne" : "model.manageOff", { count: manage.turnedOff })}</span>}
                 </button>
               ) : (
                 <>

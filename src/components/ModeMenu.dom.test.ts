@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
-// The composer's mode rows (#4900, #5088): Auto, Fast, Expert, Heavy, Manual,
-// a tooltip beside the menu on hover or focus saying what the mode does and
-// which model backs it, a mode with no usable model left out, Manual (the
-// pinned model) opening every model, Auto's own setting under it.
+// The composer's mode rows (#4900, #5088; owner 2026-11-23, M-20261123-040,
+// M-20261123-045): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
+// models; a tooltip beside the menu on hover or focus saying what the mode
+// does and which model backs it, a mode with no usable model left out,
+// Reasoning greyed with the imposed level under a mode that sets its own, All
+// models (checked and named while a pinned model runs) opening the cascade,
+// Auto's own setting under it.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { trackInputModality } from "@/lib/input-modality";
 import type { ModeResolution, ModelMode } from "../../shared/model-mode";
+import type { ReasoningRow } from "../../shared/mode-menu";
 import { ModeMenu, type ModeMenuProps } from "./ModeMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,9 +37,13 @@ const resolutions = (over: Partial<Record<ModelMode, ModeResolution>> = {}): Rec
   fast: { mode: "fast", pick: model("Grok 4.7") },
   expert: { mode: "expert", pick: model("Grok 4.7"), effort: "high" },
   heavy: { mode: "heavy", pick: model("Grok 4.7"), team: [model("Grok 4.7"), model("Grok 4.7"), model("Grok 4.7")] },
+  build: { mode: "build", pick: model("Grok Code 2") },
   ...over,
 });
-const base = (over: Partial<ModeMenuProps> = {}): ModeMenuProps => ({ current: "auto", resolutions: resolutions(), onPick: vi.fn(), manual: { onOpen: vi.fn() }, ...over });
+const base = (over: Partial<ModeMenuProps> = {}): ModeMenuProps => ({ current: "auto", resolutions: resolutions(), onPick: vi.fn(), allModels: { onOpen: vi.fn() }, ...over });
+const reasoning = (row: Partial<ReasoningRow>, onOpen = vi.fn()): NonNullable<ModeMenuProps["reasoning"]> => ({
+  row: { shown: true, disabled: false, choices: ["low", "high"], ...row }, label: (level) => (level ? level.toUpperCase() : "Default"), onOpen,
+});
 
 beforeEach(() => {
   // the menu is opened by a click: the first focus is the pointer's, as in the app
@@ -53,15 +61,43 @@ afterEach(() => {
 });
 
 describe("the mode menu", () => {
-  it("lists Auto, Fast, Expert, Heavy and Manual (no Build), the one in use checked, and no model", () => {
-    render(base({ current: "expert" }));
-    expect(rows().map((node) => node.textContent)).toEqual(["Auto", "Fast", "Expert", "Heavy", "Manual"]);
-    expect(row("expert").getAttribute("aria-checked")).toBe("true");
+  it("lists Auto, Fast, Expert, Heavy, Build, then Reasoning, then All models, a hairline before each of the two, the mode in use checked, and no model", () => {
+    render(base({ current: "auto", reasoning: reasoning({ value: "high" }) }));
+    expect(rows().map((node) => node.textContent)).toEqual(["Auto", "Fast", "Expert", "Heavy", "Build", "ReasoningHIGH", "All models"]);
+    // the hairlines sit right before Reasoning and right before All models
+    const order = [...host.querySelectorAll<HTMLElement>("[data-mode-row], [data-mode-separator]")].map((node) => node.dataset.modeRow ?? "separator");
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "build", "separator", "reasoning", "separator", "all"]);
+    expect(row("auto").getAttribute("aria-checked")).toBe("true");
     expect(row("fast").getAttribute("aria-checked")).toBe("false");
-    expect(row("manual").getAttribute("aria-checked")).toBe("false");
+    expect(row("all").getAttribute("aria-checked")).toBe("false");
     expect(host.textContent).not.toContain("Grok");
-    // every row is one of the panel's radios: its arrow keys reach them
-    expect(rows().every((node) => node.getAttribute("role") === "radio" && node.dataset.modelPanelRow)).toBe(true);
+    // every row is one of the panel's rows: its arrow keys reach them
+    expect(rows().every((node) => node.dataset.modelPanelRow)).toBe(true);
+  });
+
+  it("Reasoning shows the level in use and opens its levels", () => {
+    const onOpen = vi.fn();
+    render(base({ reasoning: reasoning({ value: "low" }, onOpen) }));
+    expect(row("reasoning").querySelector("[data-mode-reasoning-value]")?.textContent).toBe("LOW");
+    expect((row("reasoning") as HTMLButtonElement).disabled).toBe(false);
+    fire(row("reasoning"), "click");
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("under a mode that sets its own level, Reasoning is greyed, shows the imposed level and opens nothing", () => {
+    const onOpen = vi.fn();
+    render(base({ current: "expert", reasoning: reasoning({ disabled: true, value: "high", choices: [] }, onOpen) }));
+    expect((row("reasoning") as HTMLButtonElement).disabled).toBe(true);
+    expect(row("reasoning").dataset.modeReasoningImposed).toBe("");
+    expect(row("reasoning").querySelector("[data-mode-reasoning-value]")?.textContent).toBe("HIGH");
+    fire(row("reasoning"), "click");
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("a model with no level has no Reasoning row, and no hairline for it", () => {
+    render(base({ reasoning: reasoning({ shown: false, choices: [] }) }));
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "build", "all"]);
+    expect(host.querySelectorAll("[data-mode-separator]")).toHaveLength(1);
   });
 
   it("a hover opens a tooltip with what the mode does and which model backs it", () => {
@@ -104,12 +140,12 @@ describe("the mode menu", () => {
 
   it("leaves out a mode no model can serve (Auto always stays)", () => {
     render(base({ resolutions: resolutions({ heavy: { mode: "heavy", pick: null } }) }));
-    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "manual"]);
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "build", "all"]);
   });
 
   it("shows every mode, with the blurb alone in the tooltip, until the server has answered", () => {
     render(base({ resolutions: undefined }));
-    expect(rows()).toHaveLength(5);
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "build", "all"]);
     hover(row("expert"));
     expect(tooltip()?.textContent).toBe("Thinks hard");
   });
@@ -126,24 +162,29 @@ describe("the mode menu", () => {
     expect(document.activeElement).toBe(row("heavy"));
   });
 
-  it("a pinned model is Manual, checked and named; Manual opens every model", () => {
+  it("a pinned model checks All models, which names it; All models opens the cascade", () => {
     const onOpen = vi.fn();
-    render(base({ current: null, manual: { label: "Claude Opus 5.5", onOpen } }));
-    expect(row("manual").getAttribute("aria-checked")).toBe("true");
-    expect(row("manual").textContent).toBe("ManualClaude Opus 5.5");
+    render(base({ current: null, allModels: { label: "Claude Opus 5.5", onOpen } }));
+    expect(row("all").getAttribute("aria-checked")).toBe("true");
+    expect(row("all").textContent).toBe("All modelsClaude Opus 5.5");
     expect(row("auto").getAttribute("aria-checked")).toBe("false");
-    expect(document.activeElement).toBe(row("manual"));
-    fire(row("manual"), "click");
+    expect(document.activeElement).toBe(row("all"));
+    fire(row("all"), "click");
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("Auto's own setting sits under Auto while Auto is on, never under another mode", () => {
-    const setting = createElement("div", { "data-test-setting": "" }, "Optimize");
-    render(base({ current: "auto", autoSetting: setting }));
-    const under = host.querySelector("[data-test-setting]")!;
-    expect(under.parentElement).toBe(row("auto").closest("div")!.parentElement);
-    render(base({ current: "expert", autoSetting: setting }));
-    expect(host.querySelector("[data-test-setting]")).toBeNull();
+  it("Build is a mode like the others: its tooltip and its pick", () => {
+    const onPick = vi.fn();
+    render(base({ onPick }));
+    hover(row("build"));
+    expect(tooltip()?.textContent).toBe("A model made for code · Grok Code 2");
+    fire(row("build"), "click");
+    expect(onPick).toHaveBeenCalledWith("build");
+  });
+
+  it("D-20261124-002: nothing sits under the Auto row, the rows are the console's only", () => {
+    render(base({ current: "auto" }));
+    expect(row("auto").closest("div")!.parentElement!.children).toHaveLength(1);
   });
 
   it("a disabled menu (the bot is working) picks nothing", () => {

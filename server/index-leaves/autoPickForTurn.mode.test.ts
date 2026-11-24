@@ -93,7 +93,8 @@ describe("a mode in the turn's pick", () => {
 
   it("the preview also says what every mode runs", () => {
     const answer = pickFor({ bot: bot("fast"), threadId: "t1", speaker, role: "orchestration", text: "", withModes: true });
-    expect(Object.keys(answer?.modes ?? {})).toEqual(["auto", "fast", "expert", "heavy"]);
+    // Build is a mode of the menu since the owner's decision M-20261123-045.
+    expect(Object.keys(answer?.modes ?? {})).toEqual(["auto", "fast", "expert", "heavy", "build"]);
     expect(answer?.modes?.expert.pick?.modelLabel).toBe("Claude Opus 5.5");
   });
 });

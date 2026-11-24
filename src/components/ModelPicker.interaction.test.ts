@@ -1015,17 +1015,17 @@ describe("the composer's mode menu (#4900, #5088)", () => {
     }));
   });
 
-  it("a pinned model is Manual, the checked row, which names it", async () => {
+  it("a pinned model checks All models, the row that names it", async () => {
     fixture.instances = [signedIn(), codex];
     const menu = (await modeMenu(open(bot("claude", "claude-opus-5-5"), composerModes)))!;
     expect(menu.props.current).toBeNull();
-    expect(menu.props.manualLabel).toMatch(/Opus 5\.5/);
+    expect(menu.props.pinnedLabel).toMatch(/Opus 5\.5/);
   });
 
   it("hands the menu what each mode runs for this person, from the server's preview", async () => {
     fixture.instances = [signedIn(), codex];
     const resolution = { mode: "expert" as const, pick: { instanceId: "claude", model: "claude-opus-5-5", engineLabel: "Claude", modelLabel: "Claude Opus 5.5" } };
-    fixture.autoStatus = { auto: true, pick: null, chain: [], excluded: [], backups: [], modes: { auto: { mode: "auto", pick: null }, fast: { mode: "fast", pick: null }, expert: resolution, heavy: { mode: "heavy", pick: null } } };
+    fixture.autoStatus = { auto: true, pick: null, chain: [], excluded: [], backups: [], modes: { auto: { mode: "auto", pick: null }, fast: { mode: "fast", pick: null }, expert: resolution, heavy: { mode: "heavy", pick: null }, build: { mode: "build", pick: null } } };
     const menu = (await modeMenu(open(onAuto("expert"), composerModes)))!;
     expect(menu.props.resolutions?.expert.pick?.modelLabel).toBe("Claude Opus 5.5");
   });

@@ -247,10 +247,34 @@ describe("the ranking Auto and the modes share", () => {
   });
 });
 
+describe("Build (M-20261123-045, as the console defines it)", () => {
+  it("is the provider's model made for code, at no level of its own", () => {
+    const pick = pickModeModel(request([kimi]), "build")!;
+    expect(pick.selection).toEqual({ instanceId: "kimi", model: "kimi-for-coding" });
+    expect(pick).toMatchObject({ reason: "mode", mode: "build", tier: "coding" });
+    expect(pick.team).toBeUndefined();
+  });
+
+  it("runs at the level the person chose in Reasoning, where the engine takes it", () => {
+    const chosen = pickModeModel(request([grok], { instanceId: "grok-build", model: "grok-4.7", auto: true, mode: "build", effort: "high" }), "build")!;
+    expect(chosen.selection.effort).toBe("high");
+    // a level the picked engine does not take is not sent
+    const other = pickModeModel(request([kimi], { instanceId: "kimi", model: "k3", auto: true, mode: "build", effort: "high" }), "build")!;
+    expect(other.selection.effort).toBeUndefined();
+  });
+
+  it("with nothing usable returns null, so the menu does not offer it", () => {
+    expect(pickModeModel(request([], { instanceId: "none", model: "none", auto: true }), "build")).toBeNull();
+  });
+});
+
 describe("resolveModes", () => {
   it("says what every mode runs, for the picker's tooltips", () => {
     const modes = resolveModes(request([claudeOpus(), grok]));
-    expect(Object.keys(modes)).toEqual(["auto", "fast", "expert", "heavy"]);
+    expect(Object.keys(modes)).toEqual(["auto", "fast", "expert", "heavy", "build"]);
+    // Build names its model and imposes no reasoning level (the menu's Reasoning row stays the person's)
+    expect(modes.build.pick).not.toBeNull();
+    expect(modes.build.effort).toBeUndefined();
     expect(modes.expert.pick).toMatchObject({ model: "claude-opus-5-5", modelLabel: "Claude Opus 5.5", engineLabel: "Claude Code" });
     expect(modes.expert.effort).toBe("high");
     expect(modes.heavy.team!.slice(0, 2).map((seat) => seat.model)).toEqual(["claude-opus-5-5", "grok-4.7"]);

@@ -1,19 +1,22 @@
-// #5088 (owner, M-20261119-077, D-20261119-083): the composer's mode menu in
-// the one model panel. The short view is Auto, Fast, Expert, Heavy, Manual;
-// Manual is every model grouped by provider and account with its state, the
-// starred favorites first, the star still a toggle. Nothing of the panel is
-// lost: reasoning levels, Account, Runs with, Manage models with how many are off.
+// The composer's mode menu in the one model panel (#5088; owner 2026-11-23,
+// M-20261123-040, M-20261123-045, M-20261123-047). The short view is Auto,
+// Fast, Expert, Heavy, Build, Reasoning, All models. Reasoning opens the levels
+// of the model in use. All models is a cascade, provider, account, model,
+// with only what can run now; the starred favorites lead it and the star is
+// still a toggle. The footer keeps Account, Runs with and Manage models; how
+// many models are off is no longer counted here.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { manualProviders, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
+import { manualProviders, modelCascade, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
 import { ModelPanel, type ModelPanelProps } from "./ModelPanel";
 
 const row = (instanceId: string, id: string, extra: Partial<ModelMenuRow> = {}): ModelMenuRow => ({
   key: `${instanceId}\u0000${id}`, kind: "model", instanceId, modelId: id, label: id, current: false, ...extra,
 });
-// two Claude accounts (the second also offers Opus), a third signed out; one Grok account
+// two Claude accounts (the second also offers Opus), a third signed out; one Grok account;
+// OpenAI signed out; two local servers
 const opus = { ...row("claude-a", "opus", { current: true }), alternatives: [row("claude-b", "opus")] };
 const sections = (): ModelMenuSection[] => [
   { key: "top", rows: [{ key: "auto", kind: "auto", label: "Auto", current: false }] },
@@ -23,7 +26,10 @@ const sections = (): ModelMenuSection[] => [
     accounts: [{ instanceId: "claude-a", label: "ada@example.com" }, { instanceId: "claude-b", label: "ada.admin@acme.test" }, { instanceId: "claude-c", label: "old@example.com", state: "Signed out" }],
   },
   { key: "xai", label: "Grok", rows: [row("grok", "grok-4"), row("grok", "grok-code")] },
+  { key: "openai", label: "OpenAI", rows: [], accounts: [{ instanceId: "codex", label: "ada@example.com", state: "Signed out" }] },
+  { key: "computer", label: "This computer", rows: [row("grok", "studio::flash", { label: "flash", subtext: "Studio" }), row("grok", "mini::flash", { label: "flash", subtext: "Mini" }), row("grok", "off", { unavailable: "Grok cannot run it" })] },
 ];
+const words = { local: "Local", thisComputer: "This computer" };
 
 describe("manualProviders", () => {
   it("groups each provider's models by account, a model on two accounts under each", () => {
@@ -43,14 +49,37 @@ describe("manualProviders", () => {
     expect(onB).toMatchObject({ instanceId: "claude-b", modelId: "opus", pinAccount: true });
     expect(claude!.groups[0]!.rows[0]!.pinAccount).toBeUndefined();
   });
+});
 
-  it("keeps a signed-out account's heading and state, and a search keeps only what matches", () => {
-    expect(manualProviders(sections().slice(2))[0]!.groups[2]!.account?.state).toBe("Signed out");
-    const found = manualProviders(sections().slice(2), "mythos");
-    expect(found.map((provider) => provider.section.key)).toEqual(["anthropic"]);
-    expect(found[0]!.groups.map((group) => group.rows.map((one) => one.modelId))).toEqual([["mythos"]]);
-    // the account's own name matches too
-    expect(manualProviders(sections().slice(2), "acme")[0]!.groups.map((group) => group.account?.label)).toEqual(["ada.admin@acme.test"]);
+describe("modelCascade", () => {
+  it("lists only the accounts and models that can run: no signed-out account, no provider left empty", () => {
+    const cascade = modelCascade(sections().slice(2), words);
+    expect(cascade.map((provider) => provider.label)).toEqual(["Claude", "Grok", "Local"]);
+    expect(cascade[0]!.accounts.map((account) => [account.label, account.models.map((one) => one.data.modelId)])).toEqual([
+      ["ada@example.com", ["opus"]],
+      ["ada.admin@acme.test", ["opus", "mythos"]],
+    ]);
+    expect(JSON.stringify(cascade)).not.toContain("Signed out");
+  });
+
+  it("a model picked under the second account forces that account", () => {
+    const claude = modelCascade(sections().slice(2), words)[0]!;
+    expect(claude.accounts[1]!.models[0]!.data).toMatchObject({ instanceId: "claude-b", modelId: "opus", pinAccount: true });
+  });
+
+  it("Local is a provider, its servers where the accounts are, a model its engine cannot run left out", () => {
+    const local = modelCascade(sections().slice(2), words)[2]!;
+    expect(local.id).toBe("local");
+    expect(local.accounts.map((account) => [account.label, account.models.map((one) => one.data.modelId)])).toEqual([
+      ["Studio", ["studio::flash"]],
+      ["Mini", ["mini::flash"]],
+    ]);
+    // the server's name is the panel's heading: the row does not repeat it
+    expect(local.accounts[0]!.models[0]!.data.subtext).toBeUndefined();
+  });
+
+  it("a provider with a single account has a single one (the menu skips its panel)", () => {
+    expect(modelCascade(sections().slice(2), words)[1]!.accounts).toHaveLength(1);
   });
 });
 
@@ -66,41 +95,70 @@ const props = (extra: Partial<ModelPanelProps> = {}): ModelPanelProps => ({
 const html = (extra?: Partial<ModelPanelProps>) => renderToStaticMarkup(createElement(ModelPanel, props(extra)));
 
 describe("the model panel with the composer's modes", () => {
-  it("opens on the modes, Auto's Optimize under it, no model list, the footer kept", () => {
+  it("opens on the rows of the menu, no model list, the footer kept", () => {
     const markup = html();
     const order = [...markup.matchAll(/data-mode-row="([a-z]+)"/g)].map((match) => match[1]);
-    expect(order).toEqual(["auto", "fast", "expert", "heavy", "manual"]);
-    expect(markup).toContain("data-model-auto-optimize-row");
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "build", "reasoning", "all"]);
     expect(markup).not.toContain("data-model-panel-segment");
     expect(markup).not.toContain('data-model-option="opus"');
     expect(markup).toContain("data-model-manage");
-    expect(markup).toContain("4 off");
   });
 
-  it("a mode that sets its own reasoning hides the levels; Auto and Manual keep them", () => {
-    expect(html({ modes: { current: "expert", onPick: vi.fn() } })).not.toContain("data-model-panel-reasoning");
-    expect(html({ modes: { current: "auto", onPick: vi.fn() } })).toContain("data-model-panel-reasoning");
-    expect(html({ autoOn: false, modes: { current: null, onPick: vi.fn(), manualLabel: "Claude · opus" } })).toContain("data-model-panel-reasoning");
+  it("D-20261124-002: Optimize for left the mode menu; the panel's own short view (a bot's Model cell in Settings) keeps it under Auto", () => {
+    const markup = html();
+    expect(markup).not.toContain("data-model-auto-optimize");
+    expect(markup).not.toContain("Optimize for");
+    expect(html({ modes: undefined })).toContain("data-model-auto-optimize-row");
   });
 
-  it("Manual names the pinned model on its row", () => {
-    const markup = html({ autoOn: false, modes: { current: null, onPick: vi.fn(), manualLabel: "Claude · opus" } });
-    expect(markup).toMatch(/data-mode-row="manual"[^>]*>.*Claude · opus/);
+  it("M-20261123-047: the menu no longer counts the models turned off; Manage models keeps its link", () => {
+    const markup = html();
+    expect(markup).toContain("data-model-manage");
+    expect(markup).not.toContain("data-model-manage-off");
+    expect(markup).not.toContain("4 off");
+    // every other place the panel opens still says it
+    expect(html({ modes: undefined })).toContain("4 off");
   });
 
-  it("the Manual list: favorites first, then each provider and each account with its state, stars on every model", () => {
+  it("M-20261123-040: Reasoning is a row with the level in use, never the segmented control at the foot", () => {
+    const markup = html();
+    expect(markup).not.toContain("data-model-panel-reasoning");
+    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*data-mode-reasoning-value[^>]*>Medium</);
+    // a level the person chose reads on the row
+    expect(html({ effort: { ...props().effort!, value: "high" } })).toMatch(/data-mode-reasoning-value[^>]*>High</);
+  });
+
+  it("a mode that sets its own reasoning greys the row and shows the level it imposes; Auto, Build and a pinned model leave it open", () => {
+    const resolutions = { expert: { mode: "expert", pick: null, effort: "high" } } as unknown as NonNullable<ModelPanelProps["modes"]>["resolutions"];
+    const imposed = html({ modes: { current: "expert", onPick: vi.fn(), resolutions } });
+    expect(imposed).toMatch(/<button[^>]*disabled=""[^>]*data-mode-row="reasoning"[^>]*data-mode-reasoning-imposed/);
+    expect(imposed).toMatch(/data-mode-reasoning-value[^>]*>High</);
+    for (const modes of [{ current: "auto" as const, onPick: vi.fn() }, { current: "build" as const, onPick: vi.fn() }, { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" }]) {
+      expect(html({ autoOn: modes.current !== null, modes })).not.toContain("data-mode-reasoning-imposed");
+    }
+  });
+
+  it("the level follows the model: a model with no level has no Reasoning row", () => {
+    const markup = html({ effort: undefined });
+    expect(markup).not.toContain('data-mode-row="reasoning"');
+  });
+
+  it("All models names the pinned model on its row", () => {
+    const markup = html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } });
+    expect(markup).toMatch(/data-mode-row="all"[^>]*>.*Claude · opus/);
+  });
+
+  it("M-20261123-045: All models opens on the providers, the favorites first with their stars, no account, no state, no model of a provider yet", () => {
     const markup = html({ view: "all" });
+    expect(markup).toContain('data-mode-panel="providers"');
     expect(markup).not.toContain("data-model-panel-segment");
-    const favorites = markup.indexOf('data-model-manual-group="favorites"');
-    const claude = markup.indexOf('data-model-manual-provider="anthropic"');
-    const grok = markup.indexOf('data-model-manual-provider="xai"');
-    expect(favorites).toBeGreaterThan(-1);
-    expect(favorites).toBeLessThan(claude);
-    expect(claude).toBeLessThan(grok);
-    expect(markup).toContain("ada.admin@acme.test");
-    expect(markup).toMatch(/data-model-account-state[^>]*>· Signed out/);
-    // the favorite is starred where it shows; another model offers its star
+    const providers = [...markup.matchAll(/data-model-cascade-provider="([a-z]+)"/g)].map((match) => match[1]);
+    // OpenAI is signed out: it is not there
+    expect(providers).toEqual(["anthropic", "xai", "local"]);
+    expect(markup.indexOf("data-model-cascade-favorites")).toBeLessThan(markup.indexOf("data-model-cascade-provider"));
     expect(markup).toContain(`aria-pressed="true" data-model-favorite="grok\u0000grok-4"`);
-    expect(markup).toContain(`aria-pressed="false" data-model-favorite="grok\u0000grok-code"`);
+    expect(markup).not.toContain("Signed out");
+    expect(markup).not.toContain("ada.admin@acme.test");
+    expect(markup).not.toContain('data-model-option="mythos"');
   });
 });

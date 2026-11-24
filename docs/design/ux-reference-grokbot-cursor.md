@@ -2006,17 +2006,26 @@ Rules that hold at every width:
 - Composer: one capsule on the column's edges; the model chip shows while
   the capsule is at least 560px wide (35rem) and folds into the + menu's
   Model row below that.
-- Mode menu (owner, 2026-11-19, #5088, back after #4936): the chip reads the
-  mode's name ("Expert ⌄") and opens the model panel's short view as the modes:
-  Auto (its Optimize under it while on), Fast, Expert, Heavy, Manual, the panel's
-  36px rows with a glyph in a 16px slot and the check in the right icon slot. A
-  hovered or keyboard focused row opens a small tooltip beside the menu, level
-  with the row: what the mode does, then the model behind it in secondary ink
-  ("Quick responses · Grok 4.7"); a click's own focus stays quiet. Manual names
-  the pinned model at its right and opens every model: favorites first, then each
-  provider and each account with its state, one list with a search past eight
-  rows. See `docs/model-modes.md`. Tests: `src/components/ModeMenu.dom.test.ts`,
-  `src/components/ModelPanel.modes.test.ts`; captures:
+- Mode menu (owner, 2026-11-19, #5088; 2026-11-23, M-20261123-040,
+  M-20261123-045, M-20261123-047): the chip reads the mode's name ("Expert ⌄")
+  and opens the model panel's short view as the mode menu, the same rows as the
+  Perspicax console's (`shared/mode-menu.ts`): Auto, Fast, Expert, Heavy, Build, a hairline, Reasoning, a hairline, All
+  models; the panel's 36px rows, a mode's glyph in a 16px slot, the check or
+  the chevron in the right icon slot, no heading over the rows. A hovered or
+  keyboard focused mode opens a small tooltip beside the menu, level with the
+  row: what the mode does, then the model behind it in secondary ink ("Quick
+  responses · Grok 4.7"); a click's own focus stays quiet. Reasoning shows the
+  level in use at its right, in 12px secondary ink, and opens the levels of
+  the model in use in place; under Fast, Expert and Heavy it is greyed and
+  shows the level the mode imposes. All models names the pinned model at its
+  right and opens three panels in place, each under a back row (a chevron and
+  the panel's name in 12px secondary ink): the providers (the favorites first),
+  the provider's accounts, the account's models with a search past eight rows.
+  A provider with one account skips the account panel. Nothing that cannot run
+  is listed and no state ("Off", "Signed out") is written. See
+  `docs/model-modes.md`. Tests: `shared/mode-menu.test.ts`,
+  `src/components/ModeMenu.dom.test.ts`, `src/components/ModelPanel.modes.test.ts`,
+  `src/components/ModelPanel.cascade.dom.test.ts`; captures:
   `scripts/capture/mode-menu.mjs`.
 - Message bar (#4152, measured 2026-11-13 in the owner's configuration;
   neither flag changes these values): one line is 44px tall with a 0.5px
@@ -3569,7 +3578,8 @@ composer chip, bot Model row, wizard, team settings), 360px wide
   fall on one centre. The side slot holds only the star of the model in
   use, beside its check; it stays empty on every other row. The account
   line sits under the model's name, at its left edge.
-- Auto: while it is on, "Optimize for" is one 32px line right under it, the
+- Auto, outside the composer's mode menu (D-20261124-002: the mode menu
+  never shows it): while it is on, "Optimize for" is one 32px line right under it, the
   label in 12px grey at the names' edge, the small segmented control at the
   right edge; no heading band, no full-width control.
 - Reasoning: "Reasoning" and "More effort is slower" on one 12px grey line,

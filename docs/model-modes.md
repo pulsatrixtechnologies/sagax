@@ -31,7 +31,7 @@ their connected providers and accounts, and their local models.
 levels the model in use takes (`modelEffortLevels`, so they follow the model).
 Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
 and shows the level the mode imposes. A model that takes no level has no row.
-Auto and Build run at the person's level.
+Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level. Build shows its model's default until the person chooses a level.
 
 **All models** is the person's own model. Its row names the pinned model while
 it runs and opens a cascade of three panels, each with a back row: the

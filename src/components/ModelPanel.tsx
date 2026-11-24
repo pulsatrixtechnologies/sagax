@@ -303,7 +303,7 @@ export function ModelPanel(props: ModelPanelProps) {
   const levelsRow = reasoningRow({ mode: modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
   // an engine with model variants draws its own control in the panel
   const reasoningState: ReasoningRow = variantRow && !levelsRow.disabled ? { shown: true, disabled: false, choices: [] } : levelsRow;
-  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : variantRow ? "" : t("model.defaultTag"));
+  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : modes?.current === "auto" ? t("model.mode.auto.name") : variantRow ? "" : t("model.defaultTag"));
   const hasReasoning = showSettings && !modes && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
@@ -411,9 +411,9 @@ export function ModelPanel(props: ModelPanelProps) {
                   tabIndex={on || (reasoningState.value === undefined && level === reasoningState.choices[0]) ? 0 : -1}
                   onMouseDown={(event) => event.preventDefault()}
                   // the model's own default level is picked as "no level sent"
-                  onClick={() => { effort.onPick(level === null || level === effort.modelDefault ? undefined : level as EffortLevel); go({ panel: "root" }); }}
+                  onClick={() => { effort.onPick(level === null || (modes.current !== "auto" && level === effort.modelDefault) ? undefined : level as EffortLevel); go({ panel: "root" }); }}
                   className={PANEL_ROW_BUTTON}>
-                  <span className={cn("min-w-0 flex-1 truncate", level !== null && isUltracodeEffort(level as EffortLevel) && "ultracode-effort-option")}>{level === null ? t("model.defaultTag") : effortLabel(level as EffortLevel)}</span>
+                  <span className={cn("min-w-0 flex-1 truncate", level !== null && isUltracodeEffort(level as EffortLevel) && "ultracode-effort-option")}>{reasoningLabel(level ?? undefined)}</span>
                   <span aria-hidden="true" className={ROW_SIDE_SLOT} />
                   <span aria-hidden="true" className={ROW_ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
                 </button>

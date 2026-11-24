@@ -123,7 +123,7 @@ describe("the model panel with the composer's modes", () => {
   it("M-20261123-040: Reasoning is a row with the level in use, never the segmented control at the foot", () => {
     const markup = html();
     expect(markup).not.toContain("data-model-panel-reasoning");
-    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*data-mode-reasoning-value[^>]*>Medium</);
+    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*data-mode-reasoning-value[^>]*>Auto</);
     // a level the person chose reads on the row
     expect(html({ effort: { ...props().effort!, value: "high" } })).toMatch(/data-mode-reasoning-value[^>]*>High</);
   });

@@ -38,8 +38,14 @@ describe("the menu's rows", () => {
 });
 
 describe("the Reasoning row", () => {
+  it("keeps Auto available until a person explicitly chooses a reasoning level", () => {
+    const input = { mode: "auto", levels: ["low", "high"], modelDefault: "high" };
+    expect(reasoningRow(input)).toEqual({ shown: true, disabled: false, value: undefined, choices: [null, "low", "high"] });
+    expect(reasoningRow({ ...input, value: "high" }).value).toBe("high");
+  });
+
   it("offers the levels of the model in use, its default checked while none is chosen", () => {
-    expect(reasoningRow({ mode: "auto", levels: ["low", "medium", "high"], modelDefault: "medium" })).toEqual({
+    expect(reasoningRow({ mode: "build", levels: ["low", "medium", "high"], modelDefault: "medium" })).toEqual({
       shown: true, disabled: false, value: "medium", choices: ["low", "medium", "high"],
     });
     expect(reasoningRow({ mode: null, levels: ["low", "high"], value: "high" })).toEqual({

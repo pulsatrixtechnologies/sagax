@@ -62,7 +62,7 @@ afterEach(() => {
 
 describe("Reasoning", () => {
   it("opens the levels of the model in use, the level in use checked, and a pick returns to the menu", () => {
-    const given = render();
+    const given = render({ modes: { current: "build", onPick: vi.fn() } });
     click('[data-mode-row="reasoning"]');
     expect(panel()).toBe("reasoning");
     expect(rowsOf("data-model-effort-choice")).toEqual(["Low", "Medium", "High"]);
@@ -73,11 +73,23 @@ describe("Reasoning", () => {
   });
 
   it("offers Default while the model names no level of its own, sent as no level", () => {
-    const given = render({ effort: { title: "Reasoning effort", levels: ["low", "high"], onPick: vi.fn() } });
+    const given = render({ modes: { current: "build", onPick: vi.fn() }, effort: { title: "Reasoning effort", levels: ["low", "high"], onPick: vi.fn() } });
     click('[data-mode-row="reasoning"]');
     expect(rowsOf("data-model-effort-choice")).toEqual(["Default", "Low", "High"]);
     click('[data-model-effort-choice="default"]');
     expect(given.effort!.onPick).toHaveBeenCalledWith(undefined);
+  });
+
+  it("Auto retains an explicit pick equal to the model default and allows returning to Auto", () => {
+    const given = render();
+    click('[data-mode-row="reasoning"]');
+    expect(rowsOf("data-model-effort-choice")).toEqual(["Auto", "Low", "Medium", "High"]);
+    expect(host.querySelector('[data-model-effort-choice="default"]')?.getAttribute("aria-checked")).toBe("true");
+    click('[data-model-effort-choice="medium"]');
+    expect(given.effort!.onPick).toHaveBeenCalledWith("medium");
+    click('[data-mode-row="reasoning"]');
+    click('[data-model-effort-choice="default"]');
+    expect(given.effort!.onPick).toHaveBeenLastCalledWith(undefined);
   });
 
   it("the back row returns to the menu without a pick", () => {

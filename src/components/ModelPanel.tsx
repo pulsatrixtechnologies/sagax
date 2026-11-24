@@ -12,8 +12,9 @@
 // #5088, then the owner on 2026-11-23 (M-20261123-040, M-20261123-045,
 // M-20261123-047): in the composer the short view is the mode menu instead
 // (ModeMenu.tsx, the rows of shared/mode-menu.ts, the same as the Perspicax
-// console's): Auto (its Optimize under it), Fast, Expert, Heavy, Build, then
-// Reasoning, then All models. Reasoning and All models open in place, a back
+// console's): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
+// models (D-20261124-002: Auto's Optimize for is no row of this menu, it is
+// set in Manage models and in a bot's Model cell of Settings). Reasoning and All models open in place, a back
 // row at the top: Reasoning lists the levels of the model in use; All models
 // is a cascade, the provider, then the account (skipped when the provider has
 // one), then the model, listing only what can run a turn now
@@ -53,7 +54,8 @@ export interface ModelPanelProps {
   /** Each provider's mark, by section key. */
   mark: (sectionKey: string) => ReactNode;
   autoOn: boolean;
-  /** The Optimize choice (Intelligence, Balance, Cost) while Auto is on. */
+  /** The Optimize choice (Intelligence, Balance, Cost) while Auto is on;
+   * never drawn in the mode menu (D-20261124-002). */
   optimize?: { value: AutoOptimize; onPick: (value: AutoOptimize) => void };
   effort?: {
     title: string;
@@ -395,8 +397,7 @@ export function ModelPanel(props: ModelPanelProps) {
         {modes && at.panel === "root" ? (
           <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
             reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, onOpen: () => go({ panel: "reasoning" }) } : undefined}
-            allModels={{ label: modes.pinnedLabel, onOpen: () => go({ panel: "providers" }) }}
-            autoSetting={optimize ? optimizeRow(optimize) : undefined} />
+            allModels={{ label: modes.pinnedLabel, onOpen: () => go({ panel: "providers" }) }} />
         ) : modes && at.panel === "reasoning" ? (
           variantRow ? <div className="px-2 py-1.5">{variantRow}</div> : effort && reasoningState.choices.map((level) => {
             const on = (level ?? undefined) === reasoningState.value;

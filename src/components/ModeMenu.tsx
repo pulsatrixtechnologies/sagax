@@ -9,7 +9,7 @@
 // models are not the person's to pick here: Sagax maps each mode to the best
 // ones they can use (server/models/model-mode.ts). A model the person pinned in
 // All models checks that row, which names it.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Brain, Check, ChevronRight, Hammer, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
@@ -47,11 +47,9 @@ export interface ModeMenuProps {
   reasoning?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void };
   /** All models: opens the cascade. `label` is the pinned model while it runs. */
   allModels?: { label?: string; onOpen: () => void };
-  /** What sits under the Auto row while Auto is on (its Optimize choice). */
-  autoSetting?: ReactNode;
 }
 
-export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, autoSetting }: ModeMenuProps) {
+export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels }: ModeMenuProps) {
   const modes = offeredModes(resolutions);
   const rows = menuRows({ offered: modes, reasoning: Boolean(reasoning?.row.shown), all: Boolean(allModels) });
   const [tipFor, setTipFor] = useState<ModelMode | null>(null);
@@ -160,7 +158,6 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
                 <span aria-hidden="true" className={ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
               </button>
             </div>
-            {mode === "auto" && on && autoSetting}
           </div>
         );
       })}

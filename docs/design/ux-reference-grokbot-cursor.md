@@ -2009,8 +2009,7 @@ Rules that hold at every width:
 - Mode menu (owner, 2026-11-19, #5088; 2026-11-23, M-20261123-040,
   M-20261123-045, M-20261123-047): the chip reads the mode's name ("Expert ⌄")
   and opens the model panel's short view as the mode menu, the same rows as the
-  Perspicax console's (`shared/mode-menu.ts`): Auto (its Optimize under it
-  while on), Fast, Expert, Heavy, Build, a hairline, Reasoning, a hairline, All
+  Perspicax console's (`shared/mode-menu.ts`): Auto, Fast, Expert, Heavy, Build, a hairline, Reasoning, a hairline, All
   models; the panel's 36px rows, a mode's glyph in a 16px slot, the check or
   the chevron in the right icon slot, no heading over the rows. A hovered or
   keyboard focused mode opens a small tooltip beside the menu, level with the
@@ -3579,7 +3578,8 @@ composer chip, bot Model row, wizard, team settings), 360px wide
   fall on one centre. The side slot holds only the star of the model in
   use, beside its check; it stays empty on every other row. The account
   line sits under the model's name, at its left edge.
-- Auto: while it is on, "Optimize for" is one 32px line right under it, the
+- Auto, outside the composer's mode menu (D-20261124-002: the mode menu
+  never shows it): while it is on, "Optimize for" is one 32px line right under it, the
   label in 12px grey at the names' edge, the small segmented control at the
   right edge; no heading band, no full-width control.
 - Reasoning: "Reasoning" and "More effort is slower" on one 12px grey line,

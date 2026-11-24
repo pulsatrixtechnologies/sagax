@@ -101,7 +101,6 @@ function Gallery() {
             favorites={{ keys: stars, onToggle: (candidate) => setStars((list) => (list.includes(candidate.key) ? list.filter((key) => key !== candidate.key) : [...list, candidate.key])) }}
             mark={(key) => (key === "anthropic" || key === "claude" ? <ClaudeMark size={14} /> : <ProviderMonogram label={key === "xai" ? "Grok" : key === "computer" ? "Local" : "OpenAI"} />)}
             autoOn={autoOn}
-            optimize={{ value: "balance", onPick: () => undefined }}
             effort={{ title: t("model.reasoning"), levels: ["low", "medium", "high", "xhigh", "max"], modelDefault: "high", onPick: () => undefined }}
             manage={{ onManage: () => undefined, turnedOff: 3, openProviders: () => undefined }}
             showSettings

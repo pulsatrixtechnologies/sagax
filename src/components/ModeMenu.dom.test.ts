@@ -182,13 +182,9 @@ describe("the mode menu", () => {
     expect(onPick).toHaveBeenCalledWith("build");
   });
 
-  it("Auto's own setting sits under Auto while Auto is on, never under another mode", () => {
-    const setting = createElement("div", { "data-test-setting": "" }, "Optimize");
-    render(base({ current: "auto", autoSetting: setting }));
-    const under = host.querySelector("[data-test-setting]")!;
-    expect(under.parentElement).toBe(row("auto").closest("div")!.parentElement);
-    render(base({ current: "expert", autoSetting: setting }));
-    expect(host.querySelector("[data-test-setting]")).toBeNull();
+  it("D-20261124-002: nothing sits under the Auto row, the rows are the console's only", () => {
+    render(base({ current: "auto" }));
+    expect(row("auto").closest("div")!.parentElement!.children).toHaveLength(1);
   });
 
   it("a disabled menu (the bot is working) picks nothing", () => {

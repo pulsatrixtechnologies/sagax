@@ -95,14 +95,20 @@ const props = (extra: Partial<ModelPanelProps> = {}): ModelPanelProps => ({
 const html = (extra?: Partial<ModelPanelProps>) => renderToStaticMarkup(createElement(ModelPanel, props(extra)));
 
 describe("the model panel with the composer's modes", () => {
-  it("opens on the rows of the menu, Auto's Optimize under it, no model list, the footer kept", () => {
+  it("opens on the rows of the menu, no model list, the footer kept", () => {
     const markup = html();
     const order = [...markup.matchAll(/data-mode-row="([a-z]+)"/g)].map((match) => match[1]);
     expect(order).toEqual(["auto", "fast", "expert", "heavy", "build", "reasoning", "all"]);
-    expect(markup).toContain("data-model-auto-optimize-row");
     expect(markup).not.toContain("data-model-panel-segment");
     expect(markup).not.toContain('data-model-option="opus"');
     expect(markup).toContain("data-model-manage");
+  });
+
+  it("D-20261124-002: Optimize for left the mode menu; the panel's own short view (a bot's Model cell in Settings) keeps it under Auto", () => {
+    const markup = html();
+    expect(markup).not.toContain("data-model-auto-optimize");
+    expect(markup).not.toContain("Optimize for");
+    expect(html({ modes: undefined })).toContain("data-model-auto-optimize-row");
   });
 
   it("M-20261123-047: the menu no longer counts the models turned off; Manage models keeps its link", () => {

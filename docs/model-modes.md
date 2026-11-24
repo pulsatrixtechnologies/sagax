@@ -45,9 +45,11 @@ offer is listed under each, and the copy under an account the menu does not
 lead with forces that account (as the Account line does). The starred
 favorites lead the provider panel and the star still adds or removes one,
 synced across the person's devices. Nothing else of the panel is lost (one
-component, `src/components/ModelPanel.tsx` with `modes`): Auto's Optimize sits
-under Auto, the Account and Runs with lines and "Manage models" stay in the
-footer. The menu no longer counts the models turned off: turning one back on
+component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
+with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no
+row of the mode menu (owner, D-20261124-002: the menu has the console's rows
+only); it is set where it already was, under Auto in the Manage models window
+and in a bot's Model cell (Settings, Providers, Models and context size). The menu no longer counts the models turned off: turning one back on
 is done in Manage models. The other places the model menu opens (the bot's
 Model row, the wizard, team settings) keep the panel's own short view.
 

@@ -26,7 +26,7 @@ describe("stored data that carries a mode", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
   });
 
-  it("keeps Heavy on the bot and drops Build from a thread", () => {
+  it("keeps Heavy on the bot and Build on a thread (M-20261123-045), and drops a mode it does not know", () => {
     const store = new Store(base);
     const bot = store.createBot({ name: "Wren" }, { seedMessages: false });
     const other = store.createTask(bot.id, "Other", false)!;
@@ -36,6 +36,10 @@ describe("stored data that carries a mode", () => {
     saved[0].modelSelection.mode = "heavy";
     const task = saved[0].tasks.find((t: { threadId: string }) => t.threadId === other.threadId);
     task.modelSelection.mode = "build";
+    const third = store.createTask(bot.id, "Third", false)!;
+    const unknown = JSON.parse(JSON.stringify(store.bots))[0].tasks.find((t: { threadId: string }) => t.threadId === third.threadId);
+    unknown.modelSelection = { instanceId: "codex", model: "gpt-6-astra", auto: true, mode: "turbo" };
+    saved[0].tasks.push(unknown);
     mkdirSync(dirname(BOTS_FILE()), { recursive: true });
     writeFileSync(BOTS_FILE(), JSON.stringify(saved));
 
@@ -43,7 +47,9 @@ describe("stored data that carries a mode", () => {
     const loaded = reloaded.bot(bot.id)!;
     expect(loaded.modelSelection).toMatchObject({ auto: true, mode: "heavy" });
     const loadedTask = reloaded.taskByThread(bot.id, other.threadId)!;
-    expect(loadedTask.modelSelection).toMatchObject({ model: "gpt-6-astra", auto: true });
-    expect("mode" in loadedTask.modelSelection!).toBe(false);
+    expect(loadedTask.modelSelection).toMatchObject({ model: "gpt-6-astra", auto: true, mode: "build" });
+    const unknownTask = reloaded.taskByThread(bot.id, third.threadId)!;
+    expect(unknownTask.modelSelection).toMatchObject({ model: "gpt-6-astra", auto: true });
+    expect("mode" in unknownTask.modelSelection!).toBe(false);
   });
 });

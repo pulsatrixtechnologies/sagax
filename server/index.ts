@@ -1573,6 +1573,7 @@ import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedA
 import { accountOwnedBy, accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
 import { accountWords } from "../shared/model-accounts.ts";
 import { providerOfInstance } from "../shared/model-provider.ts";
+import { engineCascadeFacts, modelCascadeFacts } from "./agent-model-cascade.ts";
 import { accountPickText, accountSwitchSettingOf, cleanAccountSwitchDefaults, type AccountPick, type AccountSwitchSetting } from "../shared/account-switch.ts";
 import { createAccountMeter } from "./usage/account-meter.ts";
 import { createAccountSwitch } from "./usage/account-switch-host.ts";
@@ -35147,6 +35148,9 @@ const agentApi = createAgentApi({
       if (!instanceId) return [];
       const label = String(instance.displayName ?? instance.driverKind ?? instanceId);
       const modelBag = instance.models && typeof instance.models === "object" ? instance.models as { options?: Array<{ id?: string; label?: string; keyPaid?: boolean }>; default?: string } : null;
+      // M-20261123-045: where each model comes from (provider, account) and the levels it takes
+      const cascadeInstance = { instanceId, driverKind: String(instance.driverKind ?? ""), displayName: label, providerAccount: instance.providerAccount as { provider?: string; serverId: string } | undefined, email: (instance.snapshot as { account?: { email?: string } } | undefined)?.account?.email };
+      const cascadeEngine = engineCascadeFacts(cascadeInstance);
       // #3085: pi offers the providers this bot's payer holds a key for (its
       // owner when the owner pays, else the caller), never another one
       // the person's own list (GET /api/instances) already fits a new bot
@@ -35159,6 +35163,7 @@ const agentApi = createAgentApi({
           id: String(option.id).trim(),
           label: String(option.label ?? option.id).trim(),
           ...modelHealth({ instanceId, driverKind: String(instance.driverKind ?? ""), snapshot: instance.snapshot as HealthInstance["snapshot"] }, { id: String(option.id).trim(), ...((option as { local?: boolean }).local === true ? { local: true } : {}) }, sources),
+          ...modelCascadeFacts(cascadeInstance, { ...(option as Record<string, unknown>), id: String(option.id).trim() }, cascadeEngine.provider?.id),
         }))
         : [];
       const caps = instance.capabilities && typeof instance.capabilities === "object" ? instance.capabilities as { effortLevels?: unknown } : null;
@@ -35168,6 +35173,7 @@ const agentApi = createAgentApi({
         label,
         models: options,
         ...(effortLevels?.length ? { effort_levels: effortLevels } : {}),
+        ...cascadeEngine,
         auto: true,
       }];
     });

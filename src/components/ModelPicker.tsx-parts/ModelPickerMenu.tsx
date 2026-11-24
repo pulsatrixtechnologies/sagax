@@ -120,8 +120,8 @@ export function ModelPickerMenu({
   /** #4417: "Context size" for the bot (src/components/ContextSize.tsx),
    * computed by the picker. */
   contextSize?: readonly ContextSizeChoice[];
-  /** #4900, #5088: the chat bar's mode menu (Auto, Fast, Expert, Heavy, Manual),
-   * the model panel's short view; Manual is its list of every model. */
+  /** #4900, #5088, M-20261123-045: the chat bar's mode menu (Auto, Fast,
+   * Expert, Heavy, Build, Reasoning, All models), the model panel's short view. */
   modeMenu?: ModelPanelProps["modes"];
 }) {
   const width = MENU_WIDTH;

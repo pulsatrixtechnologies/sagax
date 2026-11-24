@@ -3,6 +3,9 @@
 // types, and the arrow keys over what is left. Pure, so the rules are tested
 // without a DOM.
 
+import { LOCAL_PROVIDER_ID, usableCascade, type CascadeAccount, type CascadeProvider } from "../../shared/mode-menu";
+import { COMPUTER_PROVIDER_ID } from "../../shared/model-provider";
+
 export type ModelMenuRowKind = "auto" | "follow" | "keep" | "model";
 
 export interface ModelMenuRow {
@@ -154,6 +157,44 @@ export function manualProviders(providers: readonly ModelMenuSection[], query = 
       .filter((group) => group.rows.length > 0 || (words.length === 0 && group.account?.state !== undefined));
     return kept.length ? [{ section, groups: kept }] : [];
   });
+}
+
+/** All models as a cascade (owner, 2026-11-23, M-20261123-045,
+ * M-20261123-047): the provider, then the account, then the model, with only
+ * what can run a turn now (shared/mode-menu.ts usableCascade). An account is
+ * the engine's sign-in or key the Manual grouping already names; a provider
+ * with one account has one, skipped by the menu. The models of this computer
+ * and of the local servers are the "Local" provider, each server (or the
+ * person who shares it) standing where an account does. A model several
+ * accounts offer is listed under each; picking it under an account the menu
+ * does not lead with forces that account. */
+export function modelCascade(providers: readonly ModelMenuSection[], words: { local: string; thisComputer: string }): CascadeProvider<ModelMenuRow>[] {
+  const model = (row: ModelMenuRow) => ({
+    id: row.key, label: row.label, usable: !row.unavailable, current: row.current,
+    note: row.warning ?? row.description, data: row,
+  });
+  return usableCascade(providers.map((section): CascadeProvider<ModelMenuRow> => {
+    if (section.key === COMPUTER_PROVIDER_ID) {
+      const servers = new Map<string, ModelMenuRow[]>();
+      for (const row of section.rows) servers.set(row.subtext ?? "", [...(servers.get(row.subtext ?? "") ?? []), row]);
+      return {
+        id: LOCAL_PROVIDER_ID, label: words.local,
+        // the server's name is the panel's: the row does not say it again
+        accounts: [...servers.entries()].map(([server, rows]) => ({
+          id: server || "this-computer", label: server || words.thisComputer, usable: true,
+          models: rows.map((row) => { const { subtext: _subtext, ...rest } = row; return model(rest); }),
+        })),
+      };
+    }
+    const groups = manualProviders([section])[0]?.groups ?? [];
+    const accounts = groups.map((group, index): CascadeAccount<ModelMenuRow> => ({
+      id: group.account?.instanceId ?? `${section.key}:${index}`,
+      label: group.account?.label ?? section.label ?? section.key,
+      usable: !group.account?.state,
+      models: group.rows.map(model),
+    }));
+    return { id: section.key, label: section.label ?? section.key, accounts };
+  }));
 }
 
 /** The rows the arrow keys and Enter reach, in order. */

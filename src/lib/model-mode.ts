@@ -16,6 +16,7 @@ export function modeName(mode: ModelMode): string {
     case "fast": return t("model.mode.fast.name");
     case "expert": return t("model.mode.expert.name");
     case "heavy": return t("model.mode.heavy.name");
+    case "build": return t("model.mode.build.name");
   }
 }
 
@@ -26,6 +27,7 @@ export function modeBlurb(mode: ModelMode): string {
     case "fast": return t("model.mode.fast.blurb");
     case "expert": return t("model.mode.expert.blurb");
     case "heavy": return t("model.mode.heavy.blurb");
+    case "build": return t("model.mode.build.blurb");
   }
 }
 

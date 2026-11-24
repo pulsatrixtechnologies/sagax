@@ -1,20 +1,23 @@
-// The composer's mode rows (#4900, back by #5088, owner decision 2026-11-19,
-// M-20261119-077): Auto, Fast, Expert, Heavy, then Manual, at the top of the
-// one model menu (ModelPanel.tsx), drawn as its rows. A hovered or focused row
-// opens a small tooltip beside the menu: what the mode does, then which model
-// backs it ("Quick responses · Grok 4.7"). The models are not the person's to
-// pick here: Sagax maps each mode to the best ones they can use
-// (server/models/model-mode.ts). Manual is the person's own pinned model: its
-// row opens every model (the panel's Manual list), and while a pinned model
-// runs it is the checked row and names it.
+// The composer's mode menu (#4900, #5088; owner 2026-11-23, M-20261123-040,
+// M-20261123-045): the rows of shared/mode-menu.ts, the same in the Perspicax
+// console, at the top of the one model menu (ModelPanel.tsx): Auto, Fast,
+// Expert, Heavy, Build, a hairline, Reasoning (the level in use, opening the
+// levels of the model in use; greyed with the imposed level under a mode that
+// sets its own), a hairline, All models (opening provider, account, model).
+// A hovered or focused mode opens a small tooltip beside the menu: what the
+// mode does, then which model backs it ("Quick responses · Grok 4.7"). The
+// models are not the person's to pick here: Sagax maps each mode to the best
+// ones they can use (server/models/model-mode.ts). A model the person pinned in
+// All models checks that row, which names it.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Brain, Check, ChevronRight, Layers, SlidersHorizontal, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Brain, Check, ChevronRight, Hammer, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { modeBlurb, modeModelsLine, modeName, modeTooltip, offeredModes, type ModelMode } from "@/lib/model-mode";
 import type { ModeResolution } from "../../shared/model-mode";
+import { menuRows, type ReasoningRow } from "../../shared/mode-menu";
 import { MENU_BOX } from "./menu-look";
 import { POPOVER_LAYER } from "./AnchoredPopover";
 
@@ -30,23 +33,27 @@ function keyboardFocus(element: HTMLElement): boolean {
   return !("pointerFocus" in element.dataset);
 }
 
-export const MODE_GLYPHS: Record<ModelMode | "manual", LucideIcon> = { auto: Sparkles, fast: Zap, expert: Brain, heavy: Layers, manual: SlidersHorizontal };
+export const MODE_GLYPHS: Record<ModelMode, LucideIcon> = { auto: Sparkles, fast: Zap, expert: Brain, heavy: Layers, build: Hammer };
 
 export interface ModeMenuProps {
-  /** The mode in use; null while the person's own pinned model runs (Manual). */
+  /** The mode in use; null while a model the person pinned in All models runs. */
   current: ModelMode | null;
   /** What each mode runs for this person (GET /api/bots/:id/auto-model); absent while loading. */
   resolutions?: Record<ModelMode, ModeResolution>;
   disabled?: boolean;
   onPick: (mode: ModelMode) => void;
-  /** Manual: opens every model. `label` is the pinned model while it runs. */
-  manual?: { label?: string; onOpen: () => void };
+  /** Reasoning: the row's state (shared/mode-menu.ts reasoningRow), how a
+   * level reads, and what opens its levels. Absent: no row. */
+  reasoning?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void };
+  /** All models: opens the cascade. `label` is the pinned model while it runs. */
+  allModels?: { label?: string; onOpen: () => void };
   /** What sits under the Auto row while Auto is on (its Optimize choice). */
   autoSetting?: ReactNode;
 }
 
-export function ModeMenu({ current, resolutions, disabled = false, onPick, manual, autoSetting }: ModeMenuProps) {
+export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, autoSetting }: ModeMenuProps) {
   const modes = offeredModes(resolutions);
+  const rows = menuRows({ offered: modes, reasoning: Boolean(reasoning?.row.shown), all: Boolean(allModels) });
   const [tipFor, setTipFor] = useState<ModelMode | null>(null);
   const [tipAt, setTipAt] = useState<{ side: "right" | "left"; x: number; top: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -81,10 +88,55 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, manua
       <Glyph size={15} strokeWidth={1.75} />
     </span>
   );
-  const ManualGlyph = MODE_GLYPHS.manual;
+  const separator = (key: string) => <div key={key} role="separator" data-mode-separator="" className="mx-2 my-1 border-t border-popover-hairline" />;
+  const pinned = current === null;
   return (
     <div ref={rootRef} data-mode-menu="" className="contents">
-      {modes.map((mode) => {
+      {rows.map((row, index) => {
+        if (row.kind === "separator") return separator(`separator-${index}`);
+        if (row.kind === "reasoning" && reasoning) {
+          const { row: state } = reasoning;
+          return (
+            <div key="reasoning" className={rowShape}>
+              <button type="button" aria-haspopup="menu" disabled={disabled || state.disabled}
+                data-mode-row="reasoning" data-model-panel-row="mode:reasoning" data-mode-reasoning-imposed={state.disabled ? "" : undefined}
+                title={state.disabled ? t("model.mode.reasoning.imposed") : undefined}
+                tabIndex={-1}
+                onMouseDown={(event) => event.preventDefault()}
+                onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); reasoning.onOpen(); } }}
+                onClick={reasoning.onOpen}
+                className={buttonShape}>
+                <span className="min-w-0 flex-1 truncate">{t("model.reasoning")}</span>
+                <span data-mode-reasoning-value="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{reasoning.label(state.value)}</span>
+                <span aria-hidden="true" className={SIDE_SLOT} />
+                <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+              </button>
+            </div>
+          );
+        }
+        if (row.kind === "all" && allModels) {
+          return (
+            <div key="all" className={rowShape}>
+              <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" disabled={disabled}
+                data-mode-row="all" data-model-panel-row="mode:all" data-mode-current={pinned ? "" : undefined}
+                aria-label={pinned && allModels.label ? `${t("model.auto.rail")}. ${allModels.label}` : t("model.auto.rail")}
+                tabIndex={pinned ? 0 : -1}
+                onMouseDown={(event) => event.preventDefault()}
+                onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); allModels.onOpen(); } }}
+                onClick={allModels.onOpen}
+                className={buttonShape}>
+                <span className="min-w-0 flex-1 truncate">{t("model.auto.rail")}</span>
+                {pinned && allModels.label && (
+                  <span data-mode-pinned-model="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{allModels.label}</span>
+                )}
+                <span aria-hidden="true" className={SIDE_SLOT}>{pinned && <Check size={14} className="text-popover-accent" />}</span>
+                <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+              </button>
+            </div>
+          );
+        }
+        if (row.kind !== "mode") return null;
+        const mode = row.id;
         const Glyph = MODE_GLYPHS[mode];
         const on = current === mode;
         return (
@@ -94,7 +146,7 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, manua
                 data-mode-row={mode} data-model-panel-row={`mode:${mode}`} data-mode-current={on ? "" : undefined}
                 aria-describedby={tipFor === mode ? tipId : undefined}
                 aria-label={`${modeName(mode)}. ${modeTooltip(mode, resolutions?.[mode])}`}
-                tabIndex={on || (current === null && mode === modes[0]) ? 0 : -1}
+                tabIndex={on || (current === null && !allModels && mode === modes[0]) ? 0 : -1}
                 onMouseDown={(event) => event.preventDefault()}
                 onPointerEnter={() => setTipFor(mode)}
                 onPointerLeave={() => setTipFor((open) => (open === mode ? null : open))}
@@ -112,26 +164,6 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, manua
           </div>
         );
       })}
-      {manual && (
-        <div className={rowShape}>
-          <button type="button" role="radio" aria-checked={current === null} disabled={disabled}
-            data-mode-row="manual" data-model-panel-row="mode:manual" data-mode-current={current === null ? "" : undefined}
-            aria-label={current === null && manual.label ? `${t("model.mode.manual.name")}. ${manual.label}` : t("model.mode.manual.name")}
-            title={t("model.mode.manual.blurb")}
-            tabIndex={current === null ? 0 : -1}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={manual.onOpen}
-            className={buttonShape}>
-            {glyph(ManualGlyph, current === null)}
-            <span className="min-w-0 flex-1 truncate">{t("model.mode.manual.name")}</span>
-            {current === null && manual.label && (
-              <span data-mode-manual-model="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{manual.label}</span>
-            )}
-            <span aria-hidden="true" className={SIDE_SLOT}>{current === null && <Check size={14} className="text-popover-accent" />}</span>
-            <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-          </button>
-        </div>
-      )}
       {tipFor && tipAt && typeof document !== "undefined" && createPortal(
         <div id={tipId} role="tooltip" data-mode-tooltip={tipFor}
           style={{ ...(tipAt.side === "right" ? { left: tipAt.x } : { right: tipAt.x }), top: tipAt.top, maxWidth: TIP_WIDTH }}

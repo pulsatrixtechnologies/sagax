@@ -193,7 +193,7 @@ import { ATTACHMENTS_DIR, attachmentExists, cleanupStaleAttachmentPartials, clea
 import { messageAttachmentTags, statMessageFile } from "./messages/message-file.ts";
 import { createThreadFilePins } from "./threads/thread-file-pins.ts";
 import { activePath, listThreadFiles, threadFileId, threadFileRefs, type ThreadFileRef } from "./threads/thread-files.ts";
-import { avatarImageStatus } from "./media/avatar-image.ts";
+import { avatarImageStatus, type AvatarImageConfig } from "./media/avatar-image.ts";
 import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import { insideFolderRoots, MEMBER_FOLDER_REFUSED } from "./people/member-folders.ts";
@@ -336,7 +336,10 @@ import { bundledKnowledgeIndex } from "./self-knowledge/self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
 import { createWebSearchInternalRoutes } from "./routes/web-search-internal.ts";
 import { createImageInternalRoutes } from "./routes/image-internal.ts";
-import { chatImageCredential } from "./media/chat-image.ts";
+import { chatImageCredentials } from "./media/chat-image.ts";
+import { personGrokAccountToken } from "./voice/grok-account-voice.ts";
+import { VoiceKeyRefusals } from "./voice/voice-keys.ts";
+import { voiceRefusalText } from "./voice/voice-mode.ts";
 import { createVideoInternalRoutes } from "./routes/video-internal.ts";
 import { VideoGenerations, VideoJobError } from "./video/video-generation.ts";
 import { videoCredential } from "./video/video-credentials.ts";
@@ -23997,27 +24000,27 @@ function turnMediaPrincipal(threadId: string): string | null {
   if (turnRoutineLineage.has(threadId)) return turnRoutinePayers.get(threadId)?.trim().toLowerCase() || null;
   return turnSpeakerPrincipals.get(threadId)?.trim().toLowerCase() || null;
 }
-/** The person's own connected Grok account token for an image aspect
- * (#5223): solo is this computer's sign-in, an organization is this person's
- * live sign-in. The token is never logged, never in a response. */
-async function imageAccountTokenFor(principalId: string | null | undefined): Promise<string | undefined> {
-  if (IDENTITY.kind === "perspicax") {
-    if (!principalId) return undefined;
-    const access = await grokLiveAccessOf(principalId);
-    return access.ok ? access.accessToken : undefined;
-  }
-  return soloGrokVoiceToken();
+/** The person an image is made for, as the voice sees them (the same
+ * `disabled`), and their connected Grok account by the voice's own rule
+ * (#5223): one answer for both aspects. The token is never logged. */
+function imagePersonOf(principalId: string | null | undefined): VoiceSpeaker {
+  return principalId && (IDENTITY.kind !== "perspicax" || isPrincipalId(principalId)) ? voiceSpeakerOf(principalId) : { principalId: "" };
 }
+/** What an image credential refused lately, per person (the voice's memory, D-20261123-053). */
+const imageKeyRefusals = new VoiceKeyRefusals();
 /** The image settings an avatar generation for this person may use, or
  * null when the provider is xAI and neither the organization's key was given
  * to them nor do they have a connected Grok account. The key is left out
  * whenever it is not theirs to use; their own account is added when present
  * (#5223, an account beats the organization's key). */
-async function orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: AppConfig["imageGen"]; xai?: { key?: string }; xaiAccount?: string } | null> {
+async function orgAvatarImageConfig(principalId: string | null): Promise<AvatarImageConfig | null> {
   const given = orgXaiMediaGiven("image", principalId);
-  const account = await imageAccountTokenFor(principalId);
+  const account = await grokAccountTokenOf(imagePersonOf(principalId));
   if (!given && !account && avatarImageStatus(cfg).provider === "xai") return null;
-  return { imageGen: cfg.imageGen, ...(given ? { xai: cfg.xai } : {}), ...(account ? { xaiAccount: account } : {}) };
+  return {
+    imageGen: cfg.imageGen, ...(given ? { xai: cfg.xai } : {}), ...(account ? { xaiAccount: account } : {}),
+    chain: { who: principalId ?? "solo", refusals: imageKeyRefusals, organization: IDENTITY.kind === "perspicax", log: (line) => console.warn(line) },
+  };
 }
 /** A config status as this viewer sees it: the xAI voice and images are not
  * configured for a member the organization did not give them to. */
@@ -24733,17 +24736,21 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       if (!connectorThread(capability.botId, capability.threadId)) return null;
       return turnMediaPrincipal(capability.threadId) ?? (IDENTITY.kind !== "perspicax" ? localPrincipalId() ?? "solo" : null);
     },
-    credential: async (capability) => {
+    refusals: imageKeyRefusals,
+    refusalText: voiceRefusalText,
+    log: (line) => console.warn(line),
+    credentials: async (capability) => {
       const principalId = turnMediaPrincipal(capability.threadId) ?? (IDENTITY.kind !== "perspicax" ? localPrincipalId() ?? "solo" : null);
       const owner = IDENTITY.kind === "perspicax" ? providerAccountOwner(principalId) : undefined;
-      return chatImageCredential({
+      const person = imagePersonOf(principalId);
+      return chatImageCredentials({
+        ...(person.disabled ? { disabled: true } : {}),
         organization: IDENTITY.kind === "perspicax",
         personal: (provider) => owner ? providerAccounts.resolve(owner, provider) : Promise.resolve({ ok: false as const, error: "no_key" as const }),
         solo: (provider) => providerAccounts.key(undefined, provider),
-        // The person's own connected Grok account, before any key (#5223,
-        // order D-20261120-012). Solo is this computer's sign-in, an
-        // organization is this person's live sign-in. The token is never logged.
-        account: () => imageAccountTokenFor(principalId),
+        // The person's own connected Grok account, by the voice's own rule
+        // (#5223, order D-20261120-012). The token is never logged.
+        account: () => grokAccountTokenOf(person),
         imageGen: cfg.imageGen,
         organizationXaiAllowed: () => orgXaiMediaGiven("image", principalId),
         organizationXaiKey: () => cfg.xai?.key,
@@ -32026,6 +32033,12 @@ async function grokLiveAccessOf(principalId: string): Promise<GrokLiveAccess> {
   return instanceId ? engineLogins.grokLiveAccess(principalId, instanceId, restore) : { ok: false, error: "no_sign_in" };
 }
 
+/** One person's connected Grok account, for the voice and for the image
+ * alike (server/voice/grok-account-voice.ts): a person turned off has none. */
+function grokAccountTokenOf(person: { principalId?: string | null; disabled?: boolean }): Promise<string | undefined> {
+  return personGrokAccountToken(person, { organization: IDENTITY.kind === "perspicax", liveAccess: grokLiveAccessOf, solo: soloGrokVoiceToken });
+}
+
 const voiceModeDeps: VoiceModeDeps = {
   organization: IDENTITY.kind === "perspicax",
   notice: (threadId, message) => publishVoiceNotice(threadId, message),
@@ -32058,15 +32071,7 @@ const voiceModeDeps: VoiceModeDeps = {
   // A disabled person has none. The token is never logged.
   credentialPolicy: (speaker, threadId) => ({ ...credentialPolicyFor(threadId, speaker), aspect: "voice" }),
   auditCredential: (decision, speaker, threadId) => auditCredentialDecisionFor(threadId, undefined, decision, speaker),
-  grokAccount: async (speaker) => {
-    if (speaker.disabled) return undefined;
-    if (IDENTITY.kind === "perspicax") {
-      if (!speaker.principalId) return undefined;
-      const access = await grokLiveAccessOf(speaker.principalId);
-      return access.ok ? access.accessToken : undefined;
-    }
-    return soloGrokVoiceToken();
-  },
+  grokAccount: grokAccountTokenOf,
   resolveOwnKey: (sub) => {
     const person = IDENTITY.kind === "perspicax" ? principals.bySubject(IDENTITY.issuer, sub) : null;
     const owner = providerAccountOwner(person?.id);

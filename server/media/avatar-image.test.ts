@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { chatImageCredentials } from "./chat-image.ts";
+
 import {
   avatarDirectionRefusal,
   avatarGenerationStateMatches,
@@ -106,6 +108,59 @@ describe("avatar image generation", () => {
     expect(url).toBe("https://cli-chat-proxy.grok.com/v1/images/generations");
     expect(init?.headers).toMatchObject({ authorization: "Bearer acct-token" });
     expect(JSON.stringify(init)).not.toContain("xai-secret");
+  });
+
+  // #5223 review, point 3: the account stands where the chat's rule puts it
+  // (chat-image.ts imageChainWithAccount), so the same person with the same
+  // settings reaches the same provider on the avatar and in the chat.
+  it("a chosen image provider is never overtaken by the account, as in the chat", async () => {
+    const hosts = async (cfg: Parameters<typeof generateAvatarImage>[0]) => {
+      const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
+      await generateAvatarImage(cfg, BOT, "owl", fetchMock);
+      return new URL(String(fetchMock.mock.calls[0]![0])).host;
+    };
+    const chatHost = async (imageGen: NonNullable<Parameters<typeof generateAvatarImage>[0]["imageGen"]>) => {
+      const chain = await chatImageCredentials({
+        organization: false, personal: async () => ({ ok: false, error: "no_key" }), solo: async () => undefined,
+        account: async () => "acct-token", imageGen, organizationXaiAllowed: () => true, organizationXaiKey: () => "xai-secret",
+      });
+      return Array.isArray(chain) ? new URL(chain[0]!.credential.baseUrl).host : null;
+    };
+    const settings: Array<NonNullable<Parameters<typeof generateAvatarImage>[0]["imageGen"]>> = [
+      { ...ALL_KEYS.imageGen, provider: "openai" },
+      { ...ALL_KEYS.imageGen, provider: "custom" },
+      { ...ALL_KEYS.imageGen, provider: "xai" },
+      { ...ALL_KEYS.imageGen },
+    ];
+    for (const imageGen of settings) {
+      expect(await hosts({ ...ALL_KEYS, imageGen, xaiAccount: "acct-token" }), `provider ${imageGen.provider ?? "not chosen"}`).toBe(await chatHost(imageGen));
+    }
+    expect(await hosts({ ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "openai" }, xaiAccount: "acct-token" })).toBe("api.openai.com");
+    expect(await hosts({ ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "custom" }, xaiAccount: "acct-token" })).toBe("127.0.0.1:20128");
+    expect(await hosts({ ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "xai" }, xaiAccount: "acct-token" })).toBe("cli-chat-proxy.grok.com");
+  });
+
+  // D-20261123-053: the avatar goes on like the chat's image and the voice
+  it("an account out of credits gives way to the organization's xAI key", async () => {
+    const asked: string[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      asked.push(new URL(String(url)).host);
+      return asked.length === 1 ? new Response('{"error":"out_of_credits"}', { status: 402 }) : imageResponse(JPEG);
+    });
+    const cfg = { ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "xai" as const }, xaiAccount: "acct-token" };
+
+    await expect(generateAvatarImage(cfg, BOT, "owl", fetchMock)).resolves.toEqual({ bytes: JPEG, mime: "image/jpeg" });
+    expect(asked).toEqual(["cli-chat-proxy.grok.com", "api.x.ai"]);
+  });
+
+  it("an account out of credits with nothing behind it is credits, and an outage is not retried on a key", async () => {
+    const dry = vi.fn<typeof fetch>(async () => new Response('{"error":"out_of_credits"}', { status: 402 }));
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, xaiAccount: "acct-token" }, BOT, "owl", dry))
+      .rejects.toMatchObject({ code: "credits", status: 502 });
+    const down = vi.fn<typeof fetch>(async () => new Response("down", { status: 503 }));
+    const cfg = { ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "xai" as const }, xaiAccount: "acct-token" };
+    await expect(generateAvatarImage(cfg, BOT, "owl", down)).rejects.toMatchObject({ status: 502 });
+    expect(down).toHaveBeenCalledTimes(1);
   });
 
   it("uses only the custom key and model at a normalized gateway image endpoint", async () => {

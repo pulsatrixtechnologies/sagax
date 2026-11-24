@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { voiceOutOfCredits } from "../tts/grok.ts";
 import {
-  chatImageCredential,
+  chatImageCredentials,
+  type ChatImageCredential,
   ChatImageError,
+  imageRefusalCause,
   NO_IMAGE_PROVIDER,
   OPENAI_IMAGE_MODEL,
   renderChatImage,
@@ -14,6 +19,12 @@ const PNG = Buffer.from(PNG_B64, "base64");
 const ok = () => new Response(JSON.stringify({ data: [{ b64_json: PNG_B64 }] }), { status: 200 });
 const none = async (): Promise<ProviderKeyResult> => ({ ok: false, error: "no_key" });
 
+/** The head of the chain: the credential an image starts on, or null. */
+async function firstCredential(input: Parameters<typeof chatImageCredentials>[0]): Promise<ChatImageCredential | null> {
+  const chain = await chatImageCredentials(input);
+  return Array.isArray(chain) ? chain[0]?.credential ?? null : null;
+}
+
 function recorder(answer: () => Response = ok) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const fetchImpl = (async (url: string, init: RequestInit) => { calls.push({ url, init }); return answer(); }) as unknown as typeof fetch;
@@ -24,39 +35,79 @@ describe("chatImageCredential (#2954)", () => {
   const base = { organization: false as boolean, personal: none, solo: async (): Promise<string | undefined> => undefined, organizationXaiAllowed: (): boolean => false, organizationXaiKey: (): string | undefined => undefined };
 
   it("prefers the xAI key, then OpenAI, then the image settings", async () => {
-    expect((await chatImageCredential({ ...base, solo: async (p) => p === "xai" ? "xk" : "ok" }))?.provider).toBe("xai");
-    expect((await chatImageCredential({ ...base, solo: async (p) => p === "openai" ? "ok" : undefined }))).toMatchObject({ provider: "openai", model: OPENAI_IMAGE_MODEL });
-    expect((await chatImageCredential({ ...base, imageGen: { provider: "openai", key: "gk" } as never }))?.provider).toBe("openai");
-    expect((await chatImageCredential({ ...base, imageGen: { provider: "custom", customUrl: "https://img.example.test/v1", customModel: "m" } as never }))?.provider).toBe("custom");
+    expect((await firstCredential({ ...base, solo: async (p) => p === "xai" ? "xk" : "ok" }))?.provider).toBe("xai");
+    expect((await firstCredential({ ...base, solo: async (p) => p === "openai" ? "ok" : undefined }))).toMatchObject({ provider: "openai", model: OPENAI_IMAGE_MODEL });
+    expect((await firstCredential({ ...base, imageGen: { provider: "openai", key: "gk" } as never }))?.provider).toBe("openai");
+    expect((await firstCredential({ ...base, imageGen: { provider: "custom", customUrl: "https://img.example.test/v1", customModel: "m" } as never }))?.provider).toBe("custom");
   });
 
   it("uses the person's own key in an organization and the shared xAI key only when allowed", async () => {
     const org = { ...base, organization: true, solo: async () => "never", organizationXaiKey: () => "shared" };
-    expect(await chatImageCredential(org)).toBeNull();
-    expect((await chatImageCredential({ ...org, organizationXaiAllowed: () => true }))?.provider).toBe("xai");
-    const mine = await chatImageCredential({ ...org, personal: async (p) => p === "openai" ? { ok: true, key: "mine", fingerprint: "f" } as never : { ok: false, error: "no_key" } });
+    expect(await firstCredential(org)).toBeNull();
+    expect((await firstCredential({ ...org, organizationXaiAllowed: () => true }))?.provider).toBe("xai");
+    const mine = await firstCredential({ ...org, personal: async (p) => p === "openai" ? { ok: true, key: "mine", fingerprint: "f" } as never : { ok: false, error: "no_key" } });
     expect(mine).toMatchObject({ provider: "openai", key: "mine" });
   });
 
+  // #5223 review, point 3 (and #5231): the chosen image provider is never
+  // overtaken by the account, on the chat as on the avatar.
+  it("a chosen image provider keeps its place: the account comes after it, never in front", async () => {
+    const account = async (): Promise<string | undefined> => "acct-token";
+    const sources = async (input: Parameters<typeof chatImageCredentials>[0]) => {
+      const chain = await chatImageCredentials(input);
+      return Array.isArray(chain) ? chain.map((entry) => `${entry.credential.provider}:${entry.credential.auth ?? "key"}`) : chain;
+    };
+    // OpenAI chosen: OpenAI first, then the account
+    expect(await sources({ ...base, account, imageGen: { provider: "openai", key: "gk" } })).toEqual(["openai:key", "xai:account"]);
+    // a custom endpoint chosen: the same
+    expect(await sources({ ...base, account, imageGen: { provider: "custom", customUrl: "https://img.example.test/v1", customModel: "m" } }))
+      .toEqual(["custom:key", "xai:account"]);
+    // xAI chosen, or nothing chosen: the account leads, a key behind it
+    expect(await sources({ ...base, account, imageGen: { provider: "xai" }, organizationXaiKey: () => "shared" })).toEqual(["xai:account", "xai:key"]);
+    expect(await sources({ ...base, account, imageGen: { key: "gk" } })).toEqual(["xai:account", "openai:key"]);
+    // a chosen provider that cannot serve (no key) leaves the account in front
+    expect(await sources({ ...base, account, imageGen: { provider: "openai" } })).toEqual(["xai:account"]);
+  });
+
+  it("the whole chain, in order: account, the person's keys, then the organization's (D-20261123-053)", async () => {
+    const chain = await chatImageCredentials({
+      ...base, organization: true, account: async () => "acct-token-0001",
+      personal: async (p) => ({ ok: true, key: p === "xai" ? "person-xai-0002" : "person-oai-0003", fingerprint: "f" } as never),
+      organizationXaiAllowed: () => true, organizationXaiKey: () => "org-key-00000004",
+    });
+    expect(Array.isArray(chain) && chain.map((entry) => [entry.source, entry.credential.provider, entry.last4])).toEqual([
+      ["grok-account", "xai", "0001"], ["perspicax-key", "xai", "0002"], ["perspicax-key", "openai", "0003"], ["org-key", "xai", "0004"],
+    ]);
+  });
+
+  // #5223 review, point 2: same verdict as the voice (resolveVoiceKeys)
+  it("a person turned off in their organization is refused as the voice refuses them, before any credential is read", async () => {
+    let read = 0;
+    const account = async (): Promise<string | undefined> => { read += 1; return "acct-token"; };
+    expect(await chatImageCredentials({ ...base, organization: true, disabled: true, account, organizationXaiAllowed: () => true, organizationXaiKey: () => "shared" }))
+      .toEqual({ refused: "payer_disabled" });
+    expect(read).toBe(0);
+  });
+
   it("answers null with nothing connected, and the message says what to do", async () => {
-    expect(await chatImageCredential(base)).toBeNull();
+    expect(await firstCredential(base)).toBeNull();
     expect(NO_IMAGE_PROVIDER).toMatch(/Grok account/);
   });
 
   it("a connected Grok account beats every key, solo and organization (#5223)", async () => {
     const account = async (): Promise<string | undefined> => "acct-token";
     // solo: account first, even with a solo xAI key present
-    const solo = await chatImageCredential({ ...base, account, solo: async (p) => p === "xai" ? "xk" : undefined });
+    const solo = await firstCredential({ ...base, account, solo: async (p) => p === "xai" ? "xk" : undefined });
     expect(solo).toMatchObject({ provider: "xai", auth: "account", key: "acct-token", baseUrl: "https://cli-chat-proxy.grok.com/v1" });
     // organization: account before the person's own key and before the shared key
-    const org = await chatImageCredential({
+    const org = await firstCredential({
       ...base, organization: true, account,
       personal: async () => ({ ok: true, key: "mine", fingerprint: "f" } as never),
       organizationXaiAllowed: () => true, organizationXaiKey: () => "shared",
     });
     expect(org).toMatchObject({ auth: "account", key: "acct-token" });
     // no account falls back to the keys exactly as before
-    const keyed = await chatImageCredential({ ...base, account: async () => undefined, solo: async (p) => p === "xai" ? "xk" : undefined });
+    const keyed = await firstCredential({ ...base, account: async () => undefined, solo: async (p) => p === "xai" ? "xk" : undefined });
     expect(keyed).toMatchObject({ provider: "xai", auth: "key", key: "xk", baseUrl: "https://api.x.ai/v1" });
   });
 });
@@ -116,6 +167,21 @@ describe("renderChatImage (#2954)", () => {
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers.authorization).toBe("Bearer acct-token");
     expect(headers["x-xai-token-auth"]).toBe("xai-grok-cli");
+  });
+
+  // #5223 review, point 1: which words mean spent credits is the voice's rule
+  // (server/tts/grok.ts); the image reads it there and adds only the status.
+  it("spent credits are read by the voice's own rule, plus HTTP 402", () => {
+    for (const said of ['{"error":"out_of_credits"}', "This team needs credits", "You hit your spending limit", '{"error":{"code":"insufficient_quota"}}', "all good", "Incorrect API key provided"]) {
+      expect(imageRefusalCause(503, said) === "credits").toBe(voiceOutOfCredits(said));
+    }
+    expect(imageRefusalCause(402, "")).toBe("credits");
+    expect(imageRefusalCause(401, "")).toBe("key");
+    expect(imageRefusalCause(400, "Incorrect API key provided")).toBe("key");
+    expect(imageRefusalCause(500, "boom")).toBe("error");
+    // one place for the words: no second list of them in this file
+    const source = readFileSync(fileURLToPath(new URL("./chat-image.ts", import.meta.url)), "utf8");
+    expect(source).not.toMatch(/insufficient_quota|spending limit|needs credits/);
   });
 
   it("reads spent credits as credits, never as a missing key or the network (#5223)", async () => {

@@ -4,11 +4,20 @@ import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 import {
+  imageChainWithAccount,
+  imageKeyCandidate,
   imageRefusalCause,
+  openaiKeyImage,
+  withImageCredentials,
+  xaiAccountImage,
+  xaiKeyImage,
   XAI_ACCOUNT_HEADER_NAME,
   XAI_ACCOUNT_HEADER_VALUE,
-  XAI_ACCOUNT_IMAGE_BASE,
+  type ChatImageCredential,
+  type ImageChain,
+  type ImageKeyCandidate,
 } from "./chat-image.ts";
+import { VoiceKeyRefusals } from "../voice/voice-keys.ts";
 import { BOT_AVATAR_MAX_BYTES } from "../org/org-admin-look.ts";
 import type { BotRecord } from "../store.ts";
 
@@ -38,12 +47,15 @@ const generatedImageResponseSchema = z.object({
 
 type AvatarIdentity = Pick<BotRecord, "name" | "title" | "description">;
 type AvatarGenerationState = Pick<BotRecord, "avatarUrl" | "avatarCrop">;
-interface AvatarImageConfig {
+export interface AvatarImageConfig {
   imageGen?: ImageGenerationConfig;
   xai?: { key?: string };
-  /** The person's own connected Grok account token (#5223). On an xAI avatar
-   * it beats the organization's key, on the CLI host, no key needed. */
+  /** The person's own connected Grok account token (#5223). Its place among
+   * the keys is the chat's own rule (chat-image.ts imageChainWithAccount). */
   xaiAccount?: string;
+  /** Who asks and what was refused lately (the image chain, D-20261123-053);
+   * a chain with no memory when absent. */
+  chain?: ImageChain & { organization?: boolean };
 }
 
 /** Public settings describe availability without returning provider secrets. */
@@ -159,32 +171,49 @@ export async function generateAvatarImage(
   const refused = avatarDirectionRefusal(direction);
   if (refused) throw Object.assign(new Error(refused), { status: 400 });
   const settings = avatarImageStatus(cfg);
-  const { provider, model } = settings;
-  // A connected Grok account beats the organization's xAI key (#5223, order
-  // D-20261120-012): it reaches the image API on the CLI host, no key needed.
+  const { provider } = settings;
+  // The settings' provider when it can serve, and the person's connected Grok
+  // account where the chat's own rule puts it (#5223): one rule, two surfaces.
+  const shared = cfg.chain?.organization ? "org-key" as const : "server" as const;
+  const configured: ImageKeyCandidate[] = !settings.configured ? []
+    : [imageKeyCandidate(
+      provider === "openai" ? openaiKeyImage(cfg.imageGen!.key!.trim())
+        : provider === "xai" ? xaiKeyImage(cfg.xai!.key!.trim())
+          : { provider: "custom", baseUrl: settings.customUrl, model: settings.customModel, ...(cfg.imageGen?.customApiKey?.trim() ? { key: cfg.imageGen.customApiKey.trim() } : {}) },
+      shared)];
   const accountToken = cfg.xaiAccount?.trim();
-  const account = provider === "xai" && Boolean(accountToken);
-  if (!settings.configured && !account) {
+  const candidates = imageChainWithAccount(configured, accountToken ? imageKeyCandidate(xaiAccountImage(accountToken), "grok-account") : null, cfg.imageGen);
+  if (!candidates.length) {
     const message = provider === "openai" ? "Add an OpenAI image API key first"
       : provider === "xai" ? "Connect your Grok account or add an xAI API key first"
         : "Set a valid custom image API URL and model first";
     throw Object.assign(new Error(message), { status: 409, code: "no_provider" });
   }
+  // D-20261123-053: a credential out of credits (or refused) gives way to the
+  // next one, by the same chain as the chat's image and the voice.
+  const chain: ImageChain = cfg.chain ?? { who: "", refusals: new VoiceKeyRefusals() };
+  const prompt = avatarGenerationPrompt(bot, direction);
+  return (await withImageCredentials(chain, candidates, (credential) => avatarOnCredential(credential, prompt, fetchImpl, timeoutMs))).value;
+}
 
-  const apiKey = (account ? accountToken
-    : provider === "openai" ? cfg.imageGen?.key
-      : provider === "xai" ? cfg.xai?.key : cfg.imageGen?.customApiKey)?.trim();
+/** One avatar generation on one credential. */
+async function avatarOnCredential(
+  credential: ChatImageCredential,
+  prompt: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<GeneratedAvatarImage> {
+  const { provider, model } = credential;
+  const account = credential.auth === "account";
+  const apiKey = credential.key;
   const providerName = provider === "openai" ? "OpenAI" : provider === "xai" ? "xAI" : "Custom";
-  const url = account ? `${XAI_ACCOUNT_IMAGE_BASE}/images/generations`
-    : provider === "openai" ? "https://api.openai.com/v1/images/generations"
-      : provider === "xai" ? "https://api.x.ai/v1/images/generations"
-        : `${settings.customUrl}/images/generations`;
+  const url = `${credential.baseUrl}/images/generations`;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
   if (account) headers[XAI_ACCOUNT_HEADER_NAME] = XAI_ACCOUNT_HEADER_VALUE;
   const body = {
     model,
-    prompt: avatarGenerationPrompt(bot, direction),
+    prompt,
     ...(provider === "openai" ? { size: "1024x1024", quality: "low", output_format: "webp" }
       : provider === "xai" ? { response_format: "b64_json", aspect_ratio: "1:1" }
         : { response_format: "b64_json", size: "1024x1024", n: 1 }),

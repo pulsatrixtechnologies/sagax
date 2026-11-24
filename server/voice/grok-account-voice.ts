@@ -19,6 +19,26 @@ export function soloGrokVoiceToken(env: NodeJS.ProcessEnv = process.env): string
   }
 }
 
+/** One person's connected Grok account, for every aspect that takes it: the
+ * voice (#4567) and the image (#5223) ask here, so a person gets the same
+ * answer on both. A person turned off in their organization has none; solo
+ * is this computer's sign-in; an organization is that person's live sign-in.
+ * The token is never logged and never put in a response. */
+export async function personGrokAccountToken(
+  person: { principalId?: string | null; disabled?: boolean },
+  deps: {
+    organization: boolean;
+    liveAccess(principalId: string): Promise<{ ok: true; accessToken: string } | { ok: false }>;
+    solo(): string | undefined;
+  },
+): Promise<string | undefined> {
+  if (person.disabled) return undefined;
+  if (!deps.organization) return deps.solo();
+  if (!person.principalId) return undefined;
+  const access = await deps.liveAccess(person.principalId);
+  return access.ok ? access.accessToken : undefined;
+}
+
 export type NoCallLanguage = "fr" | "en";
 
 /** French when the interface (or, failing that, the voice language) is

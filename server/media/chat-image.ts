@@ -1,14 +1,23 @@
 /** make_image (#2954): one image generated or edited in the chat, on the
- * person's own connected provider. The provider is chosen from what is
- * connected, fastest first, so the bot never searches for an image skill:
- * the person's xAI key (Grok Imagine), their OpenAI key (gpt-image), the
- * server's configured image provider, then the organization's xAI key when
- * it was given to them. Never a provider URL from the model. */
+ * person's own connected provider. The credentials are taken from what is
+ * connected, in one order, so the bot never searches for an image skill:
+ * the person's connected Grok account (#5223), their xAI key (Grok Imagine),
+ * their OpenAI key (gpt-image), the server's configured image provider, then
+ * the organization's xAI key when it was given to them. A credential out of
+ * credits, or refused, gives way to the next one by the voice's own chain
+ * (server/voice/voice-keys.ts, D-20261123-053). Never a provider URL from
+ * the model. */
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
+import type { VoiceKeySource, VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
+import { voiceOutOfCredits, type GrokVoiceFailure } from "../tts/grok.ts";
+import {
+  describeVoiceKey, keyLast4, nextKeyIndex, voiceKeyFailureIsFinal, voiceKeyRef, VoiceKeyFailure, withVoiceKeys,
+  type VoiceKeyCandidate, type VoiceKeyRefusals,
+} from "../voice/voice-keys.ts";
 
 export const CHAT_IMAGE_TIMEOUT_MS = 90_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 30 * 1024 * 1024;
@@ -65,18 +74,53 @@ export const chatImageRequestSchema = z.object({
   aspect_ratio: z.enum(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]).optional(),
 });
 
-const xai = (key: string): ChatImageCredential => ({ provider: "xai", auth: "key", key, baseUrl: "https://api.x.ai/v1", model: XAI_IMAGE_MODEL });
-const xaiAccount = (token: string): ChatImageCredential => ({ provider: "xai", auth: "account", key: token, baseUrl: XAI_ACCOUNT_IMAGE_BASE, model: XAI_IMAGE_MODEL });
-const openai = (key: string): ChatImageCredential => ({ provider: "openai", auth: "key", key, baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL });
+export const xaiKeyImage = (key: string): ChatImageCredential => ({ provider: "xai", auth: "key", key, baseUrl: "https://api.x.ai/v1", model: XAI_IMAGE_MODEL });
+export const xaiAccountImage = (token: string): ChatImageCredential => ({ provider: "xai", auth: "account", key: token, baseUrl: XAI_ACCOUNT_IMAGE_BASE, model: XAI_IMAGE_MODEL });
+export const openaiKeyImage = (key: string): ChatImageCredential => ({ provider: "openai", auth: "key", key, baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL });
 
-/** The provider this person's image goes to, or null when none is
- * connected. Solo: this computer's connected Grok account, then its keys.
- * Organization: the person's own connected Grok account first, then their own
- * keys, the shared keys only as the organization allows. The order is decided
- * [D-20261120-012, M-20261122-023]: an account beats a key at each level, the
- * organization's account is the next lot (#5200). #5223: the connected Grok
- * account is a real form, not only keys. */
-export async function chatImageCredential(input: {
+/** One credential of an image chain, in the shape the voice chain runs
+ * (server/voice/voice-keys.ts): whose it is (`source`) and its last four
+ * characters for the log, never more of it. */
+export interface ImageKeyCandidate extends VoiceKeyCandidate {
+  credential: ChatImageCredential;
+}
+
+export function imageKeyCandidate(credential: ChatImageCredential, source: VoiceKeySource): ImageKeyCandidate {
+  const key = credential.key ?? "";
+  return {
+    key, source, last4: keyLast4(key), credential,
+    via: source === "org-key" || source === "server" ? source : "speaker-key",
+    ...(credential.provider === "openai" ? { provider: "openai" as const } : {}),
+  };
+}
+
+/** Where the connected Grok account stands among the keys of an image
+ * request. ONE rule for the chat (make_image) and the avatar (#5223 review):
+ * the account is an xAI credential and leads, a connected account beating a
+ * key [D-20261120-012], unless the image settings name another provider
+ * (`imageGen.provider` openai or custom) that can serve: that chosen
+ * provider keeps its place and the account comes right after it, never in
+ * front of it. The same person with the same settings reaches the same
+ * provider on both surfaces. A choice of credential form per person is
+ * #5231. */
+export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], account: ImageKeyCandidate | null, imageGen?: ImageGenerationConfig): ImageKeyCandidate[] {
+  if (!account) return [...keys];
+  const chosen = imageGen?.provider === "openai" || imageGen?.provider === "custom" ? imageGen.provider : null;
+  let after = -1;
+  if (chosen) keys.forEach((entry, at) => { if (entry.credential.provider === chosen) after = at; });
+  return [...keys.slice(0, after + 1), account, ...keys.slice(after + 1)];
+}
+
+/** Every credential that may make this person's image, in the order to try
+ * them; empty when none is connected. Solo: this computer's connected Grok
+ * account, then its keys. Organization: the person's own connected Grok
+ * account, then their own keys, the shared keys only as the organization
+ * allows. The order is decided [D-20261120-012, M-20261122-023]: an account
+ * beats a key at each level, the organization's account is the next lot
+ * (#5200). The account's place is `imageChainWithAccount`. A credential
+ * refused for credits or for itself gives way to the next one
+ * (`withImageCredentials`, D-20261123-053). */
+export async function chatImageCredentials(input: {
   organization: boolean;
   personal(provider: "xai" | "openai"): Promise<ProviderKeyResult>;
   solo(provider: "xai" | "openai"): Promise<string | undefined>;
@@ -86,34 +130,94 @@ export async function chatImageCredential(input: {
   imageGen?: ImageGenerationConfig;
   organizationXaiAllowed(): boolean;
   organizationXaiKey(): string | undefined;
-}): Promise<ChatImageCredential | null> {
-  // The connected Grok account beats every key at this level, solo and
-  // organization alike. An account with no credit still reaches the vendor
-  // and answers there, so it is not skipped for a key (the cause comes back
-  // from the response, expected 4).
-  const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
-  if (account) return xaiAccount(account);
+  /** The person is turned off in their organization. */
+  disabled?: boolean;
+}): Promise<ImageCredentials> {
+  // the voice's verdict for the same person (resolveVoiceKeys): nothing of
+  // an organization serves a person it turned off, account or key
+  if (input.organization && input.disabled) return { refused: "payer_disabled" };
+  const shared: VoiceKeySource = input.organization ? "org-key" : "server";
+  const keys: ImageKeyCandidate[] = [];
   for (const provider of ["xai", "openai"] as const) {
+    const build = provider === "xai" ? xaiKeyImage : openaiKeyImage;
     if (input.organization) {
       const personal = await input.personal(provider).catch(() => null);
-      if (personal?.ok && personal.key.trim()) return provider === "xai" ? xai(personal.key.trim()) : openai(personal.key.trim());
+      if (personal?.ok && personal.key.trim()) keys.push(imageKeyCandidate(build(personal.key.trim()), "perspicax-key"));
     } else {
       const key = (await input.solo(provider).catch(() => undefined))?.trim();
-      if (key) return provider === "xai" ? xai(key) : openai(key);
+      if (key) keys.push(imageKeyCandidate(build(key), "server"));
     }
   }
   const gen = input.imageGen;
-  if ((gen?.provider ?? "openai") === "openai" && gen?.key?.trim()) return openai(gen.key.trim());
+  if ((gen?.provider ?? "openai") === "openai" && gen?.key?.trim()) keys.push(imageKeyCandidate(openaiKeyImage(gen.key.trim()), shared));
   if (gen?.provider === "custom" && gen.customUrl?.trim() && gen.customModel?.trim()) {
     try {
-      return { provider: "custom", baseUrl: normalizeImageGenerationUrl(gen.customUrl), model: gen.customModel.trim(), ...(gen.customApiKey?.trim() ? { key: gen.customApiKey.trim() } : {}) };
+      keys.push(imageKeyCandidate({ provider: "custom", baseUrl: normalizeImageGenerationUrl(gen.customUrl), model: gen.customModel.trim(), ...(gen.customApiKey?.trim() ? { key: gen.customApiKey.trim() } : {}) }, shared));
     } catch { /* an invalid URL never becomes an outbound request */ }
   }
   if (!input.organization || input.organizationXaiAllowed()) {
     const key = input.organizationXaiKey()?.trim();
-    if (key) return xai(key);
+    if (key) keys.push(imageKeyCandidate(xaiKeyImage(key), shared));
   }
-  return null;
+  const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
+  return imageChainWithAccount(keys, account ? imageKeyCandidate(xaiAccountImage(account), "grok-account") : null, gen);
+}
+
+/** The chain of one person, or why the organization serves them nothing
+ * (a cause of the voice's own list, said in the voice's own words). */
+export type ImageCredentials = ImageKeyCandidate[] | { refused: VoiceModeRefusalCause };
+
+/** Who asks and what was refused lately, for one image chain. */
+export interface ImageChain {
+  who: string;
+  refusals: VoiceKeyRefusals;
+  log?(line: string): void;
+}
+
+/** A credential that gave way before the one that served. */
+export interface ImageCredentialRefusal {
+  credential: ChatImageCredential;
+  cause: ChatImageCause;
+}
+
+/** An image error as the voice chain reads a failure: credits and a refused
+ * credential are the two another credential can fix. */
+function imageFailure(error: unknown): GrokVoiceFailure {
+  const cause = error instanceof ChatImageError ? error.cause : (error as { code?: unknown } | null)?.code;
+  return cause === "credits" ? "quota" : cause === "key" ? "key" : cause === "network" ? "down" : "other";
+}
+
+/** Run `attempt` on each credential in turn, by the voice's own chain
+ * (server/voice/voice-keys.ts withVoiceKeys, D-20261123-053: a Grok account
+ * out of credits goes on to the person's API key, then the organization's).
+ * A credential refused for credits or for itself is remembered and passed
+ * over for a while; an outage or a refused prompt stays with the credential
+ * that got it. When none serves, the error of the credential closest to the
+ * person is the one they get, as for a call (voiceFailureCause). */
+export async function withImageCredentials<T>(
+  chain: ImageChain,
+  candidates: readonly ImageKeyCandidate[],
+  attempt: (credential: ChatImageCredential) => Promise<T>,
+): Promise<{ value: T; used: ChatImageCredential; skipped: ImageCredentialRefusal[] }> {
+  const failed: Array<{ candidate: ImageKeyCandidate; error: unknown }> = [];
+  try {
+    const done = await withVoiceKeys<T, ImageKeyCandidate>(chain.who, candidates, chain.refusals, async (candidate) => {
+      try { return await attempt(candidate.credential); }
+      catch (error) { failed.push({ candidate, error }); throw error; }
+    }, { next: nextKeyIndex, failure: imageFailure });
+    for (const entry of failed) {
+      chain.log?.(`[image] ${NAMES[entry.candidate.credential.provider]} refused the ${describeVoiceKey(voiceKeyRef(entry.candidate))} (${imageFailure(entry.error)}): the image went on to the ${describeVoiceKey(voiceKeyRef(done.used))}`);
+    }
+    return {
+      value: done.value,
+      used: done.used.credential,
+      skipped: failed.map((entry) => ({ credential: entry.candidate.credential, cause: imageFailure(entry.error) === "quota" ? "credits" : "key" })),
+    };
+  } catch (error) {
+    if (!(error instanceof VoiceKeyFailure) || !failed.length) throw error;
+    const allFinal = failed.every((entry) => voiceKeyFailureIsFinal(imageFailure(entry.error)));
+    throw (allFinal ? failed[0]! : failed.at(-1)!).error;
+  }
 }
 
 const NAMES: Record<ChatImageProvider, string> = { xai: "xAI", openai: "OpenAI", custom: "Custom" };
@@ -216,8 +320,10 @@ export async function renderChatImage(
  * spent credits, not an outage (#5223, expected 4; the same reading the voice
  * route makes in tts/grok.ts). Shared with the avatar route. */
 export function imageRefusalCause(status: number, body: string): ChatImageCause {
-  const said = body.slice(0, 2_048).toLowerCase();
-  if (status === 402 || /out_of_credits|insufficient_quota|spending limit|needs credits|no credits|exceeded your (?:current )?quota/i.test(said)) return "credits";
+  const said = body.slice(0, 2_048);
+  // which words mean spent credits is the voice's rule, said there only
+  // (server/tts/grok.ts): here only the status that means it
+  if (status === 402 || voiceOutOfCredits(said)) return "credits";
   if (status === 401 || status === 403 || /incorrect api key|invalid api key|invalid or expired credentials|unauthenticated|permission/i.test(said)) return "key";
   return "error";
 }

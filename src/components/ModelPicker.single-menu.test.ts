@@ -2,7 +2,7 @@
 // menu (categories left, models right) is gone; every surface that picks a
 // model renders the same ModelPicker, never a copy or a second layout.
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const SRC = join(__dirname, "..");
@@ -16,7 +16,7 @@ function sources(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const files = sources(SRC).map((path) => ({ path: relative(SRC, path), text: readFileSync(path, "utf8") }));
+const files = sources(SRC).map((path) => ({ path: relative(SRC, path).split(sep).join("/"), text: readFileSync(path, "utf8") }));
 
 const SURFACES = [
   "components/Composer.tsx-parts/ComposerActionBar.tsx",

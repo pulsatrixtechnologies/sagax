@@ -47,7 +47,7 @@ describe("proactive sealed rows at rest (#4621 review)", () => {
     expect(atRestInfoSync(path)?.sealed).toBe(true);
     expect(readFileSync(path).toString("latin1")).not.toContain(secret);
     expect(readFileSync(path).toString("latin1")).not.toContain("alex@example.com");
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
     expect(readFileSync(file, "utf8")).not.toContain(secret);
 
     const second = new ProactivePendingFile(file);

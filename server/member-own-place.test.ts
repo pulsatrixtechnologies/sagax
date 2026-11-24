@@ -10,7 +10,7 @@
 //   remaining       the reasons a member's card can still wait for an admin
 //                   are a fixed list, and only one place sets that card
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -200,7 +200,7 @@ describe("what can still wait for an organization admin on a member's bot", () =
         const path = join(dir, name);
         if (statSync(path).isDirectory()) { if (name !== "node_modules") walk(path); continue; }
         if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;
-        if (/adminApproval: true/.test(readFileSync(path, "utf8"))) setters.push(path.slice(serverDir.length));
+        if (/adminApproval: true/.test(readFileSync(path, "utf8"))) setters.push(path.slice(serverDir.length).split(sep).join("/"));
       }
     };
     walk(serverDir);

@@ -6,7 +6,7 @@
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadMenu } from "./ThreadMenu";
 import { COMPOSER_ANCHOR_INSET, COMPOSER_POPOVER_GAP, COMPOSER_POPOVER_RISE, MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
@@ -186,7 +186,7 @@ describe("the rows' and cards' three dots menus", () => {
       const text = readFileSync(file, "utf8");
       return /popover-surface menu-surface p-1\.5/.test(text) || /h-8 w-full shrink-0 items-center gap-1\.5 rounded-\[10px\]/.test(text);
     });
-    expect(copies).toEqual(["src/components/menu-look.tsx"]);
+    expect(copies.map((file) => file.split(sep).join("/"))).toEqual(["src/components/menu-look.tsx"]);
   });
 });
 

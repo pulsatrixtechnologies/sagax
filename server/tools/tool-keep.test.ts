@@ -201,7 +201,7 @@ describe("sessions and the store", () => {
     expect(files).toHaveLength(2);
     for (const file of files) {
       const path = join(toolKeepDir(), dirs[0]!, file);
-      expect(statSync(path).mode & 0o777).toBe(0o600);
+      if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
       const text = readFileSync(path, "utf8");
       // never a person, a bot or a conversation id in clear
       for (const name of ["alice", "bob", "bot-1", "t-1", "t-2"]) expect(text).not.toContain(name);
